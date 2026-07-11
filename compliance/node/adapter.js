@@ -10,6 +10,20 @@ const { PostHog } = require('../packages/node/dist/entrypoints/index.node')
 const app = express()
 app.use(express.json())
 
+// Capture mode is fixed per adapter process (baked into the image via env) so the
+// harness runs exactly one capture contract against it: v1 advertises capture_v1,
+// otherwise capture_v0.
+const CAPTURE_MODE = process.env.POSTHOG_CAPTURE_MODE === 'v1' ? 'v1' : 'v0'
+
+// Harness EventOptions -> posthog-node sentinel properties. The SDK lifts these
+// sentinels out of properties into the v1 event `options` object.
+const OPTION_SENTINELS = {
+    cookieless_mode: '$cookieless_mode',
+    disable_skew_correction: '$ignore_sent_at',
+    process_person_profile: '$process_person_profile',
+    product_tour_id: '$product_tour_id',
+}
+
 const state = {
     client: null,
     totalEventsCaptured: 0,
@@ -33,6 +47,9 @@ async function discardClient() {
     try {
         client.clearFlushTimer?.()
         client.setPersistedProperty?.('queue', [])
+        // v1 mode routes $ai_* events to a separate queue; clear it too so they can't
+        // leak into the next scenario.
+        client.setPersistedProperty?.('ai_queue', [])
         await client.shutdown(1)
     } catch (error) {
         // Ignore reset-time shutdown errors; the next test starts with a fresh client.
@@ -44,12 +61,21 @@ app.get('/health', (req, res) => {
         sdk_name: 'posthog-node',
         sdk_version: require('../packages/node/package.json').version,
         adapter_version: '1.0.0',
-        capabilities: ['capture_v0', 'encoding_gzip'],
+        capabilities: CAPTURE_MODE === 'v1' ? ['capture_v1', 'encoding_gzip'] : ['capture_v0', 'encoding_gzip'],
     })
 })
 
 app.post('/init', async (req, res) => {
-    const { api_key, host, flush_at, flush_interval_ms, max_retries, enable_compression, disable_geoip } = req.body
+    const {
+        api_key,
+        host,
+        flush_at,
+        flush_interval_ms,
+        max_retries,
+        enable_compression,
+        disable_geoip,
+        historical_migration,
+    } = req.body
 
     await discardClient()
 
@@ -70,8 +96,14 @@ app.post('/init', async (req, res) => {
         flushAt: flush_at ?? 2,
         flushInterval: flush_interval_ms ?? 100,
         fetchRetryCount: max_retries ?? 3,
+        // Keep v1 partial-retry backoff short so retry compliance tests stay well
+        // within their wait windows (the mock also sends Retry-After: 1s).
+        fetchRetryDelay: CAPTURE_MODE === 'v1' ? 250 : undefined,
         disableCompression: enable_compression === undefined ? undefined : !enable_compression,
         disableGeoip: disable_geoip ?? false,
+        historicalMigration: historical_migration ?? undefined,
+        // Capture V1 opt-in is env-var-only: the SDK reads POSTHOG_CAPTURE_MODE
+        // (set by docker-compose / Dockerfile.v1) itself, so no option is passed.
         // Use before_send to track events being sent
         before_send: (event) => {
             // Track that event is being sent
@@ -116,18 +148,29 @@ app.post('/capture', (req, res) => {
         return res.status(400).json({ error: 'SDK not initialized' })
     }
 
-    const { distinct_id, event, properties, timestamp } = req.body
+    const { distinct_id, event, properties, timestamp, options } = req.body
 
     if (!distinct_id || !event) {
         return res.status(400).json({ error: 'distinct_id and event are required' })
     }
 
     try {
+        // Translate harness EventOptions into the SDK's sentinel properties; the SDK
+        // lifts them into the v1 event `options` object (no-op in v0 mode).
+        const mergedProperties = { ...(properties || {}) }
+        if (options && typeof options === 'object') {
+            for (const [optionKey, sentinel] of Object.entries(OPTION_SENTINELS)) {
+                if (Object.prototype.hasOwnProperty.call(options, optionKey)) {
+                    mergedProperties[sentinel] = options[optionKey]
+                }
+            }
+        }
+
         // Capture event
         state.client.capture({
             distinctId: distinct_id,
             event,
-            properties,
+            properties: mergedProperties,
             timestamp: timestamp ? new Date(timestamp) : undefined,
         })
 
