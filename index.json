@@ -1,4 +1,17 @@
 {
+  "PostHog/posthog-js/issue/4132": {
+    "key": "PostHog/posthog-js/issue/4132",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4132",
+    "url": "https://github.com/PostHog/posthog-js/issues/4132",
+    "conclusion": "Valid browser SDK bug; circular event properties can break request serialization and cause retries/internal exception noise.",
+    "labels": [
+      "feature/error-tracking",
+      "web"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-12T10:46:43.006Z"
+  },
   "PostHog/posthog-js/issue/3765": {
     "key": "PostHog/posthog-js/issue/3765",
     "repo": "PostHog/posthog-js",
