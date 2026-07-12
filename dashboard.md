@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4132](https://github.com/PostHog/posthog-js/issues/4132) | Valid browser SDK bug; circular event properties can break request serialization and cause retries/internal exception noise. | feature/error-tracking, web |  | no | 2026-07-12T10:46:43.006Z |
 | PostHog/posthog-js | [issue 3765](https://github.com/PostHog/posthog-js/issues/3765) | Valid rrweb/session replay maintenance tracker; keep open and handle as one upstream change per PR. | enhancement, feature/replay |  | no | 2026-07-11T13:06:12.366Z |
 | PostHog/posthog-js | [issue 3806](https://github.com/PostHog/posthog-js/issues/3806) | Valid net-new React Native/mobile session replay feature request for remote-config-driven screen targeting. | enhancement, feature/replay, react-native, feature/mobile |  | no | 2026-07-10T16:41:55.156Z |
 | PostHog/posthog-js | [issue 3251](https://github.com/PostHog/posthog-js/issues/3251) | Valid surveys unload bug; prior fix appears incomplete for a stale/version-skewed survey manager. | feature/surveys, web | https://github.com/PostHog/posthog-js/pull/4122 | no | 2026-07-09T05:56:45.214Z |
