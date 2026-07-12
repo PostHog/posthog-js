@@ -14,6 +14,7 @@ import {
     isGzipRequest,
     isNativeAsyncGzipError,
     isNativeAsyncGzipReadError,
+    safeJsonStringify,
 } from '@posthog/core'
 
 interface RequestWithEncodedBody extends RequestWithOptions {
@@ -90,12 +91,19 @@ export const extendURLParams = (url: string, params: Record<string, any>, replac
 }
 
 export const jsonStringify = (data: any, space?: string | number): string => {
-    // With plain JSON.stringify, we get an exception when a property is a BigInt. This has caused problems for some users,
-    // see https://github.com/PostHog/posthog-js/issues/1440
-    // To work around this, we convert BigInts to strings before stringifying the data. This is not ideal, as we lose
-    // information that this was originally a number, but given ClickHouse doesn't support BigInts, the customer
-    // would not be able to operate on these numerically anyway.
-    return JSON.stringify(data, (_, value) => (typeof value === 'bigint' ? value.toString() : value), space)
+    try {
+        // Fast path: convert BigInts to strings, since plain JSON.stringify throws on them.
+        // See https://github.com/PostHog/posthog-js/issues/1440.
+        return JSON.stringify(data, (_, value) => (typeof value === 'bigint' ? value.toString() : value), space)
+    } catch {
+        // A self-referential value — most commonly a DOM node that retains a React fiber pointing back
+        // at the element — makes JSON.stringify throw "Converting circular structure to JSON". With
+        // exception autocapture enabled that throw was recaptured as a new $exception, sometimes in a
+        // tight loop. Fall back to the shared circular-safe serializer (which also handles BigInt and
+        // Errors); it replaces only true cycles with "[Circular]", leaving shared-but-acyclic
+        // references intact. `space` formatting is dropped on this rare path.
+        return safeJsonStringify(data)
+    }
 }
 
 const encodeToDataString = (data: string | Record<string, any>): string => {
