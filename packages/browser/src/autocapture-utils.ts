@@ -9,6 +9,13 @@ import { getTargetingUrl } from './utils/url-targeting-utils'
 import { isElementNode, isShadowRoot, isTag, isTextNode } from './utils/element-utils'
 import { includes, trim } from '@posthog/core'
 
+// Defensive upper bound on how far we'll walk an element's ancestor chain.
+// Real DOM trees are only a few hundred nodes deep at most, but a pathological
+// or cyclic parentNode chain on a host page could otherwise trap us in an
+// unbounded walk (and, downstream, exhaust the JS call stack). Bailing out here
+// degrades autocapture gracefully instead of crashing.
+export const MAX_DOM_ANCESTOR_DEPTH = 1000
+
 export function splitClassString(s: string): string[] {
     return s ? trim(s).split(/\s+/) : []
 }
@@ -444,7 +451,16 @@ export function shouldCaptureDomEvent(
  * @returns {boolean} whether the element should be captured
  */
 export function shouldCaptureElement(el: Element): boolean {
+    const seen = new Set<Node>()
+    let depth = 0
     for (let curEl = el; curEl.parentNode && !isTag(curEl, 'body'); curEl = curEl.parentNode as Element) {
+        // Guard against pathologically deep or cyclic ancestor chains on the host
+        // page, which would otherwise loop forever (or exhaust the call stack downstream).
+        if (depth++ >= MAX_DOM_ANCESTOR_DEPTH || seen.has(curEl)) {
+            break
+        }
+        seen.add(curEl)
+
         const classes = getClassNames(curEl)
         if (includes(classes, 'ph-sensitive') || includes(classes, 'ph-no-capture')) {
             return false

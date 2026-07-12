@@ -9,6 +9,7 @@ import {
     isAngularStyleAttr,
     isSensitiveElement,
     makeSafeText,
+    MAX_DOM_ANCESTOR_DEPTH,
     shouldCaptureDomEvent,
     shouldCaptureElement,
     shouldCaptureRageclick,
@@ -165,16 +166,31 @@ export function autocapturePropertiesForElement(
     }
 
     const targetElementList: Element[] = [target]
+    const seen = new Set<Node>([target])
     let curEl: Element = target
     while (curEl.parentNode && !isTag(curEl, 'body')) {
+        // Guard against pathologically deep or cyclic ancestor chains on the host
+        // page, which would otherwise loop forever (or exhaust the call stack downstream).
+        if (targetElementList.length >= MAX_DOM_ANCESTOR_DEPTH) {
+            break
+        }
         if (isShadowRoot(curEl.parentNode)) {
-            targetElementList.push(curEl.parentNode.host)
-            curEl = curEl.parentNode.host
+            const host = curEl.parentNode.host
+            if (seen.has(host)) {
+                break
+            }
+            seen.add(host)
+            targetElementList.push(host)
+            curEl = host
             continue
         }
         if (!isElementNode(curEl.parentNode)) {
             break
         }
+        if (seen.has(curEl.parentNode)) {
+            break
+        }
+        seen.add(curEl.parentNode)
         targetElementList.push(curEl.parentNode)
         curEl = curEl.parentNode
     }

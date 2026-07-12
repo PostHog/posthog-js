@@ -3,6 +3,7 @@
 
 import {
     Autocapture,
+    autocapturePropertiesForElement,
     getAugmentPropertiesFromElement,
     getDefaultProperties,
     getPropertiesFromElement,
@@ -1748,6 +1749,28 @@ describe('Autocapture system', () => {
                     expect(shouldCaptureDomEvent(element, fakeEvent, autocapture_config)).toBe(expectedCapturable)
                 })
             })
+        })
+    })
+
+    describe('autocapturePropertiesForElement', () => {
+        it('terminates on a cyclic ancestor chain', () => {
+            // Simulate a pathological host page whose parentNode chain loops back on
+            // itself. Without a cycle guard this ancestor-walk would never terminate.
+            const a = document!.createElement('div')
+            const b = document!.createElement('div')
+            Object.defineProperty(a, 'parentNode', { value: b, configurable: true })
+            Object.defineProperty(b, 'parentNode', { value: a, configurable: true })
+
+            const { props } = autocapturePropertiesForElement(a, {
+                e: makeMouseEvent({ target: a, type: 'click' }),
+                maskAllElementAttributes: false,
+                maskAllText: false,
+                elementsChainAsString: true,
+                disableCaptureUrlHashes: false,
+            })
+
+            // it returns without hanging and still produces capture properties
+            expect(props['$event_type']).toEqual('click')
         })
     })
 })

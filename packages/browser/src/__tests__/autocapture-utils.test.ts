@@ -512,6 +512,17 @@ describe(`Autocapture utility functions`, () => {
             // cleanup
             ;(el as any).replace = undefined
         })
+
+        it(`should terminate on a cyclic ancestor chain`, () => {
+            // Simulate a pathological host page whose parentNode chain loops back on itself.
+            // Without a cycle guard this walk would never terminate.
+            const a = document!.createElement('div')
+            const b = document!.createElement('div')
+            Object.defineProperty(a, 'parentNode', { value: b, configurable: true })
+            Object.defineProperty(b, 'parentNode', { value: a, configurable: true })
+
+            expect(shouldCaptureElement(a)).toBe(true)
+        })
     })
 
     describe(`shouldCaptureValue`, () => {
