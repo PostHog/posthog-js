@@ -1376,7 +1376,7 @@ export class PostHog implements PostHogInterface {
             this.sessionPersistence.update_campaign_params()
         }
         if (this.config.save_referrer) {
-            this.sessionPersistence.update_referrer_info(this.persistence.props)
+            this.sessionPersistence.update_referrer_info()
         }
 
         if (this.config.save_campaign_params || this.config.save_referrer) {
@@ -1637,14 +1637,23 @@ export class PostHog implements PostHogInterface {
         // don't write to the persistence properties object and info
         // properties object by passing in a new object
 
+        // $referrer / $referring_domain are written to the sessionPersistence from document.referrer
+        // on every capture, and sessionPersistence is merged after the regular persistence below, so
+        // they normally win. When the user has explicitly set one of these via posthog.register()
+        // (which writes to the regular persistence), let that value win instead. Resolve the
+        // precedence per property so a single registered key does not suppress the other, and a
+        // stale session value cannot shadow the registered one. Without this an SPA or iframe
+        // reports document.referrer (the iframe's own origin) rather than the registered value.
+        const persistenceProperties = this.persistence.properties()
+        const sessionPersistenceProperties = this.sessionPersistence.properties()
+        each(['$referrer', '$referring_domain'], (referrerKey) => {
+            if (referrerKey in persistenceProperties) {
+                delete sessionPersistenceProperties[referrerKey]
+            }
+        })
+
         // update properties with pageview info and super-properties
-        properties = extend(
-            {},
-            infoProperties,
-            this.persistence.properties(),
-            this.sessionPersistence.properties(),
-            properties
-        )
+        properties = extend({}, infoProperties, persistenceProperties, sessionPersistenceProperties, properties)
 
         properties['$is_identified'] = this._isIdentified()
 
