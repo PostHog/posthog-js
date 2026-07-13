@@ -1,4 +1,4 @@
 export interface WebRTCDataChannel {
-  nodeId: number;
-  streamId: string;
+    nodeId: number
+    streamId: string
 }

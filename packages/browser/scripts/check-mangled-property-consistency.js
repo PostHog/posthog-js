@@ -60,10 +60,7 @@ function extractMangledPropertyNames(jsFile, mapFile) {
     return result
 }
 
-const slim = extractMangledPropertyNames(
-    path.join(DIST, 'module.slim.js'),
-    path.join(DIST, 'module.slim.js.map')
-)
+const slim = extractMangledPropertyNames(path.join(DIST, 'module.slim.js'), path.join(DIST, 'module.slim.js.map'))
 const ext = extractMangledPropertyNames(
     path.join(DIST, 'extension-bundles.js'),
     path.join(DIST, 'extension-bundles.js.map')
@@ -91,9 +88,7 @@ if (mismatches.length > 0) {
     mismatches.forEach((m) =>
         console.error(`  .${m.property}:  slim → .${m.slim.join(', .')}  |  ext → .${m.ext.join(', .')}`)
     )
-    console.error(
-        '\nFix: ensure the terser nameCache is shared across entries in rollup.config.mjs'
-    )
+    console.error('\nFix: ensure the terser nameCache is shared across entries in rollup.config.mjs')
     process.exit(1)
 } else {
     console.log(

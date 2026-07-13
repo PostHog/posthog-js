@@ -11,7 +11,8 @@ const forbiddenBareSpecifiers = new Set([
     'next/server',
     'posthog-js/react',
 ])
-const specifierPattern = /\b(?:import|export)\s+(?:[^'"\n]*?\sfrom\s+)?['"]([^'"]+)['"]|\bimport\(\s*['"]([^'"]+)['"]\s*\)/g
+const specifierPattern =
+    /\b(?:import|export)\s+(?:[^'"\n]*?\sfrom\s+)?['"]([^'"]+)['"]|\bimport\(\s*['"]([^'"]+)['"]\s*\)/g
 
 function listFiles(dirPath) {
     return fs.readdirSync(dirPath, { withFileTypes: true }).flatMap((entry) => {

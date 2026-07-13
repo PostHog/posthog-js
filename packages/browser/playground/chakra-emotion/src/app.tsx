@@ -25,8 +25,8 @@ export default function App() {
                 <Stack gap={6}>
                     <Heading size="lg">Sign in</Heading>
                     <Text color="gray.500">
-                        This card has p=8 (32px) padding on all sides. If the replay shows the inputs flush left,
-                        the rule.cssText round-trip is dropping longhand padding values.
+                        This card has p=8 (32px) padding on all sides. If the replay shows the inputs flush left, the
+                        rule.cssText round-trip is dropping longhand padding values.
                     </Text>
                     <Box>
                         <Text mb={2}>Email</Text>

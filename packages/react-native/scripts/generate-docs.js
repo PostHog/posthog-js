@@ -1,25 +1,26 @@
-const path = require('path');
-const fs = require('fs');
-const { generateApiSpecs } = require('../../../scripts/docs/parser');
-const { HOG_REF } = require('../../../scripts/docs/constants');
+const path = require('path')
+const fs = require('fs')
+const { generateApiSpecs } = require('../../../scripts/docs/parser')
+const { HOG_REF } = require('../../../scripts/docs/constants')
 
 // Read package.json to get version
-const packageJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../package.json'), 'utf8'));
-const version = packageJson.version;
-const shouldWriteVersionedReferences = process.env.GENERATE_VERSIONED_REFERENCES === '1';
+const packageJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../package.json'), 'utf8'))
+const version = packageJson.version
+const shouldWriteVersionedReferences = process.env.GENERATE_VERSIONED_REFERENCES === '1'
 
 // React Native-specific configuration
 const REACT_NATIVE_SPEC_INFO = {
-    id: 'posthog-react-native',
-    title: 'PostHog React Native SDK',
-    description: 'PostHog React Native SDK allows you to capture events and send them to PostHog from your React Native applications.',
-    slugPrefix: 'posthog-react-native',
-    specUrl: 'https://github.com/PostHog/posthog-js'
-};
+  id: 'posthog-react-native',
+  title: 'PostHog React Native SDK',
+  description:
+    'PostHog React Native SDK allows you to capture events and send them to PostHog from your React Native applications.',
+  slugPrefix: 'posthog-react-native',
+  specUrl: 'https://github.com/PostHog/posthog-js',
+}
 
 // React Native-specific type examples (can be customized as needed)
 const REACT_NATIVE_TYPE_EXAMPLES = {
-    PostHogEventProperties: `// Properties for React Native events
+  PostHogEventProperties: `// Properties for React Native events
 {
     event: 'user_signed_up',
     userId: 'user123',
@@ -30,39 +31,39 @@ const REACT_NATIVE_TYPE_EXAMPLES = {
         name: 'John Doe'
     }
 }`,
-    PostHogEventProperty: `// Can be a string or an object
-"user@example.com" | { name: "John", age: 25 }`
-};
-
-const config = {
-    packageDir: path.resolve(__dirname, '..'),  // packages/react-native
-    apiJsonPath: path.resolve(__dirname, '../docs/posthog-react-native.api.json'),
-    outputPath: path.resolve(__dirname, `../references/posthog-react-native-references-${version}.json`),
-    version: version,
-    id: REACT_NATIVE_SPEC_INFO.id,
-    hogRef: HOG_REF,
-    specInfo: REACT_NATIVE_SPEC_INFO,
-    typeExamples: REACT_NATIVE_TYPE_EXAMPLES,
-    parentClass: 'PostHog',
-    extraMethods: ['PostHogProvider']
-};
-
-// Ensure references directory exists
-const referencesDir = path.resolve(__dirname, '../references');
-if (!fs.existsSync(referencesDir)) {
-    fs.mkdirSync(referencesDir, { recursive: true });
+  PostHogEventProperty: `// Can be a string or an object
+"user@example.com" | { name: "John", age: 25 }`,
 }
 
-const output = generateApiSpecs(config);
-const latestOutput = { ...output, info: { ...output.info, version: '<version>' } };
+const config = {
+  packageDir: path.resolve(__dirname, '..'), // packages/react-native
+  apiJsonPath: path.resolve(__dirname, '../docs/posthog-react-native.api.json'),
+  outputPath: path.resolve(__dirname, `../references/posthog-react-native-references-${version}.json`),
+  version: version,
+  id: REACT_NATIVE_SPEC_INFO.id,
+  hogRef: HOG_REF,
+  specInfo: REACT_NATIVE_SPEC_INFO,
+  typeExamples: REACT_NATIVE_TYPE_EXAMPLES,
+  parentClass: 'PostHog',
+  extraMethods: ['PostHogProvider'],
+}
+
+// Ensure references directory exists
+const referencesDir = path.resolve(__dirname, '../references')
+if (!fs.existsSync(referencesDir)) {
+  fs.mkdirSync(referencesDir, { recursive: true })
+}
+
+const output = generateApiSpecs(config)
+const latestOutput = { ...output, info: { ...output.info, version: '<version>' } }
 
 // Always update the rolling public API reference used by CI and docs previews.
-const latestPath = path.resolve(__dirname, '../references/posthog-react-native-references-latest.json');
-fs.writeFileSync(latestPath, JSON.stringify(latestOutput, null, 2));
+const latestPath = path.resolve(__dirname, '../references/posthog-react-native-references-latest.json')
+fs.writeFileSync(latestPath, JSON.stringify(latestOutput, null, 2))
 
 // Versioned references are release artifacts. Avoid writing them during normal generation
 // so PRs don't accidentally commit package-version-specific reference files.
 if (shouldWriteVersionedReferences) {
-    const versionedPath = path.resolve(__dirname, `../references/posthog-react-native-references-${version}.json`);
-    fs.writeFileSync(versionedPath, JSON.stringify(output, null, 2));
+  const versionedPath = path.resolve(__dirname, `../references/posthog-react-native-references-${version}.json`)
+  fs.writeFileSync(versionedPath, JSON.stringify(output, null, 2))
 }

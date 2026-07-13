@@ -43,8 +43,7 @@ module.exports = {
     meta: {
         type: 'problem',
         docs: {
-            description:
-                'Disallow direct value-level references to Web API globals that may not exist in React Native',
+            description: 'Disallow direct value-level references to Web API globals that may not exist in React Native',
         },
         messages: {
             unsafeWebGlobal:
@@ -144,7 +143,6 @@ module.exports = {
                 if (node.type === 'Literal') {
                     return
                 }
-
 
                 // Allow: import specifiers
                 if (

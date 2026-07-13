@@ -1,5 +1,5 @@
-import type { attributeMutation } from '@posthog/rrweb-types';
-import { RRNode } from '@posthog/rrdom';
+import type { attributeMutation } from '@posthog/rrweb-types'
+import { RRNode } from '@posthog/rrdom'
 
 /**
  * Checks if the dialog is a top level dialog and applies the dialog to the top level
@@ -8,37 +8,34 @@ import { RRNode } from '@posthog/rrdom';
  * @returns void
  */
 export function applyDialogToTopLevel(
-  node: HTMLDialogElement | Node | RRNode,
-  attributeMutation?: attributeMutation,
+    node: HTMLDialogElement | Node | RRNode,
+    attributeMutation?: attributeMutation
 ): void {
-  if (node.nodeName !== 'DIALOG' || node instanceof RRNode) return;
-  const dialog = node as HTMLDialogElement;
-  const oldIsOpen = dialog.open;
-  const oldIsModalState = oldIsOpen && dialog.matches('dialog:modal');
-  const rrOpenMode = dialog.getAttribute('rr_open_mode');
+    if (node.nodeName !== 'DIALOG' || node instanceof RRNode) return
+    const dialog = node as HTMLDialogElement
+    const oldIsOpen = dialog.open
+    const oldIsModalState = oldIsOpen && dialog.matches('dialog:modal')
+    const rrOpenMode = dialog.getAttribute('rr_open_mode')
 
-  const newIsOpen =
-    typeof attributeMutation?.attributes.open === 'string' ||
-    typeof dialog.getAttribute('open') === 'string';
-  const newIsModalState = rrOpenMode === 'modal';
-  const newIsNonModalState = rrOpenMode === 'non-modal';
+    const newIsOpen =
+        typeof attributeMutation?.attributes.open === 'string' || typeof dialog.getAttribute('open') === 'string'
+    const newIsModalState = rrOpenMode === 'modal'
+    const newIsNonModalState = rrOpenMode === 'non-modal'
 
-  const modalStateChanged =
-    (oldIsModalState && newIsNonModalState) ||
-    (!oldIsModalState && newIsModalState);
+    const modalStateChanged = (oldIsModalState && newIsNonModalState) || (!oldIsModalState && newIsModalState)
 
-  if (oldIsOpen && !modalStateChanged) return;
-  // complain if dialog is not attached to the dom
-  if (!dialog.isConnected) {
-    console.warn('dialog is not attached to the dom', dialog);
-    return;
-  }
+    if (oldIsOpen && !modalStateChanged) return
+    // complain if dialog is not attached to the dom
+    if (!dialog.isConnected) {
+        console.warn('dialog is not attached to the dom', dialog)
+        return
+    }
 
-  if (oldIsOpen) dialog.close();
-  if (!newIsOpen) return;
+    if (oldIsOpen) dialog.close()
+    if (!newIsOpen) return
 
-  if (newIsModalState) dialog.showModal();
-  else dialog.show();
+    if (newIsModalState) dialog.showModal()
+    else dialog.show()
 }
 
 /**
@@ -48,20 +45,20 @@ export function applyDialogToTopLevel(
  * @returns void
  */
 export function removeDialogFromTopLevel(
-  node: HTMLDialogElement | Node | RRNode,
-  attributeMutation: attributeMutation,
+    node: HTMLDialogElement | Node | RRNode,
+    attributeMutation: attributeMutation
 ): void {
-  if (node.nodeName !== 'DIALOG' || node instanceof RRNode) return;
-  const dialog = node as HTMLDialogElement;
+    if (node.nodeName !== 'DIALOG' || node instanceof RRNode) return
+    const dialog = node as HTMLDialogElement
 
-  // complain if dialog is not attached to the dom
-  if (!dialog.isConnected) {
-    console.warn('dialog is not attached to the dom', dialog);
-    return;
-  }
+    // complain if dialog is not attached to the dom
+    if (!dialog.isConnected) {
+        console.warn('dialog is not attached to the dom', dialog)
+        return
+    }
 
-  if (attributeMutation.attributes.open === null) {
-    dialog.removeAttribute('open');
-    dialog.removeAttribute('rr_open_mode');
-  }
+    if (attributeMutation.attributes.open === null) {
+        dialog.removeAttribute('open')
+        dialog.removeAttribute('rr_open_mode')
+    }
 }

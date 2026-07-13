@@ -212,8 +212,7 @@ export class ConversationsPersistence {
             }
 
             const userTraits = persistence.get_property(CONVERSATIONS_LEGACY_USER_TRAITS) as
-                | UserProvidedTraits
-                | undefined
+                UserProvidedTraits | undefined
             if (userTraits) {
                 data.userTraits = userTraits
             }

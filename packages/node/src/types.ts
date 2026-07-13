@@ -96,10 +96,7 @@ export type FlagPropertyValue = string | number | (string | number)[] | boolean
  * - `FeatureFlagOverrideOptions` - Set both flag values and payloads
  */
 export type OverrideFeatureFlagsOptions =
-  | false
-  | string[]
-  | Record<string, FeatureFlagValue>
-  | FeatureFlagOverrideOptions
+  false | string[] | Record<string, FeatureFlagValue> | FeatureFlagOverrideOptions
 
 export type BaseFlagEvaluationOptions = {
   groups?: Record<string, string>

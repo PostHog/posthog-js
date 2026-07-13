@@ -18,10 +18,7 @@ import type { BeforeSendMetricFn, MetricAttributeValue, OtlpMetricsPayload } fro
 
 /** Same tagged outcome shape as `SendLogsBatchOutcome` — one policy for both signals. */
 export type SendMetricsBatchOutcome =
-  | { kind: 'ok' }
-  | { kind: 'retry-later'; error: unknown }
-  | { kind: 'too-large' }
-  | { kind: 'fatal'; error: unknown }
+  { kind: 'ok' } | { kind: 'retry-later'; error: unknown } | { kind: 'too-large' } | { kind: 'fatal'; error: unknown }
 
 /**
  * The minimal host surface `PostHogMetrics` depends on. `PostHogCoreStateless`

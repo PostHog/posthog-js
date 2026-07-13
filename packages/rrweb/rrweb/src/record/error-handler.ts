@@ -1,36 +1,36 @@
-import type { ErrorHandler } from '../types';
+import type { ErrorHandler } from '../types'
 
-type Callback = (...args: unknown[]) => unknown;
+type Callback = (...args: unknown[]) => unknown
 
-let errorHandler: ErrorHandler | undefined;
+let errorHandler: ErrorHandler | undefined
 
 export function registerErrorHandler(handler: ErrorHandler | undefined) {
-  errorHandler = handler;
+    errorHandler = handler
 }
 
 export function unregisterErrorHandler() {
-  errorHandler = undefined;
+    errorHandler = undefined
 }
 
 /**
  * Wrap callbacks in a wrapper that allows to pass errors to a configured `errorHandler` method.
  */
 export const callbackWrapper = <T extends Callback>(cb: T): T => {
-  if (!errorHandler) {
-    return cb;
-  }
-
-  const rrwebWrapped = ((...rest: unknown[]) => {
-    try {
-      return cb(...rest);
-    } catch (error) {
-      if (errorHandler && errorHandler(error) === true) {
-        return;
-      }
-
-      throw error;
+    if (!errorHandler) {
+        return cb
     }
-  }) as unknown as T;
 
-  return rrwebWrapped;
-};
+    const rrwebWrapped = ((...rest: unknown[]) => {
+        try {
+            return cb(...rest)
+        } catch (error) {
+            if (errorHandler && errorHandler(error) === true) {
+                return
+            }
+
+            throw error
+        }
+    }) as unknown as T
+
+    return rrwebWrapped
+}

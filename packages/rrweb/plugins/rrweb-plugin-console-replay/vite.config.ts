@@ -1,3 +1,3 @@
-import config from '../../vite.config.default';
+import config from '../../vite.config.default'
 
-export default config('src/index.ts', 'rrwebPluginConsoleReplay');
+export default config('src/index.ts', 'rrwebPluginConsoleReplay')

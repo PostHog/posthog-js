@@ -1,103 +1,102 @@
-import { EventType, IncrementalSource } from '@posthog/rrweb-types';
-import type { eventWithTime } from '@posthog/rrweb-types';
+import { EventType, IncrementalSource } from '@posthog/rrweb-types'
+import type { eventWithTime } from '@posthog/rrweb-types'
 
-const now = Date.now();
+const now = Date.now()
 
 // Reveal container scroll recorded as y=0, no scrollend offset.
 const events: eventWithTime[] = [
-  { type: EventType.DomContentLoaded, data: {}, timestamp: now },
-  { type: EventType.Load, data: {}, timestamp: now + 100 },
-  {
-    type: EventType.Meta,
-    data: { href: 'http://localhost', width: 390, height: 699 },
-    timestamp: now + 100,
-  },
-  {
-    type: EventType.FullSnapshot,
-    data: {
-      node: {
-        id: 1,
-        type: 0,
-        childNodes: [
-          { type: 1, name: 'html', publicId: '', systemId: '', id: 2 },
-          {
-            id: 3,
-            type: 2,
-            tagName: 'html',
-            attributes: {},
-            childNodes: [
-              { id: 4, type: 2, tagName: 'head', attributes: {}, childNodes: [] },
-              {
-                id: 7,
-                type: 2,
-                tagName: 'body',
-                attributes: {},
+    { type: EventType.DomContentLoaded, data: {}, timestamp: now },
+    { type: EventType.Load, data: {}, timestamp: now + 100 },
+    {
+        type: EventType.Meta,
+        data: { href: 'http://localhost', width: 390, height: 699 },
+        timestamp: now + 100,
+    },
+    {
+        type: EventType.FullSnapshot,
+        data: {
+            node: {
+                id: 1,
+                type: 0,
                 childNodes: [
-                  {
-                    id: 8,
-                    type: 2,
-                    tagName: 'div',
-                    attributes: {
-                      id: 'reveal-container',
-                      style:
-                        'overflow: auto; height: 100px; width: 100%; display: block;',
+                    { type: 1, name: 'html', publicId: '', systemId: '', id: 2 },
+                    {
+                        id: 3,
+                        type: 2,
+                        tagName: 'html',
+                        attributes: {},
+                        childNodes: [
+                            { id: 4, type: 2, tagName: 'head', attributes: {}, childNodes: [] },
+                            {
+                                id: 7,
+                                type: 2,
+                                tagName: 'body',
+                                attributes: {},
+                                childNodes: [
+                                    {
+                                        id: 8,
+                                        type: 2,
+                                        tagName: 'div',
+                                        attributes: {
+                                            id: 'reveal-container',
+                                            style: 'overflow: auto; height: 100px; width: 100%; display: block;',
+                                        },
+                                        childNodes: [],
+                                    },
+                                ],
+                            },
+                        ],
                     },
-                    childNodes: [],
-                  },
                 ],
-              },
+            },
+            initialOffset: { left: 0, top: 0 },
+        },
+        timestamp: now + 100,
+    },
+    {
+        type: EventType.IncrementalSnapshot,
+        data: {
+            source: IncrementalSource.Mutation,
+            texts: [],
+            attributes: [],
+            removes: [],
+            adds: [
+                {
+                    parentId: 8,
+                    nextId: null,
+                    node: {
+                        id: 9,
+                        type: 2,
+                        tagName: 'div',
+                        attributes: { id: 'sheet-content', style: 'height: 10px;' },
+                        childNodes: [],
+                    },
+                },
             ],
-          },
-        ],
-      },
-      initialOffset: { left: 0, top: 0 },
-    },
-    timestamp: now + 100,
-  },
-  {
-    type: EventType.IncrementalSnapshot,
-    data: {
-      source: IncrementalSource.Mutation,
-      texts: [],
-      attributes: [],
-      removes: [],
-      adds: [
-        {
-          parentId: 8,
-          nextId: null,
-          node: {
-            id: 9,
-            type: 2,
-            tagName: 'div',
-            attributes: { id: 'sheet-content', style: 'height: 10px;' },
-            childNodes: [],
-          },
         },
-      ],
+        timestamp: now + 500,
     },
-    timestamp: now + 500,
-  },
-  {
-    type: EventType.IncrementalSnapshot,
-    data: { source: IncrementalSource.Scroll, id: 8, x: 0, y: 0 },
-    timestamp: now + 600,
-  },
-  {
-    type: EventType.IncrementalSnapshot,
-    data: {
-      source: IncrementalSource.Mutation,
-      texts: [],
-      attributes: [
-        {
-          id: 9,
-          attributes: { style: 'height: 3000px;' },
+    {
+        type: EventType.IncrementalSnapshot,
+        data: { source: IncrementalSource.Scroll, id: 8, x: 0, y: 0 },
+        timestamp: now + 600,
+    },
+    {
+        type: EventType.IncrementalSnapshot,
+        data: {
+            source: IncrementalSource.Mutation,
+            texts: [],
+            attributes: [
+                {
+                    id: 9,
+                    attributes: { style: 'height: 3000px;' },
+                },
+            ],
+            removes: [],
+            adds: [],
         },
-      ],
-      removes: [],
-      adds: [],
+        timestamp: now + 700,
     },
-    timestamp: now + 700,
-  },
-];
+]
 
-export default events;
+export default events

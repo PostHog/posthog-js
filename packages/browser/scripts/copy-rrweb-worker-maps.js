@@ -14,7 +14,9 @@ if (!fs.existsSync(RRWEB_DIST)) {
     process.exit(0)
 }
 
-const mapFiles = fs.readdirSync(RRWEB_DIST).filter((file) => file.startsWith('image-bitmap-data-url-worker-') && file.endsWith('.js.map'))
+const mapFiles = fs
+    .readdirSync(RRWEB_DIST)
+    .filter((file) => file.startsWith('image-bitmap-data-url-worker-') && file.endsWith('.js.map'))
 
 if (mapFiles.length === 0) {
     // Fail loudly rather than silently shipping without the sourcemap.

@@ -1787,8 +1787,7 @@ describe('PostHog React Native', () => {
       ;(posthog as any)._logs.captureLog({ body: 'hello' })
 
       const logsQueue = posthog.getPersistedProperty(PostHogPersistedProperty.LogsQueue) as
-        | Array<{ record: { body: { stringValue: string } } }>
-        | undefined
+        Array<{ record: { body: { stringValue: string } } }> | undefined
       expect(logsQueue).toHaveLength(1)
       expect(logsQueue?.[0].record.body.stringValue).toBe('hello')
 

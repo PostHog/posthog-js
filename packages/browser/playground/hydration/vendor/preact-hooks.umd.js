@@ -86,7 +86,7 @@
         return F(r.__H, t) ? ((r.__V = n()), (r.i = t), (r.__h = n), r.__V) : r.__
     }
     function T() {
-        for (var n; (n = e.shift()); )
+        for (var n; (n = e.shift());)
             if (n.__P && n.__H)
                 try {
                     ;(n.__H.__h.forEach(x), n.__H.__h.forEach(A), (n.__H.__h = []))
@@ -226,7 +226,7 @@
         (n.useId = function () {
             var n = p(u++, 11)
             if (!n.__) {
-                for (var t = r.__v; null !== t && !t.__m && null !== t.__; ) t = t.__
+                for (var t = r.__v; null !== t && !t.__m && null !== t.__;) t = t.__
                 var i = t.__m || (t.__m = [0, 0])
                 n.__ = 'P' + i[0] + '-' + i[1]++
             }

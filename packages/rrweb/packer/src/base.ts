@@ -1,7 +1,7 @@
-import type { eventWithTime } from '@posthog/rrweb-types';
+import type { eventWithTime } from '@posthog/rrweb-types'
 
 export type eventWithTimeAndPacker = eventWithTime & {
-  v: string;
-};
+    v: string
+}
 
-export const MARK = 'v1';
+export const MARK = 'v1'

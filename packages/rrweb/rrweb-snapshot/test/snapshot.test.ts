@@ -1,988 +1,897 @@
 /**
  * @vitest-environment jsdom
  */
-import { JSDOM } from 'jsdom';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { JSDOM } from 'jsdom'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import snapshot, {
-  _isBlockedElement,
-  DEFAULT_MAX_DEPTH,
-  transformAttribute,
-  wasMaxDepthReached,
-  resetMaxDepthState,
-  resetStylesheetLoadTracking,
-  serializeNodeWithId,
-} from '../src/snapshot';
-import { elementNode, serializedNodeWithId } from '../src/types';
-import { Mirror, absolutifyURLs } from '../src/utils';
+    _isBlockedElement,
+    DEFAULT_MAX_DEPTH,
+    transformAttribute,
+    wasMaxDepthReached,
+    resetMaxDepthState,
+    resetStylesheetLoadTracking,
+    serializeNodeWithId,
+} from '../src/snapshot'
+import { elementNode, serializedNodeWithId } from '../src/types'
+import { Mirror, absolutifyURLs } from '../src/utils'
 
 const serializeNode = (node: Node): serializedNodeWithId | null => {
-  return serializeNodeWithId(node, {
-    doc: document,
-    mirror: new Mirror(),
-    blockClass: 'blockblock',
-    blockSelector: null,
-    maskTextClass: 'maskmask',
-    maskTextSelector: null,
-    skipChild: false,
-    inlineStylesheet: true,
-    maskTextFn: undefined,
-    maskInputFn: undefined,
-    slimDOMOptions: {},
-  });
-};
+    return serializeNodeWithId(node, {
+        doc: document,
+        mirror: new Mirror(),
+        blockClass: 'blockblock',
+        blockSelector: null,
+        maskTextClass: 'maskmask',
+        maskTextSelector: null,
+        skipChild: false,
+        inlineStylesheet: true,
+        maskTextFn: undefined,
+        maskInputFn: undefined,
+        slimDOMOptions: {},
+    })
+}
 
 describe('iframe load listener cleanup', () => {
-  it('should not throw when iframe removeEventListener is missing', () => {
-    const iframe = document.createElement('iframe');
-    document.body.appendChild(iframe);
-    const mirror = new Mirror();
-    let disposer: (() => void) | undefined;
+    it('should not throw when iframe removeEventListener is missing', () => {
+        const iframe = document.createElement('iframe')
+        document.body.appendChild(iframe)
+        const mirror = new Mirror()
+        let disposer: (() => void) | undefined
 
-    serializeNodeWithId(iframe, {
-      doc: document,
-      mirror,
-      blockClass: 'blockblock',
-      blockSelector: null,
-      maskTextClass: 'maskmask',
-      maskTextSelector: null,
-      skipChild: false,
-      inlineStylesheet: true,
-      maskTextFn: undefined,
-      maskInputFn: undefined,
-      slimDOMOptions: {},
-      onIframeListenerRegistered: (_iframeNode, iframeDisposer) => {
-        disposer = iframeDisposer;
-      },
-    });
+        serializeNodeWithId(iframe, {
+            doc: document,
+            mirror,
+            blockClass: 'blockblock',
+            blockSelector: null,
+            maskTextClass: 'maskmask',
+            maskTextSelector: null,
+            skipChild: false,
+            inlineStylesheet: true,
+            maskTextFn: undefined,
+            maskInputFn: undefined,
+            slimDOMOptions: {},
+            onIframeListenerRegistered: (_iframeNode, iframeDisposer) => {
+                disposer = iframeDisposer
+            },
+        })
 
-    Object.defineProperty(iframe, 'removeEventListener', {
-      configurable: true,
-      value: undefined,
-    });
+        Object.defineProperty(iframe, 'removeEventListener', {
+            configurable: true,
+            value: undefined,
+        })
 
-    expect(disposer).toBeDefined();
-    expect(() => disposer?.()).not.toThrow();
+        expect(disposer).toBeDefined()
+        expect(() => disposer?.()).not.toThrow()
 
-    document.body.removeChild(iframe);
-  });
-});
+        document.body.removeChild(iframe)
+    })
+})
 
 describe('absolute url to stylesheet', () => {
-  const href = 'http://localhost/css/style.css';
+    const href = 'http://localhost/css/style.css'
 
-  it('can handle relative path', () => {
-    expect(absolutifyURLs('url(a.jpg)', href)).toEqual(
-      `url(http://localhost/css/a.jpg)`,
-    );
-  });
+    it('can handle relative path', () => {
+        expect(absolutifyURLs('url(a.jpg)', href)).toEqual(`url(http://localhost/css/a.jpg)`)
+    })
 
-  it('can handle same level path', () => {
-    expect(absolutifyURLs('url("./a.jpg")', href)).toEqual(
-      `url("http://localhost/css/a.jpg")`,
-    );
-  });
+    it('can handle same level path', () => {
+        expect(absolutifyURLs('url("./a.jpg")', href)).toEqual(`url("http://localhost/css/a.jpg")`)
+    })
 
-  it('can handle parent level path', () => {
-    expect(absolutifyURLs('url("../a.jpg")', href)).toEqual(
-      `url("http://localhost/a.jpg")`,
-    );
-  });
+    it('can handle parent level path', () => {
+        expect(absolutifyURLs('url("../a.jpg")', href)).toEqual(`url("http://localhost/a.jpg")`)
+    })
 
-  it('can handle absolute path', () => {
-    expect(absolutifyURLs('url("/a.jpg")', href)).toEqual(
-      `url("http://localhost/a.jpg")`,
-    );
-  });
+    it('can handle absolute path', () => {
+        expect(absolutifyURLs('url("/a.jpg")', href)).toEqual(`url("http://localhost/a.jpg")`)
+    })
 
-  it('can handle external path', () => {
-    expect(absolutifyURLs('url("http://localhost/a.jpg")', href)).toEqual(
-      `url("http://localhost/a.jpg")`,
-    );
-  });
+    it('can handle external path', () => {
+        expect(absolutifyURLs('url("http://localhost/a.jpg")', href)).toEqual(`url("http://localhost/a.jpg")`)
+    })
 
-  it('can handle single quote path', () => {
-    expect(absolutifyURLs(`url('./a.jpg')`, href)).toEqual(
-      `url('http://localhost/css/a.jpg')`,
-    );
-  });
+    it('can handle single quote path', () => {
+        expect(absolutifyURLs(`url('./a.jpg')`, href)).toEqual(`url('http://localhost/css/a.jpg')`)
+    })
 
-  it('can handle no quote path', () => {
-    expect(absolutifyURLs('url(./a.jpg)', href)).toEqual(
-      `url(http://localhost/css/a.jpg)`,
-    );
-  });
+    it('can handle no quote path', () => {
+        expect(absolutifyURLs('url(./a.jpg)', href)).toEqual(`url(http://localhost/css/a.jpg)`)
+    })
 
-  it('can handle multiple no quote paths', () => {
-    expect(
-      absolutifyURLs(
-        'background-image: url(images/b.jpg);background: #aabbcc url(images/a.jpg) 50% 50% repeat;',
-        href,
-      ),
-    ).toEqual(
-      `background-image: url(http://localhost/css/images/b.jpg);` +
-        `background: #aabbcc url(http://localhost/css/images/a.jpg) 50% 50% repeat;`,
-    );
-  });
+    it('can handle multiple no quote paths', () => {
+        expect(
+            absolutifyURLs(
+                'background-image: url(images/b.jpg);background: #aabbcc url(images/a.jpg) 50% 50% repeat;',
+                href
+            )
+        ).toEqual(
+            `background-image: url(http://localhost/css/images/b.jpg);` +
+                `background: #aabbcc url(http://localhost/css/images/a.jpg) 50% 50% repeat;`
+        )
+    })
 
-  it('can handle data url image', () => {
-    expect(absolutifyURLs('url(data:image/gif;base64,ABC)', href)).toEqual(
-      'url(data:image/gif;base64,ABC)',
-    );
-    expect(
-      absolutifyURLs(
-        'url(data:application/font-woff;base64,d09GMgABAAAAAAm)',
-        href,
-      ),
-    ).toEqual('url(data:application/font-woff;base64,d09GMgABAAAAAAm)');
-  });
+    it('can handle data url image', () => {
+        expect(absolutifyURLs('url(data:image/gif;base64,ABC)', href)).toEqual('url(data:image/gif;base64,ABC)')
+        expect(absolutifyURLs('url(data:application/font-woff;base64,d09GMgABAAAAAAm)', href)).toEqual(
+            'url(data:application/font-woff;base64,d09GMgABAAAAAAm)'
+        )
+    })
 
-  it('preserves quotes around inline svgs with spaces', () => {
-    expect(
-      absolutifyURLs(
-        "url(\"data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3E%3Cpath fill='%2328a745' d='M3'/%3E%3C/svg%3E\")",
-        href,
-      ),
-    ).toEqual(
-      "url(\"data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3E%3Cpath fill='%2328a745' d='M3'/%3E%3C/svg%3E\")",
-    );
-    expect(
-      absolutifyURLs(
-        'url(\'data:image/svg+xml;utf8,<svg width="28" height="32" viewBox="0 0 28 32" xmlns="http://www.w3.org/2000/svg"><path d="M27 14C28" fill="white"/></svg>\')',
-        href,
-      ),
-    ).toEqual(
-      'url(\'data:image/svg+xml;utf8,<svg width="28" height="32" viewBox="0 0 28 32" xmlns="http://www.w3.org/2000/svg"><path d="M27 14C28" fill="white"/></svg>\')',
-    );
-    expect(
-      absolutifyURLs(
-        'url("data:image/svg+xml;utf8,<svg width="28" height="32" viewBox="0 0 28 32" xmlns="http://www.w3.org/2000/svg"><path d="M27 14C28" fill="white"/></svg>")',
-        href,
-      ),
-    ).toEqual(
-      'url("data:image/svg+xml;utf8,<svg width="28" height="32" viewBox="0 0 28 32" xmlns="http://www.w3.org/2000/svg"><path d="M27 14C28" fill="white"/></svg>")',
-    );
-  });
-  it('can handle empty path', () => {
-    expect(absolutifyURLs(`url('')`, href)).toEqual(`url('')`);
-  });
-});
+    it('preserves quotes around inline svgs with spaces', () => {
+        expect(
+            absolutifyURLs(
+                "url(\"data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3E%3Cpath fill='%2328a745' d='M3'/%3E%3C/svg%3E\")",
+                href
+            )
+        ).toEqual(
+            "url(\"data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3E%3Cpath fill='%2328a745' d='M3'/%3E%3C/svg%3E\")"
+        )
+        expect(
+            absolutifyURLs(
+                'url(\'data:image/svg+xml;utf8,<svg width="28" height="32" viewBox="0 0 28 32" xmlns="http://www.w3.org/2000/svg"><path d="M27 14C28" fill="white"/></svg>\')',
+                href
+            )
+        ).toEqual(
+            'url(\'data:image/svg+xml;utf8,<svg width="28" height="32" viewBox="0 0 28 32" xmlns="http://www.w3.org/2000/svg"><path d="M27 14C28" fill="white"/></svg>\')'
+        )
+        expect(
+            absolutifyURLs(
+                'url("data:image/svg+xml;utf8,<svg width="28" height="32" viewBox="0 0 28 32" xmlns="http://www.w3.org/2000/svg"><path d="M27 14C28" fill="white"/></svg>")',
+                href
+            )
+        ).toEqual(
+            'url("data:image/svg+xml;utf8,<svg width="28" height="32" viewBox="0 0 28 32" xmlns="http://www.w3.org/2000/svg"><path d="M27 14C28" fill="white"/></svg>")'
+        )
+    })
+    it('can handle empty path', () => {
+        expect(absolutifyURLs(`url('')`, href)).toEqual(`url('')`)
+    })
+})
 
 describe('isBlockedElement()', () => {
-  const subject = (html: string, opt: any = {}) =>
-    _isBlockedElement(render(html), 'rr-block', opt.blockSelector);
+    const subject = (html: string, opt: any = {}) => _isBlockedElement(render(html), 'rr-block', opt.blockSelector)
 
-  const render = (html: string): HTMLElement =>
-    JSDOM.fragment(html).querySelector('div')!;
+    const render = (html: string): HTMLElement => JSDOM.fragment(html).querySelector('div')!
 
-  it('can handle empty elements', () => {
-    expect(subject('<div />')).toEqual(false);
-  });
+    it('can handle empty elements', () => {
+        expect(subject('<div />')).toEqual(false)
+    })
 
-  it('blocks prohibited className', () => {
-    expect(subject('<div class="foo rr-block bar" />')).toEqual(true);
-  });
+    it('blocks prohibited className', () => {
+        expect(subject('<div class="foo rr-block bar" />')).toEqual(true)
+    })
 
-  it('does not block random data selector', () => {
-    expect(subject('<div data-rr-block />')).toEqual(false);
-  });
+    it('does not block random data selector', () => {
+        expect(subject('<div data-rr-block />')).toEqual(false)
+    })
 
-  it('blocks blocked selector', () => {
-    expect(
-      subject('<div data-rr-block />', { blockSelector: '[data-rr-block]' }),
-    ).toEqual(true);
-  });
-});
+    it('blocks blocked selector', () => {
+        expect(subject('<div data-rr-block />', { blockSelector: '[data-rr-block]' })).toEqual(true)
+    })
+})
 
 describe('style elements', () => {
-  const render = (html: string): HTMLStyleElement => {
-    document.write(html);
-    return document.querySelector('style')!;
-  };
+    const render = (html: string): HTMLStyleElement => {
+        document.write(html)
+        return document.querySelector('style')!
+    }
 
-  it('should serialize all rules of stylesheet when the sheet has a single child node', () => {
-    const styleEl = render(`<style>body { color: red; }</style>`);
-    styleEl.sheet?.insertRule('section { color: blue; }');
-    expect(serializeNode(styleEl.childNodes[0])).toMatchObject({
-      isStyle: true,
-      rootId: undefined,
-      textContent: 'section {color: blue;}body {color: red;}',
-      type: 3,
-    });
-  });
+    it('should serialize all rules of stylesheet when the sheet has a single child node', () => {
+        const styleEl = render(`<style>body { color: red; }</style>`)
+        styleEl.sheet?.insertRule('section { color: blue; }')
+        expect(serializeNode(styleEl.childNodes[0])).toMatchObject({
+            isStyle: true,
+            rootId: undefined,
+            textContent: 'section {color: blue;}body {color: red;}',
+            type: 3,
+        })
+    })
 
-  it('should serialize individual text nodes on stylesheets with multiple child nodes', () => {
-    const styleEl = render(`<style>body { color: red; }</style>`);
-    styleEl.append(document.createTextNode('section { color: blue; }'));
-    expect(serializeNode(styleEl.childNodes[1])).toMatchObject({
-      isStyle: true,
-      rootId: undefined,
-      textContent: 'section { color: blue; }',
-      type: 3,
-    });
-  });
+    it('should serialize individual text nodes on stylesheets with multiple child nodes', () => {
+        const styleEl = render(`<style>body { color: red; }</style>`)
+        styleEl.append(document.createTextNode('section { color: blue; }'))
+        expect(serializeNode(styleEl.childNodes[1])).toMatchObject({
+            isStyle: true,
+            rootId: undefined,
+            textContent: 'section { color: blue; }',
+            type: 3,
+        })
+    })
 
-  it('keeps original textContent when CSSOM emits empty longhands from var() shorthand', () => {
-    // Real browsers serialize `padding: var(--p); padding-bottom: var(--pb)`
-    // as `padding-top: ; padding-right: ; padding-left: ; padding-bottom: var(--pb)`.
-    // jsdom does not reproduce this, so simulate the corruption by mocking cssText.
-    const original =
-      '.card { padding: var(--p); padding-bottom: var(--pb); color: red; }';
-    const styleEl = render(`<style>${original}</style>`);
-    const rule = styleEl.sheet!.cssRules[0];
-    Object.defineProperty(rule, 'cssText', {
-      configurable: true,
-      get: () =>
-        '.card { padding-top: ; padding-right: ; padding-left: ; padding-bottom: var(--pb); color: red; }',
-    });
-    expect(serializeNode(styleEl.childNodes[0])).toMatchObject({
-      isStyle: true,
-      rootId: undefined,
-      textContent: original,
-      type: 3,
-    });
-  });
-});
+    it('keeps original textContent when CSSOM emits empty longhands from var() shorthand', () => {
+        // Real browsers serialize `padding: var(--p); padding-bottom: var(--pb)`
+        // as `padding-top: ; padding-right: ; padding-left: ; padding-bottom: var(--pb)`.
+        // jsdom does not reproduce this, so simulate the corruption by mocking cssText.
+        const original = '.card { padding: var(--p); padding-bottom: var(--pb); color: red; }'
+        const styleEl = render(`<style>${original}</style>`)
+        const rule = styleEl.sheet!.cssRules[0]
+        Object.defineProperty(rule, 'cssText', {
+            configurable: true,
+            get: () =>
+                '.card { padding-top: ; padding-right: ; padding-left: ; padding-bottom: var(--pb); color: red; }',
+        })
+        expect(serializeNode(styleEl.childNodes[0])).toMatchObject({
+            isStyle: true,
+            rootId: undefined,
+            textContent: original,
+            type: 3,
+        })
+    })
+})
 
 describe('scrollTop/scrollLeft', () => {
-  const render = (html: string): HTMLDivElement => {
-    document.write(html);
-    return document.querySelector('div')!;
-  };
+    const render = (html: string): HTMLDivElement => {
+        document.write(html)
+        return document.querySelector('div')!
+    }
 
-  it('should serialize scroll positions', () => {
-    const el = render(`<div stylel='overflow: auto; width: 1px; height: 1px;'>
+    it('should serialize scroll positions', () => {
+        const el = render(`<div stylel='overflow: auto; width: 1px; height: 1px;'>
       Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
-    </div>`);
-    el.scrollTop = 10;
-    el.scrollLeft = 20;
-    expect(serializeNode(el)).toMatchObject({
-      attributes: {
-        rr_scrollTop: 10,
-        rr_scrollLeft: 20,
-      },
-    });
-  });
-});
+    </div>`)
+        el.scrollTop = 10
+        el.scrollLeft = 20
+        expect(serializeNode(el)).toMatchObject({
+            attributes: {
+                rr_scrollTop: 10,
+                rr_scrollLeft: 20,
+            },
+        })
+    })
+})
 
 describe('form', () => {
-  const render = (html: string): HTMLTextAreaElement => {
-    document.write(html);
-    return document.querySelector('textarea')!;
-  };
+    const render = (html: string): HTMLTextAreaElement => {
+        document.write(html)
+        return document.querySelector('textarea')!
+    }
 
-  it('should record textarea values once', () => {
-    const el = render(`<textarea>Lorem ipsum</textarea>`);
-    const sel = serializeNode(el) as elementNode;
+    it('should record textarea values once', () => {
+        const el = render(`<textarea>Lorem ipsum</textarea>`)
+        const sel = serializeNode(el) as elementNode
 
-    // we serialize according to where the DOM stores the value, not how
-    // the HTML stores it (this is so that maskInputValue can work over
-    // inputs/textareas/selects in a uniform way)
-    expect(sel).toMatchObject({
-      attributes: {
-        value: 'Lorem ipsum',
-      },
-    });
-    expect(sel?.childNodes).toEqual([]); // shouldn't be stored in childNodes while in transit
-  });
-});
+        // we serialize according to where the DOM stores the value, not how
+        // the HTML stores it (this is so that maskInputValue can work over
+        // inputs/textareas/selects in a uniform way)
+        expect(sel).toMatchObject({
+            attributes: {
+                value: 'Lorem ipsum',
+            },
+        })
+        expect(sel?.childNodes).toEqual([]) // shouldn't be stored in childNodes while in transit
+    })
+})
 
 describe('blocked elements with CSS transforms', () => {
-  const renderWithStyle = (html: string, styles: string): HTMLElement => {
-    const styleEl = document.createElement('style');
-    styleEl.textContent = styles;
-    document.head.appendChild(styleEl);
-    document.write(html);
-    return document.querySelector('div')!;
-  };
+    const renderWithStyle = (html: string, styles: string): HTMLElement => {
+        const styleEl = document.createElement('style')
+        styleEl.textContent = styles
+        document.head.appendChild(styleEl)
+        document.write(html)
+        return document.querySelector('div')!
+    }
 
-  it('should capture position for blocked element with translate transform', () => {
-    const el = renderWithStyle(
-      `<div class="blockblock" style="transform: translate(100px, 50px); width: 200px; height: 100px;">Blocked content</div>`,
-      '',
-    );
+    it('should capture position for blocked element with translate transform', () => {
+        const el = renderWithStyle(
+            `<div class="blockblock" style="transform: translate(100px, 50px); width: 200px; height: 100px;">Blocked content</div>`,
+            ''
+        )
 
-    const sn = serializeNode(el) as elementNode;
+        const sn = serializeNode(el) as elementNode
 
-    expect(sn?.attributes?.rr_width).toBeDefined();
-    expect(sn?.attributes?.rr_height).toBeDefined();
-    expect(sn?.attributes?.rr_left).toBeDefined();
-    expect(sn?.attributes?.rr_top).toBeDefined();
+        expect(sn?.attributes?.rr_width).toBeDefined()
+        expect(sn?.attributes?.rr_height).toBeDefined()
+        expect(sn?.attributes?.rr_left).toBeDefined()
+        expect(sn?.attributes?.rr_top).toBeDefined()
 
-    // The position should reflect the transformed position
-    expect(sn?.attributes?.class).toBe('blockblock');
-  });
+        // The position should reflect the transformed position
+        expect(sn?.attributes?.class).toBe('blockblock')
+    })
 
-  it('should capture position for blocked element with scale and translate', () => {
-    const el = renderWithStyle(
-      `<div class="blockblock" style="transform: translate(50px, 75px) scale(1.5); width: 100px; height: 100px;">Blocked content</div>`,
-      '',
-    );
+    it('should capture position for blocked element with scale and translate', () => {
+        const el = renderWithStyle(
+            `<div class="blockblock" style="transform: translate(50px, 75px) scale(1.5); width: 100px; height: 100px;">Blocked content</div>`,
+            ''
+        )
 
-    const sn = serializeNode(el) as elementNode;
+        const sn = serializeNode(el) as elementNode
 
-    expect(sn?.attributes?.rr_width).toBeDefined();
-    expect(sn?.attributes?.rr_height).toBeDefined();
-    expect(sn?.attributes?.rr_left).toBeDefined();
-    expect(sn?.attributes?.rr_top).toBeDefined();
-  });
+        expect(sn?.attributes?.rr_width).toBeDefined()
+        expect(sn?.attributes?.rr_height).toBeDefined()
+        expect(sn?.attributes?.rr_left).toBeDefined()
+        expect(sn?.attributes?.rr_top).toBeDefined()
+    })
 
-  it('should capture position for blocked element with rotate transform', () => {
-    const el = renderWithStyle(
-      `<div class="blockblock" style="transform: rotate(45deg) translate(100px, 100px); width: 150px; height: 150px;">Blocked content</div>`,
-      '',
-    );
+    it('should capture position for blocked element with rotate transform', () => {
+        const el = renderWithStyle(
+            `<div class="blockblock" style="transform: rotate(45deg) translate(100px, 100px); width: 150px; height: 150px;">Blocked content</div>`,
+            ''
+        )
 
-    const sn = serializeNode(el) as elementNode;
+        const sn = serializeNode(el) as elementNode
 
-    expect(sn?.attributes?.rr_width).toBeDefined();
-    expect(sn?.attributes?.rr_height).toBeDefined();
-    expect(sn?.attributes?.rr_left).toBeDefined();
-    expect(sn?.attributes?.rr_top).toBeDefined();
-  });
+        expect(sn?.attributes?.rr_width).toBeDefined()
+        expect(sn?.attributes?.rr_height).toBeDefined()
+        expect(sn?.attributes?.rr_left).toBeDefined()
+        expect(sn?.attributes?.rr_top).toBeDefined()
+    })
 
-  it('should capture position for blocked element with matrix transform', () => {
-    const el = renderWithStyle(
-      `<div class="blockblock" style="transform: matrix(1, 0, 0, 1, 100, 200); width: 80px; height: 60px;">Blocked content</div>`,
-      '',
-    );
+    it('should capture position for blocked element with matrix transform', () => {
+        const el = renderWithStyle(
+            `<div class="blockblock" style="transform: matrix(1, 0, 0, 1, 100, 200); width: 80px; height: 60px;">Blocked content</div>`,
+            ''
+        )
 
-    const sn = serializeNode(el) as elementNode;
+        const sn = serializeNode(el) as elementNode
 
-    expect(sn?.attributes?.rr_width).toBeDefined();
-    expect(sn?.attributes?.rr_height).toBeDefined();
-    expect(sn?.attributes?.rr_left).toBeDefined();
-    expect(sn?.attributes?.rr_top).toBeDefined();
-  });
+        expect(sn?.attributes?.rr_width).toBeDefined()
+        expect(sn?.attributes?.rr_height).toBeDefined()
+        expect(sn?.attributes?.rr_left).toBeDefined()
+        expect(sn?.attributes?.rr_top).toBeDefined()
+    })
 
-  it('should capture position for absolutely positioned element', () => {
-    const el = renderWithStyle(
-      `<div class="blockblock" style="position: absolute; left: 100px; top: 500px; width: 100px; height: 100px;">Blocked content</div>`,
-      'body { height: 3000px; }',
-    );
+    it('should capture position for absolutely positioned element', () => {
+        const el = renderWithStyle(
+            `<div class="blockblock" style="position: absolute; left: 100px; top: 500px; width: 100px; height: 100px;">Blocked content</div>`,
+            'body { height: 3000px; }'
+        )
 
-    const sn = serializeNode(el) as elementNode;
+        const sn = serializeNode(el) as elementNode
 
-    expect(sn?.attributes?.rr_left).toBeDefined();
-    expect(sn?.attributes?.rr_top).toBeDefined();
+        expect(sn?.attributes?.rr_left).toBeDefined()
+        expect(sn?.attributes?.rr_top).toBeDefined()
 
-    // Position should be captured from getBoundingClientRect
-    const left = parseFloat(
-      (sn?.attributes?.rr_left as string).replace('px', ''),
-    );
-    const top = parseFloat(
-      (sn?.attributes?.rr_top as string).replace('px', ''),
-    );
+        // Position should be captured from getBoundingClientRect
+        const left = parseFloat((sn?.attributes?.rr_left as string).replace('px', ''))
+        const top = parseFloat((sn?.attributes?.rr_top as string).replace('px', ''))
 
-    // The recorded position should match the element's position
-    expect(left).toBeGreaterThanOrEqual(0);
-    expect(top).toBeGreaterThanOrEqual(0);
-  });
+        // The recorded position should match the element's position
+        expect(left).toBeGreaterThanOrEqual(0)
+        expect(top).toBeGreaterThanOrEqual(0)
+    })
 
-  it('should preserve class attribute for blocked elements', () => {
-    const el = renderWithStyle(
-      `<div class="blockblock my-custom-class another-class" style="transform: translate(10px, 20px); width: 50px; height: 50px;">Blocked</div>`,
-      '',
-    );
+    it('should preserve class attribute for blocked elements', () => {
+        const el = renderWithStyle(
+            `<div class="blockblock my-custom-class another-class" style="transform: translate(10px, 20px); width: 50px; height: 50px;">Blocked</div>`,
+            ''
+        )
 
-    const sn = serializeNode(el) as elementNode;
+        const sn = serializeNode(el) as elementNode
 
-    // Only the blockClass should be preserved in attributes
-    expect(sn?.attributes?.class).toBe(
-      'blockblock my-custom-class another-class',
-    );
-  });
+        // Only the blockClass should be preserved in attributes
+        expect(sn?.attributes?.class).toBe('blockblock my-custom-class another-class')
+    })
 
-  it('should handle blocked element with explicit position', () => {
-    const el = renderWithStyle(
-      `<div class="blockblock" style="position: absolute; left: 50px; top: 30px; width: 100px; height: 100px;">Blocked</div>`,
-      '',
-    );
+    it('should handle blocked element with explicit position', () => {
+        const el = renderWithStyle(
+            `<div class="blockblock" style="position: absolute; left: 50px; top: 30px; width: 100px; height: 100px;">Blocked</div>`,
+            ''
+        )
 
-    const sn = serializeNode(el) as elementNode;
+        const sn = serializeNode(el) as elementNode
 
-    expect(sn?.attributes?.rr_left).toBeDefined();
-    expect(sn?.attributes?.rr_top).toBeDefined();
+        expect(sn?.attributes?.rr_left).toBeDefined()
+        expect(sn?.attributes?.rr_top).toBeDefined()
 
-    const left = parseFloat(
-      (sn?.attributes?.rr_left as string).replace('px', ''),
-    );
-    const top = parseFloat(
-      (sn?.attributes?.rr_top as string).replace('px', ''),
-    );
+        const left = parseFloat((sn?.attributes?.rr_left as string).replace('px', ''))
+        const top = parseFloat((sn?.attributes?.rr_top as string).replace('px', ''))
 
-    // Positions should be captured correctly
-    expect(left).toBeGreaterThanOrEqual(0);
-    expect(top).toBeGreaterThanOrEqual(0);
-  });
+        // Positions should be captured correctly
+        expect(left).toBeGreaterThanOrEqual(0)
+        expect(top).toBeGreaterThanOrEqual(0)
+    })
 
-  it('captures rr_position=static for in-flow blocked elements and omits rr_transform', () => {
-    const el = renderWithStyle(
-      `<div class="blockblock" style="width: 100px; height: 50px;">In-flow blocked</div>`,
-      '',
-    );
+    it('captures rr_position=static for in-flow blocked elements and omits rr_transform', () => {
+        const el = renderWithStyle(
+            `<div class="blockblock" style="width: 100px; height: 50px;">In-flow blocked</div>`,
+            ''
+        )
 
-    const sn = serializeNode(el) as elementNode;
+        const sn = serializeNode(el) as elementNode
 
-    expect(sn?.attributes?.rr_position).toBe('static');
-    // No transform was set, so rr_transform should not be serialized.
-    expect(sn?.attributes?.rr_transform).toBeUndefined();
-  });
+        expect(sn?.attributes?.rr_position).toBe('static')
+        // No transform was set, so rr_transform should not be serialized.
+        expect(sn?.attributes?.rr_transform).toBeUndefined()
+    })
 
-  it('captures rr_transform for blocked elements that have a CSS transform', () => {
-    const el = renderWithStyle(
-      `<div class="blockblock" style="transform: translate(20px, 30px); width: 100px; height: 50px;">Transformed</div>`,
-      '',
-    );
+    it('captures rr_transform for blocked elements that have a CSS transform', () => {
+        const el = renderWithStyle(
+            `<div class="blockblock" style="transform: translate(20px, 30px); width: 100px; height: 50px;">Transformed</div>`,
+            ''
+        )
 
-    const sn = serializeNode(el) as elementNode;
+        const sn = serializeNode(el) as elementNode
 
-    expect(sn?.attributes?.rr_position).toBe('static');
-    expect(sn?.attributes?.rr_transform).toBeDefined();
-    expect(sn?.attributes?.rr_transform).not.toBe('none');
-  });
+        expect(sn?.attributes?.rr_position).toBe('static')
+        expect(sn?.attributes?.rr_transform).toBeDefined()
+        expect(sn?.attributes?.rr_transform).not.toBe('none')
+    })
 
-  it('captures rr_position for explicitly positioned blocked elements', () => {
-    const el = renderWithStyle(
-      `<div class="blockblock" style="position: relative; width: 100px; height: 50px;">Relative</div>`,
-      '',
-    );
+    it('captures rr_position for explicitly positioned blocked elements', () => {
+        const el = renderWithStyle(
+            `<div class="blockblock" style="position: relative; width: 100px; height: 50px;">Relative</div>`,
+            ''
+        )
 
-    const sn = serializeNode(el) as elementNode;
+        const sn = serializeNode(el) as elementNode
 
-    expect(sn?.attributes?.rr_position).toBe('relative');
-  });
+        expect(sn?.attributes?.rr_position).toBe('relative')
+    })
 
-  it.each([
-    { display: 'inline', shouldCapture: true },
-    { display: 'inline-block', shouldCapture: true },
-    { display: 'inline-flex', shouldCapture: true },
-    { display: 'inline-grid', shouldCapture: true },
-    { display: 'block', shouldCapture: false },
-    { display: 'flex', shouldCapture: false },
-  ])(
-    'rr_display capture for display=$display (captured=$shouldCapture)',
-    ({ display, shouldCapture }) => {
-      // JSDOM's getComputedStyle doesn't infer the tag's default display, so set it explicitly.
-      document.write(
-        `<div><span class="blockblock" style="display: ${display};">x</span></div>`,
-      );
-      const el = document.querySelector('span.blockblock')! as HTMLElement;
+    it.each([
+        { display: 'inline', shouldCapture: true },
+        { display: 'inline-block', shouldCapture: true },
+        { display: 'inline-flex', shouldCapture: true },
+        { display: 'inline-grid', shouldCapture: true },
+        { display: 'block', shouldCapture: false },
+        { display: 'flex', shouldCapture: false },
+    ])('rr_display capture for display=$display (captured=$shouldCapture)', ({ display, shouldCapture }) => {
+        // JSDOM's getComputedStyle doesn't infer the tag's default display, so set it explicitly.
+        document.write(`<div><span class="blockblock" style="display: ${display};">x</span></div>`)
+        const el = document.querySelector('span.blockblock')! as HTMLElement
 
-      const sn = serializeNode(el) as elementNode;
+        const sn = serializeNode(el) as elementNode
 
-      if (shouldCapture) {
-        expect(sn?.attributes?.rr_display).toBe(display);
-      } else {
-        // Only inline-level displays need a rebuild override.
-        expect(sn?.attributes?.rr_display).toBeUndefined();
-      }
-    },
-  );
-});
+        if (shouldCapture) {
+            expect(sn?.attributes?.rr_display).toBe(display)
+        } else {
+            // Only inline-level displays need a rebuild override.
+            expect(sn?.attributes?.rr_display).toBeUndefined()
+        }
+    })
+})
 
 describe('jsdom snapshot', () => {
-  const render = (html: string): Document => {
-    document.write(html);
-    return document;
-  };
+    const render = (html: string): Document => {
+        document.write(html)
+        return document
+    }
 
-  it("doesn't rely on global browser objects", () => {
-    // this test is incomplete in terms of coverage,
-    // but the idea being that we are checking that all features use the
-    // passed-in `doc` object rather than the global `document`
-    // (which is only present in browsers)
-    // in any case, supporting jsdom is not a primary goal
+    it("doesn't rely on global browser objects", () => {
+        // this test is incomplete in terms of coverage,
+        // but the idea being that we are checking that all features use the
+        // passed-in `doc` object rather than the global `document`
+        // (which is only present in browsers)
+        // in any case, supporting jsdom is not a primary goal
 
-    const doc = render(`<!DOCTYPE html><p>Hello world</p><canvas></canvas>`);
-    const sn = snapshot(doc, {
-      // JSDOM Error: Not implemented: HTMLCanvasElement.prototype.toDataURL (without installing the canvas npm package)
-      //recordCanvas: true,
-    });
-    expect(sn).toMatchObject({
-      type: 0,
-    });
-  });
-});
+        const doc = render(`<!DOCTYPE html><p>Hello world</p><canvas></canvas>`)
+        const sn = snapshot(doc, {
+            // JSDOM Error: Not implemented: HTMLCanvasElement.prototype.toDataURL (without installing the canvas npm package)
+            //recordCanvas: true,
+        })
+        expect(sn).toMatchObject({
+            type: 0,
+        })
+    })
+})
 
 describe('maxDepth', () => {
-  let warnSpy: ReturnType<typeof vi.spyOn>;
+    let warnSpy: ReturnType<typeof vi.spyOn>
 
-  beforeEach(() => {
-    resetMaxDepthState();
-    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-  });
+    beforeEach(() => {
+        resetMaxDepthState()
+        warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    })
 
-  afterEach(() => {
-    warnSpy.mockRestore();
-  });
+    afterEach(() => {
+        warnSpy.mockRestore()
+    })
 
-  const buildNestedDOM = (depth: number): HTMLElement => {
-    const root = document.createElement('div');
-    root.setAttribute('data-depth', '0');
-    let current = root;
-    for (let i = 1; i < depth; i++) {
-      const child = document.createElement('div');
-      child.setAttribute('data-depth', String(i));
-      current.appendChild(child);
-      current = child;
+    const buildNestedDOM = (depth: number): HTMLElement => {
+        const root = document.createElement('div')
+        root.setAttribute('data-depth', '0')
+        let current = root
+        for (let i = 1; i < depth; i++) {
+            const child = document.createElement('div')
+            child.setAttribute('data-depth', String(i))
+            current.appendChild(child)
+            current = child
+        }
+        return root
     }
-    return root;
-  };
 
-  const countNodes = (node: serializedNodeWithId): number => {
-    let count = 1;
-    if ('childNodes' in node) {
-      for (const child of (node as elementNode).childNodes) {
-        count += countNodes(child as serializedNodeWithId);
-      }
+    const countNodes = (node: serializedNodeWithId): number => {
+        let count = 1
+        if ('childNodes' in node) {
+            for (const child of (node as elementNode).childNodes) {
+                count += countNodes(child as serializedNodeWithId)
+            }
+        }
+        return count
     }
-    return count;
-  };
 
-  const serializeWithMaxDepth = (
-    node: Node,
-    maxDepth: number,
-  ): serializedNodeWithId | null => {
-    return serializeNodeWithId(node, {
-      doc: document,
-      mirror: new Mirror(),
-      blockClass: 'blockblock',
-      blockSelector: null,
-      maskTextClass: 'maskmask',
-      maskTextSelector: null,
-      skipChild: false,
-      inlineStylesheet: true,
-      maskTextFn: undefined,
-      maskInputFn: undefined,
-      slimDOMOptions: {},
-      maxDepth,
-    });
-  };
+    const serializeWithMaxDepth = (node: Node, maxDepth: number): serializedNodeWithId | null => {
+        return serializeNodeWithId(node, {
+            doc: document,
+            mirror: new Mirror(),
+            blockClass: 'blockblock',
+            blockSelector: null,
+            maskTextClass: 'maskmask',
+            maskTextSelector: null,
+            skipChild: false,
+            inlineStylesheet: true,
+            maskTextFn: undefined,
+            maskInputFn: undefined,
+            slimDOMOptions: {},
+            maxDepth,
+        })
+    }
 
-  it('should have DEFAULT_MAX_DEPTH of 50', () => {
-    expect(DEFAULT_MAX_DEPTH).toBe(50);
-  });
+    it('should have DEFAULT_MAX_DEPTH of 50', () => {
+        expect(DEFAULT_MAX_DEPTH).toBe(50)
+    })
 
-  it('should serialize all nodes when depth is within limit', () => {
-    const root = buildNestedDOM(5);
-    const sn = serializeWithMaxDepth(root, 10);
-    expect(sn).not.toBeNull();
-    expect(countNodes(sn!)).toBe(5);
-    expect(warnSpy).not.toHaveBeenCalled();
-    expect(wasMaxDepthReached()).toBe(false);
-  });
+    it('should serialize all nodes when depth is within limit', () => {
+        const root = buildNestedDOM(5)
+        const sn = serializeWithMaxDepth(root, 10)
+        expect(sn).not.toBeNull()
+        expect(countNodes(sn!)).toBe(5)
+        expect(warnSpy).not.toHaveBeenCalled()
+        expect(wasMaxDepthReached()).toBe(false)
+    })
 
-  it('should use DEFAULT_MAX_DEPTH when maxDepth is not specified', () => {
-    const root = buildNestedDOM(5);
-    const sn = serializeNode(root);
-    expect(sn).not.toBeNull();
-    expect(countNodes(sn!)).toBe(5);
-  });
+    it('should use DEFAULT_MAX_DEPTH when maxDepth is not specified', () => {
+        const root = buildNestedDOM(5)
+        const sn = serializeNode(root)
+        expect(sn).not.toBeNull()
+        expect(countNodes(sn!)).toBe(5)
+    })
 
-  it('should truncate nodes beyond maxDepth and warn', () => {
-    const root = buildNestedDOM(10);
-    const sn = serializeWithMaxDepth(root, 5);
-    expect(sn).not.toBeNull();
-    expect(countNodes(sn!)).toBe(5);
-    expect(wasMaxDepthReached()).toBe(true);
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('DOM tree depth exceeded max depth of 5'),
-    );
-  });
+    it('should truncate nodes beyond maxDepth and warn', () => {
+        const root = buildNestedDOM(10)
+        const sn = serializeWithMaxDepth(root, 5)
+        expect(sn).not.toBeNull()
+        expect(countNodes(sn!)).toBe(5)
+        expect(wasMaxDepthReached()).toBe(true)
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('DOM tree depth exceeded max depth of 5'))
+    })
 
-  it('should return null when depth equals maxDepth', () => {
-    const root = buildNestedDOM(1);
-    const sn = serializeWithMaxDepth(root, 0);
-    expect(sn).toBeNull();
-  });
+    it('should return null when depth equals maxDepth', () => {
+        const root = buildNestedDOM(1)
+        const sn = serializeWithMaxDepth(root, 0)
+        expect(sn).toBeNull()
+    })
 
-  it('resetMaxDepthState resets both reached and warned state', () => {
-    const root = buildNestedDOM(10);
-    serializeWithMaxDepth(root, 5);
-    expect(wasMaxDepthReached()).toBe(true);
-    expect(warnSpy).toHaveBeenCalledTimes(1);
+    it('resetMaxDepthState resets both reached and warned state', () => {
+        const root = buildNestedDOM(10)
+        serializeWithMaxDepth(root, 5)
+        expect(wasMaxDepthReached()).toBe(true)
+        expect(warnSpy).toHaveBeenCalledTimes(1)
 
-    resetMaxDepthState();
-    expect(wasMaxDepthReached()).toBe(false);
+        resetMaxDepthState()
+        expect(wasMaxDepthReached()).toBe(false)
 
-    warnSpy.mockClear();
-    serializeWithMaxDepth(root, 5);
-    expect(warnSpy).toHaveBeenCalledTimes(1);
-  });
-});
+        warnSpy.mockClear()
+        serializeWithMaxDepth(root, 5)
+        expect(warnSpy).toHaveBeenCalledTimes(1)
+    })
+})
 
 describe('link href capture across SPA navigations', () => {
-  function makeLinkWithSheet(
-    rawAttr: string,
-    sheetHref: string | null,
-  ): HTMLLinkElement {
-    const link = document.createElement('link');
-    link.setAttribute('rel', 'stylesheet');
-    link.setAttribute('href', rawAttr);
-    Object.defineProperty(link, 'sheet', {
-      configurable: true,
-      get: () =>
-        sheetHref === null
-          ? null
-          : ({
-              href: sheetHref,
-              cssRules: [],
-            } as unknown as CSSStyleSheet),
-    });
-    return link;
-  }
+    function makeLinkWithSheet(rawAttr: string, sheetHref: string | null): HTMLLinkElement {
+        const link = document.createElement('link')
+        link.setAttribute('rel', 'stylesheet')
+        link.setAttribute('href', rawAttr)
+        Object.defineProperty(link, 'sheet', {
+            configurable: true,
+            get: () =>
+                sheetHref === null
+                    ? null
+                    : ({
+                          href: sheetHref,
+                          cssRules: [],
+                      } as unknown as CSSStyleSheet),
+        })
+        return link
+    }
 
-  it('prefers link.sheet.href over the detached-anchor resolution', () => {
-    const link = makeLinkWithSheet(
-      '../../_app/auth.css',
-      'http://localhost/_app/auth.css',
-    );
+    it('prefers link.sheet.href over the detached-anchor resolution', () => {
+        const link = makeLinkWithSheet('../../_app/auth.css', 'http://localhost/_app/auth.css')
 
-    const result = transformAttribute(
-      document,
-      'link',
-      'href',
-      '../../_app/auth.css',
-      link,
-    );
+        const result = transformAttribute(document, 'link', 'href', '../../_app/auth.css', link)
 
-    expect(result).toBe('http://localhost/_app/auth.css');
-  });
+        expect(result).toBe('http://localhost/_app/auth.css')
+    })
 
-  it('falls back to detached-anchor resolution when the sheet has not loaded', () => {
-    const link = makeLinkWithSheet('../../_app/auth.css', null);
+    it('falls back to detached-anchor resolution when the sheet has not loaded', () => {
+        const link = makeLinkWithSheet('../../_app/auth.css', null)
 
-    const result = transformAttribute(
-      document,
-      'link',
-      'href',
-      '../../_app/auth.css',
-      link,
-    );
+        const result = transformAttribute(document, 'link', 'href', '../../_app/auth.css', link)
 
-    expect(result).not.toBeNull();
-    expect(typeof result).toBe('string');
-  });
+        expect(result).not.toBeNull()
+        expect(typeof result).toBe('string')
+    })
 
-  it('does not divert non-link tags through the sheet branch', () => {
-    const anchor = document.createElement('a');
-    anchor.setAttribute('href', '/elsewhere');
-    Object.defineProperty(anchor, 'sheet', {
-      configurable: true,
-      get: () =>
-        ({ href: 'should-not-be-used' } as unknown as CSSStyleSheet),
-    });
+    it('does not divert non-link tags through the sheet branch', () => {
+        const anchor = document.createElement('a')
+        anchor.setAttribute('href', '/elsewhere')
+        Object.defineProperty(anchor, 'sheet', {
+            configurable: true,
+            get: () => ({ href: 'should-not-be-used' }) as unknown as CSSStyleSheet,
+        })
 
-    const result = transformAttribute(
-      document,
-      'a',
-      'href',
-      '/elsewhere',
-      anchor,
-    );
+        const result = transformAttribute(document, 'a', 'href', '/elsewhere', anchor)
 
-    expect(result).not.toBe('should-not-be-used');
-  });
-});
+        expect(result).not.toBe('should-not-be-used')
+    })
+})
 
 describe('preload link load-listener accumulation', () => {
-  function setupLink(opts: {
-    rel: string;
-    as?: string;
-    href: string;
-    sheet: CSSStyleSheet | null;
-  }) {
-    const link = document.createElement('link');
-    link.setAttribute('rel', opts.rel);
-    if (opts.as) link.setAttribute('as', opts.as);
-    link.setAttribute('href', opts.href);
-    let currentSheet = opts.sheet;
-    Object.defineProperty(link, 'sheet', {
-      configurable: true,
-      get: () => currentSheet,
-    });
-    document.head.appendChild(link);
-    return {
-      link,
-      setSheet: (next: CSSStyleSheet | null) => {
-        currentSheet = next;
-      },
-    };
-  }
-
-  function serializeWithCapture(
-    link: HTMLLinkElement,
-    onStylesheetLoad: (
-      link: HTMLLinkElement,
-      node: serializedNodeWithId,
-    ) => void = () => undefined,
-  ) {
-    return serializeNodeWithId(link, {
-      doc: document,
-      mirror: new Mirror(),
-      blockClass: 'blockblock',
-      blockSelector: null,
-      maskTextClass: 'maskmask',
-      maskTextSelector: null,
-      skipChild: false,
-      inlineStylesheet: true,
-      maskTextFn: undefined,
-      maskInputFn: undefined,
-      slimDOMOptions: {},
-      onStylesheetLoad,
-      stylesheetLoadTimeout: 5000,
-    });
-  }
-
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  const noListenerLeakCases: Array<{
-    name: string;
-    rel: string;
-    as?: string;
-    expectedAdds: number;
-  }> = [
-    {
-      name: 'preload-as-style link adds no load listeners across timer cycles',
-      rel: 'preload',
-      as: 'style',
-      expectedAdds: 0,
-    },
-    {
-      name: 'stylesheet link with already-loaded sheet adds no load listeners',
-      rel: 'stylesheet',
-      expectedAdds: 0,
-    },
-  ];
-
-  it.each(noListenerLeakCases)('$name', ({ rel, as, expectedAdds }) => {
-    const fakeSheet =
-      rel === 'stylesheet'
-        ? ({ cssRules: [], rules: [] } as unknown as CSSStyleSheet)
-        : null;
-    const { link } = setupLink({
-      rel,
-      as,
-      href: `https://example.com/${rel}-${as ?? ''}.css`,
-      sheet: fakeSheet,
-    });
-
-    let loadAdds = 0;
-    const originalAdd = link.addEventListener.bind(link);
-    link.addEventListener = ((type: string, ...rest: unknown[]) => {
-      if (type === 'load') loadAdds += 1;
-      return (originalAdd as unknown as (...args: unknown[]) => unknown)(
-        type,
-        ...rest,
-      );
-    }) as typeof link.addEventListener;
-
-    serializeWithCapture(link);
-
-    for (let cycle = 0; cycle < 5; cycle++) {
-      vi.advanceTimersByTime(5000);
+    function setupLink(opts: { rel: string; as?: string; href: string; sheet: CSSStyleSheet | null }) {
+        const link = document.createElement('link')
+        link.setAttribute('rel', opts.rel)
+        if (opts.as) link.setAttribute('as', opts.as)
+        link.setAttribute('href', opts.href)
+        let currentSheet = opts.sheet
+        Object.defineProperty(link, 'sheet', {
+            configurable: true,
+            get: () => currentSheet,
+        })
+        document.head.appendChild(link)
+        return {
+            link,
+            setSheet: (next: CSSStyleSheet | null) => {
+                currentSheet = next
+            },
+        }
     }
 
-    expect(loadAdds).toBe(expectedAdds);
-
-    document.head.removeChild(link);
-  });
-
-  const noMultiplicationCases: Array<{
-    name: string;
-    rel: string;
-    as?: string;
-  }> = [
-    {
-      name: 'preload-as-style link: synthetic load events do not multiply work',
-      rel: 'preload',
-      as: 'style',
-    },
-    {
-      name: 'stylesheet link with sheet still null: timer path fires onStylesheetLoad exactly once',
-      rel: 'stylesheet',
-    },
-  ];
-
-  it.each(noMultiplicationCases)('$name', ({ rel, as }) => {
-    const { link } = setupLink({
-      rel,
-      as,
-      href: `https://example.com/${rel}-${as ?? ''}.css`,
-      sheet: null,
-    });
-
-    let stylesheetLoadCalls = 0;
-    serializeWithCapture(link, () => {
-      stylesheetLoadCalls += 1;
-    });
-
-    for (let round = 0; round < 5; round++) {
-      link.dispatchEvent(new Event('load'));
+    function serializeWithCapture(
+        link: HTMLLinkElement,
+        onStylesheetLoad: (link: HTMLLinkElement, node: serializedNodeWithId) => void = () => undefined
+    ) {
+        return serializeNodeWithId(link, {
+            doc: document,
+            mirror: new Mirror(),
+            blockClass: 'blockblock',
+            blockSelector: null,
+            maskTextClass: 'maskmask',
+            maskTextSelector: null,
+            skipChild: false,
+            inlineStylesheet: true,
+            maskTextFn: undefined,
+            maskInputFn: undefined,
+            slimDOMOptions: {},
+            onStylesheetLoad,
+            stylesheetLoadTimeout: 5000,
+        })
     }
-    vi.advanceTimersByTime(5000);
 
-    expect(stylesheetLoadCalls).toBeLessThanOrEqual(1);
+    beforeEach(() => {
+        vi.useFakeTimers()
+    })
 
-    document.head.removeChild(link);
-  });
+    afterEach(() => {
+        vi.useRealTimers()
+    })
 
-  it('delivers _cssText to onStylesheetLoad when a stylesheet finishes loading after first serialize', () => {
-    const initiallyPending = setupLink({
-      rel: 'stylesheet',
-      href: 'https://example.com/styles-late.css',
-      sheet: null,
-    });
-    const { link, setSheet } = initiallyPending;
+    const noListenerLeakCases: Array<{
+        name: string
+        rel: string
+        as?: string
+        expectedAdds: number
+    }> = [
+        {
+            name: 'preload-as-style link adds no load listeners across timer cycles',
+            rel: 'preload',
+            as: 'style',
+            expectedAdds: 0,
+        },
+        {
+            name: 'stylesheet link with already-loaded sheet adds no load listeners',
+            rel: 'stylesheet',
+            expectedAdds: 0,
+        },
+    ]
 
-    let deliveredNode: serializedNodeWithId | null = null;
-    serializeWithCapture(link, (_, node) => {
-      deliveredNode = node;
-    });
+    it.each(noListenerLeakCases)('$name', ({ rel, as, expectedAdds }) => {
+        const fakeSheet = rel === 'stylesheet' ? ({ cssRules: [], rules: [] } as unknown as CSSStyleSheet) : null
+        const { link } = setupLink({
+            rel,
+            as,
+            href: `https://example.com/${rel}-${as ?? ''}.css`,
+            sheet: fakeSheet,
+        })
 
-    const fakeRules = [
-      { cssText: '.a { color: red; }', parentStyleSheet: null },
-    ];
-    setSheet({
-      cssRules: fakeRules as unknown as CSSRuleList,
-      rules: fakeRules as unknown as CSSRuleList,
-      href: null,
-    } as unknown as CSSStyleSheet);
+        let loadAdds = 0
+        const originalAdd = link.addEventListener.bind(link)
+        link.addEventListener = ((type: string, ...rest: unknown[]) => {
+            if (type === 'load') loadAdds += 1
+            return (originalAdd as unknown as (...args: unknown[]) => unknown)(type, ...rest)
+        }) as typeof link.addEventListener
 
-    link.dispatchEvent(new Event('load'));
+        serializeWithCapture(link)
 
-    expect(deliveredNode).not.toBeNull();
-    const attrs = ((deliveredNode as unknown as elementNode) ?? {}).attributes;
-    expect(attrs).toBeDefined();
-    expect(attrs._cssText).toContain('.a');
-    expect(attrs._cssText).toContain('color: red');
+        for (let cycle = 0; cycle < 5; cycle++) {
+            vi.advanceTimersByTime(5000)
+        }
 
-    document.head.removeChild(link);
-  });
+        expect(loadAdds).toBe(expectedAdds)
 
-  it('resetStylesheetLoadTracking tears down the previous session listener and re-tracks the link for the new session', () => {
-    const { link, setSheet } = setupLink({
-      rel: 'stylesheet',
-      href: 'https://example.com/styles-cross-lifecycle.css',
-      sheet: null,
-    });
+        document.head.removeChild(link)
+    })
 
-    let firstSessionCalls = 0;
-    serializeWithCapture(link, () => {
-      firstSessionCalls += 1;
-    });
+    const noMultiplicationCases: Array<{
+        name: string
+        rel: string
+        as?: string
+    }> = [
+        {
+            name: 'preload-as-style link: synthetic load events do not multiply work',
+            rel: 'preload',
+            as: 'style',
+        },
+        {
+            name: 'stylesheet link with sheet still null: timer path fires onStylesheetLoad exactly once',
+            rel: 'stylesheet',
+        },
+    ]
 
-    resetStylesheetLoadTracking();
+    it.each(noMultiplicationCases)('$name', ({ rel, as }) => {
+        const { link } = setupLink({
+            rel,
+            as,
+            href: `https://example.com/${rel}-${as ?? ''}.css`,
+            sheet: null,
+        })
 
-    let secondSessionDelivered: serializedNodeWithId | null = null;
-    serializeWithCapture(link, (_, node) => {
-      secondSessionDelivered = node;
-    });
+        let stylesheetLoadCalls = 0
+        serializeWithCapture(link, () => {
+            stylesheetLoadCalls += 1
+        })
 
-    const fakeRules = [
-      { cssText: '.late { color: blue; }', parentStyleSheet: null },
-    ];
-    setSheet({
-      cssRules: fakeRules as unknown as CSSRuleList,
-      rules: fakeRules as unknown as CSSRuleList,
-      href: null,
-    } as unknown as CSSStyleSheet);
+        for (let round = 0; round < 5; round++) {
+            link.dispatchEvent(new Event('load'))
+        }
+        vi.advanceTimersByTime(5000)
 
-    link.dispatchEvent(new Event('load'));
+        expect(stylesheetLoadCalls).toBeLessThanOrEqual(1)
 
-    expect(firstSessionCalls).toBe(0);
-    expect(secondSessionDelivered).not.toBeNull();
-    const attrs = ((secondSessionDelivered as unknown as elementNode) ?? {})
-      .attributes;
-    expect(attrs._cssText).toContain('.late');
-    expect(attrs._cssText).toContain('color: blue');
+        document.head.removeChild(link)
+    })
 
-    document.head.removeChild(link);
-  });
-});
+    it('delivers _cssText to onStylesheetLoad when a stylesheet finishes loading after first serialize', () => {
+        const initiallyPending = setupLink({
+            rel: 'stylesheet',
+            href: 'https://example.com/styles-late.css',
+            sheet: null,
+        })
+        const { link, setSheet } = initiallyPending
+
+        let deliveredNode: serializedNodeWithId | null = null
+        serializeWithCapture(link, (_, node) => {
+            deliveredNode = node
+        })
+
+        const fakeRules = [{ cssText: '.a { color: red; }', parentStyleSheet: null }]
+        setSheet({
+            cssRules: fakeRules as unknown as CSSRuleList,
+            rules: fakeRules as unknown as CSSRuleList,
+            href: null,
+        } as unknown as CSSStyleSheet)
+
+        link.dispatchEvent(new Event('load'))
+
+        expect(deliveredNode).not.toBeNull()
+        const attrs = ((deliveredNode as unknown as elementNode) ?? {}).attributes
+        expect(attrs).toBeDefined()
+        expect(attrs._cssText).toContain('.a')
+        expect(attrs._cssText).toContain('color: red')
+
+        document.head.removeChild(link)
+    })
+
+    it('resetStylesheetLoadTracking tears down the previous session listener and re-tracks the link for the new session', () => {
+        const { link, setSheet } = setupLink({
+            rel: 'stylesheet',
+            href: 'https://example.com/styles-cross-lifecycle.css',
+            sheet: null,
+        })
+
+        let firstSessionCalls = 0
+        serializeWithCapture(link, () => {
+            firstSessionCalls += 1
+        })
+
+        resetStylesheetLoadTracking()
+
+        let secondSessionDelivered: serializedNodeWithId | null = null
+        serializeWithCapture(link, (_, node) => {
+            secondSessionDelivered = node
+        })
+
+        const fakeRules = [{ cssText: '.late { color: blue; }', parentStyleSheet: null }]
+        setSheet({
+            cssRules: fakeRules as unknown as CSSRuleList,
+            rules: fakeRules as unknown as CSSRuleList,
+            href: null,
+        } as unknown as CSSStyleSheet)
+
+        link.dispatchEvent(new Event('load'))
+
+        expect(firstSessionCalls).toBe(0)
+        expect(secondSessionDelivered).not.toBeNull()
+        const attrs = ((secondSessionDelivered as unknown as elementNode) ?? {}).attributes
+        expect(attrs._cssText).toContain('.late')
+        expect(attrs._cssText).toContain('color: blue')
+
+        document.head.removeChild(link)
+    })
+})
 
 describe('SVG <image> data: URI size cap', () => {
-  const SVG_NS = 'http://www.w3.org/2000/svg';
-  const SMALL_DATA_URI =
-    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==';
-  const LARGE_DATA_URI = 'data:image/png;base64,' + 'A'.repeat(20000);
+    const SVG_NS = 'http://www.w3.org/2000/svg'
+    const SMALL_DATA_URI =
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=='
+    const LARGE_DATA_URI = 'data:image/png;base64,' + 'A'.repeat(20000)
 
-  function svgImage(): HTMLElement {
-    return document.createElementNS(SVG_NS, 'image') as unknown as HTMLElement;
-  }
+    function svgImage(): HTMLElement {
+        return document.createElementNS(SVG_NS, 'image') as unknown as HTMLElement
+    }
 
-  it.each(['href', 'xlink:href'])(
-    'caps an oversized SVG <image> %s data URI to the striped placeholder',
-    (attrName) => {
-      const result = transformAttribute(
-        document,
-        'image',
-        attrName as Lowercase<string>,
-        LARGE_DATA_URI,
-        svgImage(),
-        { maxBase64ImageLength: 10000 },
-      );
+    it.each(['href', 'xlink:href'])(
+        'caps an oversized SVG <image> %s data URI to the striped placeholder',
+        (attrName) => {
+            const result = transformAttribute(
+                document,
+                'image',
+                attrName as Lowercase<string>,
+                LARGE_DATA_URI,
+                svgImage(),
+                { maxBase64ImageLength: 10000 }
+            )
 
-      expect(result).toMatch(/^data:image\/svg\+xml;base64,/);
-    },
-  );
+            expect(result).toMatch(/^data:image\/svg\+xml;base64,/)
+        }
+    )
 
-  it.each(['href', 'xlink:href'])(
-    'preserves a small SVG <image> %s data URI under the cap',
-    (attrName) => {
-      const result = transformAttribute(
-        document,
-        'image',
-        attrName as Lowercase<string>,
-        SMALL_DATA_URI,
-        svgImage(),
-        { maxBase64ImageLength: 10000 },
-      );
+    it.each(['href', 'xlink:href'])('preserves a small SVG <image> %s data URI under the cap', (attrName) => {
+        const result = transformAttribute(
+            document,
+            'image',
+            attrName as Lowercase<string>,
+            SMALL_DATA_URI,
+            svgImage(),
+            { maxBase64ImageLength: 10000 }
+        )
 
-      expect(result).toBe(SMALL_DATA_URI);
-    },
-  );
+        expect(result).toBe(SMALL_DATA_URI)
+    })
 
-  it.each(['href', 'xlink:href'])(
-    'leaves an oversized SVG <image> %s data URI untouched when no cap is configured',
-    (attrName) => {
-      const result = transformAttribute(
-        document,
-        'image',
-        attrName as Lowercase<string>,
-        LARGE_DATA_URI,
-        svgImage(),
-        {},
-      );
+    it.each(['href', 'xlink:href'])(
+        'leaves an oversized SVG <image> %s data URI untouched when no cap is configured',
+        (attrName) => {
+            const result = transformAttribute(
+                document,
+                'image',
+                attrName as Lowercase<string>,
+                LARGE_DATA_URI,
+                svgImage(),
+                {}
+            )
 
-      expect(result).toBe(LARGE_DATA_URI);
-    },
-  );
+            expect(result).toBe(LARGE_DATA_URI)
+        }
+    )
 
-  it.each([
-    { tagName: 'use', attrName: 'xlink:href' },
-    { tagName: 'a', attrName: 'xlink:href' },
-    { tagName: 'use', attrName: 'href' },
-  ])(
-    'does not cap a <$tagName> $attrName data URI — only SVG <image> is an image payload',
-    ({ tagName, attrName }) => {
-      const result = transformAttribute(
-        document,
-        tagName as Lowercase<string>,
-        attrName as Lowercase<string>,
-        LARGE_DATA_URI,
-        document.createElementNS(SVG_NS, tagName) as unknown as HTMLElement,
-        { maxBase64ImageLength: 10000 },
-      );
+    it.each([
+        { tagName: 'use', attrName: 'xlink:href' },
+        { tagName: 'a', attrName: 'xlink:href' },
+        { tagName: 'use', attrName: 'href' },
+    ])(
+        'does not cap a <$tagName> $attrName data URI — only SVG <image> is an image payload',
+        ({ tagName, attrName }) => {
+            const result = transformAttribute(
+                document,
+                tagName as Lowercase<string>,
+                attrName as Lowercase<string>,
+                LARGE_DATA_URI,
+                document.createElementNS(SVG_NS, tagName) as unknown as HTMLElement,
+                { maxBase64ImageLength: 10000 }
+            )
 
-      expect(result).toBe(LARGE_DATA_URI);
-    },
-  );
-});
+            expect(result).toBe(LARGE_DATA_URI)
+        }
+    )
+})

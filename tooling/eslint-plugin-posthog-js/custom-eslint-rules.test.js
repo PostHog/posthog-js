@@ -175,10 +175,7 @@ tsRuleTester.run('no-unsafe-web-global', noUnsafeWebGlobal, {
         // isUndefined(Event) — the original bug pattern
         {
             code: `!isUndefined(Event) && isInstanceOf(candidate, Event)`,
-            errors: [
-                { messageId: 'unsafeWebGlobal' },
-                { messageId: 'unsafeWebGlobal' },
-            ],
+            errors: [{ messageId: 'unsafeWebGlobal' }, { messageId: 'unsafeWebGlobal' }],
         },
         // other web globals
         {

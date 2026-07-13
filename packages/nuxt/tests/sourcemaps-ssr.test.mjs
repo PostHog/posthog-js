@@ -37,25 +37,25 @@ const executableSource = source
   .replace(/const processOptions: string\[\] = /g, 'const processOptions = ')
   // `import.meta.url` is not available inside `new Function`; the value is
   // only fed to stubbed createResolver/fileURLToPath which ignore it.
-  .replace(/import\.meta\.url/g, '\'file:///fake/module.ts\'')
+  .replace(/import\.meta\.url/g, "'file:///fake/module.ts'")
   // Turn the module's `export default` into a value the wrapper returns.
   .replace('export default defineNuxtModule(', 'return defineNuxtModule(')
 
 function loadModule() {
   const spawnCalls = []
   const stubs = {
-    defineNuxtModule: config => config,
+    defineNuxtModule: (config) => config,
     addPlugin: () => {},
     addServerPlugin: () => {},
     addImportsDir: () => {},
-    createResolver: () => ({ resolve: p => p }),
+    createResolver: () => ({ resolve: (p) => p }),
     resolveBinaryPath: () => '/fake/posthog-cli',
     spawnLocal: async (bin, args) => {
       spawnCalls.push({ bin, args: [...args] })
       return { code: 0 }
     },
-    fileURLToPath: u => u,
-    dirname: p => p,
+    fileURLToPath: (u) => u,
+    dirname: (p) => p,
   }
   const factory = new Function(...Object.keys(stubs), executableSource)
   const mod = factory(...Object.values(stubs))
@@ -91,7 +91,7 @@ async function runLifecycle({ ssr }) {
         projectId: '123',
       },
     },
-    nuxt,
+    nuxt
   )
 
   // With `ssr: false` (client-only / SPA mode) Nitro still reports output
@@ -116,7 +116,7 @@ async function runLifecycle({ ssr }) {
 }
 
 function findCall(calls, op, directory) {
-  return calls.find(c => c.args.includes(op) && c.args.includes('--directory') && c.args.includes(directory))
+  return calls.find((c) => c.args.includes(op) && c.args.includes('--directory') && c.args.includes(directory))
 }
 
 // Both branches share the same assertion skeleton: did the server inject happen
@@ -129,7 +129,7 @@ const cases = [
 
 for (const { ssr, expectInject } of cases) {
   const calls = await runLifecycle({ ssr })
-  const dump = JSON.stringify(calls.map(c => c.args))
+  const dump = JSON.stringify(calls.map((c) => c.args))
   const injectCall = findCall(calls, 'inject', '/build/.output/server')
 
   if (expectInject) {
@@ -141,7 +141,7 @@ for (const { ssr, expectInject } of cases) {
   // Upload of the outputDir must always happen so public sourcemaps reach PostHog.
   assert.ok(
     findCall(calls, 'upload', '/build/.output'),
-    `ssr:${ssr}: expected sourcemap upload against outputDir. Got: ${dump}`,
+    `ssr:${ssr}: expected sourcemap upload against outputDir. Got: ${dump}`
   )
 }
 

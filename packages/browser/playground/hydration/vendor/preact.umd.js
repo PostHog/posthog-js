@@ -88,7 +88,7 @@
     }
     function S() {
         var n, l, t, i, r, f, c, s, a
-        for (o.sort(e); (n = o.shift()); )
+        for (o.sort(e); (n = o.shift());)
             n.__d &&
                 ((l = o.length),
                 (i = void 0),
@@ -206,7 +206,7 @@
             e = l[u]
         if (null === e || (e && i == e.key && o === e.type)) return u
         if (t > (null != e && 0 == (e.__u & a) ? 1 : 0))
-            for (; r >= 0 || f < l.length; ) {
+            for (; r >= 0 || f < l.length;) {
                 if (r >= 0) {
                     if ((e = l[r]) && 0 == (e.__u & a) && i == e.key && o === e.type) return r
                     r--
@@ -475,7 +475,7 @@
                 T(n, y(v) ? v : [v], u, t, i, o && 'foreignObject' !== x, r, f, r ? r[0] : t.__k && w(t, 0), e, c),
                 null != r)
             )
-                for (s = r.length; s--; ) null != r[s] && _(r[s])
+                for (s = r.length; s--;) null != r[s] && _(r[s])
             e ||
                 ((s = 'value'),
                 void 0 !== b &&
@@ -537,7 +537,7 @@
     ;((l = p.slice),
         (u = {
             __e: function (n, l, u, t) {
-                for (var i, o, r; (l = l.__); )
+                for (var i, o, r; (l = l.__);)
                     if ((i = l.__c) && !i.__)
                         try {
                             if (

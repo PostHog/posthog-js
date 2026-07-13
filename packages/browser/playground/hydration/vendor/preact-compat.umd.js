@@ -74,7 +74,7 @@
         h = t.options.__e
     t.options.__e = function (n, t, e, r) {
         if (n.then)
-            for (var u, o = t; (o = o.__); )
+            for (var u, o = t; (o = o.__);)
                 if ((u = o.__c) && u.__c) return (null == t.__e && ((t.__e = e.__e), (t.__k = e.__k)), u.__c(n, t))
         h(n, t, e, r)
     }
@@ -163,7 +163,7 @@
                         r.__v.__k[0] = p(n, n.__c.__P, n.__c.__O)
                     }
                     var t
-                    for (r.setState({ __a: (r.__b = null) }); (t = r.t.pop()); ) t.forceUpdate()
+                    for (r.setState({ __a: (r.__b = null) }); (t = r.t.pop());) t.forceUpdate()
                 }
             }
             ;(r.__u++ || 32 & t.__u || r.setState({ __a: (r.__b = r.__v.__k[0]) }), n.then(i, i))
@@ -185,8 +185,8 @@
         }))
     var g = function (n, t, e) {
         if ((++e[1] === e[0] && n.o.delete(t), n.props.revealOrder && ('t' !== n.props.revealOrder[0] || !n.o.size)))
-            for (e = n.u; e; ) {
-                for (; e.length > 3; ) e.pop()()
+            for (e = n.u; e;) {
+                for (; e.length > 3;) e.pop()()
                 if (e[1] < e[0]) break
                 n.u = e = e[2]
             }
@@ -246,7 +246,7 @@
             ;((this.u = null), (this.o = new Map()))
             var e = t.toChildArray(n.children)
             n.revealOrder && 'b' === n.revealOrder[0] && e.reverse()
-            for (var r = e.length; r--; ) this.o.set(e[r], (this.u = [1, 0, this.u]))
+            for (var r = e.length; r--;) this.o.set(e[r], (this.u = [1, 0, this.u]))
             return n.children
         }),
         (_.prototype.componentDidUpdate = _.prototype.componentDidMount =
@@ -317,14 +317,12 @@
                     u = {}
                 for (var o in e) {
                     var i = e[o]
-                    if (
-                        !(
-                            ('value' === o && 'defaultValue' in e && null == i) ||
-                            (j && 'children' === o && 'noscript' === r) ||
-                            'class' === o ||
-                            'className' === o
-                        )
-                    ) {
+                    if (!(
+                        ('value' === o && 'defaultValue' in e && null == i) ||
+                        (j && 'children' === o && 'noscript' === r) ||
+                        'class' === o ||
+                        'className' === o
+                    )) {
                         var c = o.toLowerCase()
                         ;('defaultValue' === o && 'value' in e && null == e.value
                             ? (o = 'value')
