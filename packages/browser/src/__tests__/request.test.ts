@@ -713,6 +713,53 @@ describe('request', () => {
                     'application/x-www-form-urlencoded'
                 )
             })
+
+            it('does not throw on circular references and serializes them as [Circular]', () => {
+                const circular: any = { foo: 'bar' }
+                circular.self = circular
+                request(
+                    createRequest({
+                        url: 'https://any.posthog-instance.com/',
+                        method: 'POST',
+                        data: circular,
+                    })
+                )
+                expect(mockedXHR.send.mock.calls[0][0]).toMatchInlineSnapshot(`"{"foo":"bar","self":"[Circular]"}"`)
+            })
+
+            it('does not throw when a property is a circular DOM node (e.g. a React fiber back-reference)', () => {
+                // Mimics a DOM element that retains a React fiber which points back at the element —
+                // exactly what makes plain JSON.stringify throw "Converting circular structure to JSON".
+                const el: any = { tagName: 'A', nodeType: 1 }
+                el.__reactFiber = { stateNode: el }
+                expect(() =>
+                    request(
+                        createRequest({
+                            url: 'https://any.posthog-instance.com/',
+                            method: 'POST',
+                            data: { $el: el },
+                        })
+                    )
+                ).not.toThrow()
+                expect(mockedXHR.send).toHaveBeenCalledTimes(1)
+            })
+
+            it('keeps shared-but-acyclic references while replacing only true cycles', () => {
+                const shared = { n: 1 }
+                const data: any = { a: shared, b: shared }
+                data.self = data // the only real cycle
+                request(
+                    createRequest({
+                        url: 'https://any.posthog-instance.com/',
+                        method: 'POST',
+                        data,
+                    })
+                )
+                const body = JSON.parse(mockedXHR.send.mock.calls[0][0] as string)
+                expect(body.a).toEqual({ n: 1 })
+                expect(body.b).toEqual({ n: 1 })
+                expect(body.self).toBe('[Circular]')
+            })
         })
 
         describe('sendBeacon', () => {
