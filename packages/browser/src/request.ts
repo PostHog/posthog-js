@@ -247,6 +247,17 @@ const timeoutAbortReason = (timeout?: number): Error => {
     return reason
 }
 
+// A failed fetch at the network layer (ad blocker, dropped connection, CORS, page teardown)
+// rejects with a generic `TypeError` whose message varies by browser - Chrome
+// `Failed to fetch`, Firefox `NetworkError when attempting to fetch resource.`, Safari
+// `Load failed`. These are expected, retried failures rather than genuine errors, so we
+// avoid routing them through `logger.error` (and thus error tracking's console-error capture).
+const NETWORK_ERROR_MESSAGES = /Failed to fetch|NetworkError|Load failed/i
+const isExpectedNetworkError = (error: unknown): boolean => {
+    const err = error as Error | undefined
+    return err?.name === 'TypeError' && NETWORK_ERROR_MESSAGES.test(err?.message || '')
+}
+
 const xhr = (options: RequestWithOptions) => {
     const encodedRequest = encodeRequest(options)
     if (!encodedRequest) {
@@ -374,10 +385,12 @@ const _fetch = (options: RequestWithOptions) => {
             // The flag is set synchronously the instant our timeout fires, and we additionally
             // require `name === 'AbortError'` so a genuine network error that happens to settle
             // just after the timeout is never mislabelled.
-            if (timedOut && (error as Error)?.name === 'AbortError') {
-                // Our own request timeout is an expected, intentional abort (the request queue
-                // retries), not a genuine failure - so log it at `warn` rather than `error`. This
-                // also keeps it out of error tracking's console-error capture as an exception.
+            if ((timedOut && (error as Error)?.name === 'AbortError') || isExpectedNetworkError(error)) {
+                // Expected, benign failures the request queue already retries - our own request
+                // timeout (an intentional abort), or a network-level `TypeError` (ad blocker,
+                // dropped connection, CORS, page teardown). Neither is a genuine failure, so log
+                // at `warn` rather than `error`. This also keeps them out of error tracking's
+                // console-error capture as an exception.
                 logger.warn(error)
             } else {
                 logger.error(error)
