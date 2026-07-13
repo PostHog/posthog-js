@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.399.4
+
+### Patch Changes
+
+- [#4139](https://github.com/PostHog/posthog-js/pull/4139) [`7c339be`](https://github.com/PostHog/posthog-js/commit/7c339bed0655c3e00b1860ba2da9f41c4f9013e1) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Encode uncompressed `sendBeacon` bodies as base64 form data so the beacon keeps a CORS-simple content type. Previously an uncompressed unload beacon was sent as `application/json`, which forces a CORS preflight — a preflight cannot complete while the page unloads, so on cross-origin hosts the browser silently dropped the POST and the final batch of events was lost. Compression is inactive whenever the remote config request fails (flaky network, blocked endpoint), when the config response omits `supportedCompression`, or with `disable_compression: true`.
+  (2026-07-13)
+
 ## 1.399.3
 
 ### Patch Changes
