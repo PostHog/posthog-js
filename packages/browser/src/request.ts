@@ -10,6 +10,7 @@ import { gzipSync, strToU8 } from 'fflate'
 import { _base64Encode } from './utils/encode-utils'
 import {
     gzipCompress,
+    isArray,
     isGzipData,
     isGzipRequest,
     isNativeAsyncGzipError,
@@ -290,7 +291,7 @@ const xhr = (options: RequestWithOptions) => {
     req.send(body)
 }
 
-const _fetch = (options: RequestWithOptions) => {
+const _fetch = (options: RequestWithOptions & { _keepaliveDisabled?: boolean }) => {
     const encodedRequest = encodeRequest(options)
     if (!encodedRequest) {
         return
@@ -342,7 +343,9 @@ const _fetch = (options: RequestWithOptions) => {
         // so let's get the best of both worlds and only set keepalive for POST requests
         // where the body is less than 64kb
         // NB this is fetch keepalive and not http keepalive
-        keepalive: options.method === 'POST' && (estimatedSize || 0) < KEEP_ALIVE_THRESHOLD,
+        // _keepaliveDisabled: a beacon-rejected payload would fail a keepalive fetch too (shared quota)
+        keepalive:
+            options.method === 'POST' && !options._keepaliveDisabled && (estimatedSize || 0) < KEEP_ALIVE_THRESHOLD,
         body,
         signal: aborter?.signal,
         ...options.fetchOptions,
@@ -389,13 +392,16 @@ const _fetch = (options: RequestWithOptions) => {
     return
 }
 
+// below this size a rejection means the shared quota is exhausted, not that the payload is too big
+const BEACON_SPLIT_FLOOR_BYTES = 16 * 1024
+
 const _sendBeacon = (options: RequestWithOptions) => {
     // beacon documentation https://w3c.github.io/beacon/
     // beacons format the message and use the type property
 
     try {
         const { url, encodedBody } = encodePostDataSafely(options)
-        const { contentType, body } = encodedBody ?? {}
+        const { contentType, body, estimatedSize } = encodedBody ?? {}
         if (!body) {
             return
         }
@@ -403,7 +409,21 @@ const _sendBeacon = (options: RequestWithOptions) => {
         // Without wrapping, ArrayBuffer bodies are sent with no Content-Type,
         // which can cause issues with proxies/WAFs that require it.
         const sendBeaconBody = body instanceof Blob ? body : new Blob([body], { type: contentType })
-        navigator!.sendBeacon!(url, sendBeaconBody)
+        if (navigator!.sendBeacon!(url, sendBeaconBody)) {
+            return
+        }
+
+        // rejected: over the page's shared ~64KiB in-flight keepalive quota
+        // (https://fetch.spec.whatwg.org/#http-network-or-cache-fetch) — halve so what fits still delivers
+        if (isArray(options.data) && options.data.length > 1 && (estimatedSize ?? 0) > BEACON_SPLIT_FLOOR_BYTES) {
+            const mid = Math.ceil(options.data.length / 2)
+            _sendBeacon({ ...options, data: options.data.slice(0, mid) })
+            _sendBeacon({ ...options, data: options.data.slice(mid) })
+            return
+        }
+
+        logger.warn(`Beacon of ~${estimatedSize ?? 0} bytes was rejected by the browser, falling back to fetch`)
+        _fetch({ ...options, _keepaliveDisabled: true })
     } catch {
         // send beacon is a best-effort, fire-and-forget mechanism on page unload,
         // we don't want to throw errors here
