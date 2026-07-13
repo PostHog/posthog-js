@@ -331,6 +331,7 @@
         "_isWidgetRendered",
         "_is_persistence_disabled",
         "_is_supported",
+        "_keepaliveDisabled",
         "_lastActivityTimestamp",
         "_lastCheckedUrl",
         "_lastFullSnapshotSessionId",
