@@ -14,6 +14,7 @@ import {
     isGzipRequest,
     isNativeAsyncGzipError,
     isNativeAsyncGzipReadError,
+    isUndefined,
     safeJsonStringify,
 } from '@posthog/core'
 
@@ -151,6 +152,19 @@ const encodePostData = (options: RequestWithEncodedBody): EncodedBody | undefine
 
 const encodePostDataSafely = (options: RequestWithEncodedBody): EncodedRequest => {
     const fallbackToUncompressed = (): EncodedRequest => {
+        // beacon bodies must keep a CORS-simple content type even on the gzip-failure
+        // fallback — uncompressed application/json preflights, base64 form data does not
+        if (options.transport === 'sendBeacon') {
+            return {
+                url: extendURLParams(options.url, { compression: Compression.Base64 }),
+                encodedBody: encodePostData({
+                    ...options,
+                    compression: Compression.Base64,
+                    _encodedBody: undefined,
+                }),
+            }
+        }
+
         return {
             url: removeURLParam(options.url, 'compression'),
             encodedBody: encodePostData({
@@ -462,9 +476,15 @@ export const request = (_options: RequestWithOptions) => {
     const options: RequestWithEncodedBody = { ..._options }
     options.timeout = options.timeout || 60000
 
-    options.url = buildRequestURL(options.url, options.compression)
-
     const transport = options.transport ?? 'fetch'
+
+    // beacons fire during page unload, where a CORS preflight cannot complete — the body
+    // must keep a CORS-simple content type, which uncompressed (application/json) is not
+    if (transport === 'sendBeacon' && isUndefined(options.compression) && options.data) {
+        options.compression = Compression.Base64
+    }
+
+    options.url = buildRequestURL(options.url, options.compression)
 
     const availableTransports = AVAILABLE_TRANSPORTS.filter(
         (t) => !options.disableTransport || !t.transport || !options.disableTransport.includes(t.transport)
