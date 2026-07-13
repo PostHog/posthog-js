@@ -501,6 +501,55 @@ describe('request', () => {
             errorSpy.mockRestore()
         })
 
+        it.each([
+            ['Failed to fetch', 'Failed to fetch'],
+            ['Firefox NetworkError', 'NetworkError when attempting to fetch resource.'],
+            ['Safari Load failed', 'Load failed'],
+        ])('logs a benign network-level TypeError (%s) at warn, not error', async (_label, message) => {
+            // A network-layer failure (ad blocker, dropped connection, CORS, page teardown)
+            // rejects with a generic `TypeError`. The request queue retries it, so it is
+            // expected noise and logs at `warn`, not `error`.
+            const networkError = new TypeError(message)
+            mockedFetch.mockImplementation(() => Promise.reject(networkError))
+
+            const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {})
+            const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => {})
+
+            const callback = jest.fn()
+            request(createRequest({ callback }))
+
+            await flushPromises()
+
+            expect(warnSpy).toHaveBeenCalledWith(networkError)
+            expect(errorSpy).not.toHaveBeenCalled()
+            expect(callback).toHaveBeenCalledWith({ statusCode: 0, error: networkError })
+
+            warnSpy.mockRestore()
+            errorSpy.mockRestore()
+        })
+
+        it('logs a genuine unexpected error at error, not warn', async () => {
+            // A `TypeError` whose message is not a known network-failure phrase, or any other
+            // unexpected error, is a real bug and must stay on the error path.
+            const genuineError = new TypeError("Cannot read properties of undefined (reading 'x')")
+            mockedFetch.mockImplementation(() => Promise.reject(genuineError))
+
+            const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {})
+            const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => {})
+
+            const callback = jest.fn()
+            request(createRequest({ callback }))
+
+            await flushPromises()
+
+            expect(errorSpy).toHaveBeenCalledWith(genuineError)
+            expect(warnSpy).not.toHaveBeenCalled()
+            expect(callback).toHaveBeenCalledWith({ statusCode: 0, error: genuineError })
+
+            warnSpy.mockRestore()
+            errorSpy.mockRestore()
+        })
+
         it('supports nextOptions parameter', async () => {
             request(
                 createRequest({
