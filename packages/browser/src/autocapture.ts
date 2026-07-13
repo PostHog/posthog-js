@@ -169,8 +169,7 @@ export function autocapturePropertiesForElement(
     const seen = new Set<Node>([target])
     let curEl: Element = target
     while (curEl.parentNode && !isTag(curEl, 'body')) {
-        // Guard against pathologically deep or cyclic ancestor chains on the host
-        // page, which would otherwise loop forever (or exhaust the call stack downstream).
+        // bail out of abnormally deep or cyclic (patched parentNode) ancestor chains
         if (targetElementList.length >= MAX_DOM_ANCESTOR_DEPTH) {
             break
         }

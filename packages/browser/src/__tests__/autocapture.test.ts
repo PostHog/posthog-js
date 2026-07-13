@@ -1754,8 +1754,7 @@ describe('Autocapture system', () => {
 
     describe('autocapturePropertiesForElement', () => {
         it('terminates on a cyclic ancestor chain', () => {
-            // Simulate a pathological host page whose parentNode chain loops back on
-            // itself. Without a cycle guard this ancestor-walk would never terminate.
+            // a parentNode cycle is only possible when the page patches parentNode
             const a = document!.createElement('div')
             const b = document!.createElement('div')
             Object.defineProperty(a, 'parentNode', { value: b, configurable: true })
@@ -1769,7 +1768,6 @@ describe('Autocapture system', () => {
                 disableCaptureUrlHashes: false,
             })
 
-            // it returns without hanging and still produces capture properties
             expect(props['$event_type']).toEqual('click')
         })
     })

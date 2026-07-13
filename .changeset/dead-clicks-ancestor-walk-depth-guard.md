@@ -2,4 +2,4 @@
 'posthog-js': patch
 ---
 
-Guard autocapture's ancestor-walk loops against pathologically deep or cyclic DOM trees. `autocapturePropertiesForElement` and `shouldCaptureElement` now cap how far they climb the `parentNode` chain and bail out if they revisit a node, so autocapture (including dead-clicks autocapture) degrades gracefully instead of exhausting the JS call stack on abnormal host-page DOMs. Normal capture behavior is unchanged.
+Bound autocapture's DOM ancestor walks against abnormal host-page DOM trees. `autocapturePropertiesForElement` and `shouldCaptureElement` now stop climbing the `parentNode` chain after 1000 ancestors or if they revisit a node (only possible when a page patches `parentNode`, since native DOMs cannot contain cycles), instead of walking indefinitely. When `shouldCaptureElement` cannot finish checking ancestors for `ph-no-capture`/`ph-sensitive`, it fails closed and reports the element as not capturable. Behavior on normal DOM trees is unchanged.
