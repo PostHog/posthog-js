@@ -381,22 +381,25 @@ describe('request', () => {
                 },
             ],
             [
+                // beacons cannot fall back to JSON: application/json requires a CORS
+                // preflight, which never completes during page unload
                 'sendBeacon',
                 { transport: 'sendBeacon' as const, url: 'https://any.posthog-instance.com/' },
                 async () => {
                     expect(mockedNavigator?.sendBeacon.mock.calls[0][0]).not.toContain('compression=gzip-js')
+                    expect(mockedNavigator?.sendBeacon.mock.calls[0][0]).toContain('compression=base64')
                     const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
-                    expect(blob.type).toBe('application/json')
+                    expect(blob.type).toBe('application/x-www-form-urlencoded')
                     const result = await new Promise<string>((resolve) => {
                         const reader = new FileReader()
                         reader.onload = () => resolve(reader.result as string)
                         reader.readAsText(blob)
                     })
-                    expect(result).toBe('{"foo":"bar"}')
+                    expect(result).toBe('data=eyJmb28iOiJiYXIifQ%3D%3D')
                 },
             ],
         ])(
-            'falls back to JSON if a pre-encoded gzip body is not actually gzip before %s send',
+            'falls back to a non-gzip encoding if a pre-encoded gzip body is not actually gzip before %s send',
             async (_name, overrides, assertTransport) => {
                 request(invalidPreEncodedGzipRequest(overrides))
                 await assertTransport()
@@ -844,6 +847,30 @@ describe('request', () => {
                 "�      �VJ��W�RJJ,R� ��+�
                    "
             `)
+            })
+
+            it('falls back to base64 if gzip encoding throws before the beacon send', () => {
+                const gzipSpy = jest.spyOn(fflate, 'gzipSync').mockImplementation(() => {
+                    throw new Error('gzip failed')
+                })
+
+                try {
+                    request(
+                        createRequest({
+                            url: 'https://any.posthog-instance.com/',
+                            method: 'POST',
+                            compression: Compression.GZipJS,
+                            data: { foo: 'bar' },
+                        })
+                    )
+
+                    expect(mockedNavigator?.sendBeacon).toHaveBeenCalledTimes(1)
+                    expect(mockedNavigator?.sendBeacon.mock.calls[0][0]).toContain('compression=base64')
+                    const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
+                    expect(blob.type).toBe('application/x-www-form-urlencoded')
+                } finally {
+                    gzipSpy.mockRestore()
+                }
             })
 
             it('should not call sendBeacon when body is undefined', () => {

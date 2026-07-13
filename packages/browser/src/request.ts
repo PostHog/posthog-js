@@ -152,6 +152,19 @@ const encodePostData = (options: RequestWithEncodedBody): EncodedBody | undefine
 
 const encodePostDataSafely = (options: RequestWithEncodedBody): EncodedRequest => {
     const fallbackToUncompressed = (): EncodedRequest => {
+        // beacon bodies must keep a CORS-simple content type even on the gzip-failure
+        // fallback — uncompressed application/json preflights, base64 form data does not
+        if (options.transport === 'sendBeacon') {
+            return {
+                url: extendURLParams(options.url, { compression: Compression.Base64 }),
+                encodedBody: encodePostData({
+                    ...options,
+                    compression: Compression.Base64,
+                    _encodedBody: undefined,
+                }),
+            }
+        }
+
         return {
             url: removeURLParam(options.url, 'compression'),
             encodedBody: encodePostData({
