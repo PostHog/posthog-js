@@ -508,7 +508,7 @@ describe('request', () => {
         ])('logs a benign network-level TypeError (%s) at warn, not error', async (_label, message) => {
             // A network-layer failure (ad blocker, dropped connection, CORS, page teardown)
             // rejects with a generic `TypeError`. The request queue retries it, so it is
-            // expected noise and must not reach error tracking's console-error capture.
+            // expected noise and logs at `warn`, not `error`.
             const networkError = new TypeError(message)
             mockedFetch.mockImplementation(() => Promise.reject(networkError))
 

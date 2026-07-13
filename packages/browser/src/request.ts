@@ -251,7 +251,7 @@ const timeoutAbortReason = (timeout?: number): Error => {
 // rejects with a generic `TypeError` whose message varies by browser - Chrome
 // `Failed to fetch`, Firefox `NetworkError when attempting to fetch resource.`, Safari
 // `Load failed`. These are expected, retried failures rather than genuine errors, so we
-// avoid routing them through `logger.error` (and thus error tracking's console-error capture).
+// log them at `warn` rather than `error`.
 const NETWORK_ERROR_MESSAGES = /Failed to fetch|NetworkError|Load failed/i
 const isExpectedNetworkError = (error: unknown): boolean => {
     const err = error as Error | undefined
@@ -389,8 +389,9 @@ const _fetch = (options: RequestWithOptions) => {
                 // Expected, benign failures the request queue already retries - our own request
                 // timeout (an intentional abort), or a network-level `TypeError` (ad blocker,
                 // dropped connection, CORS, page teardown). Neither is a genuine failure, so log
-                // at `warn` rather than `error`. This also keeps them out of error tracking's
-                // console-error capture as an exception.
+                // at `warn` rather than `error`. (For setups running with debug logging and
+                // `capture_console_errors` both enabled, this also keeps them out of error
+                // tracking's console-error capture.)
                 logger.warn(error)
             } else {
                 logger.error(error)
