@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.56.0
+
+### Minor Changes
+
+- [#4111](https://github.com/PostHog/posthog-js/pull/4111) [`9bfaa8f`](https://github.com/PostHog/posthog-js/commit/9bfaa8fce1358c04e05ee42283afe47408aadc96) Thanks [@ioannisj](https://github.com/ioannisj)! - Enable native crash autocapture (`errorTracking.autocapture.nativeCrashes`) on macOS. The native plugin now loads on macOS (previously iOS/Android only); the legacy session-replay-only fallback stays iOS/Android. Requires `@posthog/react-native-plugin` >= 2.2.0.
+  (2026-07-13)
+
 ## 4.55.0
 
 ### Minor Changes
