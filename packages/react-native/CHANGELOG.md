@@ -1,5 +1,14 @@
 # posthog-react-native
 
+## 4.56.2
+
+### Patch Changes
+
+- [#4148](https://github.com/PostHog/posthog-js/pull/4148) [`f4694e9`](https://github.com/PostHog/posthog-js/commit/f4694e93eb951beb5eeb87a12cc3d74829d85949) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Expo plugin: `skipOnConflict` now also applies to native iOS dSYM uploads. With `uploadNativeSymbols` enabled, a release build whose dSYM already exists in PostHog with different content no longer fails — the upload is skipped and the existing symbols are kept. Requires posthog-ios >= 3.64.7 and posthog-cli >= 0.7.12; with older posthog-ios versions the option has no effect on dSYM uploads. Changes to `skipOnConflict` or `uploadNativeSymbols.includeSource` now take effect on the next `expo prebuild` without `--clean`; build phases you have customized by hand are never modified.
+  (2026-07-14)
+- Updated dependencies [[`f4694e9`](https://github.com/PostHog/posthog-js/commit/f4694e93eb951beb5eeb87a12cc3d74829d85949)]:
+  - @posthog/react-native-plugin@2.2.2
+
 ## 4.56.1
 
 ### Patch Changes
