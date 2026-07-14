@@ -17,4 +17,4 @@ export {
   normalizeLanguageCode,
 } from './translations'
 export { canSurveyActivateRepeatedly, doesSurveyActivateByEvent } from './activation'
-export { getSurveyIterationKey, type SurveyWithIteration } from './keys'
+export { getSurveyIterationKey, isSurveyKeyForSurvey, type SurveyWithIteration } from './keys'

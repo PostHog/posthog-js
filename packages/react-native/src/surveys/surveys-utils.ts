@@ -213,10 +213,6 @@ export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
   // return reverseIfUnshuffled(survey.questions, shuffle(survey.questions))
 }
 
-// export const hasActions = (survey: Survey): boolean => {
-//   return survey.conditions?.actions?.values.length !== undefined && survey.conditions.actions.values.length > 0
-// }
-
 /**
  * Use the Fisher-yates algorithm to shuffle this array
  * https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle

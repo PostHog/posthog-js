@@ -13,7 +13,6 @@ import {
 } from '../../posthog-surveys-types'
 import { document as _document, window as _window } from '../../utils/globals'
 import {
-    doesSurveyActivateByEvent,
     getSurveyInteractionProperty,
     getSurveySeenKey,
     getSurveyAbandonedKey,
@@ -577,10 +576,6 @@ export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
     }
 
     return reverseIfUnshuffled(survey.questions, shuffle(survey.questions))
-}
-
-export const hasEvents = (survey: Pick<Survey, 'conditions'>): boolean => {
-    return doesSurveyActivateByEvent(survey)
 }
 
 export const canActivateRepeatedly = (

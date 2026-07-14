@@ -1,5 +1,5 @@
 import { PostHogPersistedProperty } from '@posthog/core'
-import { getSurveyIterationKey, SurveyWithIteration } from '@posthog/core/surveys'
+import { getSurveyIterationKey, isSurveyKeyForSurvey, SurveyWithIteration } from '@posthog/core/surveys'
 import { useCallback, useEffect, useState } from 'react'
 import { usePostHog } from '../hooks/usePostHog'
 
@@ -18,10 +18,7 @@ const MAX_SEEN_SURVEYS = 20
 // can never match again and would otherwise evict other surveys' seen state.
 export function updateSeenSurveys(current: string[], survey: SurveyWithIteration): string[] {
   const surveyKey = getSurveyIterationKey(survey)
-  return [surveyKey, ...current.filter((key) => key !== survey.id && !key.startsWith(`${survey.id}_`))].slice(
-    0,
-    MAX_SEEN_SURVEYS
-  )
+  return [surveyKey, ...current.filter((key) => !isSurveyKeyForSurvey(key, survey.id))].slice(0, MAX_SEEN_SURVEYS)
 }
 
 export function useSurveyStorage(): SurveyStorage {
@@ -39,8 +36,8 @@ export function useSurveyStorage(): SurveyStorage {
       const serialisedSeenSurveys = posthogStorage.getPersistedProperty(PostHogPersistedProperty.SurveysSeen)
       if (typeof serialisedSeenSurveys === 'string') {
         const parsedSeenSurveys: unknown = JSON.parse(serialisedSeenSurveys)
-        if (Array.isArray(parsedSeenSurveys) && typeof parsedSeenSurveys[0] === 'string') {
-          setSeenSurveys(parsedSeenSurveys)
+        if (Array.isArray(parsedSeenSurveys)) {
+          setSeenSurveys(parsedSeenSurveys.filter((key): key is string => typeof key === 'string'))
         }
       }
     })
