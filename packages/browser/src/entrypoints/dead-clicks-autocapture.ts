@@ -28,6 +28,11 @@ function swipeDirection(dx: number, dy: number): 'left' | 'right' | 'up' | 'down
     return dy >= 0 ? 'down' : 'up'
 }
 
+// the event name doubles as the property prefix ($dead_click_* / $dead_swipe_*)
+function deadEventName(candidate: DeadClickCandidate): '$dead_click' | '$dead_swipe' {
+    return candidate.type === 'swipe' ? '$dead_swipe' : '$dead_click'
+}
+
 function hasModifierKey(event: MouseEvent | TouchEvent): boolean {
     return event.ctrlKey || event.metaKey || event.altKey || event.shiftKey
 }
@@ -43,7 +48,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     private _lastVisibilityChange: number | undefined
     private _clicks: DeadClickCandidate[] = []
     private _checkClickTimer: number | undefined
-    private _touchStart: { x: number; y: number; timestamp: number } | undefined
+    private _touchStart: { x: number; y: number } | undefined
     // swipes are only observed on the default autocapture path, not when an external
     // consumer (e.g. heatmaps) provides its own capture handler
     private _observeSwipes: boolean
@@ -210,7 +215,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     private _onTouchStart = (event: Event): void => {
         const touch = (event as TouchEvent).touches?.[0]
         if (touch) {
-            this._touchStart = { x: touch.clientX, y: touch.clientY, timestamp: Date.now() }
+            this._touchStart = { x: touch.clientX, y: touch.clientY }
         }
     }
 
@@ -229,16 +234,17 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
 
         const dx = touch.clientX - start.x
         const dy = touch.clientY - start.y
-        const distancePx = Math.sqrt(dx * dx + dy * dy)
-        // a short movement is a tap or a jitter, not a swipe
-        if (distancePx < this._config.swipe_threshold_px) {
+        // compare squared distances to avoid a sqrt on every touch; only the actual swipes need it
+        const threshold = this._config.swipe_threshold_px
+        if (dx * dx + dy * dy < threshold * threshold) {
+            // a short movement is a tap or a jitter, not a swipe
             return
         }
 
         const swipe = asCandidate(touchEvent, {
             type: 'swipe',
             swipeDirection: swipeDirection(dx, dy),
-            swipeDistancePx: Math.round(distancePx),
+            swipeDistancePx: Math.round(Math.sqrt(dx * dx + dy * dy)),
         })
         if (!isNull(swipe) && !this._ignore(swipe)) {
             this._clicks.push(swipe)
@@ -350,7 +356,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                 selectionChangedTimeout ||
                 visibilityChangedTimeout
             ) {
-                const prefix = click.type === 'swipe' ? '$dead_swipe' : '$dead_click'
+                const prefix = deadEventName(click)
                 this._onCapture(click, {
                     [`${prefix}_last_mutation_timestamp`]: this._lastMutation,
                     [`${prefix}_event_timestamp`]: click.timestamp,
@@ -372,9 +378,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     private _captureDeadClick(click: DeadClickCandidate, properties: Properties) {
         // TODO need to check safe and captur-able as with autocapture
         // TODO autocaputure config
-        const isSwipe = click.type === 'swipe'
-        // the event name doubles as the property prefix ($dead_click / $dead_swipe)
-        const prefix = isSwipe ? '$dead_swipe' : '$dead_click'
+        const prefix = deadEventName(click)
         this.instance.capture(
             prefix,
             {
@@ -393,12 +397,9 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                 [`${prefix}_absolute_delay_ms`]: click.absoluteDelayMs,
                 [`${prefix}_selection_changed_delay_ms`]: click.selectionChangedDelayMs,
                 [`${prefix}_visibility_changed_delay_ms`]: click.visibilityChangedDelayMs,
-                ...(isSwipe
-                    ? {
-                          $dead_swipe_direction: click.swipeDirection,
-                          $dead_swipe_distance_px: click.swipeDistancePx,
-                      }
-                    : {}),
+                // undefined for clicks (stripped on serialization), like the delay fields above
+                $dead_swipe_direction: click.swipeDirection,
+                $dead_swipe_distance_px: click.swipeDistancePx,
             },
             {
                 timestamp: new Date(click.timestamp),

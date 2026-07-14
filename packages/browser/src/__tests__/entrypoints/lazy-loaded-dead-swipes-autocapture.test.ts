@@ -64,7 +64,7 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
         it('records the touch start position', () => {
             triggerTouchEvent(document.body, 'touchstart', [{ x: 100, y: 100 }])
 
-            expect(lazyLoadedDeadClicksAutocapture['_touchStart']).toEqual({ x: 100, y: 100, timestamp: 1000 })
+            expect(lazyLoadedDeadClicksAutocapture['_touchStart']).toEqual({ x: 100, y: 100 })
         })
 
         it('stores a swipe candidate when the gesture is beyond the threshold', () => {
