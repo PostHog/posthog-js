@@ -267,6 +267,16 @@ function encodePbxShellScript(script: string): string {
   return '"' + script.replace(/"/g, '\\"') + '"'
 }
 
+// Undoes any quoted pbxproj encoding of shellScript. Handles both the literal-newline
+// form xcode's addBuildPhase writes and the \n-escaped form Xcode itself writes, so a
+// pristine phase is recognized regardless of which tool last serialized the project.
+function decodePbxShellScript(stored: string): string {
+  if (!stored.startsWith('"') || !stored.endsWith('"')) {
+    return stored
+  }
+  return stored.slice(1, -1).replace(/\\(.)/g, (_match, ch) => (ch === 'n' ? '\n' : ch === 't' ? '\t' : ch))
+}
+
 // Appends a Run Script build phase that uploads dSYMs; appended last so it runs after the
 // dSYM bundle is produced. Re-runs refresh a still-plugin-generated script so option
 // changes take effect without a clean prebuild.
@@ -274,9 +284,12 @@ export function addDsymUploadBuildPhase(xcodeProject: any, includeSource = false
   const existing = xcodeProject.pbxItemByComment(POSTHOG_DSYM_BUILD_PHASE_NAME, 'PBXShellScriptBuildPhase')
   if (existing) {
     const generatedVariants = [false, true].flatMap((source) =>
-      [false, true].map((skip) => encodePbxShellScript(buildDsymUploadShellScript(source, skip)))
+      [false, true].map((skip) => buildDsymUploadShellScript(source, skip))
     )
-    if (generatedVariants.includes(existing.shellScript)) {
+    if (
+      typeof existing.shellScript === 'string' &&
+      generatedVariants.includes(decodePbxShellScript(existing.shellScript))
+    ) {
       existing.shellScript = encodePbxShellScript(buildDsymUploadShellScript(includeSource, skipOnConflict))
     }
     return

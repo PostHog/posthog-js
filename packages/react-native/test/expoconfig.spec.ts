@@ -316,6 +316,22 @@ describe('addDsymUploadBuildPhase', () => {
     expect(existing.shellScript).toBe(stored)
   })
 
+  it('recognizes a pristine phase stored in Xcode-style \\n-escaped encoding', () => {
+    const existing = { isa: 'PBXShellScriptBuildPhase', shellScript: JSON.stringify(buildDsymUploadShellScript()) }
+    const xp = mockXcodeProjectForBuildPhase(existing)
+
+    addDsymUploadBuildPhase(xp, false, true)
+    expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript(false, true)))
+  })
+
+  it('recognizes a pristine phase stored without pbxproj quoting', () => {
+    const existing = { isa: 'PBXShellScriptBuildPhase', shellScript: buildDsymUploadShellScript(true) }
+    const xp = mockXcodeProjectForBuildPhase(existing)
+
+    addDsymUploadBuildPhase(xp, false, true)
+    expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript(false, true)))
+  })
+
   it('leaves a user-customized phase script untouched', () => {
     const customized = encodePbx(`${buildDsymUploadShellScript()}\necho "my custom step"`)
     const existing = { isa: 'PBXShellScriptBuildPhase', shellScript: customized }
