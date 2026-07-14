@@ -1604,7 +1604,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             if (!maskedUrl) {
                 return undefined
             }
-            // we can't use convertToURL here, as it would convert the URL to a relative one (e.g. "/"), which is not useful for getting the current hostname from
+            // not convertToURL: it resolves invalid input (e.g. a masking fn returning "REDACTED")
+            // against the current page and would return the real hostname we're trying to mask.
+            // new URL throws instead, so bad input falls through to the catch and we omit the property.
             // eslint-disable-next-line compat/compat
             return new URL(maskedUrl).hostname || undefined
         } catch {
