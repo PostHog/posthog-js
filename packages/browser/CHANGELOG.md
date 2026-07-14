@@ -1,5 +1,20 @@
 # posthog-js
 
+## 1.400.0
+
+### Minor Changes
+
+- [#4101](https://github.com/PostHog/posthog-js/pull/4101) [`dc2aa5b`](https://github.com/PostHog/posthog-js/commit/dc2aa5b3175dd4112347c16d16725045d63387f9) Thanks [@posthog](https://github.com/apps/posthog)! - Normalize the error tracking rate-limiter config to first-class options. The browser SDK now reads `exceptionRateLimiterRefillRate` / `exceptionRateLimiterBucketSize` on `error_tracking`, with the previous double-underscore `__exceptionRateLimiterRefillRate` / `__exceptionRateLimiterBucketSize` options deprecated but still honoured as a fallback. The option shape (`ExceptionRateLimiterConfig`) and default-resolution logic (`resolveExceptionRateLimiterConfig`) now live in `@posthog/core` and are shared between the browser and Node SDKs.
+  (2026-07-14)
+
+### Patch Changes
+
+- [#4140](https://github.com/PostHog/posthog-js/pull/4140) [`1eabd30`](https://github.com/PostHog/posthog-js/commit/1eabd30ea17977a300405c3889c18ff4c3544485) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Handle `sendBeacon` quota rejections instead of silently dropping events. A beacon rejected by the browser (over the page's shared ~64KiB in-flight keepalive quota) is now split in half and re-sent recursively so the batch delivers as far as the quota allows; a rejected payload that cannot be split falls back to a non-keepalive fetch and logs a warning. Previously the boolean return of `sendBeacon` was ignored and an over-quota unload batch was lost with no signal.
+  (2026-07-14)
+- Updated dependencies [[`dc2aa5b`](https://github.com/PostHog/posthog-js/commit/dc2aa5b3175dd4112347c16d16725045d63387f9)]:
+    - @posthog/core@1.41.0
+    - @posthog/types@1.394.0
+
 ## 1.399.5
 
 ### Patch Changes
