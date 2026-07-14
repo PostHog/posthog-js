@@ -2074,7 +2074,13 @@
     {
       "id": "IPostHog",
       "name": "IPostHog",
-      "properties": [],
+      "properties": [
+        {
+          "description": "The `posthog.metrics` API: a statsd-style pre-aggregating metrics client (count, gauge, histogram) — alpha. Samples are folded into per-series aggregates in memory and flushed periodically. Configure via the `metrics` client option.",
+          "type": "Metrics",
+          "name": "metrics"
+        }
+      ],
       "path": "src/types.ts"
     },
     {
