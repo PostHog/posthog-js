@@ -153,8 +153,12 @@ export async function handleIdentify(
       // pod (fresh instrument() per request) is every request. A token session
       // was already announced by whichever pod handled `initialize`, so only the
       // handshake, or a genuine change a long-lived server observed, publishes
-      // $identify. Every event carries distinct_id/$set regardless, so a
-      // suppressed $identify never loses person data.
+      // $identify. Every event still carries distinct_id/$set regardless, so
+      // person properties are never lost. Known gap: if identity is null at
+      // `initialize` but resolves later on a token session, that first $identify
+      // is suppressed too, so any pre-identify (anonymous) events aren't aliased
+      // onto the user. Inherent to statelessness (no pod knows a sibling already
+      // announced); revisit with the stateless-by-default rework.
       const changed = previousIdentity !== undefined && !areIdentitiesEqual(previousIdentity, mergedIdentity)
       const firstSeen = previousIdentity === undefined
       const announcedAtInitialize = data.sessionSource === 'token' && request.method !== 'initialize'
