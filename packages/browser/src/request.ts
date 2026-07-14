@@ -424,9 +424,10 @@ const _sendBeacon = (options: RequestWithOptions) => {
 
         logger.warn(`Beacon of ~${estimatedSize ?? 0} bytes was rejected by the browser, falling back to fetch`)
         _fetch({ ...options, _keepaliveDisabled: true })
-    } catch {
+    } catch (error) {
         // send beacon is a best-effort, fire-and-forget mechanism on page unload,
         // we don't want to throw errors here
+        logger.warn('Beacon send failed', error)
     }
 }
 

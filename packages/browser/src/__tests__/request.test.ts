@@ -945,6 +945,20 @@ describe('request', () => {
                 })
             })
 
+            it('warns instead of throwing when the beacon call itself throws', () => {
+                const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {})
+                mockedNavigator!.sendBeacon.mockImplementation(() => {
+                    throw new Error('boom')
+                })
+
+                try {
+                    expect(() => request(createRequest({ method: 'POST', data: { foo: 'bar' } }))).not.toThrow()
+                    expect(warnSpy).toHaveBeenCalledWith('Beacon send failed', expect.any(Error))
+                } finally {
+                    warnSpy.mockRestore()
+                }
+            })
+
             it('should not call sendBeacon when body is undefined', () => {
                 request(
                     createRequest({
