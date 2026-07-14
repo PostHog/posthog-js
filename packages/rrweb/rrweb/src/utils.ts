@@ -155,12 +155,10 @@ export function hookSetter<T>(
           set(value) {
             // put hooked setter into event loop to avoid of set latency
             setTimeout(() => {
-              // `this` may not be a genuine native element (e.g. a custom
-              // element, a cross-realm object, or a proxy another library
-              // placed on the prototype chain). In that case the native
-              // accessors read inside `d.set` reject with 'Illegal
-              // invocation'. Swallow it so recording degrades gracefully
-              // instead of throwing and polluting error tracking.
+              // the accessors read inside `d.set` throw 'Illegal invocation'
+              // when `this` is not a genuine native element (e.g. a proxy);
+              // the page cannot observe this deferred call, so drop the
+              // update rather than throw
               try {
                 d.set!.call(this, value);
               } catch {
@@ -168,15 +166,10 @@ export function hookSetter<T>(
               }
             }, 0);
             if (original && original.set) {
-              // Same guard as above: invoking the native setter on an
-              // illegal `this` throws 'Illegal invocation'. This call runs
-              // synchronously in the host page's assignment path, so an
-              // unguarded throw would propagate into the host page.
-              try {
-                original.set.call(this, value);
-              } catch {
-                // noop
-              }
+              // deliberately unguarded: this runs synchronously inside the
+              // page's own assignment, where the platform throws even for
+              // genuine elements (e.g. setting a file input's value)
+              original.set.call(this, value);
             }
           },
         },

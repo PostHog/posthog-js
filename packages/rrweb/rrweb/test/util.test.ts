@@ -102,11 +102,10 @@ describe('Utilities for other modules', () => {
   });
 
   describe('hookSetter()', () => {
-    it('should not throw when the native setter rejects an illegal `this`', () => {
+    it('should contain a failing deferred hooked setter and preserve the native throw', () => {
       vi.useFakeTimers();
       try {
-        // A getter/setter pair whose setter emulates a native accessor that
-        // rejects a foreign `this` with 'Illegal invocation'.
+        // emulates a native accessor rejecting a foreign `this`
         const proto = {} as Record<string, unknown>;
         Object.defineProperty(proto, 'value', {
           configurable: true,
@@ -130,16 +129,15 @@ describe('Utilities for other modules', () => {
           window,
         );
 
-        // An object that inherits the hooked setter but is not a genuine
-        // native element (e.g. a custom element or cross-realm proxy).
         const foreign = Object.create(proto) as { value: string };
 
-        // The synchronous native setter call must not propagate.
+        // the native setter's throw reaches the caller, as it would
+        // without the hook installed
         expect(() => {
           foreign.value = 'test';
-        }).not.toThrow();
+        }).toThrow(TypeError);
 
-        // The deferred hooked setter call must not propagate either.
+        // the deferred hooked setter still ran and its throw is contained
         expect(() => vi.runAllTimers()).not.toThrow();
         expect(hookedSet).toHaveBeenCalledTimes(1);
 
