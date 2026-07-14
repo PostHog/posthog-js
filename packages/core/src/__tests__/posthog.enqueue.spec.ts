@@ -42,6 +42,18 @@ describe('PostHog Core', () => {
       expect(mocks.fetch).not.toHaveBeenCalled()
     })
 
+    it('should warn when queue is full and the oldest message is dropped', () => {
+      createSut(2, 2)
+      const warnSpy = jest.spyOn((posthog as any)._logger, 'warn').mockImplementation(() => {})
+
+      posthog.capture('type1', { foo: 'bar' })
+      posthog.capture('type2', { foo: 'bar' })
+      expect(warnSpy).not.toHaveBeenCalled()
+
+      posthog.capture('type3', { foo: 'bar' })
+      expect(warnSpy).toHaveBeenCalledWith('Queue is full, the oldest event is dropped.')
+    })
+
     it('should delete oldest message if queue is full', () => {
       createSut(2, 2)
 

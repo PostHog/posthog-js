@@ -144,8 +144,14 @@ export type FeatureFlagBucketingIdentifier = 'distinct_id' | 'device_id' | '' | 
 
 export type BeforeSendFn = (event: EventMessage | null) => EventMessage | null
 
-export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
+export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'maxQueueSize'> & {
   persistence?: 'memory'
+  /**
+   * The maximum number of cached messages either in memory or on the local storage (must be higher than `flushAt`)
+   *
+   * @default 10000
+   */
+  maxQueueSize?: number
   /**
    * Credential that enables local feature flag evaluation and remote config.
    *

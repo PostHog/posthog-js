@@ -616,6 +616,26 @@ describe('PostHog Node.js', () => {
     })
   })
 
+  describe('maxQueueSize', () => {
+    it('defaults to 10000, higher than the shared core default of 1000', () => {
+      const ph = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+      })
+
+      expect((ph as any).maxQueueSize).toBe(10000)
+    })
+
+    it('still honors an explicit override', () => {
+      const ph = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        maxQueueSize: 42,
+        flushAt: 1,
+      })
+
+      expect((ph as any).maxQueueSize).toBe(42)
+    })
+  })
+
   describe('before_send', () => {
     it('should allow events through when before_send returns the event', async () => {
       const beforeSendFn = jest.fn((event) => event)
