@@ -16,6 +16,8 @@ import {
     isNativeAsyncGzipError,
     isNativeAsyncGzipReadError,
     isObject,
+    isUndefined,
+    safeJsonStringify,
 } from '@posthog/core'
 
 interface RequestWithEncodedBody extends RequestWithOptions {
@@ -92,12 +94,19 @@ export const extendURLParams = (url: string, params: Record<string, any>, replac
 }
 
 export const jsonStringify = (data: any, space?: string | number): string => {
-    // With plain JSON.stringify, we get an exception when a property is a BigInt. This has caused problems for some users,
-    // see https://github.com/PostHog/posthog-js/issues/1440
-    // To work around this, we convert BigInts to strings before stringifying the data. This is not ideal, as we lose
-    // information that this was originally a number, but given ClickHouse doesn't support BigInts, the customer
-    // would not be able to operate on these numerically anyway.
-    return JSON.stringify(data, (_, value) => (typeof value === 'bigint' ? value.toString() : value), space)
+    try {
+        // Fast path: convert BigInts to strings, since plain JSON.stringify throws on them.
+        // See https://github.com/PostHog/posthog-js/issues/1440.
+        return JSON.stringify(data, (_, value) => (typeof value === 'bigint' ? value.toString() : value), space)
+    } catch {
+        // A self-referential value — most commonly a DOM node that retains a React fiber pointing back
+        // at the element — makes JSON.stringify throw "Converting circular structure to JSON". With
+        // exception autocapture enabled that throw was recaptured as a new $exception, sometimes in a
+        // tight loop. Fall back to the shared circular-safe serializer (which also handles BigInt and
+        // Errors); it replaces only true cycles with "[Circular]", leaving shared-but-acyclic
+        // references intact. `space` formatting is dropped on this rare path.
+        return safeJsonStringify(data)
+    }
 }
 
 const encodeToDataString = (data: string | Record<string, any>): string => {
@@ -145,6 +154,19 @@ const encodePostData = (options: RequestWithEncodedBody): EncodedBody | undefine
 
 const encodePostDataSafely = (options: RequestWithEncodedBody): EncodedRequest => {
     const fallbackToUncompressed = (): EncodedRequest => {
+        // beacon bodies must keep a CORS-simple content type even on the gzip-failure
+        // fallback — uncompressed application/json preflights, base64 form data does not
+        if (options.transport === 'sendBeacon') {
+            return {
+                url: extendURLParams(options.url, { compression: Compression.Base64 }),
+                encodedBody: encodePostData({
+                    ...options,
+                    compression: Compression.Base64,
+                    _encodedBody: undefined,
+                }),
+            }
+        }
+
         return {
             url: removeURLParam(options.url, 'compression'),
             encodedBody: encodePostData({
@@ -225,6 +247,17 @@ const timeoutAbortReason = (timeout?: number): Error => {
     const reason = new Error(`PostHog request timed out${timeout ? ` after ${timeout}ms` : ''}`)
     reason.name = 'AbortError'
     return reason
+}
+
+// A failed fetch at the network layer (ad blocker, dropped connection, CORS, page teardown)
+// rejects with a generic `TypeError` whose message varies by browser - Chrome
+// `Failed to fetch`, Firefox `NetworkError when attempting to fetch resource.`, Safari
+// `Load failed`. These are expected, retried failures rather than genuine errors, so we
+// log them at `warn` rather than `error`.
+const NETWORK_ERROR_MESSAGES = /Failed to fetch|NetworkError|Load failed/i
+const isExpectedNetworkError = (error: unknown): boolean => {
+    const err = error as Error | undefined
+    return err?.name === 'TypeError' && NETWORK_ERROR_MESSAGES.test(err?.message || '')
 }
 
 const xhr = (options: RequestWithOptions) => {
@@ -354,10 +387,13 @@ const _fetch = (options: RequestWithOptions) => {
             // The flag is set synchronously the instant our timeout fires, and we additionally
             // require `name === 'AbortError'` so a genuine network error that happens to settle
             // just after the timeout is never mislabelled.
-            if (timedOut && (error as Error)?.name === 'AbortError') {
-                // Our own request timeout is an expected, intentional abort (the request queue
-                // retries), not a genuine failure - so log it at `warn` rather than `error`. This
-                // also keeps it out of error tracking's console-error capture as an exception.
+            if ((timedOut && (error as Error)?.name === 'AbortError') || isExpectedNetworkError(error)) {
+                // Expected, benign failures the request queue already retries - our own request
+                // timeout (an intentional abort), or a network-level `TypeError` (ad blocker,
+                // dropped connection, CORS, page teardown). Neither is a genuine failure, so log
+                // at `warn` rather than `error`. (For setups running with debug logging and
+                // `capture_console_errors` both enabled, this also keeps them out of error
+                // tracking's console-error capture.)
                 logger.warn(error)
             } else {
                 logger.error(error)
@@ -470,9 +506,15 @@ export const request = (_options: RequestWithOptions) => {
     const options: RequestWithEncodedBody = { ..._options }
     options.timeout = options.timeout || 60000
 
-    options.url = buildRequestURL(options.url, options.compression)
-
     const transport = options.transport ?? 'fetch'
+
+    // beacons fire during page unload, where a CORS preflight cannot complete — the body
+    // must keep a CORS-simple content type, which uncompressed (application/json) is not
+    if (transport === 'sendBeacon' && isUndefined(options.compression) && options.data) {
+        options.compression = Compression.Base64
+    }
+
+    options.url = buildRequestURL(options.url, options.compression)
 
     const availableTransports = AVAILABLE_TRANSPORTS.filter(
         (t) => !options.disableTransport || !t.transport || !options.disableTransport.includes(t.transport)

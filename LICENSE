@@ -327,12 +327,12 @@ SOFTWARE.
 
 ---
 
-Some files in this codebase contain code from MCPCat/mcpcat-typescript-sdk.
+Some files in this codebase contain code from agentcathq/agentcat-typescript-sdk (formerly MCPCat/mcpcat-typescript-sdk).
 In such cases it is explicitly stated in the file header. This license only applies to the relevant code in such cases.
 
 MIT License
 
-Copyright (c) 2025 MCPcat
+Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

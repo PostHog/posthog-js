@@ -1,6 +1,6 @@
 {
     "name": "@posthog/rrweb-utils",
-    "version": "0.0.61",
+    "version": "0.0.62",
     "scripts": {
         "dev": "vite build --watch",
         "build": "tsc -noEmit && vite build",

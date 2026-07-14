@@ -42,7 +42,7 @@ import {
   PostHogCustomStorage,
   PostHogSessionReplayConfig,
 } from './types'
-import { getRemoteConfigBool, getRemoteConfigNumber, isHermes, isValidSampleRate } from './utils'
+import { getRemoteConfigBool, getRemoteConfigNumber, isHermes, isMacOS, isValidSampleRate } from './utils'
 import { withReactNativeNavigation } from './frameworks/wix-navigation'
 import { OptionalReactNativePlugin } from './optional/OptionalPlugin'
 import { ErrorTracking, ErrorTrackingOptions } from './error-tracking'
@@ -196,6 +196,7 @@ export class PostHog extends PostHogCore {
   private _enableSessionReplay?: boolean
   private _sessionReplayNativeInitialized: boolean = false
   private _nativeErrorTrackingInitialized: boolean = false
+  private _sessionReplayMacOSWarned: boolean = false
   // Last applied recording state; the native bridge is only crossed on a change.
   private _sessionReplayRecordingActive?: boolean
   // Serializes re-arm evaluations so concurrent flags reloads don't interleave.
@@ -1369,7 +1370,8 @@ export class PostHog extends PostHogCore {
   }
 
   _isEnableSessionReplay(): boolean {
-    return !this.isDisabled && (this._enableSessionReplay ?? false)
+    // Session replay has no macOS backend, so it is never enabled there (crash tracking still is).
+    return !this.isDisabled && !isMacOS() && (this._enableSessionReplay ?? false)
   }
 
   _resetSessionId(reactNativeSessionReplay: typeof OptionalReactNativePlugin | undefined, sessionId: string): void {
@@ -1462,7 +1464,7 @@ export class PostHog extends PostHogCore {
     }
 
     if (!OptionalReactNativePlugin) {
-      // Web/macOS - silently return
+      // No native plugin loaded (web, or plugin not installed) - nothing to do
       return false
     }
 
@@ -1532,7 +1534,7 @@ export class PostHog extends PostHogCore {
     }
 
     if (!OptionalReactNativePlugin) {
-      // Web/macOS - silently return
+      // No native plugin loaded (web, or plugin not installed) - nothing to do
       return false
     }
 
@@ -1578,7 +1580,7 @@ export class PostHog extends PostHogCore {
     }
 
     if (!OptionalReactNativePlugin) {
-      // Web/macOS - always return false
+      // No native plugin loaded (web, or plugin not installed) - not active
       return false
     }
 
@@ -1983,6 +1985,16 @@ export class PostHog extends PostHogCore {
     enableSessionReplay: boolean = this._isEnableSessionReplay()
   ): Promise<boolean> {
     let enableNativeErrorTracking = this._isAutocaptureNativeErrors(options)
+
+    // Session replay has no macOS backend — the native plugin no-ops its recording controls there.
+    // Skip it in JS so we don't mark replay initialized or log a false "started" while nothing records.
+    if (enableSessionReplay && isMacOS()) {
+      if (!this._sessionReplayMacOSWarned) {
+        this._sessionReplayMacOSWarned = true
+        this._logger.warn('Session replay is not supported on macOS; ignoring.')
+      }
+      enableSessionReplay = false
+    }
 
     if (!enableSessionReplay && !enableNativeErrorTracking) {
       return true

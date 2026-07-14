@@ -943,6 +943,55 @@ describe('PostHog Node.js', () => {
     })
   })
 
+  describe('flush coalescing', () => {
+    beforeEach(() => {
+      jest.useRealTimers()
+    })
+
+    afterEach(() => {
+      jest.useFakeTimers()
+    })
+
+    it('coalesces threshold-triggered flushes while fetch is failing', async () => {
+      const rejectFetch: Array<(err: Error) => void> = []
+      mockedFetch.mockImplementation(() => new Promise((_, reject) => rejectFetch.push(reject)) as any)
+
+      const ph = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        fetchRetryCount: 0,
+        flushAt: 2,
+        disableCompression: true,
+      })
+
+      for (let i = 0; i < 20; i++) {
+        ph.capture({ event: `offline-event-${i}`, distinctId: '123' })
+      }
+
+      // all 20 captures coalesced into a single flush — not one flush per capture
+      await wait(10)
+      expect(mockedFetch).toHaveBeenCalledTimes(1)
+
+      rejectFetch.shift()!(new Error('network down'))
+      await wait(10)
+      expect(mockedFetch).toHaveBeenCalledTimes(1)
+
+      // coalescing doesn't leave flushing permanently stuck
+      ph.capture({ event: 'offline-event-20', distinctId: '123' })
+      await wait(10)
+      expect(mockedFetch).toHaveBeenCalledTimes(2)
+
+      rejectFetch.shift()!(new Error('network down'))
+      await wait(10)
+
+      mockedFetch.mockResolvedValue({
+        status: 200,
+        text: () => Promise.resolve('ok'),
+        json: () => Promise.resolve({ status: 'ok' }),
+      } as any)
+      await ph.shutdown()
+    })
+  })
+
   describe('shutdown', () => {
     beforeEach(() => {
       mockedFetch.mockImplementation(async () => {

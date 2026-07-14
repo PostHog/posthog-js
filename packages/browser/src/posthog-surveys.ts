@@ -509,6 +509,6 @@ export class PostHogSurveys implements Extension {
     }
 
     handlePageUnload(): void {
-        this._surveyManager?.handlePageUnload()
+        this._surveyManager?.handlePageUnload?.()
     }
 }

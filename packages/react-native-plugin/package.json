@@ -1,6 +1,6 @@
 {
   "name": "@posthog/react-native-plugin",
-  "version": "2.1.2",
+  "version": "2.2.1",
   "description": "PostHog React Native plugin for iOS and Android integrations",
   "source": "./src/index.tsx",
   "main": "./lib/commonjs/index.js",
@@ -50,7 +50,8 @@
   "keywords": [
     "react-native",
     "ios",
-    "android"
+    "android",
+    "macos"
   ],
   "repository": {
     "type": "git",

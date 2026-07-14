@@ -45,12 +45,15 @@ describe('server barrels (default / edge / react-server exports conditions)', ()
         it.each([
             ['PostHogProvider', 'function'],
             ['PostHogPageView', 'function'],
-            ['getServerSidePostHog', 'function'],
-            ['getPostHog', 'function'],
+            ['createPostHog', 'function'],
             ['postHogMiddleware', 'function'],
             ['DEFAULT_INGEST_PATH', 'string'],
         ])('exposes %s as %s', (name, expectedType) => {
             expect(typeof asRecord(pagesNode)[name]).toBe(expectedType)
+        })
+
+        it.each(['getServerSidePostHog', 'getPostHog'])('omits the removed bare getter %s', (name) => {
+            expect(asRecord(pagesNode)[name]).toBeUndefined()
         })
     })
 
@@ -64,7 +67,7 @@ describe('server barrels (default / edge / react-server exports conditions)', ()
             expect(typeof asRecord(pagesEdge)[name]).toBe(expectedType)
         })
 
-        it.each(['getServerSidePostHog', 'getPostHog'])('omits %s', (name) => {
+        it.each(['getServerSidePostHog', 'getPostHog', 'createPostHog'])('omits %s', (name) => {
             expect(asRecord(pagesEdge)[name]).toBeUndefined()
         })
     })
@@ -73,7 +76,7 @@ describe('server barrels (default / edge / react-server exports conditions)', ()
         it.each([
             ['PostHogProvider', 'function'],
             ['PostHogPageView', 'function'],
-            ['getPostHog', 'function'],
+            ['createPostHog', 'function'],
             ['postHogMiddleware', 'function'],
             ['captureRequestError', 'function'],
             ['onRequestError', 'function'],
@@ -81,6 +84,10 @@ describe('server barrels (default / edge / react-server exports conditions)', ()
             ['DEFAULT_INGEST_PATH', 'string'],
         ])('exposes %s as %s', (name, expectedType) => {
             expect(typeof asRecord(indexNode)[name]).toBe(expectedType)
+        })
+
+        it('omits the removed bare getter getPostHog', () => {
+            expect(asRecord(indexNode)['getPostHog']).toBeUndefined()
         })
     })
 
@@ -96,7 +103,7 @@ describe('server barrels (default / edge / react-server exports conditions)', ()
             expect(typeof asRecord(indexEdge)[name]).toBe(expectedType)
         })
 
-        it.each(['PostHogProvider', 'getPostHog'])('omits %s', (name) => {
+        it.each(['PostHogProvider', 'getPostHog', 'createPostHog'])('omits %s', (name) => {
             expect(asRecord(indexEdge)[name]).toBeUndefined()
         })
     })

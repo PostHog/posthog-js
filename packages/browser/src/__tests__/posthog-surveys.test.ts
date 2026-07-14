@@ -848,6 +848,14 @@ describe('posthog-surveys', () => {
             })
         })
 
+        describe('handlePageUnload', () => {
+            it('does not throw when a stale survey manager is missing handlePageUnload', () => {
+                surveys['_surveyManager'] = {} as unknown as SurveyManager
+
+                expect(() => surveys.handlePageUnload()).not.toThrow()
+            })
+        })
+
         describe('markSurveyAsSeen', () => {
             beforeEach(() => {
                 localStorage.clear()

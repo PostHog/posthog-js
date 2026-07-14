@@ -87,6 +87,29 @@ export async function collectReleaseAssets(distDir = DIST_DIR): Promise<ReleaseA
         )
     }
 
+    // The toolbar is moving from a single-file IIFE to a code-split ESM
+    // bundle: `toolbar.js` becomes a small loader that dynamic-import()s
+    // content-hashed chunks from a sibling `toolbar/` directory, resolved
+    // relative to the loader's own URL. Publish that directory whenever the
+    // build emits it — a loader without its chunks is a broken toolbar for
+    // strict_script_versioning users. No-op while posthog/posthog still
+    // produces the single-file build.
+    const toolbarDir = path.join(distDir, 'toolbar')
+    if (await fileExists(toolbarDir)) {
+        const files = (await listFilesRecursively(toolbarDir)).sort()
+        assets.push(
+            ...files.map((filePath) => ({
+                relativeKey: `toolbar/${path.relative(toolbarDir, filePath).replaceAll(path.sep, '/')}`,
+                filePath,
+                contentType: filePath.endsWith('.js.map')
+                    ? 'application/json'
+                    : filePath.endsWith('.js')
+                      ? 'application/javascript'
+                      : inferContentType(filePath),
+            }))
+        )
+    }
+
     return assets
 }
 

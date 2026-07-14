@@ -130,4 +130,31 @@ describe('ShadowDomManager', () => {
 
     document.body.removeChild(host);
   });
+
+  it('keys a shadow root by its host owner document, not the passed document', () => {
+    const manager = createManager();
+
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    const iframeDoc = iframe.contentDocument as Document;
+    const host = iframeDoc.createElement('div');
+    iframeDoc.body.appendChild(host);
+    const root = host.attachShadow({ mode: 'open' });
+
+    const buffersBeforeAdd = mutationBuffers.length;
+    // takeFullSnapshot's onSerialize passes the top-level document for every root,
+    // even ones nested inside an iframe.
+    manager.addShadowRoot(root, document);
+    expect(mutationBuffers.length).toBe(buffersBeforeAdd + 1);
+
+    // Tearing down the top-level document must not match the iframe-owned root.
+    manager.resetForDoc(document);
+    expect(mutationBuffers.length).toBe(buffersBeforeAdd + 1);
+
+    // Tearing down the iframe's own document does.
+    manager.resetForDoc(iframeDoc);
+    expect(mutationBuffers.length).toBe(buffersBeforeAdd);
+
+    document.body.removeChild(iframe);
+  });
 });
