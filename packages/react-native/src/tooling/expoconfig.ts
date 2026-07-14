@@ -358,8 +358,8 @@ type PostHogPluginProps = {
    * Appends `--skip-on-conflict` to `posthog-cli hermes upload` on iOS and Android. When
    * `uploadNativeSymbols` is enabled, also sets `POSTHOG_SKIP_ON_CONFLICT=1` in the iOS dSYM
    * upload build phase; posthog-ios's `upload-symbols.sh` forwards it as `--skip-on-conflict`
-   * to `posthog-cli dsym upload` on versions that support the variable (with posthog-cli
-   * >= 0.7.12) and ignores it on older versions, where dSYM conflicts keep failing the build.
+   * to `posthog-cli dsym upload` on posthog-ios >= 3.64.7 (with posthog-cli >= 0.7.12) and
+   * ignores it on older versions, where dSYM conflicts keep failing the build.
    *
    * Default: false.
    */
