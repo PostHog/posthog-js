@@ -922,6 +922,92 @@ describe('request', () => {
                 }
             })
 
+            describe('quota rejection (sendBeacon returns false)', () => {
+                const bigEvent = (i: number) => ({ event: 'big', i, payload: 'x'.repeat(8 * 1024) })
+                let warnSpy: jest.SpyInstance
+
+                beforeEach(() => {
+                    warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {})
+                    mockedFetch.mockImplementation(() =>
+                        Promise.resolve({ status: 200, text: () => Promise.resolve('{}') })
+                    )
+                })
+
+                afterEach(() => {
+                    warnSpy.mockRestore()
+                })
+
+                it('splits a rejected over-quota batch in half and re-sends each piece', () => {
+                    mockedNavigator!.sendBeacon.mockReturnValueOnce(false).mockReturnValue(true)
+
+                    request(
+                        createRequest({
+                            method: 'POST',
+                            data: [bigEvent(1), bigEvent(2), bigEvent(3), bigEvent(4)],
+                        })
+                    )
+
+                    expect(mockedNavigator?.sendBeacon).toHaveBeenCalledTimes(3)
+                    const [full, firstHalf, secondHalf] = mockedNavigator!.sendBeacon.mock.calls.map(
+                        (c) => (c[1] as Blob).size
+                    )
+                    expect(firstHalf).toBeLessThan(full)
+                    expect(secondHalf).toBeLessThan(full)
+                    expect(mockedFetch).not.toHaveBeenCalled()
+                })
+
+                it('splits recursively and falls back to fetch for single events that still do not fit', () => {
+                    mockedNavigator!.sendBeacon.mockReturnValue(false)
+
+                    request(
+                        createRequest({
+                            method: 'POST',
+                            data: [bigEvent(1), bigEvent(2), bigEvent(3), bigEvent(4)],
+                        })
+                    )
+
+                    // 1 full + 2 halves + 4 singles
+                    expect(mockedNavigator?.sendBeacon).toHaveBeenCalledTimes(7)
+                    expect(mockedFetch).toHaveBeenCalledTimes(4)
+                    expect(warnSpy).toHaveBeenCalledTimes(4)
+                    for (const call of mockedFetch.mock.calls) {
+                        expect(call[1].keepalive).toBe(false)
+                    }
+                })
+
+                it('does not split a rejected small batch, the quota is already exhausted', () => {
+                    mockedNavigator!.sendBeacon.mockReturnValue(false)
+
+                    request(
+                        createRequest({
+                            method: 'POST',
+                            data: [
+                                { event: 'small', i: 1 },
+                                { event: 'small', i: 2 },
+                            ],
+                        })
+                    )
+
+                    expect(mockedNavigator?.sendBeacon).toHaveBeenCalledTimes(1)
+                    expect(mockedFetch).toHaveBeenCalledTimes(1)
+                    expect(mockedFetch.mock.calls[0][1].keepalive).toBe(false)
+                })
+            })
+
+            it('warns instead of throwing when the beacon call itself throws', () => {
+                const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {})
+                mockedNavigator!.sendBeacon.mockImplementation(() => {
+                    throw new Error('boom')
+                })
+
+                try {
+                    expect(() => request(createRequest({ method: 'POST', data: { foo: 'bar' } }))).not.toThrow()
+                    expect(warnSpy).toHaveBeenCalledWith('Beacon send failed', expect.any(Error))
+                } finally {
+                    warnSpy.mockRestore()
+                }
+            })
+
             it('should not call sendBeacon when body is undefined', () => {
                 request(
                     createRequest({
