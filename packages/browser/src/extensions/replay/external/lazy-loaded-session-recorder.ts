@@ -1644,18 +1644,19 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             const snapshotEvents = splitBuffer(this._buffer)
             snapshotEvents.forEach((snapshotBuffer) => {
                 this._flushedSizeTracker?.trackSize(snapshotBuffer.sessionId, snapshotBuffer.size)
-                const properties: Properties = {
+                this._captureSnapshot({
                     $snapshot_bytes: snapshotBuffer.size,
                     $snapshot_data: snapshotBuffer.data,
                     $session_id: snapshotBuffer.sessionId,
                     $window_id: snapshotBuffer.windowId,
                     $lib: Config.LIB_NAME,
                     $lib_version: Config.LIB_VERSION,
-                }
-                if (snapshotHostname) {
-                    properties.$snapshot_host = snapshotHostname
-                }
-                this._captureSnapshot(properties)
+                    // undefined when unclassifiable (no URL, masked away, or unparseable) — JSON
+                    // serialization drops the key, and the ingestion consumer treats absence as
+                    // "fail closed". Empty string must never reach here; the consumer would read
+                    // it as a present-but-empty host.
+                    $snapshot_host: snapshotHostname,
+                })
             })
 
             // Notify strategy that initial flush is complete (performance optimization)
