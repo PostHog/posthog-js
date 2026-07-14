@@ -175,7 +175,7 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
    *
    * @default 1
    */
-  __exceptionRateLimiterRefillRate?: number
+  exceptionRateLimiterRefillRate?: number
   /**
    * ADVANCED: alters the bucket size for the error tracking rate limiter's token bucket.
    *
@@ -186,7 +186,7 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
    *
    * @default 10
    */
-  __exceptionRateLimiterBucketSize?: number
+  exceptionRateLimiterBucketSize?: number
   // The interval in milliseconds between polls for refreshing feature flag definitions. Defaults to 30 seconds.
   featureFlagsPollingInterval?: number
   // Maximum size of cache that deduplicates $feature_flag_called calls per user.

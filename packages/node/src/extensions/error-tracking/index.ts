@@ -27,11 +27,11 @@ export default class ErrorTracking {
     // By default each exception type captures ten exceptions before being rate limited, then
     // refills at a rate of one token / 10 second period (e.g. captures 1 rate-limited exception of
     // that type every 10 seconds until the burst ends). The bucket size and refill rate can be
-    // tuned via the `__exceptionRateLimiterBucketSize` and `__exceptionRateLimiterRefillRate`
-    // options, matching the browser SDK.
+    // tuned via the `exceptionRateLimiterBucketSize` and `exceptionRateLimiterRefillRate`
+    // options.
     this._rateLimiter = new BucketedRateLimiter({
-      refillRate: options.__exceptionRateLimiterRefillRate ?? 1,
-      bucketSize: options.__exceptionRateLimiterBucketSize ?? 10,
+      refillRate: options.exceptionRateLimiterRefillRate ?? 1,
+      bucketSize: options.exceptionRateLimiterBucketSize ?? 10,
       refillInterval: 10000, // ten seconds in milliseconds
       _logger: this._logger,
     })

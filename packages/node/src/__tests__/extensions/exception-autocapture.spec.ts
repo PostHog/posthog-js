@@ -142,7 +142,7 @@ describe('exception autocapture', () => {
       host: 'http://example.com',
       fetchRetryCount: 0,
       disableCompression: true,
-      __exceptionRateLimiterBucketSize: 3,
+      exceptionRateLimiterBucketSize: 3,
     })
 
     const mockedCapture = jest.spyOn(ph, '_capturePreparedEvent').mockResolvedValue(undefined)
