@@ -163,17 +163,6 @@ export class PostHogMetrics {
       return
     }
 
-    const seenType = this._typeByName.get(filtered.name)
-    if (seenType === undefined) {
-      this._typeByName.set(filtered.name, filtered.type)
-    } else if (seenType !== filtered.type && !this._typeCollisionWarned.has(filtered.name)) {
-      this._typeCollisionWarned.add(filtered.name)
-      this._logger.warn(
-        `Metric name '${filtered.name}' is already used as a ${seenType}; ` +
-          `recording it as a ${filtered.type} too will blend both series in charts. Use a distinct name.`
-      )
-    }
-
     const key = seriesKey(filtered.type, filtered.name, filtered.unit, filtered.attributes)
     let state = this._series.get(key)
     if (!state) {
@@ -197,6 +186,19 @@ export class PostHogMetrics {
         windowStartMs: Date.now(),
       }
       this._series.set(key, state)
+    }
+
+    // Bookkeeping only for admitted samples, so name-cardinality misuse (IDs
+    // interpolated into metric names) can't grow this map past the series cap.
+    const seenType = this._typeByName.get(filtered.name)
+    if (seenType === undefined) {
+      this._typeByName.set(filtered.name, filtered.type)
+    } else if (seenType !== filtered.type && !this._typeCollisionWarned.has(filtered.name)) {
+      this._typeCollisionWarned.add(filtered.name)
+      this._logger.warn(
+        `Metric name '${filtered.name}' is already used as a ${seenType}; ` +
+          `recording it as a ${filtered.type} too will blend both series in charts. Use a distinct name.`
+      )
     }
 
     this._fold(state, filtered.value)
@@ -261,7 +263,9 @@ export class PostHogMetrics {
     }
     this._flushTimer = safeSetTimeout(() => {
       this._flushTimer = undefined
-      this.flush().catch(() => {})
+      this.flush().catch((e) => {
+        this._logger.error('Metrics flush failed:', e)
+      })
     }, this._config.flushIntervalMs)
   }
 

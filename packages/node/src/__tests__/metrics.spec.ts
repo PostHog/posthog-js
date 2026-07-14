@@ -106,4 +106,16 @@ describe('PostHog Node.js metrics', () => {
 
     expect(metricsCalls()).toHaveLength(0)
   })
+
+  it('bounds the shutdown metrics flush by the shutdown timeout', async () => {
+    // A hung transport must not hold shutdown past the caller's deadline — the
+    // metrics flush runs before the events flush starts its own timeout.
+    posthog.metrics.count('jobs.processed', 1)
+    mockedFetch.mockImplementation(() => new Promise(() => {}) as any)
+
+    const shutdown = posthog.shutdown(500)
+    await jest.advanceTimersByTimeAsync(600)
+
+    await expect(shutdown).resolves.toBeUndefined()
+  })
 })

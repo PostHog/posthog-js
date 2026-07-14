@@ -493,7 +493,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * The `posthog.metrics` API: a statsd-style pre-aggregating metrics client.
+   * The `posthog.metrics` API: a statsd-style pre-aggregating metrics client — alpha.
    * Samples are folded into per-series aggregates in memory and flushed
    * periodically as one OTLP data point per series per window, so recording
    * from hot paths is cheap. Configure via the `metrics` client option.
@@ -2410,9 +2410,15 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     await this.featureFlagsPoller?.stopPoller(shutdownTimeoutMs)
     this.errorTracking.shutdown()
     if (this._metrics) {
-      // Send whatever is aggregated in the current window, then clear the
-      // flush timer so it can't fire after teardown.
-      await this._metrics.flush().catch(() => {})
+      // Send whatever is aggregated in the current window, then clear the flush
+      // timer so it can't fire after teardown. Raced against the shutdown budget:
+      // this flush runs before super._shutdown starts its own timeout, so an
+      // unresponsive transport must not be able to hold shutdown past the
+      // caller's deadline (its retry stack alone can take ~49s).
+      await Promise.race([
+        this._metrics.flush().catch(() => {}),
+        new Promise<void>((resolve) => safeSetTimeout(resolve, shutdownTimeoutMs ?? 30000)),
+      ])
       this._metrics.reset()
     }
     try {
