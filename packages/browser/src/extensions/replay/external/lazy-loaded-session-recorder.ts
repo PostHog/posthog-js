@@ -1609,6 +1609,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             if (!maskedUrl) {
                 return undefined
             }
+            // deliberately not convertToURL: anchor-based parsing resolves a non-URL masking
+            // result relative to the current page, stamping the very host masking tried to hide.
+            // new URL throws on garbage instead, and URL-less browsers land in the catch — both
+            // omit the property.
             // eslint-disable-next-line compat/compat
             return new URL(maskedUrl).hostname || undefined
         } catch {
@@ -1651,10 +1655,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     $window_id: snapshotBuffer.windowId,
                     $lib: Config.LIB_NAME,
                     $lib_version: Config.LIB_VERSION,
-                    // undefined when unclassifiable (no URL, masked away, or unparseable) — JSON
-                    // serialization drops the key, and the ingestion consumer treats absence as
-                    // "fail closed". Empty string must never reach here; the consumer would read
-                    // it as a present-but-empty host.
                     $snapshot_host: snapshotHostname,
                 })
             })
