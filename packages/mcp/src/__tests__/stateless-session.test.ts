@@ -3,7 +3,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { instrument } from '../index'
 import { getServerTrackingData } from '../extensions/internal'
 import { decodeSessionId } from '../extensions/session-token'
-import type { CompatibleRequestHandlerExtra, MCPRequestLike, MCPServerLike } from '../types'
+import type { CompatibleRequestHandlerExtra, MCPAnalyticsOptions, MCPRequestLike, MCPServerLike } from '../types'
 import { EventCapture, fakePostHog } from './test-utils'
 
 /**
@@ -24,16 +24,22 @@ const INITIALIZE_REQUEST: MCPRequestLike = {
   },
 }
 
-/** A stateless "pod": fresh instrumented low-level Server with an echo tool. */
-function createPod(podName: string): { server: Server; lowLevel: MCPServerLike } {
+/** A stateless "pod": fresh instrumented low-level Server with a get_plan tool. */
+function createPod(podName: string, options?: MCPAnalyticsOptions): { server: Server; lowLevel: MCPServerLike } {
   const server = new Server({ name: podName, version: '1.0.0' }, { capabilities: { tools: {} } })
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [{ name: 'echo', description: 'Echo', inputSchema: { type: 'object', properties: {} } }],
+    tools: [
+      {
+        name: 'get_plan',
+        description: "Return the caller's current plan",
+        inputSchema: { type: 'object', properties: {} },
+      },
+    ],
   }))
-  server.setRequestHandler(CallToolRequestSchema, async (request) => ({
-    content: [{ type: 'text', text: `echo: ${(request.params?.arguments as { text?: string })?.text ?? ''}` }],
+  server.setRequestHandler(CallToolRequestSchema, async () => ({
+    content: [{ type: 'text', text: 'plan: enterprise' }],
   }))
-  instrument(server, fakePostHog())
+  instrument(server, fakePostHog(), options)
   return { server, lowLevel: server as unknown as MCPServerLike }
 }
 
@@ -181,7 +187,7 @@ describe('Stateless session minting', () => {
     await invokeHandler(
       podB.lowLevel,
       'tools/call',
-      { method: 'tools/call', params: { name: 'echo', arguments: { text: 'hi' } } },
+      { method: 'tools/call', params: { name: 'get_plan', arguments: {} } },
       { requestInfo: { headers: { 'mcp-session-id': token } } }
     )
 
@@ -195,5 +201,50 @@ describe('Stateless session minting', () => {
     expect(toolCalls[0].properties.$session_id).toBe(initEvents[0].properties.$session_id)
     expect(toolCalls[0].properties.$mcp_client_name).toBe('Claude')
     expect(toolCalls[0].properties.$mcp_client_version).toBe('1.2.3')
+  })
+
+  describe('identify across stateless pods', () => {
+    const IDENTITY = { distinctId: 'user_mock', properties: { email: 'mock@example.com', plan: 'enterprise' } }
+    const PLAN_CALL: MCPRequestLike = { method: 'tools/call', params: { name: 'get_plan', arguments: {} } }
+
+    it('publishes $identify once at initialize and never again for tool calls replaying the token', async () => {
+      // Pod A handles initialize: mints the token and announces the identity.
+      const podA = createPod('pod-identify-a', { identify: async () => IDENTITY })
+      const transportA: { sessionId?: string } = {}
+      setFakeTransport(podA.server, transportA)
+      await invokeHandler(podA.lowLevel, 'initialize', INITIALIZE_REQUEST, { requestInfo: { headers: {} } })
+
+      const token = transportA.sessionId
+      expect(decodeSessionId(token)).not.toBeNull()
+      expect(eventCapture.findCapturesByEvent('$identify')).toHaveLength(1)
+
+      // Fresh pods share nothing with pod A — their identity caches are empty,
+      // but the replayed token says the session was announced at initialize.
+      for (const podName of ['pod-identify-b', 'pod-identify-c']) {
+        const pod = createPod(podName, { identify: async () => IDENTITY })
+        await invokeHandler(pod.lowLevel, 'tools/call', PLAN_CALL, {
+          requestInfo: { headers: { 'mcp-session-id': token } },
+        })
+      }
+
+      expect(eventCapture.findCapturesByEvent('$identify')).toHaveLength(1)
+
+      // Suppressing $identify must not lose attribution: every tool call still
+      // carries the identified user.
+      const toolCalls = eventCapture.findCapturesByEvent('$mcp_tool_call')
+      expect(toolCalls).toHaveLength(2)
+      for (const toolCall of toolCalls) {
+        expect(toolCall.distinct_id).toBe('user_mock')
+        expect(toolCall.properties.$set).toMatchObject({ email: 'mock@example.com', plan: 'enterprise' })
+      }
+    })
+
+    it('still publishes $identify for a first-seen identity when no token is in play', async () => {
+      const pod = createPod('pod-identify-generated', { identify: async () => IDENTITY })
+
+      await invokeHandler(pod.lowLevel, 'tools/call', PLAN_CALL, { requestInfo: { headers: {} } })
+
+      expect(eventCapture.findCapturesByEvent('$identify')).toHaveLength(1)
+    })
   })
 })
