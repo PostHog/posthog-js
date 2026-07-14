@@ -1594,6 +1594,28 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._activateTrigger(triggerType)
     }
 
+    // Hostname stamped as $snapshot_host on every $snapshot message, read by the ingestion
+    // pipeline (a cross-repo contract) to classify hosts even when the snapshot contains no
+    // URL-bearing events. Derived from the masked URL so it cannot bypass a customer's URL
+    // masking config; undefined (property omitted, consumer fails closed) when masking removes
+    // the URL or the masked result doesn't parse.
+    private _currentMaskedHostname(): string | undefined {
+        try {
+            const href = window?.location?.href
+            if (!href) {
+                return undefined
+            }
+            const maskedUrl = this._maskReplayUrl(href)
+            if (!maskedUrl) {
+                return undefined
+            }
+            // eslint-disable-next-line compat/compat
+            return new URL(maskedUrl).hostname || undefined
+        } catch {
+            return undefined
+        }
+    }
+
     private _clearFlushBufferTimer() {
         if (this._flushBufferTimer) {
             clearTimeout(this._flushBufferTimer)
@@ -1618,17 +1640,22 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         if (this._buffer.data.length > 0) {
+            const snapshotHostname = this._currentMaskedHostname()
             const snapshotEvents = splitBuffer(this._buffer)
             snapshotEvents.forEach((snapshotBuffer) => {
                 this._flushedSizeTracker?.trackSize(snapshotBuffer.sessionId, snapshotBuffer.size)
-                this._captureSnapshot({
+                const properties: Properties = {
                     $snapshot_bytes: snapshotBuffer.size,
                     $snapshot_data: snapshotBuffer.data,
                     $session_id: snapshotBuffer.sessionId,
                     $window_id: snapshotBuffer.windowId,
                     $lib: Config.LIB_NAME,
                     $lib_version: Config.LIB_VERSION,
-                })
+                }
+                if (snapshotHostname) {
+                    properties.$snapshot_host = snapshotHostname
+                }
+                this._captureSnapshot(properties)
             })
 
             // Notify strategy that initial flush is complete (performance optimization)
