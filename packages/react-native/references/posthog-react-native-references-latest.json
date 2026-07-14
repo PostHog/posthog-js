@@ -2113,7 +2113,7 @@
           "name": "console"
         },
         {
-          "description": "Enables native iOS/Android crash autocapture through the optional native plugin. Disabled by default. Requires `@posthog/react-native-plugin` installed.",
+          "description": "Enables native iOS/Android/macOS crash autocapture through the optional native plugin. Disabled by default. Requires `@posthog/react-native-plugin` installed (2.2.0 or newer for macOS).",
           "type": "boolean",
           "name": "nativeCrashes"
         },
@@ -2951,6 +2951,10 @@
       "id": "PostHogPersistedProperty",
       "name": "PostHogPersistedProperty",
       "properties": [
+        {
+          "type": "\"ai_queue\"",
+          "name": "AiQueue"
+        },
         {
           "type": "\"anonymous_id\"",
           "name": "AnonymousId"

@@ -40,6 +40,26 @@ export type { CaptureLogOptions, LogAttributeValue, LogAttributes, LogSeverityLe
 // Re-export the shared error tracking rate-limiter config type so SDKs built on core
 // (e.g. posthog-node) don't have to depend on `@posthog/types` directly.
 export type { ExceptionRateLimiterConfig } from '@posthog/types'
+export {
+  PostHogMetrics,
+  buildOtlpMetricsPayload,
+  buildMetricsResourceAttributes,
+  DEFAULT_HISTOGRAM_BOUNDS,
+} from './metrics'
+export type {
+  MetricsHost,
+  PostHogMetricsConfig,
+  ResolvedPostHogMetricsConfig,
+  SendMetricsBatchOutcome,
+} from './metrics'
+// Same barrel convention as logs for the user-facing metric types.
+export type {
+  CaptureMetricOptions,
+  MetricAttributes,
+  MetricAttributeValue,
+  MetricSample,
+  MetricType,
+} from './metrics/types'
 export { uuidv7 } from './vendor/uuidv7'
 export * from './cookie'
 export * from './posthog-core'

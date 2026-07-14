@@ -267,6 +267,11 @@ export enum PostHogPersistedProperty {
   BootstrapFeatureFlagPayloads = 'bootstrap_feature_flag_payloads',
   OverrideFeatureFlags = 'override_feature_flags',
   Queue = 'queue',
+  // Isolated capture queue for events that must not share a send cycle with the
+  // main queue. Only used by posthog-node today, to keep `$ai_*` events on the
+  // legacy (v0) transport while other events move to Capture V1 — segregated so a
+  // failure on one route can't re-send events already accepted on the other.
+  AiQueue = 'ai_queue',
   // Logs queue. Individual SDKs may route this key to an isolated storage
   // instance if they want to separate logs write volume from main state.
   LogsQueue = 'logs_queue',

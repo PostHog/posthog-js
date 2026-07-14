@@ -1,5 +1,15 @@
 # @posthog/mcp
 
+## 0.9.0
+
+### Minor Changes
+
+- [#4123](https://github.com/PostHog/posthog-js/pull/4123) [`c8d036e`](https://github.com/PostHog/posthog-js/commit/c8d036e1656aa30a63405a2e672f4695eae5c5b9) Thanks [@gesh](https://github.com/gesh)! - feat(mcp): stable sessions and client metadata on stateless / multi-pod MCP servers
+
+  On stateless servers every request became its own session and `$mcp_client_name`/`$mcp_client_version` were missing after `initialize`. The SDK now mints the `Mcp-Session-Id` response header at `initialize` as a token carrying the session id and client name/version; clients replay it on every request, so any pod recovers both with no server-side store. Auto-minting requires `enableJsonResponse: true` on `StreamableHTTPServerTransport`; SSE-mode servers can set the header at the HTTP layer with the new exports.
+
+  New exports: `encodeSessionId`, `decodeSessionId`, `MCP_SESSION_HEADER`, `SessionTokenPayload`, `newSessionId`. (2026-07-10)
+
 ## 0.8.0
 
 ### Minor Changes

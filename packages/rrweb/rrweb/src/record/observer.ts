@@ -1394,6 +1394,9 @@ export function initObservers(
         mutationBuffers.splice(index, 1);
       }
     }
+    // Disconnect the shadow observers owned by this document (e.g. an iframe being
+    // torn down) without touching the rest of the page's shadow observation.
+    o.shadowDomManager.resetForDoc(o.doc);
     mutationObserver?.disconnect();
     mousemoveHandler();
     mouseInteractionHandler();

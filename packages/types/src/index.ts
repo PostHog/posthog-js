@@ -76,6 +76,7 @@ export type {
     SessionRecordingOptions,
     RequestQueueConfig,
     LogCaptureOptions,
+    MetricsConfig,
     PostHogConfig,
 } from './posthog-config'
 
@@ -106,3 +107,19 @@ export type {
     OtlpLogsPayload,
     BeforeSendLogFn,
 } from './capture-log'
+
+// Metric capture types
+export type {
+    MetricAttributeValue,
+    MetricAttributes,
+    MetricType,
+    CaptureMetricOptions,
+    MetricSample,
+    BeforeSendMetricFn,
+    Metrics,
+    OtlpNumberDataPoint,
+    OtlpHistogramDataPoint,
+    OtlpMetric,
+    OtlpMetricsPayload,
+} from './capture-metric'
+export { OTLP_AGGREGATION_TEMPORALITY_DELTA } from './capture-metric'

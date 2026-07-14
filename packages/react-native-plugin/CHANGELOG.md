@@ -1,5 +1,19 @@
 # @posthog/react-native-plugin
 
+## 2.2.1
+
+### Patch Changes
+
+- [#4126](https://github.com/PostHog/posthog-js/pull/4126) [`c5477ce`](https://github.com/PostHog/posthog-js/commit/c5477ceb7b7cab752edd43bc77208c871df2fc69) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix fatal JS errors being double-reported on Android in minified release builds: the plugin's dedup matched serialized class-name strings, which R8/ProGuard renaming can defeat. It now registers `JavascriptException` in posthog-android's `errorTrackingConfig.ignoredExceptionTypes` (requires core 6.24.0), which matches by class across the cause chain and is unaffected by minification.
+  (2026-07-10)
+
+## 2.2.0
+
+### Minor Changes
+
+- [#4110](https://github.com/PostHog/posthog-js/pull/4110) [`da33d9e`](https://github.com/PostHog/posthog-js/commit/da33d9e6ae76d9f72284e2a590d0df002c2e9ce7) Thanks [@ioannisj](https://github.com/ioannisj)! - Add macOS support so the plugin builds on react-native-macos targets. The podspec now declares an `osx` platform, and all iOS-only posthog-ios APIs (session replay config, surveys, session-recording controls) are guarded with `#if os(iOS)`. Session replay remains iOS-only; macOS gets native error tracking.
+  (2026-07-10)
+
 ## 2.1.2
 
 ### Patch Changes

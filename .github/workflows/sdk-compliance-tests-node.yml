@@ -23,6 +23,7 @@ permissions:
   pull-requests: write
 
 jobs:
+  # Legacy /batch/ capture contract (capture_v0). Default capture mode.
   test-node-sdk:
     uses: PostHog/posthog-sdk-test-harness/.github/workflows/test-sdk-action.yml@02c049e529001d02f37a534745678e057d371fb0
     with:
@@ -30,3 +31,15 @@ jobs:
       adapter-context: .
       test-harness-version: "0.10.0"
       report-name: node-sdk-compliance-report
+
+  # Capture V1 contract (capture_v1, POST /i/v1/analytics/events). Runs in
+  # parallel with the v0 job; the v1 adapter image bakes POSTHOG_CAPTURE_MODE=v1
+  # so the harness runs only the v1 contract against it. Kept alongside the v0
+  # job while both capture modes ship dual for smoke testing.
+  test-node-sdk-v1:
+    uses: PostHog/posthog-sdk-test-harness/.github/workflows/test-sdk-action.yml@02c049e529001d02f37a534745678e057d371fb0
+    with:
+      adapter-dockerfile: compliance/node/Dockerfile.v1
+      adapter-context: .
+      test-harness-version: "0.10.0"
+      report-name: node-sdk-compliance-report-v1

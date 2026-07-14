@@ -360,6 +360,16 @@ export function needMaskingText(
 // Returns a disposer that removes the load listener and clears any pending
 // timer — call it if the iframe is detached before the listener fires.
 // https://stackoverflow.com/a/36155560
+function removeEventListenerSafely(
+  target: Pick<EventTarget, 'removeEventListener'>,
+  type: string,
+  listener: EventListenerOrEventListenerObject,
+): void {
+  const removeEventListener = target.removeEventListener;
+  if (typeof removeEventListener !== 'function') return;
+  removeEventListener.call(target, type, listener);
+}
+
 function onceIframeLoaded(
   iframeEl: HTMLIFrameElement,
   listener: () => unknown,
@@ -391,7 +401,7 @@ function onceIframeLoaded(
         clearTimeout(timer);
         timer = null;
       }
-      iframeEl.removeEventListener('load', onInitialLoad);
+      removeEventListenerSafely(iframeEl, 'load', onInitialLoad);
       iframeEl.addEventListener('load', onSubsequentLoad);
       listener();
     };
@@ -404,10 +414,10 @@ function onceIframeLoaded(
         timer = null;
       }
       if (fired) {
-        iframeEl.removeEventListener('load', onSubsequentLoad);
+        removeEventListenerSafely(iframeEl, 'load', onSubsequentLoad);
       } else {
         fired = true;
-        iframeEl.removeEventListener('load', onInitialLoad);
+        removeEventListenerSafely(iframeEl, 'load', onInitialLoad);
       }
     };
   }
@@ -433,13 +443,13 @@ function onceIframeLoaded(
     iframeEl.addEventListener('load', onSubsequentLoad);
     return () => {
       clearTimeout(initialTimer);
-      iframeEl.removeEventListener('load', onSubsequentLoad);
+      removeEventListenerSafely(iframeEl, 'load', onSubsequentLoad);
     };
   }
   // Transient blank during navigation — wait for the real load.
   iframeEl.addEventListener('load', onSubsequentLoad);
   return () => {
-    iframeEl.removeEventListener('load', onSubsequentLoad);
+    removeEventListenerSafely(iframeEl, 'load', onSubsequentLoad);
   };
 }
 
@@ -860,7 +870,7 @@ function serializeElementNode(
       image.currentSrc || image.getAttribute('src') || '<unknown-src>';
     const priorCrossOrigin = image.crossOrigin;
     const recordInlineImage = () => {
-      image.removeEventListener('load', recordInlineImage);
+      removeEventListenerSafely(image, 'load', recordInlineImage);
       try {
         canvasService!.width = image.naturalWidth;
         canvasService!.height = image.naturalHeight;
