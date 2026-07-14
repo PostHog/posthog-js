@@ -1,4 +1,3 @@
-/* eslint-disable compat/compat */
 import { useState } from 'react'
 import { getUser, TEAMS, User, useUser } from './auth'
 import { posthogHelpers } from './posthog'
