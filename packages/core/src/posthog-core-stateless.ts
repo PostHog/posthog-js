@@ -1574,7 +1574,10 @@ export abstract class PostHogCoreStateless {
       if (isPostHogFetchContentTooLargeError(err)) {
         return { kind: 'too-large' }
       }
-      if (err instanceof PostHogFetchNetworkError) {
+      // Exhausted retries on a retryable failure (network error, 408/429/5xx)
+      // still classify as retry-later so the window rides the next flush; only
+      // non-retryable HTTP errors (and 413 above) drop the batch.
+      if (isPostHogFetchRetryableError(err)) {
         return { kind: 'retry-later', error: err }
       }
       return { kind: 'fatal', error: err }

@@ -1,4 +1,5 @@
 import { PostHog, PostHogOptions } from '@/entrypoints/index.node'
+import type { IPostHog } from '@/types'
 
 jest.mock('../version', () => ({ version: '1.2.3' }))
 
@@ -76,6 +77,20 @@ describe('PostHog Node.js metrics', () => {
     expect(metricsByName(lastMetricsBody())['jobs.processed'].sum.dataPoints[0].asDouble).toBe(5)
   })
 
+  it.each([429, 503])('merges the window back and resends after exhausted retries on HTTP %i', async (status) => {
+    mockedFetch.mockResolvedValueOnce({ status, text: async () => '' } as any)
+
+    posthog.metrics.count('jobs.processed', 3)
+    await posthog.metrics.flush()
+    expect(metricsCalls()).toHaveLength(1)
+
+    posthog.metrics.count('jobs.processed', 2)
+    await posthog.metrics.flush()
+
+    expect(metricsCalls()).toHaveLength(2)
+    expect(metricsByName(lastMetricsBody())['jobs.processed'].sum.dataPoints[0].asDouble).toBe(5)
+  })
+
   it('drops the batch on 413 instead of retrying it forever', async () => {
     mockedFetch.mockResolvedValueOnce({ status: 413, text: async () => '' } as any)
 
@@ -97,6 +112,13 @@ describe('PostHog Node.js metrics', () => {
     expect(metricsByName(lastMetricsBody())['jobs.processed'].sum.dataPoints[0].asDouble).toBe(4)
   })
 
+  it('is reachable through the IPostHog interface', () => {
+    // Compile-time check: `metrics` must be part of the exported interface,
+    // not just the concrete client class.
+    const asInterface: IPostHog = posthog
+    expect(typeof asInterface.metrics.count).toBe('function')
+  })
+
   it('captures nothing while disabled', async () => {
     const disabled = new PostHog('TEST_API_KEY', { ...options, disabled: true })
     disabled.metrics.count('jobs.processed', 1)
@@ -105,6 +127,25 @@ describe('PostHog Node.js metrics', () => {
     await disabled.shutdown()
 
     expect(metricsCalls()).toHaveLength(0)
+  })
+
+  it('discards a metrics window whose raced-out flush completes after shutdown', async () => {
+    let rejectFetch!: (e: Error) => void
+    mockedFetch.mockImplementation(() => new Promise((_, reject) => (rejectFetch = reject)) as any)
+
+    posthog.metrics.count('jobs.processed', 1)
+    const shutdown = posthog.shutdown(100)
+    await jest.advanceTimersByTimeAsync(150)
+    await shutdown
+    expect(metricsCalls()).toHaveLength(1)
+
+    // The flush that lost the shutdown race finally fails with a retryable
+    // error — after teardown its window must be discarded, not merged back
+    // onto a re-armed flush timer.
+    rejectFetch(new Error('connection refused'))
+    await jest.advanceTimersByTimeAsync(60_000)
+
+    expect(metricsCalls()).toHaveLength(1)
   })
 
   it('bounds the shutdown metrics flush by the shutdown timeout', async () => {
@@ -117,5 +158,27 @@ describe('PostHog Node.js metrics', () => {
     await jest.advanceTimersByTimeAsync(600)
 
     await expect(shutdown).resolves.toBeUndefined()
+  })
+
+  it('shares one shutdown deadline between the metrics flush and the event flush', async () => {
+    // Separate client: its hung sends would wedge the shared afterEach shutdown.
+    const client = new PostHog('TEST_API_KEY', options)
+    mockedFetch.mockImplementation(() => new Promise(() => {}) as any)
+    client.metrics.count('jobs.processed', 1)
+    client.capture({ distinctId: 'user-1', event: 'order created' })
+
+    // With both transports hung, shutdown(500) must settle by the deadline —
+    // not spend the full budget on the metrics race and then grant the event
+    // flush a fresh full budget on top.
+    let settled = false
+    client
+      .shutdown(500)
+      .catch(() => {})
+      .finally(() => {
+        settled = true
+      })
+    await jest.advanceTimersByTimeAsync(600)
+
+    expect(settled).toBe(true)
   })
 })

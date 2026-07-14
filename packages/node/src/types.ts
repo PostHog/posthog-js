@@ -3,6 +3,7 @@ import type {
   ExceptionRateLimiterConfig,
   FeatureFlagValue,
   JsonType,
+  Metrics,
   MetricsConfig,
   PostHogFetchOptions,
   PostHogFetchResponse,
@@ -725,6 +726,13 @@ export interface IPostHog {
    * @returns The current context data, or undefined if no context is set
    */
   getContext(): ContextData | undefined
+
+  /**
+   * @description The `posthog.metrics` API: a statsd-style pre-aggregating metrics client (count,
+   * gauge, histogram) — alpha. Samples are folded into per-series aggregates in memory and flushed
+   * periodically. Configure via the `metrics` client option.
+   */
+  readonly metrics: Metrics
 
   /**
    * @description Flushes the events still in the queue and clears the feature flags poller to allow for

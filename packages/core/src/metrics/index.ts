@@ -73,6 +73,10 @@ export class PostHogMetrics {
   // types under one name produces charts that blend both series.
   private _typeByName = new Map<string, MetricType>()
   private _typeCollisionWarned = new Set<string>()
+  // Bumped by reset(). A flush that was in flight when reset() ran (e.g. it
+  // lost a shutdown race) sees a stale generation when its send settles and
+  // discards its window instead of merging it back and re-arming the timer.
+  private _generation = 0
 
   constructor(
     private readonly _instance: MetricsHost,
@@ -129,8 +133,9 @@ export class PostHogMetrics {
     return this._buildPayload(window)
   }
 
-  /** Clears the flush timer and drops the current window. */
+  /** Clears the flush timer, drops the current window, and invalidates in-flight flushes. */
   reset(): void {
+    this._generation++
     this._clearFlushTimer()
     this._series = new Map()
     this._flushPromise = null
@@ -163,26 +168,30 @@ export class PostHogMetrics {
       return
     }
 
-    const key = seriesKey(filtered.type, filtered.name, filtered.unit, filtered.attributes)
+    // Snapshot: the key is computed from these values, so a caller mutating
+    // the object after capture must not change the stored series. Reading and
+    // serializing the attributes can throw (BigInt values, throwing
+    // getters/proxies) — a malformed sample is dropped, never thrown.
+    let attributes: MetricAttributes | undefined
+    let key: string
+    try {
+      attributes = filtered.attributes ? { ...filtered.attributes } : undefined
+      key = seriesKey(filtered.type, filtered.name, filtered.unit, attributes)
+    } catch (e) {
+      this._logger.warn(`Dropping metric '${filtered.name}': attributes could not be serialized`, e)
+      return
+    }
+
     let state = this._series.get(key)
     if (!state) {
-      if (this._series.size >= this._config.maxSeriesPerFlush) {
-        if (!this._seriesCapWarned) {
-          this._seriesCapWarned = true
-          this._logger.warn(
-            `Metric series cap reached (${this._config.maxSeriesPerFlush} per flush window); ` +
-              `dropping new series until the next flush. Reduce attribute cardinality.`
-          )
-        }
+      if (!this._admitNewSeries()) {
         return
       }
       state = {
         name: filtered.name,
         type: filtered.type,
         unit: filtered.unit,
-        // Snapshot: the key was computed from these values, so a caller
-        // mutating the object after capture must not change the stored series.
-        attributes: filtered.attributes ? { ...filtered.attributes } : undefined,
+        attributes,
         windowStartMs: Date.now(),
       }
       this._series.set(key, state)
@@ -203,6 +212,24 @@ export class PostHogMetrics {
 
     this._fold(state, filtered.value)
     this._armFlushTimer()
+  }
+
+  /**
+   * Cardinality gate for adding a series to the live window — warns once per
+   * window when the cap is hit. Applied on capture and on merge-back alike.
+   */
+  private _admitNewSeries(): boolean {
+    if (this._series.size < this._config.maxSeriesPerFlush) {
+      return true
+    }
+    if (!this._seriesCapWarned) {
+      this._seriesCapWarned = true
+      this._logger.warn(
+        `Metric series cap reached (${this._config.maxSeriesPerFlush} per flush window); ` +
+          `dropping new series until the next flush. Reduce attribute cardinality.`
+      )
+    }
+    return false
   }
 
   private _fold(state: SeriesState, value: number): void {
@@ -289,7 +316,13 @@ export class PostHogMetrics {
     this._typeByName = new Map()
     this._typeCollisionWarned = new Set()
 
+    const generation = this._generation
     const outcome = await this._instance._sendMetricsBatch(this._buildPayload(window))
+    if (generation !== this._generation) {
+      // reset() ran while the send was in flight — the client was torn down or
+      // reconfigured, so this window is dropped whatever the outcome was.
+      return
+    }
     switch (outcome.kind) {
       case 'ok':
         return
@@ -383,7 +416,11 @@ export class PostHogMetrics {
     for (const [key, old] of window) {
       const current = this._series.get(key)
       if (!current) {
-        this._series.set(key, old)
+        // The cap still applies here: an unbounded merge-back would let a
+        // failed flush reintroduce series past maxSeriesPerFlush.
+        if (this._admitNewSeries()) {
+          this._series.set(key, old)
+        }
         continue
       }
       current.windowStartMs = Math.min(current.windowStartMs, old.windowStartMs)

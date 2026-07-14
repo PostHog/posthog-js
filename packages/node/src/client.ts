@@ -2404,6 +2404,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @returns Promise that resolves when shutdown is complete
    */
   async _shutdown(shutdownTimeoutMs?: number): Promise<void> {
+    // One absolute deadline for the whole shutdown: the metrics flush race and
+    // super._shutdown spend from the same budget, so shutdown(500) can't take
+    // ~1000ms by giving each phase a fresh full timeout.
+    const shutdownDeadlineMs = Date.now() + (shutdownTimeoutMs ?? 30000)
     // Cancel any pending debounced flush — shutdown will flush directly.
     const resolve = this._consumeWaitUntilCycle()
 
@@ -2417,12 +2421,15 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       // caller's deadline (its retry stack alone can take ~49s).
       await Promise.race([
         this._metrics.flush().catch(() => {}),
-        new Promise<void>((resolve) => safeSetTimeout(resolve, shutdownTimeoutMs ?? 30000)),
+        new Promise<void>((resolve) => safeSetTimeout(resolve, Math.max(0, shutdownDeadlineMs - Date.now()))),
       ])
+      // reset() also invalidates a flush that lost the race above: when its
+      // send finally settles, the stale window is discarded instead of being
+      // merged back onto a re-armed timer after teardown.
       this._metrics.reset()
     }
     try {
-      return await super._shutdown(shutdownTimeoutMs)
+      return await super._shutdown(Math.max(0, shutdownDeadlineMs - Date.now()))
     } finally {
       this.distinctIdHasSentFlagCalls = {}
       resolve?.()
