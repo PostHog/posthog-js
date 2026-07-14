@@ -24,21 +24,6 @@ export function circularReferenceReplacer() {
     }
 }
 
-// native URL (not convertToURL): garbage must fail to parse, not resolve relative to the current page
-export function hostnameFromURL(url: string | URL | RequestInfo): string | null {
-    try {
-        if (typeof url === 'string') {
-            return new URL(url).hostname
-        }
-        if ('url' in url) {
-            return new URL(url.url).hostname
-        }
-        return url.hostname
-    } catch {
-        return null
-    }
-}
-
 function estimateStringBytes(data: string): number {
     return new Blob([data]).size
 }

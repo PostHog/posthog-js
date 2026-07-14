@@ -1,5 +1,18 @@
 import { NetworkRecordOptions } from '../../../types'
-import { hostnameFromURL } from './sessionrecording-utils'
+
+function hostnameFromURL(url: string | URL | RequestInfo): string | null {
+    try {
+        if (typeof url === 'string') {
+            return new URL(url).hostname
+        }
+        if ('url' in url) {
+            return new URL(url.url).hostname
+        }
+        return url.hostname
+    } catch {
+        return null
+    }
+}
 
 export function isHostOnDenyList(url: string | URL | Request, options: NetworkRecordOptions) {
     const hostname = hostnameFromURL(url)

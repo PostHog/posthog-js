@@ -22,7 +22,6 @@ import {
 import {
     estimateCompressedEventSize,
     estimateSize,
-    hostnameFromURL,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     splitBuffer,
     truncateLargeConsoleLogs,
@@ -1603,8 +1602,19 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _currentMaskedHostname(): string | undefined {
         try {
             const href = window?.location?.href
-            const maskedUrl = href ? this._maskReplayUrl(href) : undefined
-            return (maskedUrl && hostnameFromURL(maskedUrl)) || undefined
+            if (!href) {
+                return undefined
+            }
+            const maskedUrl = this._maskReplayUrl(href)
+            if (!maskedUrl) {
+                return undefined
+            }
+            // deliberately not convertToURL: anchor-based parsing resolves a non-URL masking
+            // result relative to the current page, stamping the very host masking tried to hide.
+            // new URL throws on garbage instead, and URL-less browsers land in the catch — both
+            // omit the property.
+            // eslint-disable-next-line compat/compat
+            return new URL(maskedUrl).hostname || undefined
         } catch {
             return undefined
         }
