@@ -385,8 +385,9 @@ export type ExternalIntegrationKind = 'intercom' | 'crispChat'
  *
  * Burst protection is scoped **per exception type** — the limiter is keyed by exception type, so
  * each distinct `$exception` type gets its own token bucket and there is no aggregate cap across
- * all types. These options let customers with high-cardinality exception types tune the per-type
- * allowance, and are shared between the browser and Node SDKs.
+ * all types. It applies only to autocaptured exceptions; manual `captureException` calls are
+ * never rate limited. These options let customers with high-cardinality exception types tune the
+ * per-type allowance, and are shared between the browser and Node SDKs.
  */
 export interface ExceptionRateLimiterConfig {
     /**
