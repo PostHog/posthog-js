@@ -205,6 +205,13 @@ describe('modifyExistingXcodeBuildScript', () => {
     modifyExistingXcodeBuildScript(script)
     expect(script.shellScript).toBe(original)
   })
+
+  it('warns instead of throwing when the bundle phase is missing', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(() => modifyExistingXcodeBuildScript(undefined)).not.toThrow()
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Bundle React Native code and images'))
+    warn.mockRestore()
+  })
 })
 
 const mockXcodeProjectForBuildPhase = (
@@ -285,16 +292,38 @@ describe('addDsymUploadBuildPhase', () => {
     expect(xp.addBuildPhase).not.toHaveBeenCalled()
   })
 
-  it('refreshes an existing phase script so option changes take effect', () => {
-    const existing = { isa: 'PBXShellScriptBuildPhase', shellScript: JSON.stringify(buildDsymUploadShellScript()) }
+  // How xcode@3's addBuildPhase stores shellScript in the pbxproj: quotes escaped, newlines literal.
+  const encodePbx = (script: string): string => '"' + script.replace(/"/g, '\\"') + '"'
+
+  it('refreshes an existing plugin-generated phase script so option changes take effect', () => {
+    const existing = { isa: 'PBXShellScriptBuildPhase', shellScript: encodePbx(buildDsymUploadShellScript()) }
     const xp = mockXcodeProjectForBuildPhase(existing)
 
     addDsymUploadBuildPhase(xp, false, true)
     expect(xp.addBuildPhase).not.toHaveBeenCalled()
-    expect(JSON.parse(existing.shellScript)).toContain('export POSTHOG_SKIP_ON_CONFLICT=1')
+    expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript(false, true)))
 
     addDsymUploadBuildPhase(xp, false, false)
-    expect(JSON.parse(existing.shellScript)).not.toContain('POSTHOG_SKIP_ON_CONFLICT')
+    expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript()))
+  })
+
+  it('refreshing with unchanged options preserves the stored pbxproj representation', () => {
+    const stored = encodePbx(buildDsymUploadShellScript(true))
+    const existing = { isa: 'PBXShellScriptBuildPhase', shellScript: stored }
+    const xp = mockXcodeProjectForBuildPhase(existing)
+
+    addDsymUploadBuildPhase(xp, true)
+    expect(existing.shellScript).toBe(stored)
+  })
+
+  it('leaves a user-customized phase script untouched', () => {
+    const customized = encodePbx(`${buildDsymUploadShellScript()}\necho "my custom step"`)
+    const existing = { isa: 'PBXShellScriptBuildPhase', shellScript: customized }
+    const xp = mockXcodeProjectForBuildPhase(existing)
+
+    addDsymUploadBuildPhase(xp, false, true)
+    expect(xp.addBuildPhase).not.toHaveBeenCalled()
+    expect(existing.shellScript).toBe(customized)
   })
 })
 

@@ -166,7 +166,15 @@ const withAndroidNativeSymbolsPlugin = (config: any) => {
 
 type BuildPhase = { shellScript: string }
 
-export function modifyExistingXcodeBuildScript(script: BuildPhase, skipOnConflict = false): void {
+export function modifyExistingXcodeBuildScript(script: BuildPhase | undefined, skipOnConflict = false): void {
+  if (!script?.shellScript) {
+    console.warn(
+      "[posthog-react-native] Could not find the 'Bundle React Native code and images' build phase; " +
+        'skipping sourcemap upload setup.'
+    )
+    return
+  }
+
   if (!script.shellScript.match(/(packager|scripts)\/react-native-xcode\.sh\b/)) {
     return
   }
@@ -218,7 +226,7 @@ const POSTHOG_DSYM_BUILD_PHASE_NAME = 'Upload PostHog Debug Symbols'
 // Shell script for the dSYM upload build phase. It locates and runs posthog-ios's
 // upload-symbols.sh (CocoaPods or SwiftPM) rather than re-implementing dSYM upload.
 // `includeSource` (iOS only) opts into POSTHOG_INCLUDE_SOURCE to also upload native source.
-// `skipOnConflict` opts into POSTHOG_SKIP_ON_CONFLICT so dSYM conflicts don't fail the build.
+// `skipOnConflict` opts into POSTHOG_SKIP_ON_CONFLICT to skip conflicting dSYM uploads.
 export function buildDsymUploadShellScript(includeSource = false, skipOnConflict = false): string {
   const lines = [
     '# Upload iOS dSYMs to PostHog so native crashes can be symbolicated.',
@@ -254,20 +262,31 @@ export function buildDsymUploadShellScript(includeSource = false, skipOnConflict
   return lines.join('\n')
 }
 
-// Appends a Run Script build phase that uploads dSYMs. Idempotent; appended last so it
-// runs after the dSYM bundle is produced. Re-runs refresh the existing phase's script so
-// option changes (includeSource, skipOnConflict) take effect without a clean prebuild.
+// Matches how xcode's addBuildPhase stores shellScript in the pbxproj (quotes escaped,
+// newlines literal), so in-place refreshes don't rewrite the stored representation.
+function encodePbxShellScript(script: string): string {
+  return '"' + script.replace(/"/g, '\\"') + '"'
+}
+
+// Appends a Run Script build phase that uploads dSYMs; appended last so it runs after the
+// dSYM bundle is produced. Re-runs refresh the phase in place while its script is still
+// plugin-generated, so option changes take effect without a clean prebuild; a script the
+// user has customized is left untouched.
 export function addDsymUploadBuildPhase(xcodeProject: any, includeSource = false, skipOnConflict = false): void {
-  const shellScript = buildDsymUploadShellScript(includeSource, skipOnConflict)
   const existing = xcodeProject.pbxItemByComment(POSTHOG_DSYM_BUILD_PHASE_NAME, 'PBXShellScriptBuildPhase')
   if (existing) {
-    existing.shellScript = JSON.stringify(shellScript)
+    const generatedVariants = [false, true].flatMap((source) =>
+      [false, true].map((skip) => encodePbxShellScript(buildDsymUploadShellScript(source, skip)))
+    )
+    if (generatedVariants.includes(existing.shellScript)) {
+      existing.shellScript = encodePbxShellScript(buildDsymUploadShellScript(includeSource, skipOnConflict))
+    }
     return
   }
 
   xcodeProject.addBuildPhase([], 'PBXShellScriptBuildPhase', POSTHOG_DSYM_BUILD_PHASE_NAME, null, {
     shellPath: '/bin/sh',
-    shellScript,
+    shellScript: buildDsymUploadShellScript(includeSource, skipOnConflict),
   })
 }
 
@@ -327,8 +346,9 @@ type PostHogPluginProps = {
    *
    * Appends `--skip-on-conflict` to `posthog-cli hermes upload` on iOS and Android. When
    * `uploadNativeSymbols` is enabled, also sets `POSTHOG_SKIP_ON_CONFLICT=1` in the iOS dSYM
-   * upload build phase so posthog-ios's `upload-symbols.sh` forwards `--skip-on-conflict`
-   * to `posthog-cli dsym upload` (requires posthog-cli >= 0.7.12).
+   * upload build phase; posthog-ios's `upload-symbols.sh` forwards it as `--skip-on-conflict`
+   * to `posthog-cli dsym upload` on versions that support the variable (with posthog-cli
+   * >= 0.7.12) and ignores it on older versions, where dSYM conflicts keep failing the build.
    *
    * Default: false.
    */
