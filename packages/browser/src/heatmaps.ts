@@ -148,7 +148,9 @@ export class Heatmaps implements Extension {
     }
 
     private _onDeadClick(click: DeadClickCandidate): void {
-        this._onClick(click.originalEvent, 'deadclick')
+        // the heatmaps path only ever receives click candidates (swipes are not forwarded here),
+        // so originalEvent is always a MouseEvent
+        this._onClick(click.originalEvent as MouseEvent, 'deadclick')
     }
 
     private _onVisibilityChange(): void {

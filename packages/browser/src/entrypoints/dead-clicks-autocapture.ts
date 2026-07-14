@@ -15,12 +15,35 @@ function asClick(event: MouseEvent): DeadClickCandidate | null {
             node: eventTarget,
             originalEvent: event,
             timestamp: Date.now(),
+            type: 'click',
         }
     }
     return null
 }
 
-function hasModifierKey(event: MouseEvent): boolean {
+function swipeDirection(dx: number, dy: number): 'left' | 'right' | 'up' | 'down' {
+    if (Math.abs(dx) >= Math.abs(dy)) {
+        return dx >= 0 ? 'right' : 'left'
+    }
+    return dy >= 0 ? 'down' : 'up'
+}
+
+function asSwipe(event: TouchEvent, dx: number, dy: number, distancePx: number): DeadClickCandidate | null {
+    const eventTarget = getEventTarget(event)
+    if (eventTarget) {
+        return {
+            node: eventTarget,
+            originalEvent: event,
+            timestamp: Date.now(),
+            type: 'swipe',
+            swipeDirection: swipeDirection(dx, dy),
+            swipeDistancePx: Math.round(distancePx),
+        }
+    }
+    return null
+}
+
+function hasModifierKey(event: MouseEvent | TouchEvent): boolean {
     return event.ctrlKey || event.metaKey || event.altKey || event.shiftKey
 }
 
@@ -35,6 +58,10 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     private _lastVisibilityChange: number | undefined
     private _clicks: DeadClickCandidate[] = []
     private _checkClickTimer: number | undefined
+    private _touchStart: { x: number; y: number; timestamp: number } | undefined
+    // swipes are only observed on the default autocapture path, not when an external
+    // consumer (e.g. heatmaps) provides its own capture handler
+    private _observeSwipes: boolean
     private _config: Required<Omit<DeadClicksAutoCaptureConfig, 'css_selector_ignorelist'>> &
         Pick<DeadClicksAutoCaptureConfig, 'css_selector_ignorelist'>
     private _onCapture: (click: DeadClickCandidate, properties: Properties) => void
@@ -45,6 +72,8 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         selection_change_threshold_ms: 100,
         mutation_threshold_ms: 2500,
         capture_clicks_with_modifier_keys: false,
+        capture_dead_swipes: true,
+        swipe_threshold_px: 30,
         __onCapture: defaultOnCapture,
     })
 
@@ -62,6 +91,8 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             mutation_threshold_ms: providedConfig?.mutation_threshold_ms ?? defaultConfig.mutation_threshold_ms,
             capture_clicks_with_modifier_keys:
                 providedConfig?.capture_clicks_with_modifier_keys ?? defaultConfig.capture_clicks_with_modifier_keys,
+            capture_dead_swipes: providedConfig?.capture_dead_swipes ?? defaultConfig.capture_dead_swipes,
+            swipe_threshold_px: providedConfig?.swipe_threshold_px ?? defaultConfig.swipe_threshold_px,
             css_selector_ignorelist: providedConfig?.css_selector_ignorelist,
             __onCapture: defaultConfig.__onCapture,
         }
@@ -73,6 +104,8 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     ) {
         this._config = this._asRequiredConfig(config)
         this._onCapture = this._config.__onCapture
+        // when a consumer supplies its own capture handler (heatmaps) we only track clicks
+        this._observeSwipes = this._config.capture_dead_swipes && isUndefined(config?.__onCapture)
     }
 
     start(observerTarget: Node) {
@@ -81,6 +114,9 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         this._startSelectionChangedObserver()
         this._startVisibilityChangeObserver()
         this._startMutationObserver(observerTarget)
+        if (this._observeSwipes) {
+            this._startSwipeObserver()
+        }
     }
 
     private _startMutationObserver(observerTarget: Node) {
@@ -104,6 +140,8 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         assignableWindow.removeEventListener('click', this._onClick)
         assignableWindow.removeEventListener('scroll', this._onScroll, { capture: true })
         assignableWindow.removeEventListener('selectionchange', this._onSelectionChange)
+        assignableWindow.removeEventListener('touchstart', this._onTouchStart, { capture: true })
+        assignableWindow.removeEventListener('touchend', this._onTouchEnd, { capture: true })
         document?.removeEventListener('visibilitychange', this._onVisibilityChange)
     }
 
@@ -172,6 +210,83 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         if (document?.visibilityState === 'visible') {
             this._lastVisibilityChange = Date.now()
         }
+    }
+
+    // `capture: true` mirrors the scroll observer so we see gestures on nested scrollable
+    // elements too. `passive: true` tells the browser we won't call `preventDefault()`.
+    private _startSwipeObserver() {
+        addEventListener(assignableWindow, 'touchstart', this._onTouchStart, { capture: true, passive: true })
+        addEventListener(assignableWindow, 'touchend', this._onTouchEnd, { capture: true, passive: true })
+    }
+
+    private _onTouchStart = (event: Event): void => {
+        const touch = (event as TouchEvent).touches?.[0]
+        if (touch) {
+            this._touchStart = { x: touch.clientX, y: touch.clientY, timestamp: Date.now() }
+        }
+    }
+
+    private _onTouchEnd = (event: Event): void => {
+        const start = this._touchStart
+        this._touchStart = undefined
+        if (isUndefined(start)) {
+            return
+        }
+
+        const touchEvent = event as TouchEvent
+        const touch = touchEvent.changedTouches?.[0]
+        if (!touch) {
+            return
+        }
+
+        const dx = touch.clientX - start.x
+        const dy = touch.clientY - start.y
+        const distancePx = Math.sqrt(dx * dx + dy * dy)
+        // a short movement is a tap or a jitter, not a swipe
+        if (distancePx < this._config.swipe_threshold_px) {
+            return
+        }
+
+        const swipe = asSwipe(touchEvent, dx, dy, distancePx)
+        if (!isNull(swipe) && !this._ignoreSwipe(swipe)) {
+            this._clicks.push(swipe)
+        }
+
+        if (this._clicks.length && isUndefined(this._checkClickTimer)) {
+            this._checkClickTimer = assignableWindow.setTimeout(() => {
+                this._checkClicks()
+            }, 1000)
+        }
+    }
+
+    private _ignoreSwipe(swipe: DeadClickCandidate | null): boolean {
+        if (!swipe) {
+            return true
+        }
+
+        if (isElementInToolbar(swipe.node)) {
+            return true
+        }
+
+        const alreadySwipedInLastSecond = this._clicks.some((c) => {
+            return c.type === 'swipe' && c.node === swipe.node && Math.abs(c.timestamp - swipe.timestamp) < 1000
+        })
+
+        if (alreadySwipedInLastSecond) {
+            return true
+        }
+
+        // unlike clicks, we do not skip anchors here: a swipe is not an anchor activation,
+        // and a swipe that fails to navigate is exactly the signal we want to surface
+        if (isTag(swipe.node, 'html') || !isElementNode(swipe.node)) {
+            return true
+        }
+
+        if (!shouldCaptureDeadClick(swipe.node, { css_selector_ignorelist: this._config.css_selector_ignorelist })) {
+            return true
+        }
+
+        return false
     }
 
     private _ignoreClick(click: DeadClickCandidate | null): boolean {
@@ -268,14 +383,15 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                 selectionChangedTimeout ||
                 visibilityChangedTimeout
             ) {
+                const prefix = click.type === 'swipe' ? '$dead_swipe' : '$dead_click'
                 this._onCapture(click, {
-                    $dead_click_last_mutation_timestamp: this._lastMutation,
-                    $dead_click_event_timestamp: click.timestamp,
-                    $dead_click_scroll_timeout: scrollTimeout,
-                    $dead_click_mutation_timeout: mutationTimeout,
-                    $dead_click_absolute_timeout: absoluteTimeout,
-                    $dead_click_selection_changed_timeout: selectionChangedTimeout,
-                    $dead_click_visibility_changed_timeout: visibilityChangedTimeout,
+                    [`${prefix}_last_mutation_timestamp`]: this._lastMutation,
+                    [`${prefix}_event_timestamp`]: click.timestamp,
+                    [`${prefix}_scroll_timeout`]: scrollTimeout,
+                    [`${prefix}_mutation_timeout`]: mutationTimeout,
+                    [`${prefix}_absolute_timeout`]: absoluteTimeout,
+                    [`${prefix}_selection_changed_timeout`]: selectionChangedTimeout,
+                    [`${prefix}_visibility_changed_timeout`]: visibilityChangedTimeout,
                 })
             } else if (click.absoluteDelayMs < this._config.mutation_threshold_ms) {
                 // keep waiting until next check
@@ -293,8 +409,11 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     private _captureDeadClick(click: DeadClickCandidate, properties: Properties) {
         // TODO need to check safe and captur-able as with autocapture
         // TODO autocaputure config
+        const isSwipe = click.type === 'swipe'
+        const eventName = isSwipe ? '$dead_swipe' : '$dead_click'
+        const prefix = isSwipe ? '$dead_swipe' : '$dead_click'
         this.instance.capture(
-            '$dead_click',
+            eventName,
             {
                 ...properties,
                 ...autocapturePropertiesForElement(click.node, {
@@ -306,11 +425,17 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                     elementsChainAsString: false,
                     disableCaptureUrlHashes: this.instance.config.disable_capture_url_hashes,
                 }).props,
-                $dead_click_scroll_delay_ms: click.scrollDelayMs,
-                $dead_click_mutation_delay_ms: click.mutationDelayMs,
-                $dead_click_absolute_delay_ms: click.absoluteDelayMs,
-                $dead_click_selection_changed_delay_ms: click.selectionChangedDelayMs,
-                $dead_click_visibility_changed_delay_ms: click.visibilityChangedDelayMs,
+                [`${prefix}_scroll_delay_ms`]: click.scrollDelayMs,
+                [`${prefix}_mutation_delay_ms`]: click.mutationDelayMs,
+                [`${prefix}_absolute_delay_ms`]: click.absoluteDelayMs,
+                [`${prefix}_selection_changed_delay_ms`]: click.selectionChangedDelayMs,
+                [`${prefix}_visibility_changed_delay_ms`]: click.visibilityChangedDelayMs,
+                ...(isSwipe
+                    ? {
+                          $dead_swipe_direction: click.swipeDirection,
+                          $dead_swipe_distance_px: click.swipeDistancePx,
+                      }
+                    : {}),
             },
             {
                 timestamp: new Date(click.timestamp),

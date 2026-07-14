@@ -246,8 +246,15 @@ export interface PerformanceCaptureConfig {
 
 export interface DeadClickCandidate {
     node: Element
-    originalEvent: MouseEvent
+    // clicks carry a MouseEvent, swipes carry the TouchEvent that ended the gesture
+    originalEvent: MouseEvent | TouchEvent
     timestamp: number
+    // whether this candidate came from a click (default) or a touch swipe gesture
+    type?: 'click' | 'swipe'
+    // for swipe candidates, the dominant direction of the gesture
+    swipeDirection?: 'left' | 'right' | 'up' | 'down'
+    // for swipe candidates, the total distance travelled in CSS pixels
+    swipeDistancePx?: number
     // time between click and the most recent scroll
     scrollDelayMs?: number
     // time between click and the most recent mutation
@@ -336,6 +343,27 @@ export type DeadClicksAutoCaptureConfig = {
      * @default false
      */
     capture_clicks_with_modifier_keys?: boolean
+
+    /**
+     * Determines whether PostHog should also detect "dead swipes" — touch swipe gestures
+     * (typically on mobile/touch devices) that produce no observable screen change
+     * (no scroll, mutation, selection or visibility change). These usually indicate a
+     * failed navigation, e.g. swiping to go back or to move a carousel with nothing happening.
+     *
+     * Dead swipes are captured as `$dead_swipe` events. This only applies to the dead-click
+     * autocapture path, not the heatmaps path.
+     *
+     * @default true
+     */
+    capture_dead_swipes?: boolean
+
+    /**
+     * The minimum distance in CSS pixels a touch gesture must travel to be considered a swipe
+     * (rather than a tap). Only used when `capture_dead_swipes` is enabled.
+     *
+     * @default 30
+     */
+    swipe_threshold_px?: number
 
     /**
      * List of CSS selectors to ignore dead clicks on
