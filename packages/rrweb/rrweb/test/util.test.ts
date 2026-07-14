@@ -8,6 +8,7 @@ import {
   shadowHostInDom,
   getShadowHost,
   on,
+  hookSetter,
 } from '../src/utils';
 
 describe('Utilities for other modules', () => {
@@ -97,6 +98,90 @@ describe('Utilities for other modules', () => {
         expect.any(Function),
         { capture: true, passive: true },
       );
+    });
+  });
+
+  describe('hookSetter()', () => {
+    it('should not throw when the native setter rejects an illegal `this`', () => {
+      vi.useFakeTimers();
+      try {
+        // A getter/setter pair whose setter emulates a native accessor that
+        // rejects a foreign `this` with 'Illegal invocation'.
+        const proto = {} as Record<string, unknown>;
+        Object.defineProperty(proto, 'value', {
+          configurable: true,
+          get() {
+            return '';
+          },
+          set() {
+            throw new TypeError('Illegal invocation');
+          },
+        });
+
+        const hookedSet = vi.fn(() => {
+          throw new TypeError('Illegal invocation');
+        });
+
+        const reset = hookSetter(
+          proto,
+          'value',
+          { set: hookedSet },
+          false,
+          window,
+        );
+
+        // An object that inherits the hooked setter but is not a genuine
+        // native element (e.g. a custom element or cross-realm proxy).
+        const foreign = Object.create(proto) as { value: string };
+
+        // The synchronous native setter call must not propagate.
+        expect(() => {
+          foreign.value = 'test';
+        }).not.toThrow();
+
+        // The deferred hooked setter call must not propagate either.
+        expect(() => vi.runAllTimers()).not.toThrow();
+        expect(hookedSet).toHaveBeenCalledTimes(1);
+
+        reset();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should still invoke the setters for a valid `this`', () => {
+      vi.useFakeTimers();
+      try {
+        const nativeSet = vi.fn();
+        const proto = {} as Record<string, unknown>;
+        Object.defineProperty(proto, 'value', {
+          configurable: true,
+          get() {
+            return '';
+          },
+          set: nativeSet,
+        });
+
+        const hookedSet = vi.fn();
+        const reset = hookSetter(
+          proto,
+          'value',
+          { set: hookedSet },
+          false,
+          window,
+        );
+
+        const obj = Object.create(proto) as { value: string };
+        obj.value = 'test';
+
+        expect(nativeSet).toHaveBeenCalledWith('test');
+        vi.runAllTimers();
+        expect(hookedSet).toHaveBeenCalledWith('test');
+
+        reset();
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
