@@ -131,7 +131,6 @@ export function getPropertiesFromElement(
     let nthOfType = 1
     let currentElem: Element | null = elem
     while ((currentElem = previousElementSibling(currentElem))) {
-        // eslint-disable-line no-cond-assign
         nthChild++
         if (currentElem.tagName === elem.tagName) {
             nthOfType++

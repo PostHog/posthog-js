@@ -78,7 +78,6 @@ export class PostHogMetrics implements Extension {
      */
     flush(transport?: 'XHR' | 'fetch' | 'sendBeacon'): Promise<void> {
         if (!this._core) {
-            // eslint-disable-next-line compat/compat
             return Promise.resolve()
         }
         if (transport) {
@@ -86,7 +85,7 @@ export class PostHogMetrics implements Extension {
             if (payload) {
                 void this._sendMetricsBatch(payload, transport)
             }
-            // eslint-disable-next-line compat/compat
+
             return Promise.resolve()
         }
         return this._core.flush().catch((err) => this._logger.error('PostHog metrics flush failed:', err))

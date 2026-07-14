@@ -1,4 +1,3 @@
-/* eslint-disable compat/compat */
 import { ConversationsPersistence } from '../../../extensions/conversations/external/persistence'
 import { UserProvidedTraits } from '../../../posthog-conversations-types'
 import { PostHog } from '../../../posthog-core'

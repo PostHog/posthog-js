@@ -27,7 +27,6 @@ const _createLogger = (prefix: string, { debugEnabled }: CreateLoggerOptions = {
                         ? (window.console[level] as any)['__rrweb_original__']
                         : window.console[level]
 
-                // eslint-disable-next-line no-console
                 consoleLog(prefix, ...args)
             }
         },

@@ -957,7 +957,6 @@ export class PostHog implements PostHogInterface {
             // Only time-slice if deferred init is enabled, otherwise run synchronously
             if (this.config.__preview_deferred_init_extensions) {
                 // we don't support IE11 anymore, so performance.now is safe
-                // eslint-disable-next-line compat/compat
                 const elapsed = performance.now() - initStartTime
 
                 // Check if we've exceeded our time budget

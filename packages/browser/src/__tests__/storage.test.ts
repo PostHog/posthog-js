@@ -81,7 +81,6 @@ describe('sessionStore', () => {
     describe('sessionStore._is_supported', () => {
         beforeEach(() => {
             // Reset the sessionStorageSupported before each test. Otherwise, we'd just be testing the cached value.
-            // eslint-disable-next-line no-unused-vars
             resetSessionStorageSupported()
         })
         it('returns false if sessionStorage is undefined', () => {

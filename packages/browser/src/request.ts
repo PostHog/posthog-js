@@ -22,7 +22,6 @@ interface RequestWithEncodedBody extends RequestWithOptions {
     _encodedBody?: EncodedBody
 }
 
-// eslint-disable-next-line compat/compat
 export const SUPPORTS_REQUEST = !!XMLHttpRequest || !!fetch
 
 const CONTENT_TYPE_PLAIN = 'text/plain'
@@ -310,7 +309,6 @@ const _fetch = (options: RequestWithOptions) => {
     const { url, encodedBody } = encodedRequest
     const { contentType, body, estimatedSize } = encodedBody ?? {}
 
-    // eslint-disable-next-line compat/compat
     const headers = new Headers()
     each(options.headers, function (headerValue, headerName) {
         headers.append(headerName, headerValue)

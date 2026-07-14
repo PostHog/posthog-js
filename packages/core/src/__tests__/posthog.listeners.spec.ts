@@ -2,7 +2,6 @@ import { waitForPromises, createTestClient, PostHogCoreTestClient, PostHogCoreTe
 
 describe('PostHog Core', () => {
   let posthog: PostHogCoreTestClient
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let mocks: PostHogCoreTestClientMocks
 
   jest.useFakeTimers()

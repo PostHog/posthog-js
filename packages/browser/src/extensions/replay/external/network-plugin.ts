@@ -107,7 +107,6 @@ function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Req
         })
     })
     // compat checked earlier
-    // eslint-disable-next-line compat/compat
     const entryTypes = PerformanceObserver.supportedEntryTypes.filter((x) =>
         options.performanceEntryTypeToObserve.includes(x)
     )
@@ -309,7 +308,6 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                 // instrumentation fails we degrade gracefully and the original request still proceeds.
                 try {
                     // check IE earlier than this, we only initialize if Request is present
-                    // eslint-disable-next-line compat/compat
                     const req = new Request(url)
                     const networkRequest: Partial<CapturedNetworkRequest> = {}
                     let start: number | undefined
@@ -772,7 +770,6 @@ function initFetchObserver(
             let req: Request
             try {
                 // check IE earlier than this, we only initialize if Request is present
-                // eslint-disable-next-line compat/compat
                 req = new Request(url, init)
             } catch (e) {
                 logger.error('Failed to instrument fetch for network capture', e)

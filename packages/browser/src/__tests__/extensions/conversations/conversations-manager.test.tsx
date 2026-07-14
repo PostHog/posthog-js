@@ -1,4 +1,3 @@
-/* eslint-disable compat/compat */
 import { ConversationsManager } from '../../../extensions/conversations/external'
 import {
     ConversationsRemoteConfig,

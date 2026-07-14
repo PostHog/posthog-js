@@ -89,7 +89,6 @@ export const test = base.extend<{
 
             await options.action()
 
-            // eslint-disable-next-line compat/compat
             await Promise.allSettled(responsePromises)
         }
         page.expectCapturedEventsToBe = async function (expectedEvents: string[]) {

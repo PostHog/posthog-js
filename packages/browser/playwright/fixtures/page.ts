@@ -48,7 +48,6 @@ export const testPage = base.extend<{ page: BasePage; url: string | undefined }>
                 return this.waitForResponse(urlPattern)
             })
             await options.action()
-            // eslint-disable-next-line compat/compat
             await Promise.allSettled(responsePromises)
         }
         page.reloadIdle = async () => {

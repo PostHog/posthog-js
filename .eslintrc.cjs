@@ -11,6 +11,7 @@ const rules = {
     'no-empty': 'off',
     'no-console': 'error',
     'no-only-tests/no-only-tests': 'error',
+    '@eslint-community/eslint-comments/no-unused-disable': 'error',
     'posthog-js/no-external-replay-imports': 'error',
     'posthog-js/no-unsafe-web-global': 'off',
     '@typescript-eslint/naming-convention': [
@@ -52,6 +53,7 @@ module.exports = {
         'eslint-plugin-react-hooks',
         'jest',
         'no-only-tests',
+        '@eslint-community/eslint-comments',
     ],
     extends: extend,
     rules,

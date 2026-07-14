@@ -72,7 +72,6 @@ function emitDeprecationWarningOnce(id: string, message: string): void {
     return
   }
   _emittedDeprecations.add(id)
-  // eslint-disable-next-line no-console
   console.warn(`[PostHog] ${message}`)
 }
 

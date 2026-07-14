@@ -170,7 +170,6 @@ export function resolveSurveyAlignment(position: string | undefined): {
       resolvedPosition = position as SurveyPosition
     } else if (!warnedUnknownPositions.has(position)) {
       warnedUnknownPositions.add(position)
-      // eslint-disable-next-line no-console
       console.warn(
         `[PostHog.surveys] Unknown survey position ${JSON.stringify(position)} — falling back to ${defaultSurveyAppearance.position}. Expected one of: ${Object.values(SurveyPosition).join(', ')}.`
       )
