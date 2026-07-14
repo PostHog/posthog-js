@@ -3239,6 +3239,13 @@
       "example": "{\n    kind: 'ok';\n} | {\n    kind: 'too-large';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
     },
     {
+      "id": "SendMetricsBatchOutcome",
+      "name": "SendMetricsBatchOutcome",
+      "properties": [],
+      "path": "../core/src/metrics/types.ts",
+      "example": "{\n    kind: 'ok';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n} | {\n    kind: 'too-large';\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
+    },
+    {
       "id": "SeverityLevel",
       "name": "SeverityLevel",
       "properties": [],
