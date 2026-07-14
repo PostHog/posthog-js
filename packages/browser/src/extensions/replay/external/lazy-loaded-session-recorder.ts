@@ -1594,11 +1594,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._activateTrigger(triggerType)
     }
 
-    // Hostname stamped as $snapshot_host on every $snapshot message, read by the ingestion
-    // pipeline (a cross-repo contract) to classify hosts even when the snapshot contains no
-    // URL-bearing events. Derived from the masked URL so it cannot bypass a customer's URL
-    // masking config; undefined (property omitted, consumer fails closed) when masking removes
-    // the URL or the masked result doesn't parse.
     private _currentMaskedHostname(): string | undefined {
         try {
             const href = window?.location?.href
@@ -1609,10 +1604,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             if (!maskedUrl) {
                 return undefined
             }
-            // deliberately not convertToURL: anchor-based parsing resolves a non-URL masking
-            // result relative to the current page, stamping the very host masking tried to hide.
-            // new URL throws on garbage instead, and URL-less browsers land in the catch — both
-            // omit the property.
+            // we can't use convertToURL here, as it would convert the URL to a relative one (e.g. "/"), which is not useful for getting the current hostname from
             // eslint-disable-next-line compat/compat
             return new URL(maskedUrl).hostname || undefined
         } catch {
