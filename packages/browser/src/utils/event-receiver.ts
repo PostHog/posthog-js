@@ -58,6 +58,16 @@ export abstract class EventReceiver<T extends EventTriggerable> {
         this._eventToItems = new Map<string, string[]>()
         this._cancelEventToItems = new Map<string, string[]>()
         this._actionToItems = new Map<string, string[]>()
+
+        // A persisted activation belongs to the session the item was shown in. When the session
+        // rotates (idle timeout, max length, cross-tab adoption) the trigger did not fire in the
+        // new session, so the activation is stale and must be dropped. We subscribe to rotations
+        // here rather than relying only on reading the session id on the display path: that read
+        // is read-only and so cannot observe an idle-expired session (and must not force a
+        // rotation, since merely checking whether to show a survey should never keep a session
+        // alive). The read-time check in `_getPersistedActivatedIds` remains as a complementary
+        // backstop for a session that had already rotated in persistence before this page loaded.
+        this._instance?.onSessionId?.((sessionId) => this._onSessionIdChanged(sessionId))
     }
 
     // Abstract methods for subclasses to implement
@@ -327,6 +337,11 @@ export abstract class EventReceiver<T extends EventTriggerable> {
             return []
         }
         const stampedSessionId = this._instance?.persistence?.props[this._getActivatedSessionKey()]
+        // Read-only: this catches a session that had already rotated in persistence before this
+        // page loaded (the stamped id no longer matches the current one). It intentionally does
+        // NOT force a rotation of an idle-expired session — that case is handled by the
+        // `onSessionId` subscription in the constructor, which clears the activation when the
+        // session actually rotates on the next real event.
         const currentSessionId = this._instance?.get_session_id?.()
         // No resolvable session (e.g. cookieless mode) → treat the activation as un-scopable and
         // do not carry it across a reload.
@@ -347,6 +362,21 @@ export abstract class EventReceiver<T extends EventTriggerable> {
     /** Forget the session stamp once nothing is persisted under it. */
     private _clearActivationSession(): void {
         this._clearActivatedSession()
+    }
+
+    /**
+     * Drop a persisted activation once the session it was stamped under is no longer current.
+     * Fired on session rotation (idle timeout, max length, cross-tab adoption) — the cases the
+     * read-only session read on the display path cannot observe.
+     */
+    private _onSessionIdChanged(sessionId: string): void {
+        const stampedSessionId = this._instance?.persistence?.props[this._getActivatedSessionKey()]
+        if (stampedSessionId && stampedSessionId !== sessionId) {
+            if (this._getRawPersistedActivatedIds().length > 0) {
+                this._setActivatedItems([])
+            }
+            this._clearActivationSession()
+        }
     }
 
     getActivatedIds(): string[] {

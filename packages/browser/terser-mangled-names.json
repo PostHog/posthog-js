@@ -412,6 +412,7 @@
         "_onSelectionChange",
         "_onSessionIdCallback",
         "_onSessionIdChange",
+        "_onSessionIdChanged",
         "_onSessionIdListener",
         "_onSessionIdleResetForcedListener",
         "_onVisibilityChange",
