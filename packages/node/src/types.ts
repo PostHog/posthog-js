@@ -1,5 +1,6 @@
 import type {
   PostHogCoreOptions,
+  ExceptionRateLimiterConfig,
   FeatureFlagValue,
   JsonType,
   PostHogFetchOptions,
@@ -165,28 +166,6 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
   personalApiKey?: string
   privacyMode?: boolean
   enableExceptionAutocapture?: boolean
-  /**
-   * ADVANCED: alters the refill rate for the error tracking rate limiter's token bucket.
-   *
-   * Burst protection is scoped **per exception type** — each distinct `$exception` type gets
-   * its own bucket, and there is no aggregate cap across all types. Raising this lets more
-   * rate-limited exceptions of a given type through over time. Normally only altered alongside
-   * PostHog support guidance. Accepts values between 0 and 100.
-   *
-   * @default 1
-   */
-  exceptionRateLimiterRefillRate?: number
-  /**
-   * ADVANCED: alters the bucket size for the error tracking rate limiter's token bucket.
-   *
-   * Burst protection is scoped **per exception type** — each distinct `$exception` type starts
-   * with its own full bucket of tokens, and there is no aggregate cap across all types. Raising
-   * this increases the burst allowance for each individual exception type. Normally only altered
-   * alongside PostHog support guidance. Accepts values between 0 and 100.
-   *
-   * @default 10
-   */
-  exceptionRateLimiterBucketSize?: number
   // The interval in milliseconds between polls for refreshing feature flag definitions. Defaults to 30 seconds.
   featureFlagsPollingInterval?: number
   // Maximum size of cache that deduplicates $feature_flag_called calls per user.
@@ -331,7 +310,7 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
    * new PostHog('key', { isServer: false })
    */
   isServer?: boolean
-}
+} & ExceptionRateLimiterConfig
 
 export type PostHogFeatureFlag = {
   id: number

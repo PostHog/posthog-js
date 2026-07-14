@@ -3,7 +3,7 @@ import { PostHogBackendClient } from '@/client'
 import { isObject } from '@posthog/core'
 import { EventMessage, PostHogOptions } from '@/types'
 import type { Logger } from '@posthog/core'
-import { BucketedRateLimiter } from '@posthog/core'
+import { BucketedRateLimiter, resolveExceptionRateLimiterConfig } from '@posthog/core'
 import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 
 const SHUTDOWN_TIMEOUT = 2000
@@ -30,8 +30,7 @@ export default class ErrorTracking {
     // tuned via the `exceptionRateLimiterBucketSize` and `exceptionRateLimiterRefillRate`
     // options.
     this._rateLimiter = new BucketedRateLimiter({
-      refillRate: options.exceptionRateLimiterRefillRate ?? 1,
-      bucketSize: options.exceptionRateLimiterBucketSize ?? 10,
+      ...resolveExceptionRateLimiterConfig(options),
       refillInterval: 10000, // ten seconds in milliseconds
       _logger: this._logger,
     })

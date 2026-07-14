@@ -37,6 +37,9 @@ export type {
 // via the `logs/types` barrel so consumers don't have to import from two
 // packages to type their `captureLog` calls.
 export type { CaptureLogOptions, LogAttributeValue, LogAttributes, LogSeverityLevel } from './logs/types'
+// Re-export the shared error tracking rate-limiter config type so SDKs built on core
+// (e.g. posthog-node) don't have to depend on `@posthog/types` directly.
+export type { ExceptionRateLimiterConfig } from '@posthog/types'
 export { uuidv7 } from './vendor/uuidv7'
 export * from './cookie'
 export * from './posthog-core'

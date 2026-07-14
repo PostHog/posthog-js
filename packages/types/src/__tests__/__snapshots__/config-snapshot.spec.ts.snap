@@ -530,6 +530,14 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "exception_steps": [
       "undefined",
       "ExceptionStepsConfig"
+    ],
+    "exceptionRateLimiterRefillRate": [
+      "undefined",
+      "number"
+    ],
+    "exceptionRateLimiterBucketSize": [
+      "undefined",
+      "number"
     ]
   },
   "session_idle_timeout_seconds": "number",
