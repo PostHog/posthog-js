@@ -169,7 +169,7 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
         setLastSeenSurveyDate(new Date())
       },
       onClose: (submitted: boolean, responses: SurveyResponses) => {
-        setSeenSurvey(activeSurvey.id)
+        setSeenSurvey(activeSurvey)
         setActiveSurvey(undefined)
         if (!submitted) {
           dismissedSurveyEvent(translatedActiveSurvey.survey, responses, posthog, translatedActiveSurvey.language)
