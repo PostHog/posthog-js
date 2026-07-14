@@ -292,7 +292,7 @@ describe('addDsymUploadBuildPhase', () => {
     expect(xp.addBuildPhase).not.toHaveBeenCalled()
   })
 
-  // How xcode@3's addBuildPhase stores shellScript in the pbxproj: quotes escaped, newlines literal.
+  // xcode's addBuildPhase stores shellScript quote-escaped with literal newlines.
   const encodePbx = (script: string): string => '"' + script.replace(/"/g, '\\"') + '"'
 
   it('refreshes an existing plugin-generated phase script so option changes take effect', () => {

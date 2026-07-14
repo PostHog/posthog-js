@@ -226,7 +226,6 @@ const POSTHOG_DSYM_BUILD_PHASE_NAME = 'Upload PostHog Debug Symbols'
 // Shell script for the dSYM upload build phase. It locates and runs posthog-ios's
 // upload-symbols.sh (CocoaPods or SwiftPM) rather than re-implementing dSYM upload.
 // `includeSource` (iOS only) opts into POSTHOG_INCLUDE_SOURCE to also upload native source.
-// `skipOnConflict` opts into POSTHOG_SKIP_ON_CONFLICT to skip conflicting dSYM uploads.
 export function buildDsymUploadShellScript(includeSource = false, skipOnConflict = false): string {
   const lines = [
     '# Upload iOS dSYMs to PostHog so native crashes can be symbolicated.',
@@ -262,16 +261,15 @@ export function buildDsymUploadShellScript(includeSource = false, skipOnConflict
   return lines.join('\n')
 }
 
-// Matches how xcode's addBuildPhase stores shellScript in the pbxproj (quotes escaped,
-// newlines literal), so in-place refreshes don't rewrite the stored representation.
+// xcode's addBuildPhase stores shellScript quote-escaped with literal newlines; in-place
+// refreshes must match or the stored pbxproj representation churns.
 function encodePbxShellScript(script: string): string {
   return '"' + script.replace(/"/g, '\\"') + '"'
 }
 
 // Appends a Run Script build phase that uploads dSYMs; appended last so it runs after the
-// dSYM bundle is produced. Re-runs refresh the phase in place while its script is still
-// plugin-generated, so option changes take effect without a clean prebuild; a script the
-// user has customized is left untouched.
+// dSYM bundle is produced. Re-runs refresh a still-plugin-generated script so option
+// changes take effect without a clean prebuild.
 export function addDsymUploadBuildPhase(xcodeProject: any, includeSource = false, skipOnConflict = false): void {
   const existing = xcodeProject.pbxItemByComment(POSTHOG_DSYM_BUILD_PHASE_NAME, 'PBXShellScriptBuildPhase')
   if (existing) {
