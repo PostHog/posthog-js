@@ -74,7 +74,6 @@ class PostHogFetchNetworkError extends Error {
 
   constructor(public error: unknown) {
     // TRICKY: "cause" is a newer property but is just ignored otherwise. Cast to any to ignore the type issue.
-    // eslint-disable-next-line @typescript-eslint/prefer-ts-expect-error
     // @ts-ignore
     super('Network error while fetching PostHog', error instanceof Error ? { cause: error } : {})
   }

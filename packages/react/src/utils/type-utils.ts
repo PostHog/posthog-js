@@ -11,6 +11,5 @@ export const isUndefined = function (x: unknown): x is undefined {
 }
 
 export const isNull = function (x: unknown): x is null {
-    // eslint-disable-next-line posthog-js/no-direct-null-check
     return x === null
 }

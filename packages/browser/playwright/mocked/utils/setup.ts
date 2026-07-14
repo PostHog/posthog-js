@@ -101,7 +101,6 @@ export async function start(
     })
 
     // allow promise in e2e tests
-    // eslint-disable-next-line compat/compat
     const flagsMock = new Promise((resolve) => {
         void context.route('**/flags/*', (route) => {
             route.fulfill({

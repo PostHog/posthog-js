@@ -11,7 +11,6 @@ import { logger } from './logger'
  * and return `undefined`.
  */
 export async function getDeviceModel(): Promise<string | undefined> {
-    // eslint-disable-next-line compat/compat
     const uaData = navigator?.userAgentData
     if (!uaData?.getHighEntropyValues) {
         return undefined

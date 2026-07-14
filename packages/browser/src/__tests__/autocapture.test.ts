@@ -1,6 +1,4 @@
 /// <reference lib="dom" />
-/* eslint-disable compat/compat */
-
 import {
     Autocapture,
     autocapturePropertiesForElement,
@@ -72,12 +70,11 @@ describe('Autocapture system', () => {
             configurable: true,
             enumerable: true,
             writable: true,
-            // eslint-disable-next-line compat/compat
+
             value: new URL('https://example.com'),
         })
 
         beforeSendMock = jest.fn().mockImplementation((...args) => args)
-
         posthog = await createPosthogInstance(uuidv7(), {
             api_host: 'https://test.com',
             token: 'testtoken',

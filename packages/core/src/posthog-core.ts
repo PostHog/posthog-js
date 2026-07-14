@@ -646,7 +646,6 @@ export abstract class PostHogCore extends PostHogCoreStateless {
    *
    * @param _response The remote config or flags response containing config fields
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   protected onRemoteConfig(_response: PostHogRemoteConfig): void {
     // Override in subclasses
   }

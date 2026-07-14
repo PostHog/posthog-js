@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 import { PostHogFeature, useActiveFeatureFlags, usePostHog } from 'posthog-js/react'
 import { useEffect, useState } from 'react'
 import { cookieConsentGiven, PERSON_PROCESSING_MODE } from '@/src/posthog'

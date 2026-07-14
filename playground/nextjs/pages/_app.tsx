@@ -34,7 +34,6 @@ export default function App({ Component, pageProps }: AppProps) {
     useEffect(() => {
         // make sure we initialize the WebSocket server
         // we don't need to support IE11 here
-        // eslint-disable-next-line compat/compat
         fetch('/api/socket')
     }, [])
 

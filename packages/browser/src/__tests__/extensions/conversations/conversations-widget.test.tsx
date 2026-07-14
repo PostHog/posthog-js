@@ -1,4 +1,3 @@
-/* eslint-disable compat/compat */
 import { render, fireEvent, waitFor } from '@testing-library/preact'
 import '@testing-library/jest-dom'
 import { ConversationsWidget } from '../../../extensions/conversations/external/components/ConversationsWidget'

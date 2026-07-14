@@ -1,4 +1,3 @@
-/* eslint-disable compat/compat */
 /// <reference lib="dom" />
 
 import { TextDecoder } from 'util'
@@ -432,7 +431,6 @@ describe('request', () => {
             expect(reason.name).toBe('AbortError')
             // ...but with a descriptive message so it is never a reason-less "signal is aborted without reason"
             expect(reason.message).toBe('PostHog request timed out after 8000ms')
-
             expect(callback).toHaveBeenCalledTimes(1)
             const response = callback.mock.calls[0][0]
             expect(response.statusCode).toBe(0)

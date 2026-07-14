@@ -53,7 +53,6 @@ export function patch(
         // Make sure it's a function first, as we need to attach an empty prototype for `defineProperties` to work
         // otherwise it'll throw "TypeError: Object.defineProperties called on non-object"
         if (isFunction(wrapped)) {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
             wrapped.prototype = wrapped.prototype || {}
             Object.defineProperties(wrapped, {
                 __posthog_wrapped__: {
