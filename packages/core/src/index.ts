@@ -15,6 +15,9 @@ export {
 } from './gzip'
 export * from './utils'
 export * as ErrorTracking from './error-tracking'
+// Re-exported from `@posthog/types` so SDKs can type their burst protection
+// options without importing from two packages.
+export type { ExceptionBurstProtectionOptions } from '@posthog/types'
 export {
   buildOtlpLogRecord,
   buildOtlpLogsPayload,

@@ -70,6 +70,7 @@ export type {
     ConfigDefaults,
     ExternalIntegrationKind,
     ErrorTrackingOptions,
+    ExceptionBurstProtectionOptions,
     MaskInputOptions,
     SlimDOMOptions,
     SessionRecordingOptions,

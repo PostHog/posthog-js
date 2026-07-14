@@ -1,4 +1,5 @@
 import type {
+  ExceptionBurstProtectionOptions,
   PostHogCoreOptions,
   FeatureFlagValue,
   JsonType,
@@ -165,6 +166,13 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
   personalApiKey?: string
   privacyMode?: boolean
   enableExceptionAutocapture?: boolean
+  /**
+   * Tunes the per-exception-type burst protection applied to autocaptured exceptions.
+   * See `ExceptionBurstProtectionOptions` for the full semantics: each distinct exception type
+   * gets its own token bucket, and manual `captureException` calls are never rate limited.
+   * Normally only altered alongside PostHog support guidance.
+   */
+  exceptionBurstProtection?: ExceptionBurstProtectionOptions
   // The interval in milliseconds between polls for refreshing feature flag definitions. Defaults to 30 seconds.
   featureFlagsPollingInterval?: number
   // Maximum size of cache that deduplicates $feature_flag_called calls per user.

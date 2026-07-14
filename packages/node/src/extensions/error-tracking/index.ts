@@ -19,15 +19,7 @@ export default class ErrorTracking {
     this._exceptionAutocaptureEnabled = options.enableExceptionAutocapture || false
     this._logger = _logger
 
-    // by default captures ten exceptions before rate limiting by exception type
-    // refills at a rate of one token / 10 second period
-    // e.g. will capture 1 exception rate limited exception every 10 seconds until burst ends
-    this._rateLimiter = new BucketedRateLimiter({
-      refillRate: 1,
-      bucketSize: 10,
-      refillInterval: 10000, // ten seconds in milliseconds
-      _logger: this._logger,
-    })
+    this._rateLimiter = CoreErrorTracking.createExceptionRateLimiter(options.exceptionBurstProtection, this._logger)
 
     this.startAutocaptureIfEnabled()
   }
@@ -77,8 +69,7 @@ export default class ErrorTracking {
             exception,
             hint
           )
-          const exceptionProperties = eventMessage.properties
-          const exceptionType = exceptionProperties?.$exception_list[0]?.type ?? 'Exception'
+          const exceptionType = CoreErrorTracking.getExceptionBucketKey(eventMessage.properties)
           const isRateLimited = this._rateLimiter.consumeRateLimit(exceptionType)
           if (isRateLimited) {
             this._logger.info('Skipping exception capture because of client rate limiting.', {

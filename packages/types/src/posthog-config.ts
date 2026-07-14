@@ -380,6 +380,31 @@ export type ConfigDefaults = '2026-06-25' | '2026-05-30' | '2026-01-30' | '2025-
 
 export type ExternalIntegrationKind = 'intercom' | 'crispChat'
 
+/**
+ * Client-side burst protection for autocaptured exceptions.
+ *
+ * Burst protection is scoped per exception type: each distinct `$exception` type gets its own
+ * token bucket, and there is no aggregate cap across types. It applies only to autocaptured
+ * exceptions — manual `captureException` calls are never rate limited.
+ */
+export interface ExceptionBurstProtectionOptions {
+    /**
+     * Number of exceptions of a single type captured in a burst before rate limiting kicks in.
+     * Accepts values between 0 and 100.
+     *
+     * @default 10
+     */
+    bucketSize?: number
+
+    /**
+     * Number of captures of a rate-limited exception type allowed back per 10 second interval.
+     * Accepts values between 0 and `bucketSize`.
+     *
+     * @default 1
+     */
+    refillRate?: number
+}
+
 export interface ErrorTrackingOptions {
     /**
      * Decide whether exceptions thrown by browser extensions should be captured
@@ -396,19 +421,27 @@ export interface ErrorTrackingOptions {
     __capturePostHogExceptions?: boolean
 
     /**
-     * ADVANCED: alters the refill rate for the token bucket mutation throttling
+     * Tunes the per-exception-type burst protection applied to autocaptured exceptions.
+     * Normally only altered alongside PostHog support guidance.
+     */
+    burstProtection?: ExceptionBurstProtectionOptions
+
+    /**
+     * ADVANCED: alters the refill rate for the exception burst protection token bucket
      * Normally only altered alongside posthog support guidance.
      * Accepts values between 0 and 100
      *
+     * @deprecated Use `burstProtection.refillRate` instead.
      * @default 1
      */
     __exceptionRateLimiterRefillRate?: number
 
     /**
-     * ADVANCED: alters the bucket size for the token bucket mutation throttling
+     * ADVANCED: alters the bucket size for the exception burst protection token bucket
      * Normally only altered alongside posthog support guidance.
      * Accepts values between 0 and 100
      *
+     * @deprecated Use `burstProtection.bucketSize` instead.
      * @default 10
      */
     __exceptionRateLimiterBucketSize?: number

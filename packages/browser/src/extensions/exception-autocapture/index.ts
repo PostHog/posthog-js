@@ -23,15 +23,18 @@ export class ExceptionObserver {
         this._instance = instance
         this._remoteEnabled = !!this._instance.persistence?.props[EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]
 
-        // by default captures ten exceptions before rate limiting by exception type
-        // refills at a rate of one token / 10 second period
-        // e.g. will capture 1 exception rate limited exception every 10 seconds until burst ends
-        this._rateLimiter = new BucketedRateLimiter({
-            refillRate: this._instance.config.error_tracking.__exceptionRateLimiterRefillRate ?? 1,
-            bucketSize: this._instance.config.error_tracking.__exceptionRateLimiterBucketSize ?? 10,
-            refillInterval: 10000, // ten seconds in milliseconds,
-            _logger: logger,
-        })
+        const errorTrackingConfig = this._instance.config.error_tracking
+        this._rateLimiter = ErrorTracking.createExceptionRateLimiter(
+            {
+                bucketSize:
+                    errorTrackingConfig.burstProtection?.bucketSize ??
+                    errorTrackingConfig.__exceptionRateLimiterBucketSize,
+                refillRate:
+                    errorTrackingConfig.burstProtection?.refillRate ??
+                    errorTrackingConfig.__exceptionRateLimiterRefillRate,
+            },
+            logger
+        )
 
         this._config = this._requiredConfig()
         this.startIfEnabledOrStop()
@@ -153,7 +156,7 @@ export class ExceptionObserver {
     }
 
     captureException(errorProperties: ErrorTracking.ErrorProperties) {
-        const exceptionType = errorProperties?.$exception_list?.[0]?.type ?? 'Exception'
+        const exceptionType = ErrorTracking.getExceptionBucketKey(errorProperties)
         const isRateLimited = this._rateLimiter.consumeRateLimit(exceptionType)
 
         if (isRateLimited) {

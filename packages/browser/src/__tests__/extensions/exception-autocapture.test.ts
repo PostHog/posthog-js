@@ -2,7 +2,7 @@ import { PostHog } from '../../posthog-core'
 import { createPosthogInstance } from '../helpers/posthog-instance'
 import { uuidv7 } from '../../uuidv7'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
-import { RemoteConfig } from '../../types'
+import { PostHogConfig, RemoteConfig } from '../../types'
 
 describe('ExceptionObserver', () => {
     let instance: PostHog
@@ -11,6 +11,47 @@ describe('ExceptionObserver', () => {
         instance = await createPosthogInstance(uuidv7(), {
             api_host: 'https://test.com',
             token: 'testtoken',
+        })
+    })
+
+    describe('burst protection', () => {
+        async function captureRepeatedExceptions(errorTracking: PostHogConfig['error_tracking']): Promise<jest.Mock> {
+            const configuredInstance = await createPosthogInstance(uuidv7(), {
+                api_host: 'https://test.com',
+                token: 'testtoken',
+                error_tracking: errorTracking,
+            })
+            const sendExceptionEvent = jest.fn()
+            configuredInstance.exceptions = { sendExceptionEvent } as unknown as PostHog['exceptions']
+
+            for (let i = 0; i < 10; i++) {
+                configuredInstance.exceptionObserver.captureException({
+                    $exception_list: [{ type: 'Error', value: 'boom' }],
+                })
+            }
+            return sendExceptionEvent
+        }
+
+        it('honours the configured burstProtection bucket size', async () => {
+            const sendExceptionEvent = await captureRepeatedExceptions({ burstProtection: { bucketSize: 3 } })
+
+            // a bucket of 3 lets 2 through before the limiter kicks in
+            expect(sendExceptionEvent).toHaveBeenCalledTimes(2)
+        })
+
+        it('prefers burstProtection over the deprecated __ options', async () => {
+            const sendExceptionEvent = await captureRepeatedExceptions({
+                burstProtection: { bucketSize: 3 },
+                __exceptionRateLimiterBucketSize: 50,
+            })
+
+            expect(sendExceptionEvent).toHaveBeenCalledTimes(2)
+        })
+
+        it('falls back to the deprecated __ options when burstProtection is not set', async () => {
+            const sendExceptionEvent = await captureRepeatedExceptions({ __exceptionRateLimiterBucketSize: 3 })
+
+            expect(sendExceptionEvent).toHaveBeenCalledTimes(2)
         })
     })
 

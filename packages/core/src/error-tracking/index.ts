@@ -1,3 +1,4 @@
+export * from './burst-protection'
 export * from './error-properties-builder'
 export type * from './types'
 export * from './parsers'
