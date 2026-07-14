@@ -8,14 +8,14 @@ import { isElementInToolbar, isElementNode, isTag } from '../utils/element-utils
 import { getNativeMutationObserverImplementation } from '../utils/prototype-utils'
 import { addEventListener } from '../utils'
 
-function asClick(event: MouseEvent): DeadClickCandidate | null {
+function asCandidate(event: MouseEvent | TouchEvent, extra: Partial<DeadClickCandidate>): DeadClickCandidate | null {
     const eventTarget = getEventTarget(event)
     if (eventTarget) {
         return {
             node: eventTarget,
             originalEvent: event,
             timestamp: Date.now(),
-            type: 'click',
+            ...extra,
         }
     }
     return null
@@ -26,21 +26,6 @@ function swipeDirection(dx: number, dy: number): 'left' | 'right' | 'up' | 'down
         return dx >= 0 ? 'right' : 'left'
     }
     return dy >= 0 ? 'down' : 'up'
-}
-
-function asSwipe(event: TouchEvent, dx: number, dy: number, distancePx: number): DeadClickCandidate | null {
-    const eventTarget = getEventTarget(event)
-    if (eventTarget) {
-        return {
-            node: eventTarget,
-            originalEvent: event,
-            timestamp: Date.now(),
-            type: 'swipe',
-            swipeDirection: swipeDirection(dx, dy),
-            swipeDistancePx: Math.round(distancePx),
-        }
-    }
-    return null
 }
 
 function hasModifierKey(event: MouseEvent | TouchEvent): boolean {
@@ -156,11 +141,14 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     }
 
     private _onClick = (event: Event): void => {
-        const click = asClick(event as MouseEvent)
-        if (!isNull(click) && !this._ignoreClick(click)) {
+        const click = asCandidate(event as MouseEvent, { type: 'click' })
+        if (!isNull(click) && !this._ignore(click)) {
             this._clicks.push(click)
         }
+        this._scheduleCheck()
+    }
 
+    private _scheduleCheck() {
         if (this._clicks.length && isUndefined(this._checkClickTimer)) {
             this._checkClickTimer = assignableWindow.setTimeout(() => {
                 this._checkClicks()
@@ -247,78 +235,57 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             return
         }
 
-        const swipe = asSwipe(touchEvent, dx, dy, distancePx)
-        if (!isNull(swipe) && !this._ignoreSwipe(swipe)) {
+        const swipe = asCandidate(touchEvent, {
+            type: 'swipe',
+            swipeDirection: swipeDirection(dx, dy),
+            swipeDistancePx: Math.round(distancePx),
+        })
+        if (!isNull(swipe) && !this._ignore(swipe)) {
             this._clicks.push(swipe)
         }
-
-        if (this._clicks.length && isUndefined(this._checkClickTimer)) {
-            this._checkClickTimer = assignableWindow.setTimeout(() => {
-                this._checkClicks()
-            }, 1000)
-        }
+        this._scheduleCheck()
     }
 
-    private _ignoreSwipe(swipe: DeadClickCandidate | null): boolean {
-        if (!swipe) {
+    private _ignore(candidate: DeadClickCandidate | null): boolean {
+        if (!candidate) {
             return true
         }
 
-        if (isElementInToolbar(swipe.node)) {
+        const isSwipe = candidate.type === 'swipe'
+
+        // clicks with modifier keys (open in new tab, etc.) are intentional; touch swipes have no modifiers
+        if (!isSwipe && !this._config.capture_clicks_with_modifier_keys && hasModifierKey(candidate.originalEvent)) {
             return true
         }
 
-        const alreadySwipedInLastSecond = this._clicks.some((c) => {
-            return c.type === 'swipe' && c.node === swipe.node && Math.abs(c.timestamp - swipe.timestamp) < 1000
+        if (isElementInToolbar(candidate.node)) {
+            return true
+        }
+
+        const alreadySeenInLastSecond = this._clicks.some((c) => {
+            return (
+                c.type === candidate.type &&
+                c.node === candidate.node &&
+                Math.abs(c.timestamp - candidate.timestamp) < 1000
+            )
         })
-
-        if (alreadySwipedInLastSecond) {
+        if (alreadySeenInLastSecond) {
             return true
         }
 
-        // unlike clicks, we do not skip anchors here: a swipe is not an anchor activation,
-        // and a swipe that fails to navigate is exactly the signal we want to surface
-        if (isTag(swipe.node, 'html') || !isElementNode(swipe.node)) {
+        // unlike clicks, a swipe is not an anchor activation, so we do not skip anchors for swipes:
+        // a swipe that fails to navigate is exactly the signal we want to surface
+        if (
+            isTag(candidate.node, 'html') ||
+            !isElementNode(candidate.node) ||
+            (!isSwipe && shouldSkipDeadClick(candidate.node))
+        ) {
             return true
         }
 
-        if (!shouldCaptureDeadClick(swipe.node, { css_selector_ignorelist: this._config.css_selector_ignorelist })) {
-            return true
-        }
-
-        return false
-    }
-
-    private _ignoreClick(click: DeadClickCandidate | null): boolean {
-        if (!click) {
-            return true
-        }
-
-        if (!this._config.capture_clicks_with_modifier_keys && hasModifierKey(click.originalEvent)) {
-            return true
-        }
-
-        if (isElementInToolbar(click.node)) {
-            return true
-        }
-
-        const alreadyClickedInLastSecond = this._clicks.some((c) => {
-            return c.node === click.node && Math.abs(c.timestamp - click.timestamp) < 1000
+        return !shouldCaptureDeadClick(candidate.node, {
+            css_selector_ignorelist: this._config.css_selector_ignorelist,
         })
-
-        if (alreadyClickedInLastSecond) {
-            return true
-        }
-
-        if (isTag(click.node, 'html') || !isElementNode(click.node) || shouldSkipDeadClick(click.node)) {
-            return true
-        }
-
-        if (!shouldCaptureDeadClick(click.node, { css_selector_ignorelist: this._config.css_selector_ignorelist })) {
-            return true
-        }
-
-        return false
     }
 
     private _checkClicks() {
@@ -399,21 +366,17 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             }
         }
 
-        if (this._clicks.length && isUndefined(this._checkClickTimer)) {
-            this._checkClickTimer = assignableWindow.setTimeout(() => {
-                this._checkClicks()
-            }, 1000)
-        }
+        this._scheduleCheck()
     }
 
     private _captureDeadClick(click: DeadClickCandidate, properties: Properties) {
         // TODO need to check safe and captur-able as with autocapture
         // TODO autocaputure config
         const isSwipe = click.type === 'swipe'
-        const eventName = isSwipe ? '$dead_swipe' : '$dead_click'
+        // the event name doubles as the property prefix ($dead_click / $dead_swipe)
         const prefix = isSwipe ? '$dead_swipe' : '$dead_click'
         this.instance.capture(
-            eventName,
+            prefix,
             {
                 ...properties,
                 ...autocapturePropertiesForElement(click.node, {
