@@ -218,6 +218,8 @@ describe('buildDsymUploadShellScript', () => {
   it('produces valid shell syntax with and without source', () => {
     expectValidShellSyntax(buildDsymUploadShellScript())
     expectValidShellSyntax(buildDsymUploadShellScript(true))
+    expectValidShellSyntax(buildDsymUploadShellScript(false, true))
+    expectValidShellSyntax(buildDsymUploadShellScript(true, true))
   })
 
   it('reuses posthog-ios upload-symbols.sh and probes both Pods and SwiftPM paths', () => {
@@ -234,6 +236,16 @@ describe('buildDsymUploadShellScript', () => {
 
   it('exports POSTHOG_INCLUDE_SOURCE=1 when includeSource is requested', () => {
     expect(buildDsymUploadShellScript(true)).toContain('export POSTHOG_INCLUDE_SOURCE=1')
+  })
+
+  it('does not set POSTHOG_SKIP_ON_CONFLICT by default', () => {
+    expect(buildDsymUploadShellScript()).not.toContain('POSTHOG_SKIP_ON_CONFLICT')
+    expect(buildDsymUploadShellScript(true, false)).not.toContain('POSTHOG_SKIP_ON_CONFLICT')
+  })
+
+  it('exports POSTHOG_SKIP_ON_CONFLICT=1 when skipOnConflict is requested', () => {
+    expect(buildDsymUploadShellScript(false, true)).toContain('export POSTHOG_SKIP_ON_CONFLICT=1')
+    expect(buildDsymUploadShellScript(true, true)).toContain('export POSTHOG_SKIP_ON_CONFLICT=1')
   })
 })
 
@@ -259,10 +271,30 @@ describe('addDsymUploadBuildPhase', () => {
     expect(opts.shellScript).toContain('export POSTHOG_INCLUDE_SOURCE=1')
   })
 
+  it('forwards skipOnConflict into the phase script', () => {
+    const xp = mockXcodeProjectForBuildPhase(undefined)
+    addDsymUploadBuildPhase(xp, false, true)
+    const [, , , , opts] = xp.addBuildPhase.mock.calls[0]
+    expect(opts.shellScript).toContain('export POSTHOG_SKIP_ON_CONFLICT=1')
+    expect(opts.shellScript).not.toContain('POSTHOG_INCLUDE_SOURCE')
+  })
+
   it('is idempotent — does not add a second phase when one already exists', () => {
     const xp = mockXcodeProjectForBuildPhase({ isa: 'PBXShellScriptBuildPhase' })
     addDsymUploadBuildPhase(xp)
     expect(xp.addBuildPhase).not.toHaveBeenCalled()
+  })
+
+  it('refreshes an existing phase script so option changes take effect', () => {
+    const existing = { isa: 'PBXShellScriptBuildPhase', shellScript: JSON.stringify(buildDsymUploadShellScript()) }
+    const xp = mockXcodeProjectForBuildPhase(existing)
+
+    addDsymUploadBuildPhase(xp, false, true)
+    expect(xp.addBuildPhase).not.toHaveBeenCalled()
+    expect(JSON.parse(existing.shellScript)).toContain('export POSTHOG_SKIP_ON_CONFLICT=1')
+
+    addDsymUploadBuildPhase(xp, false, false)
+    expect(JSON.parse(existing.shellScript)).not.toContain('POSTHOG_SKIP_ON_CONFLICT')
   })
 })
 
