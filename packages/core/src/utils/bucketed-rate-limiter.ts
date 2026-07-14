@@ -1,8 +1,37 @@
+import type { ExceptionRateLimiterConfig } from '@posthog/types'
 import { Logger } from '../types'
 import { clampToRange } from './number-utils'
 
 type Bucket = { tokens: number; lastAccess: number }
 const ONE_DAY_IN_MS = 86400000
+
+export const DEFAULT_EXCEPTION_RATE_LIMITER_REFILL_RATE = 1
+export const DEFAULT_EXCEPTION_RATE_LIMITER_BUCKET_SIZE = 10
+
+/**
+ * Resolves the error tracking rate limiter's `refillRate` and `bucketSize` from SDK config,
+ * applying the shared defaults. The deprecated double-underscore options are honoured as a
+ * fallback so existing browser SDK configs keep working after the rename.
+ */
+export function resolveExceptionRateLimiterConfig(
+  config: ExceptionRateLimiterConfig & {
+    /** @deprecated use exceptionRateLimiterRefillRate */
+    __exceptionRateLimiterRefillRate?: number
+    /** @deprecated use exceptionRateLimiterBucketSize */
+    __exceptionRateLimiterBucketSize?: number
+  } = {}
+): { refillRate: number; bucketSize: number } {
+  return {
+    refillRate:
+      config.exceptionRateLimiterRefillRate ??
+      config.__exceptionRateLimiterRefillRate ??
+      DEFAULT_EXCEPTION_RATE_LIMITER_REFILL_RATE,
+    bucketSize:
+      config.exceptionRateLimiterBucketSize ??
+      config.__exceptionRateLimiterBucketSize ??
+      DEFAULT_EXCEPTION_RATE_LIMITER_BUCKET_SIZE,
+  }
+}
 
 export class BucketedRateLimiter<T extends string | number> {
   private _bucketSize: number

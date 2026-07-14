@@ -1,5 +1,6 @@
 import type {
   PostHogCoreOptions,
+  ExceptionRateLimiterConfig,
   FeatureFlagValue,
   JsonType,
   PostHogFetchOptions,
@@ -309,7 +310,7 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
    * new PostHog('key', { isServer: false })
    */
   isServer?: boolean
-}
+} & ExceptionRateLimiterConfig
 
 export type PostHogFeatureFlag = {
   id: number
