@@ -1,5 +1,29 @@
 # posthog-js
 
+## 1.399.5
+
+### Patch Changes
+
+- [#4134](https://github.com/PostHog/posthog-js/pull/4134) [`ab10064`](https://github.com/PostHog/posthog-js/commit/ab100642da425590b9dcb78a9e8573eeeb29f52a) Thanks [@posthog](https://github.com/apps/posthog)! - Bound autocapture's DOM ancestor walks against abnormal host-page DOM trees. `autocapturePropertiesForElement` and `shouldCaptureElement` now stop climbing the `parentNode` chain after 1000 ancestors or if they revisit a node (only possible when a page patches `parentNode`, since native DOMs cannot contain cycles), instead of walking indefinitely. When `shouldCaptureElement` cannot finish checking ancestors for `ph-no-capture`/`ph-sensitive`, it fails closed and reports the element as not capturable. Behavior on normal DOM trees is unchanged.
+  (2026-07-14)
+
+- [#4141](https://github.com/PostHog/posthog-js/pull/4141) [`17d956c`](https://github.com/PostHog/posthog-js/commit/17d956c6639e83396aa19a5974d7550b46928c68) Thanks [@posthog](https://github.com/apps/posthog)! - Log network-level fetch failures from posthog-js's own request layer (ad blocker, dropped connection, CORS, page teardown) at `warn` instead of `error`. The browser rejects these with a generic `TypeError` (`Failed to fetch`, Firefox's `NetworkError...`, or Safari's `Load failed`); they are already caught and retried by the request queue, so they are expected noise rather than SDK errors — `_fetch` now gives them the same `warn` treatment as our own timeout aborts. Genuine, unexpected errors still log at `error`.
+  (2026-07-14)
+
+## 1.399.4
+
+### Patch Changes
+
+- [#4139](https://github.com/PostHog/posthog-js/pull/4139) [`7c339be`](https://github.com/PostHog/posthog-js/commit/7c339bed0655c3e00b1860ba2da9f41c4f9013e1) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Encode uncompressed `sendBeacon` bodies as base64 form data so the beacon keeps a CORS-simple content type. Previously an uncompressed unload beacon was sent as `application/json`, which forces a CORS preflight — a preflight cannot complete while the page unloads, so on cross-origin hosts the browser silently dropped the POST and the final batch of events was lost. Compression is inactive whenever the remote config request fails (flaky network, blocked endpoint), when the config response omits `supportedCompression`, or with `disable_compression: true`.
+  (2026-07-13)
+
+## 1.399.3
+
+### Patch Changes
+
+- [#4133](https://github.com/PostHog/posthog-js/pull/4133) [`4ebb618`](https://github.com/PostHog/posthog-js/commit/4ebb61837adaed8960abbe3f8e0e28781e6bf905) Thanks [@mikenicholls88](https://github.com/mikenicholls88)! - Make `jsonStringify` circular-safe so event serialization never throws. Previously a captured property holding a circular value — most commonly a DOM node that retains a React fiber pointing back at the element — made `JSON.stringify` throw `Converting circular structure to JSON`; with `capture_exceptions` enabled that throw was recaptured as a new `$exception`, at times in a loop. On a throw we now fall back to `safeJsonStringify` from `@posthog/core`. The fast (non-circular) path is unchanged, and only true cycles become `"[Circular]"`, so shared-but-acyclic references keep their real values.
+  (2026-07-13)
+
 ## 1.399.2
 
 ### Patch Changes
