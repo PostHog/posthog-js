@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/4142": {
+    "key": "PostHog/posthog-js/issue/4142",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4142",
+    "url": "https://github.com/PostHog/posthog-js/issues/4142",
+    "conclusion": "Valid bug: Expo skipOnConflict is not wired into the generated iOS dSYM upload phase.",
+    "labels": [
+      "react-native",
+      "iOS",
+      "feature/error-tracking",
+      "feature/mobile"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-14T09:55:26.743Z"
+  },
   "PostHog/posthog-js/issue/4132": {
     "key": "PostHog/posthog-js/issue/4132",
     "repo": "PostHog/posthog-js",
