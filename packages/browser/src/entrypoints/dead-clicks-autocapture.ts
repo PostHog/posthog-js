@@ -132,6 +132,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         assignableWindow.removeEventListener('selectionchange', this._onSelectionChange)
         assignableWindow.removeEventListener('touchstart', this._onTouchStart, { capture: true })
         assignableWindow.removeEventListener('touchend', this._onTouchEnd, { capture: true })
+        assignableWindow.removeEventListener('touchcancel', this._onTouchCancel, { capture: true })
         document?.removeEventListener('visibilitychange', this._onVisibilityChange)
     }
 
@@ -210,13 +211,21 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     private _startSwipeObserver() {
         addEventListener(assignableWindow, 'touchstart', this._onTouchStart, { capture: true, passive: true })
         addEventListener(assignableWindow, 'touchend', this._onTouchEnd, { capture: true, passive: true })
+        // a cancelled gesture (system back-swipe, incoming call, etc.) never fires touchend,
+        // so clear the start point to avoid measuring the next gesture from a stale origin
+        addEventListener(assignableWindow, 'touchcancel', this._onTouchCancel, { capture: true, passive: true })
     }
 
     private _onTouchStart = (event: Event): void => {
-        const touch = (event as TouchEvent).touches?.[0]
-        if (touch) {
-            this._touchStart = { x: touch.clientX, y: touch.clientY }
-        }
+        const touches = (event as TouchEvent).touches
+        // only single-finger gestures are swipes; a second finger (pinch/zoom) is not,
+        // so a multi-touch start clears any tracked origin rather than measuring against it
+        const touch = touches?.length === 1 ? touches[0] : undefined
+        this._touchStart = touch ? { x: touch.clientX, y: touch.clientY } : undefined
+    }
+
+    private _onTouchCancel = (): void => {
+        this._touchStart = undefined
     }
 
     private _onTouchEnd = (event: Event): void => {

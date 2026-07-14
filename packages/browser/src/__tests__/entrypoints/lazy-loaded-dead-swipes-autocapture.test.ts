@@ -89,6 +89,39 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
         })
 
+        it('does not treat a multi-touch gesture (pinch/zoom) as a swipe', () => {
+            // two fingers down => not a swipe, even if one finger travels far before lifting
+            triggerTouchEvent(document.body, 'touchstart', [
+                { x: 100, y: 200 },
+                { x: 140, y: 200 },
+            ])
+            triggerTouchEvent(document.body, 'touchend', [{ x: 100, y: 40 }])
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+        })
+
+        it('clears the tracked origin when a second finger lands mid-gesture', () => {
+            triggerTouchEvent(document.body, 'touchstart', [{ x: 100, y: 200 }])
+            // a second finger arriving turns this into a pinch, not a swipe
+            triggerTouchEvent(document.body, 'touchstart', [
+                { x: 100, y: 200 },
+                { x: 140, y: 200 },
+            ])
+
+            expect(lazyLoadedDeadClicksAutocapture['_touchStart']).toBe(undefined)
+        })
+
+        it('clears the tracked origin on touchcancel so the next gesture is measured fresh', () => {
+            triggerTouchEvent(document.body, 'touchstart', [{ x: 100, y: 200 }])
+            triggerTouchEvent(document.body, 'touchcancel', [{ x: 100, y: 200 }])
+
+            expect(lazyLoadedDeadClicksAutocapture['_touchStart']).toBe(undefined)
+
+            // a plain tap after the cancelled gesture must not be measured against the stale origin
+            triggerTouchEvent(document.body, 'touchend', [{ x: 100, y: 40 }])
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+        })
+
         it('does not store swipes after stop', () => {
             lazyLoadedDeadClicksAutocapture.stop()
 
