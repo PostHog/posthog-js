@@ -277,6 +277,8 @@
         "_hostnamesForPatch",
         "_identityFields",
         "_ignore",
+        "_ignoreClick",
+        "_ignoreCommon",
         "_inCookielessMode",
         "_initExtensions",
         "_initialPageviewCaptured",

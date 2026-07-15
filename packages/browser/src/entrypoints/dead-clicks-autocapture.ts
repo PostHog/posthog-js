@@ -313,14 +313,12 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         if (!candidate) {
             return true
         }
+        // swipes run only the shared gates; clicks layer their own intent gates on top
+        return candidate.type === 'swipe' ? this._ignoreCommon(candidate) : this._ignoreClick(candidate)
+    }
 
-        const isSwipe = candidate.type === 'swipe'
-
-        // clicks with modifier keys (open in new tab, etc.) are intentional; touch swipes have no modifiers
-        if (!isSwipe && !this._config.capture_clicks_with_modifier_keys && hasModifierKey(candidate.originalEvent)) {
-            return true
-        }
-
+    // gates that apply to every dead candidate, whatever the gesture
+    private _ignoreCommon(candidate: DeadClickCandidate): boolean {
         if (isElementInToolbar(candidate.node)) {
             return true
         }
@@ -336,19 +334,30 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             return true
         }
 
-        // unlike clicks, a swipe is not an anchor activation, so we do not skip anchors for swipes:
-        // a swipe that fails to navigate is exactly the signal we want to surface
-        if (
-            isTag(candidate.node, 'html') ||
-            !isElementNode(candidate.node) ||
-            (!isSwipe && shouldSkipDeadClick(candidate.node))
-        ) {
+        if (isTag(candidate.node, 'html') || !isElementNode(candidate.node)) {
             return true
         }
 
         return !shouldCaptureDeadClick(candidate.node, {
             css_selector_ignorelist: this._config.css_selector_ignorelist,
         })
+    }
+
+    // click-only gates, layered on top of the shared ones
+    private _ignoreClick(candidate: DeadClickCandidate): boolean {
+        // clicks with modifier keys (open in new tab, etc.) are intentional; touch swipes have no modifiers
+        if (!this._config.capture_clicks_with_modifier_keys && hasModifierKey(candidate.originalEvent)) {
+            return true
+        }
+
+        if (this._ignoreCommon(candidate)) {
+            return true
+        }
+
+        // an anchor is a legitimate click activation so we skip it, but a swipe that fails to
+        // navigate is the signal we want — which is why anchors are skipped for clicks only.
+        // reaching here means _ignoreCommon confirmed an element node, so this is safe to call
+        return shouldSkipDeadClick(candidate.node)
     }
 
     private _checkClicks() {
