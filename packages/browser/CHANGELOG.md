@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.402.0
+
+### Minor Changes
+
+- [#4143](https://github.com/PostHog/posthog-js/pull/4143) [`0e8ad14`](https://github.com/PostHog/posthog-js/commit/0e8ad14fdadd7984da985df4936c9a3b128bb772) Thanks [@robbie-c](https://github.com/robbie-c)! - Stamp the current hostname as `$snapshot_host` on every `$snapshot` event the session recorder sends. The value is derived from the page URL after it passes through the existing replay URL masking pipeline (`maskCapturedNetworkRequestFn` / deprecated `maskNetworkRequestFn`, hash stripping, personal-data query-param masking), so it cannot bypass a customer's masking config. When masking removes the URL or the masked result doesn't parse as a URL, the property is omitted entirely. This gives ingestion consumers a per-message host signal even for mid-session snapshot batches that contain no URL-bearing events.
+  (2026-07-15)
+
 ## 1.401.0
 
 ### Minor Changes
