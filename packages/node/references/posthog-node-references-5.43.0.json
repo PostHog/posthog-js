@@ -2,7 +2,7 @@
   "id": "posthog-node",
   "hogRef": "0.3",
   "info": {
-    "version": "<version>",
+    "version": "5.43.0",
     "id": "posthog-node",
     "title": "PostHog Node.js SDK",
     "description": "PostHog Node.js SDK allows you to capture events and send them to PostHog from your Node.js applications.",
@@ -2333,7 +2333,7 @@
       "name": "PostHogOptions",
       "properties": [],
       "path": "src/types.ts",
-      "example": "Omit<PostHogCoreOptions, 'before_send' | 'maxQueueSize'> & {\n    persistence?: 'memory';\n    maxQueueSize?: number;\n    metrics?: MetricsConfig;\n    secretKey?: string;\n    personalApiKey?: string;\n    privacyMode?: boolean;\n    enableExceptionAutocapture?: boolean;\n    featureFlagsPollingInterval?: number;\n    maxCacheSize?: number;\n    fetch?: (url: string, options: PostHogFetchOptions) => Promise<PostHogFetchResponse>;\n    enableLocalEvaluation?: boolean;\n    flagDefinitionCacheProvider?: FlagDefinitionCacheProvider;\n    before_send?: BeforeSendFn | BeforeSendFn[];\n    evaluationContexts?: readonly string[];\n    evaluationEnvironments?: readonly string[];\n    custom_blocked_useragents?: string[];\n    __preview_capture_bot_pageviews?: boolean;\n    strictLocalEvaluation?: boolean;\n    featureFlagsLogWarnings?: boolean;\n    waitUntil?: (promise: Promise<unknown>) => void;\n    waitUntilDebounceMs?: number;\n    waitUntilMaxWaitMs?: number;\n    isServer?: boolean;\n} & ExceptionRateLimiterConfig"
+      "example": "Omit<PostHogCoreOptions, 'before_send'> & {\n    persistence?: 'memory';\n    metrics?: MetricsConfig;\n    secretKey?: string;\n    personalApiKey?: string;\n    privacyMode?: boolean;\n    enableExceptionAutocapture?: boolean;\n    featureFlagsPollingInterval?: number;\n    maxCacheSize?: number;\n    fetch?: (url: string, options: PostHogFetchOptions) => Promise<PostHogFetchResponse>;\n    enableLocalEvaluation?: boolean;\n    flagDefinitionCacheProvider?: FlagDefinitionCacheProvider;\n    before_send?: BeforeSendFn | BeforeSendFn[];\n    evaluationContexts?: readonly string[];\n    evaluationEnvironments?: readonly string[];\n    custom_blocked_useragents?: string[];\n    __preview_capture_bot_pageviews?: boolean;\n    strictLocalEvaluation?: boolean;\n    featureFlagsLogWarnings?: boolean;\n    waitUntil?: (promise: Promise<unknown>) => void;\n    waitUntilDebounceMs?: number;\n    waitUntilMaxWaitMs?: number;\n    isServer?: boolean;\n} & ExceptionRateLimiterConfig"
     },
     {
       "id": "PostHogPersistedProperty",

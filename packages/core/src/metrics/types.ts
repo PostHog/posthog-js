@@ -4,6 +4,7 @@ export type {
   MetricAttributeValue,
   MetricAttributes,
   MetricType,
+  MetricsConfig,
   CaptureMetricOptions,
   MetricSample,
   BeforeSendMetricFn,

@@ -10,6 +10,10 @@ export type { FlagDefinitionCacheData, FlagDefinitionCacheProvider } from './ext
 export { FeatureFlagError } from '@posthog/core'
 export type { FeatureFlagErrorType } from '@posthog/core'
 
+// Metrics types re-exported so consumers can name the `metrics` client option
+// and API surface without a direct @posthog/core dependency.
+export type { CaptureMetricOptions, Metrics, MetricsConfig } from '@posthog/core'
+
 // Identity helpers re-exported from core for posthog-node consumers managing
 // distinct_id outside the browser SDK (e.g. Lambda functions handing out
 // `download-app` redirects). Closes #2143.

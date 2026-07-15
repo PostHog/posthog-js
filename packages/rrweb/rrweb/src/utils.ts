@@ -155,9 +155,20 @@ export function hookSetter<T>(
           set(value) {
             // put hooked setter into event loop to avoid of set latency
             setTimeout(() => {
-              d.set!.call(this, value);
+              // the accessors read inside `d.set` throw 'Illegal invocation'
+              // when `this` is not a genuine native element (e.g. a proxy);
+              // the page cannot observe this deferred call, so drop the
+              // update rather than throw
+              try {
+                d.set!.call(this, value);
+              } catch {
+                // noop
+              }
             }, 0);
             if (original && original.set) {
+              // deliberately unguarded: this runs synchronously inside the
+              // page's own assignment, where the platform throws even for
+              // genuine elements (e.g. setting a file input's value)
               original.set.call(this, value);
             }
           },
