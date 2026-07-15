@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.42.1
+
+### Patch Changes
+
+- [#4153](https://github.com/PostHog/posthog-js/pull/4153) [`fc2cb2e`](https://github.com/PostHog/posthog-js/commit/fc2cb2e6e7accf23ed1f075f6da996f6ba575276) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Log a `warn` (previously `info`) when the local event queue is full and the oldest event is dropped, matching the severity Python and Rust already use for this condition.
+  (2026-07-15)
+
 ## 1.42.0
 
 ### Minor Changes

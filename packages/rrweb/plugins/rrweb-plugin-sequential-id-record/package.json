@@ -1,6 +1,6 @@
 {
   "name": "@posthog/rrweb-plugin-sequential-id-record",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "",
   "type": "module",
   "main": "./dist/rrweb-plugin-sequential-id-record.umd.cjs",
