@@ -1,5 +1,13 @@
 # @rrweb/record
 
+## 0.0.80
+
+### Patch Changes
+
+- Updated dependencies [[`800af7c`](https://github.com/PostHog/posthog-js/commit/800af7cae4e2cf103d0089918e778a97dccee35f), [`5116a41`](https://github.com/PostHog/posthog-js/commit/5116a413a5d95706a4fb38dc6c40a0525cb16578), [`9bd3ef0`](https://github.com/PostHog/posthog-js/commit/9bd3ef06283c8f6a869df6880e7fc2b2d04f69cc)]:
+    - @posthog/rrweb@0.1.0
+    - @posthog/rrweb-utils@0.0.63
+
 ## 0.0.79
 
 ### Patch Changes

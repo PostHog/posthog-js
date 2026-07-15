@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.401.0
+
+### Minor Changes
+
+- [#4129](https://github.com/PostHog/posthog-js/pull/4129) [`800af7c`](https://github.com/PostHog/posthog-js/commit/800af7cae4e2cf103d0089918e778a97dccee35f) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: add `session_recording.attributeFilter` option that passes an attribute allowlist through to the native MutationObserver, so mutations to unlisted attributes (e.g. animation-driven inline `style` churn) never cost recording CPU (port of upstream rrweb #1873)
+  (2026-07-15)
+
+### Patch Changes
+
+- Updated dependencies [[`800af7c`](https://github.com/PostHog/posthog-js/commit/800af7cae4e2cf103d0089918e778a97dccee35f)]:
+    - @posthog/types@1.395.0
+
 ## 1.400.1
 
 ### Patch Changes

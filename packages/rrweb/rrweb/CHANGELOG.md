@@ -1,5 +1,20 @@
 # rrweb
 
+## 0.1.0
+
+### Minor Changes
+
+- [#4129](https://github.com/PostHog/posthog-js/pull/4129) [`800af7c`](https://github.com/PostHog/posthog-js/commit/800af7cae4e2cf103d0089918e778a97dccee35f) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: add `session_recording.attributeFilter` option that passes an attribute allowlist through to the native MutationObserver, so mutations to unlisted attributes (e.g. animation-driven inline `style` churn) never cost recording CPU (port of upstream rrweb #1873)
+  (2026-07-15)
+
+### Patch Changes
+
+- [#4130](https://github.com/PostHog/posthog-js/pull/4130) [`5116a41`](https://github.com/PostHog/posthog-js/commit/5116a413a5d95706a4fb38dc6c40a0525cb16578) Thanks [@pauldambra](https://github.com/pauldambra)! - perf: when a node is re-encountered while collecting added nodes, move it to the end of the added set so the emit phase processes adds in latest-DOM order. This avoids paying for out-of-order deferrals on large mutation batches (port of upstream rrweb #1302).
+  (2026-07-15)
+- Updated dependencies [[`9bd3ef0`](https://github.com/PostHog/posthog-js/commit/9bd3ef06283c8f6a869df6880e7fc2b2d04f69cc)]:
+    - @posthog/rrweb-utils@0.0.63
+    - @posthog/rrweb-snapshot@0.0.66
+
 ## 0.0.79
 
 ### Patch Changes
