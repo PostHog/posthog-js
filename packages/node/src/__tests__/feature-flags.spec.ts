@@ -86,7 +86,7 @@ describe('local evaluation', () => {
           latestBuildVersionMajor: undefined,
           latestBuildVersionMinor: undefined,
           latestBuildVersionPatch: undefined,
-        } as unknown as Record<string, string>,
+        },
       })
     ).toEqual(false)
 
