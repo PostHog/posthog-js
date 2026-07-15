@@ -1076,8 +1076,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     distinctId: string,
     options: {
       groups?: Record<string, string>
-      personProperties?: Record<string, string>
-      groupProperties?: Record<string, Record<string, string>>
+      personProperties?: Record<string, any>
+      groupProperties?: Record<string, Record<string, any>>
       onlyEvaluateLocally?: boolean
       sendFeatureFlagEvents?: boolean
       disableGeoip?: boolean
@@ -1343,8 +1343,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     distinctId: string,
     options?: {
       groups?: Record<string, string>
-      personProperties?: Record<string, string>
-      groupProperties?: Record<string, Record<string, string>>
+      personProperties?: Record<string, any>
+      groupProperties?: Record<string, Record<string, any>>
       onlyEvaluateLocally?: boolean
       sendFeatureFlagEvents?: boolean
       disableGeoip?: boolean
@@ -1414,8 +1414,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     matchValue?: FeatureFlagValue,
     options?: {
       groups?: Record<string, string>
-      personProperties?: Record<string, string>
-      groupProperties?: Record<string, Record<string, string>>
+      personProperties?: Record<string, any>
+      groupProperties?: Record<string, Record<string, any>>
       onlyEvaluateLocally?: boolean
       /** @deprecated THIS OPTION HAS NO EFFECT, kept here for backwards compatibility reasons. */
       sendFeatureFlagEvents?: boolean
@@ -1601,8 +1601,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     distinctId: string,
     options?: {
       groups?: Record<string, string>
-      personProperties?: Record<string, string>
-      groupProperties?: Record<string, Record<string, string>>
+      personProperties?: Record<string, any>
+      groupProperties?: Record<string, Record<string, any>>
       onlyEvaluateLocally?: boolean
       sendFeatureFlagEvents?: boolean
       disableGeoip?: boolean
@@ -2620,12 +2620,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private addLocalPersonAndGroupProperties(
     distinctId: string,
     groups?: Record<string, string>,
-    personProperties?: Record<string, string>,
-    groupProperties?: Record<string, Record<string, string>>
-  ): { allPersonProperties: Record<string, string>; allGroupProperties: Record<string, Record<string, string>> } {
+    personProperties?: Record<string, any>,
+    groupProperties?: Record<string, Record<string, any>>
+  ): { allPersonProperties: Record<string, any>; allGroupProperties: Record<string, Record<string, any>> } {
     const allPersonProperties = { ...(personProperties || {}) }
 
-    const allGroupProperties: Record<string, Record<string, string>> = {}
+    const allGroupProperties: Record<string, Record<string, any>> = {}
     if (groups) {
       for (const groupName of Object.keys(groups)) {
         allGroupProperties[groupName] = {

@@ -106,8 +106,8 @@ export type OverrideFeatureFlagsOptions =
 
 export type BaseFlagEvaluationOptions = {
   groups?: Record<string, string>
-  personProperties?: Record<string, string>
-  groupProperties?: Record<string, Record<string, string>>
+  personProperties?: Record<string, any>
+  groupProperties?: Record<string, Record<string, any>>
   onlyEvaluateLocally?: boolean
   disableGeoip?: boolean
 }
@@ -501,8 +501,8 @@ export interface IPostHog {
     distinctId: string,
     options?: {
       groups?: Record<string, string>
-      personProperties?: Record<string, string>
-      groupProperties?: Record<string, Record<string, string>>
+      personProperties?: Record<string, any>
+      groupProperties?: Record<string, Record<string, any>>
       onlyEvaluateLocally?: boolean
       sendFeatureFlagEvents?: boolean
     }
@@ -532,8 +532,8 @@ export interface IPostHog {
     distinctId: string,
     options?: {
       groups?: Record<string, string>
-      personProperties?: Record<string, string>
-      groupProperties?: Record<string, Record<string, string>>
+      personProperties?: Record<string, any>
+      groupProperties?: Record<string, Record<string, any>>
       onlyEvaluateLocally?: boolean
       sendFeatureFlagEvents?: boolean
     }
