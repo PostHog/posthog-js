@@ -54,9 +54,10 @@
     ],
     "scripts": {
         "clean": "rimraf dist",
-        "build": "tsgo -p tsconfig.build.json && pnpm check:esm-specifiers",
+        "build": "tsgo -p tsconfig.build.json && pnpm check:esm-specifiers && pnpm check:pages-router-ssr",
         "dev": "tsgo -p tsconfig.build.json --watch",
         "check:esm-specifiers": "node ./scripts/check-relative-esm-specifiers.mjs",
+        "check:pages-router-ssr": "node ./scripts/check-pages-router-ssr.mjs",
         "test:unit": "jest",
         "test": "pnpm test:unit",
         "lint": "eslint src",

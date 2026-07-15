@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import posthogJs from 'posthog-js'
+import { posthog as posthogJs } from 'posthog-js'
 import { isUndefined } from '@posthog/core'
 import { PostHogContext } from '@posthog/react'
 import type { BootstrapConfig, PostHogConfig } from 'posthog-js'

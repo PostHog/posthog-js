@@ -2,17 +2,25 @@ import React, { useContext } from 'react'
 import { render, screen } from '@testing-library/react'
 import { ClientPostHogProvider } from '../src/client/ClientPostHogProvider'
 import { PostHogContext, useFeatureFlagEnabled } from '@posthog/react'
-import posthogJs from 'posthog-js'
+import { posthog as posthogJs } from 'posthog-js'
 
-jest.mock('posthog-js', () => ({
-    __esModule: true,
-    default: {
+jest.mock('posthog-js', () => {
+    const posthog = {
         __loaded: false,
         init: jest.fn(),
         isFeatureEnabled: jest.fn(() => undefined),
         onFeatureFlags: jest.fn(() => () => {}),
-    },
-}))
+    }
+
+    return {
+        __esModule: true,
+        // Native Node ESM resolves the posthog-js CommonJS default import to
+        // the exports object. Model that shape so the provider must select the
+        // named singleton instead of accidentally placing this object in context.
+        default: { default: posthog, posthog },
+        posthog,
+    }
+})
 
 const mockPostHogJs = posthogJs as jest.Mocked<typeof posthogJs> & { __loaded: boolean }
 
