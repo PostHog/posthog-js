@@ -349,6 +349,34 @@ describe('PostHogMetrics', () => {
       expect((logger.warn as jest.Mock).mock.calls.length).toBe(1)
     })
 
+    it('re-applies the series cap when merging a failed window back', async () => {
+      let resolveSend!: (outcome: SendMetricsBatchOutcome) => void
+      mockInstance._sendMetricsBatch
+        .mockImplementationOnce(() => new Promise<SendMetricsBatchOutcome>((resolve) => (resolveSend = resolve)))
+        .mockResolvedValue({ kind: 'ok' })
+
+      const metrics = createMetrics({ maxSeriesPerFlush: 2 })
+      metrics.count('a', 1)
+      metrics.count('b', 1)
+      const inflight = metrics.flush()
+      // New series captured while the failing send is in flight fill the fresh window to the cap.
+      metrics.count('c', 1)
+      metrics.count('d', 1)
+      resolveSend({ kind: 'retry-later', error: new Error('offline') })
+      await inflight
+
+      await metrics.flush()
+
+      const payloads = sentPayloads()
+      expect(payloads).toHaveLength(2)
+      const dataPointCount = payloads[1].resourceMetrics[0].scopeMetrics[0].metrics.reduce(
+        (n, m) => n + (m.sum?.dataPoints.length ?? 0),
+        0
+      )
+      expect(dataPointCount).toBeLessThanOrEqual(2)
+      expect((logger.warn as jest.Mock).mock.calls.some((c) => String(c[0]).includes('series cap'))).toBe(true)
+    })
+
     it('drops non-finite values and negative counts', async () => {
       const metrics = createMetrics()
       metrics.count('a', NaN)
@@ -363,6 +391,27 @@ describe('PostHogMetrics', () => {
       expect(sent).toHaveLength(1)
       expect(sent[0].name).toBe('b')
       expect(sent[0].gauge!.dataPoints[0].asDouble).toBe(-5)
+    })
+
+    it('drops samples with unserializable attributes instead of throwing', async () => {
+      const metrics = createMetrics()
+      const throwingAttrs = {}
+      Object.defineProperty(throwingAttrs, 'bad', {
+        enumerable: true,
+        get() {
+          throw new Error('boom')
+        },
+      })
+
+      expect(() => metrics.count('good', 1, { attributes: { plan: 'free' } })).not.toThrow()
+      expect(() => metrics.count('bigint_attr', 1, { attributes: { jobId: BigInt(1) } as any })).not.toThrow()
+      expect(() => metrics.count('throwing_attr', 1, { attributes: throwingAttrs as any })).not.toThrow()
+      await metrics.flush()
+
+      // Only the well-formed sample ships; the malformed ones are dropped with a warning.
+      expect(sentMetrics().map((m) => m.name)).toEqual(['good'])
+      const attrWarns = (logger.warn as jest.Mock).mock.calls.filter((c) => String(c[0]).includes('attributes'))
+      expect(attrWarns).toHaveLength(2)
     })
 
     it('drops samples with an empty name', async () => {

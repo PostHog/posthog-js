@@ -12,11 +12,14 @@ import {
   PostHogFetchResponse,
   PostHogFlagsAndPayloadsResponse,
   PostHogFlagsResponse,
+  PostHogMetrics,
   PostHogPersistedProperty,
+  resolveMetricsConfig,
   RetriableOptions,
   safeSetTimeout,
   uuidv7,
 } from '@posthog/core'
+import type { Metrics } from '@posthog/core'
 import {
   AllFlagsOptions,
   EventMessage,
@@ -133,6 +136,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private maxCacheSize: number
   public readonly options: PostHogOptions
   protected readonly context?: IPostHogContext
+  private _metrics?: PostHogMetrics
 
   private readonly captureMode: CaptureMode
   private _v1Sender?: V1CaptureSender
@@ -486,6 +490,30 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    */
   getLibraryVersion(): string {
     return version
+  }
+
+  /**
+   * The `posthog.metrics` API: a statsd-style pre-aggregating metrics client — alpha.
+   * Samples are folded into per-series aggregates in memory and flushed
+   * periodically as one OTLP data point per series per window, so recording
+   * from hot paths is cheap. Configure via the `metrics` client option.
+   *
+   * @example
+   * ```ts
+   * client.metrics.count('jobs.processed', 1, { attributes: { queue: 'default' } })
+   * client.metrics.gauge('queue.depth', 42)
+   * client.metrics.histogram('job.duration', 187, { unit: 'ms' })
+   * ```
+   *
+   * {@label Metrics}
+   */
+  public get metrics(): Metrics {
+    if (!this._metrics) {
+      // Lazy: `this` is the MetricsHost (isDisabled/optedOut/_sendMetricsBatch
+      // live on PostHogCoreStateless), so nothing is set up until first use.
+      this._metrics = new PostHogMetrics(this, resolveMetricsConfig(this.options.metrics), this._logger)
+    }
+    return this._metrics
   }
 
   /**
@@ -2376,13 +2404,32 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @returns Promise that resolves when shutdown is complete
    */
   async _shutdown(shutdownTimeoutMs?: number): Promise<void> {
+    // One absolute deadline for the whole shutdown: the metrics flush race and
+    // super._shutdown spend from the same budget, so shutdown(500) can't take
+    // ~1000ms by giving each phase a fresh full timeout.
+    const shutdownDeadlineMs = Date.now() + (shutdownTimeoutMs ?? 30000)
     // Cancel any pending debounced flush — shutdown will flush directly.
     const resolve = this._consumeWaitUntilCycle()
 
     await this.featureFlagsPoller?.stopPoller(shutdownTimeoutMs)
     this.errorTracking.shutdown()
+    if (this._metrics) {
+      // Send whatever is aggregated in the current window, then clear the flush
+      // timer so it can't fire after teardown. Raced against the shutdown budget:
+      // this flush runs before super._shutdown starts its own timeout, so an
+      // unresponsive transport must not be able to hold shutdown past the
+      // caller's deadline (its retry stack alone can take ~49s).
+      await Promise.race([
+        this._metrics.flush().catch(() => {}),
+        new Promise<void>((resolve) => safeSetTimeout(resolve, Math.max(0, shutdownDeadlineMs - Date.now()))),
+      ])
+      // reset() also invalidates a flush that lost the race above: when its
+      // send finally settles, the stale window is discarded instead of being
+      // merged back onto a re-armed timer after teardown.
+      this._metrics.reset()
+    }
     try {
-      return await super._shutdown(shutdownTimeoutMs)
+      return await super._shutdown(Math.max(0, shutdownDeadlineMs - Date.now()))
     } finally {
       this.distinctIdHasSentFlagCalls = {}
       resolve?.()
