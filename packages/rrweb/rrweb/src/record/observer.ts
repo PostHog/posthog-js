@@ -936,7 +936,26 @@ export function initAdoptedStyleSheetObserver(
       return originalPropertyDescriptor.get?.call(this) as CSSStyleSheet[];
     },
     set(sheets: CSSStyleSheet[]) {
-      const result = originalPropertyDescriptor.set?.call(this, sheets);
+      let result: unknown;
+      try {
+        result = originalPropertyDescriptor.set?.call(this, sheets);
+      } catch (e) {
+        // Assigning a `CSSStyleSheet` that was constructed in a different
+        // document/realm makes the browser reject the assignment with
+        // `NotAllowedError` ("Sharing constructed stylesheets in multiple
+        // documents is not allowed"). That is the host page's own invalid
+        // operation, but because our patched setter sits on the call stack
+        // the exception would otherwise be attributed to the recorder and
+        // churn fingerprints in error tracking. The browser rejects the
+        // assignment atomically, so recording simply degrades (we skip the
+        // adoption below). Contain only this specific, unactionable case;
+        // re-throw everything else so genuine host-page failures are
+        // preserved (mirrors `callSafely` in ../utils).
+        if (e instanceof DOMException && e.name === 'NotAllowedError') {
+          return;
+        }
+        throw e;
+      }
       if (hostId !== null && hostId !== -1) {
         try {
           stylesheetManager.adoptStyleSheets(sheets, hostId);
