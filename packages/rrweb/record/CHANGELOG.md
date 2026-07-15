@@ -1,5 +1,14 @@
 # @rrweb/record
 
+## 0.0.82
+
+### Patch Changes
+
+- [#4151](https://github.com/PostHog/posthog-js/pull/4151) [`81adbfd`](https://github.com/PostHog/posthog-js/commit/81adbfde4cb7932435804cc55c8e9d975b94f3f5) Thanks [@posthog](https://github.com/apps/posthog)! - Session recording no longer emits an uncaught `TypeError: Illegal invocation` when a programmatic input-value change happens on an object that is not a genuine native input element (for example a proxy on the element prototype chain). The recorder drops that one replay update instead of throwing.
+  (2026-07-15)
+- Updated dependencies [[`81adbfd`](https://github.com/PostHog/posthog-js/commit/81adbfde4cb7932435804cc55c8e9d975b94f3f5)]:
+    - @posthog/rrweb@0.1.2
+
 ## 0.0.81
 
 ### Patch Changes
