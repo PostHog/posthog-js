@@ -1,5 +1,12 @@
 # @posthog/react-native-plugin
 
+## 2.2.3
+
+### Patch Changes
+
+- [#4154](https://github.com/PostHog/posthog-js/pull/4154) [`7c9de2f`](https://github.com/PostHog/posthog-js/commit/7c9de2f6dd0114fd5d222dba6749fbae69e7d688) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Bump `com.posthog:posthog-android` to `3.54.0` to pick up the session replay ANR fix from 3.53.7: clearing the replay buffer on session rotation (e.g. `identify()` at login) no longer blocks the main thread waiting on the replay executor.
+  (2026-07-15)
+
 ## 2.2.2
 
 ### Patch Changes
