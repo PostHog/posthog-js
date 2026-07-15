@@ -19,13 +19,13 @@ jobs:
         node-version: [20, 22, 24]
         typescript-version:
           - version: "4.7.4"
-            extra-flags: "--moduleResolution node"
+            extra-flags: "--module commonjs --moduleResolution node"
           - version: "5.9.2"
-            extra-flags: "--moduleResolution node"
+            extra-flags: "--module commonjs --moduleResolution node"
           - version: "latest"
-            extra-flags: "--moduleResolution node --ignoreConfig --ignoreDeprecations 6.0"
+            extra-flags: "--module nodenext --moduleResolution nodenext --ignoreConfig"
           - version: "6.0.0-dev.20251204"
-            extra-flags: "--ignoreConfig"
+            extra-flags: "--module commonjs --ignoreConfig"
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -45,6 +45,6 @@ jobs:
         run: |
           rm ci-ts-file.js || true
           pnpm exec tsc --version
-          pnpm exec tsc ci-ts-file.ts --strict --target es2017 --module commonjs --skipLibCheck ${{ matrix.typescript-version.extra-flags }}
+          pnpm exec tsc ci-ts-file.ts --strict --target es2017 --skipLibCheck ${{ matrix.typescript-version.extra-flags }}
           node ci-ts-file.js
         working-directory: packages/browser
