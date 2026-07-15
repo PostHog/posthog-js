@@ -1,4 +1,5 @@
-import type { OtlpLogsPayload } from '@posthog/types'
+import type { OtlpLogsPayload, OtlpMetricsPayload } from '@posthog/types'
+import type { SendMetricsBatchOutcome } from './metrics/types'
 import { SimpleEventEmitter } from './eventemitter'
 import { getFeatureFlagValue, normalizeFlagsResponse } from './featureFlagUtils'
 import { gzipCompress, isGzipSupported } from './gzip'
@@ -1092,7 +1093,7 @@ export abstract class PostHogCoreStateless {
 
       if (queue.length >= this.maxQueueSize) {
         queue.shift()
-        this._logger.info('Queue is full, the oldest event is dropped.')
+        this._logger.warn('Queue is full, the oldest event is dropped.')
       }
 
       queue.push({ message })
@@ -1528,6 +1529,55 @@ export abstract class PostHogCoreStateless {
         return { kind: 'too-large' }
       }
       if (err instanceof PostHogFetchNetworkError) {
+        return { kind: 'retry-later', error: err }
+      }
+      return { kind: 'fatal', error: err }
+    }
+  }
+
+  /**
+   * Sends a pre-built OTLP metrics payload to `/i/v1/metrics`. Same tagged
+   * outcome contract and error classification as `_sendLogsBatch` — this is
+   * the `MetricsHost._sendMetricsBatch` implementation, so `PostHogMetrics`
+   * can use any core-based SDK as its host.
+   */
+  async _sendMetricsBatch(payload: OtlpMetricsPayload): Promise<SendMetricsBatchOutcome> {
+    if (this.disabled) {
+      return { kind: 'fatal', error: new Error('The client is disabled') }
+    }
+
+    const serialized = JSON.stringify(payload)
+    const url = `${this.host}/i/v1/metrics?token=${encodeURIComponent(this.apiKey)}`
+
+    const gzippedPayload = !this.disableCompression ? await gzipCompress(serialized, this.isDebug) : null
+    const fetchOptions: PostHogFetchOptions = {
+      method: 'POST',
+      headers: {
+        ...this.getCustomHeaders(),
+        'Content-Type': 'application/json',
+        ...(gzippedPayload !== null && { 'Content-Encoding': 'gzip' }),
+      },
+      body: gzippedPayload || serialized,
+    }
+
+    try {
+      await this.fetchWithRetry(url, fetchOptions, {
+        retryCheck: (err) => {
+          if (isPostHogFetchContentTooLargeError(err)) {
+            return false
+          }
+          return isPostHogFetchRetryableError(err)
+        },
+      })
+      return { kind: 'ok' }
+    } catch (err) {
+      if (isPostHogFetchContentTooLargeError(err)) {
+        return { kind: 'too-large' }
+      }
+      // Exhausted retries on a retryable failure (network error, 408/429/5xx)
+      // still classify as retry-later so the window rides the next flush; only
+      // non-retryable HTTP errors (and 413 above) drop the batch.
+      if (isPostHogFetchRetryableError(err)) {
         return { kind: 'retry-later', error: err }
       }
       return { kind: 'fatal', error: err }

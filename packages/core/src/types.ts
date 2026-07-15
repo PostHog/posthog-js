@@ -633,43 +633,49 @@ export type SurveyAppearance = {
   widgetColor?: string
 }
 
-export enum SurveyPosition {
-  TopLeft = 'top_left',
-  TopCenter = 'top_center',
-  TopRight = 'top_right',
-  MiddleLeft = 'middle_left',
-  MiddleCenter = 'middle_center',
-  MiddleRight = 'middle_right',
-  Left = 'left',
-  Right = 'right',
-  Center = 'center',
-}
+export const SurveyPosition = {
+  TopLeft: 'top_left',
+  TopCenter: 'top_center',
+  TopRight: 'top_right',
+  MiddleLeft: 'middle_left',
+  MiddleCenter: 'middle_center',
+  MiddleRight: 'middle_right',
+  Left: 'left',
+  Right: 'right',
+  Center: 'center',
+} as const
+export type SurveyPosition = (typeof SurveyPosition)[keyof typeof SurveyPosition]
 
-export enum SurveyWidgetType {
-  Button = 'button',
-  Tab = 'tab',
-  Selector = 'selector',
-}
+export const SurveyWidgetType = {
+  Button: 'button',
+  Tab: 'tab',
+  Selector: 'selector',
+} as const
+export type SurveyWidgetType = (typeof SurveyWidgetType)[keyof typeof SurveyWidgetType]
 
-export enum SurveyType {
-  Popover = 'popover',
-  API = 'api',
-  Widget = 'widget',
-  ExternalSurvey = 'external_survey',
-}
+export const SurveyType = {
+  Popover: 'popover',
+  API: 'api',
+  Widget: 'widget',
+  ExternalSurvey: 'external_survey',
+} as const
+export type SurveyType = (typeof SurveyType)[keyof typeof SurveyType]
 
 export type SurveyQuestion = BasicSurveyQuestion | LinkSurveyQuestion | RatingSurveyQuestion | MultipleSurveyQuestion
 
-export enum SurveyQuestionDescriptionContentType {
-  Html = 'html',
-  Text = 'text',
-}
+export const SurveyQuestionDescriptionContentType = {
+  Html: 'html',
+  Text: 'text',
+} as const
+export type SurveyQuestionDescriptionContentType =
+  (typeof SurveyQuestionDescriptionContentType)[keyof typeof SurveyQuestionDescriptionContentType]
 
 // Survey validation types
-export enum SurveyValidationType {
-  MinLength = 'min_length',
-  MaxLength = 'max_length',
-}
+export const SurveyValidationType = {
+  MinLength: 'min_length',
+  MaxLength: 'max_length',
+} as const
+export type SurveyValidationType = (typeof SurveyValidationType)[keyof typeof SurveyValidationType]
 
 export interface SurveyValidationRule {
   type: SurveyValidationType
@@ -710,16 +716,16 @@ type SurveyQuestionBase = {
 }
 
 export type BasicSurveyQuestion = SurveyQuestionBase & {
-  type: SurveyQuestionType.Open
+  type: typeof SurveyQuestionType.Open
 }
 
 export type LinkSurveyQuestion = SurveyQuestionBase & {
-  type: SurveyQuestionType.Link
+  type: typeof SurveyQuestionType.Link
   link?: string | null
 }
 
 export type RatingSurveyQuestion = SurveyQuestionBase & {
-  type: SurveyQuestionType.Rating
+  type: typeof SurveyQuestionType.Rating
   display: SurveyRatingDisplay
   scale: 2 | 3 | 5 | 7 | 10
   lowerBoundLabel: string
@@ -727,49 +733,52 @@ export type RatingSurveyQuestion = SurveyQuestionBase & {
   skipSubmitButton?: boolean
 }
 
-export enum SurveyRatingDisplay {
-  Number = 'number',
-  Emoji = 'emoji',
-}
+export const SurveyRatingDisplay = {
+  Number: 'number',
+  Emoji: 'emoji',
+} as const
+export type SurveyRatingDisplay = (typeof SurveyRatingDisplay)[keyof typeof SurveyRatingDisplay]
 
 export type MultipleSurveyQuestion = SurveyQuestionBase & {
-  type: SurveyQuestionType.SingleChoice | SurveyQuestionType.MultipleChoice
+  type: typeof SurveyQuestionType.SingleChoice | typeof SurveyQuestionType.MultipleChoice
   choices: string[]
   hasOpenChoice?: boolean
   shuffleOptions?: boolean
   skipSubmitButton?: boolean
 }
 
-export enum SurveyQuestionType {
-  Open = 'open',
-  MultipleChoice = 'multiple_choice',
-  SingleChoice = 'single_choice',
-  Rating = 'rating',
-  Link = 'link',
-}
+export const SurveyQuestionType = {
+  Open: 'open',
+  MultipleChoice: 'multiple_choice',
+  SingleChoice: 'single_choice',
+  Rating: 'rating',
+  Link: 'link',
+} as const
+export type SurveyQuestionType = (typeof SurveyQuestionType)[keyof typeof SurveyQuestionType]
 
-export enum SurveyQuestionBranchingType {
-  NextQuestion = 'next_question',
-  End = 'end',
-  ResponseBased = 'response_based',
-  SpecificQuestion = 'specific_question',
-}
+export const SurveyQuestionBranchingType = {
+  NextQuestion: 'next_question',
+  End: 'end',
+  ResponseBased: 'response_based',
+  SpecificQuestion: 'specific_question',
+} as const
+export type SurveyQuestionBranchingType = (typeof SurveyQuestionBranchingType)[keyof typeof SurveyQuestionBranchingType]
 
 export type NextQuestionBranching = {
-  type: SurveyQuestionBranchingType.NextQuestion
+  type: typeof SurveyQuestionBranchingType.NextQuestion
 }
 
 export type EndBranching = {
-  type: SurveyQuestionBranchingType.End
+  type: typeof SurveyQuestionBranchingType.End
 }
 
 export type ResponseBasedBranching = {
-  type: SurveyQuestionBranchingType.ResponseBased
+  type: typeof SurveyQuestionBranchingType.ResponseBased
   responseValues: Record<string, any>
 }
 
 export type SpecificQuestionBranching = {
-  type: SurveyQuestionBranchingType.SpecificQuestion
+  type: typeof SurveyQuestionBranchingType.SpecificQuestion
   index: number
 }
 
@@ -783,20 +792,22 @@ export type SurveyResponses = Record<string, SurveyResponseValue>
 
 export type SurveyCallback = (surveys: Survey[]) => void
 
-export enum SurveyMatchType {
-  Regex = 'regex',
-  NotRegex = 'not_regex',
-  Exact = 'exact',
-  IsNot = 'is_not',
-  Icontains = 'icontains',
-  NotIcontains = 'not_icontains',
-}
+export const SurveyMatchType = {
+  Regex: 'regex',
+  NotRegex: 'not_regex',
+  Exact: 'exact',
+  IsNot: 'is_not',
+  Icontains: 'icontains',
+  NotIcontains: 'not_icontains',
+} as const
+export type SurveyMatchType = (typeof SurveyMatchType)[keyof typeof SurveyMatchType]
 
-export enum SurveySchedule {
-  Once = 'once',
-  Recurring = 'recurring',
-  Always = 'always',
-}
+export const SurveySchedule = {
+  Once: 'once',
+  Recurring: 'recurring',
+  Always: 'always',
+} as const
+export type SurveySchedule = (typeof SurveySchedule)[keyof typeof SurveySchedule]
 
 export type SurveyElement = {
   text?: string
@@ -853,9 +864,9 @@ export type Survey = {
   }
   start_date?: string
   end_date?: string
-  current_iteration?: number
-  current_iteration_start_date?: string
-  schedule?: SurveySchedule
+  current_iteration?: number | null
+  current_iteration_start_date?: string | null
+  schedule?: SurveySchedule | null
 }
 
 export type SurveyActionType = {
@@ -865,11 +876,12 @@ export type SurveyActionType = {
 }
 
 /** Sync with plugin-server/src/types.ts */
-export enum ActionStepStringMatching {
-  Contains = 'contains',
-  Exact = 'exact',
-  Regex = 'regex',
-}
+export const ActionStepStringMatching = {
+  Contains: 'contains',
+  Exact: 'exact',
+  Regex: 'regex',
+} as const
+export type ActionStepStringMatching = (typeof ActionStepStringMatching)[keyof typeof ActionStepStringMatching]
 
 export type ActionStepType = {
   event?: string

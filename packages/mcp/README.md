@@ -15,6 +15,14 @@ as a token carrying the session id and client name/version. Clients replay the h
 every request, so any pod keeps `$session_id` and `$mcp_client_name`/`$mcp_client_version`
 stable with no server-side store.
 
+A standalone `$identify` event fires **at most once per session** — at `initialize` (or, on a
+long-lived server, when the identity first appears or materially changes). Tool calls on other
+pods reuse the identity to stamp `distinct_id`/`$set` on every event **without** re-publishing
+`$identify`, so person **properties** are never lost. (Edge case: if identity isn't resolvable
+until _after_ `initialize`, the first `$identify` is suppressed too, so pre-identify anonymous
+events aren't aliased onto the user — see `docs/ARCHITECTURE.md` §4.) To drop `$identify`
+entirely, return `null` from `beforeSend` when `event === '$identify'`.
+
 ### Streamable HTTP: set `enableJsonResponse: true`
 
 The token is minted onto the `Mcp-Session-Id` **response** header from inside the `initialize`

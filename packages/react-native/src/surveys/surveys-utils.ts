@@ -10,7 +10,6 @@ import {
   SurveyPosition,
   SurveyQuestionDescriptionContentType,
   SurveyMatchType,
-  SurveySchedule,
 } from '@posthog/core'
 
 // Extended operator type to include numeric operators not in core SurveyMatchType
@@ -211,20 +210,6 @@ export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
   // }
 
   // return reverseIfUnshuffled(survey.questions, shuffle(survey.questions))
-}
-
-export const hasEvents = (survey: Survey): boolean => {
-  return survey.conditions?.events?.values !== undefined && survey.conditions.events.values.length > 0
-}
-
-// export const hasActions = (survey: Survey): boolean => {
-//   return survey.conditions?.actions?.values.length !== undefined && survey.conditions.actions.values.length > 0
-// }
-
-export const canActivateRepeatedly = (survey: Survey): boolean => {
-  return (
-    !!(survey.conditions?.events?.repeatedActivation && hasEvents(survey)) || survey.schedule === SurveySchedule.Always
-  )
 }
 
 /**

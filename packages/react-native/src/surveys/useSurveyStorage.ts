@@ -1,12 +1,24 @@
 import { PostHogPersistedProperty } from '@posthog/core'
+import { getSurveyIterationKey, isSurveyKeyForSurvey, SurveyWithIteration } from '@posthog/core/surveys'
 import { useCallback, useEffect, useState } from 'react'
 import { usePostHog } from '../hooks/usePostHog'
 
 type SurveyStorage = {
+  // Iteration-qualified keys (getSurveyIterationKey) so repeating surveys re-show when a new iteration starts
   seenSurveys: string[]
-  setSeenSurvey: (surveyId: string) => void
+  setSeenSurvey: (survey: SurveyWithIteration) => void
   lastSeenSurveyDate: Date | undefined
   setLastSeenSurveyDate: (date: Date) => void
+}
+
+// To keep storage bounded, only keep the last 20 seen surveys
+const MAX_SEEN_SURVEYS = 20
+
+// One slot per survey: stale keys from earlier iterations (or the pre-iteration bare id)
+// can never match again and would otherwise evict other surveys' seen state.
+export function updateSeenSurveys(current: string[], survey: SurveyWithIteration): string[] {
+  const surveyKey = getSurveyIterationKey(survey)
+  return [surveyKey, ...current.filter((key) => !isSurveyKeyForSurvey(key, survey.id))].slice(0, MAX_SEEN_SURVEYS)
 }
 
 export function useSurveyStorage(): SurveyStorage {
@@ -24,8 +36,8 @@ export function useSurveyStorage(): SurveyStorage {
       const serialisedSeenSurveys = posthogStorage.getPersistedProperty(PostHogPersistedProperty.SurveysSeen)
       if (typeof serialisedSeenSurveys === 'string') {
         const parsedSeenSurveys: unknown = JSON.parse(serialisedSeenSurveys)
-        if (Array.isArray(parsedSeenSurveys) && typeof parsedSeenSurveys[0] === 'string') {
-          setSeenSurveys(parsedSeenSurveys)
+        if (Array.isArray(parsedSeenSurveys)) {
+          setSeenSurveys(parsedSeenSurveys.filter((key): key is string => typeof key === 'string'))
         }
       }
     })
@@ -34,14 +46,10 @@ export function useSurveyStorage(): SurveyStorage {
   return {
     seenSurveys,
     setSeenSurvey: useCallback(
-      (surveyId: string) => {
+      (survey: SurveyWithIteration) => {
         setSeenSurveys((current) => {
-          // To keep storage bounded, only keep the last 20 seen surveys
-          const newValue = [surveyId, ...current.filter((id) => id !== surveyId)]
-          posthogStorage.setPersistedProperty(
-            PostHogPersistedProperty.SurveysSeen,
-            JSON.stringify(newValue.slice(0, 20))
-          )
+          const newValue = updateSeenSurveys(current, survey)
+          posthogStorage.setPersistedProperty(PostHogPersistedProperty.SurveysSeen, JSON.stringify(newValue))
           return newValue
         })
       },

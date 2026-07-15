@@ -1,5 +1,12 @@
 # @rrweb/utils
 
+## 0.0.63
+
+### Patch Changes
+
+- [#4128](https://github.com/PostHog/posthog-js/pull/4128) [`9bd3ef0`](https://github.com/PostHog/posthog-js/commit/9bd3ef06283c8f6a869df6880e7fc2b2d04f69cc) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: keep the untainted-prototype fallback iframe attached on Safari so MutationObserver callbacks are not silently dropped (port of upstream rrweb #1854)
+  (2026-07-15)
+
 ## 0.0.62
 
 ### Patch Changes

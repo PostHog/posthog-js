@@ -1,5 +1,72 @@
 # posthog-js
 
+## 1.402.3
+
+### Patch Changes
+
+- [#4157](https://github.com/PostHog/posthog-js/pull/4157) [`4a2ecf5`](https://github.com/PostHog/posthog-js/commit/4a2ecf5ccdc3ed2567a5d59dcdcf88c6541d9b1b) Thanks [@posthog](https://github.com/apps/posthog)! - Session recording no longer emits an uncaught `NotAllowedError` ("Sharing constructed stylesheets in multiple documents is not allowed") when a page assigns a `CSSStyleSheet` constructed in a different document to `adoptedStyleSheets`. That assignment is the host page's own invalid operation, but the recorder's patched setter sat on the call stack, so the exception was attributed to rrweb and churned fingerprints in error tracking. The recorder now contains this specific rejection (matched by its standardized `NotAllowedError` name, so it works even when the setter throws from an iframe realm) and skips recording those sheets, while still re-throwing any other native-setter error so host-page behaviour is preserved.
+  (2026-07-15)
+
+- [#4158](https://github.com/PostHog/posthog-js/pull/4158) [`0dc389e`](https://github.com/PostHog/posthog-js/commit/0dc389e656ab07056ae5ea77e22c74518a4271d3) Thanks [@posthog](https://github.com/apps/posthog)! - fix(replay): session recording no longer throws `TypeError: Converting circular structure to JSON` when replay event data contains a circular reference. The circular-reference guard now also detects cycles that pass through an array, and affected events are captured with `[Circular]` markers instead of surfacing an unhandled error and being dropped.
+  (2026-07-15)
+- Updated dependencies [[`fc2cb2e`](https://github.com/PostHog/posthog-js/commit/fc2cb2e6e7accf23ed1f075f6da996f6ba575276)]:
+    - @posthog/core@1.42.1
+
+## 1.402.2
+
+### Patch Changes
+
+- [#4151](https://github.com/PostHog/posthog-js/pull/4151) [`81adbfd`](https://github.com/PostHog/posthog-js/commit/81adbfde4cb7932435804cc55c8e9d975b94f3f5) Thanks [@posthog](https://github.com/apps/posthog)! - Session recording no longer emits an uncaught `TypeError: Illegal invocation` when a programmatic input-value change happens on an object that is not a genuine native input element (for example a proxy on the element prototype chain). The recorder drops that one replay update instead of throwing.
+  (2026-07-15)
+
+## 1.402.1
+
+### Patch Changes
+
+- [#4117](https://github.com/PostHog/posthog-js/pull/4117) [`1eddff7`](https://github.com/PostHog/posthog-js/commit/1eddff74e63ff539eb3144f075b14ab5ffec84cc) Thanks [@DanielVisca](https://github.com/DanielVisca)! - add the posthog.metrics API (count, gauge, histogram) to posthog-node — alpha
+
+    Backend services can now record metrics through the same statsd-style pre-aggregating client the browser SDK ships, with no OpenTelemetry setup:
+
+    ```ts
+    const client = new PostHog('phc_...', { metrics: { serviceName: 'billing-worker' } })
+    client.metrics.count('invoices.processed', 1, { attributes: { plan: 'pro' } })
+    client.metrics.gauge('queue.depth', 42)
+    client.metrics.histogram('job.duration', 187, { unit: 'ms' })
+    ```
+
+    Samples aggregate in memory and flush as OTLP/JSON to `/i/v1/metrics` (one data point per series per window). Pending metrics are flushed on `shutdown()`. Core gains `_sendMetricsBatch` on `PostHogCoreStateless` (same outcome contract as `_sendLogsBatch`) and a shared `resolveMetricsConfig`, so any core-based SDK can host `PostHogMetrics`. (2026-07-15)
+
+- Updated dependencies [[`1eddff7`](https://github.com/PostHog/posthog-js/commit/1eddff74e63ff539eb3144f075b14ab5ffec84cc)]:
+    - @posthog/core@1.42.0
+
+## 1.402.0
+
+### Minor Changes
+
+- [#4143](https://github.com/PostHog/posthog-js/pull/4143) [`0e8ad14`](https://github.com/PostHog/posthog-js/commit/0e8ad14fdadd7984da985df4936c9a3b128bb772) Thanks [@robbie-c](https://github.com/robbie-c)! - Stamp the current hostname as `$snapshot_host` on every `$snapshot` event the session recorder sends. The value is derived from the page URL after it passes through the existing replay URL masking pipeline (`maskCapturedNetworkRequestFn` / deprecated `maskNetworkRequestFn`, hash stripping, personal-data query-param masking), so it cannot bypass a customer's masking config. When masking removes the URL or the masked result doesn't parse as a URL, the property is omitted entirely. This gives ingestion consumers a per-message host signal even for mid-session snapshot batches that contain no URL-bearing events.
+  (2026-07-15)
+
+## 1.401.0
+
+### Minor Changes
+
+- [#4129](https://github.com/PostHog/posthog-js/pull/4129) [`800af7c`](https://github.com/PostHog/posthog-js/commit/800af7cae4e2cf103d0089918e778a97dccee35f) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: add `session_recording.attributeFilter` option that passes an attribute allowlist through to the native MutationObserver, so mutations to unlisted attributes (e.g. animation-driven inline `style` churn) never cost recording CPU (port of upstream rrweb #1873)
+  (2026-07-15)
+
+### Patch Changes
+
+- Updated dependencies [[`800af7c`](https://github.com/PostHog/posthog-js/commit/800af7cae4e2cf103d0089918e778a97dccee35f)]:
+    - @posthog/types@1.395.0
+
+## 1.400.1
+
+### Patch Changes
+
+- [#4090](https://github.com/PostHog/posthog-js/pull/4090) [`6dd8827`](https://github.com/PostHog/posthog-js/commit/6dd88274193e07a5f9f4bcb816dfca49cfe072d7) Thanks [@lucasheriques](https://github.com/lucasheriques)! - chore: survey seen-key and repeat-activation helpers now live in @posthog/core, shared by the web and React Native SDKs. Core's survey enums are now const-object literal unions (matching the web SDK's existing pattern), so the same values type-check across both SDKs. No behavior change. Type-level note: enum members no longer work as standalone type annotations (e.g. `SurveyType.Popover` as a type); use the exported union types instead. Runtime values are unchanged.
+  (2026-07-14)
+- Updated dependencies [[`6dd8827`](https://github.com/PostHog/posthog-js/commit/6dd88274193e07a5f9f4bcb816dfca49cfe072d7)]:
+    - @posthog/core@1.41.1
+
 ## 1.400.0
 
 ### Minor Changes
