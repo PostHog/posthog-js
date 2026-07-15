@@ -1758,6 +1758,48 @@ describe('Lazy SessionRecording', () => {
                 )
             })
 
+            it.each([
+                [
+                    'a direct self-reference',
+                    (data: Record<string, any>) => {
+                        data.circularReference = data
+                    },
+                ],
+                [
+                    'a cycle through an array',
+                    (data: Record<string, any>) => {
+                        // shape seen in production: object -> array -> element -> back to the root
+                        data.plugins = [{ instance: data }]
+                    },
+                ],
+            ])('compresses full snapshot data containing %s without throwing', (_name, addCycle) => {
+                const data: Record<string, any> = { content: Array(30).fill(uuidv7()).join('') }
+                addCycle(data)
+
+                expect(() => _emit(createFullSnapshot({ data }))).not.toThrow()
+                sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+                expect(posthog.capture).toHaveBeenCalledWith(
+                    '$snapshot',
+                    {
+                        $snapshot_data: [
+                            {
+                                data: expect.any(String),
+                                cv: '2024-10',
+                                type: 2,
+                            },
+                        ],
+                        $session_id: sessionId,
+                        $snapshot_bytes: expect.any(Number),
+                        $window_id: 'windowId',
+                        $lib: 'web',
+                        $lib_version: '0.0.1',
+                        $snapshot_host: 'localhost',
+                    },
+                    captureOptions
+                )
+            })
+
             it('compresses incremental snapshot mutation data', () => {
                 _emit(createIncrementalMutationEvent({ texts: [Array(30).fill(uuidv7()).join('')] }))
                 sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
