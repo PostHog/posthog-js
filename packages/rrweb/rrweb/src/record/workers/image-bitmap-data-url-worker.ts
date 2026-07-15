@@ -7,20 +7,25 @@ import type {
 const lastFingerprintMap: Map<number, string> = new Map();
 const transparentFingerprintMap: Map<number, string> = new Map();
 
-// fnv1a over 32-bit words rather than bytes: RGBA pixel buffers are
-// multi-megabyte, always word-aligned, and this runs on every captured frame
+// two independent hashes over 32-bit words rather than bytes: RGBA pixel
+// buffers are multi-megabyte, always word-aligned, and this runs on every frame
 function hashPixels(data: Uint8ClampedArray): string {
   const view = new Uint32Array(
     data.buffer,
     data.byteOffset,
     data.byteLength >>> 2,
   );
-  let hash = 0x811c9dc5;
+  let primaryHash = 0x811c9dc5;
+  let secondaryHash = 0x9e3779b9;
   for (let i = 0; i < view.length; i++) {
-    hash ^= view[i];
-    hash = Math.imul(hash, 0x01000193);
+    primaryHash ^= view[i];
+    primaryHash = Math.imul(primaryHash, 0x01000193);
+    secondaryHash ^= view[i];
+    secondaryHash = Math.imul(secondaryHash, 0x85ebca6b);
   }
-  return (hash >>> 0).toString(16);
+  return `${(primaryHash >>> 0).toString(16)}:${(
+    secondaryHash >>> 0
+  ).toString(16)}`;
 }
 
 // fingerprints are dimension-tagged: raw pixels alone can't distinguish a

@@ -170,6 +170,19 @@ describe('image-bitmap-data-url-worker', () => {
     expect(convertToBlob).not.toHaveBeenCalled();
   });
 
+  it('sends non-blank pixels that collide with the transparent 32-bit hash', async () => {
+    const onmessage = await loadWorker();
+    const collidingPixels = Uint8ClampedArray.from([
+      1, 0, 0, 0, 147, 6, 0, 1,
+    ]);
+
+    await onmessage(frame(1, collidingPixels, 2, 1));
+
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 1, base64: expect.any(String) }),
+    );
+  });
+
   it('keeps skipping a never-sent canvas that resizes while blank', async () => {
     const onmessage = await loadWorker();
 
