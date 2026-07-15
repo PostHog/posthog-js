@@ -28,7 +28,6 @@ const Chat = () => {
 
     const sendMessage = () => {
         if (!socket) {
-            // eslint-disable-next-line no-console
             console.log('socket not running, ruh roh!')
             return
         }

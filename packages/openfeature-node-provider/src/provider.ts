@@ -94,7 +94,6 @@ export class PostHogServerProvider implements Provider {
       unsubscribe()
     }
     if (preloadError) {
-      // eslint-disable-next-line no-console
       console.warn(
         '[PostHogServerProvider] initialize() flag preload failed; remote evaluation still available.',
         preloadError

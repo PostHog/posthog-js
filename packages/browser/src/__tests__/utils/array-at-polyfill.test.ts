@@ -22,7 +22,6 @@ describe('Array.prototype.at polyfill', () => {
                 configurable: true,
             })
         } else {
-            // eslint-disable-next-line no-extend-native
             delete (Array.prototype as any).at
         }
     })
@@ -30,7 +29,7 @@ describe('Array.prototype.at polyfill', () => {
     describe('when Array.prototype.at is missing (old browser)', () => {
         beforeEach(() => {
             // simulate Chrome <92 / iOS Safari <15.4
-            // eslint-disable-next-line no-extend-native
+
             delete (Array.prototype as any).at
             loadPolyfill()
         })

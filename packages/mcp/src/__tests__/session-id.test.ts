@@ -1,6 +1,7 @@
 import { instrument } from '../index'
 import { getServerTrackingData } from '../extensions/internal'
-import { deriveSessionIdFromMCPSession, getServerSessionId } from '../extensions/session'
+import { deriveSessionIdFromMCPSession, getSessionId } from '../extensions/session'
+import { MCP_SESSION_HEADER, encodeSessionId } from '../extensions/session-token'
 import type { HighLevelMCPServerLike } from '../types'
 import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
@@ -62,7 +63,7 @@ describe('Session ID Management', () => {
       const extra = { sessionId: mcpSessionId }
 
       // Get session ID with MCP sessionId provided
-      const sessionId = getServerSessionId(lowLevelServer, extra)
+      const sessionId = getSessionId(lowLevelServer, extra)
 
       // Verify it's deterministically derived
       const expectedSessionId = deriveSessionIdFromMCPSession(mcpSessionId)
@@ -70,7 +71,6 @@ describe('Session ID Management', () => {
 
       // Verify tracking data is updated
       const data = getServerTrackingData(lowLevelServer)
-      expect(data?.lastMcpSessionId).toBe(mcpSessionId)
       expect(data?.sessionSource).toBe('mcp')
 
       await eventCapture.stop()
@@ -85,16 +85,15 @@ describe('Session ID Management', () => {
       const lowLevelServer = server.server
 
       // Get initial session ID without MCP sessionId
-      const sessionId1 = getServerSessionId(lowLevelServer)
+      const sessionId1 = getSessionId(lowLevelServer)
       expect(sessionId1).toMatch(SESSION_ID_PATTERN)
 
       // Verify tracking data shows PostHog MCP analytics source
       const data = getServerTrackingData(lowLevelServer)
       expect(data?.sessionSource).toBe('generated')
-      expect(data?.lastMcpSessionId).toBeUndefined()
 
       // Get session ID again - should be the same
-      const sessionId2 = getServerSessionId(lowLevelServer)
+      const sessionId2 = getSessionId(lowLevelServer)
       expect(sessionId2).toBe(sessionId1)
 
       await eventCapture.stop()
@@ -110,7 +109,7 @@ describe('Session ID Management', () => {
       const lowLevelServer = server.server
 
       // Start with no MCP sessionId
-      const generatedSessionId = getServerSessionId(lowLevelServer)
+      const generatedSessionId = getSessionId(lowLevelServer)
       expect(generatedSessionId).toMatch(SESSION_ID_PATTERN)
 
       let data = getServerTrackingData(lowLevelServer)
@@ -118,7 +117,7 @@ describe('Session ID Management', () => {
 
       // Now provide MCP sessionId
       const extra = { sessionId: mcpSessionId }
-      const mcpDerivedSessionId = getServerSessionId(lowLevelServer, extra)
+      const mcpDerivedSessionId = getSessionId(lowLevelServer, extra)
 
       // Verify it switched to MCP-derived ID
       const expectedSessionId = deriveSessionIdFromMCPSession(mcpSessionId)
@@ -127,7 +126,6 @@ describe('Session ID Management', () => {
 
       // Verify tracking data is updated
       data = getServerTrackingData(lowLevelServer)
-      expect(data?.lastMcpSessionId).toBe(mcpSessionId)
       expect(data?.sessionSource).toBe('mcp')
 
       await eventCapture.stop()
@@ -144,13 +142,13 @@ describe('Session ID Management', () => {
 
       // Provide MCP sessionId
       const extra = { sessionId: mcpSessionId }
-      const mcpDerivedSessionId = getServerSessionId(lowLevelServer, extra)
+      const mcpDerivedSessionId = getSessionId(lowLevelServer, extra)
 
       const expectedSessionId = deriveSessionIdFromMCPSession(mcpSessionId)
       expect(mcpDerivedSessionId).toBe(expectedSessionId)
 
       // Now call without MCP sessionId (it disappeared)
-      const sessionIdAfterDisappear = getServerSessionId(lowLevelServer)
+      const sessionIdAfterDisappear = getSessionId(lowLevelServer)
 
       // Should keep using the last derived sessionId
       expect(sessionIdAfterDisappear).toBe(mcpDerivedSessionId)
@@ -158,7 +156,6 @@ describe('Session ID Management', () => {
       // Verify tracking data still shows MCP source
       const data = getServerTrackingData(lowLevelServer)
       expect(data?.sessionSource).toBe('mcp')
-      expect(data?.lastMcpSessionId).toBe(mcpSessionId)
 
       await eventCapture.stop()
     })
@@ -175,14 +172,14 @@ describe('Session ID Management', () => {
 
       // Provide first MCP sessionId
       const extra1 = { sessionId: mcpSessionId1 }
-      const sessionId1 = getServerSessionId(lowLevelServer, extra1)
+      const sessionId1 = getSessionId(lowLevelServer, extra1)
 
       const expectedSessionId1 = deriveSessionIdFromMCPSession(mcpSessionId1)
       expect(sessionId1).toBe(expectedSessionId1)
 
       // Change to second MCP sessionId
       const extra2 = { sessionId: mcpSessionId2 }
-      const sessionId2 = getServerSessionId(lowLevelServer, extra2)
+      const sessionId2 = getSessionId(lowLevelServer, extra2)
 
       const expectedSessionId2 = deriveSessionIdFromMCPSession(mcpSessionId2)
       expect(sessionId2).toBe(expectedSessionId2)
@@ -190,7 +187,6 @@ describe('Session ID Management', () => {
 
       // Verify tracking data is updated
       const data = getServerTrackingData(lowLevelServer)
-      expect(data?.lastMcpSessionId).toBe(mcpSessionId2)
       expect(data?.sessionSource).toBe('mcp')
 
       await eventCapture.stop()
@@ -209,7 +205,7 @@ describe('Session ID Management', () => {
 
       // Get MCP-derived session ID
       const extra = { sessionId: mcpSessionId }
-      const sessionId1 = getServerSessionId(lowLevelServer, extra)
+      const sessionId1 = getSessionId(lowLevelServer, extra)
 
       // Manually set lastActivity to simulate timeout (31 minutes ago)
       const data = getServerTrackingData(lowLevelServer)
@@ -218,7 +214,7 @@ describe('Session ID Management', () => {
       }
 
       // Get session ID again with same MCP sessionId
-      const sessionId2 = getServerSessionId(lowLevelServer, extra)
+      const sessionId2 = getSessionId(lowLevelServer, extra)
 
       // Should still be the same (no timeout for MCP sessions)
       expect(sessionId2).toBe(sessionId1)
@@ -235,7 +231,7 @@ describe('Session ID Management', () => {
       const lowLevelServer = server.server
 
       // Get PostHog MCP analytics-generated session ID
-      const sessionId1 = getServerSessionId(lowLevelServer)
+      const sessionId1 = getSessionId(lowLevelServer)
 
       // Manually set lastActivity to simulate timeout (31 minutes ago)
       const data = getServerTrackingData(lowLevelServer)
@@ -244,13 +240,96 @@ describe('Session ID Management', () => {
       }
 
       // Get session ID again without MCP sessionId
-      const sessionId2 = getServerSessionId(lowLevelServer)
+      const sessionId2 = getSessionId(lowLevelServer)
 
       // Should be different (timeout occurred)
       expect(sessionId2).not.toBe(sessionId1)
       expect(sessionId2).toMatch(SESSION_ID_PATTERN)
 
       await eventCapture.stop()
+    })
+  })
+
+  describe('Self-encoded session token resolution', () => {
+    const tokenPayload = { sessionId: 'ses_0199f41e7a2e', clientName: 'TokenClient', clientVersion: '9.9.9' }
+
+    it('recovers the session id and client info from a token in the request headers (stateless replay)', () => {
+      instrument(server, fakePostHog())
+      const lowLevelServer = server.server
+
+      const token = encodeSessionId(tokenPayload)
+      const extra = { requestInfo: { headers: { [MCP_SESSION_HEADER]: token } } }
+
+      const sessionId = getSessionId(lowLevelServer, extra)
+
+      expect(sessionId).toBe(tokenPayload.sessionId)
+      const data = getServerTrackingData(lowLevelServer)
+      expect(data?.sessionSource).toBe('token')
+      expect(data?.sessionInfo.clientName).toBe('TokenClient')
+      expect(data?.sessionInfo.clientVersion).toBe('9.9.9')
+    })
+
+    it('treats a token in extra.sessionId as a plain transport id (tokens only count from the header)', () => {
+      instrument(server, fakePostHog())
+      const lowLevelServer = server.server
+
+      const token = encodeSessionId(tokenPayload)
+      const sessionId = getSessionId(lowLevelServer, { sessionId: token })
+
+      expect(sessionId).toBe(deriveSessionIdFromMCPSession(token))
+      expect(getServerTrackingData(lowLevelServer)?.sessionSource).toBe('mcp')
+    })
+
+    it('leaves non-token session ids on the hash path', () => {
+      instrument(server, fakePostHog())
+      const lowLevelServer = server.server
+
+      const sessionId = getSessionId(lowLevelServer, { sessionId: 'plain-mcp-session' })
+
+      expect(sessionId).toBe(deriveSessionIdFromMCPSession('plain-mcp-session'))
+      expect(getServerTrackingData(lowLevelServer)?.sessionSource).toBe('mcp')
+    })
+
+    it('ignores a non-token header when the transport supplies no sessionId', () => {
+      instrument(server, fakePostHog())
+      const lowLevelServer = server.server
+
+      const extra = { requestInfo: { headers: { [MCP_SESSION_HEADER]: 'not-a-token-uuid' } } }
+      const sessionId = getSessionId(lowLevelServer, extra)
+
+      expect(sessionId).toMatch(SESSION_ID_PATTERN)
+      expect(getServerTrackingData(lowLevelServer)?.sessionSource).toBe('generated')
+    })
+
+    it('keeps the token-derived session id when a later request arrives bare', () => {
+      instrument(server, fakePostHog())
+      const lowLevelServer = server.server
+
+      const token = encodeSessionId(tokenPayload)
+      const first = getSessionId(lowLevelServer, {
+        requestInfo: { headers: { [MCP_SESSION_HEADER]: token } },
+      })
+      const second = getSessionId(lowLevelServer)
+
+      expect(second).toBe(first)
+      expect(getServerTrackingData(lowLevelServer)?.sessionSource).toBe('token')
+    })
+
+    it('does NOT apply the inactivity rollover to token-derived sessions', () => {
+      instrument(server, fakePostHog())
+      const lowLevelServer = server.server
+
+      const token = encodeSessionId(tokenPayload)
+      const extra = { requestInfo: { headers: { [MCP_SESSION_HEADER]: token } } }
+      const first = getSessionId(lowLevelServer, extra)
+
+      const data = getServerTrackingData(lowLevelServer)
+      if (data) {
+        data.lastActivity = new Date(Date.now() - 31 * 60 * 1000)
+      }
+
+      expect(getSessionId(lowLevelServer, extra)).toBe(first)
+      expect(getSessionId(lowLevelServer)).toBe(first)
     })
   })
 

@@ -1,4 +1,3 @@
-/* eslint-disable compat/compat */
 jest.mock('../utils/logger', () => ({
     createLogger: jest.fn().mockReturnValue({
         info: jest.fn(),

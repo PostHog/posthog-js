@@ -1,8 +1,7 @@
 /// <reference lib="dom" />
-/* eslint-disable compat/compat */
-
 import {
     Autocapture,
+    autocapturePropertiesForElement,
     getAugmentPropertiesFromElement,
     getDefaultProperties,
     getPropertiesFromElement,
@@ -71,12 +70,11 @@ describe('Autocapture system', () => {
             configurable: true,
             enumerable: true,
             writable: true,
-            // eslint-disable-next-line compat/compat
+
             value: new URL('https://example.com'),
         })
 
         beforeSendMock = jest.fn().mockImplementation((...args) => args)
-
         posthog = await createPosthogInstance(uuidv7(), {
             api_host: 'https://test.com',
             token: 'testtoken',
@@ -1748,6 +1746,26 @@ describe('Autocapture system', () => {
                     expect(shouldCaptureDomEvent(element, fakeEvent, autocapture_config)).toBe(expectedCapturable)
                 })
             })
+        })
+    })
+
+    describe('autocapturePropertiesForElement', () => {
+        it('terminates on a cyclic ancestor chain', () => {
+            // a parentNode cycle is only possible when the page patches parentNode
+            const a = document!.createElement('div')
+            const b = document!.createElement('div')
+            Object.defineProperty(a, 'parentNode', { value: b, configurable: true })
+            Object.defineProperty(b, 'parentNode', { value: a, configurable: true })
+
+            const { props } = autocapturePropertiesForElement(a, {
+                e: makeMouseEvent({ target: a, type: 'click' }),
+                maskAllElementAttributes: false,
+                maskAllText: false,
+                elementsChainAsString: true,
+                disableCaptureUrlHashes: false,
+            })
+
+            expect(props['$event_type']).toEqual('click')
         })
     })
 })

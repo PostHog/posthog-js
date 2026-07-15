@@ -1,5 +1,30 @@
 # posthog-react-native
 
+## 4.56.2
+
+### Patch Changes
+
+- [#4148](https://github.com/PostHog/posthog-js/pull/4148) [`f4694e9`](https://github.com/PostHog/posthog-js/commit/f4694e93eb951beb5eeb87a12cc3d74829d85949) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Expo plugin: `skipOnConflict` now also applies to native iOS dSYM uploads. With `uploadNativeSymbols` enabled, a release build whose dSYM already exists in PostHog with different content no longer fails — the upload is skipped and the existing symbols are kept. Requires posthog-ios >= 3.64.7 and posthog-cli >= 0.7.12; with older posthog-ios versions the option has no effect on dSYM uploads. Changes to `skipOnConflict` or `uploadNativeSymbols.includeSource` now take effect on the next `expo prebuild` without `--clean`; build phases you have customized by hand are never modified.
+  (2026-07-14)
+- Updated dependencies [[`f4694e9`](https://github.com/PostHog/posthog-js/commit/f4694e93eb951beb5eeb87a12cc3d74829d85949)]:
+  - @posthog/react-native-plugin@2.2.2
+
+## 4.56.1
+
+### Patch Changes
+
+- [#4090](https://github.com/PostHog/posthog-js/pull/4090) [`6dd8827`](https://github.com/PostHog/posthog-js/commit/6dd88274193e07a5f9f4bcb816dfca49cfe072d7) Thanks [@lucasheriques](https://github.com/lucasheriques)! - fix: repeating surveys now show again when a new iteration starts. The local seen state is keyed by survey iteration (matching the web SDK), so a survey scheduled to repeat no longer stays hidden on a device after the first response.
+  (2026-07-14)
+- Updated dependencies [[`6dd8827`](https://github.com/PostHog/posthog-js/commit/6dd88274193e07a5f9f4bcb816dfca49cfe072d7)]:
+  - @posthog/core@1.41.1
+
+## 4.56.0
+
+### Minor Changes
+
+- [#4111](https://github.com/PostHog/posthog-js/pull/4111) [`9bfaa8f`](https://github.com/PostHog/posthog-js/commit/9bfaa8fce1358c04e05ee42283afe47408aadc96) Thanks [@ioannisj](https://github.com/ioannisj)! - Enable native crash autocapture (`errorTracking.autocapture.nativeCrashes`) on macOS. The native plugin now loads on macOS (previously iOS/Android only); the legacy session-replay-only fallback stays iOS/Android. Requires `@posthog/react-native-plugin` >= 2.2.0.
+  (2026-07-13)
+
 ## 4.55.0
 
 ### Minor Changes

@@ -1,4 +1,3 @@
-/* eslint-disable compat/compat */
 /// <reference lib="dom" />
 
 import { TextDecoder } from 'util'
@@ -381,22 +380,25 @@ describe('request', () => {
                 },
             ],
             [
+                // beacons cannot fall back to JSON: application/json requires a CORS
+                // preflight, which never completes during page unload
                 'sendBeacon',
                 { transport: 'sendBeacon' as const, url: 'https://any.posthog-instance.com/' },
                 async () => {
                     expect(mockedNavigator?.sendBeacon.mock.calls[0][0]).not.toContain('compression=gzip-js')
+                    expect(mockedNavigator?.sendBeacon.mock.calls[0][0]).toContain('compression=base64')
                     const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
-                    expect(blob.type).toBe('application/json')
+                    expect(blob.type).toBe('application/x-www-form-urlencoded')
                     const result = await new Promise<string>((resolve) => {
                         const reader = new FileReader()
                         reader.onload = () => resolve(reader.result as string)
                         reader.readAsText(blob)
                     })
-                    expect(result).toBe('{"foo":"bar"}')
+                    expect(result).toBe('data=eyJmb28iOiJiYXIifQ%3D%3D')
                 },
             ],
         ])(
-            'falls back to JSON if a pre-encoded gzip body is not actually gzip before %s send',
+            'falls back to a non-gzip encoding if a pre-encoded gzip body is not actually gzip before %s send',
             async (_name, overrides, assertTransport) => {
                 request(invalidPreEncodedGzipRequest(overrides))
                 await assertTransport()
@@ -429,7 +431,6 @@ describe('request', () => {
             expect(reason.name).toBe('AbortError')
             // ...but with a descriptive message so it is never a reason-less "signal is aborted without reason"
             expect(reason.message).toBe('PostHog request timed out after 8000ms')
-
             expect(callback).toHaveBeenCalledTimes(1)
             const response = callback.mock.calls[0][0]
             expect(response.statusCode).toBe(0)
@@ -493,6 +494,55 @@ describe('request', () => {
             expect(errorSpy).toHaveBeenCalledWith(foreignAbortError)
             expect(warnSpy).not.toHaveBeenCalled()
             expect(callback).toHaveBeenCalledWith({ statusCode: 0, error: foreignAbortError })
+
+            warnSpy.mockRestore()
+            errorSpy.mockRestore()
+        })
+
+        it.each([
+            ['Failed to fetch', 'Failed to fetch'],
+            ['Firefox NetworkError', 'NetworkError when attempting to fetch resource.'],
+            ['Safari Load failed', 'Load failed'],
+        ])('logs a benign network-level TypeError (%s) at warn, not error', async (_label, message) => {
+            // A network-layer failure (ad blocker, dropped connection, CORS, page teardown)
+            // rejects with a generic `TypeError`. The request queue retries it, so it is
+            // expected noise and logs at `warn`, not `error`.
+            const networkError = new TypeError(message)
+            mockedFetch.mockImplementation(() => Promise.reject(networkError))
+
+            const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {})
+            const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => {})
+
+            const callback = jest.fn()
+            request(createRequest({ callback }))
+
+            await flushPromises()
+
+            expect(warnSpy).toHaveBeenCalledWith(networkError)
+            expect(errorSpy).not.toHaveBeenCalled()
+            expect(callback).toHaveBeenCalledWith({ statusCode: 0, error: networkError })
+
+            warnSpy.mockRestore()
+            errorSpy.mockRestore()
+        })
+
+        it('logs a genuine unexpected error at error, not warn', async () => {
+            // A `TypeError` whose message is not a known network-failure phrase, or any other
+            // unexpected error, is a real bug and must stay on the error path.
+            const genuineError = new TypeError("Cannot read properties of undefined (reading 'x')")
+            mockedFetch.mockImplementation(() => Promise.reject(genuineError))
+
+            const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {})
+            const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => {})
+
+            const callback = jest.fn()
+            request(createRequest({ callback }))
+
+            await flushPromises()
+
+            expect(errorSpy).toHaveBeenCalledWith(genuineError)
+            expect(warnSpy).not.toHaveBeenCalled()
+            expect(callback).toHaveBeenCalledWith({ statusCode: 0, error: genuineError })
 
             warnSpy.mockRestore()
             errorSpy.mockRestore()
@@ -713,6 +763,53 @@ describe('request', () => {
                     'application/x-www-form-urlencoded'
                 )
             })
+
+            it('does not throw on circular references and serializes them as [Circular]', () => {
+                const circular: any = { foo: 'bar' }
+                circular.self = circular
+                request(
+                    createRequest({
+                        url: 'https://any.posthog-instance.com/',
+                        method: 'POST',
+                        data: circular,
+                    })
+                )
+                expect(mockedXHR.send.mock.calls[0][0]).toMatchInlineSnapshot(`"{"foo":"bar","self":"[Circular]"}"`)
+            })
+
+            it('does not throw when a property is a circular DOM node (e.g. a React fiber back-reference)', () => {
+                // Mimics a DOM element that retains a React fiber which points back at the element —
+                // exactly what makes plain JSON.stringify throw "Converting circular structure to JSON".
+                const el: any = { tagName: 'A', nodeType: 1 }
+                el.__reactFiber = { stateNode: el }
+                expect(() =>
+                    request(
+                        createRequest({
+                            url: 'https://any.posthog-instance.com/',
+                            method: 'POST',
+                            data: { $el: el },
+                        })
+                    )
+                ).not.toThrow()
+                expect(mockedXHR.send).toHaveBeenCalledTimes(1)
+            })
+
+            it('keeps shared-but-acyclic references while replacing only true cycles', () => {
+                const shared = { n: 1 }
+                const data: any = { a: shared, b: shared }
+                data.self = data // the only real cycle
+                request(
+                    createRequest({
+                        url: 'https://any.posthog-instance.com/',
+                        method: 'POST',
+                        data,
+                    })
+                )
+                const body = JSON.parse(mockedXHR.send.mock.calls[0][0] as string)
+                expect(body.a).toEqual({ n: 1 })
+                expect(body.b).toEqual({ n: 1 })
+                expect(body.self).toBe('[Circular]')
+            })
         })
 
         describe('sendBeacon', () => {
@@ -720,7 +817,7 @@ describe('request', () => {
                 transport = 'sendBeacon'
             })
 
-            it("should encode data to a string and send it as a blob if it's a POST request", async () => {
+            it('base64-encodes uncompressed POST data so the content type stays CORS-simple', async () => {
                 request(
                     createRequest({
                         url: 'https://any.posthog-instance.com/',
@@ -730,11 +827,11 @@ describe('request', () => {
                 )
 
                 expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
-                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45',
+                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&compression=base64',
                     expect.any(Blob)
                 )
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
-                expect(blob.type).toBe('application/json')
+                expect(blob.type).toBe('application/x-www-form-urlencoded')
 
                 const reader = new FileReader()
                 const result = await new Promise((resolve) => {
@@ -742,7 +839,7 @@ describe('request', () => {
                     reader.readAsText(blob)
                 })
 
-                expect(result).toMatchInlineSnapshot(`"{"foo":"bar"}"`)
+                expect(result).toMatchInlineSnapshot(`"data=eyJmb28iOiJiYXIifQ%3D%3D"`)
             })
 
             it('should respect base64 compression', async () => {
@@ -799,6 +896,116 @@ describe('request', () => {
             `)
             })
 
+            it('falls back to base64 if gzip encoding throws before the beacon send', () => {
+                const gzipSpy = jest.spyOn(fflate, 'gzipSync').mockImplementation(() => {
+                    throw new Error('gzip failed')
+                })
+
+                try {
+                    request(
+                        createRequest({
+                            url: 'https://any.posthog-instance.com/',
+                            method: 'POST',
+                            compression: Compression.GZipJS,
+                            data: { foo: 'bar' },
+                        })
+                    )
+
+                    expect(mockedNavigator?.sendBeacon).toHaveBeenCalledTimes(1)
+                    expect(mockedNavigator?.sendBeacon.mock.calls[0][0]).toContain('compression=base64')
+                    const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
+                    expect(blob.type).toBe('application/x-www-form-urlencoded')
+                } finally {
+                    gzipSpy.mockRestore()
+                }
+            })
+
+            describe('quota rejection (sendBeacon returns false)', () => {
+                const bigEvent = (i: number) => ({ event: 'big', i, payload: 'x'.repeat(8 * 1024) })
+                let warnSpy: jest.SpyInstance
+
+                beforeEach(() => {
+                    warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {})
+                    mockedFetch.mockImplementation(() =>
+                        Promise.resolve({ status: 200, text: () => Promise.resolve('{}') })
+                    )
+                })
+
+                afterEach(() => {
+                    warnSpy.mockRestore()
+                })
+
+                it('splits a rejected over-quota batch in half and re-sends each piece', () => {
+                    mockedNavigator!.sendBeacon.mockReturnValueOnce(false).mockReturnValue(true)
+
+                    request(
+                        createRequest({
+                            method: 'POST',
+                            data: [bigEvent(1), bigEvent(2), bigEvent(3), bigEvent(4)],
+                        })
+                    )
+
+                    expect(mockedNavigator?.sendBeacon).toHaveBeenCalledTimes(3)
+                    const [full, firstHalf, secondHalf] = mockedNavigator!.sendBeacon.mock.calls.map(
+                        (c) => (c[1] as Blob).size
+                    )
+                    expect(firstHalf).toBeLessThan(full)
+                    expect(secondHalf).toBeLessThan(full)
+                    expect(mockedFetch).not.toHaveBeenCalled()
+                })
+
+                it('splits recursively and falls back to fetch for single events that still do not fit', () => {
+                    mockedNavigator!.sendBeacon.mockReturnValue(false)
+
+                    request(
+                        createRequest({
+                            method: 'POST',
+                            data: [bigEvent(1), bigEvent(2), bigEvent(3), bigEvent(4)],
+                        })
+                    )
+
+                    // 1 full + 2 halves + 4 singles
+                    expect(mockedNavigator?.sendBeacon).toHaveBeenCalledTimes(7)
+                    expect(mockedFetch).toHaveBeenCalledTimes(4)
+                    expect(warnSpy).toHaveBeenCalledTimes(4)
+                    for (const call of mockedFetch.mock.calls) {
+                        expect(call[1].keepalive).toBe(false)
+                    }
+                })
+
+                it('does not split a rejected small batch, the quota is already exhausted', () => {
+                    mockedNavigator!.sendBeacon.mockReturnValue(false)
+
+                    request(
+                        createRequest({
+                            method: 'POST',
+                            data: [
+                                { event: 'small', i: 1 },
+                                { event: 'small', i: 2 },
+                            ],
+                        })
+                    )
+
+                    expect(mockedNavigator?.sendBeacon).toHaveBeenCalledTimes(1)
+                    expect(mockedFetch).toHaveBeenCalledTimes(1)
+                    expect(mockedFetch.mock.calls[0][1].keepalive).toBe(false)
+                })
+            })
+
+            it('warns instead of throwing when the beacon call itself throws', () => {
+                const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {})
+                mockedNavigator!.sendBeacon.mockImplementation(() => {
+                    throw new Error('boom')
+                })
+
+                try {
+                    expect(() => request(createRequest({ method: 'POST', data: { foo: 'bar' } }))).not.toThrow()
+                    expect(warnSpy).toHaveBeenCalledWith('Beacon send failed', expect.any(Error))
+                } finally {
+                    warnSpy.mockRestore()
+                }
+            })
+
             it('should not call sendBeacon when body is undefined', () => {
                 request(
                     createRequest({
@@ -812,7 +1019,10 @@ describe('request', () => {
             })
 
             it.each([
-                ['no compression', undefined, 'application/json'],
+                // Every content type here must be CORS-simple: a preflight cannot complete while
+                // the page unloads, so a preflighted beacon (e.g. application/json) is silently
+                // dropped by the browser on cross-origin hosts and its events are lost.
+                ['no compression', undefined, 'application/x-www-form-urlencoded'],
                 ['base64 compression', Compression.Base64, 'application/x-www-form-urlencoded'],
                 ['gzip compression', Compression.GZipJS, 'text/plain'],
             ])(

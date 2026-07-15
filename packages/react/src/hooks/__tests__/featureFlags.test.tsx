@@ -66,7 +66,6 @@ describe('feature flag hooks', () => {
             } as unknown as PostHog['featureFlags'],
         } as unknown as PostHog
 
-        // eslint-disable-next-line react/display-name
         renderProvider = ({ children }) => <PostHogProvider client={posthog}>{children}</PostHogProvider>
     })
 
@@ -125,7 +124,6 @@ describe('feature flag hooks', () => {
             } as unknown as PostHog['featureFlags'],
         } as unknown as PostHog
 
-        // eslint-disable-next-line react/display-name
         const wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
             <PostHogProvider client={client}>{children}</PostHogProvider>
         )
@@ -197,7 +195,6 @@ describe('feature flag hooks', () => {
                 } as unknown as PostHog['featureFlags'],
             } as unknown as PostHog
 
-            // eslint-disable-next-line react/display-name
             const wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
                 <PostHogProvider client={client}>{children}</PostHogProvider>
             )
@@ -227,7 +224,6 @@ describe('feature flag hooks', () => {
                     } as unknown as PostHog['featureFlags'],
                 } as unknown as PostHog
 
-                // eslint-disable-next-line react/display-name
                 const wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
                     <PostHogProvider client={client}>{children}</PostHogProvider>
                 )
@@ -306,7 +302,6 @@ describe('feature flag hooks', () => {
                     } as unknown as PostHog['featureFlags'],
                 } as unknown as PostHog
 
-                // eslint-disable-next-line react/display-name
                 const wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
                     <PostHogProvider client={client}>{children}</PostHogProvider>
                 )
@@ -349,7 +344,6 @@ describe('feature flag hooks', () => {
                     } as unknown as PostHog['featureFlags'],
                 } as unknown as PostHog
 
-                // eslint-disable-next-line react/display-name
                 const wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
                     <PostHogProvider client={client}>{children}</PostHogProvider>
                 )

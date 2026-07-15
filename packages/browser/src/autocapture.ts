@@ -9,6 +9,7 @@ import {
     isAngularStyleAttr,
     isSensitiveElement,
     makeSafeText,
+    MAX_DOM_ANCESTOR_DEPTH,
     shouldCaptureDomEvent,
     shouldCaptureElement,
     shouldCaptureRageclick,
@@ -130,7 +131,6 @@ export function getPropertiesFromElement(
     let nthOfType = 1
     let currentElem: Element | null = elem
     while ((currentElem = previousElementSibling(currentElem))) {
-        // eslint-disable-line no-cond-assign
         nthChild++
         if (currentElem.tagName === elem.tagName) {
             nthOfType++
@@ -165,16 +165,30 @@ export function autocapturePropertiesForElement(
     }
 
     const targetElementList: Element[] = [target]
+    const seen = new Set<Node>([target])
     let curEl: Element = target
     while (curEl.parentNode && !isTag(curEl, 'body')) {
+        // bail out of abnormally deep or cyclic (patched parentNode) ancestor chains
+        if (targetElementList.length >= MAX_DOM_ANCESTOR_DEPTH) {
+            break
+        }
         if (isShadowRoot(curEl.parentNode)) {
-            targetElementList.push(curEl.parentNode.host)
-            curEl = curEl.parentNode.host
+            const host = curEl.parentNode.host
+            if (seen.has(host)) {
+                break
+            }
+            seen.add(host)
+            targetElementList.push(host)
+            curEl = host
             continue
         }
         if (!isElementNode(curEl.parentNode)) {
             break
         }
+        if (seen.has(curEl.parentNode)) {
+            break
+        }
+        seen.add(curEl.parentNode)
         targetElementList.push(curEl.parentNode)
         curEl = curEl.parentNode
     }

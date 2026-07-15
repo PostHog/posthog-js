@@ -27,7 +27,6 @@ export const createPosthogInstance = async (
         },
     } as any
 
-    // eslint-disable-next-line compat/compat
     return await new Promise<PostHog>((resolve) =>
         posthog.init(
             token,

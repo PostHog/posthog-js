@@ -9,6 +9,10 @@ import { getTargetingUrl } from './utils/url-targeting-utils'
 import { isElementNode, isShadowRoot, isTag, isTextNode } from './utils/element-utils'
 import { includes, trim } from '@posthog/core'
 
+// Real DOM trees are at most a few hundred nodes deep; a patched parentNode
+// chain could otherwise trap ancestor walks in an unbounded loop.
+export const MAX_DOM_ANCESTOR_DEPTH = 1000
+
 export function splitClassString(s: string): string[] {
     return s ? trim(s).split(/\s+/) : []
 }
@@ -444,7 +448,16 @@ export function shouldCaptureDomEvent(
  * @returns {boolean} whether the element should be captured
  */
 export function shouldCaptureElement(el: Element): boolean {
+    const seen = new Set<Node>()
+    let depth = 0
     for (let curEl = el; curEl.parentNode && !isTag(curEl, 'body'); curEl = curEl.parentNode as Element) {
+        // Abnormal (too deep or cyclic) chain: we can't finish the sensitivity
+        // checks, so fail closed and don't capture.
+        if (depth++ >= MAX_DOM_ANCESTOR_DEPTH || seen.has(curEl)) {
+            return false
+        }
+        seen.add(curEl)
+
         const classes = getClassNames(curEl)
         if (includes(classes, 'ph-sensitive') || includes(classes, 'ph-no-capture')) {
             return false

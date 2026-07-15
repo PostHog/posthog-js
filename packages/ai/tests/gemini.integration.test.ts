@@ -12,7 +12,7 @@ if (!GEMINI_API_KEY) {
 } else {
   // Dynamic imports to avoid ESM parse failures when @google/genai
   // transitive deps are not configured in transformIgnorePatterns.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { PostHog } = require('posthog-node')
 
   jest.mock('posthog-node', () => ({
@@ -23,7 +23,7 @@ if (!GEMINI_API_KEY) {
     })),
   }))
 
-  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const PostHogGemini = require('../src/gemini').default
 
   describe('Gemini Integration Tests', () => {

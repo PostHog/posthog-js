@@ -4,7 +4,7 @@ import { RemoteConfig } from '../../types'
 
 import { createLogger } from '../../utils/logger'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
-import { isUndefined, BucketedRateLimiter, isObject } from '@posthog/core'
+import { isUndefined, BucketedRateLimiter, isObject, resolveExceptionRateLimiterConfig } from '@posthog/core'
 import { ErrorTracking } from '@posthog/core'
 import { ExceptionAutoCaptureConfig } from '../../types'
 
@@ -23,12 +23,13 @@ export class ExceptionObserver {
         this._instance = instance
         this._remoteEnabled = !!this._instance.persistence?.props[EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]
 
-        // by default captures ten exceptions before rate limiting by exception type
-        // refills at a rate of one token / 10 second period
-        // e.g. will capture 1 exception rate limited exception every 10 seconds until burst ends
+        // Burst protection is scoped per exception type: captures ten exceptions before rate
+        // limiting, then refills at a rate of one token / 10 second period (e.g. captures 1
+        // rate-limited exception of that type every 10 seconds until the burst ends). The bucket
+        // size and refill rate can be tuned via the `exceptionRateLimiterBucketSize` and
+        // `exceptionRateLimiterRefillRate` config options.
         this._rateLimiter = new BucketedRateLimiter({
-            refillRate: this._instance.config.error_tracking.__exceptionRateLimiterRefillRate ?? 1,
-            bucketSize: this._instance.config.error_tracking.__exceptionRateLimiterBucketSize ?? 10,
+            ...resolveExceptionRateLimiterConfig(this._instance.config.error_tracking),
             refillInterval: 10000, // ten seconds in milliseconds,
             _logger: logger,
         })

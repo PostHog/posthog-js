@@ -70,6 +70,8 @@ export interface MCPAnalyticsOptions {
   /**
    * Identify the calling user. Returning a non-null value sets `distinct_id` and `$set`
    * on subsequent events for the session. Object form is treated as a static identity.
+   * A standalone `$identify` event is published once per session — at `initialize`, or
+   * when a long-lived server sees the identity appear or change — never per tool call.
    */
   identify?:
     | ((request: MCPRequestLike, extra?: CompatibleRequestHandlerExtra) => Promise<UserIdentity | null>)
@@ -180,9 +182,17 @@ export interface Event {
 /** A partially-built MCP event as it flows through the SDK before capture. */
 export type McpEvent = Partial<Event>
 
+/** HTTP request info the SDK's Streamable HTTP transports attach per request. */
+export interface CompatibleRequestInfoLike {
+  headers?: Record<string, string | string[] | undefined>
+  [key: string]: unknown
+}
+
 export interface CompatibleRequestHandlerExtra {
   headers?: Record<string, string | string[]>
   sessionId?: string
+  /** Present on HTTP transports only — headers ride every request, unlike `clientInfo`. */
+  requestInfo?: CompatibleRequestInfoLike
   [key: string]: unknown
 }
 
@@ -200,9 +210,17 @@ export interface HighLevelMCPServerLike {
   tool?(name: string, description: string, paramsSchema: unknown, cb: ToolCallback): void
 }
 
+/** The connected transport as exposed by the SDK's `Protocol.transport` getter. */
+export interface CompatibleTransportLike {
+  sessionId?: string
+  [key: string]: unknown
+}
+
 export interface MCPServerLike {
   _requestHandlers: Map<string, (request: MCPRequestLike, extra?: CompatibleRequestHandlerExtra) => Promise<unknown>>
   _serverInfo?: ServerClientInfoLike
+  /** Optional so older SDKs (and bare test doubles) still validate. */
+  transport?: CompatibleTransportLike
   getClientVersion(): ServerClientInfoLike | undefined
   setRequestHandler(
     schema: unknown,
@@ -246,11 +264,11 @@ export interface MCPAnalyticsData {
   sink: McpEventSink | undefined
   identifiedSessions: IdentityCache
   lastActivity: Date
-  lastMcpSessionId?: string
   options: MCPAnalyticsOptions
   sessionId: string
   sessionInfo: SessionInfo
-  sessionSource: 'generated' | 'mcp'
+  /** `token` = recovered from a self-encoded `Mcp-Session-Id` token (see session-token.ts). */
+  sessionSource: 'generated' | 'mcp' | 'token'
   toolCategories: Map<string, string>
   toolDescriptions: Map<string, string>
 }

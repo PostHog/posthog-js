@@ -1373,7 +1373,6 @@ describe('featureflags', () => {
         it('should isolate a throwing callback so later callbacks still fire', () => {
             // The logged error is expected here, so swallow it rather than letting the
             // test setup's console.error guard throw.
-            // eslint-disable-next-line no-console
             console.error = jest.fn()
 
             featureFlags._hasLoadedFlags = true
