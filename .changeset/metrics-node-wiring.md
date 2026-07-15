@@ -2,6 +2,7 @@
 'posthog-node': minor
 '@posthog/core': minor
 'posthog-js': patch
+'posthog-react-native': patch
 ---
 
 add the posthog.metrics API (count, gauge, histogram) to posthog-node — alpha
