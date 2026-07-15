@@ -20,6 +20,7 @@ import {
     URLTriggerMatching,
 } from './triggerMatching'
 import {
+    circularReferenceReplacer,
     estimateCompressedEventSize,
     estimateSize,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
@@ -221,11 +222,15 @@ function gzipStringToString(serializedData: string): string {
 }
 
 function gzipToString(data: unknown): string {
-    return gzipStringToString(JSON.stringify(data))
+    // guard against circular references (e.g. a leaked instance graph in event data) so
+    // serialization degrades gracefully to '[Circular]' markers instead of throwing, matching estimateSize
+    return gzipStringToString(JSON.stringify(data, circularReferenceReplacer()))
 }
 
 async function gzipToStringAsync(data: unknown): Promise<string> {
-    const serializedData = JSON.stringify(data)
+    // guard against circular references (e.g. a leaked instance graph in event data) so
+    // serialization degrades gracefully to '[Circular]' markers instead of throwing, matching estimateSize
+    const serializedData = JSON.stringify(data, circularReferenceReplacer())
     const compressed = await gzipCompress(serializedData, Config.DEBUG, { rethrow: true })
     return strFromU8(new Uint8Array(await compressed!.arrayBuffer()), true)
 }
@@ -1372,11 +1377,24 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     return
                 }
 
-                const { event: eventToSend, size } = compressionEnabled
-                    ? shouldUseNativeAsyncSessionRecordingGzip(event)
-                        ? await compressEventAsync(event)
-                        : compressEventSync(event)
-                    : { event, size: estimateSize(event) }
+                let eventToSend: eventWithTime | compressedEventWithTime
+                let size: number
+                try {
+                    const result = compressionEnabled
+                        ? shouldUseNativeAsyncSessionRecordingGzip(event)
+                            ? await compressEventAsync(event)
+                            : compressEventSync(event)
+                        : { event, size: estimateSize(event) }
+                    eventToSend = result.event
+                    size = result.size
+                } catch (e) {
+                    // A serialization/compression failure must never surface as an unhandled
+                    // rejection and interrupt the compression queue - fall back to the uncompressed
+                    // event the way compressEventSync/estimateSize already do.
+                    logger.error('could not process queued compression event - will use uncompressed event', e)
+                    eventToSend = event
+                    size = estimateSize(event)
+                }
 
                 this._captureQueuedCompressionEvent(queuedEvent, eventToSend, size)
             } finally {

@@ -1758,6 +1758,35 @@ describe('Lazy SessionRecording', () => {
                 )
             })
 
+            it('compresses full snapshot data containing circular references without throwing', () => {
+                const data: Record<string, any> = { content: Array(30).fill(uuidv7()).join('') }
+                // a circular reference in the event data must not crash the compression path
+                data.circularReference = data
+
+                expect(() => _emit(createFullSnapshot({ data }))).not.toThrow()
+                sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+                expect(posthog.capture).toHaveBeenCalledWith(
+                    '$snapshot',
+                    {
+                        $snapshot_data: [
+                            {
+                                data: expect.any(String),
+                                cv: '2024-10',
+                                type: 2,
+                            },
+                        ],
+                        $session_id: sessionId,
+                        $snapshot_bytes: expect.any(Number),
+                        $window_id: 'windowId',
+                        $lib: 'web',
+                        $lib_version: '0.0.1',
+                        $snapshot_host: 'localhost',
+                    },
+                    captureOptions
+                )
+            })
+
             it('compresses incremental snapshot mutation data', () => {
                 _emit(createIncrementalMutationEvent({ texts: [Array(30).fill(uuidv7()).join('')] }))
                 sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
