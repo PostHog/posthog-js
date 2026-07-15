@@ -951,7 +951,19 @@ export function initAdoptedStyleSheetObserver(
         // adoption below). Contain only this specific, unactionable case;
         // re-throw everything else so genuine host-page failures are
         // preserved (mirrors `callSafely` in ../utils).
-        if (e instanceof DOMException && e.name === 'NotAllowedError') {
+        //
+        // Match on the standardized `name` rather than `instanceof
+        // DOMException`: when this observer is installed on a (same-origin)
+        // iframe document the native setter throws the iframe realm's
+        // `DOMException`, which fails an `instanceof` check against the
+        // recorder realm's constructor. The cross-document sharing error we
+        // want to contain is exactly that cross-realm case, so a name check
+        // is what keeps iframe recordings protected too.
+        if (
+          !!e &&
+          typeof e === 'object' &&
+          (e as { name?: unknown }).name === 'NotAllowedError'
+        ) {
           return;
         }
         throw e;

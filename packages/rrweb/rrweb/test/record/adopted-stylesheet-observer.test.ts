@@ -90,6 +90,27 @@ describe('initAdoptedStyleSheetObserver()', () => {
     expect(adoptStyleSheets).not.toHaveBeenCalled();
   });
 
+  it('contains a NotAllowedError thrown from another realm (same-origin iframe)', () => {
+    // Simulates the iframe realm's DOMException, which is not `instanceof`
+    // the recorder realm's DOMException but still carries the standardized
+    // `NotAllowedError` name.
+    const crossRealmError = {
+      name: 'NotAllowedError',
+      message: 'Sharing constructed stylesheets in multiple documents is not allowed',
+    }
+    expect(crossRealmError instanceof DOMException).toBe(false);
+    nativeSet.mockImplementation(() => {
+      throw crossRealmError;
+    });
+    observe();
+
+    expect(() => {
+      document.adoptedStyleSheets = [{} as CSSStyleSheet];
+    }).not.toThrow();
+
+    expect(adoptStyleSheets).not.toHaveBeenCalled();
+  });
+
   it('re-throws unrelated native-setter errors so host-page behaviour is preserved', () => {
     nativeSet.mockImplementation(() => {
       throw new TypeError('Failed to set adoptedStyleSheets');
