@@ -732,6 +732,37 @@ describe('PostHogOpenAI - Jest test suite', () => {
     }
   )
 
+  // Each key must suppress the declaration on its own, not only alongside
+  // $ai_input_tokens — partial overrides are valid passthrough too.
+  test.each(['$ai_input_tokens', '$ai_cache_read_input_tokens', '$ai_cache_creation_input_tokens'])(
+    'passthrough of %s alone keeps the reporting declaration unset (#3615)',
+    async (tokenKey) => {
+      mockOpenAiChatResponse.model = 'anthropic/claude-sonnet-4.6'
+      mockOpenAiChatResponse.usage = {
+        prompt_tokens: 32611,
+        completion_tokens: 561,
+        total_tokens: 33172,
+        prompt_tokens_details: {
+          cached_tokens: 27929,
+        },
+      }
+
+      await client.chat.completions.create({
+        model: 'anthropic/claude-sonnet-4.6',
+        messages: [{ role: 'user', content: 'Hello' }],
+        posthogDistinctId: 'test-id',
+        posthogProperties: { [tokenKey]: 1234 },
+      })
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      expect(properties[tokenKey]).toBe(1234)
+      expect(properties).not.toHaveProperty('$ai_cache_reporting_exclusive')
+    }
+  )
+
   test('declares inclusive cache token reporting on streaming completions', async () => {
     const stream = (await client.chat.completions.create({
       model: 'gpt-4',
