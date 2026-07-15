@@ -48,7 +48,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     private _lastVisibilityChange: number | undefined
     private _clicks: DeadClickCandidate[] = []
     private _checkClickTimer: number | undefined
-    private _touchStart: { x: number; y: number } | undefined
+    private _touchStart: { x: number; y: number; timestamp: number; scrollDelayMs?: number } | undefined
     // swipes are only observed on the default autocapture path, not when an external
     // consumer (e.g. heatmaps) provides its own capture handler
     private _observeSwipes: boolean
@@ -175,6 +175,9 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
 
     private _onScroll = (): void => {
         const candidateNow = Date.now()
+        if (this._touchStart && isUndefined(this._touchStart.scrollDelayMs)) {
+            this._touchStart.scrollDelayMs = candidateNow - this._touchStart.timestamp
+        }
         // very naive throttle
         if (candidateNow % 50 === 0) {
             // we can see many scrolls between scheduled checks,
@@ -221,7 +224,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         // only single-finger gestures are swipes; a second finger (pinch/zoom) is not,
         // so a multi-touch start clears any tracked origin rather than measuring against it
         const touch = touches?.length === 1 ? touches[0] : undefined
-        this._touchStart = touch ? { x: touch.clientX, y: touch.clientY } : undefined
+        this._touchStart = touch ? { x: touch.clientX, y: touch.clientY, timestamp: Date.now() } : undefined
     }
 
     private _onTouchCancel = (): void => {
@@ -251,9 +254,11 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         }
 
         const swipe = asCandidate(touchEvent, {
+            timestamp: start.timestamp,
             type: 'swipe',
             swipeDirection: swipeDirection(dx, dy),
             swipeDistancePx: Math.round(Math.sqrt(dx * dx + dy * dy)),
+            scrollDelayMs: start.scrollDelayMs,
         })
         if (!isNull(swipe) && !this._ignore(swipe)) {
             this._clicks.push(swipe)

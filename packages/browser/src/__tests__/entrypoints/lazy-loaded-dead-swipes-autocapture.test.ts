@@ -10,12 +10,12 @@ jest.setSystemTime(1000)
 // enough of the shape that the swipe observer reads (touches / changedTouches)
 const triggerTouchEvent = function (
     node: Node,
-    eventType: 'touchstart' | 'touchend',
+    eventType: 'touchstart' | 'touchend' | 'touchcancel',
     points: { x: number; y: number }[]
 ) {
     const event = new Event(eventType, { bubbles: true, cancelable: true })
     const touchList = points.map((p) => ({ clientX: p.x, clientY: p.y }))
-    Object.defineProperty(event, eventType === 'touchend' ? 'changedTouches' : 'touches', {
+    Object.defineProperty(event, eventType === 'touchstart' ? 'touches' : 'changedTouches', {
         value: touchList,
         configurable: true,
     })
@@ -64,7 +64,7 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
         it('records the touch start position', () => {
             triggerTouchEvent(document.body, 'touchstart', [{ x: 100, y: 100 }])
 
-            expect(lazyLoadedDeadClicksAutocapture['_touchStart']).toEqual({ x: 100, y: 100 })
+            expect(lazyLoadedDeadClicksAutocapture['_touchStart']).toEqual({ x: 100, y: 100, timestamp: 1000 })
         })
 
         it('stores a swipe candidate when the gesture is beyond the threshold', () => {
@@ -136,6 +136,33 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
             triggerSwipe(document.body, { x: 100, y: 200 }, { x: 100, y: 40 })
 
             expect(lazyLoadedDeadClicksAutocapture['_checkClickTimer']).not.toBe(undefined)
+        })
+
+        it('uses the gesture start time so mutations during the swipe count as a response', () => {
+            jest.setSystemTime(1000)
+            triggerTouchEvent(document.body, 'touchstart', [{ x: 100, y: 200 }])
+            lazyLoadedDeadClicksAutocapture['_lastMutation'] = 1050
+            jest.setSystemTime(1100)
+            triggerTouchEvent(document.body, 'touchend', [{ x: 100, y: 40 }])
+
+            lazyLoadedDeadClicksAutocapture['_checkClicks']()
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
+
+        it('counts scrolling during the swipe as a response', () => {
+            jest.setSystemTime(1000)
+            triggerTouchEvent(document.body, 'touchstart', [{ x: 100, y: 200 }])
+            jest.setSystemTime(1050)
+            window.dispatchEvent(new Event('scroll'))
+            jest.setSystemTime(1100)
+            triggerTouchEvent(document.body, 'touchend', [{ x: 100, y: 40 }])
+
+            lazyLoadedDeadClicksAutocapture['_checkClicks']()
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
         })
 
         it.each([
