@@ -821,6 +821,59 @@ describe('getFeatureFlagResult', () => {
         $feature_flag_reason: 'Matched condition set 2',
         $feature_flag_request_id: 'test-request-id',
         locally_evaluated: false,
+        $feature_flag_has_experiment: false,
+      },
+    })
+  })
+
+  it.each([
+    ['true when the server reports has_experiment true', true, true],
+    ['false when the server reports has_experiment false', false, false],
+    ['false when the server omits has_experiment', undefined, false],
+  ])('captures $feature_flag_has_experiment %s', async (_, hasExperiment, expected) => {
+    const flagsResponse: PostHogV2FlagsResponse = {
+      flags: {
+        'test-flag': {
+          key: 'test-flag',
+          enabled: true,
+          variant: undefined,
+          reason: {
+            code: 'condition_match',
+            condition_index: 0,
+            description: 'Matched condition set 1',
+          },
+          metadata: {
+            id: 10,
+            version: 3,
+            payload: undefined,
+            description: 'description',
+            ...(hasExperiment === undefined ? {} : { has_experiment: hasExperiment }),
+          },
+        },
+      },
+      errorsWhileComputingFlags: false,
+      requestId: 'test-request-id',
+      evaluatedAt: 1640995200000,
+    }
+    mockedFetch.mockImplementation(apiImplementationV4(flagsResponse))
+
+    const posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      ...posthogImmediateResolveOptions,
+    })
+    let capturedMessage: any
+    posthog.on('capture', (message) => {
+      capturedMessage = message
+    })
+
+    await posthog.getFeatureFlagResult('test-flag', 'some-distinct-id')
+
+    await waitForPromises()
+    expect(capturedMessage).toMatchObject({
+      event: '$feature_flag_called',
+      properties: {
+        $feature_flag: 'test-flag',
+        $feature_flag_has_experiment: expected,
       },
     })
   })
@@ -1081,6 +1134,54 @@ describe('getFeatureFlagResult', () => {
           $feature_flag_response: true,
           $feature_flag_id: 55,
           locally_evaluated: true,
+          $feature_flag_has_experiment: false,
+        },
+      })
+
+      await posthog.shutdown()
+    })
+
+    it.each([
+      ['true when the definition reports has_experiment true', true, true],
+      ['false when the definition reports has_experiment false', false, false],
+      ['false when the definition omits has_experiment', undefined, false],
+    ])('captures $feature_flag_has_experiment %s on local evaluation', async (_, hasExperiment, expected) => {
+      const localFlags = {
+        flags: [
+          {
+            id: 55,
+            name: 'Simple Flag',
+            key: 'simple-flag',
+            active: true,
+            filters: {
+              groups: [{ rollout_percentage: 100 }],
+            },
+            ...(hasExperiment === undefined ? {} : { has_experiment: hasExperiment }),
+          },
+        ],
+      }
+      mockedFetch.mockImplementation(apiImplementation({ localFlags }))
+
+      const posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        ...posthogImmediateResolveOptions,
+      })
+
+      let capturedMessage: any
+      posthog.on('capture', (message) => {
+        capturedMessage = message
+      })
+
+      await posthog.getFeatureFlagResult('simple-flag', 'some-distinct-id')
+
+      await waitForPromises()
+      expect(capturedMessage).toMatchObject({
+        event: '$feature_flag_called',
+        properties: {
+          $feature_flag: 'simple-flag',
+          locally_evaluated: true,
+          $feature_flag_has_experiment: expected,
         },
       })
 

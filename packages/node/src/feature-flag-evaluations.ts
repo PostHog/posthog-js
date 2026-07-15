@@ -17,6 +17,7 @@ export type EvaluatedFlagRecord = {
   version: number | undefined
   reason: string | undefined
   locallyEvaluated: boolean
+  hasExperiment: boolean
 }
 
 /**
@@ -286,6 +287,7 @@ export class FeatureFlagEvaluations {
       [`$feature/${key}`]: response,
       $feature_flag_request_id: this._requestId,
       $feature_flag_evaluated_at: flag?.locallyEvaluated ? Date.now() : this._evaluatedAt,
+      $feature_flag_has_experiment: flag?.hasExperiment ?? false,
     }
 
     if (flag?.locallyEvaluated && this._flagDefinitionsLoadedAt !== undefined) {

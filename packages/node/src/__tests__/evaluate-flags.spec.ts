@@ -496,6 +496,29 @@ describe('evaluateFlags', () => {
       expect(byKey['missing-flag'].$feature_flag_error).toEqual('errors_while_computing_flags,flag_missing')
     })
 
+    it('attaches $feature_flag_has_experiment from the response metadata, defaulting to false when absent', async () => {
+      const response = flagsResponseFixture()
+      response.flags['variant-flag'].metadata!.has_experiment = true
+      response.flags['boolean-flag'].metadata!.has_experiment = false
+      // disabled-flag's metadata omits has_experiment (older servers)
+      mockedFetch.mockImplementation(apiImplementationV4(response))
+
+      const flags = await posthog.evaluateFlags('user-1')
+      flags.isEnabled('variant-flag')
+      flags.isEnabled('boolean-flag')
+      flags.isEnabled('disabled-flag')
+
+      await waitForPromises()
+      const byKey = Object.fromEntries(
+        captures
+          .filter((m) => m.event === '$feature_flag_called')
+          .map((m) => [m.properties.$feature_flag, m.properties])
+      )
+      expect(byKey['variant-flag'].$feature_flag_has_experiment).toBe(true)
+      expect(byKey['boolean-flag'].$feature_flag_has_experiment).toBe(false)
+      expect(byKey['disabled-flag'].$feature_flag_has_experiment).toBe(false)
+    })
+
     it('reports quota_limited from response.quotaLimited', async () => {
       const response = flagsResponseFixture()
       ;(response as any).quotaLimited = ['feature_flags']
@@ -622,6 +645,32 @@ describe('evaluateFlags', () => {
       await waitForPromises()
       const flagCalled = captures.find((m) => m.event === '$feature_flag_called')
       expect(flagCalled.properties.$feature_flag_definitions_loaded_at).toEqual(expect.any(Number))
+    })
+
+    it('attaches $feature_flag_has_experiment from the local definition, defaulting to false when absent', async () => {
+      // The beforeEach client already loaded the fixture definitions; build a fresh
+      // client against definitions that carry has_experiment.
+      await posthog.shutdown()
+      const definitions = localFlagsFixture()
+      ;(definitions.flags[0] as any).has_experiment = true
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: definitions }))
+      setup({ personalApiKey: 'TEST_PERSONAL_API_KEY' })
+
+      const flags = await posthog.evaluateFlags('user-1')
+      flags.isEnabled('local-flag')
+
+      await waitForPromises()
+      const flagCalled = captures.find((m) => m.event === '$feature_flag_called')
+      expect(flagCalled.properties.$feature_flag_has_experiment).toBe(true)
+    })
+
+    it('defaults $feature_flag_has_experiment to false when the local definition omits it', async () => {
+      const flags = await posthog.evaluateFlags('user-1')
+      flags.isEnabled('local-flag')
+
+      await waitForPromises()
+      const flagCalled = captures.find((m) => m.event === '$feature_flag_called')
+      expect(flagCalled.properties.$feature_flag_has_experiment).toBe(false)
     })
   })
 

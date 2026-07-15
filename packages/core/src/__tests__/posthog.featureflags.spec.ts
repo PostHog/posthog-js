@@ -807,6 +807,71 @@ describe('PostHog Feature Flags v4', () => {
         }
       )
 
+      describe('$feature_flag_has_experiment', () => {
+        const mockFlagsWithMetadata = (metadata: Record<string, any>): void => {
+          mocks.fetch.mockImplementation((url) => {
+            if (url.includes('/flags/?v=2')) {
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () =>
+                  Promise.resolve({
+                    flags: {
+                      'feature-1': {
+                        key: 'feature-1',
+                        enabled: true,
+                        variant: undefined,
+                        reason: undefined,
+                        metadata,
+                      },
+                    },
+                  }),
+              })
+            }
+
+            return Promise.resolve({
+              status: 200,
+              text: () => Promise.resolve('ok'),
+              json: () => Promise.resolve({ status: 'ok' }),
+            })
+          })
+        }
+
+        const getFlagCalledProperties = async (): Promise<Record<string, any>> => {
+          await posthog.reloadFeatureFlagsAsync()
+          posthog.getFeatureFlag('feature-1')
+          await waitForPromises()
+          const event = mocks.fetch.mock.calls
+            .flatMap((call) => parseBody(call)?.batch ?? [])
+            .find((e: any) => e.event === '$feature_flag_called')
+          return event.properties
+        }
+
+        it('should send $feature_flag_has_experiment true when the server reports has_experiment true', async () => {
+          mockFlagsWithMetadata({ id: 1, version: 1, description: undefined, payload: undefined, has_experiment: true })
+
+          expect(await getFlagCalledProperties()).toMatchObject({ $feature_flag_has_experiment: true })
+        })
+
+        it('should send $feature_flag_has_experiment false when the server reports has_experiment false', async () => {
+          mockFlagsWithMetadata({
+            id: 1,
+            version: 1,
+            description: undefined,
+            payload: undefined,
+            has_experiment: false,
+          })
+
+          expect(await getFlagCalledProperties()).toMatchObject({ $feature_flag_has_experiment: false })
+        })
+
+        it('should send $feature_flag_has_experiment false when the server omits has_experiment', async () => {
+          mockFlagsWithMetadata({ id: 1, version: 1, description: undefined, payload: undefined })
+
+          expect(await getFlagCalledProperties()).toMatchObject({ $feature_flag_has_experiment: false })
+        })
+      })
+
       it('should not capture $feature_flag_called again if reloaded flags keep the same value', async () => {
         expect(posthog.getFeatureFlag('feature-1')).toEqual(true)
         await waitForPromises()

@@ -891,6 +891,7 @@ describe('featureflags', () => {
                     $feature_flag_bootstrapped_response: null,
                     $feature_flag_bootstrapped_payload: null,
                     $used_bootstrap_value: true,
+                    $feature_flag_has_experiment: false,
                 })
             })
 
@@ -937,6 +938,7 @@ describe('featureflags', () => {
                     $feature_flag_bootstrapped_response: null,
                     $feature_flag_bootstrapped_payload: null,
                     $used_bootstrap_value: true,
+                    $feature_flag_has_experiment: false,
                     $feature_flag_original_response: false,
                     $feature_flag_original_payload: { status: 'original' },
                     $feature_flag_request_id: undefined,
@@ -953,6 +955,7 @@ describe('featureflags', () => {
                     $feature_flag_bootstrapped_response: null,
                     $feature_flag_bootstrapped_payload: null,
                     $used_bootstrap_value: true,
+                    $feature_flag_has_experiment: false,
                     $feature_flag_original_response: false,
                     $feature_flag_request_id: undefined,
                 })
@@ -968,6 +971,7 @@ describe('featureflags', () => {
                     $feature_flag_bootstrapped_response: null,
                     $feature_flag_bootstrapped_payload: null,
                     $used_bootstrap_value: true,
+                    $feature_flag_has_experiment: false,
                     $feature_flag_original_response: 'multivariate-variant-1',
                     $feature_flag_request_id: undefined,
                 })
@@ -2854,6 +2858,67 @@ describe('featureflags', () => {
                 '$feature_flag_called',
                 expect.objectContaining({
                     $feature_flag_evaluated_at: NEW_EVALUATED_AT,
+                })
+            )
+        })
+    })
+
+    describe('Feature Flag Has Experiment', () => {
+        const receiveFlagWithMetadata = (metadata?: Record<string, any>) => {
+            featureFlags.receivedFeatureFlags({
+                featureFlags: { 'test-flag': true },
+                featureFlagPayloads: {},
+                flags: {
+                    'test-flag': {
+                        key: 'test-flag',
+                        enabled: true,
+                        variant: undefined,
+                        reason: undefined,
+                        metadata,
+                    },
+                },
+            })
+            featureFlags._hasLoadedFlags = true
+        }
+
+        it('includes $feature_flag_has_experiment true when server reports has_experiment true', () => {
+            receiveFlagWithMetadata({ id: 1, version: 2, has_experiment: true })
+
+            featureFlags.getFeatureFlag('test-flag')
+
+            expect(instance.capture).toHaveBeenCalledWith(
+                '$feature_flag_called',
+                expect.objectContaining({
+                    $feature_flag: 'test-flag',
+                    $feature_flag_has_experiment: true,
+                })
+            )
+        })
+
+        it('includes $feature_flag_has_experiment false when server reports has_experiment false', () => {
+            receiveFlagWithMetadata({ id: 1, version: 2, has_experiment: false })
+
+            featureFlags.getFeatureFlag('test-flag')
+
+            expect(instance.capture).toHaveBeenCalledWith(
+                '$feature_flag_called',
+                expect.objectContaining({
+                    $feature_flag: 'test-flag',
+                    $feature_flag_has_experiment: false,
+                })
+            )
+        })
+
+        it('includes $feature_flag_has_experiment false when server omits has_experiment', () => {
+            receiveFlagWithMetadata({ id: 1, version: 2 })
+
+            featureFlags.getFeatureFlag('test-flag')
+
+            expect(instance.capture).toHaveBeenCalledWith(
+                '$feature_flag_called',
+                expect.objectContaining({
+                    $feature_flag: 'test-flag',
+                    $feature_flag_has_experiment: false,
                 })
             )
         })

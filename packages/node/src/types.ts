@@ -356,6 +356,8 @@ export type PostHogFeatureFlag = {
   rollout_percentage: null | number
   ensure_experience_continuity: boolean
   experiment_set: number[]
+  // Whether the flag is linked to an experiment. Absent on older servers.
+  has_experiment?: boolean
 }
 
 /**
