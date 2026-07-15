@@ -44,14 +44,12 @@ function checkTimeout(value: number | undefined, thresholdMs: number) {
 class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptureInterface {
     private _mutationObserver: MutationObserver | undefined
     private _lastMutation: number | undefined
+    private _lastScroll: number | undefined
     private _lastSelectionChanged: number | undefined
     private _lastVisibilityChange: number | undefined
     private _clicks: DeadClickCandidate[] = []
     private _checkClickTimer: number | undefined
-    private _touchStart: { x: number; y: number; timestamp: number; scrollDelayMs?: number } | undefined
-    // swipes are only observed on the default autocapture path, not when an external
-    // consumer (e.g. heatmaps) provides its own capture handler
-    private _observeSwipes: boolean
+    private _touchStart: { x: number; y: number; timestamp: number } | undefined
     private _config: Required<Omit<DeadClicksAutoCaptureConfig, 'css_selector_ignorelist'>> &
         Pick<DeadClicksAutoCaptureConfig, 'css_selector_ignorelist'>
     private _onCapture: (click: DeadClickCandidate, properties: Properties) => void
@@ -94,8 +92,6 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     ) {
         this._config = this._asRequiredConfig(config)
         this._onCapture = this._config.__onCapture
-        // when a consumer supplies its own capture handler (heatmaps) we only track clicks
-        this._observeSwipes = this._config.capture_dead_swipes && isUndefined(config?.__onCapture)
     }
 
     start(observerTarget: Node) {
@@ -104,7 +100,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         this._startSelectionChangedObserver()
         this._startVisibilityChangeObserver()
         this._startMutationObserver(observerTarget)
-        if (this._observeSwipes) {
+        if (this._config.capture_dead_swipes) {
             this._startSwipeObserver()
         }
     }
@@ -177,11 +173,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
 
     private _onScroll = (): void => {
         const candidateNow = Date.now()
-        // scrolls caused by a drag fire while the finger is still down, before the touchend
-        // that would create a candidate, so they are tracked on the in-flight gesture instead
-        if (this._touchStart && isUndefined(this._touchStart.scrollDelayMs)) {
-            this._touchStart.scrollDelayMs = candidateNow - this._touchStart.timestamp
-        }
+        this._lastScroll = candidateNow
         // very naive throttle
         if (candidateNow % 50 === 0) {
             // we can see many scrolls between scheduled checks,
@@ -250,9 +242,10 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
 
         const dx = touch.clientX - start.x
         const dy = touch.clientY - start.y
+        const distanceSq = dx * dx + dy * dy
         // compare squared distances to avoid a sqrt on every touch; only the actual swipes need it
         const threshold = this._config.swipe_threshold_px
-        if (dx * dx + dy * dy < threshold * threshold) {
+        if (distanceSq < threshold * threshold) {
             // a short movement is a tap or a jitter, not a swipe
             return
         }
@@ -262,11 +255,9 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         // dead, so it never becomes a candidate. surviving candidates keep the touchend
         // timestamp: the thresholds in _checkClicks measure how quickly the page responds
         // after the finger lifts, just as they measure the response to a click
-        const gestureCausedActivity =
-            isNumber(start.scrollDelayMs) ||
-            [this._lastMutation, this._lastSelectionChanged].some(
-                (lastActivityAt) => isNumber(lastActivityAt) && lastActivityAt >= start.timestamp
-            )
+        const gestureCausedActivity = [this._lastScroll, this._lastMutation, this._lastSelectionChanged].some(
+            (lastActivityAt) => isNumber(lastActivityAt) && lastActivityAt >= start.timestamp
+        )
         if (gestureCausedActivity) {
             return
         }
@@ -274,7 +265,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         const swipe = asCandidate(touchEvent, {
             type: 'swipe',
             swipeDirection: swipeDirection(dx, dy),
-            swipeDistancePx: Math.round(Math.sqrt(dx * dx + dy * dy)),
+            swipeDistancePx: Math.round(Math.sqrt(distanceSq)),
         })
         if (!isNull(swipe) && !this._ignore(swipe)) {
             this._clicks.push(swipe)

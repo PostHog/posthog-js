@@ -148,12 +148,12 @@ export class Heatmaps implements Extension {
     }
 
     private _onDeadClick(click: DeadClickCandidate): void {
-        // heatmaps only plots click coordinates; a swipe's TouchEvent has no clientX/clientY,
-        // so guard rather than relying on the swipe observer being disabled on this path
-        if (click.type === 'swipe') {
+        // heatmaps only plots click coordinates; this also rejects swipe candidates (never
+        // expected on this path), since a swipe's TouchEvent has no clientX/clientY
+        if (!isValidMouseEvent(click.originalEvent)) {
             return
         }
-        this._onClick(click.originalEvent as MouseEvent, 'deadclick')
+        this._onClick(click.originalEvent, 'deadclick')
     }
 
     private _onVisibilityChange(): void {

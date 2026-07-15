@@ -1,5 +1,6 @@
 import { PostHog } from '../../posthog-core'
 import LazyLoadedDeadClicksAutocapture from '../../entrypoints/dead-clicks-autocapture'
+import { DeadClickCandidate } from '../../types'
 import { assignableWindow, document } from '../../utils/globals'
 
 // need to fake the timer before jsdom inits
@@ -163,12 +164,31 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
         // page, a finger-following carousel mutates the DOM), i.e. before the candidate exists,
         // so the post-gesture checks in _checkClicks cannot see it
 
-        it('does not store a candidate when the page scrolled while the finger was down', () => {
-            jest.setSystemTime(1000)
+        it.each([
+            {
+                scenario: 'the page scrolled',
+                act: () => {
+                    document.body.dispatchEvent(new Event('scroll'))
+                },
+            },
+            {
+                scenario: 'the DOM mutated',
+                // MutationObserver delivery is async in jsdom, so poke the timestamp it would set
+                act: () => {
+                    lazyLoadedDeadClicksAutocapture['_lastMutation'] = 1050
+                },
+            },
+            {
+                scenario: 'the selection changed',
+                act: () => {
+                    lazyLoadedDeadClicksAutocapture['_lastSelectionChanged'] = 1050
+                },
+            },
+        ])('does not store a candidate when $scenario while the finger was down', ({ act }) => {
             triggerTouchEvent(document.body, 'touchstart', [{ x: 100, y: 200 }])
 
             jest.setSystemTime(1050)
-            document.body.dispatchEvent(new Event('scroll'))
+            act()
 
             jest.setSystemTime(1100)
             triggerTouchEvent(document.body, 'touchend', [{ x: 100, y: 40 }])
@@ -178,31 +198,6 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
             // and nothing is captured once the check runs
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
             expect(fakeInstance.capture).not.toHaveBeenCalled()
-        })
-
-        it('does not store a candidate when the DOM mutated while the finger was down', () => {
-            jest.setSystemTime(1000)
-            triggerTouchEvent(document.body, 'touchstart', [{ x: 100, y: 200 }])
-
-            // MutationObserver delivery is async in jsdom, so poke the timestamp it would set
-            lazyLoadedDeadClicksAutocapture['_lastMutation'] = 1050
-
-            jest.setSystemTime(1100)
-            triggerTouchEvent(document.body, 'touchend', [{ x: 100, y: 40 }])
-
-            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
-        })
-
-        it('does not store a candidate when the selection changed while the finger was down', () => {
-            jest.setSystemTime(1000)
-            triggerTouchEvent(document.body, 'touchstart', [{ x: 100, y: 200 }])
-
-            lazyLoadedDeadClicksAutocapture['_lastSelectionChanged'] = 1050
-
-            jest.setSystemTime(1100)
-            triggerTouchEvent(document.body, 'touchend', [{ x: 100, y: 40 }])
-
-            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
         })
 
         it('still stores a candidate when the only activity happened before the gesture began', () => {
@@ -263,38 +258,15 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
     })
 
     describe('config gating', () => {
-        it('does not observe swipes when capture_dead_swipes is false', () => {
+        it.each([
+            { scenario: 'capture_dead_swipes is false', config: { capture_dead_swipes: false } },
+            // the 160px swipe below is under this custom threshold
+            { scenario: 'the swipe is below a custom swipe_threshold_px', config: { swipe_threshold_px: 200 } },
+        ])('does not store a swipe when $scenario', ({ config }) => {
             lazyLoadedDeadClicksAutocapture.stop()
-            lazyLoadedDeadClicksAutocapture = new LazyLoadedDeadClicksAutocapture(fakeInstance, {
-                capture_dead_swipes: false,
-            })
+            lazyLoadedDeadClicksAutocapture = new LazyLoadedDeadClicksAutocapture(fakeInstance, config)
             lazyLoadedDeadClicksAutocapture.start(document)
 
-            triggerSwipe(document.body, { x: 100, y: 200 }, { x: 100, y: 40 })
-
-            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
-        })
-
-        it('does not observe swipes when an external onCapture is provided (heatmaps path)', () => {
-            lazyLoadedDeadClicksAutocapture.stop()
-            lazyLoadedDeadClicksAutocapture = new LazyLoadedDeadClicksAutocapture(fakeInstance, {
-                __onCapture: jest.fn(),
-            })
-            lazyLoadedDeadClicksAutocapture.start(document)
-
-            triggerSwipe(document.body, { x: 100, y: 200 }, { x: 100, y: 40 })
-
-            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
-        })
-
-        it('respects a custom swipe_threshold_px', () => {
-            lazyLoadedDeadClicksAutocapture.stop()
-            lazyLoadedDeadClicksAutocapture = new LazyLoadedDeadClicksAutocapture(fakeInstance, {
-                swipe_threshold_px: 200,
-            })
-            lazyLoadedDeadClicksAutocapture.start(document)
-
-            // 160px is below the custom 200px threshold
             triggerSwipe(document.body, { x: 100, y: 200 }, { x: 100, y: 40 })
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
@@ -306,7 +278,7 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
             jest.setSystemTime(0)
         })
 
-        it('swipe followed by scroll within threshold, not a dead swipe', () => {
+        const pushSwipeCandidate = (overrides: Partial<DeadClickCandidate> = {}) => {
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
                 node: document.body,
                 originalEvent: { type: 'touchend' } as unknown as TouchEvent,
@@ -314,9 +286,12 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
                 type: 'swipe',
                 swipeDirection: 'up',
                 swipeDistancePx: 160,
-                scrollDelayMs: 99,
+                ...overrides,
             })
-            lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
+        }
+
+        it('swipe followed by scroll within threshold, not a dead swipe', () => {
+            pushSwipeCandidate({ scrollDelayMs: 99 })
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
@@ -325,14 +300,7 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
         })
 
         it('swipe followed by mutation, not a dead swipe', () => {
-            lazyLoadedDeadClicksAutocapture['_clicks'].push({
-                node: document.body,
-                originalEvent: { type: 'touchend' } as unknown as TouchEvent,
-                timestamp: 900,
-                type: 'swipe',
-                swipeDirection: 'up',
-                swipeDistancePx: 160,
-            })
+            pushSwipeCandidate()
             lazyLoadedDeadClicksAutocapture['_lastMutation'] = 1000
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
@@ -342,16 +310,7 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
         })
 
         it('swipe followed by a scroll after threshold, dead swipe', () => {
-            lazyLoadedDeadClicksAutocapture['_clicks'].push({
-                node: document.body,
-                originalEvent: { type: 'touchend' } as unknown as TouchEvent,
-                timestamp: 900,
-                type: 'swipe',
-                swipeDirection: 'up',
-                swipeDistancePx: 160,
-                scrollDelayMs: 2501,
-            })
-            lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
+            pushSwipeCandidate({ scrollDelayMs: 2501 })
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
@@ -379,15 +338,7 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
         })
 
         it('swipe followed by nothing for too long, dead swipe', () => {
-            lazyLoadedDeadClicksAutocapture['_clicks'].push({
-                node: document.body,
-                originalEvent: { type: 'touchend' } as unknown as TouchEvent,
-                timestamp: 900,
-                type: 'swipe',
-                swipeDirection: 'left',
-                swipeDistancePx: 120,
-            })
-            lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
+            pushSwipeCandidate({ swipeDirection: 'left', swipeDistancePx: 120 })
 
             jest.setSystemTime(3001 + 900)
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
@@ -406,15 +357,7 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
         })
 
         it('a swipe never captures a $dead_click event', () => {
-            lazyLoadedDeadClicksAutocapture['_clicks'].push({
-                node: document.body,
-                originalEvent: { type: 'touchend' } as unknown as TouchEvent,
-                timestamp: 900,
-                type: 'swipe',
-                swipeDirection: 'up',
-                swipeDistancePx: 160,
-                scrollDelayMs: 2501,
-            })
+            pushSwipeCandidate({ scrollDelayMs: 2501 })
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 

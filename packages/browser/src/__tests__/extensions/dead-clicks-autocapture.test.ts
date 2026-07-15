@@ -82,6 +82,19 @@ describe('DeadClicksAutocapture', () => {
         expect(instance.deadClicksAutocapture.lazyLoadedDeadClicksAutocapture).toBeUndefined()
     })
 
+    it('disables dead swipes only for consumers that provide their own capture handler (heatmaps path)', async () => {
+        const mockInit = jest.fn().mockReturnValue({ start: mockStart, stop: jest.fn() })
+        assignableWindow.__PosthogExtensions__.initDeadClicksAutocapture = mockInit
+        const instance = await createPosthogInstance(uuidv7(), { capture_dead_clicks: true })
+
+        mockInit.mockClear()
+        new DeadClicksAutocapture(instance, () => true)
+        new DeadClicksAutocapture(instance, () => true, jest.fn())
+
+        expect(mockInit.mock.calls[0][1].capture_dead_swipes).toBeUndefined()
+        expect(mockInit.mock.calls[1][1].capture_dead_swipes).toBe(false)
+    })
+
     it('should stop dead clicks when remote config disables a previously enabled setting', async () => {
         const instance = await createPosthogInstance(uuidv7(), {
             api_host: 'https://test.com',
