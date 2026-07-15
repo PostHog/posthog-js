@@ -182,10 +182,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   constructor(apiKey: string, options: PostHogOptions = {}) {
     const normalizedApiKey = normalizeApiKey(apiKey)
     const normalizedOptions = {
+      ...options,
       // Node's default is higher than the shared core default (1000) because backend
       // workloads are more likely to burst-enqueue synchronously ahead of a flush.
-      maxQueueSize: 10000,
-      ...options,
+      // Applied after the spread with a nullish fallback so a wrapper forwarding
+      // `maxQueueSize: undefined` still gets the Node default, not the core one.
+      maxQueueSize: options.maxQueueSize ?? 10000,
       host: normalizeHost(options.host),
       personalApiKey: normalizePersonalApiKey(options.secretKey ?? options.personalApiKey),
     }

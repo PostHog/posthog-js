@@ -634,6 +634,15 @@ describe('PostHog Node.js', () => {
 
       expect((ph as any).maxQueueSize).toBe(42)
     })
+
+    it('keeps the Node default when a wrapper forwards maxQueueSize: undefined', () => {
+      const ph = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        maxQueueSize: undefined,
+      })
+
+      expect((ph as any).maxQueueSize).toBe(10000)
+    })
   })
 
   describe('before_send', () => {
