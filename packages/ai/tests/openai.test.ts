@@ -658,45 +658,79 @@ describe('PostHogOpenAI - Jest test suite', () => {
   // The cache-reporting tests below are fully mocked (no API calls), so they
   // run unconditionally instead of using `conditionalTest`.
   test.each([
-    { behavior: 'declares inclusive reporting by default', posthogProperties: undefined, expectedFlag: false },
+    {
+      behavior: 'declares inclusive reporting by default',
+      posthogProperties: undefined,
+      expectedFlag: false,
+      expectedInputTokens: 32611,
+    },
     {
       behavior: 'lets user-provided posthogProperties override the declaration',
       posthogProperties: { $ai_cache_reporting_exclusive: true },
       expectedFlag: true,
+      expectedInputTokens: 32611,
     },
-  ])('cache token reporting convention $behavior (#3615)', async ({ posthogProperties, expectedFlag }) => {
-    // OpenAI-convention usage reports prompt_tokens INCLUSIVE of cached tokens.
-    // Ingestion classifies claude* models as Anthropic-convention (exclusive)
-    // and would price the 27,929 cached tokens twice unless the event declares
-    // the convention via $ai_cache_reporting_exclusive: false. Numbers taken
-    // from the #3615 report (Claude via OpenRouter).
-    mockOpenAiChatResponse.model = 'anthropic/claude-sonnet-4.6'
-    mockOpenAiChatResponse.usage = {
-      prompt_tokens: 32611,
-      completion_tokens: 561,
-      total_tokens: 33172,
-      prompt_tokens_details: {
-        cached_tokens: 27929,
+    {
+      // Callers working around the double-billing already pass exclusive
+      // counts through posthogProperties (here 4,682 = 32,611 − 27,929);
+      // declaring `false` on those events would make ingestion subtract the
+      // cache again and report −23,247 uncached tokens.
+      behavior: 'stays unset when posthogProperties passes through token counts',
+      posthogProperties: { $ai_input_tokens: 4682, $ai_cache_read_input_tokens: 27929 },
+      expectedFlag: undefined,
+      expectedInputTokens: 4682,
+    },
+    {
+      behavior: 'keeps an explicit declaration alongside passed-through token counts',
+      posthogProperties: {
+        $ai_input_tokens: 4682,
+        $ai_cache_read_input_tokens: 27929,
+        $ai_cache_reporting_exclusive: true,
       },
+      expectedFlag: true,
+      expectedInputTokens: 4682,
+    },
+  ])(
+    'cache token reporting convention $behavior (#3615)',
+    async ({ posthogProperties, expectedFlag, expectedInputTokens }) => {
+      // OpenAI-convention usage reports prompt_tokens INCLUSIVE of cached tokens.
+      // Ingestion classifies claude* models as Anthropic-convention (exclusive)
+      // and would price the 27,929 cached tokens twice unless the event declares
+      // the convention via $ai_cache_reporting_exclusive: false. Numbers taken
+      // from the #3615 report (Claude via OpenRouter).
+      mockOpenAiChatResponse.model = 'anthropic/claude-sonnet-4.6'
+      mockOpenAiChatResponse.usage = {
+        prompt_tokens: 32611,
+        completion_tokens: 561,
+        total_tokens: 33172,
+        prompt_tokens_details: {
+          cached_tokens: 27929,
+        },
+      }
+
+      await client.chat.completions.create({
+        model: 'anthropic/claude-sonnet-4.6',
+        messages: [{ role: 'user', content: 'Hello' }],
+        posthogDistinctId: 'test-id',
+        posthogProperties,
+      })
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      // Token counts stay raw either way (OpenAI convention, consistent with
+      // $ai_usage) unless the caller passes their own through…
+      expect(properties['$ai_input_tokens']).toBe(expectedInputTokens)
+      expect(properties['$ai_cache_read_input_tokens']).toBe(27929)
+      // …only the declared convention changes, so ingestion subtracts instead of double-billing.
+      if (expectedFlag === undefined) {
+        expect(properties).not.toHaveProperty('$ai_cache_reporting_exclusive')
+      } else {
+        expect(properties['$ai_cache_reporting_exclusive']).toBe(expectedFlag)
+      }
     }
-
-    await client.chat.completions.create({
-      model: 'anthropic/claude-sonnet-4.6',
-      messages: [{ role: 'user', content: 'Hello' }],
-      posthogDistinctId: 'test-id',
-      posthogProperties,
-    })
-
-    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
-    const { properties } = captureArgs[0]
-
-    // Token counts stay raw either way (OpenAI convention, consistent with $ai_usage)…
-    expect(properties['$ai_input_tokens']).toBe(32611)
-    expect(properties['$ai_cache_read_input_tokens']).toBe(27929)
-    // …only the declared convention changes, so ingestion subtracts instead of double-billing.
-    expect(properties['$ai_cache_reporting_exclusive']).toBe(expectedFlag)
-  })
+  )
 
   test('declares inclusive cache token reporting on streaming completions', async () => {
     const stream = (await client.chat.completions.create({
