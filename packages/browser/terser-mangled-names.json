@@ -117,6 +117,7 @@
         "_counter",
         "_createHost",
         "_cross_subdomain",
+        "_currentMaskedHostname",
         "_currentPageview",
         "_currentStepIndex",
         "_currentTicketId",

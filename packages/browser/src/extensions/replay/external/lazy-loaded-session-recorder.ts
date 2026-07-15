@@ -1594,6 +1594,26 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._activateTrigger(triggerType)
     }
 
+    private _currentMaskedHostname(): string | undefined {
+        try {
+            const href = window?.location?.href
+            if (!href) {
+                return undefined
+            }
+            const maskedUrl = this._maskReplayUrl(href)
+            if (!maskedUrl) {
+                return undefined
+            }
+            // not convertToURL: it resolves invalid input (e.g. a masking fn returning "REDACTED")
+            // against the current page and would return the real hostname we're trying to mask.
+            // new URL throws instead, so bad input falls through to the catch and we omit the property.
+            // eslint-disable-next-line compat/compat
+            return new URL(maskedUrl).hostname || undefined
+        } catch {
+            return undefined
+        }
+    }
+
     private _clearFlushBufferTimer() {
         if (this._flushBufferTimer) {
             clearTimeout(this._flushBufferTimer)
@@ -1618,6 +1638,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         if (this._buffer.data.length > 0) {
+            const snapshotHostname = this._currentMaskedHostname()
             const snapshotEvents = splitBuffer(this._buffer)
             snapshotEvents.forEach((snapshotBuffer) => {
                 this._flushedSizeTracker?.trackSize(snapshotBuffer.sessionId, snapshotBuffer.size)
@@ -1628,6 +1649,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     $window_id: snapshotBuffer.windowId,
                     $lib: Config.LIB_NAME,
                     $lib_version: Config.LIB_VERSION,
+                    $snapshot_host: snapshotHostname,
                 })
             })
 
