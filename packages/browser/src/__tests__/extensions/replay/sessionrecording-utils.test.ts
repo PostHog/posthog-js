@@ -420,5 +420,26 @@ describe(`SessionRecording utility functions`, () => {
             const result = JSON.stringify(a, circularReferenceReplacer())
             expect(result).toEqual('{"b":{"a":"[Circular]"}}')
         })
+
+        it('should handle circular references that pass through an array', () => {
+            // shape seen in production: root -> queue -> plugins (array) -> element -> instance -> root
+            const root: any = {}
+            root.queue = { plugins: [{ instance: root }] }
+            const result = JSON.stringify(root, circularReferenceReplacer())
+            expect(result).toEqual('{"queue":{"plugins":[{"instance":"[Circular]"}]}}')
+        })
+
+        it('should handle a self-referencing array', () => {
+            const arr: any[] = []
+            arr.push(arr)
+            const result = JSON.stringify({ arr }, circularReferenceReplacer())
+            expect(result).toEqual('{"arr":["[Circular]"]}')
+        })
+
+        it('should preserve shared but acyclic references', () => {
+            const shared = { id: 1 }
+            const result = JSON.stringify({ a: shared, b: [shared] }, circularReferenceReplacer())
+            expect(result).toEqual('{"a":{"id":1},"b":[{"id":1}]}')
+        })
     })
 })
