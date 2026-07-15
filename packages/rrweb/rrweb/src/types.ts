@@ -57,6 +57,20 @@ export type recordOptions<T> = {
   maskTextFn?: MaskTextFn;
   slimDOMOptions?: SlimDOMOptions | 'all' | true;
   ignoreCSSAttributes?: Set<string>;
+  /**
+   * Limit which DOM attributes the MutationObserver watches, by passing the
+   * list through to the native `MutationObserver.observe` `attributeFilter`.
+   * When set, mutations to unlisted attributes never fire the observer
+   * callback at all, so they cost no recording CPU - useful to exclude
+   * high-frequency inline `style` mutations from JS-driven animations.
+   *
+   * Filtered attributes are invisible to replay, so only set this when that
+   * loss of fidelity is acceptable. When omitted (or set to an empty array)
+   * all attributes are observed, the default behaviour.
+   *
+   * @see https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver/observe#attributefilter
+   */
+  attributeFilter?: string[];
   inlineStylesheet?: boolean;
   hooks?: hooksParam;
   packFn?: PackFn;
@@ -120,6 +134,7 @@ export type observerParam = {
   canvasManager: CanvasManager;
   processedNodeManager: ProcessedNodeManager;
   ignoreCSSAttributes: Set<string>;
+  attributeFilter?: string[];
   plugins: Array<{
     observer: (
       cb: (...arg: Array<unknown>) => void,
@@ -154,6 +169,7 @@ export type MutationBufferParam = Pick<
   | 'shadowDomManager'
   | 'canvasManager'
   | 'processedNodeManager'
+  | 'attributeFilter'
 >;
 
 export type ReplayPlugin = {
