@@ -1093,7 +1093,7 @@ export abstract class PostHogCoreStateless {
 
       if (queue.length >= this.maxQueueSize) {
         queue.shift()
-        this._logger.info('Queue is full, the oldest event is dropped.')
+        this._logger.warn('Queue is full, the oldest event is dropped.')
       }
 
       queue.push({ message })
