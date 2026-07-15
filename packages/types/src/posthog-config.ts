@@ -347,8 +347,10 @@ export type DeadClicksAutoCaptureConfig = {
     /**
      * Determines whether PostHog should also detect "dead swipes" — touch swipe gestures
      * (typically on mobile/touch devices) that produce no observable screen change
-     * (no scroll, mutation, selection or visibility change). These usually indicate a
-     * failed navigation, e.g. swiping to go back or to move a carousel with nothing happening.
+     * (no scroll, mutation or selection change while the gesture is in progress, and no
+     * scroll, mutation, selection or visibility change afterwards). These usually indicate
+     * a failed navigation, e.g. swiping to go back or to move a carousel with nothing
+     * happening.
      *
      * Dead swipes are captured as `$dead_swipe` events. This only applies to the dead-click
      * autocapture path, not the heatmaps path.
