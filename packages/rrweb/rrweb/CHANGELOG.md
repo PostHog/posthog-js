@@ -1,5 +1,15 @@
 # rrweb
 
+## 0.1.1
+
+### Patch Changes
+
+- [#4073](https://github.com/PostHog/posthog-js/pull/4073) [`f48eaf2`](https://github.com/PostHog/posthog-js/commit/f48eaf2242dafdf72e8fc9dd739b90c9a6b89513) Thanks [@pauldambra](https://github.com/pauldambra)! - Canvas capture now fingerprints raw pixels before encoding, so unchanged frames skip the expensive image encode entirely. Previously every captured frame was encoded (webp/png) and base64'd just to compute a fingerprint, with unchanged frames dropped only after paying the full encode cost — for a static canvas at the default fps this burned CPU continuously for the lifetime of the page. Blank first frames are now detected from pixel data and never encoded either (previously they cost two encodes: one for the frame and one for a transparent reference blob). No response shapes changed, and unchanged-frame detection is equal or stricter: dedupe compares dimension-tagged raw pixels using two independent 32-bit hashes rather than encoded bytes, so the rare frames that previously deduped on identical lossy-encoded output now transmit, and a resize retransmits even when the raw bytes happen to match (any equal-pixel-count resize of a uniform fill, e.g. 100x200 redrawn at 200x100). The one exception in the "sends more" direction: a canvas that resizes while never having shown content stays skipped — it is blank at either size. Changed frames pay a small new pixel-readback + hash cost on top of the encode, so always-animating canvases do slightly more work per frame; static canvases — the case that burned continuously — drop from a full encode per tick to a readback + hash.
+  (2026-07-15)
+
+- [#4131](https://github.com/PostHog/posthog-js/pull/4131) [`c50b27f`](https://github.com/PostHog/posthog-js/commit/c50b27f54e551ea76b1a7e7b935346bcf4d13ebf) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: non-user-initiated events (media autoplay, canvas/font/stylesheet churn) no longer unfreeze a frozen page, so background activity cannot flush the frozen mutation buffer (port of upstream rrweb #1697)
+  (2026-07-15)
+
 ## 0.1.0
 
 ### Minor Changes
