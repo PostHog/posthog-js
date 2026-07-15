@@ -253,7 +253,7 @@ export interface DeadClickCandidate {
     type?: 'click' | 'swipe'
     // for swipe candidates, the dominant direction of the gesture
     swipeDirection?: 'left' | 'right' | 'up' | 'down'
-    // for swipe candidates, the total distance travelled in CSS pixels
+    // for swipe candidates, the straight-line distance in CSS pixels between where the gesture started and ended
     swipeDistancePx?: number
     // time between click and the most recent scroll
     scrollDelayMs?: number
@@ -358,8 +358,9 @@ export type DeadClicksAutoCaptureConfig = {
     capture_dead_swipes?: boolean
 
     /**
-     * The minimum distance in CSS pixels a touch gesture must travel to be considered a swipe
-     * (rather than a tap). Only used when `capture_dead_swipes` is enabled.
+     * The minimum straight-line distance in CSS pixels between where a touch gesture starts
+     * and ends for it to be considered a swipe (rather than a tap). Only used when
+     * `capture_dead_swipes` is enabled.
      *
      * @default 30
      */

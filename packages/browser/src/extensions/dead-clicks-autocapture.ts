@@ -90,8 +90,11 @@ export class DeadClicksAutocapture implements Extension {
             !this._lazyLoadedDeadClicksAutocapture &&
             assignableWindow.__PosthogExtensions__?.initDeadClicksAutocapture
         ) {
-            const config = isObject(this.instance.config.capture_dead_clicks)
-                ? this.instance.config.capture_dead_clicks
+            // copied so that writing __onCapture below can't leak into the user's config object,
+            // which is shared between the autocapture and heatmaps instances of this extension
+            // (and its presence decides whether the lazy-loaded capture observes swipes)
+            const config: DeadClicksAutoCaptureConfig = isObject(this.instance.config.capture_dead_clicks)
+                ? { ...this.instance.config.capture_dead_clicks }
                 : {}
             config.__onCapture = this.onCapture
 

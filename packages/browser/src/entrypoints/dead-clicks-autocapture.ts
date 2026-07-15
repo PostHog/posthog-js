@@ -134,6 +134,8 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         assignableWindow.removeEventListener('touchend', this._onTouchEnd, { capture: true })
         assignableWindow.removeEventListener('touchcancel', this._onTouchCancel, { capture: true })
         document?.removeEventListener('visibilitychange', this._onVisibilityChange)
+        // so a gesture in flight when we stopped can't pair with a touchend after a restart
+        this._touchStart = undefined
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -175,6 +177,8 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
 
     private _onScroll = (): void => {
         const candidateNow = Date.now()
+        // scrolls caused by a drag fire while the finger is still down, before the touchend
+        // that would create a candidate, so they are tracked on the in-flight gesture instead
         if (this._touchStart && isUndefined(this._touchStart.scrollDelayMs)) {
             this._touchStart.scrollDelayMs = candidateNow - this._touchStart.timestamp
         }
@@ -253,12 +257,24 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             return
         }
 
+        // a gesture that already did something while the finger was down — dragging scrolled
+        // the page, a finger-following carousel mutated the DOM, a text selection grew — is not
+        // dead, so it never becomes a candidate. surviving candidates keep the touchend
+        // timestamp: the thresholds in _checkClicks measure how quickly the page responds
+        // after the finger lifts, just as they measure the response to a click
+        const gestureCausedActivity =
+            isNumber(start.scrollDelayMs) ||
+            [this._lastMutation, this._lastSelectionChanged].some(
+                (lastActivityAt) => isNumber(lastActivityAt) && lastActivityAt >= start.timestamp
+            )
+        if (gestureCausedActivity) {
+            return
+        }
+
         const swipe = asCandidate(touchEvent, {
-            timestamp: start.timestamp,
             type: 'swipe',
             swipeDirection: swipeDirection(dx, dy),
             swipeDistancePx: Math.round(Math.sqrt(dx * dx + dy * dy)),
-            scrollDelayMs: start.scrollDelayMs,
         })
         if (!isNull(swipe) && !this._ignore(swipe)) {
             this._clicks.push(swipe)

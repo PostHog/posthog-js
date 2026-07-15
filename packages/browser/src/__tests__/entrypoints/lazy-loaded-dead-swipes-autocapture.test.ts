@@ -61,7 +61,7 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
             expect(lazyLoadedDeadClicksAutocapture['_touchStart']).toBe(undefined)
         })
 
-        it('records the touch start position', () => {
+        it('records the touch start position and time', () => {
             triggerTouchEvent(document.body, 'touchstart', [{ x: 100, y: 100 }])
 
             expect(lazyLoadedDeadClicksAutocapture['_touchStart']).toEqual({ x: 100, y: 100, timestamp: 1000 })
@@ -130,39 +130,20 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
         })
 
+        it('clears the tracked origin on stop, so a restart cannot pair it with a later touchend', () => {
+            triggerTouchEvent(document.body, 'touchstart', [{ x: 100, y: 200 }])
+
+            lazyLoadedDeadClicksAutocapture.stop()
+
+            expect(lazyLoadedDeadClicksAutocapture['_touchStart']).toBe(undefined)
+        })
+
         it('sets the check timer when detecting a swipe', () => {
             expect(lazyLoadedDeadClicksAutocapture['_checkClickTimer']).toBe(undefined)
 
             triggerSwipe(document.body, { x: 100, y: 200 }, { x: 100, y: 40 })
 
             expect(lazyLoadedDeadClicksAutocapture['_checkClickTimer']).not.toBe(undefined)
-        })
-
-        it('uses the gesture start time so mutations during the swipe count as a response', () => {
-            jest.setSystemTime(1000)
-            triggerTouchEvent(document.body, 'touchstart', [{ x: 100, y: 200 }])
-            lazyLoadedDeadClicksAutocapture['_lastMutation'] = 1050
-            jest.setSystemTime(1100)
-            triggerTouchEvent(document.body, 'touchend', [{ x: 100, y: 40 }])
-
-            lazyLoadedDeadClicksAutocapture['_checkClicks']()
-
-            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
-            expect(fakeInstance.capture).not.toHaveBeenCalled()
-        })
-
-        it('counts scrolling during the swipe as a response', () => {
-            jest.setSystemTime(1000)
-            triggerTouchEvent(document.body, 'touchstart', [{ x: 100, y: 200 }])
-            jest.setSystemTime(1050)
-            window.dispatchEvent(new Event('scroll'))
-            jest.setSystemTime(1100)
-            triggerTouchEvent(document.body, 'touchend', [{ x: 100, y: 40 }])
-
-            lazyLoadedDeadClicksAutocapture['_checkClicks']()
-
-            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
-            expect(fakeInstance.capture).not.toHaveBeenCalled()
         })
 
         it.each([
@@ -174,6 +155,66 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
             triggerSwipe(document.body, from, to)
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks'][0].swipeDirection).toBe(direction)
+        })
+    })
+
+    describe('activity during the gesture', () => {
+        // a swipe's effect mostly happens while the finger is still down (dragging scrolls the
+        // page, a finger-following carousel mutates the DOM), i.e. before the candidate exists,
+        // so the post-gesture checks in _checkClicks cannot see it
+
+        it('does not store a candidate when the page scrolled while the finger was down', () => {
+            jest.setSystemTime(1000)
+            triggerTouchEvent(document.body, 'touchstart', [{ x: 100, y: 200 }])
+
+            jest.setSystemTime(1050)
+            document.body.dispatchEvent(new Event('scroll'))
+
+            jest.setSystemTime(1100)
+            triggerTouchEvent(document.body, 'touchend', [{ x: 100, y: 40 }])
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+
+            // and nothing is captured once the check runs
+            lazyLoadedDeadClicksAutocapture['_checkClicks']()
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
+
+        it('does not store a candidate when the DOM mutated while the finger was down', () => {
+            jest.setSystemTime(1000)
+            triggerTouchEvent(document.body, 'touchstart', [{ x: 100, y: 200 }])
+
+            // MutationObserver delivery is async in jsdom, so poke the timestamp it would set
+            lazyLoadedDeadClicksAutocapture['_lastMutation'] = 1050
+
+            jest.setSystemTime(1100)
+            triggerTouchEvent(document.body, 'touchend', [{ x: 100, y: 40 }])
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+        })
+
+        it('does not store a candidate when the selection changed while the finger was down', () => {
+            jest.setSystemTime(1000)
+            triggerTouchEvent(document.body, 'touchstart', [{ x: 100, y: 200 }])
+
+            lazyLoadedDeadClicksAutocapture['_lastSelectionChanged'] = 1050
+
+            jest.setSystemTime(1100)
+            triggerTouchEvent(document.body, 'touchend', [{ x: 100, y: 40 }])
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+        })
+
+        it('still stores a candidate when the only activity happened before the gesture began', () => {
+            jest.setSystemTime(900)
+            document.body.dispatchEvent(new Event('scroll'))
+            lazyLoadedDeadClicksAutocapture['_lastMutation'] = 900
+            lazyLoadedDeadClicksAutocapture['_lastSelectionChanged'] = 900
+
+            jest.setSystemTime(1000)
+            triggerSwipe(document.body, { x: 100, y: 200 }, { x: 100, y: 40 })
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
         })
     })
 
