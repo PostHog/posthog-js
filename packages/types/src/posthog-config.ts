@@ -355,6 +355,10 @@ export type DeadClicksAutoCaptureConfig = {
      * Dead swipes are captured as `$dead_swipe` events. This only applies to the dead-click
      * autocapture path, not the heatmaps path.
      *
+     * Swipes over surfaces whose response cannot be observed — canvas, video and other
+     * media/plugin elements under the finger — are never captured, and capture is limited
+     * per page load (see `max_dead_swipes_per_page_load`).
+     *
      * @default true
      */
     capture_dead_swipes?: boolean
@@ -367,6 +371,15 @@ export type DeadClicksAutoCaptureConfig = {
      * @default 30
      */
     swipe_threshold_px?: number
+
+    /**
+     * The maximum number of dead swipes captured per page load. Swipe gestures are plentiful
+     * on touch devices, so a page whose responses the detector cannot see is capped rather
+     * than allowed to flood events. Only used when `capture_dead_swipes` is enabled.
+     *
+     * @default 10
+     */
+    max_dead_swipes_per_page_load?: number
 
     /**
      * List of CSS selectors to ignore dead clicks on

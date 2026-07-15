@@ -33,6 +33,11 @@ function deadEventName(candidate: DeadClickCandidate): '$dead_click' | '$dead_sw
     return candidate.type === 'swipe' ? '$dead_swipe' : '$dead_click'
 }
 
+// surfaces that respond to a gesture without anything our observers can see — a canvas or
+// WebGL repaint is not a DOM mutation, and native media controls live in a closed UA shadow
+// root — so a swipe over them can never be judged dead
+const UNOBSERVABLE_SURFACE_SELECTOR = 'canvas,video,audio,embed,object'
+
 function hasModifierKey(event: MouseEvent | TouchEvent): boolean {
     return event.ctrlKey || event.metaKey || event.altKey || event.shiftKey
 }
@@ -50,6 +55,9 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     private _clicks: DeadClickCandidate[] = []
     private _checkClickTimer: number | undefined
     private _touchStart: { x: number; y: number; timestamp: number } | undefined
+    private _deadSwipesCaptured = 0
+    private _hasUnobservableSurfaces: boolean | undefined
+    private _surfacesCheckedAt: number | undefined
     private _config: Required<Omit<DeadClicksAutoCaptureConfig, 'css_selector_ignorelist'>> &
         Pick<DeadClicksAutoCaptureConfig, 'css_selector_ignorelist'>
     private _onCapture: (click: DeadClickCandidate, properties: Properties) => void
@@ -62,6 +70,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         capture_clicks_with_modifier_keys: false,
         capture_dead_swipes: true,
         swipe_threshold_px: 30,
+        max_dead_swipes_per_page_load: 10,
         __onCapture: defaultOnCapture,
     })
 
@@ -81,6 +90,8 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                 providedConfig?.capture_clicks_with_modifier_keys ?? defaultConfig.capture_clicks_with_modifier_keys,
             capture_dead_swipes: providedConfig?.capture_dead_swipes ?? defaultConfig.capture_dead_swipes,
             swipe_threshold_px: providedConfig?.swipe_threshold_px ?? defaultConfig.swipe_threshold_px,
+            max_dead_swipes_per_page_load:
+                providedConfig?.max_dead_swipes_per_page_load ?? defaultConfig.max_dead_swipes_per_page_load,
             css_selector_ignorelist: providedConfig?.css_selector_ignorelist,
             __onCapture: defaultConfig.__onCapture,
         }
@@ -230,7 +241,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     private _onTouchEnd = (event: Event): void => {
         const start = this._touchStart
         this._touchStart = undefined
-        if (isUndefined(start)) {
+        if (isUndefined(start) || this._deadSwipesCaptured >= this._config.max_dead_swipes_per_page_load) {
             return
         }
 
@@ -262,6 +273,18 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             return
         }
 
+        // hit-test the stack under where the finger landed rather than the candidate's
+        // ancestors: canvas apps usually receive their touches through transparent overlay
+        // elements stacked on top of the canvas, so the surface is beneath, not above.
+        // this runs at most once per dead-candidate gesture, when the page is provably idle
+        // (the activity gate above just passed), so a forced layout flush is unlikely
+        if (this._pageHasUnobservableSurfaces()) {
+            const stack = document?.elementsFromPoint?.(start.x, start.y) ?? []
+            if (stack.some((el) => el.matches?.(UNOBSERVABLE_SURFACE_SELECTOR))) {
+                return
+            }
+        }
+
         const swipe = asCandidate(touchEvent, {
             type: 'swipe',
             swipeDirection: swipeDirection(dx, dy),
@@ -271,6 +294,19 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             this._clicks.push(swipe)
         }
         this._scheduleCheck()
+    }
+
+    // whether the page contains surfaces whose response to a gesture we cannot observe —
+    // cached, recomputed lazily and only when the DOM has mutated since the last look
+    private _pageHasUnobservableSurfaces(): boolean {
+        const domChangedSinceCheck =
+            isUndefined(this._surfacesCheckedAt) ||
+            (isNumber(this._lastMutation) && this._lastMutation > this._surfacesCheckedAt)
+        if (isUndefined(this._hasUnobservableSurfaces) || domChangedSinceCheck) {
+            this._surfacesCheckedAt = Date.now()
+            this._hasUnobservableSurfaces = !!document?.querySelector(UNOBSERVABLE_SURFACE_SELECTOR)
+        }
+        return !!this._hasUnobservableSurfaces
     }
 
     private _ignore(candidate: DeadClickCandidate | null): boolean {
@@ -378,6 +414,13 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                 visibilityChangedTimeout
             ) {
                 const prefix = deadEventName(click)
+                if (prefix === '$dead_swipe') {
+                    if (this._deadSwipesCaptured >= this._config.max_dead_swipes_per_page_load) {
+                        // the page-load budget for dead swipes is spent — drop, don't requeue
+                        continue
+                    }
+                    this._deadSwipesCaptured++
+                }
                 this._onCapture(click, {
                     [`${prefix}_last_mutation_timestamp`]: this._lastMutation,
                     [`${prefix}_event_timestamp`]: click.timestamp,

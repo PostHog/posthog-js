@@ -213,6 +213,73 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
         })
     })
 
+    describe('unobservable surfaces', () => {
+        // canvas/WebGL repaints are not DOM mutations and native media controls live in a
+        // closed UA shadow root, so deadness cannot be judged over those surfaces.
+        // jsdom has no layout, so elementsFromPoint is faked per test
+        let canvas: HTMLCanvasElement | undefined
+
+        const addCanvas = () => {
+            canvas = document.createElement('canvas')
+            document.body.append(canvas)
+        }
+
+        afterEach(() => {
+            canvas?.remove()
+            canvas = undefined
+            delete (document as any).elementsFromPoint
+        })
+
+        it('does not store a swipe when the finger was over a canvas', () => {
+            addCanvas()
+            ;(document as any).elementsFromPoint = jest.fn().mockReturnValue([canvas, document.body])
+
+            triggerSwipe(document.body, { x: 100, y: 200 }, { x: 100, y: 40 })
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+        })
+
+        it('still stores a swipe when the finger was not over the surface', () => {
+            addCanvas()
+            ;(document as any).elementsFromPoint = jest.fn().mockReturnValue([document.body])
+
+            triggerSwipe(document.body, { x: 100, y: 200 }, { x: 100, y: 40 })
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
+        })
+
+        it('does not hit-test at all on pages without such surfaces', () => {
+            const elementsFromPoint = jest.fn().mockReturnValue([])
+            ;(document as any).elementsFromPoint = elementsFromPoint
+
+            triggerSwipe(document.body, { x: 100, y: 200 }, { x: 100, y: 40 })
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
+            expect(elementsFromPoint).not.toHaveBeenCalled()
+        })
+
+        it('rechecks for surfaces once the DOM has mutated', () => {
+            const elementsFromPoint = jest.fn().mockReturnValue([])
+            ;(document as any).elementsFromPoint = elementsFromPoint
+
+            // first swipe: no canvas on the page, so the cached answer is "none" and no hit-test runs
+            triggerSwipe(document.body, { x: 100, y: 200 }, { x: 100, y: 40 })
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
+            expect(elementsFromPoint).not.toHaveBeenCalled()
+
+            // a canvas arrives; MutationObserver delivery is async in jsdom, so poke the timestamp
+            addCanvas()
+            lazyLoadedDeadClicksAutocapture['_lastMutation'] = 3000
+            elementsFromPoint.mockReturnValue([canvas])
+
+            jest.setSystemTime(5000)
+            triggerSwipe(document.body, { x: 100, y: 200 }, { x: 100, y: 40 })
+
+            expect(elementsFromPoint).toHaveBeenCalled()
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
+        })
+    })
+
     describe('swipe ignore', () => {
         it('ignores swipes on the html node', () => {
             const fakeHTML = document.createElement('html')
@@ -363,6 +430,64 @@ describe('LazyLoadedDeadClicksAutocapture - dead swipes', () => {
 
             expect(fakeInstance.capture).toHaveBeenCalledTimes(1)
             expect(fakeInstance.capture).not.toHaveBeenCalledWith('$dead_click', expect.anything(), expect.anything())
+        })
+    })
+
+    describe('page load capture limit', () => {
+        beforeEach(() => {
+            jest.setSystemTime(0)
+        })
+
+        it('drops dead swipes beyond max_dead_swipes_per_page_load instead of capturing them', () => {
+            lazyLoadedDeadClicksAutocapture.stop()
+            lazyLoadedDeadClicksAutocapture = new LazyLoadedDeadClicksAutocapture(fakeInstance, {
+                max_dead_swipes_per_page_load: 2,
+            })
+            lazyLoadedDeadClicksAutocapture.start(document)
+
+            for (let i = 0; i < 3; i++) {
+                const node = document.createElement('div')
+                document.body.append(node)
+                lazyLoadedDeadClicksAutocapture['_clicks'].push({
+                    node,
+                    originalEvent: { type: 'touchend' } as unknown as TouchEvent,
+                    timestamp: 900,
+                    type: 'swipe',
+                    swipeDirection: 'up',
+                    swipeDistancePx: 160,
+                    scrollDelayMs: 2501,
+                })
+            }
+
+            lazyLoadedDeadClicksAutocapture['_checkClicks']()
+
+            expect(fakeInstance.capture).toHaveBeenCalledTimes(2)
+            // the third is dropped, not requeued for a later check
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+        })
+
+        it('stops observing gestures entirely once the limit is spent', () => {
+            lazyLoadedDeadClicksAutocapture['_deadSwipesCaptured'] = 10
+
+            triggerSwipe(document.body, { x: 100, y: 200 }, { x: 100, y: 40 })
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+        })
+
+        it('does not limit dead clicks', () => {
+            lazyLoadedDeadClicksAutocapture['_deadSwipesCaptured'] = 10
+            lazyLoadedDeadClicksAutocapture['_clicks'].push({
+                node: document.body,
+                originalEvent: { type: 'click' } as unknown as MouseEvent,
+                timestamp: 900,
+                type: 'click',
+                scrollDelayMs: 2501,
+            })
+
+            lazyLoadedDeadClicksAutocapture['_checkClicks']()
+
+            expect(fakeInstance.capture).toHaveBeenCalledTimes(1)
+            expect(fakeInstance.capture).toHaveBeenCalledWith('$dead_click', expect.anything(), expect.anything())
         })
     })
 })
