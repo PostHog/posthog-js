@@ -821,16 +821,15 @@ describe('getFeatureFlagResult', () => {
         $feature_flag_reason: 'Matched condition set 2',
         $feature_flag_request_id: 'test-request-id',
         locally_evaluated: false,
-        $feature_flag_has_experiment: false,
       },
     })
   })
 
   it.each([
-    ['true when the server reports has_experiment true', true, true],
-    ['false when the server reports has_experiment false', false, false],
-    ['false when the server omits has_experiment', undefined, false],
-  ])('captures $feature_flag_has_experiment %s', async (_, hasExperiment, expected) => {
+    ['sends true when the server reports has_experiment true', true],
+    ['sends false when the server reports has_experiment false', false],
+    ['omits the property when the server omits has_experiment', undefined],
+  ])('$feature_flag_has_experiment: %s', async (_, hasExperiment) => {
     const flagsResponse: PostHogV2FlagsResponse = {
       flags: {
         'test-flag': {
@@ -869,13 +868,12 @@ describe('getFeatureFlagResult', () => {
     await posthog.getFeatureFlagResult('test-flag', 'some-distinct-id')
 
     await waitForPromises()
-    expect(capturedMessage).toMatchObject({
-      event: '$feature_flag_called',
-      properties: {
-        $feature_flag: 'test-flag',
-        $feature_flag_has_experiment: expected,
-      },
-    })
+    expect(capturedMessage.event).toBe('$feature_flag_called')
+    if (hasExperiment === undefined) {
+      expect(capturedMessage.properties).not.toHaveProperty('$feature_flag_has_experiment')
+    } else {
+      expect(capturedMessage.properties.$feature_flag_has_experiment).toBe(hasExperiment)
+    }
   })
 
   it('does not capture event when sendFeatureFlagEvents is false', async () => {
@@ -1134,7 +1132,6 @@ describe('getFeatureFlagResult', () => {
           $feature_flag_response: true,
           $feature_flag_id: 55,
           locally_evaluated: true,
-          $feature_flag_has_experiment: false,
         },
       })
 
@@ -1142,10 +1139,10 @@ describe('getFeatureFlagResult', () => {
     })
 
     it.each([
-      ['true when the definition reports has_experiment true', true, true],
-      ['false when the definition reports has_experiment false', false, false],
-      ['false when the definition omits has_experiment', undefined, false],
-    ])('captures $feature_flag_has_experiment %s on local evaluation', async (_, hasExperiment, expected) => {
+      ['sends true when the definition reports has_experiment true', true],
+      ['sends false when the definition reports has_experiment false', false],
+      ['omits the property when the definition omits has_experiment', undefined],
+    ])('$feature_flag_has_experiment on local evaluation: %s', async (_, hasExperiment) => {
       const localFlags = {
         flags: [
           {
@@ -1176,14 +1173,13 @@ describe('getFeatureFlagResult', () => {
       await posthog.getFeatureFlagResult('simple-flag', 'some-distinct-id')
 
       await waitForPromises()
-      expect(capturedMessage).toMatchObject({
-        event: '$feature_flag_called',
-        properties: {
-          $feature_flag: 'simple-flag',
-          locally_evaluated: true,
-          $feature_flag_has_experiment: expected,
-        },
-      })
+      expect(capturedMessage.event).toBe('$feature_flag_called')
+      expect(capturedMessage.properties.locally_evaluated).toBe(true)
+      if (hasExperiment === undefined) {
+        expect(capturedMessage.properties).not.toHaveProperty('$feature_flag_has_experiment')
+      } else {
+        expect(capturedMessage.properties.$feature_flag_has_experiment).toBe(hasExperiment)
+      }
 
       await posthog.shutdown()
     })

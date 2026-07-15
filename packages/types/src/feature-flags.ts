@@ -30,7 +30,7 @@ export type FeatureFlagMetadata = {
     version: number | undefined
     description: string | undefined
     payload: JsonType | undefined
-    // Whether the flag is linked to an experiment. Absent on older servers.
+    /** Whether the flag is linked to an experiment. Absent when the server does not report it. */
     has_experiment?: boolean
     // Only used when overriding a flag payload.
     original_payload?: JsonType | undefined

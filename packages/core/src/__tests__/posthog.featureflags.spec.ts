@@ -865,10 +865,10 @@ describe('PostHog Feature Flags v4', () => {
           expect(await getFlagCalledProperties()).toMatchObject({ $feature_flag_has_experiment: false })
         })
 
-        it('should send $feature_flag_has_experiment false when the server omits has_experiment', async () => {
+        it('should omit $feature_flag_has_experiment when the server omits has_experiment', async () => {
           mockFlagsWithMetadata({ id: 1, version: 1, description: undefined, payload: undefined })
 
-          expect(await getFlagCalledProperties()).toMatchObject({ $feature_flag_has_experiment: false })
+          expect(await getFlagCalledProperties()).not.toHaveProperty('$feature_flag_has_experiment')
         })
       })
 

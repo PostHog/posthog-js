@@ -896,7 +896,10 @@ export class PostHogFeatureFlags implements Extension {
                     $feature_flag_bootstrapped_payload: this._config.bootstrap?.featureFlagPayloads?.[key] || null,
                     // If we haven't yet received a response from the /flags endpoint, we must have used the bootstrapped value
                     $used_bootstrap_value: !this._flagsLoadedFromRemote,
-                    $feature_flag_has_experiment: flagDetails?.metadata?.has_experiment ?? false,
+                }
+
+                if (!isUndefined(flagDetails?.metadata?.has_experiment)) {
+                    properties.$feature_flag_has_experiment = flagDetails.metadata.has_experiment
                 }
 
                 if (!isUndefined(flagDetails?.metadata?.version)) {

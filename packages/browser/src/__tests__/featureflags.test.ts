@@ -891,7 +891,6 @@ describe('featureflags', () => {
                     $feature_flag_bootstrapped_response: null,
                     $feature_flag_bootstrapped_payload: null,
                     $used_bootstrap_value: true,
-                    $feature_flag_has_experiment: false,
                 })
             })
 
@@ -938,7 +937,6 @@ describe('featureflags', () => {
                     $feature_flag_bootstrapped_response: null,
                     $feature_flag_bootstrapped_payload: null,
                     $used_bootstrap_value: true,
-                    $feature_flag_has_experiment: false,
                     $feature_flag_original_response: false,
                     $feature_flag_original_payload: { status: 'original' },
                     $feature_flag_request_id: undefined,
@@ -955,7 +953,6 @@ describe('featureflags', () => {
                     $feature_flag_bootstrapped_response: null,
                     $feature_flag_bootstrapped_payload: null,
                     $used_bootstrap_value: true,
-                    $feature_flag_has_experiment: false,
                     $feature_flag_original_response: false,
                     $feature_flag_request_id: undefined,
                 })
@@ -971,7 +968,6 @@ describe('featureflags', () => {
                     $feature_flag_bootstrapped_response: null,
                     $feature_flag_bootstrapped_payload: null,
                     $used_bootstrap_value: true,
-                    $feature_flag_has_experiment: false,
                     $feature_flag_original_response: 'multivariate-variant-1',
                     $feature_flag_request_id: undefined,
                 })
@@ -2909,16 +2905,15 @@ describe('featureflags', () => {
             )
         })
 
-        it('includes $feature_flag_has_experiment false when server omits has_experiment', () => {
+        it('omits $feature_flag_has_experiment when server omits has_experiment', () => {
             receiveFlagWithMetadata({ id: 1, version: 2 })
 
             featureFlags.getFeatureFlag('test-flag')
 
             expect(instance.capture).toHaveBeenCalledWith(
                 '$feature_flag_called',
-                expect.objectContaining({
-                    $feature_flag: 'test-flag',
-                    $feature_flag_has_experiment: false,
+                expect.not.objectContaining({
+                    $feature_flag_has_experiment: expect.anything(),
                 })
             )
         })

@@ -496,7 +496,7 @@ describe('evaluateFlags', () => {
       expect(byKey['missing-flag'].$feature_flag_error).toEqual('errors_while_computing_flags,flag_missing')
     })
 
-    it('attaches $feature_flag_has_experiment from the response metadata, defaulting to false when absent', async () => {
+    it('attaches $feature_flag_has_experiment from the response metadata, omitting it when absent', async () => {
       const response = flagsResponseFixture()
       response.flags['variant-flag'].metadata!.has_experiment = true
       response.flags['boolean-flag'].metadata!.has_experiment = false
@@ -516,7 +516,7 @@ describe('evaluateFlags', () => {
       )
       expect(byKey['variant-flag'].$feature_flag_has_experiment).toBe(true)
       expect(byKey['boolean-flag'].$feature_flag_has_experiment).toBe(false)
-      expect(byKey['disabled-flag'].$feature_flag_has_experiment).toBe(false)
+      expect(byKey['disabled-flag']).not.toHaveProperty('$feature_flag_has_experiment')
     })
 
     it('reports quota_limited from response.quotaLimited', async () => {
@@ -647,7 +647,7 @@ describe('evaluateFlags', () => {
       expect(flagCalled.properties.$feature_flag_definitions_loaded_at).toEqual(expect.any(Number))
     })
 
-    it('attaches $feature_flag_has_experiment from the local definition, defaulting to false when absent', async () => {
+    it('attaches $feature_flag_has_experiment from the local definition', async () => {
       // The beforeEach client already loaded the fixture definitions; build a fresh
       // client against definitions that carry has_experiment.
       await posthog.shutdown()
@@ -664,13 +664,13 @@ describe('evaluateFlags', () => {
       expect(flagCalled.properties.$feature_flag_has_experiment).toBe(true)
     })
 
-    it('defaults $feature_flag_has_experiment to false when the local definition omits it', async () => {
+    it('omits $feature_flag_has_experiment when the local definition omits it', async () => {
       const flags = await posthog.evaluateFlags('user-1')
       flags.isEnabled('local-flag')
 
       await waitForPromises()
       const flagCalled = captures.find((m) => m.event === '$feature_flag_called')
-      expect(flagCalled.properties.$feature_flag_has_experiment).toBe(false)
+      expect(flagCalled.properties).not.toHaveProperty('$feature_flag_has_experiment')
     })
   })
 
