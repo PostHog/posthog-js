@@ -1,4 +1,19 @@
 {
   "version": 1,
-  "items": []
+  "items": [
+    {
+      "id": "issue-4162-auto-none-no-comment-no-close-1784162086211",
+      "kind": "issue",
+      "number": 4162,
+      "mode": "auto",
+      "commandMention": "@posthog-watcher",
+      "enqueuedAt": "2026-07-16T00:34:46.211Z",
+      "source": {
+        "eventName": "issues",
+        "runId": 29461811918,
+        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/29461811918"
+      },
+      "attempts": 0
+    }
+  ]
 }
