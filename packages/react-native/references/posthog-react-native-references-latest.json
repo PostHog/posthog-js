@@ -3887,12 +3887,12 @@
       "name": "PostHogReactNativePluginExtended",
       "properties": [
         {
-          "type": "((sessionId: string, sdkOptions: import(\"/Users/anna/Develop/posthog-js/packages/react-native-plugin/lib/typescript/module/src/index\").PostHogReactNativePluginMap, pluginConfig?: import(\"/Users/anna/Develop/posthog-js/packages/react-native-plugin/lib/typescript/module/src/index\").PostHogReactNativePluginConfig) => Promise<void>) & ((sessionId: string, sdkOptions: { [key: string]: any; }, pluginConfig: { [key: string]: any; }) => Promise<void>)",
+          "type": "((sessionId: string, sdkOptions: PostHogReactNativePluginMap, pluginConfig?: PostHogReactNativePluginConfig) => Promise<void>) & ((sessionId: string, sdkOptions: { [key: string]: any; }, pluginConfig: { [key: string]: any; }) => Promise<void>)",
           "name": "setup"
         },
         {
           "description": "Legacy session replay setup entrypoint. Prefer setup() for new native features.",
-          "type": "(sessionId: string, sdkOptions: import(\"/Users/anna/Develop/posthog-js/packages/react-native-plugin/lib/typescript/module/src/index\").PostHogReactNativePluginMap, sdkReplayConfig: import(\"/Users/anna/Develop/posthog-js/packages/react-native-plugin/lib/typescript/module/src/index\").PostHogReactNativePluginMap, decideReplayConfig: import(\"/Users/anna/Develop/posthog-js/packages/react-native-plugin/lib/typescript/module/src/index\").PostHogReactNativePluginMap) => Promise<void>",
+          "type": "(sessionId: string, sdkOptions: PostHogReactNativePluginMap, sdkReplayConfig: PostHogReactNativePluginMap, decideReplayConfig: PostHogReactNativePluginMap) => Promise<void>",
           "name": "start"
         },
         {
@@ -3920,7 +3920,7 @@
           "name": "stopRecording"
         },
         {
-          "type": "((message: string, properties?: import(\"/Users/anna/Develop/posthog-js/packages/react-native-plugin/lib/typescript/module/src/index\").PostHogReactNativePluginMap) => Promise<void>) & ((message: string, properties?: { [key: string]: any; }) => Promise<void>)",
+          "type": "((message: string, properties?: PostHogReactNativePluginMap) => Promise<void>) & ((message: string, properties?: { [key: string]: any; }) => Promise<void>)",
           "name": "addExceptionStep"
         }
       ],
@@ -4607,7 +4607,7 @@
           "name": "borderColor"
         },
         {
-          "type": "import(\"/Users/anna/Develop/posthog-js/packages/core/dist/types\").SurveyPosition",
+          "type": "SurveyPosition",
           "name": "position"
         },
         {

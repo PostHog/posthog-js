@@ -1,3 +1,6 @@
+import type { RemoteBase } from './other';
+import type { ThirdBase } from './third';
+
 /**
  * Base configuration shared by all clients
  *
@@ -101,6 +104,17 @@ export type Pair = [name: string, value: number];
  * @public
  */
 export type LooseId = 'special' | string;
+
+/**
+ * Intersection mixing a lexically imported property type with one that is only
+ * reachable through the checker
+ *
+ * @public
+ */
+export type Remote = RemoteBase & {
+    local?: string;
+    extra?: ThirdBase;
+};
 
 /**
  * Referenced by the public API but not exported

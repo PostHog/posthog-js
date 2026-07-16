@@ -101,9 +101,15 @@ function describeProperty(checker, prop, location) {
     const propType = checker.getTypeOfSymbolAtLocation(prop, location);
     const description = ts.displayPartsToString(prop.getDocumentationComment(checker)).trim();
 
+    // typeToString qualifies symbols not lexically visible at the alias declaration as
+    // import("<absolute path>").Name — machine-specific and unfit for published output
+    const typeText = checker
+        .typeToString(propType, location, ts.TypeFormatFlags.NoTruncation)
+        .replace(/import\("[^"]*"\)\./g, '');
+
     return {
         name: prop.getName(),
-        type: checker.typeToString(propType, location, ts.TypeFormatFlags.NoTruncation),
+        type: typeText,
         description: description || undefined,
     };
 }

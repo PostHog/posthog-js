@@ -82,6 +82,14 @@ describe('createTypeResolver classification', () => {
         assert.equal(typeResolver.resolveTypeAlias('LooseId').kind, 'other');
     });
 
+    test('returns null when the same alias name is declared differently in several files', () => {
+        assert.equal(typeResolver.resolveTypeAlias('Dup'), null);
+    });
+
+    test('resolves aliases declared outside the entry point', () => {
+        assert.equal(typeResolver.resolveTypeAlias('RemoteMode').kind, 'object');
+    });
+
     test('resolves aliases referenced by the public API but not exported', () => {
         const hidden = typeResolver.resolveTypeAlias('HiddenOptions');
         assert.equal(hidden.kind, 'object');
@@ -169,6 +177,19 @@ describe('resolveTypeDefinitions with type resolver', () => {
     test('interfaces keep their members', () => {
         const base = byName(types, 'BaseConfig');
         assert.deepEqual(base.properties.map((p) => p.name), ['api_host', 'loaded', 'token']);
+    });
+
+    test('cross-file property types render bare names, never import("...") qualifiers', () => {
+        const remote = byName(types, 'Remote');
+        assert.deepEqual(
+            remote.properties.map(({ name, type }) => ({ name, type })),
+            [
+                { name: 'options', type: 'RemoteOptions' },
+                { name: 'local', type: 'string' },
+                { name: 'extra', type: 'ThirdBase' },
+            ]
+        );
+        assert.doesNotMatch(JSON.stringify(types), /import\("/);
     });
 });
 

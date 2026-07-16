@@ -2990,12 +2990,12 @@
         },
         {
           "description": "Determines whether PostHog should autocapture events.\nThis setting does not affect capturing pageview events (see `capture_pageview`).\n\nby default autocapture is ignored on elements that match a `ph-no-capture` css class on the element or a parent",
-          "type": "boolean | import(\"/Users/anna/Develop/posthog-js/packages/types/dist/posthog-config\").AutocaptureConfig",
+          "type": "boolean | AutocaptureConfig",
           "name": "autocapture"
         },
         {
           "description": "Determines whether PostHog should capture rage clicks.\n\nBy default, rage clicks are ignored on elements that match a `ph-no-capture` or `ph-no-rageclick` CSS class on the element or a parent.\nWhen `defaults` is `'2025-11-30'` or later, the default is `{ content_ignorelist: true }`.\nWhen `defaults` is `'2026-05-30'` or later, the default also excludes stepper controls (`+`, `-`, `−`, `–`) and text-selection surfaces.",
-          "type": "boolean | import(\"/Users/anna/Develop/posthog-js/packages/types/dist/posthog-config\").RageclickConfig",
+          "type": "boolean | RageclickConfig",
           "name": "rageclick"
         },
         {
@@ -3126,17 +3126,17 @@
         },
         {
           "description": "Survey-specific configuration options.",
-          "type": "import(\"/Users/anna/Develop/posthog-js/packages/types/dist/posthog-config\").SurveyConfig",
+          "type": "SurveyConfig",
           "name": "surveys"
         },
         {
           "description": "Logs-specific configuration options.",
-          "type": "import(\"/Users/anna/Develop/posthog-js/packages/types/dist/posthog-config\").LogsConfig",
+          "type": "LogsConfig",
           "name": "logs"
         },
         {
           "description": "Metrics-specific configuration options for the posthog.metrics API.",
-          "type": "import(\"/Users/anna/Develop/posthog-js/packages/types/dist/posthog-config\").MetricsConfig",
+          "type": "MetricsConfig",
           "name": "metrics"
         },
         {
@@ -3277,7 +3277,7 @@
         },
         {
           "description": "Configuration defaults for breaking changes. When set to a specific date,\nenables new default behaviors that were introduced on that date.\n\n- `'unset'`: Use legacy default behaviors\n- `'2025-05-24'`: Use updated default behaviors (e.g. capture_pageview defaults to 'history_change')\n- `'2025-11-30'`: Defaults from '2025-05-24' plus additional changes (e.g. strict minimum duration for replay and rageclick content ignore list defaults to active)\n- `'2026-01-30'`: Defaults from '2025-11-30' plus external_scripts_inject_target defaults to 'head' (avoids SSR hydration errors)\n- `'2026-05-30'`: Defaults from '2026-01-30' plus `persistence_save_debounce_ms` defaults to `250`, `split_storage` and `detect_google_search_app` default to `true`, and rageclick defaults also exclude stepper controls and text-selection surfaces\n- `'2026-06-25'`: Defaults from '2026-05-30' plus `session_recording.streamNetworkBody` defaults to `true` (streams network bodies to enforce the payload size limit)",
-          "type": "import(\"/Users/anna/Develop/posthog-js/packages/types/dist/posthog-config\").ConfigDefaults",
+          "type": "ConfigDefaults",
           "name": "defaults"
         },
         {
@@ -3297,7 +3297,7 @@
         },
         {
           "description": "Determines the error tracking options.",
-          "type": "import(\"/Users/anna/Develop/posthog-js/packages/types/dist/posthog-config\").ErrorTrackingOptions",
+          "type": "ErrorTrackingOptions",
           "name": "error_tracking"
         },
         {
@@ -3406,7 +3406,7 @@
         },
         {
           "description": "This function or array of functions - if provided - are called immediately before sending data to the server.\nIt allows you to edit data before it is sent, or choose not to send it all.\nif provided as an array the functions are called in the order they are provided\nany one function returning null means the event will not be sent",
-          "type": "import(\"/Users/anna/Develop/posthog-js/packages/types/dist/capture\").BeforeSendFn | import(\"/Users/anna/Develop/posthog-js/packages/types/dist/capture\").BeforeSendFn[]",
+          "type": "BeforeSendFn | BeforeSendFn[]",
           "name": "before_send"
         },
         {
@@ -3419,7 +3419,7 @@
           "name": "sanitize_properties"
         },
         {
-          "type": "(eventName: string, eventData: import(\"/Users/anna/Develop/posthog-js/packages/types/dist/capture\").CaptureResult) => void",
+          "type": "(eventName: string, eventData: CaptureResult) => void",
           "name": "_onCapture"
         },
         {
@@ -3434,17 +3434,17 @@
         },
         {
           "description": "An object containing the `distinctID`, `isIdentifiedID`, and `featureFlags` keys,\nwhere `distinctID` is a string, and `featureFlags` is an object of key-value pairs.\n\nSince there is a delay between initializing PostHog and fetching feature flags,\nfeature flags are not always available immediately.\nThis makes them unusable if you want to do something like redirecting a user\nto a different page based on a feature flag.\n\nYou can, therefore, fetch the feature flags in your server and pre-fill them here,\nallowing PostHog to know the feature flag values immediately.\n\nAfter the SDK fetches feature flags from PostHog, it will use those flag values instead of bootstrapped ones.",
-          "type": "import(\"/Users/anna/Develop/posthog-js/packages/types/dist/posthog-config\").BootstrapConfig",
+          "type": "BootstrapConfig",
           "name": "bootstrap"
         },
         {
           "description": "The segment analytics object.",
-          "type": "import(\"/Users/anna/Develop/posthog-js/packages/types/dist/segment\").SegmentAnalytics",
+          "type": "SegmentAnalytics",
           "name": "segment"
         },
         {
           "description": "Determines whether to capture heatmaps.",
-          "type": "boolean | import(\"/Users/anna/Develop/posthog-js/packages/types/dist/posthog-config\").HeatmapConfig",
+          "type": "boolean | HeatmapConfig",
           "name": "capture_heatmaps"
         },
         {
@@ -3453,12 +3453,12 @@
         },
         {
           "description": "Determines whether to capture dead clicks.\n\nby default dead clicks are ignored on elements that match a `ph-no-capture` or `ph-no-deadclick` css class on the element or a parent",
-          "type": "boolean | import(\"/Users/anna/Develop/posthog-js/packages/types/dist/posthog-config\").DeadClicksAutoCaptureConfig",
+          "type": "boolean | DeadClicksAutoCaptureConfig",
           "name": "capture_dead_clicks"
         },
         {
           "description": "Determines whether to capture exceptions.",
-          "type": "boolean | import(\"/Users/anna/Develop/posthog-js/packages/types/dist/posthog-config\").ExceptionAutoCaptureConfig",
+          "type": "boolean | ExceptionAutoCaptureConfig",
           "name": "capture_exceptions"
         },
         {
@@ -3492,12 +3492,12 @@
         },
         {
           "description": "Used to change the behavior of the request queue.\nThis is an advanced feature and should be used with caution.",
-          "type": "import(\"/Users/anna/Develop/posthog-js/packages/types/dist/posthog-config\").RequestQueueConfig",
+          "type": "RequestQueueConfig",
           "name": "request_queue_config"
         },
         {
           "description": "Used to set-up external integrations with PostHog data - such as session replays, distinct id, etc.",
-          "type": "Record<import(\"/Users/anna/Develop/posthog-js/packages/types/dist/posthog-config\").ExternalIntegrationKind, boolean>",
+          "type": "Record<ExternalIntegrationKind, boolean>",
           "name": "integrations"
         },
         {
@@ -3621,12 +3621,12 @@
         },
         {
           "description": "Capture an event.",
-          "type": "(event_name: string, properties?: Properties | null, options?: import(\"/Users/anna/Develop/posthog-js/packages/types/dist/capture\").CaptureOptions) => import(\"/Users/anna/Develop/posthog-js/packages/types/dist/capture\").CaptureResult | undefined",
+          "type": "(event_name: string, properties?: Properties | null, options?: CaptureOptions) => CaptureResult | undefined",
           "name": "capture"
         },
         {
           "description": "Capture an exception.",
-          "type": "(error: unknown, additionalProperties?: Properties) => import(\"/Users/anna/Develop/posthog-js/packages/types/dist/capture\").CaptureResult | undefined",
+          "type": "(error: unknown, additionalProperties?: Properties) => CaptureResult | undefined",
           "name": "captureException"
         },
         {
@@ -3636,12 +3636,12 @@
         },
         {
           "description": "Capture a log entry and send it to the PostHog logs endpoint.",
-          "type": "(options: import(\"/Users/anna/Develop/posthog-js/packages/types/dist/capture-log\").CaptureLogOptions) => void",
+          "type": "(options: CaptureLogOptions) => void",
           "name": "captureLog"
         },
         {
           "description": "Logger with convenience methods for each severity level.",
-          "type": "import(\"/Users/anna/Develop/posthog-js/packages/types/dist/capture-log\").Logger",
+          "type": "Logger",
           "name": "logger"
         },
         {
@@ -3671,7 +3671,7 @@
         },
         {
           "description": "Create an alias for the current user.",
-          "type": "(alias: string, original?: string) => import(\"/Users/anna/Develop/posthog-js/packages/types/dist/capture\").CaptureResult | void | number",
+          "type": "(alias: string, original?: string) => CaptureResult | void | number",
           "name": "alias"
         },
         {
@@ -3716,12 +3716,12 @@
         },
         {
           "description": "The feature flags instance. Provides access to feature flag override methods.",
-          "type": "{ overrideFeatureFlags(overrideOptions: import(\"/Users/anna/Develop/posthog-js/packages/types/dist/feature-flags\").OverrideFeatureFlagsOptions): void; override(flags: boolean | string[] | Record<string, string | boolean>, suppressWarning?: boolean): void; }",
+          "type": "{ overrideFeatureFlags(overrideOptions: OverrideFeatureFlagsOptions): void; override(flags: boolean | string[] | Record<string, string | boolean>, suppressWarning?: boolean): void; }",
           "name": "featureFlags"
         },
         {
           "description": "Get the value of a feature flag.",
-          "type": "(key: string, options?: import(\"/Users/anna/Develop/posthog-js/packages/types/dist/feature-flags\").FeatureFlagOptions) => boolean | string | undefined",
+          "type": "(key: string, options?: FeatureFlagOptions) => boolean | string | undefined",
           "name": "getFeatureFlag"
         },
         {
@@ -3731,12 +3731,12 @@
         },
         {
           "description": "Get a feature flag evaluation result including both the flag value and payload.\n\nBy default, this method emits the `$feature_flag_called` event.",
-          "type": "(key: string, options?: import(\"/Users/anna/Develop/posthog-js/packages/types/dist/feature-flags\").FeatureFlagOptions) => import(\"/Users/anna/Develop/posthog-js/packages/types/dist/feature-flags\").FeatureFlagResult | undefined",
+          "type": "(key: string, options?: FeatureFlagOptions) => FeatureFlagResult | undefined",
           "name": "getFeatureFlagResult"
         },
         {
           "description": "Check if a feature flag is enabled.",
-          "type": "(key: string, options?: import(\"/Users/anna/Develop/posthog-js/packages/types/dist/feature-flags\").FeatureFlagOptions) => boolean | undefined",
+          "type": "(key: string, options?: FeatureFlagOptions) => boolean | undefined",
           "name": "isFeatureEnabled"
         },
         {
@@ -3751,7 +3751,7 @@
         },
         {
           "description": "Register a callback to be called when feature flags are loaded.",
-          "type": "(callback: import(\"/Users/anna/Develop/posthog-js/packages/types/dist/feature-flags\").FeatureFlagsCallback) => () => void",
+          "type": "(callback: FeatureFlagsCallback) => () => void",
           "name": "onFeatureFlags"
         },
         {
@@ -3776,12 +3776,12 @@
         },
         {
           "description": "Get the list of early access features.",
-          "type": "(callback: import(\"/Users/anna/Develop/posthog-js/packages/types/dist/feature-flags\").EarlyAccessFeatureCallback, forceReload?: boolean, stages?: import(\"/Users/anna/Develop/posthog-js/packages/types/dist/feature-flags\").EarlyAccessFeatureStage[]) => void",
+          "type": "(callback: EarlyAccessFeatureCallback, forceReload?: boolean, stages?: EarlyAccessFeatureStage[]) => void",
           "name": "getEarlyAccessFeatures"
         },
         {
           "description": "Update enrollment in an early access feature.",
-          "type": "(key: string, isEnrolled: boolean, stage?: import(\"/Users/anna/Develop/posthog-js/packages/types/dist/feature-flags\").EarlyAccessFeatureStage) => void",
+          "type": "(key: string, isEnrolled: boolean, stage?: EarlyAccessFeatureStage) => void",
           "name": "updateEarlyAccessFeatureEnrollment"
         },
         {
@@ -3826,7 +3826,7 @@
         },
         {
           "description": "Register a callback to be called when the session ID changes.",
-          "type": "(callback: import(\"/Users/anna/Develop/posthog-js/packages/types/dist/session-recording\").SessionIdChangedCallback) => () => void",
+          "type": "(callback: SessionIdChangedCallback) => () => void",
           "name": "onSessionId"
         },
         {
@@ -3906,12 +3906,12 @@
         },
         {
           "description": "Check if a survey can be rendered.",
-          "type": "(surveyId: string) => import(\"/Users/anna/Develop/posthog-js/packages/types/dist/survey\").SurveyRenderReason | null",
+          "type": "(surveyId: string) => SurveyRenderReason | null",
           "name": "canRenderSurvey"
         },
         {
           "description": "Check if a survey can be rendered (async version).",
-          "type": "(surveyId: string, forceReload?: boolean) => Promise<import(\"/Users/anna/Develop/posthog-js/packages/types/dist/survey\").SurveyRenderReason>",
+          "type": "(surveyId: string, forceReload?: boolean) => Promise<SurveyRenderReason>",
           "name": "canRenderSurveyAsync"
         },
         {
@@ -3921,7 +3921,7 @@
         },
         {
           "description": "Start automatic exception capture.",
-          "type": "(config?: import(\"/Users/anna/Develop/posthog-js/packages/types/dist/posthog-config\").ExceptionAutoCaptureConfig) => void",
+          "type": "(config?: ExceptionAutoCaptureConfig) => void",
           "name": "startExceptionAutocapture"
         },
         {
@@ -3950,7 +3950,7 @@
           "name": "captureTraceMetric"
         },
         {
-          "type": "{ set: (prop: string | Properties, to?: string, callback?: import(\"/Users/anna/Develop/posthog-js/packages/types/dist/request\").RequestCallback) => void; set_once: (prop: string | Properties, to?: string, callback?: import(\"/Users/anna/Develop/posthog-js/packages/types/dist/request\").RequestCallback) => void; }",
+          "type": "{ set: (prop: string | Properties, to?: string, callback?: RequestCallback) => void; set_once: (prop: string | Properties, to?: string, callback?: RequestCallback) => void; }",
           "name": "people"
         },
         {
