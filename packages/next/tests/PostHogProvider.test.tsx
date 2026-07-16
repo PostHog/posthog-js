@@ -473,6 +473,27 @@ describe('PostHogProvider', () => {
             )
         })
 
+        it('propagates errors from cookies() so Next.js can handle dynamic rendering control flow', async () => {
+            const { cookies } = require('next/headers.js')
+            const dynamicUsageError = Object.assign(new Error('Dynamic server usage'), {
+                digest: 'DYNAMIC_SERVER_USAGE',
+            })
+            cookies.mockRejectedValueOnce(dynamicUsageError)
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+
+            await expect(
+                PostHogProvider({
+                    apiKey: 'phc_test123',
+                    bootstrapFlags: true,
+                    children: <div>Child</div>,
+                })
+            ).rejects.toBe(dynamicUsageError)
+
+            expect(mockGetAllFlagsAndPayloads).not.toHaveBeenCalled()
+            expect(warnSpy).not.toHaveBeenCalled()
+            warnSpy.mockRestore()
+        })
+
         it('renders without bootstrap when flag evaluation fails', async () => {
             mockGetAllFlagsAndPayloads.mockRejectedValue(new Error('network timeout'))
             const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
