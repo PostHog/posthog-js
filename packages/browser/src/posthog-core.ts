@@ -18,6 +18,7 @@ import {
     EVENT_PAGEVIEW,
     FLAG_CALL_REPORTED,
     PEOPLE_DISTINCT_ID_KEY,
+    PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
     SDK_DEBUG_EXTENSIONS_INIT_METHOD,
     SDK_DEBUG_EXTENSIONS_INIT_TIME_MS,
     SESSION_RECORDING_REMOTE_CONFIG,
@@ -114,6 +115,7 @@ import {
     isObject,
     isBoolean,
     getEventUuid,
+    minimizeFlagCalledEventProperties,
 } from '@posthog/core'
 import { uuidv7 } from './uuidv7'
 import { ExternalIntegrations } from './extensions/external-integration'
@@ -171,6 +173,11 @@ const CONSENT_COOKIELESS_WARN = 'Consent opt in/out is not valid with cookieless
 const SURVEYS_NOT_AVAILABLE = 'Surveys module not available'
 const SANITIZE_DEPRECATED = 'sanitize_properties is deprecated. Use before_send instead'
 const DENYLIST_INVALID = 'Invalid value for property_denylist config: '
+
+// Transport-level keys the browser SDK carries inside event properties (unlike other SDKs,
+// where they live outside `properties`). They are out of scope of the minimal
+// $feature_flag_called allowlist and must survive minimization for ingestion to work.
+const FLAG_CALLED_TRANSPORT_PROPERTY_KEYS = ['token', 'distinct_id', COOKIELESS_MODE_FLAG_PROPERTY]
 
 const PRIMARY_INSTANCE_NAME = 'posthog'
 
@@ -1391,8 +1398,18 @@ export class PostHog implements PostHogInterface {
             data.properties['$lib_rate_limit_remaining_tokens'] = clientRateLimitContext.remainingTokens
         }
 
+        // When the server gates this project into minimal $feature_flag_called events and the
+        // evaluated flag is not linked to an experiment, the fully merged properties are rebuilt
+        // from the strict allowlist below (after the last SDK-added property) so super properties
+        // and the context envelope are structurally excluded. Any missing signal falls back to
+        // the full event.
+        const isMinimalFlagCalledEvent =
+            event_name === '$feature_flag_called' &&
+            data.properties['$feature_flag_has_experiment'] === false &&
+            this.get_property(PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS) === true
+
         const setProperties = options?.$set
-        if (setProperties) {
+        if (setProperties && !isMinimalFlagCalledEvent) {
             data.$set = options?.$set
         }
         const unsetProperties = options?.$unset
@@ -1406,11 +1423,12 @@ export class PostHog implements PostHogInterface {
         // $identify should always include initial props because it creates/merges persons
         // and may be processed before earlier anonymous events on the server
         const forceIncludeInitialProps = event_name === EVENT_IDENTIFY
-        const setOnceProperties = this._calculate_set_once_properties(
-            options?.$set_once,
-            markSetOnceAsSent,
-            forceIncludeInitialProps
-        )
+        // Minimal flag-called events must not carry $set_once. Skipping the calculation (rather
+        // than dropping its result) avoids marking the initial person props as sent, so they
+        // still go out with the next full event.
+        const setOnceProperties = isMinimalFlagCalledEvent
+            ? undefined
+            : this._calculate_set_once_properties(options?.$set_once, markSetOnceAsSent, forceIncludeInitialProps)
         if (setOnceProperties) {
             data.$set_once = setOnceProperties
         }
@@ -1422,6 +1440,12 @@ export class PostHog implements PostHogInterface {
         if (!isUndefined(options?.timestamp)) {
             data.properties['$event_time_override_provided'] = true
             data.properties['$event_time_override_system_time'] = systemTime
+        }
+
+        // before_send runs after this filter and may deliberately re-add stripped properties;
+        // the SDK itself must not enrich beyond allowlisted keys past this point.
+        if (isMinimalFlagCalledEvent) {
+            data.properties = minimizeFlagCalledEventProperties(data.properties, FLAG_CALLED_TRANSPORT_PROPERTY_KEYS)
         }
 
         if (event_name === SurveyEventName.DISMISSED || event_name === SurveyEventName.SENT) {

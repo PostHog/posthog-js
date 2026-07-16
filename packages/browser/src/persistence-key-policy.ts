@@ -29,6 +29,7 @@ import {
     PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
     PERSISTENCE_FEATURE_FLAG_PAYLOADS,
     PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+    PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
     PERSISTENCE_OVERRIDE_FEATURE_FLAGS,
     PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS,
     PRODUCT_TOURS,
@@ -148,6 +149,9 @@ export const PERSISTENCE_KEY_POLICY: Record<string, PersistenceKeyPolicyEntry> =
     [PERSISTENCE_FEATURE_FLAG_DETAILS]: { exposure: 'hidden', storageGroup: 'flags' },
     [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: { exposure: 'event', storageGroup: 'flags' },
     [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: { exposure: 'event', storageGroup: 'flags', volatile: true },
+    // Server gate for minimal $feature_flag_called events — internal state that must never
+    // leak into event properties.
+    [PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS]: { exposure: 'hidden', storageGroup: 'flags' },
     [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: { exposure: 'event' },
     [PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS]: { exposure: 'hidden' },
     [STORED_PERSON_PROPERTIES_KEY]: { exposure: 'hidden' },

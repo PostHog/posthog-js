@@ -796,9 +796,12 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
         if (!result.success) {
           if (!this.disableRemoteFeatureFlags) {
+            // Keep the persisted gate alongside the kept flags — a failed request is not a
+            // signal that the server turned minimal flag-called events off.
             this.setKnownFeatureFlagDetails({
               flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
               requestError: result.error,
+              minimalFlagCalledEvents: this.getStoredFlagDetails()?.minimalFlagCalledEvents,
             })
           }
           return undefined
@@ -811,6 +814,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
             this.setKnownFeatureFlagDetails({
               flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
               quotaLimited: res.quotaLimited,
+              minimalFlagCalledEvents: this.getStoredFlagDetails()?.minimalFlagCalledEvents,
             })
           }
           this._logger.warn(
@@ -854,6 +858,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
             evaluatedAt: res.evaluatedAt,
             errorsWhileComputingFlags: res.errorsWhileComputingFlags,
             quotaLimited: res.quotaLimited,
+            // Absence of the field always flips the gate off — fail safe to full events.
+            minimalFlagCalledEvents: res.minimalFlagCalledEvents === true,
           })
           // Mark that we hit the /flags endpoint so we can capture this in the $feature_flag_called event
           this.setPersistedProperty(PostHogPersistedProperty.FlagsEndpointWasHit, true)
@@ -918,6 +924,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
   private getStoredFlagDetails(): PostHogFlagsStorageFormat | undefined {
     return this.getPersistedProperty<PostHogFlagsStorageFormat>(PostHogPersistedProperty.FeatureFlagDetails)
+  }
+
+  protected isMinimalFlagCalledEventsEnabled(): boolean {
+    return this.getStoredFlagDetails()?.minimalFlagCalledEvents === true
   }
 
   protected getKnownFeatureFlags(): PostHogFlagsResponse['featureFlags'] | undefined {

@@ -5,6 +5,7 @@ import {
   isBlockedUA,
   isPlainObject,
   JsonType,
+  minimizeFlagCalledEventProperties,
   PostHogCaptureOptions,
   PostHogCoreStateless,
   PostHogEventProperties,
@@ -145,6 +146,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private _flagOverrides?: Record<string, FeatureFlagValue>
   private _payloadOverrides?: Record<string, JsonType>
 
+  // Server-controlled gate for minimal $feature_flag_called events. Single client-level gate,
+  // last-writer-wins across the two signal sources (v2 /flags responses and the poller's
+  // flag-definition loads) — both derive from the same per-team server config and converge.
+  private _minimalFlagCalledEvents: boolean = false
+
   distinctIdHasSentFlagCalls: Record<string, Set<string>>
 
   // waitUntil debounce state (per-instance)
@@ -237,6 +243,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           },
           onLoad: (count: number) => {
             this._events.emit('localEvaluationFlagsLoaded', count)
+          },
+          onMinimalFlagCalledEvents: (enabled: boolean) => {
+            this._minimalFlagCalledEvents = enabled
           },
           customHeaders: this.getCustomHeaders(),
           cacheProvider: normalizedOptions.flagDefinitionCacheProvider,
@@ -1180,6 +1189,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       if (flagsResponse === undefined) {
         featureFlagError = FeatureFlagError.UNKNOWN_ERROR
       } else {
+        this._minimalFlagCalledEvents = flagsResponse.minimalFlagCalledEvents === true
         requestId = flagsResponse.requestId
         evaluatedAt = flagsResponse.evaluatedAt
 
@@ -1962,6 +1972,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         flagKeys
       )
       if (details) {
+        this._minimalFlagCalledEvents = details.minimalFlagCalledEvents === true
         requestId = details.requestId
         evaluatedAt = details.evaluatedAt
         errorsWhileComputing = Boolean((details as any).errorsWhileComputingFlags)
@@ -2035,6 +2046,17 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       errorsWhileComputing,
       quotaLimited,
     })
+  }
+
+  /**
+   * Minimal iff the server gate is on and the flag is known to not be linked to an
+   * experiment. Any missing signal — no gate seen yet, `$feature_flag_has_experiment`
+   * absent — falls back to the full event.
+   *
+   * @internal
+   */
+  private _shouldSendMinimalFlagCalledEvent(properties: PostHogEventProperties): boolean {
+    return this._minimalFlagCalledEvents && properties.$feature_flag_has_experiment === false
   }
 
   /**
@@ -2798,11 +2820,20 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       mergedProperties.$session_id = contextData.sessionId
     }
 
+    // Minimal $feature_flag_called events: rebuild from the strict allowlist before before_send
+    // runs, so a customer hook may deliberately re-add stripped properties. Everything the SDK
+    // itself adds after this point ($groups, $lib/$lib_version/$is_server, $geoip_disable) is
+    // allowlisted — no SDK enrichment may reintroduce stripped properties.
+    const finalProperties =
+      event === '$feature_flag_called' && this._shouldSendMinimalFlagCalledEvent(mergedProperties)
+        ? minimizeFlagCalledEventProperties(mergedProperties)
+        : mergedProperties
+
     // Run before_send if configured
     const eventMessage = this._runBeforeSend({
       distinctId: mergedDistinctId,
       event,
-      properties: mergedProperties,
+      properties: finalProperties,
       groups,
       flags,
       sendFeatureFlags,

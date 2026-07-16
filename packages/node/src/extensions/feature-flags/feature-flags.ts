@@ -61,6 +61,13 @@ type FeatureFlagsPollerOptions = {
   fetch?: (url: string, options: PostHogFetchOptions) => Promise<PostHogFetchResponse>
   onError?: (error: Error) => void
   onLoad?: (count: number) => void
+  /**
+   * Called whenever flag definitions are (re)loaded — from the API, the cache provider, or a
+   * quota reset — with the server gate for minimal `$feature_flag_called` events carried by
+   * that payload. Lets the client keep a single last-writer-wins gate across the local-eval
+   * and remote `/flags` signal sources.
+   */
+  onMinimalFlagCalledEvents?: (enabled: boolean) => void
   customHeaders?: { [key: string]: string }
   cacheProvider?: FlagDefinitionCacheProvider
   strictLocalEvaluation?: boolean
@@ -104,6 +111,7 @@ class FeatureFlagsPoller {
   private nextFetchAllowedAt?: number
   private strictLocalEvaluation: boolean
   private flagDefinitionsLoadedAt?: number
+  private onMinimalFlagCalledEvents?: (enabled: boolean) => void
 
   constructor({
     pollingInterval,
@@ -129,6 +137,7 @@ class FeatureFlagsPoller {
     this.onError = options.onError
     this.customHeaders = customHeaders
     this.onLoad = options.onLoad
+    this.onMinimalFlagCalledEvents = options.onMinimalFlagCalledEvents
     this.cacheProvider = options.cacheProvider
     this.strictLocalEvaluation = options.strictLocalEvaluation ?? false
     void this.loadFeatureFlags()
@@ -679,6 +688,8 @@ class FeatureFlagsPoller {
     this.groupTypeMapping = flagData.groupTypeMapping
     this.cohorts = flagData.cohorts
     this.loadedSuccessfullyOnce = true
+    // Absence of the field (older cached data, older servers) always means full events.
+    this.onMinimalFlagCalledEvents?.(flagData.minimalFlagCalledEvents === true)
   }
 
   /**
@@ -896,6 +907,7 @@ class FeatureFlagsPoller {
           this.featureFlagsByKey = {}
           this.groupTypeMapping = {}
           this.cohorts = {}
+          this.onMinimalFlagCalledEvents?.(false)
           return
 
         case 403:
@@ -928,6 +940,8 @@ class FeatureFlagsPoller {
             flags: (responseJson.flags as PostHogFeatureFlag[]) ?? [],
             groupTypeMapping: (responseJson.group_type_mapping as Record<string, string>) || {},
             cohorts: (responseJson.cohorts as Record<string, PropertyGroup>) || {},
+            // Absence of the field always flips the gate off — fail safe to full events.
+            minimalFlagCalledEvents: responseJson.minimal_flag_called_events === true,
           }
 
           this.updateFlagState(flagData)

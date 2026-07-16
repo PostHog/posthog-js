@@ -462,6 +462,11 @@ export interface FlagsResponse extends RemoteConfig {
     requestId?: string
     flags: Record<string, FeatureFlagDetail>
     evaluatedAt?: number
+    /**
+     * Server-controlled gate for minimal `$feature_flag_called` events. `true` only when the
+     * project opted in; omitted otherwise. Absence always means full events.
+     */
+    minimalFlagCalledEvents?: boolean
 }
 
 export type SiteAppGlobals = {

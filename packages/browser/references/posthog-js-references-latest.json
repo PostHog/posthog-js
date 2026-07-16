@@ -2622,6 +2622,11 @@
           "name": "flags"
         },
         {
+          "description": "Server-controlled gate for minimal `$feature_flag_called` events. `true` only when the project opted in; omitted otherwise. Absence always means full events.",
+          "type": "boolean",
+          "name": "minimalFlagCalledEvents"
+        },
+        {
           "type": "string",
           "name": "requestId"
         }

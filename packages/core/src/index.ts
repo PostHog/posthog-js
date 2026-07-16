@@ -4,6 +4,8 @@ export {
   getVariantFromValue,
   parsePayload,
   flagDetailsToResults,
+  MINIMAL_FLAG_CALLED_EVENT_PROPERTIES,
+  minimizeFlagCalledEventProperties,
 } from './featureFlagUtils'
 export {
   gzipCompress,
