@@ -17,11 +17,13 @@ renderToStaticMarkup(
         PostHogProvider,
         {
             apiKey: 'phc_test',
-            bootstrap: {
-                distinctID: 'ssr-user',
-                isIdentifiedID: false,
-                featureFlags: { [flagKey]: 'variant-a' },
-                featureFlagPayloads: {},
+            clientOptions: {
+                bootstrap: {
+                    distinctID: 'ssr-user',
+                    isIdentifiedID: false,
+                    featureFlags: { [flagKey]: 'variant-a' },
+                    featureFlagPayloads: {},
+                },
             },
         },
         React.createElement(FlagResult)

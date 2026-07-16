@@ -4,9 +4,7 @@ import React from 'react'
 import { posthog as posthogJs } from 'posthog-js'
 import { isUndefined } from '@posthog/core'
 import { PostHogContext } from '@posthog/react'
-import type { BootstrapConfig, PostHogConfig } from 'posthog-js'
-
-export type { BootstrapConfig }
+import type { PostHogConfig } from 'posthog-js'
 
 function hasTracingHeadersConfig(options?: Partial<PostHogConfig>): boolean {
     return (
@@ -37,8 +35,6 @@ export interface ClientPostHogProviderProps {
     apiKey: string
     /** Optional posthog-js configuration overrides */
     options?: Partial<PostHogConfig>
-    /** Server-evaluated feature flag values to bootstrap the client SDK with */
-    bootstrap?: BootstrapConfig
     children: React.ReactNode
 }
 
@@ -56,21 +52,23 @@ export interface ClientPostHogProviderProps {
  * the `client` prop, we guarantee the instance is fully configured before any
  * child code runs.
  */
-export function ClientPostHogProvider({ apiKey, options, bootstrap, children }: ClientPostHogProviderProps) {
+export function ClientPostHogProvider({ apiKey, options, children }: ClientPostHogProviderProps) {
     if (!apiKey) {
         // eslint-disable-next-line no-console
         console.warn('[PostHog Next.js] apiKey is required — PostHog will not be initialized')
         return <>{children}</>
     }
 
-    const mergedOptions = bootstrap ? { ...options, bootstrap: { ...options?.bootstrap, ...bootstrap } } : options
-
     // Initialize eagerly during render on the client so that child effects
     // see a fully configured posthog instance. The `__loaded` guard prevents
     // double-init (e.g. React StrictMode).
     if (typeof window !== 'undefined' && !posthogJs.__loaded) {
-        posthogJs.init(apiKey, withDefaultTracingHeaders(mergedOptions))
+        posthogJs.init(apiKey, withDefaultTracingHeaders(options))
     }
 
-    return <PostHogContext.Provider value={{ client: posthogJs, bootstrap }}>{children}</PostHogContext.Provider>
+    return (
+        <PostHogContext.Provider value={{ client: posthogJs, bootstrap: options?.bootstrap }}>
+            {children}
+        </PostHogContext.Provider>
+    )
 }
