@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.43.1
+
+### Patch Changes
+
+- [#4168](https://github.com/PostHog/posthog-js/pull/4168) [`06d19a2`](https://github.com/PostHog/posthog-js/commit/06d19a2c5ab7801971219f8b50131f19e5f0ed17) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Avoid Next.js Edge runtime warnings for native compression and fatal error handling.
+  (2026-07-16)
+
 ## 1.43.0
 
 ### Minor Changes
