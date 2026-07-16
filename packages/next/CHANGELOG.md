@@ -1,5 +1,18 @@
 # @posthog/next
 
+## 0.8.4
+
+### Patch Changes
+
+- [#4170](https://github.com/PostHog/posthog-js/pull/4170) [`ba536ba`](https://github.com/PostHog/posthog-js/commit/ba536bab0bf703d2416ba4da477c08fb7165ace3) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Let Next.js dynamic rendering bailouts propagate when bootstrapping flags.
+  (2026-07-16)
+
+- [#4169](https://github.com/PostHog/posthog-js/pull/4169) [`faf3e7d`](https://github.com/PostHog/posthog-js/commit/faf3e7dbc296dde8d936bbc1ac07eac83b40d4b1) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Require the Pages Router request context in server identity resolver types.
+  (2026-07-16)
+- Updated dependencies [[`06d19a2`](https://github.com/PostHog/posthog-js/commit/06d19a2c5ab7801971219f8b50131f19e5f0ed17)]:
+    - @posthog/core@1.43.1
+    - posthog-node@5.45.2
+
 ## 0.8.3
 
 ### Patch Changes

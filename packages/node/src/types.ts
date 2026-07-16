@@ -146,8 +146,14 @@ export type FeatureFlagBucketingIdentifier = 'distinct_id' | 'device_id' | '' | 
 
 export type BeforeSendFn = (event: EventMessage | null) => EventMessage | null
 
-export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'maxQueueSize'> & {
+export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInterval' | 'maxQueueSize'> & {
   persistence?: 'memory'
+  /**
+   * The interval in milliseconds between periodic flushes
+   *
+   * @default 5000
+   */
+  flushInterval?: number
   /**
    * The maximum number of cached messages either in memory or on the local storage (must be higher than `flushAt`)
    *
@@ -356,6 +362,8 @@ export type PostHogFeatureFlag = {
   rollout_percentage: null | number
   ensure_experience_continuity: boolean
   experiment_set: number[]
+  /** Whether the flag is linked to an experiment. Absent when the server does not report it. */
+  has_experiment?: boolean
 }
 
 /**

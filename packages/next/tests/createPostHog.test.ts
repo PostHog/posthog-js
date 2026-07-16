@@ -410,16 +410,20 @@ describe('createPostHog', () => {
         }
 
         it('passes the GetServerSidePropsContext to the resolver and applies the server distinct id', async () => {
-            const getDistinctId = jest.fn(() => 'server-user')
             const ctx = createMockPagesContext({
                 ph_phc_test123_posthog: JSON.stringify({ distinct_id: 'cookie-user' }),
             })
+            const { getPostHog } = createPagesPostHog({
+                apiKey: 'phc_test123',
+                getDistinctId: (resolverContext) => {
+                    expect(resolverContext.req).toBe(ctx.req)
+                    return 'server-user'
+                },
+            })
 
-            const { getPostHog } = createPagesPostHog({ apiKey: 'phc_test123', getDistinctId })
             const client = await getPostHog(ctx)
             client.capture({ event: 'test_event' })
 
-            expect(getDistinctId).toHaveBeenCalledWith(ctx)
             expect(mockWithContext).toHaveBeenCalledWith(
                 expect.objectContaining({ distinctId: 'server-user' }),
                 expect.any(Function)

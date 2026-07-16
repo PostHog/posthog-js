@@ -182,7 +182,7 @@ export interface BootstrapConfig {
      * - a valid UUID v7
      * - the timestamp part must be <= the timestamp of the first event in the session
      * - the timestamp of the last event in the session must be < the timestamp part + 24 hours
-     * **/
+     */
     sessionID?: string
 }
 
@@ -1389,7 +1389,7 @@ export interface PostHogConfig {
      */
     opt_out_useragent_filter: boolean
 
-    /** @deprecated Use `consent_persistence_name` instead. This will be removed in a future major version. **/
+    /** @deprecated Use `consent_persistence_name` instead. This will be removed in a future major version. */
     opt_out_capturing_cookie_prefix: string | null
 
     /**

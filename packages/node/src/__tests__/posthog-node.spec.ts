@@ -616,6 +616,16 @@ describe('PostHog Node.js', () => {
     })
   })
 
+  describe('flushInterval', () => {
+    it('defaults to 5000 for Node', () => {
+      const ph = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+      })
+
+      expect((ph as any).flushInterval).toBe(5000)
+    })
+  })
+
   describe('maxQueueSize', () => {
     it('defaults to 10000, higher than the shared core default of 1000', () => {
       const ph = new PostHog('TEST_API_KEY', {

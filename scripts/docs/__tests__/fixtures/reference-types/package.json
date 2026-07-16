@@ -1,0 +1,6 @@
+{
+    "name": "reference-types-fixture",
+    "version": "0.0.0",
+    "private": true,
+    "types": "index.d.ts"
+}

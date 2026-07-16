@@ -11,6 +11,7 @@ const shouldWriteVersionedReferences = process.env.GENERATE_VERSIONED_REFERENCES
 const config = {
     packageDir: path.resolve(__dirname, '..'),  // packages/browser
     apiJsonPath: path.resolve(__dirname, '../docs/posthog-js.api.json'),
+    dtsEntryPath: path.resolve(__dirname, '../lib/src/entrypoints/module.no-external.es.d.ts'),
     outputPath: path.resolve(__dirname, `../references/posthog-js-references-${version}.json`),
     version: version,
     id: 'posthog-js',

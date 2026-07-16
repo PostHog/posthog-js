@@ -1,7 +1,15 @@
 import type { GetServerSidePropsContext } from 'next'
 import type { IPostHog } from 'posthog-node'
 import { getServerSidePostHog } from './getServerSidePostHog.js'
-import type { CreatePostHogConfig } from '../server/createPostHog.js'
+import type { CreatePostHogConfig as AppCreatePostHogConfig } from '../server/createPostHog.js'
+import type { PostHogDistinctIdResolver as SharedPostHogDistinctIdResolver } from '../shared/identity.js'
+
+export type PostHogDistinctIdResolver = (ctx: GetServerSidePropsContext) => ReturnType<SharedPostHogDistinctIdResolver>
+
+export interface CreatePostHogConfig extends Omit<AppCreatePostHogConfig, 'getDistinctId'> {
+    /** Resolves a trusted distinct ID from the current Pages Router request. */
+    getDistinctId?: PostHogDistinctIdResolver
+}
 
 export interface PagesCreatePostHogResult {
     /**
@@ -32,8 +40,7 @@ export interface PagesCreatePostHogResult {
  * import { createPostHog } from '@posthog/next/pages'
  *
  * export const { getPostHog } = createPostHog({
- *     getDistinctId: async (ctx) =>
- *         ctx ? (await getServerSession(ctx.req, ctx.res, authOptions))?.user?.id : undefined,
+ *     getDistinctId: async (ctx) => (await getServerSession(ctx.req, ctx.res, authOptions))?.user?.id,
  * })
  *
  * // pages/index.tsx
@@ -45,8 +52,10 @@ export interface PagesCreatePostHogResult {
  * ```
  */
 export function createPostHog(config: CreatePostHogConfig = {}): PagesCreatePostHogResult {
+    const getDistinctId = config.getDistinctId as SharedPostHogDistinctIdResolver | undefined
+
     return {
         getPostHog: (ctx: GetServerSidePropsContext) =>
-            getServerSidePostHog(ctx, config.apiKey, config.options, config.getDistinctId),
+            getServerSidePostHog(ctx, config.apiKey, config.options, getDistinctId),
     }
 }

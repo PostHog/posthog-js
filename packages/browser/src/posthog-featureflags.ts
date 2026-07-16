@@ -898,6 +898,10 @@ export class PostHogFeatureFlags implements Extension {
                     $used_bootstrap_value: !this._flagsLoadedFromRemote,
                 }
 
+                if (!isUndefined(flagDetails?.metadata?.has_experiment)) {
+                    properties.$feature_flag_has_experiment = flagDetails.metadata.has_experiment
+                }
+
                 if (!isUndefined(flagDetails?.metadata?.version)) {
                     properties.$feature_flag_version = flagDetails.metadata.version
                 }

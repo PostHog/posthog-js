@@ -1,5 +1,25 @@
 # @posthog/core
 
+## 1.43.1
+
+### Patch Changes
+
+- [#4168](https://github.com/PostHog/posthog-js/pull/4168) [`06d19a2`](https://github.com/PostHog/posthog-js/commit/06d19a2c5ab7801971219f8b50131f19e5f0ed17) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Avoid Next.js Edge runtime warnings for native compression and fatal error handling.
+  (2026-07-16)
+
+## 1.43.0
+
+### Minor Changes
+
+- [#4159](https://github.com/PostHog/posthog-js/pull/4159) [`fad6d9a`](https://github.com/PostHog/posthog-js/commit/fad6d9adae4163cd63859766916cdcbae629a110) Thanks [@haacked](https://github.com/haacked)! - add `$feature_flag_has_experiment` to `$feature_flag_called` events
+
+  `$feature_flag_called` events now carry a `$feature_flag_has_experiment` boolean sourced from the server's `has_experiment` flag metadata (the `/flags?v=2` response for remote evaluation, the `/api/feature_flag/local_evaluation` definitions for posthog-node local evaluation). The property is only sent when the server explicitly reports `has_experiment`; it is omitted entirely when the value is unknown (older servers, missing metadata, bootstrapped or locally injected flags). (2026-07-16)
+
+### Patch Changes
+
+- Updated dependencies [[`fad6d9a`](https://github.com/PostHog/posthog-js/commit/fad6d9adae4163cd63859766916cdcbae629a110)]:
+  - @posthog/types@1.396.0
+
 ## 1.42.1
 
 ### Patch Changes
