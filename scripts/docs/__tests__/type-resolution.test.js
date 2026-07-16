@@ -68,6 +68,10 @@ describe('createTypeResolver classification', () => {
         assert.equal(typeResolver.resolveTypeAlias('LoadedCallback').kind, 'function');
     });
 
+    test('callable types with members keep their full signature', () => {
+        assert.equal(typeResolver.resolveTypeAlias('CallableWithProps').kind, 'signature');
+    });
+
     test('classifies unions', () => {
         assert.equal(typeResolver.resolveTypeAlias('Fruit').kind, 'union');
         assert.equal(typeResolver.resolveTypeAlias('Question').kind, 'union');
@@ -148,6 +152,13 @@ describe('resolveTypeDefinitions with type resolver', () => {
         const filters = byName(types, 'PropertyFilters');
         assert.deepEqual(filters.properties, []);
         assert.match(filters.example, /^\{/);
+    });
+
+    test('callable-with-members aliases publish the call signature via example', () => {
+        const callable = byName(types, 'CallableWithProps');
+        assert.deepEqual(callable.properties, []);
+        assert.match(callable.example, /\(input: string\): boolean/);
+        assert.match(callable.example, /label: string/);
     });
 
     test('keeps unions of interfaces as union examples', () => {

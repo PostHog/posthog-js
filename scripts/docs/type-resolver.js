@@ -82,8 +82,10 @@ function classifyAlias(checker, declaration) {
     }
 
     const properties = type.getProperties().filter((prop) => !(prop.flags & ts.SymbolFlags.Method));
-    if (type.getCallSignatures().length > 0 && properties.length === 0) {
-        return { kind: 'function' };
+    if (type.getCallSignatures().length > 0) {
+        // a callable type with members would lose its call signature as an object,
+        // so publish the full raw signature instead
+        return properties.length === 0 ? { kind: 'function' } : { kind: 'signature' };
     }
     if (properties.length > 0) {
         return {

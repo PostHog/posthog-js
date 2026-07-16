@@ -117,6 +117,17 @@ export type Remote = RemoteBase & {
 };
 
 /**
+ * Callable object: a call signature alongside named properties
+ *
+ * @public
+ */
+export type CallableWithProps = {
+    (input: string): boolean;
+    /** Human-readable label */
+    label: string;
+};
+
+/**
  * Referenced by the public API but not exported
  */
 type HiddenOptions = {
