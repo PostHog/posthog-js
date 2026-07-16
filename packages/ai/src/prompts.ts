@@ -32,7 +32,12 @@ function isPromptApiResponse(data: unknown): data is PromptApiResponse {
     return false
   }
   const record = data as Record<string, unknown>
-  return typeof record.prompt === 'string' && typeof record.name === 'string' && typeof record.version === 'number'
+  return (
+    typeof record.prompt === 'string' &&
+    typeof record.name === 'string' &&
+    typeof record.version === 'number' &&
+    (record.label === undefined || typeof record.label === 'string')
+  )
 }
 
 export interface PromptsWithPostHogOptions {
