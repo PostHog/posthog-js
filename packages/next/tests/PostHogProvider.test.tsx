@@ -81,17 +81,14 @@ describe('PostHogProvider', () => {
         )
     })
 
-    it('does not pass bootstrap when bootstrapFlags is not set', async () => {
+    it('does not add bootstrap to options when bootstrapFlags is not set', async () => {
         const element = await PostHogProvider({
             apiKey: 'phc_test123',
             children: <div>Child</div>,
         })
         render(element)
-        expect(mockClientProvider).toHaveBeenCalledWith(
-            expect.objectContaining({
-                bootstrap: undefined,
-            })
-        )
+        expect(mockClientProvider.mock.calls[0][0]).not.toHaveProperty('bootstrap')
+        expect(mockClientProvider.mock.calls[0][0].options).not.toHaveProperty('bootstrap')
     })
 
     describe('Next.js client defaults', () => {
@@ -299,11 +296,132 @@ describe('PostHogProvider', () => {
             expect(mockGetAllFlagsAndPayloads).toHaveBeenCalledWith('user_abc', {})
             expect(mockClientProvider).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    bootstrap: expect.objectContaining({
-                        featureFlags: { 'flag-1': true },
-                        featureFlagPayloads: { 'flag-1': { color: 'blue' } },
+                    options: expect.objectContaining({
+                        bootstrap: expect.objectContaining({
+                            featureFlags: { 'flag-1': true },
+                            featureFlagPayloads: { 'flag-1': { color: 'blue' } },
+                        }),
                     }),
                 })
+            )
+        })
+
+        it('uses evaluated flags as the source of truth while preserving configured identity and session data', async () => {
+            const clientBootstrap = {
+                distinctID: 'user_abc',
+                isIdentifiedID: true,
+                sessionID: '019f6199-c144-764d-8527-964285825db8',
+                featureFlags: { 'flag-1': false, 'client-only': true },
+                featureFlagPayloads: { 'flag-1': { color: 'red' }, 'client-only': { source: 'client' } },
+            }
+            const element = await PostHogProvider({
+                apiKey: 'phc_test123',
+                clientOptions: { bootstrap: clientBootstrap },
+                bootstrapFlags: true,
+                children: <div>Child</div>,
+            })
+            render(element)
+
+            expect(mockClientProvider).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    options: expect.objectContaining({
+                        bootstrap: {
+                            distinctID: 'user_abc',
+                            isIdentifiedID: true,
+                            sessionID: '019f6199-c144-764d-8527-964285825db8',
+                            featureFlags: { 'flag-1': true },
+                            featureFlagPayloads: { 'flag-1': { color: 'blue' } },
+                        },
+                    }),
+                })
+            )
+        })
+
+        it('replaces configured flags with an empty evaluated result', async () => {
+            mockGetAllFlagsAndPayloads.mockResolvedValue({ featureFlags: {}, featureFlagPayloads: {} })
+
+            const element = await PostHogProvider({
+                apiKey: 'phc_test123',
+                clientOptions: {
+                    bootstrap: {
+                        featureFlags: { 'configured-flag': true },
+                        featureFlagPayloads: { 'configured-flag': { source: 'client' } },
+                    },
+                },
+                bootstrapFlags: true,
+                children: <div>Child</div>,
+            })
+            render(element)
+
+            expect(mockClientProvider).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    options: expect.objectContaining({
+                        bootstrap: expect.objectContaining({
+                            featureFlags: {},
+                            featureFlagPayloads: {},
+                        }),
+                    }),
+                })
+            )
+        })
+
+        it('overwrites targeted evaluated flags while preserving non-evaluated configured flags', async () => {
+            mockGetAllFlagsAndPayloads.mockResolvedValue({
+                featureFlags: { 'flag-1': true },
+                featureFlagPayloads: {},
+            })
+
+            const element = await PostHogProvider({
+                apiKey: 'phc_test123',
+                clientOptions: {
+                    bootstrap: {
+                        featureFlags: { 'flag-1': false, 'client-only': true },
+                        featureFlagPayloads: {
+                            'flag-1': { color: 'red' },
+                            'client-only': { source: 'client' },
+                        },
+                    },
+                },
+                bootstrapFlags: { flags: ['flag-1'] },
+                children: <div>Child</div>,
+            })
+            render(element)
+
+            expect(mockClientProvider).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    options: expect.objectContaining({
+                        bootstrap: expect.objectContaining({
+                            featureFlags: { 'flag-1': true, 'client-only': true },
+                            featureFlagPayloads: { 'client-only': { source: 'client' } },
+                        }),
+                    }),
+                })
+            )
+        })
+
+        it('skips server evaluation when the configured identity differs from the cookie', async () => {
+            const clientBootstrap = {
+                distinctID: 'configured-distinct-id',
+                isIdentifiedID: true,
+                featureFlags: { 'client-only': true },
+            }
+            const element = await PostHogProvider({
+                apiKey: 'phc_test123',
+                clientOptions: { bootstrap: clientBootstrap },
+                bootstrapFlags: true,
+                children: <div>Child</div>,
+            })
+            render(element)
+
+            expect(mockGetAllFlagsAndPayloads).not.toHaveBeenCalled()
+            expect(mockClientProvider).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    options: expect.objectContaining({ bootstrap: clientBootstrap }),
+                })
+            )
+            expect(mockClientProvider.mock.calls[0][0].options).not.toHaveProperty(
+                'advanced_disable_feature_flags_on_first_load',
+                true
             )
         })
 
@@ -329,8 +447,10 @@ describe('PostHogProvider', () => {
             expect(mockGetAllFlagsAndPayloads).toHaveBeenCalled()
             expect(mockClientProvider).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    bootstrap: expect.objectContaining({
-                        featureFlagPayloads: { 'flag-1': { color: 'blue' } },
+                    options: expect.objectContaining({
+                        bootstrap: expect.objectContaining({
+                            featureFlagPayloads: { 'flag-1': { color: 'blue' } },
+                        }),
                     }),
                 })
             )
@@ -364,11 +484,8 @@ describe('PostHogProvider', () => {
             })
             render(element)
 
-            expect(mockClientProvider).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    bootstrap: undefined,
-                })
-            )
+            expect(mockClientProvider.mock.calls[0][0]).not.toHaveProperty('bootstrap')
+            expect(mockClientProvider.mock.calls[0][0].options).not.toHaveProperty('bootstrap')
             expect(warnSpy).toHaveBeenCalledWith(
                 '[PostHog Next.js] Failed to evaluate bootstrap flags:',
                 expect.any(Error)
@@ -436,7 +553,8 @@ describe('PostHogProvider', () => {
             render(element)
 
             expect(mockGetAllFlagsAndPayloads).not.toHaveBeenCalled()
-            expect(mockClientProvider).toHaveBeenCalledWith(expect.objectContaining({ bootstrap: undefined }))
+            expect(mockClientProvider.mock.calls[0][0]).not.toHaveProperty('bootstrap')
+            expect(mockClientProvider.mock.calls[0][0].options).not.toHaveProperty('bootstrap')
         })
 
         it('evaluates flags when consent cookie is 1', async () => {
@@ -469,7 +587,8 @@ describe('PostHogProvider', () => {
             render(element)
 
             expect(mockGetAllFlagsAndPayloads).not.toHaveBeenCalled()
-            expect(mockClientProvider).toHaveBeenCalledWith(expect.objectContaining({ bootstrap: undefined }))
+            expect(mockClientProvider.mock.calls[0][0]).not.toHaveProperty('bootstrap')
+            expect(mockClientProvider.mock.calls[0][0].options).not.toHaveProperty('bootstrap')
         })
 
         it('evaluates flags when no consent cookie and opt_out_capturing_by_default is false (default)', async () => {

@@ -799,7 +799,19 @@ export default class MutationBuffer {
     if (this.processedNodeManager.inOtherBuffer(n, this)) return;
 
     // if n is added to set, there is no need to travel it and its' children again
-    if (this.addedSet.has(n) || this.movedSet.has(n)) return;
+    if (this.addedSet.has(n)) {
+      // re-insert n so the addedSet iteration order in the `emit` phase matches
+      // the latest DOM order; a stale position makes emit's out-of-order
+      // deferral list do far more work on large batches (upstream rrweb #1302).
+      // this only moves n itself - already-present children keep their earlier
+      // positions and aren't re-appended here, but emit's addList deferral
+      // re-derives parentId/nextId, so parent-before-child order still comes
+      // out correct.
+      this.addedSet.delete(n);
+      this.addedSet.add(n);
+      return;
+    }
+    if (this.movedSet.has(n)) return;
 
     if (this.mirror.hasNode(n)) {
       if (isIgnored(n, this.mirror, this.slimDOMOptions)) {

@@ -118,8 +118,10 @@ export function mergeIdentities(previous: UserIdentity | undefined, next: UserId
 }
 
 /**
- * Resolves the optional `identify` callback, dedupes against the server's identity
- * cache, and publishes an `$identify` event only when the identity has materially changed.
+ * Resolves the optional `identify` callback on every request (the resolved
+ * identity is what stamps `distinct_id`/`$set` onto events), but publishes the
+ * `$identify` event at most once per session: at `initialize`, when a
+ * long-lived server first sees the identity, or when it materially changes.
  */
 export async function handleIdentify(
   server: MCPServerLike,
@@ -147,11 +149,24 @@ export async function handleIdentify(
     if (identityResult) {
       const previousIdentity = data.identifiedSessions.get(sessionId)
       const mergedIdentity = mergeIdentities(previousIdentity, identityResult)
-      const hasChanged = !(previousIdentity && areIdentitiesEqual(previousIdentity, mergedIdentity))
+      // "First seen" means new to this instance's cache — which on a stateless
+      // pod (fresh instrument() per request) is every request. A token session
+      // was already announced by whichever pod handled `initialize`, so only the
+      // handshake, or a genuine change a long-lived server observed, publishes
+      // $identify. Every event still carries distinct_id/$set regardless, so
+      // person properties are never lost. Known gap: if identity is null at
+      // `initialize` but resolves later on a token session, that first $identify
+      // is suppressed too, so any pre-identify (anonymous) events aren't aliased
+      // onto the user. Inherent to statelessness (no pod knows a sibling already
+      // announced); revisit with the stateless-by-default rework.
+      const changed = previousIdentity !== undefined && !areIdentitiesEqual(previousIdentity, mergedIdentity)
+      const firstSeen = previousIdentity === undefined
+      const announcedAtInitialize = data.sessionSource === 'token' && request.method !== 'initialize'
+      const shouldPublish = changed || (firstSeen && !announcedAtInitialize)
 
       data.identifiedSessions.set(sessionId, mergedIdentity)
 
-      if (hasChanged) {
+      if (shouldPublish) {
         log(`Identified session ${sessionId} with identity: ${JSON.stringify(mergedIdentity)}`)
         captureEvent(server, identifyEvent)
       }

@@ -1,7 +1,7 @@
 import React from 'react'
-import type { PostHogConfig } from 'posthog-js'
+import type { BootstrapConfig, PostHogConfig } from 'posthog-js'
+import { isUndefined } from '@posthog/core'
 import { ClientPostHogProvider } from '../client/ClientPostHogProvider.js'
-import type { BootstrapConfig } from '../client/ClientPostHogProvider.js'
 import { cookies } from 'next/headers.js'
 import type { PostHogOptions } from 'posthog-node'
 import { getOrCreateNodeClient } from '../server/clientCache.node.js'
@@ -103,6 +103,7 @@ export async function PostHogProvider({
             // If evaluateFlags returned undefined (no cookie, opted-out), the client
             // still needs to fetch flags on first load.
             if (bootstrap) {
+                resolvedOptions.bootstrap = mergeBootstrap(bootstrap, resolvedOptions.bootstrap, bootstrapFlags)
                 resolvedOptions.advanced_disable_feature_flags_on_first_load = true
             }
         } catch (error) {
@@ -112,10 +113,44 @@ export async function PostHogProvider({
     }
 
     return (
-        <ClientPostHogProvider apiKey={apiKey} options={resolvedOptions} bootstrap={bootstrap}>
+        <ClientPostHogProvider apiKey={apiKey} options={resolvedOptions}>
             {children}
         </ClientPostHogProvider>
     )
+}
+
+function mergeBootstrap(
+    evaluatedBootstrap: BootstrapConfig,
+    configuredBootstrap: BootstrapConfig | undefined,
+    bootstrapFlags: boolean | BootstrapFlagsConfig
+): BootstrapConfig {
+    const evaluatedFlagKeys = typeof bootstrapFlags === 'object' ? bootstrapFlags.flags : undefined
+
+    // A full evaluation is the source of truth for the complete flag state.
+    if (!evaluatedFlagKeys) {
+        return {
+            ...configuredBootstrap,
+            ...evaluatedBootstrap,
+            featureFlags: evaluatedBootstrap.featureFlags ?? {},
+            featureFlagPayloads: evaluatedBootstrap.featureFlagPayloads ?? {},
+        }
+    }
+
+    // For a targeted evaluation, replace every requested key while preserving
+    // configured values for flags that were intentionally not evaluated.
+    const featureFlags = { ...configuredBootstrap?.featureFlags }
+    const featureFlagPayloads = { ...configuredBootstrap?.featureFlagPayloads }
+    for (const key of evaluatedFlagKeys) {
+        delete featureFlags[key]
+        delete featureFlagPayloads[key]
+    }
+
+    return {
+        ...configuredBootstrap,
+        ...evaluatedBootstrap,
+        featureFlags: { ...featureFlags, ...evaluatedBootstrap.featureFlags },
+        featureFlagPayloads: { ...featureFlagPayloads, ...evaluatedBootstrap.featureFlagPayloads },
+    }
 }
 
 async function evaluateFlags(
@@ -132,6 +167,14 @@ async function evaluateFlags(
 
     const cookieState = readPostHogCookie(cookieStore, apiKey)
     if (!cookieState) {
+        return undefined
+    }
+
+    // Server-evaluated flags must match the identity the browser SDK will bootstrap.
+    // If the configured identity differs from the cookie, let the client resolve its
+    // final identity and fetch fresh flags instead of serving decisions for another user.
+    const configuredDistinctID = options?.bootstrap?.distinctID
+    if (!isUndefined(configuredDistinctID) && configuredDistinctID !== cookieState.distinctId) {
         return undefined
     }
 

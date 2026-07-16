@@ -166,7 +166,15 @@ const withAndroidNativeSymbolsPlugin = (config: any) => {
 
 type BuildPhase = { shellScript: string }
 
-export function modifyExistingXcodeBuildScript(script: BuildPhase, skipOnConflict = false): void {
+export function modifyExistingXcodeBuildScript(script: BuildPhase | undefined, skipOnConflict = false): void {
+  if (!script?.shellScript) {
+    console.warn(
+      "[posthog-react-native] Could not find the 'Bundle React Native code and images' build phase; " +
+        'skipping sourcemap upload setup.'
+    )
+    return
+  }
+
   if (!script.shellScript.match(/(packager|scripts)\/react-native-xcode\.sh\b/)) {
     return
   }
@@ -218,7 +226,7 @@ const POSTHOG_DSYM_BUILD_PHASE_NAME = 'Upload PostHog Debug Symbols'
 // Shell script for the dSYM upload build phase. It locates and runs posthog-ios's
 // upload-symbols.sh (CocoaPods or SwiftPM) rather than re-implementing dSYM upload.
 // `includeSource` (iOS only) opts into POSTHOG_INCLUDE_SOURCE to also upload native source.
-export function buildDsymUploadShellScript(includeSource = false): string {
+export function buildDsymUploadShellScript(includeSource = false, skipOnConflict = false): string {
   const lines = [
     '# Upload iOS dSYMs to PostHog so native crashes can be symbolicated.',
     '# upload-symbols.sh ships inside the posthog-ios dependency.',
@@ -228,6 +236,13 @@ export function buildDsymUploadShellScript(includeSource = false): string {
     lines.push(
       '# Also upload native source files for source-code context around crashes.',
       'export POSTHOG_INCLUDE_SOURCE=1'
+    )
+  }
+
+  if (skipOnConflict) {
+    lines.push(
+      '# Skip dSYMs that already exist in PostHog with different content instead of failing the build.',
+      'export POSTHOG_SKIP_ON_CONFLICT=1'
     )
   }
 
@@ -246,17 +261,43 @@ export function buildDsymUploadShellScript(includeSource = false): string {
   return lines.join('\n')
 }
 
-// Appends a Run Script build phase that uploads dSYMs. Idempotent; appended last so it
-// runs after the dSYM bundle is produced.
-export function addDsymUploadBuildPhase(xcodeProject: any, includeSource = false): void {
+// xcode's addBuildPhase stores shellScript quote-escaped with literal newlines; in-place
+// refreshes must match or the stored pbxproj representation churns.
+function encodePbxShellScript(script: string): string {
+  return '"' + script.replace(/"/g, '\\"') + '"'
+}
+
+// Undoes any quoted pbxproj encoding of shellScript. Handles both the literal-newline
+// form xcode's addBuildPhase writes and the \n-escaped form Xcode itself writes, so a
+// pristine phase is recognized regardless of which tool last serialized the project.
+function decodePbxShellScript(stored: string): string {
+  if (!stored.startsWith('"') || !stored.endsWith('"')) {
+    return stored
+  }
+  return stored.slice(1, -1).replace(/\\(.)/g, (_match, ch) => (ch === 'n' ? '\n' : ch === 't' ? '\t' : ch))
+}
+
+// Appends a Run Script build phase that uploads dSYMs; appended last so it runs after the
+// dSYM bundle is produced. Re-runs refresh a still-plugin-generated script so option
+// changes take effect without a clean prebuild.
+export function addDsymUploadBuildPhase(xcodeProject: any, includeSource = false, skipOnConflict = false): void {
   const existing = xcodeProject.pbxItemByComment(POSTHOG_DSYM_BUILD_PHASE_NAME, 'PBXShellScriptBuildPhase')
   if (existing) {
+    const generatedVariants = [false, true].flatMap((source) =>
+      [false, true].map((skip) => buildDsymUploadShellScript(source, skip))
+    )
+    if (
+      typeof existing.shellScript === 'string' &&
+      generatedVariants.includes(decodePbxShellScript(existing.shellScript))
+    ) {
+      existing.shellScript = encodePbxShellScript(buildDsymUploadShellScript(includeSource, skipOnConflict))
+    }
     return
   }
 
   xcodeProject.addBuildPhase([], 'PBXShellScriptBuildPhase', POSTHOG_DSYM_BUILD_PHASE_NAME, null, {
     shellPath: '/bin/sh',
-    shellScript: buildDsymUploadShellScript(includeSource),
+    shellScript: buildDsymUploadShellScript(includeSource, skipOnConflict),
   })
 }
 
@@ -312,7 +353,13 @@ type PostHogPluginProps = {
   uploadNativeSymbols?: boolean | { includeSource?: boolean }
 
   /**
-   * Whether to append `--skip-on-conflict` to `posthog-cli hermes upload` on iOS and Android.
+   * Whether to skip uploads whose content already exists in PostHog instead of failing the build.
+   *
+   * Appends `--skip-on-conflict` to `posthog-cli hermes upload` on iOS and Android. When
+   * `uploadNativeSymbols` is enabled, also sets `POSTHOG_SKIP_ON_CONFLICT=1` in the iOS dSYM
+   * upload build phase; posthog-ios's `upload-symbols.sh` forwards it as `--skip-on-conflict`
+   * to `posthog-cli dsym upload` on posthog-ios >= 3.64.7 (with posthog-cli >= 0.7.12) and
+   * ignores it on older versions, where dSYM conflicts keep failing the build.
    *
    * Default: false.
    */
@@ -347,7 +394,7 @@ const withIosPlugin = (config: any, props: PostHogPluginProps = {}) => {
 
     const nativeSymbols = resolveNativeSymbolUpload(props.uploadNativeSymbols)
     if (nativeSymbols.enabled) {
-      addDsymUploadBuildPhase(xcodeProject, nativeSymbols.includeSource)
+      addDsymUploadBuildPhase(xcodeProject, nativeSymbols.includeSource, props.skipOnConflict === true)
     }
 
     if (props.disableSandboxing !== false) {

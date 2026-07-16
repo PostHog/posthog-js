@@ -1,5 +1,39 @@
 # posthog-node
 
+## 5.44.0
+
+### Minor Changes
+
+- [#4153](https://github.com/PostHog/posthog-js/pull/4153) [`fc2cb2e`](https://github.com/PostHog/posthog-js/commit/fc2cb2e6e7accf23ed1f075f6da996f6ba575276) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Raise the default `maxQueueSize` from 1000 to 10000. Backend workloads are more likely to burst-enqueue events synchronously ahead of a flush than browser/mobile clients, so the previous default risked silently dropping events under bursty load. An explicit `maxQueueSize` option still overrides this default.
+  (2026-07-15)
+
+### Patch Changes
+
+- Updated dependencies [[`fc2cb2e`](https://github.com/PostHog/posthog-js/commit/fc2cb2e6e7accf23ed1f075f6da996f6ba575276)]:
+  - @posthog/core@1.42.1
+
+## 5.43.0
+
+### Minor Changes
+
+- [#4117](https://github.com/PostHog/posthog-js/pull/4117) [`1eddff7`](https://github.com/PostHog/posthog-js/commit/1eddff74e63ff539eb3144f075b14ab5ffec84cc) Thanks [@DanielVisca](https://github.com/DanielVisca)! - add the posthog.metrics API (count, gauge, histogram) to posthog-node — alpha
+
+  Backend services can now record metrics through the same statsd-style pre-aggregating client the browser SDK ships, with no OpenTelemetry setup:
+
+  ```ts
+  const client = new PostHog('phc_...', { metrics: { serviceName: 'billing-worker' } })
+  client.metrics.count('invoices.processed', 1, { attributes: { plan: 'pro' } })
+  client.metrics.gauge('queue.depth', 42)
+  client.metrics.histogram('job.duration', 187, { unit: 'ms' })
+  ```
+
+  Samples aggregate in memory and flush as OTLP/JSON to `/i/v1/metrics` (one data point per series per window). Pending metrics are flushed on `shutdown()`. Core gains `_sendMetricsBatch` on `PostHogCoreStateless` (same outcome contract as `_sendLogsBatch`) and a shared `resolveMetricsConfig`, so any core-based SDK can host `PostHogMetrics`. (2026-07-15)
+
+### Patch Changes
+
+- Updated dependencies [[`1eddff7`](https://github.com/PostHog/posthog-js/commit/1eddff74e63ff539eb3144f075b14ab5ffec84cc)]:
+  - @posthog/core@1.42.0
+
 ## 5.42.0
 
 ### Minor Changes

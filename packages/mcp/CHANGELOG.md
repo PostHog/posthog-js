@@ -1,5 +1,13 @@
 # @posthog/mcp
 
+## 0.9.1
+
+### Patch Changes
+
+- [#4144](https://github.com/PostHog/posthog-js/pull/4144) [`3c8e17e`](https://github.com/PostHog/posthog-js/commit/3c8e17e5a8c83083a15e8075f766b7b75cebdcc5) Thanks [@gesh](https://github.com/gesh)! - fix(mcp): publish `$identify` at most once per session instead of before every tool call
+
+  On stateless / multi-pod deployments the SDK rebuilds its per-server identity cache on every request, so the dedupe check saw an empty cache each time and emitted a standalone `$identify` before every `$mcp_tool_call`. The SDK now publishes `$identify` at most once per session — at `initialize`, when a long-lived server first sees the identity, or when the identity materially changes. Every event still carries `distinct_id`/`$set`, so no person data is lost when a standalone `$identify` is suppressed. (2026-07-15)
+
 ## 0.9.0
 
 ### Minor Changes

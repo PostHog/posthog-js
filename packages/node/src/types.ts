@@ -3,6 +3,8 @@ import type {
   ExceptionRateLimiterConfig,
   FeatureFlagValue,
   JsonType,
+  Metrics,
+  MetricsConfig,
   PostHogFetchOptions,
   PostHogFetchResponse,
   PostHogFlagsAndPayloadsResponse,
@@ -144,8 +146,25 @@ export type FeatureFlagBucketingIdentifier = 'distinct_id' | 'device_id' | '' | 
 
 export type BeforeSendFn = (event: EventMessage | null) => EventMessage | null
 
-export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
+export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'maxQueueSize'> & {
   persistence?: 'memory'
+  /**
+   * The maximum number of cached messages either in memory or on the local storage (must be higher than `flushAt`)
+   *
+   * @default 10000
+   */
+  maxQueueSize?: number
+  /**
+   * Configuration for the `posthog.metrics` API (count, gauge, histogram).
+   * Set `serviceName` so series can be filtered per service in the Metrics UI.
+   *
+   * @example
+   * ```ts
+   * const client = new PostHog('phc_...', { metrics: { serviceName: 'billing-worker' } })
+   * client.metrics.count('invoices.processed')
+   * ```
+   */
+  metrics?: MetricsConfig
   /**
    * Credential that enables local feature flag evaluation and remote config.
    *
@@ -713,6 +732,13 @@ export interface IPostHog {
    * @returns The current context data, or undefined if no context is set
    */
   getContext(): ContextData | undefined
+
+  /**
+   * @description The `posthog.metrics` API: a statsd-style pre-aggregating metrics client (count,
+   * gauge, histogram) — alpha. Samples are folded into per-series aggregates in memory and flushed
+   * periodically. Configure via the `metrics` client option.
+   */
+  readonly metrics: Metrics
 
   /**
    * @description Flushes the events still in the queue and clears the feature flags poller to allow for

@@ -1,11 +1,10 @@
 import Config from './config'
 import { PostHog } from './posthog-core'
 import type { CaptureMetricOptions, OtlpMetricsPayload } from './types'
-import { PostHogMetrics as CorePostHogMetrics } from '@posthog/core'
+import { PostHogMetrics as CorePostHogMetrics, resolveMetricsConfig } from '@posthog/core'
 import type { SendMetricsBatchOutcome } from '@posthog/core'
 import { createLogger } from './utils/logger'
 import { Extension } from './extensions/types'
-import { resolveMetricsConfig } from './metrics-defaults'
 
 const METRICS_ENDPOINT = '/i/v1/metrics'
 // Safety backstop for a `_send_request` that never calls back — same policy

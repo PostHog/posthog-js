@@ -613,6 +613,21 @@ export interface SessionRecordingOptions {
     recordCrossOriginIframes?: boolean
 
     /**
+     * ADVANCED: limit which DOM attributes are observed for mutations, by passing
+     * the list to the native `MutationObserver` `attributeFilter`. Mutations to
+     * unlisted attributes never reach the recorder at all, so they cost no
+     * recording CPU - useful to exclude high-frequency inline `style` mutations
+     * from JS-driven animations on animation-heavy pages.
+     *
+     * Attributes left off the list are invisible to replay, so only set this when
+     * that loss of fidelity is acceptable. When unset (the default) or set to an
+     * empty array, all attributes are observed.
+     *
+     * Normally only altered alongside posthog support guidance.
+     */
+    attributeFilter?: string[]
+
+    /**
      * Derived from `rrweb.record` options
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
      * @default false
