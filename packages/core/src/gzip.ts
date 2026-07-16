@@ -130,7 +130,7 @@ export type GzipCompressOptions = {
 export async function gzipCompress(input: string, isDebug = true, options?: GzipCompressOptions): Promise<Blob | null> {
   try {
     const inputBytes = new TextEncoder().encode(input)
-    const compressedStream = new CompressionStream('gzip')
+    const compressedStream = new globalThis.CompressionStream('gzip')
     const writer = compressedStream.writable.getWriter()
 
     const writePromise = writer
