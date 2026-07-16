@@ -1,5 +1,19 @@
 # posthog-js
 
+## 1.404.0
+
+### Minor Changes
+
+- [#4149](https://github.com/PostHog/posthog-js/pull/4149) [`607bf54`](https://github.com/PostHog/posthog-js/commit/607bf543b63dd8f9c9a2ad891048194601a942e8) Thanks [@pauldambra](https://github.com/pauldambra)! - Add dead swipe detection to dead clicks autocapture. When dead clicks autocapture is enabled, touch swipe gestures that produce no observable screen change (no scroll, mutation, selection or visibility change) are now captured as `$dead_swipe` events, surfacing failed navigations on touch devices. Configurable via `capture_dead_swipes` (default `true`) and `swipe_threshold_px` (default `30`) on the `capture_dead_clicks` config. Swipes over surfaces whose response cannot be observed (canvas, video and other media elements under the finger) are skipped, and captures are limited per page load via `max_dead_swipes_per_page_load` (default `10`).
+  (2026-07-16)
+
+### Patch Changes
+
+- [#4171](https://github.com/PostHog/posthog-js/pull/4171) [`df17ddc`](https://github.com/PostHog/posthog-js/commit/df17ddc02108114dece09801ad67007274490a9e) Thanks [@posthog](https://github.com/apps/posthog)! - Catch synchronous throws from a monkey-patched `window.fetch` so they no longer escape as unhandled exceptions. A synchronous throw is now routed through the same handling as an async rejection, so the request queue retries instead of the error leaking into error tracking.
+  (2026-07-16)
+- Updated dependencies [[`607bf54`](https://github.com/PostHog/posthog-js/commit/607bf543b63dd8f9c9a2ad891048194601a942e8)]:
+    - @posthog/types@1.397.0
+
 ## 1.403.0
 
 ### Minor Changes
