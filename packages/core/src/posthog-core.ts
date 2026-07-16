@@ -159,7 +159,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   /**
    * Resets the user's ID and clears all persisted properties.
    *
-   * Note: The event queue (`PostHogPersistedProperty.Queue`) and logs queue
+   * Note: The event queues (`PostHogPersistedProperty.Queue` and the isolated
+   * `PostHogPersistedProperty.AiQueue`) and the logs queue
    * (`PostHogPersistedProperty.LogsQueue`) are always preserved regardless
    * of what is passed in `propertiesToKeep`, to ensure in-flight data
    * is not lost when identity changes.
@@ -170,6 +171,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     this.wrap(() => {
       const allPropertiesToKeep = [
         PostHogPersistedProperty.Queue,
+        PostHogPersistedProperty.AiQueue,
         PostHogPersistedProperty.LogsQueue,
         ...(propertiesToKeep || []),
       ]
@@ -644,7 +646,6 @@ export abstract class PostHogCore extends PostHogCoreStateless {
    *
    * @param _response The remote config or flags response containing config fields
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   protected onRemoteConfig(_response: PostHogRemoteConfig): void {
     // Override in subclasses
   }

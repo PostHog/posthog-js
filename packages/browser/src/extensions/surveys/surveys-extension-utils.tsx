@@ -8,7 +8,6 @@ import {
     SurveyEventProperties,
     SurveyPosition,
     SurveyQuestion,
-    SurveySchedule,
     SurveyType,
     SurveyWidgetType,
 } from '../../posthog-surveys-types'
@@ -17,12 +16,18 @@ import {
     getSurveyInteractionProperty,
     getSurveySeenKey,
     getSurveyAbandonedKey,
+    getSurveyStorageKey,
     SURVEY_LOGGER as logger,
     setSurveySeenOnLocalStorage,
     SURVEY_IN_PROGRESS_PREFIX,
 } from '../../utils/survey-utils'
 import { isNullish, type SurveyResponses } from '@posthog/core'
-import { buildSurveyResponseProperties, getSurveyResponseKey, surveyHasResponses } from '@posthog/core/surveys'
+import {
+    buildSurveyResponseProperties,
+    canSurveyActivateRepeatedly,
+    getSurveyResponseKey,
+    surveyHasResponses,
+} from '@posthog/core/surveys'
 
 import { propertyComparisons } from '../../utils/property-utils'
 import { getTargetingUrl } from '../../utils/url-targeting-utils'
@@ -573,18 +578,10 @@ export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
     return reverseIfUnshuffled(survey.questions, shuffle(survey.questions))
 }
 
-export const hasEvents = (survey: Pick<Survey, 'conditions'>): boolean => {
-    return survey.conditions?.events?.values?.length != undefined && survey.conditions?.events?.values?.length > 0
-}
-
 export const canActivateRepeatedly = (
     survey: Pick<Survey, 'schedule' | 'conditions' | 'id' | 'current_iteration'>
 ): boolean => {
-    return (
-        !!(survey.conditions?.events?.repeatedActivation && hasEvents(survey)) ||
-        survey.schedule === SurveySchedule.Always ||
-        isSurveyInProgress(survey)
-    )
+    return canSurveyActivateRepeatedly(survey) || isSurveyInProgress(survey)
 }
 
 /**
@@ -701,11 +698,7 @@ interface InProgressSurveyState {
 }
 
 const getInProgressSurveyStateKey = (survey: Pick<Survey, 'id' | 'current_iteration'>): string => {
-    let key = `${SURVEY_IN_PROGRESS_PREFIX}${survey.id}`
-    if (survey.current_iteration && survey.current_iteration > 0) {
-        key = `${SURVEY_IN_PROGRESS_PREFIX}${survey.id}_${survey.current_iteration}`
-    }
-    return key
+    return getSurveyStorageKey(SURVEY_IN_PROGRESS_PREFIX, survey)
 }
 
 export const setInProgressSurveyState = (

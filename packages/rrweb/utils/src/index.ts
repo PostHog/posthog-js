@@ -107,6 +107,8 @@ export function getUntaintedPrototype<T extends keyof BasePrototypeCache>(
   }
 
   const iframeEl = document.createElement('iframe');
+  iframeEl.style.display = 'none';
+  let keepIframeAttached = false;
   try {
     document.body.appendChild(iframeEl);
     const win = iframeEl.contentWindow;
@@ -118,14 +120,37 @@ export function getUntaintedPrototype<T extends keyof BasePrototypeCache>(
 
     if (!untaintedObject) return defaultPrototype;
 
+    // WebKit tears down an iframe's ScriptExecutionContext when it is detached
+    // from the DOM, and MutationObserver.deliver() silently drops callbacks when
+    // its scriptExecutionContext() is null (webkit.org/b/179224), so prototypes
+    // taken from a detached iframe stop working on Safari.
+    // Adapted from upstream rrweb #1854, with one difference: the iframe stays
+    // attached for the lifetime of the page instead of being removed on recorder
+    // teardown. Observers are torn down per-document here (e.g. a same-origin
+    // iframe being removed), and the cached prototype must outlive any one of
+    // them; removing the shared iframe on the first teardown - or reusing the
+    // cache after a stop/restart cycle - would silently break the survivors.
+    if (isSafari()) {
+      // both the upstream default block class and the PostHog one, so the
+      // recorder never serializes this iframe whichever config is in use
+      iframeEl.classList.add('rr-block', 'ph-no-capture');
+      iframeEl.setAttribute('__rrwebUntaintedPrototype', key);
+      keepIframeAttached = true;
+    }
+
     return (untaintedBasePrototype[key] = untaintedObject);
   } catch {
     return defaultPrototype;
   } finally {
-    if (iframeEl.parentNode) {
+    if (!keepIframeAttached && iframeEl.parentNode) {
       document.body.removeChild(iframeEl);
     }
   }
+}
+
+function isSafari(): boolean {
+  const ua = navigator.userAgent;
+  return ua.includes('Safari') && !ua.includes('Chrome');
 }
 
 const untaintedAccessorCache: Record<
@@ -245,6 +270,28 @@ export function mutationObserverCtor(): (typeof MutationObserver)['prototype']['
   return getUntaintedPrototype('MutationObserver').constructor;
 }
 
+// Each call to `patch` installs a "layer" in the wrapper chain. A wrapper calls
+// down through its layer's mutable `next` reference rather than closing over the
+// original directly, so that any layer can later be spliced out of the chain —
+// even when newer wrappers sit on top of it.
+//
+// Without this, restoring a patch only worked when it was still on top of the
+// chain (`source[name] === wrapped`). rrweb patches shared globals such as
+// `Element.prototype.attachShadow` (shadow-dom-manager) and the observers, and
+// multiple recorder instances or repeated start/stop cycles wrap the same global
+// more than once. Restores then routinely ran out of order and silently no-op'd.
+// Each leaked wrapper stayed in the call path, and repeated cycles grew the chain
+// without bound until a real call walked a chain deep enough to overflow the call
+// stack ("RangeError: Maximum call stack size exceeded").
+interface PatchLayer {
+  next: (...args: unknown[]) => unknown;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function isFunction(value: any): value is (...args: any[]) => any {
+  return typeof value === 'function';
+}
+
 // copy from https://github.com/getsentry/sentry-javascript/blob/b2109071975af8bf0316d3b5b38f519bdaf5dc15/packages/utils/src/object.ts
 export function patch(
   source: { [key: string]: any },
@@ -258,8 +305,19 @@ export function patch(
       };
     }
 
-    const original = source[name] as () => unknown;
-    const wrapped = replacement(original);
+    const original = source[name] as (...args: unknown[]) => unknown;
+
+    const layer: PatchLayer = {
+      next: original,
+    };
+
+    // The wrapper receives this stable delegate instead of `original`, so the
+    // function it actually calls can be re-pointed when a lower layer is removed.
+    const callNext = function (this: unknown, ...args: unknown[]) {
+      return layer.next.apply(this, args);
+    };
+
+    const wrapped = replacement(callNext);
 
     // Make sure it's a function first, as we need to attach an empty prototype for `defineProperties` to work
     // otherwise it'll throw "TypeError: Object.defineProperties called on non-object"
@@ -271,13 +329,41 @@ export function patch(
           enumerable: false,
           value: original,
         },
+        __rrweb_layer__: {
+          enumerable: false,
+          value: layer,
+        },
       });
     }
 
     source[name] = wrapped;
 
     return () => {
-      source[name] = original;
+      // If we're still on top, hand back whatever we currently delegate to
+      // (lower layers may already have been removed, so this is not necessarily
+      // the `original` we captured at install time).
+      if (source[name] === wrapped) {
+        source[name] = layer.next;
+        return;
+      }
+
+      // Otherwise newer wrappers sit on top of us. Find the rrweb layer directly
+      // above us and re-point it past us, removing our wrapper from the call path
+      // without disturbing the newer wrappers.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let current: any = source[name];
+      while (isFunction(current) && (current as any).__rrweb_layer__) {
+        const currentLayer = (current as any).__rrweb_layer__ as PatchLayer;
+        if (currentLayer.next === wrapped) {
+          currentLayer.next = layer.next;
+          return;
+        }
+        current = currentLayer.next;
+      }
+
+      // If we get here we're buried under a non-rrweb wrapper that closed over
+      // us directly, or we've already been removed / replaced wholesale. There's
+      // nothing safe to do, so leave the chain untouched.
     };
   } catch {
     return () => {

@@ -4,7 +4,6 @@ import {
     doesSurveyUrlMatch,
     getFontFamily,
     getSurveySeen,
-    hasEvents,
     hasWaitPeriodPassed,
     sendSurveyEvent,
 } from '../../extensions/surveys/surveys-extension-utils'
@@ -265,49 +264,6 @@ describe('getSurveySeen', () => {
             localStorage.setItem(`${SURVEY_SEEN_PREFIX}${surveyWithZeroIteration.id}`, 'true')
             expect(getSurveySeen(surveyWithZeroIteration)).toBe(true)
         })
-    })
-})
-
-describe('hasEvents', () => {
-    it('should return false when survey has no conditions', () => {
-        const survey = {
-            conditions: undefined,
-        } as Pick<Survey, 'conditions'>
-        expect(hasEvents(survey)).toBe(false)
-    })
-
-    it('should return false when survey has no events', () => {
-        const survey = {
-            conditions: {
-                events: undefined,
-                actions: { values: [] },
-            },
-        } as Pick<Survey, 'conditions'>
-        expect(hasEvents(survey)).toBe(false)
-    })
-
-    it('should return false when survey has empty events values', () => {
-        const survey = {
-            conditions: {
-                events: {
-                    values: [],
-                },
-                actions: { values: [] },
-            },
-        } as Pick<Survey, 'conditions'>
-        expect(hasEvents(survey)).toBe(false)
-    })
-
-    it('should return true when survey has events values', () => {
-        const survey = {
-            conditions: {
-                events: {
-                    values: [{ name: 'event1' }, { name: 'event2' }],
-                },
-                actions: { values: [] },
-            },
-        } as Pick<Survey, 'conditions'>
-        expect(hasEvents(survey)).toBe(true)
     })
 })
 

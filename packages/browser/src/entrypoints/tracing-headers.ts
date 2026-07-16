@@ -183,7 +183,6 @@ const patchFetch = (
                         // For fetch(Request, init), construct a new Request so init overrides are applied and the
                         // caller's Request is not mutated. For fetch(url, init), avoid this because it exposes string
                         // bodies as ReadableStreams to downstream wrappers in Safari.
-                        // eslint-disable-next-line compat/compat
                         const req = new Request(url, init)
                         addTracingHeaders(hostnames, distinctId, sessionManager, req.url, req.headers)
                         fetchArgs = [req]

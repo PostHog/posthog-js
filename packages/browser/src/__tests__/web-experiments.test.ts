@@ -157,7 +157,6 @@ describe('Web Experimentation', () => {
         const elParent = createTestDocument()
 
         WebExperiments.getWindowLocation = () => {
-            // eslint-disable-next-line compat/compat
             return new URL(testLocation) as unknown as Location
         }
 
@@ -235,7 +234,7 @@ describe('Web Experimentation', () => {
                 const elParent = createTestDocument()
 
                 // raw browser URL would not match the exact condition
-                // eslint-disable-next-line compat/compat
+
                 WebExperiments.getWindowLocation = () => new URL('https://generated-host.skin/x') as unknown as Location
                 posthog.config.get_current_url = () => 'https://example.com/Signup'
 
@@ -248,7 +247,6 @@ describe('Web Experimentation', () => {
                 const webExperiment = new WebExperiments(posthog)
                 const elParent = createTestDocument()
 
-                // eslint-disable-next-line compat/compat
                 WebExperiments.getWindowLocation = () => new URL('https://example.com/Signup') as unknown as Location
                 posthog.config.get_current_url = () => 'https://generated-host.skin/x'
 
@@ -322,7 +320,6 @@ describe('Web Experimentation', () => {
             const original = WebExperiments.getWindowLocation
 
             WebExperiments.getWindowLocation = () => {
-                // eslint-disable-next-line compat/compat
                 return new URL(
                     'https://example.com/landing-page?__experiment_id=3&__experiment_variant=variant-sign-up'
                 ) as unknown as Location

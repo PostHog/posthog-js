@@ -155,7 +155,6 @@ export class NetworkPage {
             return this.page.waitForResponse(urlPattern)
         })
         await options.action()
-        // eslint-disable-next-line compat/compat
         await Promise.allSettled(responsePromises)
     }
 

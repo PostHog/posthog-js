@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { PostHog } from '../../../posthog-core'
 import { FlagsResponse } from '../../../types'
 import { ExceptionObserver } from '../../../extensions/exception-autocapture'
@@ -126,7 +125,7 @@ describe('Exception Observer', () => {
             // See e2e tests
             const promiseRejectionEvent = new PromiseRejectionEvent('unhandledrejection', {
                 // this is a test not a browser, so we don't care there's no Promise in IE11
-                // eslint-disable-next-line compat/compat
+
                 promise: Promise.resolve(),
                 reason: error,
             })
@@ -247,7 +246,7 @@ describe('Exception Observer', () => {
             const error = new Error('test error')
             const promiseRejectionEvent = new PromiseRejectionEvent('unhandledrejection', {
                 // this is a test not a browser, so we don't care there's no Promise in IE11
-                // eslint-disable-next-line compat/compat
+
                 promise: Promise.resolve(),
                 reason: error,
             })

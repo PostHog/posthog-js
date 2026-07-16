@@ -380,7 +380,36 @@ export type ConfigDefaults = '2026-06-25' | '2026-05-30' | '2026-01-30' | '2025-
 
 export type ExternalIntegrationKind = 'intercom' | 'crispChat'
 
-export interface ErrorTrackingOptions {
+/**
+ * Shared configuration for the error tracking burst-protection rate limiter.
+ *
+ * Burst protection is scoped **per exception type** — the limiter is keyed by exception type, so
+ * each distinct `$exception` type gets its own token bucket and there is no aggregate cap across
+ * all types. It applies only to autocaptured exceptions; manual `captureException` calls are
+ * never rate limited. These options let customers with high-cardinality exception types tune the
+ * per-type allowance, and are shared between the browser and Node SDKs.
+ */
+export interface ExceptionRateLimiterConfig {
+    /**
+     * ADVANCED: alters the refill rate for the error tracking rate limiter's token bucket.
+     * Normally only altered alongside PostHog support guidance.
+     * Accepts values between 0 and 100.
+     *
+     * @default 1
+     */
+    exceptionRateLimiterRefillRate?: number
+
+    /**
+     * ADVANCED: alters the bucket size for the error tracking rate limiter's token bucket.
+     * Normally only altered alongside PostHog support guidance.
+     * Accepts values between 0 and 100.
+     *
+     * @default 10
+     */
+    exceptionRateLimiterBucketSize?: number
+}
+
+export interface ErrorTrackingOptions extends ExceptionRateLimiterConfig {
     /**
      * Decide whether exceptions thrown by browser extensions should be captured
      *
@@ -396,20 +425,14 @@ export interface ErrorTrackingOptions {
     __capturePostHogExceptions?: boolean
 
     /**
-     * ADVANCED: alters the refill rate for the token bucket mutation throttling
-     * Normally only altered alongside posthog support guidance.
-     * Accepts values between 0 and 100
-     *
-     * @default 1
+     * @deprecated Use {@link ExceptionRateLimiterConfig.exceptionRateLimiterRefillRate} instead.
+     * Still honoured as a fallback, but will be removed in a future major version.
      */
     __exceptionRateLimiterRefillRate?: number
 
     /**
-     * ADVANCED: alters the bucket size for the token bucket mutation throttling
-     * Normally only altered alongside posthog support guidance.
-     * Accepts values between 0 and 100
-     *
-     * @default 10
+     * @deprecated Use {@link ExceptionRateLimiterConfig.exceptionRateLimiterBucketSize} instead.
+     * Still honoured as a fallback, but will be removed in a future major version.
      */
     __exceptionRateLimiterBucketSize?: number
 
@@ -565,6 +588,21 @@ export interface SessionRecordingOptions {
      * @default false
      */
     recordCrossOriginIframes?: boolean
+
+    /**
+     * ADVANCED: limit which DOM attributes are observed for mutations, by passing
+     * the list to the native `MutationObserver` `attributeFilter`. Mutations to
+     * unlisted attributes never reach the recorder at all, so they cost no
+     * recording CPU - useful to exclude high-frequency inline `style` mutations
+     * from JS-driven animations on animation-heavy pages.
+     *
+     * Attributes left off the list are invisible to replay, so only set this when
+     * that loss of fidelity is acceptable. When unset (the default) or set to an
+     * empty array, all attributes are observed.
+     *
+     * Normally only altered alongside posthog support guidance.
+     */
+    attributeFilter?: string[]
 
     /**
      * Derived from `rrweb.record` options

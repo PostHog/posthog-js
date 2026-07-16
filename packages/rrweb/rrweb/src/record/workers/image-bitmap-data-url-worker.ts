@@ -1,21 +1,54 @@
 import { encode } from 'base64-arraybuffer';
 import type {
-  DataURLOptions,
   ImageBitmapDataURLWorkerParams,
   ImageBitmapDataURLWorkerResponse,
 } from '@posthog/rrweb-types';
 
 const lastFingerprintMap: Map<number, string> = new Map();
-const transparentBlobMap: Map<string, string> = new Map();
+const transparentFingerprintMap: Map<number, string> = new Map();
 
-function fnv1aHash(buffer: ArrayBuffer): string {
-  const view = new Uint8Array(buffer);
-  let hash = 0x811c9dc5;
+// two independent hashes over 32-bit words rather than bytes: RGBA pixel
+// buffers are multi-megabyte, always word-aligned, and this runs on every frame
+function hashPixels(data: Uint8ClampedArray): string {
+  const view = new Uint32Array(
+    data.buffer,
+    data.byteOffset,
+    data.byteLength >>> 2,
+  );
+  let primaryHash = 0x811c9dc5;
+  let secondaryHash = 0x9e3779b9;
   for (let i = 0; i < view.length; i++) {
-    hash ^= view[i];
-    hash = (hash * 0x01000193) | 0;
+    primaryHash ^= view[i];
+    primaryHash = Math.imul(primaryHash, 0x01000193);
+    secondaryHash ^= view[i];
+    secondaryHash = Math.imul(secondaryHash, 0x85ebca6b);
   }
-  return (hash >>> 0).toString(16);
+  return `${(primaryHash >>> 0).toString(16)}:${(
+    secondaryHash >>> 0
+  ).toString(16)}`;
+}
+
+// fingerprints are dimension-tagged: raw pixels alone can't distinguish a
+// same-pixel-count resize (e.g. a solid-fill 100x200 -> 200x100), and the
+// replayer must repaint after one
+function frameFingerprint(
+  width: number,
+  height: number,
+  data: Uint8ClampedArray,
+): string {
+  return `${width}x${height}:${hashPixels(data)}`;
+}
+
+function transparentFingerprint(width: number, height: number): string {
+  // the hash of an all-zero buffer depends only on its length, so memoize by
+  // pixel count — this sits on the per-frame path for still-blank canvases
+  const pixelCount = width * height;
+  let hash = transparentFingerprintMap.get(pixelCount);
+  if (hash === undefined) {
+    hash = hashPixels(new Uint8ClampedArray(pixelCount * 4));
+    transparentFingerprintMap.set(pixelCount, hash);
+  }
+  return `${width}x${height}:${hash}`;
 }
 
 export interface ImageBitmapDataURLRequestWorker {
@@ -38,26 +71,6 @@ interface ImageBitmapDataURLResponseWorker {
   postMessage(e: ImageBitmapDataURLWorkerResponse): void;
 }
 
-async function getTransparentBlobFor(
-  width: number,
-  height: number,
-  dataURLOptions: DataURLOptions,
-): Promise<string> {
-  const id = `${width}-${height}`;
-  if ('OffscreenCanvas' in globalThis) {
-    if (transparentBlobMap.has(id)) return transparentBlobMap.get(id)!;
-    const offscreen = new OffscreenCanvas(width, height);
-    offscreen.getContext('2d'); // creates rendering context for `converToBlob`
-    const blob = await offscreen.convertToBlob(dataURLOptions); // takes a while
-    const arrayBuffer = await blob.arrayBuffer();
-    const base64 = encode(arrayBuffer); // cpu intensive
-    transparentBlobMap.set(id, base64);
-    return base64;
-  } else {
-    return '';
-  }
-}
-
 // `as any` because: https://github.com/Microsoft/TypeScript/issues/20595
 const worker: ImageBitmapDataURLResponseWorker = self;
 
@@ -67,50 +80,61 @@ let reusableCtx: OffscreenCanvasRenderingContext2D | null = null;
 // eslint-disable-next-line @typescript-eslint/no-misused-promises
 worker.onmessage = async function (e) {
   if ('OffscreenCanvas' in globalThis) {
-    const { id, bitmap, width, height, displayWidth, displayHeight, dataURLOptions } =
-      e.data;
+    const {
+      id,
+      bitmap,
+      width,
+      height,
+      displayWidth,
+      displayHeight,
+      dataURLOptions,
+    } = e.data;
 
     try {
-      const transparentBase64 = getTransparentBlobFor(
-        width,
-        height,
-        dataURLOptions,
-      );
-
       if (
         !reusableCanvas ||
         reusableCanvas.width !== width ||
         reusableCanvas.height !== height
       ) {
         reusableCanvas = new OffscreenCanvas(width, height);
-        reusableCtx = reusableCanvas.getContext('2d')!;
+        reusableCtx = reusableCanvas.getContext('2d', {
+          willReadFrequently: true,
+        })!;
       }
+      const ctx = reusableCtx!;
 
-      reusableCtx!.clearRect(0, 0, width, height);
-      reusableCtx!.drawImage(bitmap, 0, 0);
+      ctx.clearRect(0, 0, width, height);
+      ctx.drawImage(bitmap, 0, 0);
       bitmap.close();
-      const blob = await reusableCanvas.convertToBlob(dataURLOptions); // takes a while
-      const type = blob.type;
-      const arrayBuffer = await blob.arrayBuffer();
-      const fingerprint = fnv1aHash(arrayBuffer);
 
-      // on first try we should check if canvas is transparent,
-      // no need to save it's contents in that case
-      if (!lastFingerprintMap.has(id)) {
-        const base64 = encode(arrayBuffer);
-        if ((await transparentBase64) === base64) {
-          lastFingerprintMap.set(id, fingerprint);
-          return worker.postMessage({ id });
-        }
-        lastFingerprintMap.set(id, fingerprint);
-        worker.postMessage({ id, type, base64, displayWidth, displayHeight });
-        return;
+      // fingerprint the raw pixels so unchanged frames skip the expensive
+      // encode below entirely, instead of encoding first and deduping after.
+      // an unseen canvas is compared against the transparent fingerprint, so
+      // one that starts out blank is skipped like an unchanged frame
+      const fingerprint = frameFingerprint(
+        width,
+        height,
+        ctx.getImageData(0, 0, width, height).data,
+      );
+      const lastFingerprint =
+        lastFingerprintMap.get(id) ?? transparentFingerprint(width, height);
+
+      if (fingerprint === lastFingerprint) {
+        return worker.postMessage({ id }); // unchanged, or still blank
       }
 
-      if (lastFingerprintMap.get(id) === fingerprint)
-        return worker.postMessage({ id }); // unchanged
-      const base64 = encode(arrayBuffer);
-      worker.postMessage({ id, type, base64, displayWidth, displayHeight });
+      const blob = await reusableCanvas.convertToBlob(dataURLOptions); // takes a while
+      const arrayBuffer = await blob.arrayBuffer();
+      worker.postMessage({
+        id,
+        type: blob.type,
+        base64: encode(arrayBuffer), // cpu intensive
+        displayWidth,
+        displayHeight,
+      });
+      // only record the fingerprint once the frame was actually sent — a
+      // transient encode failure must retry on the next frame, not be
+      // remembered as "unchanged" and suppressed forever
       lastFingerprintMap.set(id, fingerprint);
     } catch {
       // Always respond so the main thread clears snapshotInProgressMap

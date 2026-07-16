@@ -82,6 +82,31 @@ describe('identify option', () => {
     await capture.stop()
   })
 
+  it('republishes $identify when the identity materially changes mid-session, then dedupes again', async () => {
+    const capture = new EventCapture()
+    await capture.start()
+    // Same distinctId, but the plan changes on the second call and then holds.
+    const plans = ['free', 'pro', 'pro']
+    let call = 0
+    const identify = jest.fn(async () => ({ distinctId: 'user-1', properties: { plan: plans[call++] } }))
+
+    instrument(server, fakePostHog(), { identify })
+
+    await callAddTodo(client, 'first')
+    await callAddTodo(client, 'second')
+    await callAddTodo(client, 'third')
+
+    await new Promise((r) => setTimeout(r, 50))
+
+    // One at first-seen, one when plan flips free→pro; the third call (still pro) dedupes.
+    expect(identify).toHaveBeenCalledTimes(3)
+    const identifyEvents = capture.getEvents().filter((e) => e.eventType === MCPAnalyticsEventType.identify)
+    expect(identifyEvents).toHaveLength(2)
+    expectIdentityStored(server, { distinctId: 'user-1', properties: { plan: 'pro' } })
+
+    await capture.stop()
+  })
+
   it('identifies the caller on tools registered after instrument() (proxy listener)', async () => {
     const capture = new EventCapture()
     await capture.start()

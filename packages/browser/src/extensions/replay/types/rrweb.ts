@@ -83,6 +83,7 @@ export type recordOptions = {
     maskTextFn?: MaskTextFn
     slimDOMOptions?: SlimDOMOptions | 'all' | true
     ignoreCSSAttributes?: Set<string>
+    attributeFilter?: string[]
     inlineStylesheet?: boolean
     hooks?: hooksParam
     packFn?: PackFn

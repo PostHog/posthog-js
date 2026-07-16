@@ -7,7 +7,10 @@ import type { SnapshotBuffer } from './lazy-loaded-session-recorder'
 export function circularReferenceReplacer() {
     const ancestors: any[] = []
     return function (this: any, _key: string, value: any) {
-        if (isObject(value)) {
+        // arrays must be tracked as ancestors too - isObject excludes them, and an
+        // untracked array in the path empties the ancestor stack, so a cycle passing
+        // through an array would be missed and JSON.stringify would throw
+        if (isObject(value) || isArray(value)) {
             // `this` is the object that value is contained in,
             // i.e., its direct parent.
             while (ancestors.length > 0 && ancestors[ancestors.length - 1] !== this) {

@@ -1,11 +1,10 @@
 import Config from './config'
 import { PostHog } from './posthog-core'
 import type { CaptureMetricOptions, OtlpMetricsPayload } from './types'
-import { PostHogMetrics as CorePostHogMetrics } from '@posthog/core'
+import { PostHogMetrics as CorePostHogMetrics, resolveMetricsConfig } from '@posthog/core'
 import type { SendMetricsBatchOutcome } from '@posthog/core'
 import { createLogger } from './utils/logger'
 import { Extension } from './extensions/types'
-import { resolveMetricsConfig } from './metrics-defaults'
 
 const METRICS_ENDPOINT = '/i/v1/metrics'
 // Safety backstop for a `_send_request` that never calls back — same policy
@@ -78,7 +77,6 @@ export class PostHogMetrics implements Extension {
      */
     flush(transport?: 'XHR' | 'fetch' | 'sendBeacon'): Promise<void> {
         if (!this._core) {
-            // eslint-disable-next-line compat/compat
             return Promise.resolve()
         }
         if (transport) {
@@ -86,7 +84,7 @@ export class PostHogMetrics implements Extension {
             if (payload) {
                 void this._sendMetricsBatch(payload, transport)
             }
-            // eslint-disable-next-line compat/compat
+
             return Promise.resolve()
         }
         return this._core.flush().catch((err) => this._logger.error('PostHog metrics flush failed:', err))

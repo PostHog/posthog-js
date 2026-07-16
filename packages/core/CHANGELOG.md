@@ -1,5 +1,55 @@
 # @posthog/core
 
+## 1.42.1
+
+### Patch Changes
+
+- [#4153](https://github.com/PostHog/posthog-js/pull/4153) [`fc2cb2e`](https://github.com/PostHog/posthog-js/commit/fc2cb2e6e7accf23ed1f075f6da996f6ba575276) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Log a `warn` (previously `info`) when the local event queue is full and the oldest event is dropped, matching the severity Python and Rust already use for this condition.
+  (2026-07-15)
+
+## 1.42.0
+
+### Minor Changes
+
+- [#4117](https://github.com/PostHog/posthog-js/pull/4117) [`1eddff7`](https://github.com/PostHog/posthog-js/commit/1eddff74e63ff539eb3144f075b14ab5ffec84cc) Thanks [@DanielVisca](https://github.com/DanielVisca)! - add the posthog.metrics API (count, gauge, histogram) to posthog-node — alpha
+
+  Backend services can now record metrics through the same statsd-style pre-aggregating client the browser SDK ships, with no OpenTelemetry setup:
+
+  ```ts
+  const client = new PostHog('phc_...', { metrics: { serviceName: 'billing-worker' } })
+  client.metrics.count('invoices.processed', 1, { attributes: { plan: 'pro' } })
+  client.metrics.gauge('queue.depth', 42)
+  client.metrics.histogram('job.duration', 187, { unit: 'ms' })
+  ```
+
+  Samples aggregate in memory and flush as OTLP/JSON to `/i/v1/metrics` (one data point per series per window). Pending metrics are flushed on `shutdown()`. Core gains `_sendMetricsBatch` on `PostHogCoreStateless` (same outcome contract as `_sendLogsBatch`) and a shared `resolveMetricsConfig`, so any core-based SDK can host `PostHogMetrics`. (2026-07-15)
+
+## 1.41.1
+
+### Patch Changes
+
+- [#4090](https://github.com/PostHog/posthog-js/pull/4090) [`6dd8827`](https://github.com/PostHog/posthog-js/commit/6dd88274193e07a5f9f4bcb816dfca49cfe072d7) Thanks [@lucasheriques](https://github.com/lucasheriques)! - chore: survey seen-key and repeat-activation helpers now live in @posthog/core, shared by the web and React Native SDKs. Core's survey enums are now const-object literal unions (matching the web SDK's existing pattern), so the same values type-check across both SDKs. No behavior change. Type-level note: enum members no longer work as standalone type annotations (e.g. `SurveyType.Popover` as a type); use the exported union types instead. Runtime values are unchanged.
+  (2026-07-14)
+
+## 1.41.0
+
+### Minor Changes
+
+- [#4101](https://github.com/PostHog/posthog-js/pull/4101) [`dc2aa5b`](https://github.com/PostHog/posthog-js/commit/dc2aa5b3175dd4112347c16d16725045d63387f9) Thanks [@posthog](https://github.com/apps/posthog)! - Normalize the error tracking rate-limiter config to first-class options. The browser SDK now reads `exceptionRateLimiterRefillRate` / `exceptionRateLimiterBucketSize` on `error_tracking`, with the previous double-underscore `__exceptionRateLimiterRefillRate` / `__exceptionRateLimiterBucketSize` options deprecated but still honoured as a fallback. The option shape (`ExceptionRateLimiterConfig`) and default-resolution logic (`resolveExceptionRateLimiterConfig`) now live in `@posthog/core` and are shared between the browser and Node SDKs.
+  (2026-07-14)
+
+### Patch Changes
+
+- Updated dependencies [[`dc2aa5b`](https://github.com/PostHog/posthog-js/commit/dc2aa5b3175dd4112347c16d16725045d63387f9)]:
+  - @posthog/types@1.394.0
+
+## 1.40.2
+
+### Patch Changes
+
+- [#4105](https://github.com/PostHog/posthog-js/pull/4105) [`203284a`](https://github.com/PostHog/posthog-js/commit/203284ad0234a667153ec96c34d0e61c4847f4b2) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Extract the `/batch/` submission out of `_flush()` and `sendImmediate()` into a single overridable `protected sendBatch()` seam on `PostHogCoreStateless`, and widen `requestTimeout`/`historicalMigration` to `protected`. Add an overridable queue-route seam (`getQueueRouteKey`, `persistedQueueKeyForRoute`, `getActiveQueueRoutes`) so a subclass can partition events across independent queues that batch, flush, retry, and persist separately, plus an `AiQueue` persisted-property key and a `route` argument on `sendBatch`. This is an internal, behavior-preserving refactor — with the default single route the enqueue/flush/shutdown/reset paths are byte-identical (v0 request shape, retry, 413 handling, and error surfacing unchanged), so browser and React Native are unaffected. Groundwork for opt-in Capture V1 support in `posthog-node`, where `$ai_*` events stay on the legacy transport isolated from the V1 route.
+  (2026-07-11)
+
 ## 1.40.1
 
 ### Patch Changes

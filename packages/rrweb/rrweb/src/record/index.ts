@@ -69,6 +69,20 @@ try {
 }
 
 const mirror = createMirror();
+
+// incremental sources which fire without user interaction (e.g. a looping
+// background video, a JS animation) and so must not unfreeze a frozen page
+// (upstream rrweb #1697). Hoisted so the check does not allocate per event.
+const nonUserInitiatedSources = new Set<IncrementalSource>([
+  IncrementalSource.Mutation,
+  IncrementalSource.MediaInteraction, // often automatic e.g. background video loop
+  IncrementalSource.StyleSheetRule,
+  IncrementalSource.CanvasMutation,
+  IncrementalSource.Font,
+  IncrementalSource.Log,
+  IncrementalSource.StyleDeclaration,
+  IncrementalSource.AdoptedStyleSheet,
+]);
 function record<T = eventWithTime>(
   options: recordOptions<T> = {},
 ): listenerHandler | undefined {
@@ -106,6 +120,7 @@ function record<T = eventWithTime>(
     plugins,
     keepIframeSrcFn = () => false,
     ignoreCSSAttributes = new Set([]),
+    attributeFilter,
     errorHandler,
   } = options;
 
@@ -216,7 +231,7 @@ function record<T = eventWithTime>(
       e.type !== EventType.FullSnapshot &&
       !(
         e.type === EventType.IncrementalSnapshot &&
-        e.data.source === IncrementalSource.Mutation
+        nonUserInitiatedSources.has(e.data.source)
       )
     ) {
       // we've got a user initiated event so first we need to apply
@@ -393,6 +408,7 @@ function record<T = eventWithTime>(
       canvasManager,
       keepIframeSrcFn,
       processedNodeManager,
+      attributeFilter,
     },
     mirror,
   });
@@ -636,6 +652,7 @@ function record<T = eventWithTime>(
           processedNodeManager,
           canvasManager,
           ignoreCSSAttributes,
+          attributeFilter,
           plugins:
             plugins
               ?.filter((p) => p.observer)

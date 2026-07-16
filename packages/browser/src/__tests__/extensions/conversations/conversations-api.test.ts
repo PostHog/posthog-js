@@ -1,4 +1,3 @@
-/* eslint-disable compat/compat */
 import { PostHogConversations, ConversationsManager } from '../../../extensions/conversations/posthog-conversations'
 import {
     ConversationsRemoteConfig,

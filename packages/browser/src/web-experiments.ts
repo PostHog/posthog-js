@@ -221,7 +221,6 @@ export class WebExperiments implements Extension {
         }
         const campaignParams = getCampaignParams()
         if (campaignParams['utm_source']) {
-            // eslint-disable-next-line compat/compat
             const utmCampaignMatched = testVariant.conditions?.utm?.utm_campaign
                 ? testVariant.conditions?.utm?.utm_campaign == campaignParams['utm_campaign']
                 : true

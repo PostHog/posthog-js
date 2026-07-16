@@ -14,10 +14,13 @@ export interface CreatePostHogConfig {
      * session/device/window linkage stays client-provided. Return nullish to
      * fall back to the client identity.
      *
-     * Runs once per `getPostHog()` call. In App Router it may call
-     * request-scoped auth helpers directly; in Pages Router
-     * (`@posthog/next/pages`) it receives the `GetServerSidePropsContext`
-     * passed to `getPostHog(ctx)`. Skipped for opted-out users.
+     * Runs in request scope and may call `cookies()`/`headers()` or auth
+     * helpers that do. In the App Router it runs at most once per request:
+     * repeated `getPostHog()` calls share a single resolution. In the Pages
+     * Router (`@posthog/next/pages`) it runs once per `getPostHog(ctx)` call
+     * and receives that `GetServerSidePropsContext`. Skipped for opted-out
+     * users. Errors are logged and treated as no identity; Next.js
+     * control-flow errors propagate normally.
      */
     getDistinctId?: PostHogDistinctIdResolver
 }

@@ -1,5 +1,66 @@
 # posthog-node
 
+## 5.44.0
+
+### Minor Changes
+
+- [#4153](https://github.com/PostHog/posthog-js/pull/4153) [`fc2cb2e`](https://github.com/PostHog/posthog-js/commit/fc2cb2e6e7accf23ed1f075f6da996f6ba575276) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Raise the default `maxQueueSize` from 1000 to 10000. Backend workloads are more likely to burst-enqueue events synchronously ahead of a flush than browser/mobile clients, so the previous default risked silently dropping events under bursty load. An explicit `maxQueueSize` option still overrides this default.
+  (2026-07-15)
+
+### Patch Changes
+
+- Updated dependencies [[`fc2cb2e`](https://github.com/PostHog/posthog-js/commit/fc2cb2e6e7accf23ed1f075f6da996f6ba575276)]:
+  - @posthog/core@1.42.1
+
+## 5.43.0
+
+### Minor Changes
+
+- [#4117](https://github.com/PostHog/posthog-js/pull/4117) [`1eddff7`](https://github.com/PostHog/posthog-js/commit/1eddff74e63ff539eb3144f075b14ab5ffec84cc) Thanks [@DanielVisca](https://github.com/DanielVisca)! - add the posthog.metrics API (count, gauge, histogram) to posthog-node — alpha
+
+  Backend services can now record metrics through the same statsd-style pre-aggregating client the browser SDK ships, with no OpenTelemetry setup:
+
+  ```ts
+  const client = new PostHog('phc_...', { metrics: { serviceName: 'billing-worker' } })
+  client.metrics.count('invoices.processed', 1, { attributes: { plan: 'pro' } })
+  client.metrics.gauge('queue.depth', 42)
+  client.metrics.histogram('job.duration', 187, { unit: 'ms' })
+  ```
+
+  Samples aggregate in memory and flush as OTLP/JSON to `/i/v1/metrics` (one data point per series per window). Pending metrics are flushed on `shutdown()`. Core gains `_sendMetricsBatch` on `PostHogCoreStateless` (same outcome contract as `_sendLogsBatch`) and a shared `resolveMetricsConfig`, so any core-based SDK can host `PostHogMetrics`. (2026-07-15)
+
+### Patch Changes
+
+- Updated dependencies [[`1eddff7`](https://github.com/PostHog/posthog-js/commit/1eddff74e63ff539eb3144f075b14ab5ffec84cc)]:
+  - @posthog/core@1.42.0
+
+## 5.42.0
+
+### Minor Changes
+
+- [#4101](https://github.com/PostHog/posthog-js/pull/4101) [`dc2aa5b`](https://github.com/PostHog/posthog-js/commit/dc2aa5b3175dd4112347c16d16725045d63387f9) Thanks [@posthog](https://github.com/apps/posthog)! - Expose the error tracking rate-limiter config via the new `exceptionRateLimiterRefillRate` and `exceptionRateLimiterBucketSize` options. Burst protection is scoped per exception type (each distinct `$exception` type gets its own token bucket, with no aggregate cap across types), so these let customers with high-cardinality exception types tune the per-type allowance.
+  (2026-07-14)
+
+### Patch Changes
+
+- Updated dependencies [[`dc2aa5b`](https://github.com/PostHog/posthog-js/commit/dc2aa5b3175dd4112347c16d16725045d63387f9)]:
+  - @posthog/core@1.41.0
+
+## 5.41.0
+
+### Minor Changes
+
+- [#4105](https://github.com/PostHog/posthog-js/pull/4105) [`203284a`](https://github.com/PostHog/posthog-js/commit/203284ad0234a667153ec96c34d0e61c4847f4b2) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Add opt-in Capture V1 support. Set the `POSTHOG_CAPTURE_MODE=v1` environment variable to submit analytics events to the Capture V1 endpoint (`/i/v1/analytics/events`) instead of the legacy `/batch/` endpoint, on both the batched and immediate send paths. The default remains `v0`, so existing behavior is unchanged unless you opt in. Opt-in is env-var-only during the transition (no public option), so nothing on the API surface has to be removed when v1 later becomes the default.
+
+  Capture V1 uses Bearer auth, lifts legacy `$`-sentinel properties into a typed `options` object, and does per-event partial retry with exponential backoff clamped against `Retry-After`. Dropped and undelivered events are surfaced on the client `error` channel as a `CaptureV1Error`. `$ai_*` events continue to use the legacy submitter for now, regardless of the capture mode.
+
+  In `v1` mode, `$ai_*` events are routed to an isolated in-memory queue and flushed independently of the Capture V1 queue, so the two transports never share a batch and a failure on one cannot re-send events already accepted on the other. Each queue keeps its own retry/durability semantics: the legacy queue re-queues on network failure (retrying on later flushes), while the V1 queue exhausts the sender's own attempt budget per cycle and then surfaces the failure rather than re-queuing. (2026-07-11)
+
+### Patch Changes
+
+- Updated dependencies [[`203284a`](https://github.com/PostHog/posthog-js/commit/203284ad0234a667153ec96c34d0e61c4847f4b2)]:
+  - @posthog/core@1.40.2
+
 ## 5.40.0
 
 ### Minor Changes

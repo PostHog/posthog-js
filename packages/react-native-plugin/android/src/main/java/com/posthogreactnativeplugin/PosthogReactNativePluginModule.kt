@@ -7,9 +7,9 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.bridge.UiThreadUtil
+import com.facebook.react.common.JavascriptException
 import com.posthog.PostHog
 import com.posthog.PostHogConfig
-import com.posthog.PostHogEvent
 import com.posthog.android.PostHogAndroid
 import com.posthog.android.PostHogAndroidConfig
 import com.posthog.internal.PostHogPreferences
@@ -117,7 +117,7 @@ class PosthogReactNativePluginModule(
 
               // React Native rethrows fatal JS errors natively as JavascriptException.
               // The JS layer already captured them, so drop the native duplicate.
-              addBeforeSend { event -> if (isReactNativeFatalJsError(event)) null else event }
+              errorTrackingConfig.ignoredExceptionTypes.add(JavascriptException::class.java)
 
               // Always apply the session replay configuration so that recording started later
               // (e.g. startRecording or a linked feature flag) uses the right mode and masking;
@@ -319,16 +319,6 @@ class PosthogReactNativePluginModule(
     map: ReadableMap?,
     key: String,
   ): Double? = runCatching { if (hasKey(map, key)) map?.getDouble(key) else null }.getOrNull()
-
-  private fun isReactNativeFatalJsError(event: PostHogEvent): Boolean {
-    if (event.event != "\$exception") return false
-    val exceptionList = event.properties?.get("\$exception_list") as? List<*> ?: return false
-    return exceptionList.any { item ->
-      val exception = item as? Map<*, *> ?: return@any false
-      exception["type"] == "JavascriptException" &&
-        (exception["module"] as? String)?.startsWith("com.facebook.react") == true
-    }
-  }
 
   private fun logError(
     method: String,

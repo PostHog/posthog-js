@@ -43,7 +43,6 @@ export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryPr
     }
 
     componentDidCatch(error: unknown, errorInfo: React.ErrorInfo) {
-        //eslint-disable-next-line react/prop-types
         const { additionalProperties } = this.props
         let currentProperties
         if (isFunction(additionalProperties)) {
@@ -63,7 +62,6 @@ export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryPr
     }
 
     public render(): React.ReactNode {
-        //eslint-disable-next-line react/prop-types
         const { children, fallback } = this.props
         const state = this.state
 

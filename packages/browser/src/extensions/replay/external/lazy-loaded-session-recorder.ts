@@ -20,6 +20,7 @@ import {
     URLTriggerMatching,
 } from './triggerMatching'
 import {
+    circularReferenceReplacer,
     estimateCompressedEventSize,
     estimateSize,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
@@ -221,12 +222,24 @@ function gzipStringToString(serializedData: string): string {
     return strFromU8(gzipSync(strToU8(serializedData)), true)
 }
 
+function serializeForCompression(data: unknown): string {
+    try {
+        // fast path: plain native stringify, since a replacer callback is expensive on
+        // large snapshots and circular event data is rare
+        return JSON.stringify(data)
+    } catch {
+        // circular event data (e.g. a leaked instance graph) degrades gracefully to
+        // '[Circular]' markers instead of throwing, the same two-step approach as jsonStringify
+        return JSON.stringify(data, circularReferenceReplacer())
+    }
+}
+
 function gzipToString(data: unknown): string {
-    return gzipStringToString(JSON.stringify(data))
+    return gzipStringToString(serializeForCompression(data))
 }
 
 async function gzipToStringAsync(data: unknown): Promise<string> {
-    const serializedData = JSON.stringify(data)
+    const serializedData = serializeForCompression(data)
     const compressed = await gzipCompress(serializedData, Config.DEBUG, { rethrow: true })
     return strFromU8(new Uint8Array(await compressed!.arrayBuffer()), true)
 }
@@ -1021,11 +1034,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         addEventListener(window, 'online', this._onOnline)
         addEventListener(window, 'visibilitychange', this._onVisibilityChange)
 
-        if (!this._onSessionIdListener) {
+        if (!this._onSessionIdListener && isFunction(this._sessionManager.onSessionId)) {
             this._onSessionIdListener = this._sessionManager.onSessionId(this._onSessionIdCallback)
         }
 
-        if (!this._onSessionIdleResetForcedListener) {
+        // NB: SessionIdManager.on was only added in posthog-js 1.268.6. This recorder chunk is loaded
+        // from the CDN and can run against an older bundled core that has no `on` method, so guard the
+        // call to degrade gracefully (recording still starts, it just skips the forced-idle-reset listener)
+        // rather than throwing a TypeError during start().
+        if (!this._onSessionIdleResetForcedListener && isFunction(this._sessionManager.on)) {
             this._onSessionIdleResetForcedListener = this._sessionManager.on('forcedIdleReset', () => {
                 // a session was forced to reset due to idle timeout and lack of activity
                 this._clearConditionalRecordingPersistence()
@@ -1041,6 +1058,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     }
                 )
             })
+        } else if (!isFunction(this._sessionManager.on)) {
+            logger.warn(
+                'bundled core has no SessionIdManager.on (requires posthog-js >= 1.268.6); ' +
+                    'recording will start but skip forced-idle-reset handling'
+            )
         }
 
         if (isNullish(this._removePageViewCaptureHook)) {
@@ -1364,11 +1386,23 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     return
                 }
 
-                const { event: eventToSend, size } = compressionEnabled
-                    ? shouldUseNativeAsyncSessionRecordingGzip(event)
-                        ? await compressEventAsync(event)
-                        : compressEventSync(event)
-                    : { event, size: estimateSize(event) }
+                let eventToSend: eventWithTime | compressedEventWithTime
+                let size: number
+                try {
+                    const result = compressionEnabled
+                        ? shouldUseNativeAsyncSessionRecordingGzip(event)
+                            ? await compressEventAsync(event)
+                            : compressEventSync(event)
+                        : { event, size: estimateSize(event) }
+                    eventToSend = result.event
+                    size = result.size
+                } catch (e) {
+                    // a compression failure must never reject the queue promise chain, since the
+                    // rejection would surface as an unhandled rejection and drop the event
+                    logger.error('could not process queued compression event - will use uncompressed event', e)
+                    eventToSend = event
+                    size = estimateSize(event)
+                }
 
                 this._captureQueuedCompressionEvent(queuedEvent, eventToSend, size)
             } finally {
@@ -1586,6 +1620,26 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._activateTrigger(triggerType)
     }
 
+    private _currentMaskedHostname(): string | undefined {
+        try {
+            const href = window?.location?.href
+            if (!href) {
+                return undefined
+            }
+            const maskedUrl = this._maskReplayUrl(href)
+            if (!maskedUrl) {
+                return undefined
+            }
+            // not convertToURL: it resolves invalid input (e.g. a masking fn returning "REDACTED")
+            // against the current page and would return the real hostname we're trying to mask.
+            // new URL throws instead, so bad input falls through to the catch and we omit the property.
+            // eslint-disable-next-line compat/compat
+            return new URL(maskedUrl).hostname || undefined
+        } catch {
+            return undefined
+        }
+    }
+
     private _clearFlushBufferTimer() {
         if (this._flushBufferTimer) {
             clearTimeout(this._flushBufferTimer)
@@ -1610,6 +1664,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         if (this._buffer.data.length > 0) {
+            const snapshotHostname = this._currentMaskedHostname()
             const snapshotEvents = splitBuffer(this._buffer)
             snapshotEvents.forEach((snapshotBuffer) => {
                 this._flushedSizeTracker?.trackSize(snapshotBuffer.sessionId, snapshotBuffer.size)
@@ -1620,6 +1675,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     $window_id: snapshotBuffer.windowId,
                     $lib: Config.LIB_NAME,
                     $lib_version: Config.LIB_VERSION,
+                    $snapshot_host: snapshotHostname,
                 })
             })
 
@@ -1941,6 +1997,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             inlineStylesheet: true,
             recordCrossOriginIframes: false,
             sampling: undefined,
+            attributeFilter: undefined,
         }
 
         // only allows user to set our allowlisted options

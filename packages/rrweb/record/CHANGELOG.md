@@ -1,5 +1,48 @@
 # @rrweb/record
 
+## 0.0.83
+
+### Patch Changes
+
+- [#4157](https://github.com/PostHog/posthog-js/pull/4157) [`4a2ecf5`](https://github.com/PostHog/posthog-js/commit/4a2ecf5ccdc3ed2567a5d59dcdcf88c6541d9b1b) Thanks [@posthog](https://github.com/apps/posthog)! - Session recording no longer emits an uncaught `NotAllowedError` ("Sharing constructed stylesheets in multiple documents is not allowed") when a page assigns a `CSSStyleSheet` constructed in a different document to `adoptedStyleSheets`. That assignment is the host page's own invalid operation, but the recorder's patched setter sat on the call stack, so the exception was attributed to rrweb and churned fingerprints in error tracking. The recorder now contains this specific rejection (matched by its standardized `NotAllowedError` name, so it works even when the setter throws from an iframe realm) and skips recording those sheets, while still re-throwing any other native-setter error so host-page behaviour is preserved.
+  (2026-07-15)
+- Updated dependencies [[`4a2ecf5`](https://github.com/PostHog/posthog-js/commit/4a2ecf5ccdc3ed2567a5d59dcdcf88c6541d9b1b)]:
+    - @posthog/rrweb@0.1.3
+
+## 0.0.82
+
+### Patch Changes
+
+- [#4151](https://github.com/PostHog/posthog-js/pull/4151) [`81adbfd`](https://github.com/PostHog/posthog-js/commit/81adbfde4cb7932435804cc55c8e9d975b94f3f5) Thanks [@posthog](https://github.com/apps/posthog)! - Session recording no longer emits an uncaught `TypeError: Illegal invocation` when a programmatic input-value change happens on an object that is not a genuine native input element (for example a proxy on the element prototype chain). The recorder drops that one replay update instead of throwing.
+  (2026-07-15)
+- Updated dependencies [[`81adbfd`](https://github.com/PostHog/posthog-js/commit/81adbfde4cb7932435804cc55c8e9d975b94f3f5)]:
+    - @posthog/rrweb@0.1.2
+
+## 0.0.81
+
+### Patch Changes
+
+- Updated dependencies [[`f48eaf2`](https://github.com/PostHog/posthog-js/commit/f48eaf2242dafdf72e8fc9dd739b90c9a6b89513), [`c50b27f`](https://github.com/PostHog/posthog-js/commit/c50b27f54e551ea76b1a7e7b935346bcf4d13ebf)]:
+    - @posthog/rrweb@0.1.1
+
+## 0.0.80
+
+### Patch Changes
+
+- Updated dependencies [[`800af7c`](https://github.com/PostHog/posthog-js/commit/800af7cae4e2cf103d0089918e778a97dccee35f), [`5116a41`](https://github.com/PostHog/posthog-js/commit/5116a413a5d95706a4fb38dc6c40a0525cb16578), [`9bd3ef0`](https://github.com/PostHog/posthog-js/commit/9bd3ef06283c8f6a869df6880e7fc2b2d04f69cc)]:
+    - @posthog/rrweb@0.1.0
+    - @posthog/rrweb-utils@0.0.63
+
+## 0.0.79
+
+### Patch Changes
+
+- [#4118](https://github.com/PostHog/posthog-js/pull/4118) [`f630394`](https://github.com/PostHog/posthog-js/commit/f6303946729b2882e495a06d75b8458433a74646) Thanks [@posthog](https://github.com/apps/posthog)! - Fix a `RangeError: Maximum call stack size exceeded` originating from the shared rrweb `patch()` helper. It patches shared globals such as `Element.prototype.attachShadow` (shadow-dom-manager) and the DOM/canvas observers, so multiple recorder instances or repeated start/stop cycles wrap the same global more than once. Previously an out-of-order restore silently no-op'd, leaving the wrapper in the call path; repeated cycles grew the wrapper chain without bound until a real call walked a chain deep enough to overflow the stack. Wrappers now delegate through a mutable per-layer link so any layer can be torn down even when newer wrappers sit on top of it, keeping the chain bounded. Recording behavior is unchanged. This applies the same fix as #4063 (fetch/XHR) to the shared helper so every rrweb-record caller inherits the bounded-chain behavior.
+  (2026-07-10)
+- Updated dependencies [[`f630394`](https://github.com/PostHog/posthog-js/commit/f6303946729b2882e495a06d75b8458433a74646)]:
+    - @posthog/rrweb-utils@0.0.62
+    - @posthog/rrweb@0.0.79
+
 ## 0.0.78
 
 ### Patch Changes

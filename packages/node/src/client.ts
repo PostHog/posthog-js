@@ -12,10 +12,14 @@ import {
   PostHogFetchResponse,
   PostHogFlagsAndPayloadsResponse,
   PostHogFlagsResponse,
+  PostHogMetrics,
   PostHogPersistedProperty,
+  resolveMetricsConfig,
+  RetriableOptions,
   safeSetTimeout,
   uuidv7,
 } from '@posthog/core'
+import type { Metrics } from '@posthog/core'
 import {
   AllFlagsOptions,
   EventMessage,
@@ -48,6 +52,9 @@ import {
 import ErrorTracking from './extensions/error-tracking'
 import { PostHogMemoryStorage } from './storage-memory'
 import { ContextData, ContextOptions, IPostHogContext } from './extensions/context/types'
+import { type CaptureMode, resolveCaptureMode } from './capture-v1/config'
+import { AI_ROUTE, ANALYTICS_ROUTE, isLegacyOnlyEvent } from './capture-v1/routing'
+import { V1CaptureSender } from './capture-v1/sender'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
 // so the fastest a poller should ever be set is 100ms.
@@ -68,7 +75,6 @@ function emitDeprecationWarningOnce(id: string, message: string): void {
     return
   }
   _emittedDeprecations.add(id)
-  // eslint-disable-next-line no-console
   console.warn(`[PostHog] ${message}`)
 }
 
@@ -130,6 +136,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private maxCacheSize: number
   public readonly options: PostHogOptions
   protected readonly context?: IPostHogContext
+  private _metrics?: PostHogMetrics
+
+  private readonly captureMode: CaptureMode
+  private _v1Sender?: V1CaptureSender
 
   // Feature flag overrides for local testing/development
   private _flagOverrides?: Record<string, FeatureFlagValue>
@@ -177,6 +187,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     const normalizedApiKey = normalizeApiKey(apiKey)
     const normalizedOptions = {
       ...options,
+      // Node's default is higher than the shared core default (1000) because backend
+      // workloads are more likely to burst-enqueue synchronously ahead of a flush.
+      // Applied after the spread with a nullish fallback so a wrapper forwarding
+      // `maxQueueSize: undefined` still gets the Node default, not the core one.
+      maxQueueSize: options.maxQueueSize ?? 10000,
       host: normalizeHost(options.host),
       personalApiKey: normalizePersonalApiKey(options.secretKey ?? options.personalApiKey),
     }
@@ -184,6 +199,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     super(normalizedApiKey, normalizedOptions)
 
     this.options = normalizedOptions
+    this.captureMode = resolveCaptureMode()
     this.context = this.initializeContext()
 
     this.options.featureFlagsPollingInterval =
@@ -395,6 +411,75 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
+   * Route an event to its queue. In v1 mode `$ai_*` events go to the isolated {@link AI_ROUTE}
+   * (legacy transport) and everything else to {@link ANALYTICS_ROUTE} (Capture V1); in v0 mode
+   * every event stays on {@link ANALYTICS_ROUTE}, which maps to the historical queue. Routing runs
+   * on the post-`before_send`, normalized event name (core calls this after `processBeforeEnqueue`).
+   */
+  protected getQueueRouteKey(message: PostHogEventProperties): string {
+    return this.captureMode === 'v1' && isLegacyOnlyEvent(message) ? AI_ROUTE : ANALYTICS_ROUTE
+  }
+
+  protected persistedQueueKeyForRoute(route: string): PostHogPersistedProperty {
+    return route === AI_ROUTE ? PostHogPersistedProperty.AiQueue : PostHogPersistedProperty.Queue
+  }
+
+  protected getActiveQueueRoutes(): string[] {
+    // Only surface the AI route in v1 mode — v0 mode never enqueues onto it, so keeping it out
+    // keeps v0's flush/shutdown identical to before (a single queue on ANALYTICS_ROUTE).
+    return this.captureMode === 'v1' ? [ANALYTICS_ROUTE, AI_ROUTE] : [ANALYTICS_ROUTE]
+  }
+
+  /**
+   * Capture submission seam shared by the batched (`_flush`) and immediate (`sendImmediate`)
+   * paths. Events are routed to homogeneous per-route queues at enqueue time, so a batch here is
+   * never mixed: the {@link AI_ROUTE} (and all of v0 mode) uses the legacy `/batch/` transport,
+   * which throws so `_flush` can shrink/persist/retry its own queue; the {@link ANALYTICS_ROUTE}
+   * in v1 mode uses the Capture V1 endpoint. Because the routes flush independently, a v0/AI leg
+   * failure can never re-send analytics events already accepted on the V1 leg.
+   */
+  protected async sendBatch(
+    batchMessages: (PostHogEventProperties | undefined)[],
+    retryOptions?: Partial<RetriableOptions>,
+    route: string = ANALYTICS_ROUTE
+  ): Promise<void> {
+    if (this.captureMode !== 'v1' || route === AI_ROUTE) {
+      return super.sendBatch(batchMessages, retryOptions, route)
+    }
+
+    // Analytics route in v1 mode: homogeneous (no `$ai_*`, routed away at enqueue) and never
+    // undefined for a freshly-enqueued event; drop any legacy undefined queue artifacts.
+    const v1Events = batchMessages.filter((message): message is PostHogEventProperties => message !== undefined)
+    await this.getV1Sender().sendV1Batch(v1Events)
+  }
+
+  private getV1Sender(): V1CaptureSender {
+    if (!this._v1Sender) {
+      this._v1Sender = new V1CaptureSender(
+        {
+          host: this.host,
+          apiKey: this.apiKey,
+          libraryId: this.getLibraryId(),
+          libraryVersion: this.getLibraryVersion(),
+          userAgent: this.getCustomUserAgent() || undefined,
+          historicalMigration: this.historicalMigration,
+          compressionEnabled: !this.disableCompression,
+          requestTimeoutMs: this.requestTimeout,
+          // Reuse the existing v0 retry knobs: 1 initial attempt + fetchRetryCount retries.
+          maxAttempts: (this.options.fetchRetryCount ?? 3) + 1,
+          initialRetryDelayMs: this.options.fetchRetryDelay ?? 3000,
+          isDebug: this.isDebug,
+        },
+        {
+          fetch: (url, fetchOptions) => this.fetch(url, fetchOptions),
+          onError: (error) => this._events.emit('error', error),
+        }
+      )
+    }
+    return this._v1Sender
+  }
+
+  /**
    * Get the library version from package.json.
    *
    * @example
@@ -410,6 +495,30 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    */
   getLibraryVersion(): string {
     return version
+  }
+
+  /**
+   * The `posthog.metrics` API: a statsd-style pre-aggregating metrics client — alpha.
+   * Samples are folded into per-series aggregates in memory and flushed
+   * periodically as one OTLP data point per series per window, so recording
+   * from hot paths is cheap. Configure via the `metrics` client option.
+   *
+   * @example
+   * ```ts
+   * client.metrics.count('jobs.processed', 1, { attributes: { queue: 'default' } })
+   * client.metrics.gauge('queue.depth', 42)
+   * client.metrics.histogram('job.duration', 187, { unit: 'ms' })
+   * ```
+   *
+   * {@label Metrics}
+   */
+  public get metrics(): Metrics {
+    if (!this._metrics) {
+      // Lazy: `this` is the MetricsHost (isDisabled/optedOut/_sendMetricsBatch
+      // live on PostHogCoreStateless), so nothing is set up until first use.
+      this._metrics = new PostHogMetrics(this, resolveMetricsConfig(this.options.metrics), this._logger)
+    }
+    return this._metrics
   }
 
   /**
@@ -2300,13 +2409,32 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * @returns Promise that resolves when shutdown is complete
    */
   async _shutdown(shutdownTimeoutMs?: number): Promise<void> {
+    // One absolute deadline for the whole shutdown: the metrics flush race and
+    // super._shutdown spend from the same budget, so shutdown(500) can't take
+    // ~1000ms by giving each phase a fresh full timeout.
+    const shutdownDeadlineMs = Date.now() + (shutdownTimeoutMs ?? 30000)
     // Cancel any pending debounced flush — shutdown will flush directly.
     const resolve = this._consumeWaitUntilCycle()
 
     await this.featureFlagsPoller?.stopPoller(shutdownTimeoutMs)
     this.errorTracking.shutdown()
+    if (this._metrics) {
+      // Send whatever is aggregated in the current window, then clear the flush
+      // timer so it can't fire after teardown. Raced against the shutdown budget:
+      // this flush runs before super._shutdown starts its own timeout, so an
+      // unresponsive transport must not be able to hold shutdown past the
+      // caller's deadline (its retry stack alone can take ~49s).
+      await Promise.race([
+        this._metrics.flush().catch(() => {}),
+        new Promise<void>((resolve) => safeSetTimeout(resolve, Math.max(0, shutdownDeadlineMs - Date.now()))),
+      ])
+      // reset() also invalidates a flush that lost the race above: when its
+      // send finally settles, the stale window is discarded instead of being
+      // merged back onto a re-armed timer after teardown.
+      this._metrics.reset()
+    }
     try {
-      return await super._shutdown(shutdownTimeoutMs)
+      return await super._shutdown(Math.max(0, shutdownDeadlineMs - Date.now()))
     } finally {
       this.distinctIdHasSentFlagCalls = {}
       resolve?.()

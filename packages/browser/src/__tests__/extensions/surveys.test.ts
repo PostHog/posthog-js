@@ -1,4 +1,3 @@
-/* eslint-disable compat/compat */
 import { act, fireEvent, render, renderHook } from '@testing-library/preact'
 import {
     SurveyManager,

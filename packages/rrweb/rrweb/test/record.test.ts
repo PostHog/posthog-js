@@ -1088,6 +1088,53 @@ describe('record', function (this: ISuite) {
     await assertSnapshot(ctx.events);
   });
 
+  it('does not unfreeze the page on non-user-initiated events like media autoplay', async () => {
+    await ctx.page.evaluate(() => {
+      return new Promise((resolve) => {
+        const video = document.createElement('video');
+        document.body.appendChild(video);
+
+        const { record, freezePage } = (window as unknown as IWindow).rrweb;
+        record({
+          emit: (window as unknown as IWindow).emit,
+        });
+        freezePage();
+        setTimeout(() => {
+          const div = document.createElement('div');
+          div.setAttribute('id', 'during-freeze');
+          document.body.appendChild(div);
+        }, 0);
+        setTimeout(() => {
+          // a background video starting to play is not user interaction and
+          // must not flush the frozen mutation buffer
+          video.dispatchEvent(new Event('play', { bubbles: true }));
+        }, 10);
+        setTimeout(() => {
+          resolve(null);
+        }, 25);
+      });
+    });
+    await waitForRAF(ctx.page);
+
+    const mutationEvents = ctx.events.filter(
+      (e) =>
+        e.type === EventType.IncrementalSnapshot &&
+        e.data.source === IncrementalSource.Mutation,
+    );
+    // the buffered mutation stays frozen even though a media event fired
+    expect(mutationEvents.length).toEqual(0);
+
+    // a real user event still unfreezes and flushes the buffer
+    await ctx.page.evaluate(() => document.body.click());
+    await waitForRAF(ctx.page);
+    const flushed = ctx.events.filter(
+      (e) =>
+        e.type === EventType.IncrementalSnapshot &&
+        e.data.source === IncrementalSource.Mutation,
+    );
+    expect(flushed.length).toEqual(1);
+  });
+
   describe('loading stylesheets', () => {
     let server: Server;
     let serverURL: string;

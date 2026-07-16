@@ -374,7 +374,6 @@ export class SessionIdManager {
         }
         const timestamp = _timestamp || new Date().getTime()
 
-        // eslint-disable-next-line prefer-const
         let [, sessionId, startTimestamp] = this._getSessionId()
         const lastActivityTimestamp = this._freshestActivityTimestamp()
         let windowId = this._getWindowId()
