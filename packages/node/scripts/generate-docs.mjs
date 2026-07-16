@@ -38,6 +38,7 @@ const NODE_TYPE_EXAMPLES = {
 const config = {
   packageDir: path.resolve(import.meta.dirname, '..'), // packages/node
   apiJsonPath: path.resolve(import.meta.dirname, '../docs/posthog-node.api.json'),
+  dtsEntryPath: path.resolve(import.meta.dirname, '../dist/entrypoints/index.node.d.ts'),
   outputPath: path.resolve(import.meta.dirname, `../references/posthog-node-references-${version}.json`),
   version: version,
   id: NODE_SPEC_INFO.id,
