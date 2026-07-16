@@ -119,6 +119,74 @@ describe('Prompts', () => {
       )
     })
 
+    it('should fetch by label and surface label metadata', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({ ...mockPromptResponse, version: 3, prompt: 'Production prompt', label: 'production' }),
+      })
+
+      const posthog = createMockPostHog()
+      const prompts = new Prompts({ posthog })
+
+      const result = await prompts.get('test-prompt', { label: 'production' })
+
+      expect(result.prompt).toBe('Production prompt')
+      expect(result.version).toBe(3)
+      expect(result.label).toBe('production')
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://us.posthog.com/api/environments/@current/llm_prompts/name/test-prompt/?token=phc_test_key&label=production',
+        {
+          method: 'GET',
+          headers: {
+            Authorization: 'Bearer phx_test_key',
+          },
+        }
+      )
+    })
+
+    it('should reject version and label together', async () => {
+      const prompts = new Prompts({ posthog: createMockPostHog() })
+
+      await expect(prompts.get('test-prompt', { version: 1, label: 'production' })).rejects.toThrow(
+        'either version or label'
+      )
+      expect(mockFetch).not.toHaveBeenCalled()
+    })
+
+    it('should keep labeled and latest prompt caches separate', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ ...mockPromptResponse, version: 4, prompt: 'Latest prompt' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({ ...mockPromptResponse, version: 2, prompt: 'Production prompt', label: 'production' }),
+        })
+
+      const posthog = createMockPostHog()
+      const prompts = new Prompts({ posthog })
+
+      // A labeled fetch after a latest fetch must not be served from the
+      // latest cache entry — that would silently return the wrong version.
+      await expect(prompts.get('test-prompt')).resolves.toHaveProperty('prompt', 'Latest prompt')
+      await expect(prompts.get('test-prompt', { label: 'production' })).resolves.toHaveProperty(
+        'prompt',
+        'Production prompt'
+      )
+      await expect(prompts.get('test-prompt')).resolves.toHaveProperty('prompt', 'Latest prompt')
+      await expect(prompts.get('test-prompt', { label: 'production' })).resolves.toHaveProperty(
+        'prompt',
+        'Production prompt'
+      )
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+    })
+
     it('should return cached prompt when fresh', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
