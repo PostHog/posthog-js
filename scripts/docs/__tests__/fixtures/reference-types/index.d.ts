@@ -132,6 +132,43 @@ export type CallableWithProps = {
 };
 
 /**
+ * Members in every deprecation shape
+ *
+ * @public
+ */
+export interface DeprecationShapes {
+    /** Current option */
+    current: string;
+    /**
+     * Legacy timeout in ms.
+     *
+     * @deprecated Use current instead
+     */
+    legacy_timeout?: number;
+    /** @deprecated */
+    retired?: boolean;
+}
+
+/**
+ * Alias flattening the same members through the checker path
+ *
+ * @public
+ */
+export type DeprecationShapesAlias = DeprecationShapes & {
+    extra?: string;
+};
+
+/**
+ * @public
+ */
+export declare enum Mode {
+    /** Standard mode */
+    Standard = "standard",
+    /** @deprecated Use Standard */
+    Legacy = "legacy"
+}
+
+/**
  * Referenced by the public API but not exported
  */
 type HiddenOptions = {

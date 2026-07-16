@@ -115,7 +115,7 @@ describe('resolveTypeDefinitions with type resolver', () => {
     test('flattens Omit + intersection aliases to their effective members', () => {
         const config = byName(types, 'Config');
         const names = config.properties.map((p) => p.name).sort();
-        assert.deepEqual(names, ['api_host', 'debug', 'loaded', 'token']);
+        assert.deepEqual(names, ['api_host', 'debug', 'loaded', 'old_host', 'token']);
         assert.equal(config.example, undefined);
 
         assert.equal(propByName(config, 'api_host').type, 'string');
@@ -187,15 +187,67 @@ describe('resolveTypeDefinitions with type resolver', () => {
 
     test('interfaces keep their members', () => {
         const base = byName(types, 'BaseConfig');
-        assert.deepEqual(base.properties.map((p) => p.name), ['api_host', 'loaded', 'token']);
+        assert.deepEqual(base.properties.map((p) => p.name), ['api_host', 'loaded', 'old_host', 'token']);
     });
 
-    test('underscore-prefixed and deprecated members are excluded from both paths', () => {
+    test('underscore-prefixed members are excluded from both paths', () => {
         const published = (type) => type.properties.map((p) => p.name);
-        assert.ok(!published(byName(types, 'BaseConfig')).includes('old_host'));
         assert.ok(!published(byName(types, 'BaseConfig')).includes('__internal_flag'));
-        assert.ok(!published(byName(types, 'Config')).includes('old_host'));
         assert.ok(!published(byName(types, 'Config')).includes('__internal_flag'));
+    });
+
+    test('deprecated members are tagged and carry their migration text in both paths', () => {
+        const oldHostVia = (name) => byName(types, name).properties.find((p) => p.name === 'old_host');
+        for (const typeName of ['BaseConfig', 'Config']) {
+            const prop = oldHostVia(typeName);
+            assert.equal(prop.releaseTag, 'deprecated', `${typeName}.old_host releaseTag`);
+            assert.match(prop.description, /Deprecated: Use api_host/);
+        }
+        const apiHost = byName(types, 'Config').properties.find((p) => p.name === 'api_host');
+        assert.equal(apiHost.releaseTag, undefined);
+    });
+
+    test('deprecation text is appended to an existing summary in both paths', () => {
+        for (const typeName of ['DeprecationShapes', 'DeprecationShapesAlias']) {
+            const prop = byName(types, typeName).properties.find((p) => p.name === 'legacy_timeout');
+            assert.equal(prop.releaseTag, 'deprecated', `${typeName}.legacy_timeout releaseTag`);
+            assert.match(prop.description, /^Legacy timeout in ms\./, `${typeName} keeps the summary`);
+            assert.match(prop.description, /Deprecated: Use current instead$/, `${typeName} appends the tag text`);
+        }
+    });
+
+    test('bare @deprecated without a message still tags, with no fabricated description', () => {
+        for (const typeName of ['DeprecationShapes', 'DeprecationShapesAlias']) {
+            const prop = byName(types, typeName).properties.find((p) => p.name === 'retired');
+            assert.equal(prop.releaseTag, 'deprecated', `${typeName}.retired releaseTag`);
+            assert.equal(prop.description, undefined, `${typeName}.retired description`);
+        }
+    });
+
+    test('deprecated enum members are tagged', () => {
+        const mode = byName(types, 'Mode');
+        const legacy = mode.properties.find((p) => p.name === 'Legacy');
+        const standard = mode.properties.find((p) => p.name === 'Standard');
+        assert.equal(legacy.releaseTag, 'deprecated');
+        assert.match(legacy.description, /Deprecated: Use Standard/);
+        assert.equal(standard.releaseTag, undefined);
+        assert.equal(standard.description, 'Standard mode');
+    });
+
+    test('serialized output carries releaseTag only on deprecated members', () => {
+        const serialized = JSON.parse(JSON.stringify(types));
+        const tagged = [];
+        for (const t of serialized) {
+            for (const p of t.properties || []) {
+                if ('releaseTag' in p) {
+                    assert.equal(p.releaseTag, 'deprecated', `${t.name}.${p.name} has unexpected releaseTag`);
+                    tagged.push(`${t.name}.${p.name}`);
+                }
+            }
+        }
+        assert.ok(tagged.includes('Config.old_host'));
+        const current = serialized.find((t) => t.name === 'DeprecationShapes').properties.find((p) => p.name === 'current');
+        assert.ok(!('releaseTag' in current), 'non-deprecated properties must not serialize a releaseTag key');
     });
 
     test('cross-file property types render bare names, never import("...") qualifiers', () => {

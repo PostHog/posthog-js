@@ -2372,6 +2372,12 @@
           "name": "selector"
         },
         {
+          "description": "Deprecated: Only `selector` should be used now.",
+          "type": "string",
+          "name": "tag_name",
+          "releaseTag": "deprecated"
+        },
+        {
           "description": "StringMatching.Exact",
           "type": "ActionStepStringMatching | null",
           "name": "text_matching"
@@ -2984,6 +2990,12 @@
           "name": "persistence_name"
         },
         {
+          "description": "Deprecated: - Use 'persistence_name' instead",
+          "type": "string",
+          "name": "cookie_name",
+          "releaseTag": "deprecated"
+        },
+        {
           "description": "List of custom property names that should be stored in cookies (in addition to the default ones)\nwhen using 'localStorage+cookie' persistence mode. This allows these properties to be shared\nacross subdomains when cross_subdomain_cookie is enabled.",
           "type": "readonly string[]",
           "name": "cookie_persisted_properties"
@@ -3004,6 +3016,12 @@
           "name": "save_campaign_params"
         },
         {
+          "description": "Deprecated: - Use `save_campaign_params` instead",
+          "type": "boolean",
+          "name": "store_google",
+          "releaseTag": "deprecated"
+        },
+        {
           "description": "Used to extend the list of campaign parameters that are saved by default.",
           "type": "string[]",
           "name": "custom_campaign_params"
@@ -3017,6 +3035,12 @@
           "description": "Determines whether PostHog should be in debug mode.\nYou can enable this to get more detailed logging.\n\nYou can also enable this on your website by appending `?__posthog_debug=true` at the end of your URL\nYou can also call `posthog.debug()` in your code to enable debug mode",
           "type": "boolean",
           "name": "debug"
+        },
+        {
+          "description": "Deprecated: Use `debug` instead",
+          "type": "boolean",
+          "name": "verbose",
+          "releaseTag": "deprecated"
         },
         {
           "description": "Determines whether PostHog should capture pageview events automatically.\nCan be:\n- `true`: Capture regular pageviews (default)\n- `false`: Don't capture any pageviews\n- `'history_change'`: Capture pageviews on the initial page load and on history API changes (pushState, replaceState, popstate)",
@@ -3047,6 +3071,12 @@
           "description": "Determines whether PostHog should disable persistence.\nIf set to `true`, the library will not save any data to the browser. It will also delete any data previously saved to the browser.",
           "type": "boolean",
           "name": "disable_persistence"
+        },
+        {
+          "description": "Deprecated: - use `disable_persistence` instead",
+          "type": "boolean",
+          "name": "disable_cookie",
+          "releaseTag": "deprecated"
         },
         {
           "description": "Coalesce rapid `Persistence.save()` calls into a single write.\n\nSet to a positive number (milliseconds) to debounce writes to localStorage / cookie\nby that window. The in-memory `props` object is always updated synchronously so\nwithin-tab reads see the latest values immediately. Cross-tab `storage` events\n(which carry the full persistence value as a payload) are reduced proportionally\nto the debounce window.\n\nPending writes are flushed on `beforeunload` and `pagehide` so no state is lost\non tab close. The cross-tab visibility delay is bounded by the configured window.\n\nDefaults to `0` (no debouncing, write synchronously) for backwards compatibility.\nOn pages that capture many events per second, `250` is a reasonable starting point\nto reduce localStorage write pressure and cross-tab IPC traffic. The `2026-05-30`\nconfig default opts into `250` automatically.",
@@ -3174,6 +3204,12 @@
           "name": "opt_out_useragent_filter"
         },
         {
+          "description": "Deprecated: Use `consent_persistence_name` instead. This will be removed in a future major version. *",
+          "type": "string",
+          "name": "opt_out_capturing_cookie_prefix",
+          "releaseTag": "deprecated"
+        },
+        {
           "description": "Determines the key for the cookie / local storage used to store the information about whether users are opted in/out of capturing.\nWhen `null`, we used a key based on your token.",
           "type": "string",
           "name": "consent_persistence_name"
@@ -3194,14 +3230,32 @@
           "name": "property_denylist"
         },
         {
+          "description": "Deprecated: - use `property_denylist` instead",
+          "type": "string[]",
+          "name": "property_blacklist",
+          "releaseTag": "deprecated"
+        },
+        {
           "description": "A list of headers that should be sent with requests to the PostHog API.",
           "type": "{ [header_name: string]: string; }",
           "name": "request_headers"
         },
         {
+          "description": "Deprecated: - use `request_headers` instead",
+          "type": "{ [header_name: string]: string; }",
+          "name": "xhr_headers",
+          "releaseTag": "deprecated"
+        },
+        {
           "description": "A function that is called when a request to the PostHog API fails.",
           "type": "(error: RequestResponse) => void",
           "name": "on_request_error"
+        },
+        {
+          "description": "Deprecated: - use `on_request_error` instead",
+          "type": "(failedRequest: XMLHttpRequest) => void",
+          "name": "on_xhr_error",
+          "releaseTag": "deprecated"
         },
         {
           "description": "Determines whether PostHog should batch requests to the PostHog API.",
@@ -3259,6 +3313,12 @@
           "name": "advanced_disable_flags"
         },
         {
+          "description": "Deprecated: Use `advanced_disable_flags` instead. This will be removed in a future major version.\n\nOne of the very first things the PostHog library does when init() is called\nis make a request to the /decide endpoint on PostHog's backend.\nThis endpoint contains information on how to run the PostHog library\nso events are properly received in the backend.\n\nThis endpoint is required to run most features of the library.\nHowever, if you're not using any of the described features,\nyou may wish to turn off the call completely to avoid an extra request\nand reduce resource usage on both the client and the server.",
+          "type": "boolean",
+          "name": "advanced_disable_decide",
+          "releaseTag": "deprecated"
+        },
+        {
           "description": "Will keep /flags running, but without evaluating any feature flags.\nUseful for when you need to load the config data associated with the flags endpoint\n(e.g. /flags?v=2&config=true) without evaluating any feature flags.  Most folks use this\nto save money on feature flag evaluation (by bootstrapping feature flags on the server side).",
           "type": "boolean",
           "name": "advanced_disable_feature_flags"
@@ -3277,6 +3337,12 @@
           "description": "List of feature flag keys to remotely evaluate for this SDK instance.\nWhen set, only these flags are evaluated by `/flags`; omitted flags are not remotely evaluated.\nDependencies of the requested flags may still be evaluated internally by PostHog.\nIf unset, all eligible flags are evaluated.\n\nExamples: ['checkout-redesign', 'new-onboarding']",
           "type": "readonly string[]",
           "name": "flag_keys"
+        },
+        {
+          "description": "Evaluation environments for feature flags.\nDeprecated: Use evaluation_contexts instead. This property will be removed in a future version.",
+          "type": "readonly string[]",
+          "name": "evaluation_environments",
+          "releaseTag": "deprecated"
         },
         {
           "description": "Determines whether PostHog should disable toolbar metrics.\nThis is our internal instrumentation for our toolbar in your website.",
@@ -3334,6 +3400,12 @@
           "name": "get_current_url"
         },
         {
+          "description": "Deprecated: - use `before_send` instead",
+          "type": "(properties: Properties, event_name: string) => Properties",
+          "name": "sanitize_properties",
+          "releaseTag": "deprecated"
+        },
+        {
           "description": "Determines whether to capture performance metrics.\nThese include Network Timing for Session Replay and Web Vitals.\n\nThe `network_timing` option is only used by the Session Replay feature.\nFor more session recording settings, see the `session_recording` and `enable_recording_console_log` configuration option.\n\nWhen `undefined`, fallback to the remote configuration.\nIf `false`, neither network timing nor web vitals will work.\nIf an object, that will override the remote configuration.",
           "type": "boolean | PerformanceCaptureConfig",
           "name": "capture_performance"
@@ -3359,6 +3431,12 @@
           "name": "capture_heatmaps"
         },
         {
+          "description": "Deprecated: Use `capture_heatmaps` instead.",
+          "type": "boolean",
+          "name": "enable_heatmaps",
+          "releaseTag": "deprecated"
+        },
+        {
           "description": "Determines whether to capture dead clicks.\n\nby default dead clicks are ignored on elements that match a `ph-no-capture` or `ph-no-deadclick` css class on the element or a parent",
           "type": "boolean | DeadClicksAutoCaptureConfig",
           "name": "capture_dead_clicks"
@@ -3382,6 +3460,12 @@
           "description": "You can control whether events from PostHog-js have person processing enabled with the `person_profiles` config setting.\nThere are three options:\n- `person_profiles: 'always'` - we will process persons data for all events\n- `person_profiles: 'never'` - we won't process persons for any event. This means that anonymous users will not be merged once they sign up or login, so you lose the ability to create funnels that track users from anonymous to identified. All events (including `$identify`) will be sent with `$process_person_profile: False`.\n- `person_profiles: 'identified_only'` _(default)_ - we will only process persons when you call `posthog.identify`, `posthog.alias`, `posthog.setPersonProperties`, `posthog.unsetPersonProperties`, `posthog.group`, `posthog.setPersonPropertiesForFlags` or `posthog.setGroupPropertiesForFlags` Anonymous users won't get person profiles.",
           "type": "\"always\" | \"never\" | \"identified_only\"",
           "name": "person_profiles"
+        },
+        {
+          "description": "Deprecated: - use `person_profiles` instead",
+          "type": "\"always\" | \"never\" | \"identified_only\"",
+          "name": "process_person",
+          "releaseTag": "deprecated"
         },
         {
           "description": "Client side rate limiting",
@@ -3424,9 +3508,39 @@
           "name": "tracing_headers"
         },
         {
+          "description": "Deprecated: Use {@link tracing_headers} instead. Kept for backwards compatibility.",
+          "type": "string[]",
+          "name": "addTracingHeaders",
+          "releaseTag": "deprecated"
+        },
+        {
           "description": "Prevents posthog-js from using the `navigator.sendBeacon` API to send events.\nEnabling this option may hurt the reliability of sending $pageleave events.",
           "type": "boolean",
           "name": "disable_beacon"
+        },
+        {
+          "description": "Deprecated: - NOT USED ANYMORE, kept here for backwards compatibility reasons",
+          "type": "string",
+          "name": "api_method",
+          "releaseTag": "deprecated"
+        },
+        {
+          "description": "Deprecated: - NOT USED ANYMORE, kept here for backwards compatibility reasons",
+          "type": "string",
+          "name": "inapp_protocol",
+          "releaseTag": "deprecated"
+        },
+        {
+          "description": "Deprecated: - NOT USED ANYMORE, kept here for backwards compatibility reasons",
+          "type": "boolean",
+          "name": "inapp_link_new_window",
+          "releaseTag": "deprecated"
+        },
+        {
+          "description": "Deprecated: - THIS OPTION HAS NO EFFECT, kept here for backwards compatibility reasons.\nUse a custom transformation or \"Discard IP data\" project setting instead:",
+          "type": "boolean",
+          "name": "ip",
+          "releaseTag": "deprecated"
         },
         {
           "type": "(posthog: PostHogInterface) => void",
@@ -3563,6 +3677,12 @@
           "description": "Get the value of a feature flag.",
           "type": "(key: string, options?: FeatureFlagOptions) => boolean | string | undefined",
           "name": "getFeatureFlag"
+        },
+        {
+          "description": "Get the payload of a feature flag.\nDeprecated: Use `getFeatureFlagResult()` instead which properly tracks the feature flag call.",
+          "type": "(key: string) => JsonType",
+          "name": "getFeatureFlagPayload",
+          "releaseTag": "deprecated"
         },
         {
           "description": "Get a feature flag evaluation result including both the flag value and payload.\n\nBy default, this method emits the `$feature_flag_called` event.",
@@ -3783,6 +3903,18 @@
           "description": "Capture a metric for a LLM trace.",
           "type": "(traceId: string | number, metricName: string, metricValue: string | number | boolean) => void",
           "name": "captureTraceMetric"
+        },
+        {
+          "description": "Deprecated: Use `setPersonProperties` instead",
+          "type": "{ set: (prop: string | Properties, to?: string, callback?: RequestCallback) => void; set_once: (prop: string | Properties, to?: string, callback?: RequestCallback) => void; }",
+          "name": "people",
+          "releaseTag": "deprecated"
+        },
+        {
+          "description": "Deprecated: Use `flagsEndpointWasHit` instead",
+          "type": "boolean",
+          "name": "decideEndpointWasHit",
+          "releaseTag": "deprecated"
         },
         {
           "type": "PostHogConfig",
@@ -4366,6 +4498,12 @@
           "description": "Whether to only capture identified users by default",
           "type": "boolean",
           "name": "defaultIdentifiedOnly"
+        },
+        {
+          "description": "Deprecated: renamed to toolbarParams, still present on older API responses",
+          "type": "ToolbarParams",
+          "name": "editorParams",
+          "releaseTag": "deprecated"
         },
         {
           "description": "Whether the `$elements_chain` property should be sent as a string or as an array\nfalse",
@@ -5131,6 +5269,12 @@
           "name": "boxPadding"
         },
         {
+          "description": "Deprecated: - not currently used",
+          "type": "string",
+          "name": "descriptionTextColor",
+          "releaseTag": "deprecated"
+        },
+        {
           "type": "boolean",
           "name": "disableAutofocus"
         },
@@ -5145,6 +5289,12 @@
         {
           "type": "boolean",
           "name": "hideCancelButton"
+        },
+        {
+          "description": "Deprecated: Use inputBackground instead (inherited from core)",
+          "type": "string",
+          "name": "inputBackgroundColor",
+          "releaseTag": "deprecated"
         },
         {
           "type": "string",
@@ -5188,6 +5338,18 @@
       "id": "SurveyConfig",
       "name": "SurveyConfig",
       "properties": [
+        {
+          "description": "Deprecated: No longer used. Pre-filled responses are now sent immediately when partial responses are enabled, or all required questions have been pre-filled.",
+          "type": "number",
+          "name": "autoSubmitDelay",
+          "releaseTag": "deprecated"
+        },
+        {
+          "description": "Deprecated: No longer used. Surveys will automatically advance past prefilled questions with skipSubmitButton enabled. If partial response collection is enabled, partial responses for pre-filled questions will be submitted automatically on page load.",
+          "type": "boolean",
+          "name": "autoSubmitIfComplete",
+          "releaseTag": "deprecated"
+        },
         {
           "description": "Prefill survey responses from matching URL parameters.\nundefined",
           "type": "boolean",

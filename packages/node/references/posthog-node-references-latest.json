@@ -2001,6 +2001,12 @@
           "name": "flags"
         },
         {
+          "description": "Deprecated: Use the `flags` option with a `FeatureFlagEvaluations` object obtained\nfrom `posthog.evaluateFlags()` instead. `sendFeatureFlags` fires a separate `/flags`\nrequest on capture and may return different values than the ones the code branched on.",
+          "type": "boolean | SendFeatureFlagsOptions",
+          "name": "sendFeatureFlags",
+          "releaseTag": "deprecated"
+        },
+        {
           "type": "Date",
           "name": "timestamp"
         },
@@ -2810,6 +2816,12 @@
           "name": "disableRemoteFeatureFlags"
         },
         {
+          "description": "Whether to load remote config when initialized or not\nDeprecated: Remote config is now always loaded and this option is a no-op. It will be removed in a future version.",
+          "type": "boolean",
+          "name": "disableRemoteConfig",
+          "releaseTag": "deprecated"
+        },
+        {
           "description": "Whether to load surveys when initialized or not\nRequires the `PostHogSurveyProvider` to be used",
           "type": "boolean",
           "name": "disableSurveys"
@@ -2873,6 +2885,12 @@
           "description": "Evaluation contexts for feature flags.\nWhen set, only feature flags that have at least one matching evaluation tag\nwill be evaluated for this SDK instance. Feature flags with no evaluation tags\nwill always be evaluated.\n\nExamples: ['production', 'web', 'mobile']",
           "type": "readonly string[]",
           "name": "evaluationContexts"
+        },
+        {
+          "description": "Evaluation environments for feature flags.\nDeprecated: Use evaluationContexts instead. This property will be removed in a future version.",
+          "type": "readonly string[]",
+          "name": "evaluationEnvironments",
+          "releaseTag": "deprecated"
         },
         {
           "description": "Determines when to create Person Profiles for users.\n\n- 'always': Always create a person profile for every user (anonymous and identified).\n- 'identified_only': Only create a person profile when the user is identified via identify(), alias(), or group().\n  Events captured before identification will NOT have person profiles and will be anonymous events.\n- 'never': Never create person profiles. identify(), alias(), and group() will be no-ops.",
@@ -3261,6 +3279,12 @@
           "name": "disableRemoteFeatureFlags"
         },
         {
+          "description": "Whether to load remote config when initialized or not\nDeprecated: Remote config is now always loaded and this option is a no-op. It will be removed in a future version.",
+          "type": "boolean",
+          "name": "disableRemoteConfig",
+          "releaseTag": "deprecated"
+        },
+        {
           "description": "Whether to load surveys when initialized or not\nRequires the `PostHogSurveyProvider` to be used",
           "type": "boolean",
           "name": "disableSurveys"
@@ -3321,6 +3345,12 @@
           "name": "evaluationContexts"
         },
         {
+          "description": "Evaluation environments for feature flags.\nDeprecated: Use evaluationContexts instead. This property will be removed in a future version.",
+          "type": "readonly string[]",
+          "name": "evaluationEnvironments",
+          "releaseTag": "deprecated"
+        },
+        {
           "description": "Determines when to create Person Profiles for users.\n\n- 'always': Always create a person profile for every user (anonymous and identified).\n- 'identified_only': Only create a person profile when the user is identified via identify(), alias(), or group().\n  Events captured before identification will NOT have person profiles and will be anonymous events.\n- 'never': Never create person profiles. identify(), alias(), and group() will be no-ops.",
           "type": "\"always\" | \"identified_only\" | \"never\"",
           "name": "personProfiles"
@@ -3348,6 +3378,12 @@
           "description": "Credential that enables local feature flag evaluation and remote config.\n\nAccepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`).\nWhen provided, the client can evaluate feature flags locally and decrypt remote\nconfig payloads via `getRemoteConfigPayload`. Prefer this over the deprecated\n`personalApiKey` option; when both are set, `secretKey` takes precedence.",
           "type": "string",
           "name": "secretKey"
+        },
+        {
+          "description": "Deprecated: Use `secretKey` instead.",
+          "type": "string",
+          "name": "personalApiKey",
+          "releaseTag": "deprecated"
         },
         {
           "type": "boolean",
