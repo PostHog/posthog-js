@@ -2988,9 +2988,10 @@
           "name": "navigation"
         },
         {
-          "description": "If you create a navigation ref with createNavigationContainerRef, you need to pass the navigation ref\nOnly used for expo-router and",
+          "description": "If you create a navigation ref with createNavigationContainerRef, you need to pass the navigation ref\nOnly used for expo-router and\nDeprecated: this is deprecated since it didn't work as expected, check out the `captureScreens` comments for capturing screen views semi-automatically",
           "type": "PostHogNavigationRef",
-          "name": "navigationRef"
+          "name": "navigationRef",
+          "releaseTag": "deprecated"
         }
       ],
       "path": "dist/types.d.ts"
@@ -3012,11 +3013,6 @@
         {
           "type": "boolean",
           "name": "disableGeoip"
-        },
-        {
-          "description": "Internal flag set by captureException() to indicate this $exception\nevent originated from the proper exception capture path. Used to warn users who call\ncapture('$exception') directly.",
-          "type": "boolean",
-          "name": "_originatedFromCaptureException"
         }
       ],
       "path": "../core/src/types.ts"
@@ -3081,9 +3077,10 @@
           "name": "disableRemoteFeatureFlags"
         },
         {
-          "description": "Whether to load remote config when initialized or not",
+          "description": "Whether to load remote config when initialized or not\nDeprecated: Remote config is now always loaded and this option is a no-op. It will be removed in a future version.",
           "type": "boolean",
-          "name": "disableRemoteConfig"
+          "name": "disableRemoteConfig",
+          "releaseTag": "deprecated"
         },
         {
           "description": "Whether to load surveys when initialized or not\nRequires the `PostHogSurveyProvider` to be used",
@@ -3151,9 +3148,10 @@
           "name": "evaluationContexts"
         },
         {
-          "description": "Evaluation environments for feature flags.",
+          "description": "Evaluation environments for feature flags.\nDeprecated: Use evaluationContexts instead. This property will be removed in a future version.",
           "type": "readonly string[]",
-          "name": "evaluationEnvironments"
+          "name": "evaluationEnvironments",
+          "releaseTag": "deprecated"
         },
         {
           "description": "Determines when to create Person Profiles for users.\n\n- 'always': Always create a person profile for every user (anonymous and identified).\n- 'identified_only': Only create a person profile when the user is identified via identify(), alias(), or group().\n  Events captured before identification will NOT have person profiles and will be anonymous events.\n- 'never': Never create person profiles. identify(), alias(), and group() will be no-ops.",
@@ -3992,14 +3990,16 @@
           "name": "captureLog"
         },
         {
-          "description": "Deboucer delay used to reduce the number of snapshots captured and reduce performance impact\nThis is used for capturing the view as a screenshot\nThe lower the number more snapshots will be captured but higher the performance impact",
+          "description": "Deboucer delay used to reduce the number of snapshots captured and reduce performance impact\nThis is used for capturing the view as a screenshot\nThe lower the number more snapshots will be captured but higher the performance impact\nDeprecated: please use throttleDelayMs instead",
           "type": "number",
-          "name": "iOSdebouncerDelayMs"
+          "name": "iOSdebouncerDelayMs",
+          "releaseTag": "deprecated"
         },
         {
-          "description": "Deboucer delay used to reduce the number of snapshots captured and reduce performance impact\nThis is used for capturing the view as a screenshot\nThe lower the number more snapshots will be captured but higher the performance impact\nPs: it was 500ms (0.5s) by default until version 3.3.7",
+          "description": "Deboucer delay used to reduce the number of snapshots captured and reduce performance impact\nThis is used for capturing the view as a screenshot\nThe lower the number more snapshots will be captured but higher the performance impact\nPs: it was 500ms (0.5s) by default until version 3.3.7\nDeprecated: please use throttleDelayMs instead",
           "type": "number",
-          "name": "androidDebouncerDelayMs"
+          "name": "androidDebouncerDelayMs",
+          "releaseTag": "deprecated"
         },
         {
           "description": "Throttling delay used to reduce the number of snapshots captured and reduce performance impact\nThis is used for capturing the view as a wireframe or screenshot\nThe lower the number more snapshots will be captured but higher the performance impact\n\nThis value has precedence over iOSdebouncerDelayMs and androidDebouncerDelayMs\nIf this is not set, we will take the max number between iOSdebouncerDelayMs and androidDebouncerDelayMs for back compatibility",
@@ -4057,12 +4057,7 @@
     {
       "id": "PreviouslyCapturedError",
       "name": "PreviouslyCapturedError",
-      "properties": [
-        {
-          "type": "boolean",
-          "name": "__posthog_previously_captured_error"
-        }
-      ],
+      "properties": [],
       "path": "../core/src/error-tracking/types.ts"
     },
     {

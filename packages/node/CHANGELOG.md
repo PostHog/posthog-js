@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.45.1
+
+### Patch Changes
+
+- [#4164](https://github.com/PostHog/posthog-js/pull/4164) [`9eb2b28`](https://github.com/PostHog/posthog-js/commit/9eb2b28c55b47379005b273d8a0baba6f87c7730) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Fix the default Node.js event flush interval at 5 seconds.
+  (2026-07-16)
+
 ## 5.45.0
 
 ### Minor Changes
