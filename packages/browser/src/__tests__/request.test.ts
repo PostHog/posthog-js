@@ -548,6 +548,53 @@ describe('request', () => {
             errorSpy.mockRestore()
         })
 
+        it('does not let a synchronously-throwing monkey-patched fetch escape as an unhandled exception', () => {
+            // Some third-party scripts (e.g. a Shopify storefront listener) wrap `window.fetch` in a
+            // shim that throws *synchronously* instead of returning a rejected promise. Because we can
+            // call `_fetch` synchronously inside the host app's stack (web experiments via
+            // `onFeatureFlags`), that throw would otherwise propagate out of `request(...)` and get
+            // captured by error tracking. It must be routed through the same handling as an async
+            // rejection: classified as a benign network error, logged at warn, and reported via the
+            // callback so the queue retries.
+            const networkError = new TypeError('Failed to fetch')
+            mockedFetch.mockImplementation(() => {
+                throw networkError
+            })
+
+            const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {})
+            const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => {})
+
+            const callback = jest.fn()
+            expect(() => request(createRequest({ callback }))).not.toThrow()
+
+            expect(warnSpy).toHaveBeenCalledWith(networkError)
+            expect(errorSpy).not.toHaveBeenCalled()
+            expect(callback).toHaveBeenCalledWith({ statusCode: 0, error: networkError })
+
+            warnSpy.mockRestore()
+            errorSpy.mockRestore()
+        })
+
+        it('routes a synchronous non-network throw through the error path without escaping', () => {
+            const genuineError = new TypeError("Cannot read properties of undefined (reading 'x')")
+            mockedFetch.mockImplementation(() => {
+                throw genuineError
+            })
+
+            const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {})
+            const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => {})
+
+            const callback = jest.fn()
+            expect(() => request(createRequest({ callback }))).not.toThrow()
+
+            expect(errorSpy).toHaveBeenCalledWith(genuineError)
+            expect(warnSpy).not.toHaveBeenCalled()
+            expect(callback).toHaveBeenCalledWith({ statusCode: 0, error: genuineError })
+
+            warnSpy.mockRestore()
+            errorSpy.mockRestore()
+        })
+
         it('supports nextOptions parameter', async () => {
             request(
                 createRequest({

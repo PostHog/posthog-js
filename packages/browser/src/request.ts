@@ -342,64 +342,80 @@ const _fetch = (options: RequestWithOptions & { _keepaliveDisabled?: boolean }) 
         }
     }
 
-    fetch!(url, {
-        method: options?.method || 'GET',
-        headers,
-        // if body is greater than 64kb, then fetch with keepalive will error
-        // see 8:10:5 at https://fetch.spec.whatwg.org/#http-network-or-cache-fetch,
-        // but we do want to set keepalive sometimes as it can  help with success
-        // when e.g. a page is being closed
-        // so let's get the best of both worlds and only set keepalive for POST requests
-        // where the body is less than 64kb
-        // NB this is fetch keepalive and not http keepalive
-        // _keepaliveDisabled: a beacon-rejected payload would fail a keepalive fetch too (shared quota)
-        keepalive:
-            options.method === 'POST' && !options._keepaliveDisabled && (estimatedSize || 0) < KEEP_ALIVE_THRESHOLD,
-        body,
-        signal: aborter?.signal,
-        ...options.fetchOptions,
-    })
-        .then((response) => {
-            return response.text().then((responseText) => {
-                const res: RequestResponse = {
-                    statusCode: response.status,
-                    text: responseText,
-                }
+    const handleError = (error: any) => {
+        // Detect our own timeout via the `timedOut` flag rather than by comparing `error`
+        // against the reason we passed to `controller.abort(...)`. Not every browser propagates
+        // the abort reason to the fetch rejection - some reject with a generic native
+        // `DOMException: AbortError: The operation was aborted.` instead - so a reference (or
+        // message) comparison misses those and misclassifies our own timeout as a real error.
+        // The flag is set synchronously the instant our timeout fires, and we additionally
+        // require `name === 'AbortError'` so a genuine network error that happens to settle
+        // just after the timeout is never mislabelled.
+        if ((timedOut && (error as Error)?.name === 'AbortError') || isExpectedNetworkError(error)) {
+            // Expected, benign failures the request queue already retries - our own request
+            // timeout (an intentional abort), or a network-level `TypeError` (ad blocker,
+            // dropped connection, CORS, page teardown). Neither is a genuine failure, so log
+            // at `warn` rather than `error`. (For setups running with debug logging and
+            // `capture_console_errors` both enabled, this also keeps them out of error
+            // tracking's console-error capture.)
+            logger.warn(error)
+        } else {
+            logger.error(error)
+        }
+        options.callback?.({ statusCode: 0, error })
+    }
 
-                if (response.status === 200) {
-                    try {
-                        res.json = JSON.parse(responseText)
-                    } catch (e) {
-                        logger.error(e)
+    try {
+        fetch!(url, {
+            method: options?.method || 'GET',
+            headers,
+            // if body is greater than 64kb, then fetch with keepalive will error
+            // see 8:10:5 at https://fetch.spec.whatwg.org/#http-network-or-cache-fetch,
+            // but we do want to set keepalive sometimes as it can  help with success
+            // when e.g. a page is being closed
+            // so let's get the best of both worlds and only set keepalive for POST requests
+            // where the body is less than 64kb
+            // NB this is fetch keepalive and not http keepalive
+            // _keepaliveDisabled: a beacon-rejected payload would fail a keepalive fetch too (shared quota)
+            keepalive:
+                options.method === 'POST' && !options._keepaliveDisabled && (estimatedSize || 0) < KEEP_ALIVE_THRESHOLD,
+            body,
+            signal: aborter?.signal,
+            ...options.fetchOptions,
+        })
+            .then((response) => {
+                return response.text().then((responseText) => {
+                    const res: RequestResponse = {
+                        statusCode: response.status,
+                        text: responseText,
                     }
-                }
 
-                options.callback?.(res)
+                    if (response.status === 200) {
+                        try {
+                            res.json = JSON.parse(responseText)
+                        } catch (e) {
+                            logger.error(e)
+                        }
+                    }
+
+                    options.callback?.(res)
+                })
             })
-        })
-        .catch((error) => {
-            // Detect our own timeout via the `timedOut` flag rather than by comparing `error`
-            // against the reason we passed to `controller.abort(...)`. Not every browser propagates
-            // the abort reason to the fetch rejection - some reject with a generic native
-            // `DOMException: AbortError: The operation was aborted.` instead - so a reference (or
-            // message) comparison misses those and misclassifies our own timeout as a real error.
-            // The flag is set synchronously the instant our timeout fires, and we additionally
-            // require `name === 'AbortError'` so a genuine network error that happens to settle
-            // just after the timeout is never mislabelled.
-            if ((timedOut && (error as Error)?.name === 'AbortError') || isExpectedNetworkError(error)) {
-                // Expected, benign failures the request queue already retries - our own request
-                // timeout (an intentional abort), or a network-level `TypeError` (ad blocker,
-                // dropped connection, CORS, page teardown). Neither is a genuine failure, so log
-                // at `warn` rather than `error`. (For setups running with debug logging and
-                // `capture_console_errors` both enabled, this also keeps them out of error
-                // tracking's console-error capture.)
-                logger.warn(error)
-            } else {
-                logger.error(error)
-            }
-            options.callback?.({ statusCode: 0, error })
-        })
-        .finally(() => (aborter ? clearTimeout(aborter.timeout) : null))
+            .catch(handleError)
+            .finally(() => (aborter ? clearTimeout(aborter.timeout) : null))
+    } catch (error) {
+        // `window.fetch` can be monkey-patched by third-party scripts (e.g. a storefront/analytics
+        // wrapper) to throw *synchronously* instead of returning a rejected promise. Because we may
+        // call `_fetch` synchronously inside the host app's call stack (e.g. web experiments loaded
+        // via `onFeatureFlags`), that throw would otherwise escape as an unhandled exception and
+        // pollute error tracking. Route it through the same handling as an async rejection so the
+        // request queue just retries. `.finally()` never runs when the call throws synchronously,
+        // so clear the timeout here too.
+        if (aborter) {
+            clearTimeout(aborter.timeout)
+        }
+        handleError(error)
+    }
 
     return
 }
