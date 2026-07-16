@@ -271,6 +271,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     opt_in_site_apps: false,
     property_denylist: [],
     respect_dnt: false,
+    respect_gpc: false,
     sanitize_properties: null,
     request_headers: {}, // { header: value, header2: value }
     request_batching: true,

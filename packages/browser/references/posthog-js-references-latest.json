@@ -3220,9 +3220,14 @@
           "name": "opt_in_site_apps"
         },
         {
-          "description": "Determines whether PostHog should respect the Do Not Track header when computing\nconsent in `ConsentManager`.",
+          "description": "Determines whether PostHog should respect the Do Not Track header when computing\nconsent in `ConsentManager`.\n\nNote the Do Not Track signal is deprecated and not sent by all modern browsers;\nsee `respect_gpc` for its successor.",
           "type": "boolean",
           "name": "respect_dnt"
+        },
+        {
+          "description": "Determines whether PostHog should respect the Global Privacy Control signal\n(`navigator.globalPrivacyControl`) when computing consent in `ConsentManager`.\nWhen `true`, users whose browser sends the GPC signal are treated as opted out.\n\nGPC is the successor to Do Not Track and is recognized as a valid opt-out\nsignal under privacy regulations such as CCPA/CPRA.",
+          "type": "boolean",
+          "name": "respect_gpc"
         },
         {
           "description": "A list of properties that should never be sent with capture calls.",

@@ -1368,10 +1368,26 @@ export interface PostHogConfig {
      * Determines whether PostHog should respect the Do Not Track header when computing
      * consent in `ConsentManager`.
      *
+     * Note the Do Not Track signal is deprecated and not sent by all modern browsers;
+     * see `respect_gpc` for its successor.
+     *
      * @see `ConsentManager`
      * @default false
      */
     respect_dnt: boolean
+
+    /**
+     * Determines whether PostHog should respect the Global Privacy Control signal
+     * (`navigator.globalPrivacyControl`) when computing consent in `ConsentManager`.
+     * When `true`, users whose browser sends the GPC signal are treated as opted out.
+     *
+     * GPC is the successor to Do Not Track and is recognized as a valid opt-out
+     * signal under privacy regulations such as CCPA/CPRA.
+     *
+     * @see `ConsentManager`
+     * @default false
+     */
+    respect_gpc: boolean
 
     /**
      * A list of properties that should never be sent with capture calls.

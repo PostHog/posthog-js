@@ -27,7 +27,7 @@ export class ConsentManager {
     }
 
     public get consent(): ConsentStatus {
-        if (this._getDnt()) {
+        if (this._getDnt() || this._getGpc()) {
             return ConsentStatus.DENIED
         }
 
@@ -128,5 +128,12 @@ export class ConsentManager {
             (navigator as any)?.['msDoNotTrack'],
             assignableWindow['doNotTrack'],
         ].some((dntValue) => isYesLike(dntValue))
+    }
+
+    private _getGpc(): boolean {
+        if (!this._config.respect_gpc) {
+            return false
+        }
+        return isYesLike((navigator as any)?.['globalPrivacyControl'])
     }
 }
