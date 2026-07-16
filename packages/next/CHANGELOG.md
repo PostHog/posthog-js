@@ -1,5 +1,12 @@
 # @posthog/next
 
+## 0.8.2
+
+### Patch Changes
+
+- [#4150](https://github.com/PostHog/posthog-js/pull/4150) [`2e9405b`](https://github.com/PostHog/posthog-js/commit/2e9405bd26388332b316bc4569c90e1c99df4b34) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Fix Pages Router SSR feature flag hooks when Node loads the CommonJS posthog-js entrypoint.
+  (2026-07-16)
+
 ## 0.8.1
 
 ### Patch Changes
