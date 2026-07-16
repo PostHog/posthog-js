@@ -233,6 +233,13 @@ describe('resolveTypeDefinitions with type resolver', () => {
         }
     });
 
+    test('descriptions ending in markdown emphasis keep their closing markers', () => {
+        for (const typeName of ['DeprecationShapes', 'DeprecationShapesAlias']) {
+            const prop = byName(types, typeName).properties.find((p) => p.name === 'emphasized');
+            assert.equal(prop.description, 'This is **important**', `${typeName}.emphasized`);
+        }
+    });
+
     test('malformed JSDoc closers do not leak asterisks into descriptions', () => {
         for (const typeName of ['DeprecationShapes', 'DeprecationShapesAlias']) {
             const prop = byName(types, typeName).properties.find((p) => p.name === 'legacy_typo');
