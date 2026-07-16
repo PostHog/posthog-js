@@ -96,8 +96,12 @@ export async function PostHogProvider({
     let bootstrap: BootstrapConfig | undefined
 
     if (bootstrapFlags) {
+        // Keep Next.js dynamic-rendering control flow outside our error handler.
+        // During static generation, cookies() throws a framework signal that must reach Next.js.
+        const cookieStore = await cookies()
+
         try {
-            bootstrap = await evaluateFlags(apiKey, resolvedOptions, bootstrapFlags, serverOptions)
+            bootstrap = await evaluateFlags(cookieStore, apiKey, resolvedOptions, bootstrapFlags, serverOptions)
 
             // Only disable the first-load fetch when we actually have bootstrap data.
             // If evaluateFlags returned undefined (no cookie, opted-out), the client
@@ -154,13 +158,12 @@ function mergeBootstrap(
 }
 
 async function evaluateFlags(
+    cookieStore: Awaited<ReturnType<typeof cookies>>,
     apiKey: string,
     options: Partial<PostHogConfig> | undefined,
     bootstrapFlags: boolean | BootstrapFlagsConfig,
     serverOptions?: Partial<PostHogOptions>
 ): Promise<BootstrapConfig | undefined> {
-    const cookieStore = await cookies()
-
     if (isOptedOut(cookieStore, apiKey, options)) {
         return undefined
     }
