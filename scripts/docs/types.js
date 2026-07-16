@@ -64,13 +64,14 @@ function createInitialTypeDef(member, apiPackage, typeResolver) {
 // Create member descriptor for enum/interface items
 const createMemberDescriptor = (member, defaultType) => {
     const deprecatedText = methods.isMethodDeprecated(member)
-        ? utils.renderDocNodeToText(member.tsdocComment.deprecatedBlock.content)
+        ? utils.trimDanglingAsterisks(utils.renderDocNodeToText(member.tsdocComment.deprecatedBlock.content)).trim()
         : '';
+    const summary = documentation.getDocComment(member);
 
     return {
         name: member.name,
         type: member.initializerExcerpt?.text || member.propertyTypeExcerpt?.text || defaultType,
-        description: [documentation.getDocComment(member), deprecatedText && `Deprecated: ${deprecatedText}`]
+        description: [summary && utils.trimDanglingAsterisks(summary), deprecatedText && `Deprecated: ${deprecatedText}`]
             .filter(Boolean).join('\n') || undefined,
         releaseTag: methods.isMethodDeprecated(member) ? 'deprecated' : undefined
     };
@@ -87,7 +88,7 @@ function processEnumMember(member, typeDef) {
 function processInterfaceMember(member, typeDef) {
     typeDef.params = member.members
         .filter((prop) => prop.kind === ApiItemKind.PropertySignature)
-        .filter((prop) => !prop.name.startsWith('_'))
+        .filter((prop) => methods.isMethodDeprecated(prop) || !prop.name.startsWith('_'))
         .map((prop) => createMemberDescriptor(prop, 'any'));
 }
 

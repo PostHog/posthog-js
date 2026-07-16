@@ -3204,7 +3204,7 @@
           "name": "opt_out_useragent_filter"
         },
         {
-          "description": "Deprecated: Use `consent_persistence_name` instead. This will be removed in a future major version. *",
+          "description": "Deprecated: Use `consent_persistence_name` instead. This will be removed in a future major version.",
           "type": "string",
           "name": "opt_out_capturing_cookie_prefix",
           "releaseTag": "deprecated"
@@ -3406,6 +3406,12 @@
           "releaseTag": "deprecated"
         },
         {
+          "description": "Deprecated: - use `before_send` instead",
+          "type": "(eventName: string, eventData: CaptureResult) => void",
+          "name": "_onCapture",
+          "releaseTag": "deprecated"
+        },
+        {
           "description": "Determines whether to capture performance metrics.\nThese include Network Timing for Session Replay and Web Vitals.\n\nThe `network_timing` option is only used by the Session Replay feature.\nFor more session recording settings, see the `session_recording` and `enable_recording_console_log` configuration option.\n\nWhen `undefined`, fallback to the remote configuration.\nIf `false`, neither network timing nor web vitals will work.\nIf an object, that will override the remote configuration.",
           "type": "boolean | PerformanceCaptureConfig",
           "name": "capture_performance"
@@ -3514,9 +3520,51 @@
           "releaseTag": "deprecated"
         },
         {
+          "description": "Deprecated: Use {@link tracing_headers} instead. Kept for backwards compatibility.",
+          "type": "string[]",
+          "name": "__add_tracing_headers",
+          "releaseTag": "deprecated"
+        },
+        {
+          "description": "Deprecated: This option is a no-op. The browser SDK already uses the `/flags/?v=2` endpoint.",
+          "type": "boolean",
+          "name": "__preview_flags_v2",
+          "releaseTag": "deprecated"
+        },
+        {
+          "description": "Deprecated: This option is a no-op. Session replay is lazy-loaded by default.",
+          "type": "boolean",
+          "name": "__preview_eager_load_replay",
+          "releaseTag": "deprecated"
+        },
+        {
           "description": "Prevents posthog-js from using the `navigator.sendBeacon` API to send events.\nEnabling this option may hurt the reliability of sending $pageleave events.",
           "type": "boolean",
           "name": "disable_beacon"
+        },
+        {
+          "description": "Deprecated: Use `disable_beacon` instead.",
+          "type": "boolean",
+          "name": "__preview_disable_beacon",
+          "releaseTag": "deprecated"
+        },
+        {
+          "description": "Deprecated: This option is a no-op. The browser SDK no longer sets `XMLHttpRequest.withCredentials`.",
+          "type": "boolean",
+          "name": "__preview_disable_xhr_credentials",
+          "releaseTag": "deprecated"
+        },
+        {
+          "description": "Deprecated: Use {@link strict_script_versioning} and {@link asset_host} instead.\nWhen set to true, this is equivalent to strict_script_versioning: true.\nWhen set to a string, this is equivalent to strict_script_versioning: true\nand asset_host set to that string.",
+          "type": "string | boolean",
+          "name": "__preview_external_dependency_versioned_paths",
+          "releaseTag": "deprecated"
+        },
+        {
+          "description": "Deprecated: - does nothing\nwas present only for PostHog testing of replay lazy loading",
+          "type": "boolean",
+          "name": "__preview_lazy_load_replay",
+          "releaseTag": "deprecated"
         },
         {
           "description": "Deprecated: - NOT USED ANYMORE, kept here for backwards compatibility reasons",

@@ -1,5 +1,6 @@
 const path = require('path');
 const ts = require('typescript');
+const utils = require('./utils');
 
 // Resolves exported type aliases against the same .d.ts entry point that api-extractor
 // analyzes, using the TypeScript checker so that Omit<>, intersections and cross-package
@@ -81,7 +82,7 @@ function classifyAlias(checker, declaration) {
         return { kind: 'other' };
     }
 
-    const properties = type.getProperties().filter(isDocumentedProperty);
+    const properties = type.getProperties().filter((prop) => isDocumentedProperty(checker, prop));
     if (type.getCallSignatures().length > 0) {
         // a callable type with members would lose its call signature as an object,
         // so publish the full raw signature instead
@@ -100,17 +101,29 @@ function classifyAlias(checker, declaration) {
 }
 
 // Underscore-prefixed members are internal surface and stay out of the published
-// reference; methods mirror the interface rendering, which lists only property
+// reference unless they are deprecated, in which case the migration note is worth
+// publishing; methods mirror the interface rendering, which lists only property
 // signatures
-function isDocumentedProperty(prop) {
-    return !(prop.flags & ts.SymbolFlags.Method) && !prop.getName().startsWith('_');
+function isDocumentedProperty(checker, prop) {
+    if (prop.flags & ts.SymbolFlags.Method) {
+        return false;
+    }
+    return isDeprecated(checker, prop) || !prop.getName().startsWith('_');
+}
+
+function isDeprecated(checker, prop) {
+    return prop.getJsDocTags(checker).some((tag) => tag.name === 'deprecated');
 }
 
 function describeProperty(checker, prop, location) {
     const propType = checker.getTypeOfSymbolAtLocation(prop, location);
-    const description = ts.displayPartsToString(prop.getDocumentationComment(checker)).trim();
+    const description = utils.trimDanglingAsterisks(
+        ts.displayPartsToString(prop.getDocumentationComment(checker))
+    ).trim();
     const deprecatedTag = prop.getJsDocTags(checker).find((tag) => tag.name === 'deprecated');
-    const deprecatedText = deprecatedTag ? ts.displayPartsToString(deprecatedTag.text).trim() : '';
+    const deprecatedText = deprecatedTag
+        ? utils.trimDanglingAsterisks(ts.displayPartsToString(deprecatedTag.text)).trim()
+        : '';
 
     // typeToString qualifies symbols not lexically visible at the alias declaration as
     // import("<absolute path>").Name — machine-specific and unfit for published output

@@ -224,6 +224,27 @@ describe('resolveTypeDefinitions with type resolver', () => {
         }
     });
 
+    test('deprecated underscore members win over the underscore exclusion in both paths', () => {
+        for (const typeName of ['DeprecationShapes', 'DeprecationShapesAlias']) {
+            const prop = byName(types, typeName).properties.find((p) => p.name === '__legacy_flag');
+            assert.ok(prop, `${typeName}.__legacy_flag should be published`);
+            assert.equal(prop.releaseTag, 'deprecated');
+            assert.match(prop.description, /Deprecated: Use current instead/);
+        }
+    });
+
+    test('malformed JSDoc closers do not leak asterisks into descriptions', () => {
+        for (const typeName of ['DeprecationShapes', 'DeprecationShapesAlias']) {
+            const prop = byName(types, typeName).properties.find((p) => p.name === 'legacy_typo');
+            assert.equal(prop.description, 'Deprecated: Gone. Use current', `${typeName}.legacy_typo`);
+        }
+        for (const t of types) {
+            for (const p of t.properties || []) {
+                assert.ok(!/\s\*+$/.test(p.description || ''), `${t.name}.${p.name} has a dangling asterisk`);
+            }
+        }
+    });
+
     test('deprecated enum members are tagged', () => {
         const mode = byName(types, 'Mode');
         const legacy = mode.properties.find((p) => p.name === 'Legacy');

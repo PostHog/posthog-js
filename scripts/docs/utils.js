@@ -244,8 +244,17 @@ const generateExampleCode = (methodName, paramList) =>
  * @param {any[]} array - Array to check
  * @returns {boolean} - Whether array has items
  */
-const hasItems = (array) => 
+const hasItems = (array) =>
   array && array.length > 0;
+
+/**
+ * to strip asterisks leaked into extracted text by malformed JSDoc closers like "**\/"
+ * (only when whitespace-separated, so markdown emphasis at the end of a sentence survives)
+ * @param {string} text - Extracted doc text
+ * @returns {string} - Cleaned text
+ */
+const trimDanglingAsterisks = (text) =>
+  text.replace(/\s+\*+\s*$/, '');
 
 /**
  * to create string literal descriptor
@@ -267,6 +276,7 @@ module.exports = {
   generateCallbackExample,
   isCallbackType,
   textToId,
+  trimDanglingAsterisks,
   formatParameterList,
   generateExampleCode,
   hasItems,

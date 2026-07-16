@@ -147,6 +147,10 @@ export interface DeprecationShapes {
     legacy_timeout?: number;
     /** @deprecated */
     retired?: boolean;
+    /** @deprecated Gone. Use current **/
+    legacy_typo?: string;
+    /** @deprecated Use current instead */
+    __legacy_flag?: boolean;
 }
 
 /**
