@@ -101,7 +101,7 @@ export default class ErrorTracking {
   private async onFatalError(exception: Error): Promise<void> {
     console.error(exception)
     await this.client.shutdown(SHUTDOWN_TIMEOUT)
-    process.exit(1)
+    globalThis.process.exit(1)
   }
 
   isEnabled(): boolean {
