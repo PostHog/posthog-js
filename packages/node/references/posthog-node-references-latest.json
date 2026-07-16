@@ -2966,6 +2966,11 @@
         {
           "type": "number[]",
           "name": "experiment_set"
+        },
+        {
+          "description": "Whether the flag is linked to an experiment. Absent when the server does not report it.",
+          "type": "boolean",
+          "name": "has_experiment"
         }
       ],
       "path": "src/types.ts"
@@ -3245,11 +3250,6 @@
           "name": "flushAt"
         },
         {
-          "description": "The interval in milliseconds between periodic flushes",
-          "type": "number",
-          "name": "flushInterval"
-        },
-        {
           "description": "The maximum number of queued messages to be flushed as part of a single batch (must be higher than `flushAt`)",
           "type": "number",
           "name": "maxBatchSize"
@@ -3367,6 +3367,11 @@
         {
           "type": "\"memory\"",
           "name": "persistence"
+        },
+        {
+          "description": "The interval in milliseconds between periodic flushes",
+          "type": "number",
+          "name": "flushInterval"
         },
         {
           "description": "The maximum number of cached messages either in memory or on the local storage (must be higher than `flushAt`)",

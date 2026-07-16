@@ -192,6 +192,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       // Applied after the spread with a nullish fallback so a wrapper forwarding
       // `maxQueueSize: undefined` still gets the Node default, not the core one.
       maxQueueSize: options.maxQueueSize ?? 10000,
+      flushInterval: options.flushInterval ?? 5000,
       host: normalizeHost(options.host),
       personalApiKey: normalizePersonalApiKey(options.secretKey ?? options.personalApiKey),
     }
