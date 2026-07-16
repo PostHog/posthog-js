@@ -587,6 +587,8 @@ export type FeatureFlagMetadata = {
   description: string | undefined
   // Payloads in the response are always JSON encoded as a string
   payload: string | undefined
+  /** Whether the flag is linked to an experiment. Absent when the server does not report it. */
+  has_experiment?: boolean
 }
 
 export type EvaluationReason = {

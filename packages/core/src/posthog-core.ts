@@ -1040,6 +1040,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         ...maybeAdd('$feature_flag_request_id', details?.requestId),
         ...maybeAdd('$feature_flag_evaluated_at', details?.evaluatedAt),
         ...maybeAdd('$feature_flag_error', featureFlagError),
+        ...maybeAdd('$feature_flag_has_experiment', featureFlag?.metadata?.has_experiment),
       }
 
       this.capture('$feature_flag_called', properties)

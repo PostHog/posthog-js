@@ -1129,6 +1129,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     let flagId: number | undefined = undefined
     let flagVersion: number | undefined = undefined
     let flagReason: string | undefined = undefined
+    let flagHasExperiment: boolean | undefined = undefined
 
     // Try local evaluation first
     const localEvaluationEnabled = this.featureFlagsPoller !== undefined
@@ -1146,6 +1147,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
             const value = localResult.value
             flagId = flag.id
             flagReason = 'Evaluated locally'
+            flagHasExperiment = flag.has_experiment
             result = {
               key,
               enabled: value !== false,
@@ -1200,6 +1202,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           flagId = flagDetail.metadata?.id
           flagVersion = flagDetail.metadata?.version
           flagReason = flagDetail.reason?.description ?? flagDetail.reason?.code
+          flagHasExperiment = flagDetail.metadata?.has_experiment
 
           // Parse payload once from the API response
           let parsedPayload: JsonType | undefined = undefined
@@ -1239,6 +1242,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         [`$feature/${key}`]: response,
         $feature_flag_request_id: requestId,
         $feature_flag_evaluated_at: flagWasLocallyEvaluated ? Date.now() : evaluatedAt,
+      }
+
+      if (flagHasExperiment !== undefined) {
+        properties.$feature_flag_has_experiment = flagHasExperiment
       }
 
       if (flagWasLocallyEvaluated && this.featureFlagsPoller) {
@@ -1935,6 +1942,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           version: undefined,
           reason: 'Evaluated locally',
           locallyEvaluated: true,
+          hasExperiment: flagDef?.has_experiment,
         }
         locallyEvaluatedKeys.add(key)
       }
@@ -1979,6 +1987,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
             version: detail.metadata?.version,
             reason: detail.reason?.description ?? detail.reason?.code,
             locallyEvaluated: false,
+            hasExperiment: detail.metadata?.has_experiment,
           }
         }
       }
@@ -2001,6 +2010,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           version: existing?.version,
           reason: existing?.reason,
           locallyEvaluated: existing?.locallyEvaluated ?? false,
+          hasExperiment: existing?.hasExperiment,
         }
       }
     }
