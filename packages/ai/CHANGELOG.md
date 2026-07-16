@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.3.1
+
+### Patch Changes
+
+- [#4071](https://github.com/PostHog/posthog-js/pull/4071) [`182434f`](https://github.com/PostHog/posthog-js/commit/182434fd4db9ba8bb93b86e515be874afa9d975a) Thanks [@DerGeraetK](https://github.com/DerGeraetK)! - fix(ai): declare `$ai_cache_reporting_exclusive: false` on OpenAI wrapper events so ingestion no longer double-bills cached input tokens for Claude models served through OpenAI-compatible hosts (e.g. OpenRouter). The flag stays unset when callers pass their own input or cache token counts through `posthogProperties`, so existing passthrough workarounds keep reporting correctly.
+  (2026-07-16)
+
 ## 8.3.0
 
 ### Minor Changes
