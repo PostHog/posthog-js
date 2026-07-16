@@ -2372,11 +2372,6 @@
           "name": "selector"
         },
         {
-          "description": "",
-          "type": "string",
-          "name": "tag_name"
-        },
-        {
           "description": "StringMatching.Exact",
           "type": "ActionStepStringMatching | null",
           "name": "text_matching"
@@ -2926,32 +2921,7 @@
     {
       "id": "PersistentStore",
       "name": "PersistentStore",
-      "properties": [
-        {
-          "type": "(error: any) => void",
-          "name": "_error"
-        },
-        {
-          "type": "(name: string) => any",
-          "name": "_get"
-        },
-        {
-          "type": "() => boolean",
-          "name": "_is_supported"
-        },
-        {
-          "type": "(name: string) => any",
-          "name": "_parse"
-        },
-        {
-          "type": "(name: string, cross_subdomain?: boolean) => void",
-          "name": "_remove"
-        },
-        {
-          "type": "(name: string, value: any, expire_days?: number | null, cross_subdomain?: boolean, secure?: boolean, debug?: boolean) => boolean",
-          "name": "_set"
-        }
-      ],
+      "properties": [],
       "path": "lib/src/types.d.ts"
     },
     {
@@ -3014,10 +2984,6 @@
           "name": "persistence_name"
         },
         {
-          "type": "string",
-          "name": "cookie_name"
-        },
-        {
           "description": "List of custom property names that should be stored in cookies (in addition to the default ones)\nwhen using 'localStorage+cookie' persistence mode. This allows these properties to be shared\nacross subdomains when cross_subdomain_cookie is enabled.",
           "type": "readonly string[]",
           "name": "cookie_persisted_properties"
@@ -3038,10 +3004,6 @@
           "name": "save_campaign_params"
         },
         {
-          "type": "boolean",
-          "name": "store_google"
-        },
-        {
           "description": "Used to extend the list of campaign parameters that are saved by default.",
           "type": "string[]",
           "name": "custom_campaign_params"
@@ -3055,10 +3017,6 @@
           "description": "Determines whether PostHog should be in debug mode.\nYou can enable this to get more detailed logging.\n\nYou can also enable this on your website by appending `?__posthog_debug=true` at the end of your URL\nYou can also call `posthog.debug()` in your code to enable debug mode",
           "type": "boolean",
           "name": "debug"
-        },
-        {
-          "type": "boolean",
-          "name": "verbose"
         },
         {
           "description": "Determines whether PostHog should capture pageview events automatically.\nCan be:\n- `true`: Capture regular pageviews (default)\n- `false`: Don't capture any pageviews\n- `'history_change'`: Capture pageviews on the initial page load and on history API changes (pushState, replaceState, popstate)",
@@ -3089,10 +3047,6 @@
           "description": "Determines whether PostHog should disable persistence.\nIf set to `true`, the library will not save any data to the browser. It will also delete any data previously saved to the browser.",
           "type": "boolean",
           "name": "disable_persistence"
-        },
-        {
-          "type": "boolean",
-          "name": "disable_cookie"
         },
         {
           "description": "Coalesce rapid `Persistence.save()` calls into a single write.\n\nSet to a positive number (milliseconds) to debounce writes to localStorage / cookie\nby that window. The in-memory `props` object is always updated synchronously so\nwithin-tab reads see the latest values immediately. Cross-tab `storage` events\n(which carry the full persistence value as a payload) are reduced proportionally\nto the debounce window.\n\nPending writes are flushed on `beforeunload` and `pagehide` so no state is lost\non tab close. The cross-tab visibility delay is bounded by the configured window.\n\nDefaults to `0` (no debouncing, write synchronously) for backwards compatibility.\nOn pages that capture many events per second, `250` is a reasonable starting point\nto reduce localStorage write pressure and cross-tab IPC traffic. The `2026-05-30`\nconfig default opts into `250` automatically.",
@@ -3220,10 +3174,6 @@
           "name": "opt_out_useragent_filter"
         },
         {
-          "type": "string",
-          "name": "opt_out_capturing_cookie_prefix"
-        },
-        {
           "description": "Determines the key for the cookie / local storage used to store the information about whether users are opted in/out of capturing.\nWhen `null`, we used a key based on your token.",
           "type": "string",
           "name": "consent_persistence_name"
@@ -3244,26 +3194,14 @@
           "name": "property_denylist"
         },
         {
-          "type": "string[]",
-          "name": "property_blacklist"
-        },
-        {
           "description": "A list of headers that should be sent with requests to the PostHog API.",
           "type": "{ [header_name: string]: string; }",
           "name": "request_headers"
         },
         {
-          "type": "{ [header_name: string]: string; }",
-          "name": "xhr_headers"
-        },
-        {
           "description": "A function that is called when a request to the PostHog API fails.",
           "type": "(error: RequestResponse) => void",
           "name": "on_request_error"
-        },
-        {
-          "type": "(failedRequest: XMLHttpRequest) => void",
-          "name": "on_xhr_error"
         },
         {
           "description": "Determines whether PostHog should batch requests to the PostHog API.",
@@ -3279,16 +3217,6 @@
           "description": "Configuration defaults for breaking changes. When set to a specific date,\nenables new default behaviors that were introduced on that date.\n\n- `'unset'`: Use legacy default behaviors\n- `'2025-05-24'`: Use updated default behaviors (e.g. capture_pageview defaults to 'history_change')\n- `'2025-11-30'`: Defaults from '2025-05-24' plus additional changes (e.g. strict minimum duration for replay and rageclick content ignore list defaults to active)\n- `'2026-01-30'`: Defaults from '2025-11-30' plus external_scripts_inject_target defaults to 'head' (avoids SSR hydration errors)\n- `'2026-05-30'`: Defaults from '2026-01-30' plus `persistence_save_debounce_ms` defaults to `250`, `split_storage` and `detect_google_search_app` default to `true`, and rageclick defaults also exclude stepper controls and text-selection surfaces\n- `'2026-06-25'`: Defaults from '2026-05-30' plus `session_recording.streamNetworkBody` defaults to `true` (streams network bodies to enforce the payload size limit)",
           "type": "ConfigDefaults",
           "name": "defaults"
-        },
-        {
-          "description": "EXPERIMENTAL: Defers initialization of non-critical extensions (autocapture, session recording, etc.)\nto the next event loop tick using setTimeout. This reduces main thread blocking during SDK\ninitialization for better page load performance, while keeping critical functionality\n(persistence, sessions, capture) available immediately.\n\nWhen enabled:\n- Persistence, sessions, and basic capture work immediately\n- Extensions (autocapture, recording, heatmaps, etc.) start after yielding back to the browser",
-          "type": "boolean",
-          "name": "__preview_deferred_init_extensions"
-        },
-        {
-          "description": "In `'localStorage+cookie'` persistence mode, prefer cookie values over localStorage\nwhen both stores carry the same key. Fixes cross-subdomain identify and session\ndisconnects caused by stale per-subdomain localStorage clobbering a fresh shared cookie.\nRead at SDK init; has no effect when toggled via `set_config` or for other persistence modes.",
-          "type": "boolean",
-          "name": "__preview_cookie_wins_on_conflict"
         },
         {
           "description": "Determines the session recording options.\n\nFor more session recording settings, see the `enable_recording_console_log` and `capture_performance` configuration option.\nWhen `defaults` is `'2025-11-30'` or later, `strictMinimumDuration` defaults to `true`.",
@@ -3331,10 +3259,6 @@
           "name": "advanced_disable_flags"
         },
         {
-          "type": "boolean",
-          "name": "advanced_disable_decide"
-        },
-        {
           "description": "Will keep /flags running, but without evaluating any feature flags.\nUseful for when you need to load the config data associated with the flags endpoint\n(e.g. /flags?v=2&config=true) without evaluating any feature flags.  Most folks use this\nto save money on feature flag evaluation (by bootstrapping feature flags on the server side).",
           "type": "boolean",
           "name": "advanced_disable_feature_flags"
@@ -3353,11 +3277,6 @@
           "description": "List of feature flag keys to remotely evaluate for this SDK instance.\nWhen set, only these flags are evaluated by `/flags`; omitted flags are not remotely evaluated.\nDependencies of the requested flags may still be evaluated internally by PostHog.\nIf unset, all eligible flags are evaluated.\n\nExamples: ['checkout-redesign', 'new-onboarding']",
           "type": "readonly string[]",
           "name": "flag_keys"
-        },
-        {
-          "description": "Evaluation environments for feature flags.",
-          "type": "readonly string[]",
-          "name": "evaluation_environments"
         },
         {
           "description": "Determines whether PostHog should disable toolbar metrics.\nThis is our internal instrumentation for our toolbar in your website.",
@@ -3415,14 +3334,6 @@
           "name": "get_current_url"
         },
         {
-          "type": "(properties: Properties, event_name: string) => Properties",
-          "name": "sanitize_properties"
-        },
-        {
-          "type": "(eventName: string, eventData: CaptureResult) => void",
-          "name": "_onCapture"
-        },
-        {
           "description": "Determines whether to capture performance metrics.\nThese include Network Timing for Session Replay and Web Vitals.\n\nThe `network_timing` option is only used by the Session Replay feature.\nFor more session recording settings, see the `session_recording` and `enable_recording_console_log` configuration option.\n\nWhen `undefined`, fallback to the remote configuration.\nIf `false`, neither network timing nor web vitals will work.\nIf an object, that will override the remote configuration.",
           "type": "boolean | PerformanceCaptureConfig",
           "name": "capture_performance"
@@ -3448,10 +3359,6 @@
           "name": "capture_heatmaps"
         },
         {
-          "type": "boolean",
-          "name": "enable_heatmaps"
-        },
-        {
           "description": "Determines whether to capture dead clicks.\n\nby default dead clicks are ignored on elements that match a `ph-no-capture` or `ph-no-deadclick` css class on the element or a parent",
           "type": "boolean | DeadClicksAutoCaptureConfig",
           "name": "capture_dead_clicks"
@@ -3475,10 +3382,6 @@
           "description": "You can control whether events from PostHog-js have person processing enabled with the `person_profiles` config setting.\nThere are three options:\n- `person_profiles: 'always'` - we will process persons data for all events\n- `person_profiles: 'never'` - we won't process persons for any event. This means that anonymous users will not be merged once they sign up or login, so you lose the ability to create funnels that track users from anonymous to identified. All events (including `$identify`) will be sent with `$process_person_profile: False`.\n- `person_profiles: 'identified_only'` _(default)_ - we will only process persons when you call `posthog.identify`, `posthog.alias`, `posthog.setPersonProperties`, `posthog.unsetPersonProperties`, `posthog.group`, `posthog.setPersonPropertiesForFlags` or `posthog.setGroupPropertiesForFlags` Anonymous users won't get person profiles.",
           "type": "\"always\" | \"never\" | \"identified_only\"",
           "name": "person_profiles"
-        },
-        {
-          "type": "\"always\" | \"never\" | \"identified_only\"",
-          "name": "process_person"
         },
         {
           "description": "Client side rate limiting",
@@ -3521,62 +3424,9 @@
           "name": "tracing_headers"
         },
         {
-          "type": "string[]",
-          "name": "addTracingHeaders"
-        },
-        {
-          "type": "string[]",
-          "name": "__add_tracing_headers"
-        },
-        {
-          "type": "boolean",
-          "name": "__preview_flags_v2"
-        },
-        {
-          "type": "boolean",
-          "name": "__preview_eager_load_replay"
-        },
-        {
           "description": "Prevents posthog-js from using the `navigator.sendBeacon` API to send events.\nEnabling this option may hurt the reliability of sending $pageleave events.",
           "type": "boolean",
           "name": "disable_beacon"
-        },
-        {
-          "type": "boolean",
-          "name": "__preview_disable_beacon"
-        },
-        {
-          "type": "boolean",
-          "name": "__preview_disable_xhr_credentials"
-        },
-        {
-          "type": "string | boolean",
-          "name": "__preview_external_dependency_versioned_paths"
-        },
-        {
-          "description": "PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION\nEnables collection of bot traffic as $bot_pageview events with detailed bot detection\nproperties instead of dropping them entirely. Use it alongside opt_out_useragent_filter",
-          "type": "boolean",
-          "name": "__preview_capture_bot_pageviews"
-        },
-        {
-          "type": "boolean",
-          "name": "__preview_lazy_load_replay"
-        },
-        {
-          "type": "string",
-          "name": "api_method"
-        },
-        {
-          "type": "string",
-          "name": "inapp_protocol"
-        },
-        {
-          "type": "boolean",
-          "name": "inapp_link_new_window"
-        },
-        {
-          "type": "boolean",
-          "name": "ip"
         },
         {
           "type": "(posthog: PostHogInterface) => void",
@@ -3586,11 +3436,6 @@
           "description": "Disables capturing the `$device_model` super-property.\n\nWhen capturing is enabled (the default), PostHog resolves the hardware model once during init\nvia `navigator.userAgentData.getHighEntropyValues(['model'])` and registers it as the raw OEM\ncode (e.g. `Pixel 7`). This is Chromium-only and only meaningful on Android — it resolves to\n`undefined` on Safari/Firefox and to an empty string on desktop, in which cases nothing is\nregistered.\n\nThis opt-out is offered because `getHighEntropyValues` is still experimental and Chromium-only\n(not yet a cross-browser standard); set it to `true` to skip the call entirely.",
           "type": "boolean",
           "name": "disableDeviceModel"
-        },
-        {
-          "description": "Internal: Extension class overrides for tree-shaking support.\nWhen provided, these classes are used instead of the default imports.\nThis enables entrypoints to control which extensions are bundled.",
-          "type": "{ exceptions?: ExtensionConstructor<PostHogExceptions>; historyAutocapture?: ExtensionConstructor<HistoryAutocapture>; tracingHeaders?: ExtensionConstructor<TracingHeaders>; siteApps?: ExtensionConstructor<SiteApps>; sessionRecording?: ExtensionConstructor<SessionRecording>; autocapture?: ExtensionConstructor<Autocapture>; productTours?: ExtensionConstructor<PostHogProductTours>; heatmaps?: ExtensionConstructor<Heatmaps>; webVitalsAutocapture?: ExtensionConstructor<WebVitalsAutocapture>; exceptionObserver?: ExtensionConstructor<ExceptionObserver>; deadClicksAutocapture?: ExtensionConstructor<DeadClicksAutocapture>; surveys?: ExtensionConstructor<PostHogSurveys>; toolbar?: ExtensionConstructor<Toolbar>; experiments?: ExtensionConstructor<WebExperiments>; conversations?: ExtensionConstructor<PostHogConversations>; featureFlags?: ExtensionConstructor<PostHogFeatureFlags>; logs?: ExtensionConstructor<PostHogLogs>; metrics?: ExtensionConstructor<PostHogMetrics>; }",
-          "name": "__extensionClasses"
         }
       ],
       "path": "lib/src/types.d.ts"
@@ -3608,11 +3453,6 @@
           "description": "The library version.",
           "type": "string",
           "name": "version"
-        },
-        {
-          "description": "Whether the PostHog instance has been loaded.",
-          "type": "boolean",
-          "name": "__loaded"
         },
         {
           "description": "Whether the flags endpoint has been hit.",
@@ -3723,11 +3563,6 @@
           "description": "Get the value of a feature flag.",
           "type": "(key: string, options?: FeatureFlagOptions) => boolean | string | undefined",
           "name": "getFeatureFlag"
-        },
-        {
-          "description": "Get the payload of a feature flag.",
-          "type": "(key: string) => JsonType",
-          "name": "getFeatureFlagPayload"
         },
         {
           "description": "Get a feature flag evaluation result including both the flag value and payload.\n\nBy default, this method emits the `$feature_flag_called` event.",
@@ -3948,14 +3783,6 @@
           "description": "Capture a metric for a LLM trace.",
           "type": "(traceId: string | number, metricName: string, metricValue: string | number | boolean) => void",
           "name": "captureTraceMetric"
-        },
-        {
-          "type": "{ set: (prop: string | Properties, to?: string, callback?: RequestCallback) => void; set_once: (prop: string | Properties, to?: string, callback?: RequestCallback) => void; }",
-          "name": "people"
-        },
-        {
-          "type": "boolean",
-          "name": "decideEndpointWasHit"
         },
         {
           "type": "PostHogConfig",
@@ -4539,11 +4366,6 @@
           "description": "Whether to only capture identified users by default",
           "type": "boolean",
           "name": "defaultIdentifiedOnly"
-        },
-        {
-          "description": "",
-          "type": "ToolbarParams",
-          "name": "editorParams"
         },
         {
           "description": "Whether the `$elements_chain` property should be sent as a string or as an array\nfalse",
@@ -5309,11 +5131,6 @@
           "name": "boxPadding"
         },
         {
-          "description": "",
-          "type": "string",
-          "name": "descriptionTextColor"
-        },
-        {
           "type": "boolean",
           "name": "disableAutofocus"
         },
@@ -5328,11 +5145,6 @@
         {
           "type": "boolean",
           "name": "hideCancelButton"
-        },
-        {
-          "description": "",
-          "type": "string",
-          "name": "inputBackgroundColor"
         },
         {
           "type": "string",
@@ -5376,16 +5188,6 @@
       "id": "SurveyConfig",
       "name": "SurveyConfig",
       "properties": [
-        {
-          "description": "",
-          "type": "number",
-          "name": "autoSubmitDelay"
-        },
-        {
-          "description": "",
-          "type": "boolean",
-          "name": "autoSubmitIfComplete"
-        },
         {
           "description": "Prefill survey responses from matching URL parameters.\nundefined",
           "type": "boolean",

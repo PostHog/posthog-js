@@ -81,7 +81,7 @@ function classifyAlias(checker, declaration) {
         return { kind: 'other' };
     }
 
-    const properties = type.getProperties().filter((prop) => !(prop.flags & ts.SymbolFlags.Method));
+    const properties = type.getProperties().filter((prop) => isDocumentedProperty(checker, prop));
     if (type.getCallSignatures().length > 0) {
         // a callable type with members would lose its call signature as an object,
         // so publish the full raw signature instead
@@ -97,6 +97,17 @@ function classifyAlias(checker, declaration) {
         return { kind: 'signature' };
     }
     return { kind: 'other' };
+}
+
+// Underscore-prefixed and @deprecated members are internal surface and stay out of
+// the published reference; methods mirror the interface rendering, which lists only
+// property signatures
+function isDocumentedProperty(checker, prop) {
+    return (
+        !(prop.flags & ts.SymbolFlags.Method) &&
+        !prop.getName().startsWith('_') &&
+        !prop.getJsDocTags(checker).some((tag) => tag.name === 'deprecated')
+    );
 }
 
 function describeProperty(checker, prop, location) {

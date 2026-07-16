@@ -13,6 +13,10 @@ export interface BaseConfig {
     loaded: (client: unknown) => void;
     /** Optional project token */
     token?: string;
+    /** @deprecated Use api_host */
+    old_host?: string;
+    /** Internal preview toggle */
+    __internal_flag?: boolean;
 }
 
 /**

@@ -1,6 +1,7 @@
 const { ApiItemKind } = require('@microsoft/api-extractor-model');
 const utils = require('./utils');
 const documentation = require('./documentation');
+const methods = require('./methods');
 
 // TypeDefinition structure: { name, id, params?, path?, example? }
 // TypeToken structure: { kind, text, canonicalReference? }
@@ -78,6 +79,7 @@ function processEnumMember(member, typeDef) {
 function processInterfaceMember(member, typeDef) {
     typeDef.params = member.members
         .filter((prop) => prop.kind === ApiItemKind.PropertySignature)
+        .filter((prop) => !prop.name.startsWith('_') && !methods.isMethodDeprecated(prop))
         .map((prop) => createMemberDescriptor(prop, 'any'));
 }
 

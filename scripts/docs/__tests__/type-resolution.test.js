@@ -190,6 +190,14 @@ describe('resolveTypeDefinitions with type resolver', () => {
         assert.deepEqual(base.properties.map((p) => p.name), ['api_host', 'loaded', 'token']);
     });
 
+    test('underscore-prefixed and deprecated members are excluded from both paths', () => {
+        const published = (type) => type.properties.map((p) => p.name);
+        assert.ok(!published(byName(types, 'BaseConfig')).includes('old_host'));
+        assert.ok(!published(byName(types, 'BaseConfig')).includes('__internal_flag'));
+        assert.ok(!published(byName(types, 'Config')).includes('old_host'));
+        assert.ok(!published(byName(types, 'Config')).includes('__internal_flag'));
+    });
+
     test('cross-file property types render bare names, never import("...") qualifiers', () => {
         const remote = byName(types, 'Remote');
         assert.deepEqual(

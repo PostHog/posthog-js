@@ -2986,11 +2986,6 @@
           "description": "Used for mutating the screen name and properties\nOnly used if captureScreens is true",
           "type": "PostHogAutocaptureNavigationTrackerOptions",
           "name": "navigation"
-        },
-        {
-          "description": "If you create a navigation ref with createNavigationContainerRef, you need to pass the navigation ref\nOnly used for expo-router and",
-          "type": "PostHogNavigationRef",
-          "name": "navigationRef"
         }
       ],
       "path": "dist/types.d.ts"
@@ -3012,11 +3007,6 @@
         {
           "type": "boolean",
           "name": "disableGeoip"
-        },
-        {
-          "description": "Internal flag set by captureException() to indicate this $exception\nevent originated from the proper exception capture path. Used to warn users who call\ncapture('$exception') directly.",
-          "type": "boolean",
-          "name": "_originatedFromCaptureException"
         }
       ],
       "path": "../core/src/types.ts"
@@ -3079,11 +3069,6 @@
           "description": "Advanced: whether to disable fetching and evaluating feature flags from PostHog entirely.\n\nWhen set to true, `reloadFeatureFlags()` and the reloads triggered by `identify()`,\n`group()`, `setPersonPropertiesForFlags()` and `reset()` become no-ops, and any request\nto the flags endpoint that still goes out (e.g. to fetch remote config or surveys)\ncarries `disable_flags: true` so the server skips flag evaluation. Flag values must be\nsupplied via the `bootstrap` option or `updateFlags()` instead; `getFeatureFlag()` and\nrelated methods keep working against those values. Until `updateFlags()` runs, reads\nreturn their not-loaded defaults, so use `bootstrap` for any flags needed at startup.\nEquivalent to the web SDK's `advanced_disable_feature_flags`.\n\nNote: surveys gated on feature flags will not evaluate unless the survey targeting\nflags are also provided via `updateFlags()`. This option cannot be toggled at runtime.\n`posthog-node` inherits this option but does not implement it (no-op).",
           "type": "boolean",
           "name": "disableRemoteFeatureFlags"
-        },
-        {
-          "description": "Whether to load remote config when initialized or not",
-          "type": "boolean",
-          "name": "disableRemoteConfig"
         },
         {
           "description": "Whether to load surveys when initialized or not\nRequires the `PostHogSurveyProvider` to be used",
@@ -3149,11 +3134,6 @@
           "description": "Evaluation contexts for feature flags.\nWhen set, only feature flags that have at least one matching evaluation tag\nwill be evaluated for this SDK instance. Feature flags with no evaluation tags\nwill always be evaluated.\n\nExamples: ['production', 'web', 'mobile']",
           "type": "readonly string[]",
           "name": "evaluationContexts"
-        },
-        {
-          "description": "Evaluation environments for feature flags.",
-          "type": "readonly string[]",
-          "name": "evaluationEnvironments"
         },
         {
           "description": "Determines when to create Person Profiles for users.\n\n- 'always': Always create a person profile for every user (anonymous and identified).\n- 'identified_only': Only create a person profile when the user is identified via identify(), alias(), or group().\n  Events captured before identification will NOT have person profiles and will be anonymous events.\n- 'never': Never create person profiles. identify(), alias(), and group() will be no-ops.",
@@ -3992,16 +3972,6 @@
           "name": "captureLog"
         },
         {
-          "description": "Deboucer delay used to reduce the number of snapshots captured and reduce performance impact\nThis is used for capturing the view as a screenshot\nThe lower the number more snapshots will be captured but higher the performance impact",
-          "type": "number",
-          "name": "iOSdebouncerDelayMs"
-        },
-        {
-          "description": "Deboucer delay used to reduce the number of snapshots captured and reduce performance impact\nThis is used for capturing the view as a screenshot\nThe lower the number more snapshots will be captured but higher the performance impact\nPs: it was 500ms (0.5s) by default until version 3.3.7",
-          "type": "number",
-          "name": "androidDebouncerDelayMs"
-        },
-        {
           "description": "Throttling delay used to reduce the number of snapshots captured and reduce performance impact\nThis is used for capturing the view as a wireframe or screenshot\nThe lower the number more snapshots will be captured but higher the performance impact\n\nThis value has precedence over iOSdebouncerDelayMs and androidDebouncerDelayMs\nIf this is not set, we will take the max number between iOSdebouncerDelayMs and androidDebouncerDelayMs for back compatibility",
           "type": "number",
           "name": "throttleDelayMs"
@@ -4057,12 +4027,7 @@
     {
       "id": "PreviouslyCapturedError",
       "name": "PreviouslyCapturedError",
-      "properties": [
-        {
-          "type": "boolean",
-          "name": "__posthog_previously_captured_error"
-        }
-      ],
+      "properties": [],
       "path": "../core/src/error-tracking/types.ts"
     },
     {
