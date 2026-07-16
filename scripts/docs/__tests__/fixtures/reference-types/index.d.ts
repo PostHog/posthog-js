@@ -13,6 +13,10 @@ export interface BaseConfig {
     loaded: (client: unknown) => void;
     /** Optional project token */
     token?: string;
+    /** @deprecated Use api_host */
+    old_host?: string;
+    /** Internal preview toggle */
+    __internal_flag?: boolean;
 }
 
 /**
@@ -126,6 +130,43 @@ export type CallableWithProps = {
     /** Human-readable label */
     label: string;
 };
+
+/**
+ * Members in every deprecation shape
+ *
+ * @public
+ */
+export interface DeprecationShapes {
+    /** Current option */
+    current: string;
+    /**
+     * Legacy timeout in ms.
+     *
+     * @deprecated Use current instead
+     */
+    legacy_timeout?: number;
+    /** @deprecated */
+    retired?: boolean;
+}
+
+/**
+ * Alias flattening the same members through the checker path
+ *
+ * @public
+ */
+export type DeprecationShapesAlias = DeprecationShapes & {
+    extra?: string;
+};
+
+/**
+ * @public
+ */
+export declare enum Mode {
+    /** Standard mode */
+    Standard = "standard",
+    /** @deprecated Use Standard */
+    Legacy = "legacy"
+}
 
 /**
  * Referenced by the public API but not exported

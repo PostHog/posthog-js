@@ -2001,8 +2001,10 @@
           "name": "flags"
         },
         {
+          "description": "Deprecated: Use the `flags` option with a `FeatureFlagEvaluations` object obtained\nfrom `posthog.evaluateFlags()` instead. `sendFeatureFlags` fires a separate `/flags`\nrequest on capture and may return different values than the ones the code branched on.",
           "type": "boolean | SendFeatureFlagsOptions",
-          "name": "sendFeatureFlags"
+          "name": "sendFeatureFlags",
+          "releaseTag": "deprecated"
         },
         {
           "type": "Date",
@@ -2012,11 +2014,6 @@
           "description": "If provided overrides the auto-generated event UUID. Must be a valid UUID.",
           "type": "string",
           "name": "uuid"
-        },
-        {
-          "description": "Internal flag set by captureException() to indicate this $exception\nevent originated from the proper exception capture path. Used to warn users who call\ncapture() with '$exception' directly.",
-          "type": "boolean",
-          "name": "_originatedFromCaptureException"
         }
       ],
       "path": "src/types.ts"
@@ -2732,11 +2729,6 @@
         {
           "type": "boolean",
           "name": "disableGeoip"
-        },
-        {
-          "description": "Internal flag set by captureException() to indicate this $exception\nevent originated from the proper exception capture path. Used to warn users who call\ncapture('$exception') directly.",
-          "type": "boolean",
-          "name": "_originatedFromCaptureException"
         }
       ],
       "path": "../core/src/types.ts"
@@ -2824,9 +2816,10 @@
           "name": "disableRemoteFeatureFlags"
         },
         {
-          "description": "Whether to load remote config when initialized or not",
+          "description": "Whether to load remote config when initialized or not\nDeprecated: Remote config is now always loaded and this option is a no-op. It will be removed in a future version.",
           "type": "boolean",
-          "name": "disableRemoteConfig"
+          "name": "disableRemoteConfig",
+          "releaseTag": "deprecated"
         },
         {
           "description": "Whether to load surveys when initialized or not\nRequires the `PostHogSurveyProvider` to be used",
@@ -2894,9 +2887,10 @@
           "name": "evaluationContexts"
         },
         {
-          "description": "Evaluation environments for feature flags.",
+          "description": "Evaluation environments for feature flags.\nDeprecated: Use evaluationContexts instead. This property will be removed in a future version.",
           "type": "readonly string[]",
-          "name": "evaluationEnvironments"
+          "name": "evaluationEnvironments",
+          "releaseTag": "deprecated"
         },
         {
           "description": "Determines when to create Person Profiles for users.\n\n- 'always': Always create a person profile for every user (anonymous and identified).\n- 'identified_only': Only create a person profile when the user is identified via identify(), alias(), or group().\n  Events captured before identification will NOT have person profiles and will be anonymous events.\n- 'never': Never create person profiles. identify(), alias(), and group() will be no-ops.",
@@ -3290,9 +3284,10 @@
           "name": "disableRemoteFeatureFlags"
         },
         {
-          "description": "Whether to load remote config when initialized or not",
+          "description": "Whether to load remote config when initialized or not\nDeprecated: Remote config is now always loaded and this option is a no-op. It will be removed in a future version.",
           "type": "boolean",
-          "name": "disableRemoteConfig"
+          "name": "disableRemoteConfig",
+          "releaseTag": "deprecated"
         },
         {
           "description": "Whether to load surveys when initialized or not\nRequires the `PostHogSurveyProvider` to be used",
@@ -3355,9 +3350,10 @@
           "name": "evaluationContexts"
         },
         {
-          "description": "Evaluation environments for feature flags.",
+          "description": "Evaluation environments for feature flags.\nDeprecated: Use evaluationContexts instead. This property will be removed in a future version.",
           "type": "readonly string[]",
-          "name": "evaluationEnvironments"
+          "name": "evaluationEnvironments",
+          "releaseTag": "deprecated"
         },
         {
           "description": "Determines when to create Person Profiles for users.\n\n- 'always': Always create a person profile for every user (anonymous and identified).\n- 'identified_only': Only create a person profile when the user is identified via identify(), alias(), or group().\n  Events captured before identification will NOT have person profiles and will be anonymous events.\n- 'never': Never create person profiles. identify(), alias(), and group() will be no-ops.",
@@ -3389,8 +3385,10 @@
           "name": "secretKey"
         },
         {
+          "description": "Deprecated: Use `secretKey` instead.",
           "type": "string",
-          "name": "personalApiKey"
+          "name": "personalApiKey",
+          "releaseTag": "deprecated"
         },
         {
           "type": "boolean",
@@ -3430,11 +3428,6 @@
           "description": "Additional user agent strings to block from being tracked.\nThese are combined with the default list of blocked user agents.",
           "type": "string[]",
           "name": "custom_blocked_useragents"
-        },
-        {
-          "description": "PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION\nEnables collection of bot traffic as $bot_pageview events instead of dropping them.\nWhen enabled, events with a $raw_user_agent property that matches the bot detection list\nwill have their $pageview event renamed to $bot_pageview.\n\nTo use this feature, pass the user agent in event properties:\n```ts\nclient.capture({\n  distinctId: 'user_123',\n  event: '$pageview',\n  properties: {\n    $raw_user_agent: req.headers['user-agent']\n  }\n})\n```",
-          "type": "boolean",
-          "name": "__preview_capture_bot_pageviews"
         },
         {
           "description": "When enabled, all feature flag evaluations will use local evaluation only,\nnever falling back to server-side evaluation. This prevents unexpected server\nrequests and associated costs when using local evaluation.\n\nFlags that cannot be evaluated locally (e.g., those with experience continuity)\nwill return `undefined` instead of making a server request.",
@@ -3654,12 +3647,7 @@
     {
       "id": "PreviouslyCapturedError",
       "name": "PreviouslyCapturedError",
-      "properties": [
-        {
-          "type": "boolean",
-          "name": "__posthog_previously_captured_error"
-        }
-      ],
+      "properties": [],
       "path": "../core/src/error-tracking/types.ts"
     },
     {

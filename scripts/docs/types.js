@@ -1,6 +1,7 @@
 const { ApiItemKind } = require('@microsoft/api-extractor-model');
 const utils = require('./utils');
 const documentation = require('./documentation');
+const methods = require('./methods');
 
 // TypeDefinition structure: { name, id, params?, path?, example? }
 // TypeToken structure: { kind, text, canonicalReference? }
@@ -18,8 +19,8 @@ function resolveTypeDefinitions(apiPackage, typeResolver) {
         const result = {
             id: type.id,
             name: type.name,
-            properties: (type.params || []).map(({ description, type: paramType, name }) => ({
-                description, type: paramType, name
+            properties: (type.params || []).map(({ description, type: paramType, name, releaseTag }) => ({
+                description, type: paramType, name, releaseTag
             }))
         };
         
@@ -61,11 +62,19 @@ function createInitialTypeDef(member, apiPackage, typeResolver) {
 }
 
 // Create member descriptor for enum/interface items
-const createMemberDescriptor = (member, defaultType) => ({
-    name: member.name,
-    type: member.initializerExcerpt?.text || member.propertyTypeExcerpt?.text || defaultType,
-    description: documentation.getDocComment(member)
-});
+const createMemberDescriptor = (member, defaultType) => {
+    const deprecatedText = methods.isMethodDeprecated(member)
+        ? utils.renderDocNodeToText(member.tsdocComment.deprecatedBlock.content)
+        : '';
+
+    return {
+        name: member.name,
+        type: member.initializerExcerpt?.text || member.propertyTypeExcerpt?.text || defaultType,
+        description: [documentation.getDocComment(member), deprecatedText && `Deprecated: ${deprecatedText}`]
+            .filter(Boolean).join('\n') || undefined,
+        releaseTag: methods.isMethodDeprecated(member) ? 'deprecated' : undefined
+    };
+};
 
 // Process enum members
 function processEnumMember(member, typeDef) {
@@ -78,6 +87,7 @@ function processEnumMember(member, typeDef) {
 function processInterfaceMember(member, typeDef) {
     typeDef.params = member.members
         .filter((prop) => prop.kind === ApiItemKind.PropertySignature)
+        .filter((prop) => !prop.name.startsWith('_'))
         .map((prop) => createMemberDescriptor(prop, 'any'));
 }
 

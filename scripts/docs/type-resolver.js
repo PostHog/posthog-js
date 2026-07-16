@@ -81,7 +81,7 @@ function classifyAlias(checker, declaration) {
         return { kind: 'other' };
     }
 
-    const properties = type.getProperties().filter((prop) => !(prop.flags & ts.SymbolFlags.Method));
+    const properties = type.getProperties().filter(isDocumentedProperty);
     if (type.getCallSignatures().length > 0) {
         // a callable type with members would lose its call signature as an object,
         // so publish the full raw signature instead
@@ -99,9 +99,18 @@ function classifyAlias(checker, declaration) {
     return { kind: 'other' };
 }
 
+// Underscore-prefixed members are internal surface and stay out of the published
+// reference; methods mirror the interface rendering, which lists only property
+// signatures
+function isDocumentedProperty(prop) {
+    return !(prop.flags & ts.SymbolFlags.Method) && !prop.getName().startsWith('_');
+}
+
 function describeProperty(checker, prop, location) {
     const propType = checker.getTypeOfSymbolAtLocation(prop, location);
     const description = ts.displayPartsToString(prop.getDocumentationComment(checker)).trim();
+    const deprecatedTag = prop.getJsDocTags(checker).find((tag) => tag.name === 'deprecated');
+    const deprecatedText = deprecatedTag ? ts.displayPartsToString(deprecatedTag.text).trim() : '';
 
     // typeToString qualifies symbols not lexically visible at the alias declaration as
     // import("<absolute path>").Name — machine-specific and unfit for published output
@@ -112,7 +121,8 @@ function describeProperty(checker, prop, location) {
     return {
         name: prop.getName(),
         type: typeText,
-        description: description || undefined,
+        description: [description, deprecatedText && `Deprecated: ${deprecatedText}`].filter(Boolean).join('\n') || undefined,
+        ...(deprecatedTag && { releaseTag: 'deprecated' }),
     };
 }
 
