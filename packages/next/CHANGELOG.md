@@ -1,5 +1,12 @@
 # @posthog/next
 
+## 0.8.3
+
+### Patch Changes
+
+- [#4152](https://github.com/PostHog/posthog-js/pull/4152) [`2578f08`](https://github.com/PostHog/posthog-js/commit/2578f082f57cbd5588c58065b97a2f737a14578b) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Remove the Pages Router `PostHogProvider.bootstrap` prop; move its value to `clientOptions.bootstrap`. For App Router server-evaluated bootstrap, use fresh evaluated flags and payloads while preserving configured identity and session fields.
+  (2026-07-16)
+
 ## 0.8.2
 
 ### Patch Changes
