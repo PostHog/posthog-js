@@ -129,7 +129,8 @@ const mapVercelPrompt = (messages: LanguageModelPrompt): PostHogInput[] => {
           } else if (c.type === 'reasoning') {
             return {
               type: 'reasoning',
-              text: truncate(c.reasoning),
+              // AI SDK reasoning prompt parts carry their content in `text`; `reasoning` is kept as a fallback for older callers
+              text: truncate(c.text ?? c.reasoning),
             }
           } else if (c.type === 'tool-call') {
             return {

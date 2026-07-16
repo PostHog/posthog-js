@@ -1086,6 +1086,41 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       ])
       expect(captureCall[0].properties.$ai_reasoning_tokens).toBe(5)
     })
+
+    it.each([
+      ['v2', createMockV2Model],
+      ['v3', createMockV3Model],
+    ])('should preserve reasoning text from prior-turn input messages in %s', async (_version, createModel) => {
+      const baseModel = createModel('gpt-4')
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-input-reasoning',
+      })
+
+      await model.doGenerate({
+        prompt: [
+          { role: 'user' as const, content: [{ type: 'text' as const, text: 'Solve this' }] },
+          {
+            role: 'assistant' as const,
+            content: [
+              { type: 'reasoning' as const, text: 'Let me think step by step.' },
+              { type: 'text' as const, text: 'The answer is 42.' },
+            ],
+          },
+          { role: 'user' as const, content: [{ type: 'text' as const, text: 'Why?' }] },
+        ] as any,
+      })
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const input = captureCall[0].properties.$ai_input as Array<{ role: string; content: any }>
+      const assistantMessage = input.find((m) => m.role === 'assistant')
+
+      expect(assistantMessage?.content).toEqual([
+        { type: 'reasoning', text: 'Let me think step by step.' },
+        { type: 'text', text: 'The answer is 42.' },
+      ])
+    })
   })
 
   describe('Prototype getter preservation', () => {
