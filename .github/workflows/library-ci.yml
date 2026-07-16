@@ -25,6 +25,8 @@ jobs:
 
       - run: pnpm test:unit
 
+      - run: pnpm test:docs-scripts
+
   edge-runtime:
     name: Node edge runtime tests
     runs-on: ubuntu-22.04

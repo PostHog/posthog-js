@@ -14,6 +14,7 @@
         "lint:playground:fix": "prettier --write 'playground/**/*.{ts,tsx,js,jsx,mjs,json,md}' && eslint --fix 'playground/**/*.{ts,tsx,js,jsx,mjs}'",
         "test": "turbo test",
         "test:unit": "turbo test:unit",
+        "test:docs-scripts": "node --test \"scripts/docs/__tests__/*.test.js\"",
         "test:functional": "turbo test:functional",
         "test:e2e": "turbo test:e2e",
         "build": "turbo build",

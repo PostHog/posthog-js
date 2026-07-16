@@ -171,6 +171,7 @@ const splitObjectProperties = (content) => {
  * @returns {{name: string, type: string, description: string} | null} - Parsed property
  */
 const parseProperty = (part) => {
+  if (part.startsWith('[')) return null; // index signatures are not named properties
   const colonIndex = part.indexOf(':');
   if (colonIndex === -1) return null;
 
