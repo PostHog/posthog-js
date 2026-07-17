@@ -73,8 +73,7 @@ export class PostHogSurveys implements Extension {
         }
 
         if (!result.ok) {
-            // Surveys are opt-in: without a fetched config we don't know whether any
-            // surveys exist, so don't load them.
+            // Failure behaves like a response without a surveys key: not loaded.
             return logger.warn('Remote config unavailable. Not loading surveys.')
         }
 

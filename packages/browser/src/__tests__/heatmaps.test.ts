@@ -264,7 +264,7 @@ describe('heatmaps', () => {
             posthog.persistence!.register({ [HEATMAPS_ENABLED_SERVER_SIDE]: true })
             const heatmaps = new Heatmaps(posthog)
 
-            // Call with empty config (simulating config fetch failure)
+            // Call with empty config (server returned no setting for this feature)
             heatmaps.onRemoteConfig({ ok: true, config: {} as FlagsResponse })
 
             // Should NOT have overwritten the existing value

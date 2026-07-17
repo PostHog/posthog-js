@@ -126,8 +126,7 @@ export class Heatmaps implements Extension {
 
     public onRemoteConfig(result: RemoteConfigResult) {
         if (!result.ok) {
-            // Heatmaps is opt-in: a failed fetch, like a response without a heatmaps
-            // key, leaves the last known server-side setting untouched.
+            // Failure behaves like a response without a heatmaps key.
             return
         }
 

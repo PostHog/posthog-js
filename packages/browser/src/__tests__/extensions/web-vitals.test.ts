@@ -488,7 +488,7 @@ describe('web vitals', () => {
                 [WEB_VITALS_ALLOWED_METRICS]: ['LCP', 'FCP'],
             })
 
-            // Call with empty config (simulating config fetch failure)
+            // Call with empty config (server returned no setting for this feature)
             posthog.webVitalsAutocapture!.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
 
             // Should NOT have overwritten the existing values

@@ -170,7 +170,7 @@ describe('DeadClicksAutocapture', () => {
                 [DEAD_CLICKS_ENABLED_SERVER_SIDE]: true,
             })
 
-            // Call with empty config (simulating config fetch failure)
+            // Call with empty config (server returned no setting for this feature)
             instance.deadClicksAutocapture.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
 
             // Should NOT have overwritten the existing value

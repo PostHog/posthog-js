@@ -131,8 +131,7 @@ export class ExceptionObserver {
 
     onRemoteConfig(result: RemoteConfigResult) {
         if (!result.ok) {
-            // Exception autocapture is opt-in: a failed fetch, like a response without
-            // an autocaptureExceptions key, leaves the last known setting untouched.
+            // Failure behaves like a response without an autocaptureExceptions key.
             return
         }
 

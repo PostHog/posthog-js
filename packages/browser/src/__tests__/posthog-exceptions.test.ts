@@ -83,7 +83,7 @@ describe('PostHogExceptions', () => {
             // Create new instance to pick up persisted values
             const newExceptions = new PostHogExceptions(posthog)
 
-            // Call with empty config (simulating config fetch failure)
+            // Call with empty config (server returned no setting for this feature)
             newExceptions.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
 
             // Should NOT have overwritten the existing values

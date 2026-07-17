@@ -49,8 +49,7 @@ export class PostHogProductTours implements Extension {
 
     onRemoteConfig(result: RemoteConfigResult): void {
         if (!result.ok) {
-            // Product tours are opt-in: a failed fetch, like a response without a
-            // productTours key, leaves the last known server-side setting untouched.
+            // Failure behaves like a response without a productTours key.
             return
         }
 

@@ -40,8 +40,7 @@ export class DeadClicksAutocapture implements Extension {
 
     public onRemoteConfig(result: RemoteConfigResult) {
         if (!result.ok) {
-            // Dead clicks capture is opt-in: a failed fetch, like a response without a
-            // captureDeadClicks key, leaves the last known server-side setting untouched.
+            // Failure behaves like a response without a captureDeadClicks key.
             return
         }
 

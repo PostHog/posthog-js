@@ -427,6 +427,30 @@ describe('posthog core', () => {
             expect(posthog.persistence!.props[HEATMAPS_ENABLED_SERVER_SIDE]).toBeUndefined()
             expect(posthog.heatmaps!.isEnabled).toBe(false)
         })
+
+        it('reaches every registered extension and no failure branch throws', async () => {
+            const posthog = await createPosthogInstance()
+            const handlers = (posthog as any)._extensions.filter((ext: any) => ext.onRemoteConfig)
+            expect(handlers.length).toBeGreaterThanOrEqual(10)
+            const spies = handlers.map((ext: any) => jest.spyOn(ext, 'onRemoteConfig'))
+
+            expect(() => posthog._onRemoteConfig({ ok: false })).not.toThrow()
+
+            for (const spy of spies) {
+                expect(spy).toHaveBeenCalledWith({ ok: false })
+            }
+        })
+
+        it('session recording treats a failure like a config without recording settings', async () => {
+            const posthog = await createPosthogInstance()
+            posthog.sessionRecording!.onRemoteConfig({ ok: false })
+
+            const other = await createPosthogInstance()
+            other.sessionRecording!.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
+
+            expect(posthog.sessionRecording!.status).toBe(other.sessionRecording!.status)
+            expect(posthog.sessionRecording!.started).toBe(false)
+        })
     })
 
     describe('_afterFlagsResponse', () => {

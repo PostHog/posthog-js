@@ -138,8 +138,7 @@ export class PostHogLogs implements Extension {
 
     onRemoteConfig(result: RemoteConfigResult) {
         if (!result.ok) {
-            // Console log capture is opt-in: a failed fetch, like a response without a
-            // logs key, leaves it disabled.
+            // Failure behaves like a response without a logs key.
             return
         }
 

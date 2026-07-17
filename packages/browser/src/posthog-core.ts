@@ -1012,8 +1012,8 @@ export class PostHog implements PostHogInterface {
         // Cache the latest remote config result so extensions that are created later
         // (e.g. sessionRecording after opt_in_capturing from cookieless mode) can
         // replay it and pick up server-side settings like recording enable flags.
-        // Storing the result (not just a config) keeps a later failed refresh from
-        // overwriting a previously cached successful config with an empty one.
+        // Storing the result (not just a config) means a replayed failure is
+        // distinguishable from a successful empty config.
         this._lastRemoteConfig = result
 
         this.compression = undefined

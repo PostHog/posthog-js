@@ -44,8 +44,7 @@ export class PostHogExceptions implements Extension {
 
     onRemoteConfig(result: RemoteConfigResult) {
         if (!result.ok) {
-            // A failed fetch, like a response without an errorTracking key, keeps the
-            // last known suppression rules (in-memory and persisted) untouched.
+            // Failure behaves like a response without an errorTracking key.
             return
         }
 

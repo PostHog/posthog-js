@@ -45,8 +45,7 @@ export class PostHogConversations implements Extension {
         }
 
         if (!result.ok) {
-            // Conversations are opt-in: a failed fetch, like a response without a
-            // conversations key, leaves them unloaded.
+            // Failure behaves like a response without a conversations key.
             return
         }
 

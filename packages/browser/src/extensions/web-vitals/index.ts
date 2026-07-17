@@ -93,8 +93,7 @@ export class WebVitalsAutocapture {
 
     public onRemoteConfig(result: RemoteConfigResult) {
         if (!result.ok) {
-            // Web vitals capture is opt-in: a failed fetch, like a response without a
-            // capturePerformance key, leaves the last known server-side setting untouched.
+            // Failure behaves like a response without a capturePerformance key.
             return
         }
 

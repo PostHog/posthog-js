@@ -21,7 +21,7 @@ describe('PostHogProductTours', () => {
                 [PRODUCT_TOURS_ENABLED_SERVER_SIDE]: true,
             })
 
-            // Call with empty config (simulating config fetch failure)
+            // Call with empty config (server returned no setting for this feature)
             instance.productTours.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
 
             // Should NOT have overwritten the existing value
