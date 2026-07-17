@@ -13,9 +13,9 @@ function normalizeToken(value?: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-function normalizeHost(value?: unknown): string {
+function normalizeHost(value: unknown, defaultHost: string): string {
   const normalizedValue = typeof value === 'string' ? value.trim() : ''
-  return normalizedValue || DEFAULT_OTEL_HOST
+  return normalizedValue || defaultHost
 }
 
 interface PostHogSpanProcessorBaseOptions {
@@ -119,7 +119,7 @@ export class PostHogSpanProcessor implements SpanProcessor {
       this.inner = runtimeOptions._spanProcessor
     } else {
       const defaultHost = projectSecret ? DEFAULT_AI_GATEWAY_HOST : DEFAULT_OTEL_HOST
-      const host = new URL(normalizeHost(runtimeOptions.host || defaultHost)).origin
+      const host = new URL(normalizeHost(runtimeOptions.host, defaultHost)).origin
       const exporter = new OTLPTraceExporter({
         url: `${host}/i/v0/ai/otel`,
         headers: {
