@@ -9,7 +9,6 @@ module.exports = {
                     module: 'CommonJS',
                     moduleResolution: 'node',
                     target: 'ES2022',
-                    ignoreDeprecations: '6.0',
                     esModuleInterop: true,
                     verbatimModuleSyntax: false,
                 },
