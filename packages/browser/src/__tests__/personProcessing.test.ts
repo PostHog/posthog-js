@@ -804,7 +804,7 @@ describe('person processing', () => {
             posthog.capture('startup page view')
 
             // act
-            posthog._onRemoteConfig({} as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: {} as RemoteConfig })
             posthog.capture('custom event')
 
             // assert
@@ -819,7 +819,7 @@ describe('person processing', () => {
             posthog.capture('startup page view')
 
             // act
-            posthog._onRemoteConfig({ defaultIdentifiedOnly: false } as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: { defaultIdentifiedOnly: false } as RemoteConfig })
             posthog.capture('custom event')
 
             // assert

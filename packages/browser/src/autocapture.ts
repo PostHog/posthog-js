@@ -342,14 +342,22 @@ export class Autocapture implements Extension {
         }
     }
 
+    // Failed fetch = opt-out unknown: keep the last known server value instead
+    // of defaulting to enabled, so a network error cannot turn autocapture on
+    // for an opted-out project.
+    public onRemoteConfigFailed(): void {
+        this.startIfEnabled()
+    }
+
     public onRemoteConfig(response: RemoteConfig) {
         if (response.elementsChainAsString) {
             this._elementsChainAsString = response.elementsChainAsString
         }
 
         // NOTE: Unlike other extensions (heatmaps, web-vitals, etc.), we intentionally
-        // DO NOT guard against missing autocapture_opt_out key here. Autocapture uses
-        // a "wait for server, then enable unless explicitly opted out" model:
+        // DO NOT guard against missing autocapture_opt_out key on a successful
+        // response. Autocapture uses a "wait for server, then enable unless
+        // explicitly opted out" model:
         // - Before remote config: autocapture disabled (isEnabled returns false)
         // - After remote config: enabled unless autocapture_opt_out is explicitly true
         // Missing/undefined key → !!undefined = false → autocapture enabled
