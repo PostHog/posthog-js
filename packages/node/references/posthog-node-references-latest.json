@@ -652,7 +652,7 @@
             {
               "description": "Optional configuration for flag evaluation",
               "isOptional": true,
-              "type": "{\n        groups?: Record<string, string>;\n        personProperties?: Record<string, string>;\n        groupProperties?: Record<string, Record<string, string>>;\n        onlyEvaluateLocally?: boolean;\n        sendFeatureFlagEvents?: boolean;\n        disableGeoip?: boolean;\n    }",
+              "type": "{\n        groups?: Record<string, string>;\n        personProperties?: Properties;\n        groupProperties?: Record<string, Properties>;\n        onlyEvaluateLocally?: boolean;\n        sendFeatureFlagEvents?: boolean;\n        disableGeoip?: boolean;\n    }",
               "name": "options"
             }
           ],
@@ -709,7 +709,7 @@
             {
               "description": "Optional configuration for flag evaluation",
               "isOptional": true,
-              "type": "{\n        groups?: Record<string, string>;\n        personProperties?: Record<string, string>;\n        groupProperties?: Record<string, Record<string, string>>;\n        onlyEvaluateLocally?: boolean;\n        sendFeatureFlagEvents?: boolean;\n        disableGeoip?: boolean;\n    }",
+              "type": "{\n        groups?: Record<string, string>;\n        personProperties?: Properties;\n        groupProperties?: Record<string, Properties>;\n        onlyEvaluateLocally?: boolean;\n        sendFeatureFlagEvents?: boolean;\n        disableGeoip?: boolean;\n    }",
               "name": "options"
             }
           ],
@@ -1030,7 +1030,7 @@
             {
               "description": "Optional configuration for flag evaluation",
               "isOptional": true,
-              "type": "{\n        groups?: Record<string, string>;\n        personProperties?: Record<string, string>;\n        groupProperties?: Record<string, Record<string, string>>;\n        onlyEvaluateLocally?: boolean;\n        sendFeatureFlagEvents?: boolean;\n        disableGeoip?: boolean;\n    }",
+              "type": "{\n        groups?: Record<string, string>;\n        personProperties?: Properties;\n        groupProperties?: Record<string, Properties>;\n        onlyEvaluateLocally?: boolean;\n        sendFeatureFlagEvents?: boolean;\n        disableGeoip?: boolean;\n    }",
               "name": "options"
             }
           ],
@@ -1647,11 +1647,11 @@
           "name": "groups"
         },
         {
-          "type": "Record<string, string>",
+          "type": "Properties",
           "name": "personProperties"
         },
         {
-          "type": "Record<string, Record<string, string>>",
+          "type": "Record<string, Properties>",
           "name": "groupProperties"
         },
         {
@@ -1697,11 +1697,11 @@
           "name": "groups"
         },
         {
-          "type": "Record<string, string>",
+          "type": "Properties",
           "name": "personProperties"
         },
         {
-          "type": "Record<string, Record<string, string>>",
+          "type": "Record<string, Properties>",
           "name": "groupProperties"
         },
         {
@@ -2280,11 +2280,11 @@
           "name": "groups"
         },
         {
-          "type": "Record<string, string>",
+          "type": "Properties",
           "name": "personProperties"
         },
         {
-          "type": "Record<string, Record<string, string>>",
+          "type": "Record<string, Properties>",
           "name": "groupProperties"
         },
         {
@@ -3819,11 +3819,11 @@
           "name": "onlyEvaluateLocally"
         },
         {
-          "type": "Record<string, any>",
+          "type": "Properties",
           "name": "personProperties"
         },
         {
-          "type": "Record<string, Record<string, any>>",
+          "type": "Record<string, Properties>",
           "name": "groupProperties"
         },
         {

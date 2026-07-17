@@ -40,6 +40,9 @@ export type { CaptureLogOptions, LogAttributeValue, LogAttributes, LogSeverityLe
 // Re-export the shared error tracking rate-limiter config type so SDKs built on core
 // (e.g. posthog-node) don't have to depend on `@posthog/types` directly.
 export type { ExceptionRateLimiterConfig } from '@posthog/types'
+// Re-export the shared `Properties` type for the same reason, so SDKs can type
+// person/group property bags consistently without importing `@posthog/types`.
+export type { Property, Properties } from '@posthog/types'
 export {
   PostHogMetrics,
   buildOtlpMetricsPayload,
