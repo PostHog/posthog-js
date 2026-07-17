@@ -197,6 +197,16 @@ export class Prompts {
     try {
       const fetched = await this.fetchPromptFromApi(name, version, label)
 
+      // An older PostHog server ignores the label param and returns the latest
+      // version with no label field — surface that instead of failing silently.
+      if (label !== undefined && fetched.label !== label) {
+        console.warn(
+          `[PostHog Prompts] Requested label "${label}" for prompt "${name}" but the server resolved ` +
+            `${fetched.label === undefined ? 'no label' : `"${fetched.label}"`}. It may not support prompt ` +
+            'labels yet and returned the latest version instead.'
+        )
+      }
+
       // Update cache
       this.getOrCreatePromptCache(name).set(cacheEntryKey, { ...fetched, fetchedAt: Date.now() })
 

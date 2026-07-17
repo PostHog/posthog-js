@@ -146,6 +146,21 @@ describe('Prompts', () => {
       )
     })
 
+    it('should warn when the server does not resolve the requested label', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(mockPromptResponse), // no label field — old-server behavior
+      })
+
+      const prompts = new Prompts({ posthog: createMockPostHog() })
+      const result = await prompts.get('test-prompt', { label: 'production' })
+
+      expect(result.prompt).toBe(mockPromptResponse.prompt)
+      expect(result.label).toBeUndefined()
+      expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('may not support prompt labels'))
+    })
+
     it('should reject version and label together', async () => {
       const prompts = new Prompts({ posthog: createMockPostHog() })
 
