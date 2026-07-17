@@ -114,8 +114,9 @@ const plugins = (es5, noExternal) => [
         toplevel: true,
         compress: {
             ecma: es5 ? 5 : 6,
-            passes: 2,
+            passes: 3,
             pure_getters: true,
+            unsafe_arrows: !es5,
             unsafe_methods: true,
             unsafe_comps: true,
             unsafe_math: true,
@@ -366,6 +367,14 @@ const entrypointTargets = entrypoints.map((file) => {
     /** @type {import('rollup').RollupOptions} */
     return {
         input: `src/entrypoints/${file}`,
+        treeshake: {
+            // Match the purity assumptions terser already applies below (pure_getters etc.):
+            // treat property reads as side-effect free, and don't retain otherwise-unused code
+            // just because it sits inside one of our many defensive try/catch blocks.
+            propertyReadSideEffects: false,
+            tryCatchDeoptimization: false,
+            unknownGlobalSideEffects: false,
+        },
         output: [
             {
                 file: `dist/${fileName}.js`,
