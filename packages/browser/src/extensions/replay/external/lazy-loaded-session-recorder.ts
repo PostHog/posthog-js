@@ -3,6 +3,7 @@ import {
     type customEvent,
     EventType,
     eventWithTime,
+    type fullSnapshotEvent,
     IncrementalSource,
     type listenerHandler,
     RecordPlugin,
@@ -307,18 +308,24 @@ function compressedResult(event: compressedEventWithTime): CompressedEventResult
     return { event, size: estimateCompressedEventSize(event) }
 }
 
-function buildCompressedFullSnapshotEvent(event: eventWithTime, data: string): compressedEventWithTime {
+function buildCompressedFullSnapshotEvent(
+    event: fullSnapshotEvent & { timestamp: number; delay?: number },
+    data: string
+): compressedEventWithTime {
     return {
         ...event,
         data,
-        cv: '2024-10' as const,
-    } as compressedEventWithTime
+        cv: '2024-10',
+    }
 }
 
 function buildCompressedIncrementalEvent(
     event: eventWithTime,
     fields: CompressedMutationFields | CompressedStyleFields
 ): compressedEventWithTime {
+    // reshapes rrweb incremental `data` into its compressed string-field variant — the
+    // compiler cannot relate the incoming union member to the matching compressed member
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
     return {
         ...event,
         cv: '2024-10' as const,

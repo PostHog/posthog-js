@@ -296,9 +296,9 @@ const stringifyArgsSafely = (
 ): { body: string; truncated: boolean; attributes: Record<string, any> } => {
     const parts: string[] = []
     const budget = { remaining: sizeLimit, truncated: false }
-    const attributeCollector = isObject(args[0])
+    const attributeCollector: AttributeCollector | undefined = isObject(args[0])
         ? {
-              result: {} as Record<string, any>,
+              result: {},
               keysRemaining: LOG_ATTRIBUTES_LIMIT,
               sizeRemaining: LOG_BODY_SIZE_LIMIT,
               truncated: false,

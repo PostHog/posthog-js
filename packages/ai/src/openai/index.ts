@@ -15,7 +15,7 @@ import type { APIPromise } from 'openai'
 import type { Stream } from 'openai/streaming'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
 import type { ResponseCreateParamsWithTools, ExtractParsedContentFromParams } from 'openai/lib/ResponsesParser'
-import type { FormattedMessage, FormattedContent, FormattedFunctionCall } from '../types'
+import type { FormattedMessage, FormattedContent } from '../types'
 import { sanitizeOpenAI, sanitizeOpenAIResponse } from '../sanitization'
 import { extractPosthogParams } from '../utils'
 import { isResponseTokenChunk, extractRequestId, buildProviderMetadata } from './utils'
@@ -74,6 +74,9 @@ function preserveAPIPromiseHelpers<Input, Output>(
   if (typeof parentPromise.withResponse === 'function') {
     apiPromise.withResponse = async () => {
       const [response, data] = await Promise.all([parentPromise.withResponse(), wrappedPromise])
+      // swaps the `data` payload inside the SDK's generic withResponse shape; the compiler
+      // cannot relate the Input- and Output-instantiated conditional types
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
       return { ...response, data } as APIPromiseWithResponse<Output>
     }
   }
@@ -294,7 +297,7 @@ export class WrappedCompletions extends Completions {
                       name: toolCall.name,
                       arguments: toolCall.arguments,
                     },
-                  } as FormattedFunctionCall)
+                  })
                 }
               }
 

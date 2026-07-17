@@ -296,6 +296,8 @@ export const buildNetworkRequestOptions = (
     if (hasDeprecatedMaskFunction) {
         instanceConfig.session_recording.maskCapturedNetworkRequestFn = (data: CapturedNetworkRequest) => {
             const cleanedURL = instanceConfig.session_recording.maskNetworkRequestFn!({ url: data.name })
+            // the deprecated mask fn can suppress the URL, leaving `name` undefined on purpose
+            // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
             return {
                 ...data,
                 name: cleanedURL?.url,

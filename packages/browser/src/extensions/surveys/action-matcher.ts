@@ -57,7 +57,7 @@ export class ActionMatcher {
             return
         }
 
-        if (!this._actionEvents.has(eventName) && !this._actionEvents.has(<string>eventPayload?.event)) {
+        if (!this._actionEvents.has(eventName) && !this._actionEvents.has(eventPayload.event)) {
             return
         }
 

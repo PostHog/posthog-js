@@ -672,9 +672,9 @@ class FeatureFlagsPoller {
    */
   private updateFlagState(flagData: FlagDefinitionCacheData): void {
     this.featureFlags = flagData.flags
-    this.featureFlagsByKey = flagData.flags.reduce(
+    this.featureFlagsByKey = flagData.flags.reduce<Record<string, PostHogFeatureFlag>>(
       (acc, curr) => ((acc[curr.key] = curr), acc),
-      <Record<string, PostHogFeatureFlag>>{}
+      {}
     )
     this.groupTypeMapping = flagData.groupTypeMapping
     this.cohorts = flagData.cohorts

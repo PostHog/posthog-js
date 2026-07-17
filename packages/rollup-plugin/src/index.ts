@@ -6,9 +6,15 @@ import fs from 'node:fs/promises'
 // Re-export for backward compatibility
 export type PostHogRollupPluginOptions = PluginConfig
 
-export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOptions) {
+// The `config` hook is Vite-specific: Vite runs it before the build to force sourcemap
+// generation, while Rollup ignores unknown hooks.
+type PostHogRollupPlugin = Plugin & {
+    config: () => { build: { sourcemap: boolean | 'hidden' } } | undefined
+}
+
+export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOptions): Plugin {
     const posthogOptions = resolveConfig(userOptions)
-    return {
+    const plugin: PostHogRollupPlugin = {
         name: 'posthog-rollup-plugin',
 
         config() {
@@ -79,5 +85,6 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
                 )
             },
         },
-    } as Plugin
+    }
+    return plugin
 }

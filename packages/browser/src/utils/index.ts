@@ -130,12 +130,13 @@ function deepCircularCopy<T extends Record<string, any> = Record<string, any>>(
                 result.push(internalDeepCircularCopy(it))
             })
         } else {
-            result = {} as T
+            const copy: Record<string, any> = {}
             each(value, (val, key) => {
                 if (!COPY_IN_PROGRESS_SET.has(val)) {
-                    ;(result as any)[key] = internalDeepCircularCopy(val, key)
+                    copy[key] = internalDeepCircularCopy(val, key)
                 }
             })
+            result = copy as T
         }
         return result
     }

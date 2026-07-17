@@ -495,10 +495,7 @@ export class PostHogPersistence {
 
     private _partitionProps(): { main: Properties; groups: Record<PersistenceStorageGroup, Properties> } {
         const main: Properties = {}
-        const groups = {} as Record<PersistenceStorageGroup, Properties>
-        for (const group of PERSISTENCE_STORAGE_GROUPS) {
-            groups[group] = {}
-        }
+        const groups: Record<PersistenceStorageGroup, Properties> = { flags: {}, surveys: {} }
         each(this.props, (value, key) => {
             const group = getPersistenceKeyPolicy(key)?.storageGroup
             if (group) {

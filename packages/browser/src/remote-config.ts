@@ -127,7 +127,11 @@ export class RemoteConfigLoader {
         // flag is evaluated, flags have already loaded.
         //
         // Even when config fails, we pass an empty object so extensions (autocapture,
-        // session recording, etc.) still initialize with their defaults.
+        // session recording, etc.) still initialize with their defaults. The empty object
+        // is deliberately missing required RemoteConfig fields: every consumer treats an
+        // absent field as "use my default", and supplying real values here (e.g.
+        // supportedCompression: []) would change behavior (that example disables compression).
+        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
         this._instance._onRemoteConfig(config ?? ({} as RemoteConfig))
 
         if (config?.hasFeatureFlags !== false) {

@@ -684,6 +684,7 @@ function elementsToString(elements: PHElement[]): string {
 
 function extractElements(elements: Properties[]): PHElement[] {
     return elements.map((el) => {
+        const attributes: { [id: string]: any } = {}
         const response = {
             text: el['$el_text']?.slice(0, 400),
             tag_name: el['tag_name'],
@@ -692,7 +693,7 @@ function extractElements(elements: Properties[]): PHElement[] {
             attr_id: el['attr__id'],
             nth_child: el['nth_child'],
             nth_of_type: el['nth_of_type'],
-            attributes: {} as { [id: string]: any },
+            attributes,
         }
 
         entries(el)
