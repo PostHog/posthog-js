@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.404.1
+
+### Patch Changes
+
+- [#4191](https://github.com/PostHog/posthog-js/pull/4191) [`66c1666`](https://github.com/PostHog/posthog-js/commit/66c1666465c5aa36bedca81b31f025c83f229569) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Honour the project-level autocapture opt-out when the remote config request fails. Previously a failed config fetch (network error, timeout, blocked request) enabled autocapture on opted-out projects and persisted that state for later page loads. Autocapture now keeps the last successfully received server value, and stays off until the first successful config response.
+  (2026-07-17)
+
 ## 1.404.0
 
 ### Minor Changes
