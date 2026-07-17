@@ -137,8 +137,8 @@ describe('RemoteConfigLoader', () => {
 
             new RemoteConfigLoader(posthog).load()
 
-            // Should still call _onRemoteConfig with empty object so extensions start
-            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({})
+            // Should still call _onRemoteConfig, marked as failed, so extensions start
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({ _configLoadFailed: true })
             // Should still attempt to load flags
             expect(posthog.featureFlags.ensureFlagsLoaded).toHaveBeenCalled()
         })

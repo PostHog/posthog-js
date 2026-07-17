@@ -329,6 +329,14 @@ export type SessionRecordingRemoteConfig = SessionRecordingCanvasOptions & {
  */
 export interface RemoteConfig {
     /**
+     * Internal: set by the SDK, never by the server, when the remote config
+     * could not be fetched. Extensions whose server setting must not fall back
+     * to a default on failure (e.g. autocapture) check this.
+     * @internal
+     */
+    _configLoadFailed?: boolean
+
+    /**
      * Supported compression algorithms
      */
     supportedCompression: Compression[]

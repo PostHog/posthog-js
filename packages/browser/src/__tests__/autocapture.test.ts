@@ -8,7 +8,8 @@ import {
     previousElementSibling,
 } from '../autocapture'
 import { DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS, shouldCaptureDomEvent } from '../autocapture-utils'
-import { AutocaptureConfig, FlagsResponse, PostHogConfig, RageclickConfig } from '../types'
+import { AutocaptureConfig, FlagsResponse, PostHogConfig, RageclickConfig, RemoteConfig } from '../types'
+import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
 import { PostHog } from '../posthog-core'
 import { window } from '../utils/globals'
 import { createPosthogInstance } from './helpers/posthog-instance'
@@ -1400,6 +1401,32 @@ describe('Autocapture system', () => {
         it('should be disabled before the flags response if client side opted out', () => {
             posthog.config.autocapture = false
             expect(autocapture.isEnabled).toBe(false)
+        })
+
+        describe('when the remote config fetch fails', () => {
+            beforeEach(() => {
+                autocapture['_isDisabledServerSide'] = null
+                posthog.persistence!.unregister(AUTOCAPTURE_DISABLED_SERVER_SIDE)
+            })
+
+            it('stays disabled when there has never been a successful config response', () => {
+                autocapture.onRemoteConfig({ _configLoadFailed: true } as RemoteConfig)
+                expect(autocapture.isEnabled).toBe(false)
+                expect(posthog.persistence!.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]).toBeUndefined()
+            })
+
+            it('keeps a persisted server-side opt-out', () => {
+                posthog.persistence!.register({ [AUTOCAPTURE_DISABLED_SERVER_SIDE]: true })
+                autocapture.onRemoteConfig({ _configLoadFailed: true } as RemoteConfig)
+                expect(autocapture.isEnabled).toBe(false)
+                expect(posthog.persistence!.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]).toBe(true)
+            })
+
+            it('keeps a persisted enabled state', () => {
+                posthog.persistence!.register({ [AUTOCAPTURE_DISABLED_SERVER_SIDE]: false })
+                autocapture.onRemoteConfig({ _configLoadFailed: true } as RemoteConfig)
+                expect(autocapture.isEnabled).toBe(true)
+            })
         })
 
         it.each([
