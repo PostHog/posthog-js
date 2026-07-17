@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4179](https://github.com/PostHog/posthog-js/issues/4179) | Valid backlog/demand-gathering enhancement; not a small JS-only fix | enhancement, react-native, feature/error-tracking, team/error-tracking, question |  | no | 2026-07-17T09:13:40.482Z |
 | PostHog/posthog-js | [issue 4176](https://github.com/PostHog/posthog-js/issues/4176) | Valid React Native Expo config plugin enhancement; keep open for API design. | enhancement, react-native, iOS, Android, feature/error-tracking, team/error-tracking |  | no | 2026-07-17T09:11:24.701Z |
 | PostHog/posthog-js | [issue 4177](https://github.com/PostHog/posthog-js/issues/4177) | Valid React Native error-tracking enhancement; RN currently ignores remote suppression rules. | enhancement, react-native, feature/error-tracking, team/error-tracking |  | no | 2026-07-17T09:09:42.663Z |
 | PostHog/posthog-js | [issue 4174](https://github.com/PostHog/posthog-js/issues/4174) | Valid browser SDK surveys enhancement; active surveys are not re-translated after display language changes. | enhancement, feature/surveys, web |  | no | 2026-07-17T08:04:05.580Z |
