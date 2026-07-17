@@ -18,7 +18,7 @@ import type { ResponseCreateParamsWithTools, ExtractParsedContentFromParams } fr
 import type { FormattedMessage, FormattedContent, FormattedFunctionCall } from '../types'
 import { sanitizeOpenAI, sanitizeOpenAIResponse } from '../sanitization'
 import { extractPosthogParams } from '../utils'
-import { isResponseTokenChunk, extractRequestId, buildProviderMetadata } from './utils'
+import { isResponseTokenChunk, extractRequestId, buildProviderMetadata, extractCacheWriteTokens } from './utils'
 
 const Chat = OpenAIOrignal.Chat
 const Completions = Chat.Completions
@@ -180,6 +180,7 @@ export class WrappedCompletions extends Completions {
                 outputTokens?: number
                 reasoningTokens?: number
                 cacheReadInputTokens?: number
+                cacheCreationInputTokens?: number
                 webSearchCount?: number
               } = {
                 inputTokens: 0,
@@ -275,6 +276,7 @@ export class WrappedCompletions extends Completions {
                     outputTokens: chunk.usage.completion_tokens ?? 0,
                     reasoningTokens: chunk.usage.completion_tokens_details?.reasoning_tokens ?? 0,
                     cacheReadInputTokens: chunk.usage.prompt_tokens_details?.cached_tokens ?? 0,
+                    cacheCreationInputTokens: extractCacheWriteTokens(chunk.usage.prompt_tokens_details),
                   }
                 }
               }
@@ -333,6 +335,7 @@ export class WrappedCompletions extends Completions {
                   outputTokens: usage.outputTokens,
                   reasoningTokens: usage.reasoningTokens,
                   cacheReadInputTokens: usage.cacheReadInputTokens,
+                  cacheCreationInputTokens: usage.cacheCreationInputTokens,
                   webSearchCount: usage.webSearchCount,
                   rawUsage: rawUsageData,
                 },
@@ -395,6 +398,7 @@ export class WrappedCompletions extends Completions {
                 outputTokens: result.usage?.completion_tokens ?? 0,
                 reasoningTokens: result.usage?.completion_tokens_details?.reasoning_tokens ?? 0,
                 cacheReadInputTokens: result.usage?.prompt_tokens_details?.cached_tokens ?? 0,
+                cacheCreationInputTokens: extractCacheWriteTokens(result.usage?.prompt_tokens_details),
                 webSearchCount: calculateWebSearchCount(result),
                 rawUsage: result.usage,
               },
