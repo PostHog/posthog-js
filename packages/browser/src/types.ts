@@ -327,13 +327,13 @@ export type SessionRecordingRemoteConfig = SessionRecordingCanvasOptions & {
  * All of these settings can be configured directly in your PostHog instance
  * Any configuration set in the client overrides the information from the server
  */
-export interface RemoteConfig {
-    /**
-     * Set by the SDK, never by the server, when the remote config could not be fetched.
-     * @internal
-     */
-    _configLoadFailed?: boolean
+/**
+ * Outcome of a remote config fetch: the config, or an explicit failure.
+ * @internal
+ */
+export type RemoteConfigResult = { ok: true; config: RemoteConfig } | { ok: false }
 
+export interface RemoteConfig {
     /**
      * Supported compression algorithms
      */

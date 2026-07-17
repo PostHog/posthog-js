@@ -342,17 +342,16 @@ export class Autocapture implements Extension {
         }
     }
 
+    // Failed fetch = opt-out unknown: keep the last known server value instead
+    // of defaulting to enabled, so a network error cannot turn autocapture on
+    // for an opted-out project.
+    public onRemoteConfigFailed(): void {
+        this.startIfEnabled()
+    }
+
     public onRemoteConfig(response: RemoteConfig) {
         if (response.elementsChainAsString) {
             this._elementsChainAsString = response.elementsChainAsString
-        }
-
-        // Failed fetch = opt-out unknown: keep the last known server value instead
-        // of defaulting to enabled, so a network error cannot turn autocapture on
-        // for an opted-out project.
-        if (response._configLoadFailed) {
-            this.startIfEnabled()
-            return
         }
 
         // NOTE: Unlike other extensions (heatmaps, web-vitals, etc.), we intentionally

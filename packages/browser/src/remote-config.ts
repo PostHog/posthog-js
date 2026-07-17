@@ -127,9 +127,9 @@ export class RemoteConfigLoader {
         // flag is evaluated, flags have already loaded.
         //
         // Even when config fails, we notify extensions so they initialize with their
-        // defaults — marked as failed so settings that must not fail open (e.g.
-        // autocapture's opt-out) can keep their last known value.
-        this._instance._onRemoteConfig(config ?? ({ _configLoadFailed: true } as RemoteConfig))
+        // defaults — as an explicit failure, so settings that must not fail open
+        // (e.g. autocapture's opt-out) can keep their last known value.
+        this._instance._onRemoteConfig(config ? { ok: true, config } : { ok: false })
 
         if (config?.hasFeatureFlags !== false) {
             if (!this._instance.config.advanced_disable_feature_flags_on_first_load) {

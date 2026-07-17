@@ -337,7 +337,7 @@ describe('posthog core', () => {
 
         it('sends payloads to alternative endpoint if given', () => {
             const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
-            posthog._onRemoteConfig({ analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: { analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig })
 
             posthog.capture('event-name', { foo: 'bar', length: 0 })
 
@@ -362,7 +362,7 @@ describe('posthog core', () => {
 
         it('sends payloads to overriden _url, even if alternative endpoint is set', () => {
             const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
-            posthog._onRemoteConfig({ analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: { analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig })
 
             posthog.capture('event-name', { foo: 'bar', length: 0 }, { _url: 'https://app.posthog.com/s/' })
 
@@ -400,32 +400,32 @@ describe('posthog core', () => {
         it('enables compression from flags response', () => {
             const posthog = posthogWith({})
 
-            posthog._onRemoteConfig({ supportedCompression: ['gzip-js', 'base64'] } as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: { supportedCompression: ['gzip-js', 'base64'] } as RemoteConfig })
 
             expect(posthog.compression).toEqual('gzip-js')
         })
         it('ignores legacy field defaultIdentifiedOnly from flags response', () => {
             const posthog = posthogWith({})
 
-            posthog._onRemoteConfig({ defaultIdentifiedOnly: true } as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: { defaultIdentifiedOnly: true } as RemoteConfig })
             expect(posthog.config.person_profiles).toEqual('identified_only')
 
-            posthog._onRemoteConfig({ defaultIdentifiedOnly: false } as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: { defaultIdentifiedOnly: false } as RemoteConfig })
             expect(posthog.config.person_profiles).toEqual('identified_only')
 
-            posthog._onRemoteConfig({} as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: {} as RemoteConfig })
             expect(posthog.config.person_profiles).toEqual('identified_only')
         })
         it('defaultIdentifiedOnly does not override person_profiles if already set', () => {
             const posthog = posthogWith({ person_profiles: 'always' })
-            posthog._onRemoteConfig({ defaultIdentifiedOnly: true } as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: { defaultIdentifiedOnly: true } as RemoteConfig })
             expect(posthog.config.person_profiles).toEqual('always')
         })
 
         it('enables compression from flags response when only one received', () => {
             const posthog = posthogWith({})
 
-            posthog._onRemoteConfig({ supportedCompression: ['base64'] } as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: { supportedCompression: ['base64'] } as RemoteConfig })
 
             expect(posthog.compression).toEqual('base64')
         })
@@ -433,7 +433,7 @@ describe('posthog core', () => {
         it('does not enable compression from flags response if compression is disabled', () => {
             const posthog = posthogWith({ disable_compression: true, persistence: 'memory' })
 
-            posthog._onRemoteConfig({ supportedCompression: ['gzip-js', 'base64'] } as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: { supportedCompression: ['gzip-js', 'base64'] } as RemoteConfig })
 
             expect(posthog.compression).toEqual(undefined)
         })
@@ -441,7 +441,7 @@ describe('posthog core', () => {
         it('defaults to /e if no endpoint is given', () => {
             const posthog = posthogWith({})
 
-            posthog._onRemoteConfig({} as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: {} as RemoteConfig })
 
             expect(posthog.analyticsDefaultEndpoint).toEqual('/e/')
         })
@@ -449,7 +449,7 @@ describe('posthog core', () => {
         it('uses the specified analytics endpoint if given', () => {
             const posthog = posthogWith({})
 
-            posthog._onRemoteConfig({ analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: { analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig })
 
             expect(posthog.analyticsDefaultEndpoint).toEqual('/i/v0/e/')
         })

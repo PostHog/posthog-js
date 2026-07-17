@@ -68,6 +68,7 @@ import {
     Property,
     QueuedRequestWithOptions,
     RemoteConfig,
+    RemoteConfigResult,
     RequestCallback,
     SessionIdChangedCallback,
     SnippetArrayItem,
@@ -435,7 +436,7 @@ export class PostHog implements PostHogInterface {
     _triggered_notifs: any
     compression?: Compression
     __request_queue: QueuedRequestWithOptions[]
-    _pendingRemoteConfig?: RemoteConfig
+    _pendingRemoteConfig?: RemoteConfigResult
     _lastRemoteConfig?: RemoteConfig
     _remoteConfigLoader?: RemoteConfigLoader
     analyticsDefaultEndpoint: string
@@ -940,9 +941,9 @@ export class PostHog implements PostHogInterface {
         // Replay any pending remote config that arrived before extensions were ready
         initTasks.push(() => {
             if (this._pendingRemoteConfig) {
-                const config = this._pendingRemoteConfig
+                const result = this._pendingRemoteConfig
                 this._pendingRemoteConfig = undefined // Clear before replaying to avoid re-storing
-                this._onRemoteConfig(config)
+                this._onRemoteConfig(result)
             }
         })
 
@@ -995,19 +996,31 @@ export class PostHog implements PostHogInterface {
         }
     }
 
-    _onRemoteConfig(config: RemoteConfig) {
+    _onRemoteConfig(result: RemoteConfigResult) {
         if (!(document && document.body)) {
             logger.info('document not ready yet, trying again in 500 milliseconds...')
             setTimeout(() => {
-                this._onRemoteConfig(config)
+                this._onRemoteConfig(result)
             }, 500)
             return
         }
 
         // Store config in case extensions aren't initialized yet (only needed for deferred init)
         if (this.config.__preview_deferred_init_extensions) {
-            this._pendingRemoteConfig = config
+            this._pendingRemoteConfig = result
         }
+
+        // On failure, extensions without onRemoteConfigFailed still initialize with
+        // their defaults from an empty config, as they would for absent keys.
+        const config: RemoteConfig = result.ok
+            ? result.config
+            : {
+                  supportedCompression: [],
+                  toolbarParams: {},
+                  toolbarVersion: 'toolbar',
+                  isAuthenticated: false,
+                  siteApps: [],
+              }
 
         // Cache the latest remote config so extensions that are created later
         // (e.g. sessionRecording after opt_in_capturing from cookieless mode) can
@@ -1033,7 +1046,13 @@ export class PostHog implements PostHogInterface {
                 : PERSON_PROFILES_IDENTIFIED_ONLY,
         })
 
-        this._extensions.forEach((ext) => ext.onRemoteConfig?.(config))
+        this._extensions.forEach((ext) => {
+            if (!result.ok && ext.onRemoteConfigFailed) {
+                ext.onRemoteConfigFailed()
+            } else {
+                ext.onRemoteConfig?.(config)
+            }
+        })
     }
 
     _loaded(): void {

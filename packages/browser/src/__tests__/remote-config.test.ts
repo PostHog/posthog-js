@@ -73,7 +73,7 @@ describe('RemoteConfigLoader', () => {
             expect(assignableWindow.__PosthogExtensions__.loadExternalDependency).not.toHaveBeenCalled()
             expect(posthog._send_request).not.toHaveBeenCalled()
 
-            expect(posthog._onRemoteConfig).toHaveBeenCalledWith(config)
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({ ok: true, config })
         })
 
         it('loads the script if window config not set', () => {
@@ -85,7 +85,7 @@ describe('RemoteConfigLoader', () => {
                 expect.any(Function)
             )
             expect(posthog._send_request).not.toHaveBeenCalled()
-            expect(posthog._onRemoteConfig).toHaveBeenCalledWith(config)
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({ ok: true, config })
         })
 
         it('loads the json if window config not set and js failed', () => {
@@ -103,7 +103,7 @@ describe('RemoteConfigLoader', () => {
                 url: 'https://test.com/array/testtoken/config',
                 callback: expect.any(Function),
             })
-            expect(posthog._onRemoteConfig).toHaveBeenCalledWith(config)
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({ ok: true, config })
         })
 
         it.each([
@@ -138,7 +138,7 @@ describe('RemoteConfigLoader', () => {
             new RemoteConfigLoader(posthog).load()
 
             // Should still call _onRemoteConfig, marked as failed, so extensions start
-            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({ _configLoadFailed: true })
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({ ok: false })
             // Should still attempt to load flags
             expect(posthog.featureFlags.ensureFlagsLoaded).toHaveBeenCalled()
         })
@@ -155,7 +155,7 @@ describe('RemoteConfigLoader', () => {
 
             new RemoteConfigLoader(posthog).load()
 
-            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({ ...config, hasFeatureFlags: true })
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({ ok: true, config: { ...config, hasFeatureFlags: true } })
             expect(posthog.featureFlags.ensureFlagsLoaded).not.toHaveBeenCalled()
         })
     })

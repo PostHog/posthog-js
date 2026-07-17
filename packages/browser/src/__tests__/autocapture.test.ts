@@ -8,7 +8,7 @@ import {
     previousElementSibling,
 } from '../autocapture'
 import { DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS, shouldCaptureDomEvent } from '../autocapture-utils'
-import { AutocaptureConfig, FlagsResponse, PostHogConfig, RageclickConfig, RemoteConfig } from '../types'
+import { AutocaptureConfig, FlagsResponse, PostHogConfig, RageclickConfig } from '../types'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
 import { PostHog } from '../posthog-core'
 import { window } from '../utils/globals'
@@ -1410,21 +1410,21 @@ describe('Autocapture system', () => {
             })
 
             it('stays disabled when there has never been a successful config response', () => {
-                autocapture.onRemoteConfig({ _configLoadFailed: true } as RemoteConfig)
+                autocapture.onRemoteConfigFailed()
                 expect(autocapture.isEnabled).toBe(false)
                 expect(posthog.persistence!.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]).toBeUndefined()
             })
 
             it('keeps a persisted server-side opt-out', () => {
                 posthog.persistence!.register({ [AUTOCAPTURE_DISABLED_SERVER_SIDE]: true })
-                autocapture.onRemoteConfig({ _configLoadFailed: true } as RemoteConfig)
+                autocapture.onRemoteConfigFailed()
                 expect(autocapture.isEnabled).toBe(false)
                 expect(posthog.persistence!.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]).toBe(true)
             })
 
             it('keeps a persisted enabled state', () => {
                 posthog.persistence!.register({ [AUTOCAPTURE_DISABLED_SERVER_SIDE]: false })
-                autocapture.onRemoteConfig({ _configLoadFailed: true } as RemoteConfig)
+                autocapture.onRemoteConfigFailed()
                 expect(autocapture.isEnabled).toBe(true)
             })
         })
