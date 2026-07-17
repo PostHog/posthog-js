@@ -396,6 +396,21 @@ describe('posthog core', () => {
         })
     })
 
+    describe('_onRemoteConfig failure dispatch', () => {
+        it('routes failure to onRemoteConfigFailed and gives other extensions an empty config', async () => {
+            const posthog = await createPosthogInstance()
+            const autocaptureFailed = jest.spyOn(posthog.autocapture!, 'onRemoteConfigFailed')
+            const autocaptureConfig = jest.spyOn(posthog.autocapture!, 'onRemoteConfig')
+            const heatmapsConfig = jest.spyOn(posthog.heatmaps!, 'onRemoteConfig')
+
+            posthog._onRemoteConfig({ ok: false })
+
+            expect(autocaptureFailed).toHaveBeenCalledTimes(1)
+            expect(autocaptureConfig).not.toHaveBeenCalled()
+            expect(heatmapsConfig).toHaveBeenCalledWith(expect.objectContaining({ supportedCompression: [] }))
+        })
+    })
+
     describe('_afterFlagsResponse', () => {
         it('enables compression from flags response', () => {
             const posthog = posthogWith({})
