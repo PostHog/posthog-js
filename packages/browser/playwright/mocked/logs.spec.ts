@@ -51,8 +51,11 @@ test.describe('logs extension', () => {
             if (posthog && posthog.logs && typeof posthog.logs.onRemoteConfig === 'function') {
                 try {
                     posthog.logs.onRemoteConfig({
-                        logs: {
-                            captureConsoleLogs: true,
+                        ok: true,
+                        config: {
+                            logs: {
+                                captureConsoleLogs: true,
+                            },
                         },
                     })
                     configCalled = true
@@ -99,8 +102,11 @@ test.describe('logs extension', () => {
             if (posthog && posthog.logs && typeof posthog.logs.onRemoteConfig === 'function') {
                 try {
                     posthog.logs.onRemoteConfig({
-                        logs: {
-                            captureConsoleLogs: false,
+                        ok: true,
+                        config: {
+                            logs: {
+                                captureConsoleLogs: false,
+                            },
                         },
                     })
                     configCalled = true
