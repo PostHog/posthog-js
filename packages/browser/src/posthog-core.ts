@@ -640,7 +640,7 @@ export class PostHog implements PostHogInterface {
         }
 
         this.__loaded = true
-        this.config = {} as PostHogConfig // will be set right below
+        this.config = defaultConfig(config.defaults) // fully overwritten by set_config right below
         config.debug = this._checkLocalStorageForDebug(config.debug)
         this._originalUserConfig = config // Store original user config for migration
 

@@ -77,7 +77,7 @@ const createFetchInitWithHeaders = (init: RequestInit | undefined, headers: Head
         return initWithHeaders
     }
 
-    const target = { headers } as RequestInit & Record<PropertyKey, unknown>
+    const target: RequestInit & Record<PropertyKey, unknown> = { headers }
 
     return new Proxy(target, {
         get(target, property) {

@@ -182,7 +182,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       // clear cached person properties
       this._cachedPersonProperties = null
 
-      for (const key of <(keyof typeof PostHogPersistedProperty)[]>Object.keys(PostHogPersistedProperty)) {
+      for (const key of Object.keys(PostHogPersistedProperty) as (keyof typeof PostHogPersistedProperty)[]) {
         if (!allPropertiesToKeep.includes(PostHogPersistedProperty[key])) {
           this.setPersistedProperty((PostHogPersistedProperty as any)[key], null)
         }
@@ -1651,7 +1651,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
     // Apply modifications from CaptureEvent back to internal message
     // Put $set/$set_once back into properties where they belong
-    const resultProps = { ...(result.properties ?? props) } as PostHogEventProperties
+    const resultProps: PostHogEventProperties = { ...(result.properties ?? props) }
     if (result.$set !== undefined) {
       resultProps.$set = result.$set as JsonType
     } else {

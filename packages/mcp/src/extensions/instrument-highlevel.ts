@@ -4,7 +4,13 @@
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
-import type { CompatibleRequestHandlerExtra, HighLevelMCPServerLike, MCPServerLike, RegisteredTool } from '../types'
+import type {
+  CompatibleRequestHandlerExtra,
+  HighLevelMCPServerLike,
+  MCPServerLike,
+  RegisteredTool,
+  ToolCallback,
+} from '../types'
 import { stripConversationId } from './conversation-id'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
@@ -34,7 +40,7 @@ type ProcessedRegisteredTool = RegisteredTool & {
   [MCP_ANALYTICS_PROCESSED]?: boolean
 }
 
-function isCallbackUpdate(value: unknown): value is { callback: unknown } {
+function isCallbackUpdate(value: unknown): value is { callback: ToolCallback } {
   return !!value && typeof value === 'object' && 'callback' in value && typeof value.callback === 'function'
 }
 
@@ -81,7 +87,7 @@ function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
                   const updateObj = updateArgs[0]
                   if (isCallbackUpdate(updateObj)) {
                     const wrappedTool = addTracingToToolCallbackInternal(
-                      { callback: updateObj.callback } as RegisteredTool,
+                      { callback: updateObj.callback },
                       property,
                       server
                     )

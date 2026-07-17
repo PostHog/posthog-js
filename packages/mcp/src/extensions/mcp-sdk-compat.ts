@@ -64,7 +64,7 @@ export function createWrappedTool(originalTool: RegisteredTool, wrappedFunction:
   return {
     ...originalTool,
     [key]: wrappedFunction,
-  } as RegisteredTool
+  }
 }
 
 // --- Zod schema internal property helpers ---

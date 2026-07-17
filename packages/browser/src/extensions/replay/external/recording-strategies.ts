@@ -28,7 +28,6 @@ import {
     allMatchSessionRecordingStatus,
     anyMatchSessionRecordingStatus,
     triggerGroupsMatchSessionRecordingStatus,
-    RecordingTriggersStatusV2,
     TriggerType,
     AndTriggerMatching,
     OrTriggerMatching,
@@ -373,7 +372,7 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
             triggerGroupMatchers: this._triggerGroupMatchers,
             triggerGroupSamplingResults: this._triggerGroupSamplingResults,
             minimumDuration: this.getMinimumDuration(context.sessionId),
-        } as RecordingTriggersStatusV2)
+        })
     }
 
     getMinimumDuration(sessionId: string): number | null {

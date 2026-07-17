@@ -2859,7 +2859,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         // Something went wrong getting the flag info - we should capture the event anyways
         return {}
       })
-      .then((additionalProperties) => {
+      .then((additionalProperties): PostHogEventProperties => {
         // No matter what - capture the event
         const resolvedGroups = eventMessage.groups || groups
 
@@ -2871,7 +2871,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           ...(resolvedGroups !== undefined && Object.keys(resolvedGroups).length > 0
             ? { $groups: resolvedGroups }
             : {}),
-        } as PostHogEventProperties
+        }
       })
 
     // Handle bot pageview collection based on preview flag

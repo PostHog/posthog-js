@@ -13,7 +13,7 @@ import type { APIPromise } from 'openai'
 import type { Stream } from 'openai/streaming'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
 import type { ResponseCreateParamsWithTools, ExtractParsedContentFromParams } from 'openai/lib/ResponsesParser'
-import type { FormattedMessage, FormattedContent, FormattedFunctionCall } from '../types'
+import type { FormattedMessage, FormattedContent } from '../types'
 import { sanitizeOpenAI } from '../sanitization'
 import { extractPosthogParams } from '../utils'
 import { isResponseTokenChunk, extractRequestId, buildProviderMetadata } from './utils'
@@ -219,7 +219,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                       name: toolCall.name,
                       arguments: toolCall.arguments,
                     },
-                  } as FormattedFunctionCall)
+                  })
                 }
               }
 
