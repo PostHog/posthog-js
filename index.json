@@ -1,4 +1,21 @@
 {
+  "PostHog/posthog-js/issue/4176": {
+    "key": "PostHog/posthog-js/issue/4176",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4176",
+    "url": "https://github.com/PostHog/posthog-js/issues/4176",
+    "conclusion": "Valid React Native Expo config plugin enhancement; keep open for API design.",
+    "labels": [
+      "enhancement",
+      "react-native",
+      "iOS",
+      "Android",
+      "feature/error-tracking",
+      "team/error-tracking"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-17T09:11:24.701Z"
+  },
   "PostHog/posthog-js/issue/4177": {
     "key": "PostHog/posthog-js/issue/4177",
     "repo": "PostHog/posthog-js",
