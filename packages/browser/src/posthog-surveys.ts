@@ -18,7 +18,7 @@ import {
     SurveyCallback,
     SurveyRenderReason,
 } from './posthog-surveys-types'
-import { Properties, RemoteConfig } from './types'
+import { Properties, RemoteConfigResult } from './types'
 import { assignableWindow, document } from './utils/globals'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import {
@@ -66,13 +66,19 @@ export class PostHogSurveys implements Extension {
         this.loadIfEnabled()
     }
 
-    onRemoteConfig(response: RemoteConfig) {
+    onRemoteConfig(result: RemoteConfigResult) {
         // only load surveys if they are enabled and there are surveys to load
         if (this._config.disable_surveys) {
             return
         }
 
-        const surveys = response['surveys']
+        if (!result.ok) {
+            // Surveys are opt-in: without a fetched config we don't know whether any
+            // surveys exist, so don't load them.
+            return logger.warn('Remote config unavailable. Not loading surveys.')
+        }
+
+        const surveys = result.config['surveys']
         if (isNullish(surveys)) {
             return logger.warn('Flags not loaded yet. Not loading surveys.')
         }

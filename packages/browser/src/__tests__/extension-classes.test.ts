@@ -1,5 +1,5 @@
 import { PostHog } from '../posthog-core'
-import { PostHogConfig, RemoteConfig } from '../types'
+import { PostHogConfig, RemoteConfig, RemoteConfigResult } from '../types'
 import { AllExtensions } from '../extensions/extension-bundles'
 import { Autocapture } from '../autocapture'
 import { PostHogFeatureFlags } from '../posthog-featureflags'
@@ -225,8 +225,8 @@ describe('extension lifecycle', () => {
 
             class SpyExtension {
                 constructor() {}
-                onRemoteConfig(config: RemoteConfig) {
-                    onRemoteConfigSpy(config)
+                onRemoteConfig(result: RemoteConfigResult) {
+                    onRemoteConfigSpy(result)
                 }
             }
 
@@ -247,7 +247,7 @@ describe('extension lifecycle', () => {
 
             // Two extensions, each should get onRemoteConfig called once
             expect(onRemoteConfigSpy).toHaveBeenCalledTimes(2)
-            expect(onRemoteConfigSpy).toHaveBeenCalledWith(remoteConfig)
+            expect(onRemoteConfigSpy).toHaveBeenCalledWith({ ok: true, config: remoteConfig })
         })
     })
 

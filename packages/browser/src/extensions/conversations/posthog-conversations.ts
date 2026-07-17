@@ -11,7 +11,7 @@ import {
     SendMessageResponse,
     UserProvidedTraits,
 } from '../../posthog-conversations-types'
-import { RemoteConfig } from '../../types'
+import { RemoteConfigResult } from '../../types'
 import { assignableWindow, LazyLoadedConversationsInterface } from '../../utils/globals'
 import { createLogger } from '../../utils/logger'
 import { isNullish, isUndefined, isBoolean, isNull } from '@posthog/core'
@@ -38,13 +38,19 @@ export class PostHogConversations implements Extension {
         this.loadIfEnabled()
     }
 
-    onRemoteConfig(response: RemoteConfig) {
+    onRemoteConfig(result: RemoteConfigResult) {
         // Don't load conversations if disabled via config
         if (this._instance.config.disable_conversations) {
             return
         }
 
-        const conversations = response['conversations']
+        if (!result.ok) {
+            // Conversations are opt-in: a failed fetch, like a response without a
+            // conversations key, leaves them unloaded.
+            return
+        }
+
+        const conversations = result.config['conversations']
         if (isNullish(conversations)) {
             return
         }

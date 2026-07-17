@@ -68,7 +68,7 @@ describe('PostHogExceptions', () => {
         it('persists the suppression rules', () => {
             const suppressionRule = createSuppressionRule()
             const remoteResponse: Partial<RemoteConfig> = { errorTracking: { suppressionRules: [suppressionRule] } }
-            exceptions.onRemoteConfig(remoteResponse as RemoteConfig)
+            exceptions.onRemoteConfig({ ok: true, config: remoteResponse as RemoteConfig })
             expect(exceptions['_suppressionRules']).toEqual([suppressionRule])
         })
 
@@ -84,7 +84,7 @@ describe('PostHogExceptions', () => {
             const newExceptions = new PostHogExceptions(posthog)
 
             // Call with empty config (simulating config fetch failure)
-            newExceptions.onRemoteConfig({} as RemoteConfig)
+            newExceptions.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
 
             // Should NOT have overwritten the existing values
             expect(posthog.persistence!.props[ERROR_TRACKING_SUPPRESSION_RULES]).toEqual([suppressionRule])
@@ -100,8 +100,11 @@ describe('PostHogExceptions', () => {
 
             const newExceptions = new PostHogExceptions(posthog)
             newExceptions.onRemoteConfig({
-                errorTracking: { suppressionRules: [], captureExtensionExceptions: false },
-            } as RemoteConfig)
+                ok: true,
+                config: {
+                    errorTracking: { suppressionRules: [], captureExtensionExceptions: false },
+                } as RemoteConfig,
+            })
 
             expect(posthog.persistence!.props[ERROR_TRACKING_SUPPRESSION_RULES]).toEqual([])
             expect(posthog.persistence!.props[ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS]).toBe(false)
@@ -127,21 +130,30 @@ describe('PostHogExceptions', () => {
             ['GenericError', 'This is a message that contains a ReactMinified error'],
         ])('drops the event if a suppression rule matches', (type, value) => {
             const suppressionRule = createSuppressionRule('OR')
-            exceptions.onRemoteConfig({ errorTracking: { suppressionRules: [suppressionRule] } } as RemoteConfig)
+            exceptions.onRemoteConfig({
+                ok: true,
+                config: { errorTracking: { suppressionRules: [suppressionRule] } } as RemoteConfig,
+            })
             exceptions.sendExceptionEvent({ $exception_list: [{ type, value }] })
             expect(captureMock).not.toBeCalled()
         })
 
         it('captures an exception if no $exception_list property exists', () => {
             const suppressionRule = createSuppressionRule('AND')
-            exceptions.onRemoteConfig({ errorTracking: { suppressionRules: [suppressionRule] } } as RemoteConfig)
+            exceptions.onRemoteConfig({
+                ok: true,
+                config: { errorTracking: { suppressionRules: [suppressionRule] } } as RemoteConfig,
+            })
             exceptions.sendExceptionEvent({ custom_property: true })
             expect(captureMock).toBeCalled()
         })
 
         it('captures an exception if all rule conditions do not match', () => {
             const suppressionRule = createSuppressionRule('AND')
-            exceptions.onRemoteConfig({ errorTracking: { suppressionRules: [suppressionRule] } } as RemoteConfig)
+            exceptions.onRemoteConfig({
+                ok: true,
+                config: { errorTracking: { suppressionRules: [suppressionRule] } } as RemoteConfig,
+            })
             exceptions.sendExceptionEvent({ $exception_list: [{ type: 'TypeError', value: 'This is a type error' }] })
             expect(captureMock).toBeCalled()
         })
@@ -155,7 +167,10 @@ describe('PostHogExceptions', () => {
                     type: 'error_tracking_issue_property',
                 },
             ])
-            exceptions.onRemoteConfig({ errorTracking: { suppressionRules: [suppressionRule] } } as RemoteConfig)
+            exceptions.onRemoteConfig({
+                ok: true,
+                config: { errorTracking: { suppressionRules: [suppressionRule] } } as RemoteConfig,
+            })
             exceptions.sendExceptionEvent({ $exception_list: [{ type: 'TypeError', value: 'This is a type error' }] })
             expect(captureMock).toBeCalled()
         })
@@ -173,7 +188,10 @@ describe('PostHogExceptions', () => {
             })
 
             it('captures extension exceptions when enabled', () => {
-                exceptions.onRemoteConfig({ errorTracking: { captureExtensionExceptions: true } } as RemoteConfig)
+                exceptions.onRemoteConfig({
+                    ok: true,
+                    config: { errorTracking: { captureExtensionExceptions: true } } as RemoteConfig,
+                })
                 const frame = { filename: 'chrome-extension://', platform: 'javascript:web' }
                 const exception = { stacktrace: { frames: [frame], type: 'raw' } }
                 exceptions.sendExceptionEvent({ $exception_list: [exception] })
@@ -275,14 +293,17 @@ describe('PostHogExceptions', () => {
             exceptions.addExceptionStep('kept step')
 
             const suppressionRule = createSuppressionRule('OR')
-            exceptions.onRemoteConfig({ errorTracking: { suppressionRules: [suppressionRule] } } as RemoteConfig)
+            exceptions.onRemoteConfig({
+                ok: true,
+                config: { errorTracking: { suppressionRules: [suppressionRule] } } as RemoteConfig,
+            })
 
             exceptions.sendExceptionEvent({
                 $exception_list: [{ type: 'TypeError', value: 'This is a type error' }],
             })
             expect(captureMock).not.toHaveBeenCalled()
 
-            exceptions.onRemoteConfig({ errorTracking: { suppressionRules: [] } } as RemoteConfig)
+            exceptions.onRemoteConfig({ ok: true, config: { errorTracking: { suppressionRules: [] } } as RemoteConfig })
             exceptions.sendExceptionEvent({ custom_property: true })
 
             expect(captureMock).toHaveBeenCalledWith(
