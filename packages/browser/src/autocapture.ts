@@ -347,11 +347,9 @@ export class Autocapture implements Extension {
             this._elementsChainAsString = response.elementsChainAsString
         }
 
-        // A failed config fetch means the opt-out state is unknown: keep the last
-        // known server value (in-memory and persisted) rather than defaulting to
-        // enabled, so a network error cannot turn autocapture on for an opted-out
-        // project. isEnabled falls back to the persisted value, or stays off when
-        // there has never been a successful config response.
+        // Failed fetch = opt-out unknown: keep the last known server value instead
+        // of defaulting to enabled, so a network error cannot turn autocapture on
+        // for an opted-out project.
         if (response._configLoadFailed) {
             this.startIfEnabled()
             return

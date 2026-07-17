@@ -126,10 +126,9 @@ export class RemoteConfigLoader {
         // whether to show a survey), not during config processing. By the time a linked
         // flag is evaluated, flags have already loaded.
         //
-        // Even when config fails, we still notify extensions so they can initialize
-        // with their defaults, but the payload is marked as failed so extensions whose
-        // server setting must not fall back to a default (e.g. autocapture's opt-out)
-        // can keep their last known value instead.
+        // Even when config fails, we notify extensions so they initialize with their
+        // defaults — marked as failed so settings that must not fail open (e.g.
+        // autocapture's opt-out) can keep their last known value.
         this._instance._onRemoteConfig(config ?? ({ _configLoadFailed: true } as RemoteConfig))
 
         if (config?.hasFeatureFlags !== false) {
