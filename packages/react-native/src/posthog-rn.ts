@@ -959,9 +959,9 @@ export class PostHog extends PostHogCore {
    *
    * @param key The feature flag key
    * @param options Optional per-call settings
-   * @returns True if enabled, false if disabled, undefined if not loaded
+   * @returns True if enabled, false if disabled
    */
-  isFeatureEnabled(key: string, options?: FeatureFlagResultOptions): boolean | undefined {
+  isFeatureEnabled(key: string, options?: FeatureFlagResultOptions): boolean {
     return super.isFeatureEnabled(key, options)
   }
 
