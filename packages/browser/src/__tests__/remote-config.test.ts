@@ -155,7 +155,10 @@ describe('RemoteConfigLoader', () => {
 
             new RemoteConfigLoader(posthog).load()
 
-            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({ ok: true, config: { ...config, hasFeatureFlags: true } })
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({
+                ok: true,
+                config: { ...config, hasFeatureFlags: true },
+            })
             expect(posthog.featureFlags.ensureFlagsLoaded).not.toHaveBeenCalled()
         })
     })

@@ -400,7 +400,10 @@ describe('posthog core', () => {
         it('enables compression from flags response', () => {
             const posthog = posthogWith({})
 
-            posthog._onRemoteConfig({ ok: true, config: { supportedCompression: ['gzip-js', 'base64'] } as RemoteConfig })
+            posthog._onRemoteConfig({
+                ok: true,
+                config: { supportedCompression: ['gzip-js', 'base64'] } as RemoteConfig,
+            })
 
             expect(posthog.compression).toEqual('gzip-js')
         })
@@ -433,7 +436,10 @@ describe('posthog core', () => {
         it('does not enable compression from flags response if compression is disabled', () => {
             const posthog = posthogWith({ disable_compression: true, persistence: 'memory' })
 
-            posthog._onRemoteConfig({ ok: true, config: { supportedCompression: ['gzip-js', 'base64'] } as RemoteConfig })
+            posthog._onRemoteConfig({
+                ok: true,
+                config: { supportedCompression: ['gzip-js', 'base64'] } as RemoteConfig,
+            })
 
             expect(posthog.compression).toEqual(undefined)
         })
