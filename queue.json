@@ -2,20 +2,6 @@
   "version": 1,
   "items": [
     {
-      "id": "issue-4179-auto-none-no-comment-no-close-1784279215700",
-      "kind": "issue",
-      "number": 4179,
-      "mode": "auto",
-      "commandMention": "@posthog-watcher",
-      "enqueuedAt": "2026-07-17T09:06:55.700Z",
-      "source": {
-        "eventName": "issues",
-        "runId": 29568801195,
-        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/29568801195"
-      },
-      "attempts": 1
-    },
-    {
       "id": "issue-4178-auto-none-no-comment-no-close-1784279215788",
       "kind": "issue",
       "number": 4178,
