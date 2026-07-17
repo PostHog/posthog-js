@@ -26,7 +26,7 @@ import {
     USER_STATE,
     COOKIELESS_ALWAYS,
 } from './constants'
-import { DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS } from './autocapture-utils'
+import { DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS } from '@posthog/browser-common/utils/autocapture-utils'
 import { isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 import { setupSegmentIntegration } from './extensions/segment-integration'
 import { SentryIntegration, sentryIntegration, SentryIntegrationOptions } from './extensions/sentry-integration'
@@ -85,15 +85,22 @@ import {
     isCrossDomainCookie,
     migrateConfigField,
     safewrapClass,
-} from './utils'
-import { isLikelyBot } from './utils/blocked-uas'
-import { getDeviceModel } from './utils/device-model-utils'
-import { getEventProperties } from './utils/event-utils'
-import { assignableWindow, document, location, navigator, userAgent, window } from './utils/globals'
-import { logger } from './utils/logger'
-import { getPersonPropertiesHash } from './utils/property-utils'
+} from '@posthog/browser-common/utils/general-utils'
+import { isLikelyBot } from '@posthog/browser-common/utils/blocked-uas'
+import { getDeviceModel } from '@posthog/browser-common/utils/device-model-utils'
+import { getEventProperties } from '@posthog/browser-common/utils/event-utils'
+import {
+    assignableWindow,
+    document,
+    location,
+    navigator,
+    userAgent,
+    window,
+} from '@posthog/browser-common/utils/globals'
+import { logger } from '@posthog/browser-common/utils/logger'
+import { getPersonPropertiesHash } from '@posthog/browser-common/utils/property-utils'
 import { RequestRouter, RequestRouterRegion } from './utils/request-router'
-import { SimpleEventEmitter } from './utils/simple-event-emitter'
+import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
 import {
     DEFAULT_DISPLAY_SURVEY_OPTIONS,
     getSurveyInteractionProperty,
@@ -117,7 +124,7 @@ import {
     getEventUuid,
     minimizeFlagCalledEventProperties,
 } from '@posthog/core'
-import { uuidv7 } from './uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { ExternalIntegrations } from './extensions/external-integration'
 import type { PostHogSurveys } from './posthog-surveys'
 import type { Autocapture } from './autocapture'

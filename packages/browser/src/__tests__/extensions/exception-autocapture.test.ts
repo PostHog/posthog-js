@@ -1,6 +1,6 @@
 import { PostHog } from '../../posthog-core'
 import { createPosthogInstance } from '../helpers/posthog-instance'
-import { uuidv7 } from '../../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
 import { RemoteConfig } from '../../types'
 

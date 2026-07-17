@@ -7,13 +7,13 @@ import {
 } from '../sessionid'
 import { SESSION_ID } from '../constants'
 import { sessionStore } from '../storage'
-import { uuid7ToTimestampMs, uuidv7 } from '../uuidv7'
+import { uuid7ToTimestampMs, uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { BootstrapConfig, PostHogConfig, Properties } from '../types'
 import { PostHogPersistence } from '../posthog-persistence'
-import { assignableWindow } from '../utils/globals'
+import { assignableWindow } from '@posthog/browser-common/utils/globals'
 import { createMockPostHog } from './helpers/posthog-instance'
 
-jest.mock('../uuidv7')
+jest.mock('@posthog/browser-common/utils/uuidv7')
 jest.mock('../storage')
 
 describe('Session ID manager', () => {

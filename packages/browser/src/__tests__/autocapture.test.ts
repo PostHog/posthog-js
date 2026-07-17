@@ -7,13 +7,16 @@ import {
     getPropertiesFromElement,
     previousElementSibling,
 } from '../autocapture'
-import { DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS, shouldCaptureDomEvent } from '../autocapture-utils'
+import {
+    DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS,
+    shouldCaptureDomEvent,
+} from '@posthog/browser-common/utils/autocapture-utils'
 import { AutocaptureConfig, FlagsResponse, PostHogConfig, RageclickConfig } from '../types'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
 import { PostHog } from '../posthog-core'
-import { window } from '../utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
 import { createPosthogInstance } from './helpers/posthog-instance'
-import { uuidv7 } from '../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { isUndefined } from '@posthog/core'
 
 // JS DOM doesn't have ClipboardEvent, so we need to mock it

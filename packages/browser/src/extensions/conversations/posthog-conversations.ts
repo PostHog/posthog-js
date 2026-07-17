@@ -12,10 +12,10 @@ import {
     UserProvidedTraits,
 } from '../../posthog-conversations-types'
 import { RemoteConfigResult } from '../../types'
-import { assignableWindow, LazyLoadedConversationsInterface } from '../../utils/globals'
-import { createLogger } from '../../utils/logger'
+import { assignableWindow, LazyLoadedConversationsInterface } from '@posthog/browser-common/utils/globals'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 import { isNullish, isUndefined, isBoolean, isNull } from '@posthog/core'
-import { isToolbarInstance } from '../../utils'
+import { isToolbarInstance } from '@posthog/browser-common/utils/general-utils'
 import { Extension } from '../types'
 
 const logger = createLogger('[Conversations]')

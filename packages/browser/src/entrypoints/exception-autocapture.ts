@@ -1,6 +1,6 @@
-import { assignableWindow, window } from '../utils/globals'
+import { assignableWindow, window } from '@posthog/browser-common/utils/globals'
 import { ErrorEventArgs } from '../types'
-import { createLogger } from '../utils/logger'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 import type { ErrorTracking } from '@posthog/core'
 import { buildErrorPropertiesBuilder } from '../posthog-exceptions'
 

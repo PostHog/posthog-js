@@ -1,14 +1,19 @@
 import Config from '../config'
 import { isUndefined } from '@posthog/core'
+import type { Logger } from '@posthog/types'
 import { assignableWindow, window } from './globals'
-import type { Logger } from '@posthog/core'
 
-type CreateLoggerOptions = {
+export type CreateLoggerOptions = {
     debugEnabled?: boolean
 }
 
-type PosthogJsLogger = Omit<Logger, 'createLogger'> & {
+export type PosthogJsLogger = Omit<Logger, 'createLogger' | 'debug' | 'info' | 'warn' | 'error' | 'trace' | 'fatal'> & {
     _log: (level: 'debug' | 'log' | 'warn' | 'error', ...args: any[]) => void
+    debug: (...args: any[]) => void
+    info: (...args: any[]) => void
+    warn: (...args: any[]) => void
+    error: (...args: any[]) => void
+    critical: (...args: any[]) => void
     uninitializedWarning: (methodName: string) => void
     createLogger: (prefix: string, options?: CreateLoggerOptions) => PosthogJsLogger
 }

@@ -1,8 +1,8 @@
 import Config from '../config'
-import { SDK_DIST_CHANNEL } from '../constants'
+import { SDK_DIST_CHANNEL } from '@posthog/browser-common/constants'
 import { init_as_module, init_from_snippet } from '../posthog-core'
-import { getEventProperties } from '../utils/event-utils'
-import { assignableWindow } from '../utils/globals'
+import { getEventProperties } from '@posthog/browser-common/utils/event-utils'
+import { assignableWindow } from '@posthog/browser-common/utils/globals'
 
 describe('sdk dist channel', () => {
     afterEach(() => {

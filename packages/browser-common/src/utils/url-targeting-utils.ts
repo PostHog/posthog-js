@@ -1,7 +1,12 @@
-import type { PostHog } from '../posthog-core'
-import { window } from './globals'
 import { isFunction, isString, isUndefined } from '@posthog/core'
+import type { PostHogConfig } from '@posthog/types'
+
+import { window } from './globals'
 import { logger } from './logger'
+
+export type UrlTargetingInstance = {
+    config: Pick<PostHogConfig, 'get_current_url'>
+}
 
 /**
  * Applies the `get_current_url` config hook to an already-resolved URL. Returns `defaultUrl`
@@ -11,7 +16,7 @@ import { logger } from './logger'
  * Use this when the caller already has its own URL source (e.g. web experiments read
  * `window.location` via a mockable indirection); otherwise prefer `getTargetingUrl`.
  */
-export function applyUrlTargetingOverride(instance: PostHog | undefined, defaultUrl: string): string {
+export function applyUrlTargetingOverride(instance: UrlTargetingInstance | undefined, defaultUrl: string): string {
     const override = instance?.config?.get_current_url
     if (!isFunction(override)) {
         return defaultUrl
@@ -40,7 +45,7 @@ export function applyUrlTargetingOverride(instance: PostHog | undefined, default
  * Called on every rrweb event by the replay URL triggers/blocklist, so a configured
  * `get_current_url` override should stay cheap.
  */
-export function getTargetingUrl(instance: PostHog | undefined): string | undefined {
+export function getTargetingUrl(instance: UrlTargetingInstance | undefined): string | undefined {
     const defaultUrl = window?.location?.href
     return isUndefined(defaultUrl) ? undefined : applyUrlTargetingOverride(instance, defaultUrl)
 }

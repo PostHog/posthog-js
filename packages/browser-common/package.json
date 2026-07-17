@@ -8,7 +8,14 @@
         "url": "git+https://github.com/PostHog/posthog-js.git",
         "directory": "packages/browser-common"
     },
-    "sideEffects": false,
+    "sideEffects": [
+        "./dist/utils/array-at-polyfill.js",
+        "./dist/utils/array-at-polyfill.mjs",
+        "./dist/utils/globals.js",
+        "./dist/utils/globals.mjs",
+        "./dist/utils/uuidv7.js",
+        "./dist/utils/uuidv7.mjs"
+    ],
     "files": [
         "dist",
         "README.md"
@@ -16,11 +23,39 @@
     "main": "dist/index.js",
     "module": "dist/index.mjs",
     "types": "dist/index.d.ts",
+    "typesVersions": {
+        "*": {
+            "config": [
+                "dist/config.d.ts"
+            ],
+            "constants": [
+                "dist/constants.d.ts"
+            ],
+            "utils/*": [
+                "dist/utils/*.d.ts"
+            ]
+        }
+    },
     "exports": {
         ".": {
             "types": "./dist/index.d.ts",
             "require": "./dist/index.js",
             "import": "./dist/index.mjs"
+        },
+        "./config": {
+            "types": "./dist/config.d.ts",
+            "require": "./dist/config.js",
+            "import": "./dist/config.mjs"
+        },
+        "./constants": {
+            "types": "./dist/constants.d.ts",
+            "require": "./dist/constants.js",
+            "import": "./dist/constants.mjs"
+        },
+        "./utils/*": {
+            "types": "./dist/utils/*.d.ts",
+            "require": "./dist/utils/*.js",
+            "import": "./dist/utils/*.mjs"
         }
     },
     "scripts": {
@@ -34,7 +69,8 @@
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
     },
     "dependencies": {
-        "@posthog/core": "workspace:^"
+        "@posthog/core": "workspace:^",
+        "@posthog/types": "workspace:^"
     },
     "devDependencies": {
         "@posthog-tooling/tsconfig-base": "workspace:*",

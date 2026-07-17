@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals'
 import { USER_STATE } from '../constants'
 import { SegmentContext, SegmentPlugin } from '../extensions/segment-integration'
 import { PostHog } from '../posthog-core'
-import { assignableWindow } from '../utils/globals'
+import { assignableWindow } from '@posthog/browser-common/utils/globals'
 import { PostHogConfig } from '../types'
 
 const initPostHogInAPromise = (

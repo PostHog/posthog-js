@@ -4,7 +4,7 @@ import { Survey, SurveyEventName } from '../posthog-surveys-types'
 import { PostHog } from '../posthog-core'
 import { SURVEY_LOGGER as logger } from './survey-utils'
 import { ActivationOutcome, EventReceiver } from './event-receiver'
-import { createLogger } from './logger'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 
 export class SurveyEventReceiver extends EventReceiver<Survey> {
     constructor(instance: PostHog) {

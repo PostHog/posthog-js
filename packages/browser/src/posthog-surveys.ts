@@ -19,7 +19,7 @@ import {
     SurveyRenderReason,
 } from './posthog-surveys-types'
 import { Properties, RemoteConfigResult } from './types'
-import { assignableWindow, document } from './utils/globals'
+import { assignableWindow, document } from '@posthog/browser-common/utils/globals'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import {
     doesSurveyActivateByAction,

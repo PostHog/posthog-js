@@ -1,6 +1,6 @@
 import { Survey, SurveyQuestion, SurveyQuestionBranchingType, SurveyQuestionType } from '../posthog-surveys-types'
 import { getSurveyResponseKey } from '../extensions/surveys/surveys-extension-utils'
-import { logger } from './logger'
+import { logger } from '@posthog/browser-common/utils/logger'
 import { isUndefined } from '@posthog/core'
 import { getNextSurveyStep } from './survey-branching'
 

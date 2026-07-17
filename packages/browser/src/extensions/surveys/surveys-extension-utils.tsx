@@ -11,7 +11,7 @@ import {
     SurveyType,
     SurveyWidgetType,
 } from '../../posthog-surveys-types'
-import { document as _document, window as _window } from '../../utils/globals'
+import { document as _document, window as _window } from '@posthog/browser-common/utils/globals'
 import {
     getSurveyInteractionProperty,
     getSurveySeenKey,
@@ -29,18 +29,18 @@ import {
     surveyHasResponses,
 } from '@posthog/core/surveys'
 
-import { propertyComparisons } from '../../utils/property-utils'
-import { getTargetingUrl } from '../../utils/url-targeting-utils'
+import { propertyComparisons } from '@posthog/browser-common/utils/property-utils'
+import { getTargetingUrl } from '@posthog/browser-common/utils/url-targeting-utils'
 import { localStore } from '../../storage'
 import { Properties, PropertyMatchType } from '../../types'
 import { Z_INDEX_SURVEYS } from '../../constants'
-import { prepareStylesheet } from '../utils/stylesheet-loader'
+import { prepareStylesheet } from '@posthog/browser-common/utils/stylesheet-loader'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
 import surveyStyles from './survey.css'
 import { useContext } from 'preact/hooks'
-import { doesDeviceTypeMatch, hasPeriodPassed } from '../utils/matcher-utils'
+import { doesDeviceTypeMatch, hasPeriodPassed } from '@posthog/browser-common/utils/matcher-utils'
 
 export function getFontFamily(fontFamily?: string): string {
     if (fontFamily === 'inherit') {

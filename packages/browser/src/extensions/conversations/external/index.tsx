@@ -23,15 +23,15 @@ import { STORED_PERSON_PROPERTIES_KEY } from '../../../constants'
 import { ConversationsManager as ConversationsManagerInterface } from '../posthog-conversations'
 import { ConversationsPersistence } from './persistence'
 import { ConversationsWidget, WidgetView } from './components/ConversationsWidget'
-import { createLogger } from '../../../utils/logger'
-import { document, window } from '../../../utils/globals'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { document, window } from '@posthog/browser-common/utils/globals'
 import {
     formDataToQuery,
     isStatusZeroFailureCircuitBreakerTripped,
     updateStatusZeroFailureCount,
-} from '../../../utils/request-utils'
+} from '@posthog/browser-common/utils/request-utils'
 import { isCurrentDomainAllowed, getRestoreTokenFromUrl, clearRestoreTokenFromUrl } from './url-utils'
-import { addEventListener } from '../../../utils'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 
 const logger = createLogger('[ConversationsManager]')
 

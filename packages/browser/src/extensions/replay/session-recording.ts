@@ -21,13 +21,13 @@ import {
 import { type eventWithTime } from './types/rrweb-types'
 
 import { isNullish, isNumber, isUndefined, isValidSampleRate } from '@posthog/core'
-import { createLogger } from '../../utils/logger'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 import {
     assignableWindow,
     LazyLoadedSessionRecordingInterface,
     PostHogExtensionKind,
     window,
-} from '../../utils/globals'
+} from '@posthog/browser-common/utils/globals'
 import { RECORDING_REMOTE_CONFIG_TTL_MS } from './external/lazy-loaded-session-recorder'
 import {
     AWAITING_CONFIG,

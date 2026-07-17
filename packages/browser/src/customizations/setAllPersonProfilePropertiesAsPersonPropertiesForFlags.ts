@@ -1,12 +1,14 @@
 import type { PostHogConfig, PostHogInterface } from '../types'
+import '../config'
+
 import {
     CAMPAIGN_PARAMS,
     getCampaignParams,
     EVENT_TO_PERSON_PROPERTIES,
     getEventProperties,
     getReferrerInfo,
-} from '../utils/event-utils'
-import { each, extend } from '../utils'
+} from '@posthog/browser-common/utils/event-utils'
+import { each, extend } from '@posthog/browser-common/utils/general-utils'
 import { includes } from '@posthog/core'
 
 // only the members the function reads — typed structurally (not as the PostHog

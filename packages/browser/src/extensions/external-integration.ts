@@ -1,7 +1,7 @@
 import { PostHog } from '../posthog-core'
 import { ExternalIntegrationKind } from '../types'
-import { assignableWindow, ExternalExtensionKind } from '../utils/globals'
-import { createLogger } from '../utils/logger'
+import { assignableWindow, ExternalExtensionKind } from '@posthog/browser-common/utils/globals'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 
 const logger = createLogger('[PostHog ExternalIntegrations]')
 

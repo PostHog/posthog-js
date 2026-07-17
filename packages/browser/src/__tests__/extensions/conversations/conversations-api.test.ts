@@ -11,7 +11,7 @@ import {
 } from '../../../posthog-conversations-types'
 import { PostHog } from '../../../posthog-core'
 import { RemoteConfig } from '../../../types'
-import { assignableWindow } from '../../../utils/globals'
+import { assignableWindow } from '@posthog/browser-common/utils/globals'
 import { createMockPostHog, createMockConfig, createMockPersistence } from '../../helpers/posthog-instance'
 import Config from '../../../config'
 

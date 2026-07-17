@@ -11,12 +11,15 @@ import {
     stripUrlHash,
 } from '@posthog/core'
 import type { BufferedLogEntry, ResolvedPostHogLogsConfig, SendLogsBatchOutcome } from '@posthog/core'
-import { assignableWindow, window } from './utils/globals'
-import { addEventListener } from './utils'
-import { createLogger } from './utils/logger'
+import { assignableWindow, window } from '@posthog/browser-common/utils/globals'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 import { Extension } from './extensions/types'
 import { resolveLogsConfig } from './logs-defaults'
-import { isStatusZeroFailureCircuitBreakerTripped, updateStatusZeroFailureCount } from './utils/request-utils'
+import {
+    isStatusZeroFailureCircuitBreakerTripped,
+    updateStatusZeroFailureCount,
+} from '@posthog/browser-common/utils/request-utils'
 
 const LOGS_ENDPOINT = '/i/v1/logs'
 // OTLP instrumentation-scope name for console auto-capture, distinguishing it from

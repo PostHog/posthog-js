@@ -1,4 +1,4 @@
-jest.mock('../utils/logger', () => ({
+jest.mock('@posthog/browser-common/utils/logger', () => ({
     createLogger: jest.fn().mockReturnValue({
         info: jest.fn(),
         warn: jest.fn(),
@@ -13,7 +13,7 @@ import { PostHog } from '../posthog-core'
 import { PostHogSurveys } from '../posthog-surveys'
 import { Survey, SurveySchedule, SurveyType } from '../posthog-surveys-types'
 import { FlagsResponse } from '../types'
-import { assignableWindow } from '../utils/globals'
+import { assignableWindow } from '@posthog/browser-common/utils/globals'
 import { SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '../utils/survey-utils'
 import { createMockPostHog } from './helpers/posthog-instance'
 

@@ -1,4 +1,4 @@
-import { assignableWindow } from '../../utils/globals'
+import { assignableWindow } from '@posthog/browser-common/utils/globals'
 import { PostHog } from '../../posthog-core'
 
 // Asserts the exact `{ level, body, attributes }` record the console wrapper hands

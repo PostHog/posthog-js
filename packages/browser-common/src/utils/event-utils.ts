@@ -1,19 +1,13 @@
 import { convertToURL, getQueryParam, maskQueryParams } from './request-utils'
 import { isNull, stripLeadingDollar, stripUrlHash } from '@posthog/core'
-import { Properties } from '../types'
+import type { Properties } from '@posthog/types'
 import Config from '../config'
 import { SDK_DIST_CHANNEL } from '../constants'
-import { each, extend, stripEmptyProperties } from './index'
+import { each, extend, stripEmptyProperties } from './general-utils'
 import { document, location, userAgent, window } from './globals'
-import {
-    BrowserDetectionHints,
-    detectBrowser,
-    detectBrowserVersion,
-    detectDevice,
-    detectDeviceType,
-    detectOS,
-} from '@posthog/core'
-import { cookieStore } from '../storage'
+import type { BrowserDetectionHints } from '@posthog/core'
+import { detectBrowser, detectBrowserVersion, detectDevice, detectDeviceType, detectOS } from '@posthog/core'
+import { getCookieValue } from './cookie-utils'
 
 const URL_REGEX_PREFIX = 'https?://(.*)'
 
@@ -127,7 +121,7 @@ function _getCampaignParamsFromUrl(url: string, customParams?: string[]): Record
 function _getCampaignParamsFromCookie(): Record<string, string> {
     const params: Record<string, any> = {}
     each(COOKIE_CAMPAIGN_PARAMS, function (kwkey) {
-        const kw = cookieStore._get(kwkey)
+        const kw = getCookieValue(kwkey)
         params[kwkey] = kw ? kw : null
     })
 
@@ -310,7 +304,7 @@ export function getEventProperties(
         stripEmptyProperties({
             $os: os_name,
             $os_version: os_version,
-            $browser: detectBrowser(userAgent, navigator.vendor, browserHints, browserOptions),
+            $browser: detectBrowser(userAgent, navigator.vendor, browserHints, browserOptions as any),
             $device: detectDevice(userAgent),
             $device_type: detectDeviceType(userAgent, {
                 // eslint-disable-next-line compat/compat
@@ -319,7 +313,7 @@ export function getEventProperties(
                 screenWidth: window?.screen?.width,
                 screenHeight: window?.screen?.height,
                 devicePixelRatio: window?.devicePixelRatio,
-            }),
+            } as any),
             $timezone: getTimezone(),
             $timezone_offset: getTimezoneOffset(),
         }),
@@ -332,7 +326,7 @@ export function getEventProperties(
             $host: location?.host,
             $pathname: location?.pathname,
             $raw_user_agent: userAgent.length > 1000 ? userAgent.substring(0, 997) + '...' : userAgent,
-            $browser_version: detectBrowserVersion(userAgent, navigator.vendor, browserHints, browserOptions),
+            $browser_version: detectBrowserVersion(userAgent, navigator.vendor, browserHints, browserOptions as any),
             $browser_language: getBrowserLanguage(),
             $browser_language_prefix: getBrowserLanguagePrefix(),
             $screen_height: window?.screen.height,

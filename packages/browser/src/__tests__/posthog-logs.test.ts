@@ -1,7 +1,7 @@
 import { PostHogLogs } from '../posthog-logs'
 import { PostHog } from '../posthog-core'
 
-import { assignableWindow } from '../utils/globals'
+import { assignableWindow } from '@posthog/browser-common/utils/globals'
 
 // Mock the logger to avoid console output during tests
 const mockLogger = {
@@ -10,7 +10,7 @@ const mockLogger = {
     error: jest.fn(),
 }
 
-jest.mock('../utils/logger', () => ({
+jest.mock('@posthog/browser-common/utils/logger', () => ({
     createLogger: jest.fn(() => mockLogger),
 }))
 

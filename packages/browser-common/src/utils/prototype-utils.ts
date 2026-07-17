@@ -7,10 +7,11 @@
  * after a number of performance reports from Angular users
  */
 
-import { AssignableWindow } from './globals'
-import { isAngularZonePresent } from './type-utils'
 import { isFunction, isNativeFunction } from '@posthog/core'
+
+import { type AssignableWindow } from './globals'
 import { logger } from './logger'
+import { isAngularZonePresent } from './type-utils'
 
 interface NativeImplementationsCache {
     MutationObserver: typeof MutationObserver
