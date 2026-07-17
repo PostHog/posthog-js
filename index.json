@@ -1,4 +1,18 @@
 {
+  "PostHog/posthog-js/issue/4185": {
+    "key": "PostHog/posthog-js/issue/4185",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4185",
+    "url": "https://github.com/PostHog/posthog-js/issues/4185",
+    "conclusion": "Valid React Native replay parity gap; full web debug-key parity needs scoping.",
+    "labels": [
+      "enhancement",
+      "feature/replay",
+      "react-native"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-17T10:04:10.802Z"
+  },
   "PostHog/posthog-js/issue/4184": {
     "key": "PostHog/posthog-js/issue/4184",
     "repo": "PostHog/posthog-js",
