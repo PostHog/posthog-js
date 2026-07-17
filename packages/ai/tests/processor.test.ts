@@ -74,6 +74,16 @@ describe('PostHogSpanProcessor', () => {
     expect(BatchSpanProcessor).toHaveBeenCalledWith(expect.any(Object))
   })
 
+  it('routes project secrets through the AI gateway', () => {
+    new PostHogSpanProcessor({ projectSecret: '  phs_test123  ' })
+
+    expect(OTLPTraceExporter).toHaveBeenCalledWith({
+      url: 'https://ai-gateway.us.posthog.com/i/v0/ai/otel',
+      headers: { Authorization: 'Bearer phs_test123' },
+    })
+    expect(BatchSpanProcessor).toHaveBeenCalledWith(expect.any(Object))
+  })
+
   it.each([
     ['missing', {}],
     ['empty', { projectToken: '' }],
@@ -90,7 +100,7 @@ describe('PostHogSpanProcessor', () => {
     expect(OTLPTraceExporter).not.toHaveBeenCalled()
     expect(BatchSpanProcessor).not.toHaveBeenCalled()
     expect(warnSpy).toHaveBeenCalledWith(
-      '[PostHogSpanProcessor] projectToken is missing or blank; the processor will be disabled.'
+      '[PostHogSpanProcessor] projectToken or projectSecret is missing or blank; the processor will be disabled.'
     )
     warnSpy.mockRestore()
   })
