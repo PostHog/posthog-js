@@ -322,6 +322,12 @@ export type SessionRecordingRemoteConfig = SessionRecordingCanvasOptions & {
 }
 
 /**
+ * Outcome of a remote config fetch: the config, or an explicit failure.
+ * @internal
+ */
+export type RemoteConfigResult = { ok: true; config: RemoteConfig } | { ok: false }
+
+/**
  * Remote configuration for the PostHog instance
  *
  * All of these settings can be configured directly in your PostHog instance

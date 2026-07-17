@@ -56,10 +56,10 @@ describe('deferred extension initialization', () => {
             })
 
             // Simulate remote config arriving synchronously before extensions init
-            posthog._onRemoteConfig(remoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: remoteConfig })
 
             // The config should be stored in _pendingRemoteConfig
-            expect((posthog as any)._pendingRemoteConfig).toEqual(remoteConfig)
+            expect((posthog as any)._pendingRemoteConfig).toEqual({ ok: true, config: remoteConfig })
 
             // Wait for extensions to initialize (time-sliced, may take multiple ticks)
             await new Promise((resolve) => setTimeout(resolve, 200))
@@ -87,10 +87,10 @@ describe('deferred extension initialization', () => {
             await new Promise((resolve) => setTimeout(resolve, 200))
 
             // Now send remote config after extensions are ready
-            posthog._onRemoteConfig(remoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: remoteConfig })
 
             // Config should be stored
-            expect((posthog as any)._pendingRemoteConfig).toEqual(remoteConfig)
+            expect((posthog as any)._pendingRemoteConfig).toEqual({ ok: true, config: remoteConfig })
         })
 
         it('should not store pending config when deferred init is disabled', async () => {
@@ -107,7 +107,7 @@ describe('deferred extension initialization', () => {
             })
 
             // With sync init, extensions are already ready, no need to store config
-            posthog._onRemoteConfig(remoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: remoteConfig })
 
             // Config should NOT be stored when deferred init is disabled
             expect((posthog as any)._pendingRemoteConfig).toBeUndefined()
@@ -127,8 +127,8 @@ describe('deferred extension initialization', () => {
             })
 
             // Call _onRemoteConfig before extensions are ready
-            posthog._onRemoteConfig(remoteConfig)
-            expect((posthog as any)._pendingRemoteConfig).toEqual(remoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: remoteConfig })
+            expect((posthog as any)._pendingRemoteConfig).toEqual({ ok: true, config: remoteConfig })
 
             // Spy on _onRemoteConfig to see if it gets called again during replay
             const onRemoteConfigSpy = jest.spyOn(posthog as any, '_onRemoteConfig')
@@ -137,7 +137,7 @@ describe('deferred extension initialization', () => {
             await new Promise((resolve) => setTimeout(resolve, 200))
 
             // _onRemoteConfig should have been called again with the pending config during replay
-            expect(onRemoteConfigSpy).toHaveBeenCalledWith(remoteConfig)
+            expect(onRemoteConfigSpy).toHaveBeenCalledWith({ ok: true, config: remoteConfig })
             // Extensions should be initialized, proving the replay worked
             expect(posthog.sessionRecording).toBeDefined()
             expect(posthog.autocapture).toBeDefined()
