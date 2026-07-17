@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4182](https://github.com/PostHog/posthog-js/issues/4182) | Valid React Native web sourcemap enhancement; likely duplicate of #4178 | enhancement, react-native, web, feature/error-tracking, team/error-tracking |  | no | 2026-07-17T09:21:12.889Z |
 | PostHog/posthog-js | [issue 4181](https://github.com/PostHog/posthog-js/issues/4181) | Valid request, but this appears to duplicate #4177. | enhancement, react-native, feature/error-tracking, team/error-tracking |  | no | 2026-07-17T09:19:06.667Z |
 | PostHog/posthog-js | [issue 4180](https://github.com/PostHog/posthog-js/issues/4180) | Valid React Native Expo plugin enhancement, but appears to duplicate open issue #4176. | enhancement, react-native, iOS, Android, feature/error-tracking, team/error-tracking |  | no | 2026-07-17T09:17:08.592Z |
 | PostHog/posthog-js | [issue 4178](https://github.com/PostHog/posthog-js/issues/4178) | Valid React Native error-tracking enhancement; web builds are explicitly skipped and have no current automatic sourcemap processing path. | enhancement, react-native, feature/error-tracking, team/error-tracking, web |  | no | 2026-07-17T09:15:53.952Z |
