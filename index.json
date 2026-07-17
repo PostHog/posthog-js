@@ -1,4 +1,20 @@
 {
+  "PostHog/posthog-js/issue/4182": {
+    "key": "PostHog/posthog-js/issue/4182",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4182",
+    "url": "https://github.com/PostHog/posthog-js/issues/4182",
+    "conclusion": "Valid React Native web sourcemap enhancement; likely duplicate of #4178",
+    "labels": [
+      "enhancement",
+      "react-native",
+      "web",
+      "feature/error-tracking",
+      "team/error-tracking"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-17T09:21:12.889Z"
+  },
   "PostHog/posthog-js/issue/4181": {
     "key": "PostHog/posthog-js/issue/4181",
     "repo": "PostHog/posthog-js",
