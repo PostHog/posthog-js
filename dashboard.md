@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4178](https://github.com/PostHog/posthog-js/issues/4178) | Valid React Native error-tracking enhancement; web builds are explicitly skipped and have no current automatic sourcemap processing path. | enhancement, react-native, feature/error-tracking, team/error-tracking, web |  | no | 2026-07-17T09:15:53.952Z |
 | PostHog/posthog-js | [issue 4179](https://github.com/PostHog/posthog-js/issues/4179) | Valid backlog/demand-gathering enhancement; not a small JS-only fix | enhancement, react-native, feature/error-tracking, team/error-tracking, question |  | no | 2026-07-17T09:13:40.482Z |
 | PostHog/posthog-js | [issue 4176](https://github.com/PostHog/posthog-js/issues/4176) | Valid React Native Expo config plugin enhancement; keep open for API design. | enhancement, react-native, iOS, Android, feature/error-tracking, team/error-tracking |  | no | 2026-07-17T09:11:24.701Z |
 | PostHog/posthog-js | [issue 4177](https://github.com/PostHog/posthog-js/issues/4177) | Valid React Native error-tracking enhancement; RN currently ignores remote suppression rules. | enhancement, react-native, feature/error-tracking, team/error-tracking |  | no | 2026-07-17T09:09:42.663Z |
