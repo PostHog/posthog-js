@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4175](https://github.com/PostHog/posthog-js/issues/4175) | Valid React Native surveys enhancement; active survey translation is cached across language changes. | enhancement, feature/surveys, react-native, feature/mobile |  | no | 2026-07-17T08:01:45.035Z |
 | PostHog/posthog-js | [issue 4162](https://github.com/PostHog/posthog-js/issues/4162) | Valid generated-reference bug in the shared docs type parser. | web, node, react-native |  | no | 2026-07-16T00:38:01.640Z |
 | PostHog/posthog-js | [issue 4142](https://github.com/PostHog/posthog-js/issues/4142) | Valid bug: Expo skipOnConflict is not wired into the generated iOS dSYM upload phase. | react-native, iOS, feature/error-tracking, feature/mobile |  | no | 2026-07-14T09:55:26.743Z |
 | PostHog/posthog-js | [issue 4132](https://github.com/PostHog/posthog-js/issues/4132) | Valid browser SDK bug; circular event properties can break request serialization and cause retries/internal exception noise. | feature/error-tracking, web |  | no | 2026-07-12T10:46:43.006Z |
