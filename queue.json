@@ -42,6 +42,20 @@
         "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/29568801195"
       },
       "attempts": 0
+    },
+    {
+      "id": "issue-4178-auto-none-no-comment-no-close-1784279215788",
+      "kind": "issue",
+      "number": 4178,
+      "mode": "auto",
+      "commandMention": "@posthog-watcher",
+      "enqueuedAt": "2026-07-17T09:06:55.787Z",
+      "source": {
+        "eventName": "issues",
+        "runId": 29568799778,
+        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/29568799778"
+      },
+      "attempts": 0
     }
   ]
 }
