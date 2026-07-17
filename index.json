@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/4177": {
+    "key": "PostHog/posthog-js/issue/4177",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4177",
+    "url": "https://github.com/PostHog/posthog-js/issues/4177",
+    "conclusion": "Valid React Native error-tracking enhancement; RN currently ignores remote suppression rules.",
+    "labels": [
+      "enhancement",
+      "react-native",
+      "feature/error-tracking",
+      "team/error-tracking"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-17T09:09:42.663Z"
+  },
   "PostHog/posthog-js/issue/4174": {
     "key": "PostHog/posthog-js/issue/4174",
     "repo": "PostHog/posthog-js",
