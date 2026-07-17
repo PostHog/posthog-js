@@ -105,6 +105,7 @@
         "_compressionQueueGeneration",
         "_computeShowTicketList",
         "_config",
+        "_configLoadFailed",
         "_consecutiveFlushFailures",
         "_consecutivePollingStatusZeroFailures",
         "_consecutiveStatusZeroFailures",
