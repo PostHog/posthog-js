@@ -1302,6 +1302,10 @@ describe('minimal $feature_flag_called events', () => {
       ['the gate field is absent', remoteFlagsResponse({ hasExperiment: false })],
       ['the gate field is false', remoteFlagsResponse({ minimalFlagCalledEvents: false, hasExperiment: false })],
       ['has_experiment is absent', remoteFlagsResponse({ minimalFlagCalledEvents: true })],
+      [
+        'the gate field is a truthy non-boolean value',
+        remoteFlagsResponse({ minimalFlagCalledEvents: 'true' as any, hasExperiment: false }),
+      ],
     ])('sends the full event when %s', async (_, response) => {
       mockedFetch.mockImplementation(apiImplementationV4(response))
       const { posthog, captured } = createClient()
@@ -1336,6 +1340,35 @@ describe('minimal $feature_flag_called events', () => {
 
       const fullMessage = captured.filter((m) => m.event === '$feature_flag_called')[1]
       expect(fullMessage.properties).toMatchObject({ '$feature/test-flag': true })
+
+      await posthog.shutdown()
+    })
+
+    it('lets before_send re-add a property stripped by minimization', async () => {
+      mockedFetch.mockImplementation(
+        apiImplementationV4(remoteFlagsResponse({ minimalFlagCalledEvents: true, hasExperiment: false }))
+      )
+      let beforeSendProperties: Record<string, any> | undefined
+      const { posthog, captured } = createClient({
+        before_send: (event) => {
+          if (event.event === '$feature_flag_called') {
+            beforeSendProperties = event.properties
+            return { ...event, properties: { ...event.properties, super_prop: 're-added' } }
+          }
+          return event
+        },
+      })
+      posthog.register({ super_prop: 'super_value' })
+
+      await posthog.getFeatureFlagResult('test-flag', 'some-distinct-id')
+      await waitForPromises()
+
+      // before_send sees the already-minimized properties, not the pre-filter merged set
+      expect(beforeSendProperties).toBeDefined()
+      expect(beforeSendProperties).not.toHaveProperty('super_prop')
+
+      const message = findFlagCalledEvent(captured)
+      expect(message.properties).toMatchObject({ super_prop: 're-added' })
 
       await posthog.shutdown()
     })
@@ -1454,6 +1487,28 @@ describe('minimal $feature_flag_called events', () => {
       expect(message.properties.$feature_flag_has_experiment).toBe(false)
       expect(message.properties).not.toHaveProperty('super_prop')
       expect(message.properties).not.toHaveProperty('$feature/simple-flag')
+
+      await posthog.shutdown()
+    })
+
+    it('flips the gate off when a later local-evaluation reload omits the field', async () => {
+      mockedFetch.mockImplementation(
+        apiImplementation({ localFlags: localFlagsPayload({ minimalFlagCalledEvents: true, hasExperiment: false }) })
+      )
+      const { posthog, captured } = createClient({ personalApiKey: 'TEST_PERSONAL_API_KEY' })
+
+      await posthog.getFeatureFlagResult('simple-flag', 'user-1')
+      await waitForPromises()
+      expect(findFlagCalledEvent(captured).properties).not.toHaveProperty('$feature/simple-flag')
+
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: localFlagsPayload({ hasExperiment: false }) }))
+      await posthog.reloadFeatureFlags()
+      // Different distinct id so the flag-called dedup cache doesn't swallow the event
+      await posthog.getFeatureFlagResult('simple-flag', 'user-2')
+      await waitForPromises()
+
+      const fullMessage = captured.filter((m) => m.event === '$feature_flag_called')[1]
+      expect(fullMessage.properties).toMatchObject({ '$feature/simple-flag': true })
 
       await posthog.shutdown()
     })

@@ -2049,14 +2049,18 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * Minimal iff the server gate is on and the flag is known to not be linked to an
-   * experiment. Any missing signal — no gate seen yet, `$feature_flag_has_experiment`
-   * absent — falls back to the full event.
+   * Minimal iff this is a `$feature_flag_called` event, the server gate is on, and the flag
+   * is known to not be linked to an experiment. Any missing signal — no gate seen yet,
+   * `$feature_flag_has_experiment` absent — falls back to the full event.
    *
    * @internal
    */
-  private _shouldSendMinimalFlagCalledEvent(properties: PostHogEventProperties): boolean {
-    return this._minimalFlagCalledEvents && properties.$feature_flag_has_experiment === false
+  private _shouldSendMinimalFlagCalledEvent(event: string, properties: PostHogEventProperties): boolean {
+    return (
+      event === '$feature_flag_called' &&
+      this._minimalFlagCalledEvents &&
+      properties.$feature_flag_has_experiment === false
+    )
   }
 
   /**
@@ -2824,10 +2828,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // runs, so a customer hook may deliberately re-add stripped properties. Everything the SDK
     // itself adds after this point ($groups, $lib/$lib_version/$is_server, $geoip_disable) is
     // allowlisted — no SDK enrichment may reintroduce stripped properties.
-    const finalProperties =
-      event === '$feature_flag_called' && this._shouldSendMinimalFlagCalledEvent(mergedProperties)
-        ? minimizeFlagCalledEventProperties(mergedProperties)
-        : mergedProperties
+    const finalProperties = this._shouldSendMinimalFlagCalledEvent(event, mergedProperties)
+      ? minimizeFlagCalledEventProperties(mergedProperties)
+      : mergedProperties
 
     // Run before_send if configured
     const eventMessage = this._runBeforeSend({

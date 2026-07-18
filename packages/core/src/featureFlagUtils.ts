@@ -230,10 +230,12 @@ export const minimizeFlagCalledEventProperties = (
   transportKeys: readonly string[] = []
 ): Record<string, any> => {
   const minimal: Record<string, any> = {}
-  for (const key of [...MINIMAL_FLAG_CALLED_EVENT_PROPERTIES, ...transportKeys]) {
+  const copyKey = (key: string): void => {
     if (properties[key] !== undefined) {
       minimal[key] = properties[key]
     }
   }
+  MINIMAL_FLAG_CALLED_EVENT_PROPERTIES.forEach(copyKey)
+  transportKeys.forEach(copyKey)
   return minimal
 }

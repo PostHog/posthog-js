@@ -1403,13 +1403,13 @@ export class PostHog implements PostHogInterface {
         // from the strict allowlist below (after the last SDK-added property) so super properties
         // and the context envelope are structurally excluded. Any missing signal falls back to
         // the full event.
-        const isMinimalFlagCalledEvent =
+        const shouldSendMinimalFlagCalledEvent =
             event_name === '$feature_flag_called' &&
             data.properties['$feature_flag_has_experiment'] === false &&
             this.get_property(PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS) === true
 
         const setProperties = options?.$set
-        if (setProperties && !isMinimalFlagCalledEvent) {
+        if (setProperties && !shouldSendMinimalFlagCalledEvent) {
             data.$set = options?.$set
         }
         const unsetProperties = options?.$unset
@@ -1426,7 +1426,7 @@ export class PostHog implements PostHogInterface {
         // Minimal flag-called events must not carry $set_once. Skipping the calculation (rather
         // than dropping its result) avoids marking the initial person props as sent, so they
         // still go out with the next full event.
-        const setOnceProperties = isMinimalFlagCalledEvent
+        const setOnceProperties = shouldSendMinimalFlagCalledEvent
             ? undefined
             : this._calculate_set_once_properties(options?.$set_once, markSetOnceAsSent, forceIncludeInitialProps)
         if (setOnceProperties) {
@@ -1444,7 +1444,7 @@ export class PostHog implements PostHogInterface {
 
         // before_send runs after this filter and may deliberately re-add stripped properties;
         // the SDK itself must not enrich beyond allowlisted keys past this point.
-        if (isMinimalFlagCalledEvent) {
+        if (shouldSendMinimalFlagCalledEvent) {
             data.properties = minimizeFlagCalledEventProperties(data.properties, FLAG_CALLED_TRANSPORT_PROPERTY_KEYS)
         }
 
