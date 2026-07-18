@@ -131,11 +131,49 @@ export class SurveyManager {
     private _widgetSelectorListeners: Map<string, { element: Element; listener: EventListener; survey: Survey }> =
         new Map()
     private _prefillHandledSurveys: Set<string> = new Set()
+    private _currentLanguage: string | null = null
+    private _languageChangeListener: (() => void) | null = null
+    private _unsubscribeFeatureFlags: (() => void) | null = null
 
     constructor(posthog: PostHog) {
         this._posthog = posthog
         // This is used to track the survey that is currently in focus. We only show one survey at a time.
         this._surveyInFocus = null
+
+        this._languageChangeListener = () => this._onLanguageChange()
+        window.addEventListener('languagechange', this._languageChangeListener)
+
+        // Re-translate when identify() or setPersonPropertiesForFlags() reloads flags,
+        // which may have updated the 'language' person property.
+        this._unsubscribeFeatureFlags = posthog.onFeatureFlags(() => this._onLanguageChange())
+    }
+
+    public destroy(): void {
+        if (this._languageChangeListener) {
+            window.removeEventListener('languagechange', this._languageChangeListener)
+            this._languageChangeListener = null
+        }
+        if (this._unsubscribeFeatureFlags) {
+            this._unsubscribeFeatureFlags()
+            this._unsubscribeFeatureFlags = null
+        }
+    }
+
+    private _onLanguageChange(): void {
+        if (isNull(this._surveyInFocus)) {
+            return
+        }
+        const surveys = this._posthog.get_property(SURVEYS) as Survey[] | undefined
+        const survey = surveys?.find((s) => s.id === this._surveyInFocus)
+        if (!survey) {
+            return
+        }
+        const { language: newLanguage } = this._translateSurveyForRendering(survey)
+        if (newLanguage === this._currentLanguage) {
+            return
+        }
+        this._currentLanguage = newLanguage
+        this.renderPopover(survey)
     }
 
     public handlePageUnload = (): void => {
@@ -182,6 +220,7 @@ export class SurveyManager {
 
     public handlePopoverSurvey = (surveyParam: Survey, options?: DisplaySurveyPopoverOptions): void => {
         const { survey: translatedSurvey, language: surveyLanguage } = this._translateSurveyForRendering(surveyParam)
+        this._currentLanguage = surveyLanguage
 
         // apply overrides for position / selector (needed for thumb surveys)
         const survey =
@@ -780,6 +819,7 @@ export class SurveyManager {
         }
         this._clearSurveyTimeout(survey.id)
         this._surveyInFocus = null
+        this._currentLanguage = null
         this._removeSurveyFromDom(survey)
     }
 
@@ -796,6 +836,8 @@ export class SurveyManager {
             sortSurveysByAppearanceDelay: this._sortSurveysByAppearanceDelay,
             checkFlags: this._checkFlags.bind(this),
             isSurveyFeatureFlagEnabled: this._isSurveyFeatureFlagEnabled.bind(this),
+            onLanguageChange: this._onLanguageChange.bind(this),
+            currentLanguage: this._currentLanguage,
         }
     }
 }

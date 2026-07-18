@@ -201,6 +201,7 @@ describe('surveys', () => {
             _send_request: jest
                 .fn()
                 .mockImplementation(({ callback }) => callback({ statusCode: 200, json: surveysResponse })),
+            onFeatureFlags: jest.fn().mockReturnValue(() => {}),
             featureFlags: {
                 _send_request: jest
                     .fn()
@@ -1569,6 +1570,88 @@ describe('surveys', () => {
                 surveys: ['example' as unknown as Survey],
             } as Partial<RemoteConfig> as RemoteConfig)
             expect(surveys['_isSurveysEnabled']).toBe(undefined)
+        })
+    })
+
+    describe('language change re-translation', () => {
+        let surveyManager: SurveyManager
+        const frSurvey: Survey = {
+            id: 'survey-lang-1',
+            name: 'Lang Survey',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'Hello?', id: 'q1', description: '' }],
+            appearance: null,
+            conditions: null,
+            start_date: '2024-01-01T00:00:00Z',
+            end_date: null,
+            current_iteration: null,
+            current_iteration_start_date: null,
+            translations: [
+                {
+                    language_code: 'fr',
+                    questions: [{ id: 'q1', question: 'Bonjour?', description: '' }],
+                },
+            ],
+        } as unknown as Survey
+
+        beforeEach(() => {
+            surveyManager = (surveys as any)._surveyManager
+            instance.get_property = jest.fn().mockReturnValue([frSurvey])
+            instance.onFeatureFlags = jest.fn().mockReturnValue(() => {})
+        })
+
+        it('re-renders a focused popover survey when languagechange fires and language differs', () => {
+            const renderMock = jest.fn()
+            ;(surveyManager as any).renderPopover = renderMock
+
+            // Simulate survey in focus with initial language
+            ;(surveyManager as any)._surveyInFocus = frSurvey.id
+            ;(surveyManager as any)._currentLanguage = 'en'
+
+            // Simulate navigator.language switching to French
+            Object.defineProperty(navigator, 'language', { value: 'fr', configurable: true })
+            window.dispatchEvent(new Event('languagechange'))
+
+            expect(renderMock).toHaveBeenCalledTimes(1)
+        })
+
+        it('does not re-render when language is unchanged', () => {
+            const renderMock = jest.fn()
+            ;(surveyManager as any).renderPopover = renderMock
+            // Make _translateSurveyForRendering return 'fr' so it matches _currentLanguage
+            ;(surveyManager as any)._translateSurveyForRendering = jest.fn().mockReturnValue({ survey: frSurvey, language: 'fr' })
+
+            ;(surveyManager as any)._surveyInFocus = frSurvey.id
+            ;(surveyManager as any)._currentLanguage = 'fr'
+
+            window.dispatchEvent(new Event('languagechange'))
+
+            expect(renderMock).not.toHaveBeenCalled()
+        })
+
+        it('does nothing when no survey is in focus', () => {
+            const renderMock = jest.fn()
+            ;(surveyManager as any).renderPopover = renderMock
+            ;(surveyManager as any)._surveyInFocus = null
+
+            window.dispatchEvent(new Event('languagechange'))
+
+            expect(renderMock).not.toHaveBeenCalled()
+        })
+
+        it('clears _currentLanguage when survey is removed from focus', () => {
+            ;(surveyManager as any)._surveyInFocus = frSurvey.id
+            ;(surveyManager as any)._currentLanguage = 'fr'
+
+            surveyManager.getTestAPI().removeSurveyFromFocus(frSurvey as any)
+
+            expect(surveyManager.getTestAPI().currentLanguage).toBeNull()
+        })
+
+        it('removes languagechange listener on destroy', () => {
+            const removeListenerSpy = jest.spyOn(window, 'removeEventListener')
+            surveyManager.destroy()
+            expect(removeListenerSpy).toHaveBeenCalledWith('languagechange', expect.any(Function))
         })
     })
 })
