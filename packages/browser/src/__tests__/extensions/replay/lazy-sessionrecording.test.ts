@@ -2817,6 +2817,52 @@ describe('Lazy SessionRecording', () => {
             }
         })
 
+        it('stops rotating the buffer after one of several OR triggers activates', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        eventTriggers: ['$exception'],
+                        linkedFlag: 'recording-flag',
+                        triggerMatchType: 'any',
+                    },
+                })
+            )
+
+            simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+            expect(sessionRecording.status).toBe('active')
+
+            const activeEvent = createIncrementalSnapshot({ data: { source: 1 } })
+            _emit(activeEvent)
+            _emit(createFullSnapshot())
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([
+                activeEvent,
+                createFullSnapshot(),
+            ])
+        })
+
+        it('keeps rotating the buffer while an ALL trigger remains pending', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        eventTriggers: ['$exception'],
+                        linkedFlag: 'recording-flag',
+                        triggerMatchType: 'all',
+                    },
+                })
+            )
+
+            simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+            expect(sessionRecording.status).toBe('buffering')
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            _emit(createFullSnapshot())
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([createFullSnapshot()])
+        })
+
         it('does not reschedule full snapshots when a trigger matches on a blocked URL', () => {
             jest.useFakeTimers()
             try {
