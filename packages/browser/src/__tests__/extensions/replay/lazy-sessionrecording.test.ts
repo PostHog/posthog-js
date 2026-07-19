@@ -3684,6 +3684,15 @@ describe('Lazy SessionRecording', () => {
             }
         })
 
+        it('uses the pending trigger snapshot interval while waiting for a linked flag', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
+            )
+
+            expect(sessionRecording.status).toEqual('buffering')
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotIntervalMillis']).toEqual(60_000)
+        })
+
         it('stores the linked flag on flags response', () => {
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
