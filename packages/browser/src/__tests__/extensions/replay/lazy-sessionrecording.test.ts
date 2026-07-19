@@ -2717,6 +2717,34 @@ describe('Lazy SessionRecording', () => {
     })
 
     describe('Event triggering', () => {
+        it('uses the active snapshot interval immediately after a trigger matches', () => {
+            jest.useFakeTimers()
+            try {
+                posthog.config.session_recording!.full_snapshot_interval_millis = 30_000
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            eventTriggers: ['$exception'],
+                        },
+                    })
+                )
+
+                const takeFullSnapshot = jest.spyOn(
+                    sessionRecording['_lazyLoadedSessionRecording'] as any,
+                    '_tryTakeFullSnapshot'
+                )
+
+                simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+                expect(sessionRecording.status).toBe('active')
+
+                jest.advanceTimersByTime(30_000)
+                expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
+            } finally {
+                jest.useRealTimers()
+            }
+        })
+
         it('flushes buffer and starts when sees event', async () => {
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
