@@ -2817,6 +2817,41 @@ describe('Lazy SessionRecording', () => {
             }
         })
 
+        it('does not reschedule full snapshots when a trigger matches on a blocked URL', () => {
+            jest.useFakeTimers()
+            try {
+                fakeNavigateTo('https://test.com/blocked')
+                posthog.config.session_recording!.full_snapshot_interval_millis = 180_000
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            eventTriggers: ['$exception'],
+                            urlBlocklist: [{ url: '/blocked', matching: 'regex' }],
+                        },
+                    })
+                )
+
+                _emit(createFullSnapshot())
+                expect(sessionRecording.status).toBe('paused')
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotTimer']).toBeUndefined()
+
+                const takeFullSnapshot = jest.spyOn(
+                    sessionRecording['_lazyLoadedSessionRecording'] as any,
+                    '_tryTakeFullSnapshot'
+                )
+
+                simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+
+                expect(sessionRecording.status).toBe('paused')
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotTimer']).toBeUndefined()
+                jest.advanceTimersByTime(180_000)
+                expect(takeFullSnapshot).not.toHaveBeenCalled()
+            } finally {
+                jest.useRealTimers()
+            }
+        })
+
         it('flushes buffer and starts when sees event', async () => {
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({

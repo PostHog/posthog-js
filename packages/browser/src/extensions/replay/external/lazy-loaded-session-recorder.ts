@@ -802,8 +802,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         if (this._fullSnapshotTimer) {
             clearInterval(this._fullSnapshotTimer)
         }
-        // we don't schedule snapshots while idle
-        if (this._isIdle === true) {
+        // we don't schedule snapshots while idle or on a blocked URL
+        if (this._isIdle === true || this._urlTriggerMatching.urlBlocked) {
             return
         }
 
