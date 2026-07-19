@@ -784,7 +784,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private get _fullSnapshotIntervalMillis(): number {
         if (this._strategy?.hasPendingTriggers(this.sessionId) && !['sampled', 'active'].includes(this.status)) {
-            return ONE_MINUTE
+            const configuredInterval = this._instance.config.session_recording?.trigger_pending_buffer_interval_millis
+            return isNumber(configuredInterval) && Number.isFinite(configuredInterval) && configuredInterval > 0
+                ? configuredInterval
+                : ONE_MINUTE
         }
 
         return this._instance.config.session_recording?.full_snapshot_interval_millis ?? FIVE_MINUTES

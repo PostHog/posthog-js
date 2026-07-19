@@ -2717,6 +2717,71 @@ describe('Lazy SessionRecording', () => {
     })
 
     describe('Event triggering', () => {
+        it('keeps the existing one-minute buffer interval while waiting for a trigger', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        eventTriggers: ['$exception'],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotIntervalMillis']).toBe(60_000)
+        })
+
+        it('uses the configured buffer interval while waiting for a trigger', () => {
+            posthog.config.session_recording!.trigger_pending_buffer_interval_millis = 120_000
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        eventTriggers: ['$exception'],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotIntervalMillis']).toBe(120_000)
+        })
+
+        it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+            'ignores unsafe pending trigger buffer interval %s',
+            (configuredInterval) => {
+                posthog.config.session_recording!.trigger_pending_buffer_interval_millis = configuredInterval
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            eventTriggers: ['$exception'],
+                        },
+                    })
+                )
+
+                expect(sessionRecording.status).toBe('buffering')
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotIntervalMillis']).toBe(60_000)
+            }
+        )
+
+        it('continues using the active recording snapshot interval after a trigger matches', () => {
+            posthog.config.session_recording!.trigger_pending_buffer_interval_millis = 120_000
+            posthog.config.session_recording!.full_snapshot_interval_millis = 180_000
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        eventTriggers: ['$exception'],
+                    },
+                })
+            )
+
+            simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+
+            expect(sessionRecording.status).toBe('active')
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotIntervalMillis']).toBe(180_000)
+        })
+
         it('flushes buffer and starts when sees event', async () => {
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({

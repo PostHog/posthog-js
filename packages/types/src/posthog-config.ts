@@ -688,6 +688,19 @@ export interface SessionRecordingOptions {
     full_snapshot_interval_millis?: number
 
     /**
+     * ADVANCED: controls how much recent replay data is kept in memory while session recording waits for a
+     * URL, event, or linked-flag trigger. The recorder periodically takes a full snapshot and discards older
+     * buffered events, so increasing this interval retains more pre-trigger history but can increase memory
+     * usage and the amount of data processed when a trigger matches. Decreasing it takes full snapshots more
+     * often, which can increase CPU usage. Non-positive or non-finite values are ignored.
+     *
+     * This setting has no effect after recording becomes active.
+     *
+     * @default 1000 * 60 (1 minute)
+     */
+    trigger_pending_buffer_interval_millis?: number
+
+    /**
      * ADVANCED: whether to partially compress rrweb events before sending them to the server,
      * defaults to true, can be set to false to disable partial compression
      * NB requests are still compressed when sent to the server regardless of this setting
