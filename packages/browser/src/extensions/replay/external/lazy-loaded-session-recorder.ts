@@ -102,6 +102,8 @@ const ONE_KB = 1024
 const ONE_MINUTE = 1000 * 60
 const FIVE_MINUTES = ONE_MINUTE * 5
 const ONE_HOUR = ONE_MINUTE * 60
+const MIN_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS = 1000
+const MAX_TIMER_INTERVAL_MILLIS = 2_147_483_647
 
 /**
  * Extracts the network_timing value from a capturePerformance config.
@@ -785,7 +787,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private get _fullSnapshotIntervalMillis(): number {
         if (this._strategy?.hasPendingTriggers(this.sessionId) && !['sampled', 'active'].includes(this.status)) {
             const configuredInterval = this._instance.config.session_recording?.trigger_pending_buffer_interval_millis
-            return isNumber(configuredInterval) && Number.isFinite(configuredInterval) && configuredInterval > 0
+            return isNumber(configuredInterval) &&
+                Number.isFinite(configuredInterval) &&
+                configuredInterval >= MIN_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS &&
+                configuredInterval <= MAX_TIMER_INTERVAL_MILLIS
                 ? configuredInterval
                 : ONE_MINUTE
         }
@@ -872,6 +877,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             })
 
             this._strategy?.updateActiveTriggers(this.sessionId)
+            this._scheduleFullSnapshot()
 
             this._flushBuffer()
             this._reportStarted((triggerType + '_trigger_matched') as SessionStartReason, {
@@ -976,7 +982,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 this._instance,
                 this._urlTriggerMatching,
                 this._reportStarted.bind(this),
-                this._tryAddCustomEvent.bind(this)
+                this._tryAddCustomEvent.bind(this),
+                this._scheduleFullSnapshot.bind(this)
             )
         } else {
             this._strategy = new V1RecordingStrategy(
@@ -985,7 +992,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 this._eventTriggerMatching,
                 this._linkedFlagMatching,
                 this._reportStarted.bind(this),
-                this._tryTakeFullSnapshot.bind(this)
+                this._tryTakeFullSnapshot.bind(this),
+                this._scheduleFullSnapshot.bind(this)
             )
         }
 

@@ -2746,7 +2746,7 @@ describe('Lazy SessionRecording', () => {
             expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotIntervalMillis']).toBe(120_000)
         })
 
-        it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+        it.each([0, -1, 999, 2_147_483_648, Number.NaN, Number.POSITIVE_INFINITY])(
             'ignores unsafe pending trigger buffer interval %s',
             (configuredInterval) => {
                 posthog.config.session_recording!.trigger_pending_buffer_interval_millis = configuredInterval
@@ -2764,22 +2764,57 @@ describe('Lazy SessionRecording', () => {
             }
         )
 
-        it('continues using the active recording snapshot interval after a trigger matches', () => {
-            posthog.config.session_recording!.trigger_pending_buffer_interval_millis = 120_000
-            posthog.config.session_recording!.full_snapshot_interval_millis = 180_000
-            sessionRecording.onRemoteConfig(
-                makeFlagsResponse({
-                    sessionRecording: {
-                        endpoint: '/s/',
-                        eventTriggers: ['$exception'],
-                    },
-                })
-            )
+        it.each([1000, 2_147_483_647])(
+            'accepts timer-safe pending trigger buffer interval %s',
+            (configuredInterval) => {
+                posthog.config.session_recording!.trigger_pending_buffer_interval_millis = configuredInterval
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            eventTriggers: ['$exception'],
+                        },
+                    })
+                )
 
-            simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+                expect(sessionRecording.status).toBe('buffering')
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotIntervalMillis']).toBe(
+                    configuredInterval
+                )
+            }
+        )
 
-            expect(sessionRecording.status).toBe('active')
-            expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotIntervalMillis']).toBe(180_000)
+        it('reschedules the active recording snapshot interval after a V1 trigger matches', () => {
+            jest.useFakeTimers()
+            try {
+                posthog.config.session_recording!.trigger_pending_buffer_interval_millis = 120_000
+                posthog.config.session_recording!.full_snapshot_interval_millis = 180_000
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            eventTriggers: ['$exception'],
+                        },
+                    })
+                )
+
+                const takeFullSnapshot = jest.spyOn(
+                    sessionRecording['_lazyLoadedSessionRecording'] as any,
+                    '_tryTakeFullSnapshot'
+                )
+
+                jest.advanceTimersByTime(119_000)
+                simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+
+                expect(sessionRecording.status).toBe('active')
+                jest.advanceTimersByTime(61_000)
+                expect(takeFullSnapshot).not.toHaveBeenCalled()
+
+                jest.advanceTimersByTime(119_000)
+                expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
+            } finally {
+                jest.useRealTimers()
+            }
         })
 
         it('flushes buffer and starts when sees event', async () => {
@@ -5025,6 +5060,50 @@ describe('Lazy SessionRecording', () => {
     })
 
     describe('V2 Trigger Groups Integration', () => {
+        it('reschedules the active recording snapshot interval after a V2 trigger matches', () => {
+            jest.useFakeTimers()
+            try {
+                posthog.config.session_recording!.trigger_pending_buffer_interval_millis = 120_000
+                posthog.config.session_recording!.full_snapshot_interval_millis = 180_000
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            version: 2,
+                            triggerGroups: [
+                                {
+                                    id: 'error-group',
+                                    name: 'Error Tracking',
+                                    sampleRate: 1.0,
+                                    conditions: {
+                                        matchType: 'any',
+                                        events: [{ name: '$exception' }],
+                                    },
+                                },
+                            ],
+                        },
+                    })
+                )
+
+                const takeFullSnapshot = jest.spyOn(
+                    sessionRecording['_lazyLoadedSessionRecording'] as any,
+                    '_tryTakeFullSnapshot'
+                )
+
+                jest.advanceTimersByTime(119_000)
+                simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+
+                expect(sessionRecording.status).toBe('sampled')
+                jest.advanceTimersByTime(61_000)
+                expect(takeFullSnapshot).not.toHaveBeenCalled()
+
+                jest.advanceTimersByTime(119_000)
+                expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
+            } finally {
+                jest.useRealTimers()
+            }
+        })
+
         it('registers session properties when trigger group matches and is sampled', () => {
             const registerSpy = jest.spyOn(posthog, 'register_for_session')
 
