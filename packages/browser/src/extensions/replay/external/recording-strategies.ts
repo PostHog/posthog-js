@@ -167,21 +167,19 @@ export class V1RecordingStrategy implements RecordingStrategy {
         private readonly _eventTriggerMatching: EventTriggerMatching,
         private readonly _linkedFlagMatching: LinkedFlagMatching,
         private readonly _reportStarted: (reason: SessionStartReason, payload?: Record<string, any>) => void,
-        private readonly _tryTakeFullSnapshot: () => void,
-        private readonly _onTriggerActivated: () => void
+        private readonly _tryTakeFullSnapshot: () => void
     ) {}
 
     onRemoteConfig(config: SessionRecordingPersistedConfig): void {
         this._sampleRate = isNumber(config.sampleRate) ? config.sampleRate : null
 
         // Setup trigger matching strategy (AND vs OR)
-        const triggerMatchers = [this._eventTriggerMatching, this._urlTriggerMatching, this._linkedFlagMatching]
         if (config.triggerMatchType === 'any') {
-            this._triggerStatusMatcher = new OrTriggerMatching(triggerMatchers)
+            this._triggerStatusMatcher = new OrTriggerMatching([this._eventTriggerMatching, this._urlTriggerMatching])
             this._recordingStatusFunction = anyMatchSessionRecordingStatus
         } else {
             // either the setting is "ALL" or we default to the most restrictive
-            this._triggerStatusMatcher = new AndTriggerMatching(triggerMatchers)
+            this._triggerStatusMatcher = new AndTriggerMatching([this._eventTriggerMatching, this._urlTriggerMatching])
             this._recordingStatusFunction = allMatchSessionRecordingStatus
         }
 
@@ -194,7 +192,6 @@ export class V1RecordingStrategy implements RecordingStrategy {
 
         this._linkedFlagMatching.onConfig(config, (flag, variant) => {
             this._reportStarted('linked_flag_matched', { flag, variant })
-            this._onTriggerActivated()
         })
     }
 

@@ -992,8 +992,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 this._eventTriggerMatching,
                 this._linkedFlagMatching,
                 this._reportStarted.bind(this),
-                this._tryTakeFullSnapshot.bind(this),
-                this._scheduleFullSnapshot.bind(this)
+                this._tryTakeFullSnapshot.bind(this)
             )
         }
 
