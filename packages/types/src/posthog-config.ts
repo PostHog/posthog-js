@@ -695,8 +695,6 @@ export interface SessionRecordingOptions {
      * CPU usage. Values must be between 1,000 ms and 2,147,483,647 ms (inclusive); values outside this timer-safe
      * range, or non-finite values, are ignored.
      *
-     * This setting has no effect after recording becomes active.
-     *
      * @default 1000 * 60 (1 minute)
      */
     trigger_pending_buffer_interval_millis?: number

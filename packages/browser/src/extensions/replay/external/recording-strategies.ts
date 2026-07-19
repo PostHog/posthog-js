@@ -338,8 +338,7 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
         private readonly _instance: PostHog,
         private readonly _urlTriggerMatching: URLTriggerMatching,
         private readonly _reportStarted: (reason: SessionStartReason, payload?: Record<string, any>) => void,
-        private readonly _tryAddCustomEvent: (tag: string, payload: any) => void,
-        private readonly _onTriggerActivated: () => void
+        private readonly _tryAddCustomEvent: (tag: string, payload: any) => void
     ) {}
 
     onRemoteConfig(config: SessionRecordingPersistedConfig): void {
@@ -421,7 +420,6 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
 
                     matcher.activateTrigger(triggerType, sessionId)
                     this.updateActiveTriggers(sessionId)
-                    this._onTriggerActivated()
                 },
                 sessionId
             )
@@ -478,7 +476,6 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
 
                             matcher.activateTrigger(triggerType, sessionId)
                             this.updateActiveTriggers(sessionId)
-                            this._onTriggerActivated()
                         },
                         sessionId
                     )
@@ -657,7 +654,6 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
                     group_id: group.id,
                     group_name: group.name,
                 })
-                this._onTriggerActivated()
             })
             this._triggerGroupMatchers.push(matcher)
         }

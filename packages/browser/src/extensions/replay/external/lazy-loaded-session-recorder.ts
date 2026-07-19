@@ -802,8 +802,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         if (this._fullSnapshotTimer) {
             clearInterval(this._fullSnapshotTimer)
         }
-        // we don't schedule snapshots while idle or on a blocked URL
-        if (this._isIdle === true || this._urlTriggerMatching.urlBlocked) {
+        // we don't schedule snapshots while idle
+        if (this._isIdle === true) {
             return
         }
 
@@ -877,7 +877,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             })
 
             this._strategy?.updateActiveTriggers(this.sessionId)
-            this._scheduleFullSnapshot()
 
             this._flushBuffer()
             this._reportStarted((triggerType + '_trigger_matched') as SessionStartReason, {
@@ -982,8 +981,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 this._instance,
                 this._urlTriggerMatching,
                 this._reportStarted.bind(this),
-                this._tryAddCustomEvent.bind(this),
-                this._scheduleFullSnapshot.bind(this)
+                this._tryAddCustomEvent.bind(this)
             )
         } else {
             this._strategy = new V1RecordingStrategy(

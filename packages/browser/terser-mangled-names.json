@@ -434,7 +434,6 @@
         "_onTouchCancel",
         "_onTouchEnd",
         "_onTouchStart",
-        "_onTriggerActivated",
         "_onVisibilityChange",
         "_onVisibilityChange_handler",
         "_onlineListener",
