@@ -442,6 +442,8 @@ export class PostHog implements PostHogInterface {
     analyticsDefaultEndpoint: string
     version: string = Config.LIB_VERSION
     _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
+    // Keys registered via register_for_session — cleared when the PostHog session rotates
+    _sessionRegisteredPropKeys: Set<string> = new Set()
     _cachedPersonProperties: string | null
 
     SentryIntegration: typeof SentryIntegration
@@ -705,6 +707,15 @@ export class PostHog implements PostHogInterface {
         if (!startInCookielessMode) {
             this.sessionManager = new SessionIdManager(this)
             this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager, this.persistence)
+            // Clear user-registered session properties when a new PostHog session starts due to
+            // idle timeout or hitting the max session length. Properties registered via
+            // register_for_session are meant to be session-scoped, but sessionStorage persists
+            // until the browser tab closes — without this they leak into the next session.
+            this.sessionManager.onSessionId((_sessionId, _windowId, changeReason) => {
+                if (changeReason?.activityTimeout || changeReason?.sessionPastMaximumLength) {
+                    this._clearSessionRegisteredProps()
+                }
+            })
         }
 
         // Conditionally defer extension initialization based on config
@@ -1821,6 +1832,7 @@ export class PostHog implements PostHogInterface {
      */
     register_for_session(properties: Properties): void {
         this.sessionPersistence?.register(properties)
+        Object.keys(properties).forEach((key) => this._sessionRegisteredPropKeys.add(key))
     }
 
     /**
@@ -1867,10 +1879,18 @@ export class PostHog implements PostHogInterface {
      */
     unregister_for_session(property: string): void {
         this.sessionPersistence?.unregister(property)
+        this._sessionRegisteredPropKeys.delete(property)
     }
 
     _register_single(prop: string, value: Property) {
         this.register({ [prop]: value })
+    }
+
+    _clearSessionRegisteredProps(): void {
+        this._sessionRegisteredPropKeys.forEach((key) => {
+            this.sessionPersistence?.unregister(key)
+        })
+        this._sessionRegisteredPropKeys.clear()
     }
 
     /**
@@ -2983,6 +3003,7 @@ export class PostHog implements PostHogInterface {
         this.consent.reset()
         this.persistence?.clear()
         this.sessionPersistence?.clear()
+        this._sessionRegisteredPropKeys.clear()
 
         if (!isUndefined(recordingRemoteConfig)) {
             this.persistence?.register({ [SESSION_RECORDING_REMOTE_CONFIG]: recordingRemoteConfig })
