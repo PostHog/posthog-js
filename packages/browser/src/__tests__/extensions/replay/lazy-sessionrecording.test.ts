@@ -2745,6 +2745,33 @@ describe('Lazy SessionRecording', () => {
             }
         })
 
+        it('does not restart the snapshot timer when a trigger matches on a blocked URL', () => {
+            jest.useFakeTimers()
+            try {
+                fakeNavigateTo('https://test.com/blocked')
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            eventTriggers: ['$exception'],
+                            urlBlocklist: [{ url: '/blocked', matching: 'regex' }],
+                        },
+                    })
+                )
+
+                _emit(createFullSnapshot())
+                expect(sessionRecording.status).toBe('paused')
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotTimer']).toBeUndefined()
+
+                simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+
+                expect(sessionRecording.status).toBe('paused')
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotTimer']).toBeUndefined()
+            } finally {
+                jest.useRealTimers()
+            }
+        })
+
         it('flushes buffer and starts when sees event', async () => {
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
@@ -3571,6 +3598,29 @@ describe('Lazy SessionRecording', () => {
     })
 
     describe('linked flags', () => {
+        it('uses the active snapshot interval immediately after a linked flag matches', () => {
+            jest.useFakeTimers()
+            try {
+                posthog.config.session_recording!.full_snapshot_interval_millis = 30_000
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
+                )
+
+                const takeFullSnapshot = jest.spyOn(
+                    sessionRecording['_lazyLoadedSessionRecording'] as any,
+                    '_tryTakeFullSnapshot'
+                )
+
+                onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': 'literally-anything' })
+                expect(sessionRecording.status).toBe('active')
+
+                jest.advanceTimersByTime(30_000)
+                expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
+            } finally {
+                jest.useRealTimers()
+            }
+        })
+
         it('stores the linked flag on flags response', () => {
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
@@ -4988,6 +5038,45 @@ describe('Lazy SessionRecording', () => {
     })
 
     describe('V2 Trigger Groups Integration', () => {
+        it('uses the active snapshot interval immediately after a trigger group matches', () => {
+            jest.useFakeTimers()
+            try {
+                posthog.config.session_recording!.full_snapshot_interval_millis = 30_000
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            version: 2,
+                            triggerGroups: [
+                                {
+                                    id: 'error-group',
+                                    name: 'Error Tracking',
+                                    sampleRate: 1.0,
+                                    conditions: {
+                                        matchType: 'any',
+                                        events: [{ name: '$exception' }],
+                                    },
+                                },
+                            ],
+                        },
+                    })
+                )
+
+                const takeFullSnapshot = jest.spyOn(
+                    sessionRecording['_lazyLoadedSessionRecording'] as any,
+                    '_tryTakeFullSnapshot'
+                )
+
+                simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+                expect(sessionRecording.status).toBe('sampled')
+
+                jest.advanceTimersByTime(30_000)
+                expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
+            } finally {
+                jest.useRealTimers()
+            }
+        })
+
         it('registers session properties when trigger group matches and is sampled', () => {
             const registerSpy = jest.spyOn(posthog, 'register_for_session')
 
