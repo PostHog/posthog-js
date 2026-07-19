@@ -416,8 +416,14 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
                         linkedFlagMatches = !!variantForFlagKey
                     }
                 }
+                // onFeatureFlags fires on every flag reload, so only report activation on the
+                // inactive->active transition. Firing on every reload while the flag stays truthy
+                // re-reports linked_flag_matched and (via onStarted -> _onTriggerActivated) restarts
+                // the full-snapshot interval each time, which can postpone periodic full snapshots
+                // indefinitely when flags reload more often than full_snapshot_interval_millis.
+                const isNewActivation = linkedFlagMatches && !this.linkedFlagSeen
                 this.linkedFlagSeen = linkedFlagMatches
-                if (linkedFlagMatches) {
+                if (isNewActivation) {
                     onStarted(linkedFlag, linkedVariant)
                 }
             })
