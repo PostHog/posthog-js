@@ -315,7 +315,10 @@ export class V1RecordingStrategy implements RecordingStrategy {
     }
 
     hasPendingTriggers(sessionId: string): boolean {
-        return this._triggerStatusMatcher?.triggerStatus(sessionId) === TRIGGER_PENDING
+        return (
+            this._triggerStatusMatcher?.triggerStatus(sessionId) === TRIGGER_PENDING ||
+            this._linkedFlagMatching.triggerStatus() === TRIGGER_PENDING
+        )
     }
 
     stop(): void {

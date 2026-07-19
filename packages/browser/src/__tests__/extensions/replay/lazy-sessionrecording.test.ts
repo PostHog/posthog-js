@@ -3643,6 +3643,37 @@ describe('Lazy SessionRecording', () => {
     })
 
     describe('linked flags', () => {
+        it('uses the pending buffer interval and reschedules after the linked flag matches', () => {
+            jest.useFakeTimers()
+            try {
+                posthog.config.session_recording!.trigger_pending_buffer_interval_millis = 120_000
+                posthog.config.session_recording!.full_snapshot_interval_millis = 180_000
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
+                )
+
+                const takeFullSnapshot = jest.spyOn(
+                    sessionRecording['_lazyLoadedSessionRecording'] as any,
+                    '_tryTakeFullSnapshot'
+                )
+
+                expect(sessionRecording.status).toBe('buffering')
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotIntervalMillis']).toBe(120_000)
+
+                jest.advanceTimersByTime(119_000)
+                onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': 'literally-anything' })
+
+                expect(sessionRecording.status).toBe('active')
+                jest.advanceTimersByTime(61_000)
+                expect(takeFullSnapshot).not.toHaveBeenCalled()
+
+                jest.advanceTimersByTime(119_000)
+                expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
+            } finally {
+                jest.useRealTimers()
+            }
+        })
+
         it('stores the linked flag on flags response', () => {
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
