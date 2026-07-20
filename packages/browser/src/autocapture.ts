@@ -354,21 +354,19 @@ export class Autocapture implements Extension {
             this._elementsChainAsString = response.elementsChainAsString
         }
 
-        // NOTE: Unlike other extensions (heatmaps, web-vitals, etc.), we intentionally
-        // DO NOT guard against missing autocapture_opt_out key on a successful
-        // response. Autocapture uses a "wait for server, then enable unless
-        // explicitly opted out" model:
-        // - Before remote config: autocapture disabled (isEnabled returns false)
-        // - After remote config: enabled unless autocapture_opt_out is explicitly true
-        // Missing/undefined key → !!undefined = false → autocapture enabled
-        // This is intentional and different from opt-in features like heatmaps.
-        if (this.instance.persistence) {
-            this.instance.persistence.register({
-                [AUTOCAPTURE_DISABLED_SERVER_SIDE]: !!response['autocapture_opt_out'],
-            })
+        // The server always sends a boolean autocapture_opt_out, so a response
+        // without one carries no opt-out information: keep the last known server
+        // value, as with a failed fetch.
+        const optOut = response['autocapture_opt_out']
+        if (isBoolean(optOut)) {
+            if (this.instance.persistence) {
+                this.instance.persistence.register({
+                    [AUTOCAPTURE_DISABLED_SERVER_SIDE]: optOut,
+                })
+            }
+            // store this in-memory in case persistence is disabled
+            this._isDisabledServerSide = optOut
         }
-        // store this in-memory in case persistence is disabled
-        this._isDisabledServerSide = !!response['autocapture_opt_out']
         this.startIfEnabled()
     }
 
