@@ -1460,6 +1460,21 @@ describe('Autocapture system', () => {
                 expect(autocapture.isEnabled).toBe(false)
                 expect(posthog.persistence!.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]).toBeUndefined()
             })
+
+            it('keeps the in-memory value when persistence has no entry', () => {
+                autocapture['_isDisabledServerSide'] = true
+                autocapture.onRemoteConfig({} as FlagsResponse)
+                expect(autocapture.isEnabled).toBe(false)
+            })
+
+            it('recovers once a response includes the field', () => {
+                autocapture.onRemoteConfig({} as FlagsResponse)
+                expect(autocapture.isEnabled).toBe(false)
+
+                autocapture.onRemoteConfig({ autocapture_opt_out: false } as FlagsResponse)
+                expect(autocapture.isEnabled).toBe(true)
+                expect(posthog.persistence!.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]).toBe(false)
+            })
         })
 
         it.each([

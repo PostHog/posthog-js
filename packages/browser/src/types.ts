@@ -340,7 +340,9 @@ export interface RemoteConfig {
     supportedCompression: Compression[]
 
     /**
-     * If set, disables autocapture
+     * If true, disables autocapture. When absent or not a boolean, the SDK
+     * keeps the last known server value; autocapture stays off until a
+     * response containing the field arrives.
      */
     autocapture_opt_out?: boolean
 
