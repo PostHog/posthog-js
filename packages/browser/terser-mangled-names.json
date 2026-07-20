@@ -275,6 +275,7 @@
         "_hasPersonProcessing",
         "_hasProcessedRestoreToken",
         "_hasQueuedRecords",
+        "_hasReceivedConfigResponse",
         "_hasStatusZeroCircuitBreakerTripped",
         "_hasUnobservableSurfaces",
         "_hostnamesForPatch",
