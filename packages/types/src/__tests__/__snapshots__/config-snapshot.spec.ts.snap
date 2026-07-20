@@ -519,6 +519,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "undefined",
       "number"
     ],
+    "trigger_pending_buffer_interval_millis": [
+      "undefined",
+      "number"
+    ],
     "compress_events": [
       "undefined",
       "false",
