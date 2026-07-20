@@ -103,7 +103,7 @@ const ONE_MINUTE = 1000 * 60
 const FIVE_MINUTES = ONE_MINUTE * 5
 const ONE_HOUR = ONE_MINUTE * 60
 const MIN_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS = 1000
-const MAX_TIMER_INTERVAL_MILLIS = 2_147_483_647
+const MAX_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS = ONE_HOUR
 
 /**
  * Extracts the network_timing value from a capturePerformance config.
@@ -790,7 +790,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return isNumber(configuredInterval) &&
                 Number.isFinite(configuredInterval) &&
                 configuredInterval >= MIN_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS &&
-                configuredInterval <= MAX_TIMER_INTERVAL_MILLIS
+                configuredInterval <= MAX_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS
                 ? configuredInterval
                 : ONE_MINUTE
         }

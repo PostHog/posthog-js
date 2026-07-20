@@ -692,8 +692,8 @@ export interface SessionRecordingOptions {
      * conditional trigger. The recorder periodically takes a full snapshot and discards older buffered events,
      * so increasing this interval retains more pre-trigger history but can increase memory usage and
      * CPU usage. Performance impacts on your site can start to be visible to users with larger values.
-     * Values must be between 1,000 ms and 2,147,483,647 ms (inclusive); values outside this timer-safe
-     * range, or non-finite values, are ignored.
+     * Values must be between 1,000 ms and 3,600,000 ms (1 hour, inclusive); values outside this range,
+     * or non-finite values, are ignored.
      *
      * @default 1000 * 60 (1 minute)
      */

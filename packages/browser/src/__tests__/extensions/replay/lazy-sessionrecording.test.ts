@@ -2722,11 +2722,11 @@ describe('Lazy SessionRecording', () => {
             [undefined, 60_000],
             [120_000, 120_000],
             [1000, 1000],
-            [2_147_483_647, 2_147_483_647],
+            [3_600_000, 3_600_000],
             [0, 60_000],
             [-1, 60_000],
             [999, 60_000],
-            [2_147_483_648, 60_000],
+            [3_600_001, 60_000],
             [Number.NaN, 60_000],
             [Number.POSITIVE_INFINITY, 60_000],
         ])('uses pending trigger buffer interval %s as %s', (configuredInterval, expectedInterval) => {
