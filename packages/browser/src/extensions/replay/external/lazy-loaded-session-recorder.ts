@@ -475,6 +475,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _rrwebError = false
     private _rrwebStartAttempted = false
     private _maxDepthExceeded = false
+    // only warn once per recorder instance that client-side masking is shadowing the project setting
+    private _hasWarnedClientMaskingOverride = false
 
     private _linkedFlagMatching: LinkedFlagMatching
     private _urlTriggerMatching: URLTriggerMatching
@@ -581,6 +583,54 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                   blockSelector,
               }
             : undefined
+    }
+
+    /**
+     * Client-side masking config in `posthog.init` intentionally wins over the "Privacy and masking"
+     * project setting (the remote config). That precedence is by-design, but silent: a developer who
+     * sets e.g. `maskTextSelector: '*'` locally can be surprised that their dashboard setting has no
+     * effect. Warn (once per recorder) when the two diverge so the override is self-explaining.
+     */
+    private _warnIfClientMaskingShadowsServer(): void {
+        if (this._hasWarnedClientMaskingOverride) {
+            return
+        }
+
+        const masking_server_side = this._remoteConfig?.masking
+        if (isNullish(masking_server_side)) {
+            return
+        }
+
+        const clientConfig = this._instance.config.session_recording
+        const divergentFields = (['maskAllInputs', 'maskTextSelector', 'blockSelector'] as const).filter((field) => {
+            const clientValue = clientConfig?.[field]
+            const serverValue = masking_server_side[field]
+            // a client value that is set and disagrees with the project's value shadows it — an unset
+            // server value counts as a divergence too, since the client is then masking something the
+            // project setting did not ask for (e.g. maskTextSelector: '*' vs an unset project selector)
+            return !isUndefined(clientValue) && clientValue !== serverValue
+        })
+
+        if (divergentFields.length === 0) {
+            return
+        }
+
+        this._hasWarnedClientMaskingOverride = true
+        logger.warn(
+            'Session recording masking is configured both in `posthog.init` and in your project settings, and they differ. ' +
+                'The `session_recording` options in `posthog.init` take precedence, so the project ("Privacy and masking") setting is ignored for: ' +
+                divergentFields.join(', ') +
+                '. Remove these masking options from `posthog.init` to use the project setting instead. ' +
+                'See https://posthog.com/docs/session-replay/privacy',
+            {
+                client: {
+                    maskAllInputs: clientConfig?.maskAllInputs,
+                    maskTextSelector: clientConfig?.maskTextSelector,
+                    blockSelector: clientConfig?.blockSelector,
+                },
+                project: masking_server_side,
+            }
+        )
     }
 
     // (0,1] fraction of the canvas display size to capture frames at, from
@@ -2032,6 +2082,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             sessionRecordingOptions.maskTextSelector = this._masking.maskTextSelector ?? undefined
             sessionRecordingOptions.blockSelector = this._masking.blockSelector ?? undefined
         }
+
+        this._warnIfClientMaskingShadowsServer()
 
         const rrwebRecord = getRRWebRecord()
         if (!rrwebRecord) {
