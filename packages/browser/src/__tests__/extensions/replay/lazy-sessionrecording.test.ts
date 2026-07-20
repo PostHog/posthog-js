@@ -26,6 +26,8 @@ import {
     PerformanceCaptureConfig,
     PostHogConfig,
     Property,
+    RemoteConfig,
+    RemoteConfigResult,
     SessionIdChangedCallback,
     SessionRecordingOptions,
 } from '../../../types'
@@ -173,8 +175,8 @@ const createPluginSnapshot = (event = {}): pluginEvent => ({
     ...event,
 })
 
-function makeFlagsResponse(partialResponse: Partial<FlagsResponse>) {
-    return partialResponse as unknown as FlagsResponse
+function makeFlagsResponse(partialResponse: Partial<FlagsResponse>): RemoteConfigResult {
+    return { ok: true, config: partialResponse as unknown as RemoteConfig }
 }
 
 const originalLocation = window!.location

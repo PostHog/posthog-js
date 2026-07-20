@@ -1,5 +1,25 @@
 # posthog-js
 
+## 1.405.1
+
+### Patch Changes
+
+- [#4193](https://github.com/PostHog/posthog-js/pull/4193) [`dec8fe7`](https://github.com/PostHog/posthog-js/commit/dec8fe7ec1a64da0caa7a49f92b255e1701a2ec7) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Internal restructuring of remote config failure handling across SDK extensions; no behavior change.
+  (2026-07-20)
+
+## 1.405.0
+
+### Minor Changes
+
+- [#4172](https://github.com/PostHog/posthog-js/pull/4172) [`9621830`](https://github.com/PostHog/posthog-js/commit/9621830c359a9955ffec0db61164e5fc450e5443) Thanks [@haacked](https://github.com/haacked)! - send minimal `$feature_flag_called` events when the server enables it
+
+    When the v2 `/flags` response carries `minimalFlagCalledEvents: true` (or, for posthog-node local evaluation, the flag-definitions payload carries `minimal_flag_called_events: true`) and the evaluated flag is not linked to an experiment (`$feature_flag_has_experiment === false`), `$feature_flag_called` events are rebuilt from a strict allowlist of flag-evaluation, processing-control, and SDK-identity properties. Super properties, `$set`/`$set_once`, the `$feature/<key>` enumeration, `$active_feature_flags`, and the context envelope are stripped. Any missing signal (no gate on the response, bootstrapped or locally injected flags, `has_experiment` unknown) falls back to the full event, and experiment-linked flags always send the full envelope. The gate is stored alongside the cached flags (posthog-js persistence, posthog-node poller state) and is server-controlled, with no SDK-side configuration. `before_send` runs after the filter and may re-add stripped properties. (2026-07-20)
+
+### Patch Changes
+
+- Updated dependencies [[`9621830`](https://github.com/PostHog/posthog-js/commit/9621830c359a9955ffec0db61164e5fc450e5443)]:
+    - @posthog/core@1.44.0
+
 ## 1.404.1
 
 ### Patch Changes

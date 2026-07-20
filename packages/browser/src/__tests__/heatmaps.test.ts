@@ -264,8 +264,8 @@ describe('heatmaps', () => {
             posthog.persistence!.register({ [HEATMAPS_ENABLED_SERVER_SIDE]: true })
             const heatmaps = new Heatmaps(posthog)
 
-            // Call with empty config (simulating config fetch failure)
-            heatmaps.onRemoteConfig({} as FlagsResponse)
+            // Call with empty config (server returned no setting for this feature)
+            heatmaps.onRemoteConfig({ ok: true, config: {} as FlagsResponse })
 
             // Should NOT have overwritten the existing value
             expect(posthog.persistence!.props[HEATMAPS_ENABLED_SERVER_SIDE]).toBe(true)
@@ -275,7 +275,7 @@ describe('heatmaps', () => {
             posthog.persistence!.register({ [HEATMAPS_ENABLED_SERVER_SIDE]: true })
             const heatmaps = new Heatmaps(posthog)
 
-            heatmaps.onRemoteConfig({ heatmaps: false } as FlagsResponse)
+            heatmaps.onRemoteConfig({ ok: true, config: { heatmaps: false } as FlagsResponse })
 
             expect(posthog.persistence!.props[HEATMAPS_ENABLED_SERVER_SIDE]).toBe(false)
         })
@@ -354,8 +354,11 @@ describe('heatmaps', () => {
                 posthog.config.enable_heatmaps = deprecatedclientSideOptIn
                 posthog.config.capture_heatmaps = clientSideOptIn
                 posthog.heatmaps!.onRemoteConfig({
-                    heatmaps: serverSideOptIn,
-                } as FlagsResponse)
+                    ok: true,
+                    config: {
+                        heatmaps: serverSideOptIn,
+                    } as FlagsResponse,
+                })
                 expect(posthog.heatmaps!.isEnabled).toBe(expected)
             }
         )

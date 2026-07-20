@@ -1,5 +1,5 @@
 import { PostHog } from '../../posthog-core'
-import { PostHogConfig, RemoteConfig, SupportedWebVitalsMetrics } from '../../types'
+import { PostHogConfig, RemoteConfigResult, SupportedWebVitalsMetrics } from '../../types'
 import { createLogger } from '../../utils/logger'
 import { isBoolean, isNullish, isNumber, isUndefined, isObject, stripUrlHash } from '@posthog/core'
 import { WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
@@ -91,7 +91,13 @@ export class WebVitalsAutocapture {
         }
     }
 
-    public onRemoteConfig(response: RemoteConfig) {
+    public onRemoteConfig(result: RemoteConfigResult) {
+        if (!result.ok) {
+            // Failure behaves like a response without a capturePerformance key.
+            return
+        }
+
+        const response = result.config
         if (!('capturePerformance' in response)) {
             return
         }

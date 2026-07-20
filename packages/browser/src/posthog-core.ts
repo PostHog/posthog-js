@@ -18,6 +18,7 @@ import {
     EVENT_PAGEVIEW,
     FLAG_CALL_REPORTED,
     PEOPLE_DISTINCT_ID_KEY,
+    PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
     SDK_DEBUG_EXTENSIONS_INIT_METHOD,
     SDK_DEBUG_EXTENSIONS_INIT_TIME_MS,
     SESSION_RECORDING_REMOTE_CONFIG,
@@ -67,7 +68,6 @@ import {
     Properties,
     Property,
     QueuedRequestWithOptions,
-    RemoteConfig,
     RemoteConfigResult,
     RequestCallback,
     SessionIdChangedCallback,
@@ -115,6 +115,7 @@ import {
     isObject,
     isBoolean,
     getEventUuid,
+    minimizeFlagCalledEventProperties,
 } from '@posthog/core'
 import { uuidv7 } from './uuidv7'
 import { ExternalIntegrations } from './extensions/external-integration'
@@ -172,6 +173,11 @@ const CONSENT_COOKIELESS_WARN = 'Consent opt in/out is not valid with cookieless
 const SURVEYS_NOT_AVAILABLE = 'Surveys module not available'
 const SANITIZE_DEPRECATED = 'sanitize_properties is deprecated. Use before_send instead'
 const DENYLIST_INVALID = 'Invalid value for property_denylist config: '
+
+// Transport-level keys the browser SDK carries inside event properties (unlike other SDKs,
+// where they live outside `properties`). They are out of scope of the minimal
+// $feature_flag_called allowlist and must survive minimization for ingestion to work.
+const FLAG_CALLED_TRANSPORT_PROPERTY_KEYS = ['token', 'distinct_id', COOKIELESS_MODE_FLAG_PROPERTY]
 
 const PRIMARY_INSTANCE_NAME = 'posthog'
 
@@ -437,7 +443,7 @@ export class PostHog implements PostHogInterface {
     compression?: Compression
     __request_queue: QueuedRequestWithOptions[]
     _pendingRemoteConfig?: RemoteConfigResult
-    _lastRemoteConfig?: RemoteConfig
+    _lastRemoteConfig?: RemoteConfigResult
     _remoteConfigLoader?: RemoteConfigLoader
     analyticsDefaultEndpoint: string
     version: string = Config.LIB_VERSION
@@ -1010,49 +1016,39 @@ export class PostHog implements PostHogInterface {
             this._pendingRemoteConfig = result
         }
 
-        // On failure, extensions without onRemoteConfigFailed still initialize with
-        // their defaults from an empty config, as they would for absent keys.
-        const config: RemoteConfig = result.ok
-            ? result.config
-            : {
-                  supportedCompression: [],
-                  toolbarParams: {},
-                  toolbarVersion: 'toolbar',
-                  isAuthenticated: false,
-                  siteApps: [],
-              }
-
-        // Cache the latest remote config so extensions that are created later
+        // Cache the latest remote config result so extensions that are created later
         // (e.g. sessionRecording after opt_in_capturing from cookieless mode) can
         // replay it and pick up server-side settings like recording enable flags.
-        this._lastRemoteConfig = config
+        // Storing the result (not just a config) means a replayed failure is
+        // distinguishable from a successful empty config.
+        this._lastRemoteConfig = result
 
         this.compression = undefined
-        if (config.supportedCompression && !this.config.disable_compression) {
-            this.compression = includes(config['supportedCompression'], Compression.GZipJS)
-                ? Compression.GZipJS
-                : includes(config['supportedCompression'], Compression.Base64)
-                  ? Compression.Base64
-                  : undefined
+        if (result.ok) {
+            const config = result.config
+            if (config.supportedCompression && !this.config.disable_compression) {
+                this.compression = includes(config['supportedCompression'], Compression.GZipJS)
+                    ? Compression.GZipJS
+                    : includes(config['supportedCompression'], Compression.Base64)
+                      ? Compression.Base64
+                      : undefined
+            }
+
+            if (config.analytics?.endpoint) {
+                this.analyticsDefaultEndpoint = config.analytics.endpoint
+            }
         }
 
-        if (config.analytics?.endpoint) {
-            this.analyticsDefaultEndpoint = config.analytics.endpoint
-        }
-
+        // Runs on failure too: the person_profiles default must be applied even when
+        // the remote config could not be fetched.
         this.set_config({
             person_profiles: this._initialPersonProfilesConfig
                 ? this._initialPersonProfilesConfig
                 : PERSON_PROFILES_IDENTIFIED_ONLY,
         })
 
-        this._extensions.forEach((ext) => {
-            if (!result.ok && ext.onRemoteConfigFailed) {
-                ext.onRemoteConfigFailed()
-            } else {
-                ext.onRemoteConfig?.(config)
-            }
-        })
+        // Every extension receives the full result and handles the failure case itself.
+        this._extensions.forEach((ext) => ext.onRemoteConfig?.(result))
     }
 
     _loaded(): void {
@@ -1410,8 +1406,18 @@ export class PostHog implements PostHogInterface {
             data.properties['$lib_rate_limit_remaining_tokens'] = clientRateLimitContext.remainingTokens
         }
 
+        // When the server gates this project into minimal $feature_flag_called events and the
+        // evaluated flag is not linked to an experiment, the fully merged properties are rebuilt
+        // from the strict allowlist below (after the last SDK-added property) so super properties
+        // and the context envelope are structurally excluded. Any missing signal falls back to
+        // the full event.
+        const shouldSendMinimalFlagCalledEvent =
+            event_name === '$feature_flag_called' &&
+            data.properties['$feature_flag_has_experiment'] === false &&
+            this.get_property(PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS) === true
+
         const setProperties = options?.$set
-        if (setProperties) {
+        if (setProperties && !shouldSendMinimalFlagCalledEvent) {
             data.$set = options?.$set
         }
         const unsetProperties = options?.$unset
@@ -1425,11 +1431,12 @@ export class PostHog implements PostHogInterface {
         // $identify should always include initial props because it creates/merges persons
         // and may be processed before earlier anonymous events on the server
         const forceIncludeInitialProps = event_name === EVENT_IDENTIFY
-        const setOnceProperties = this._calculate_set_once_properties(
-            options?.$set_once,
-            markSetOnceAsSent,
-            forceIncludeInitialProps
-        )
+        // Minimal flag-called events must not carry $set_once. Skipping the calculation (rather
+        // than dropping its result) avoids marking the initial person props as sent, so they
+        // still go out with the next full event.
+        const setOnceProperties = shouldSendMinimalFlagCalledEvent
+            ? undefined
+            : this._calculate_set_once_properties(options?.$set_once, markSetOnceAsSent, forceIncludeInitialProps)
         if (setOnceProperties) {
             data.$set_once = setOnceProperties
         }
@@ -1441,6 +1448,12 @@ export class PostHog implements PostHogInterface {
         if (!isUndefined(options?.timestamp)) {
             data.properties['$event_time_override_provided'] = true
             data.properties['$event_time_override_system_time'] = systemTime
+        }
+
+        // before_send runs after this filter and may deliberately re-add stripped properties;
+        // the SDK itself must not enrich beyond allowlisted keys past this point.
+        if (shouldSendMinimalFlagCalledEvent) {
+            data.properties = minimizeFlagCalledEventProperties(data.properties, FLAG_CALLED_TRANSPORT_PROPERTY_KEYS)
         }
 
         if (event_name === SurveyEventName.DISMISSED || event_name === SurveyEventName.SENT) {
@@ -3893,9 +3906,9 @@ export class PostHog implements PostHogInterface {
                     this.sessionRecording,
                     new SessionRecordingClass(this) as SessionRecording
                 )
-                // Replay the cached remote config so the new recorder picks up server-side
-                // settings (enable flag, endpoint, sampling) that arrived while we were
-                // still in cookieless mode and sessionRecording didn't yet exist.
+                // Replay the cached remote config result so the new recorder picks up
+                // server-side settings (enable flag, endpoint, sampling) that arrived while
+                // we were still in cookieless mode and sessionRecording didn't yet exist.
                 if (this._lastRemoteConfig) {
                     this.sessionRecording?.onRemoteConfig?.(this._lastRemoteConfig)
                 }

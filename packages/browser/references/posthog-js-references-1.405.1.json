@@ -2,7 +2,7 @@
   "id": "posthog-js",
   "hogRef": "0.3",
   "info": {
-    "version": "<version>",
+    "version": "1.405.1",
     "id": "posthog-js",
     "title": "PostHog JavaScript Web SDK",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
@@ -4523,7 +4523,7 @@
           "name": "analytics"
         },
         {
-          "description": "If true, disables autocapture. When absent or not a boolean, the SDK keeps the last known server value; autocapture stays off until a response containing the field arrives.",
+          "description": "If set, disables autocapture",
           "type": "boolean",
           "name": "autocapture_opt_out"
         },

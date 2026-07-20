@@ -7,7 +7,7 @@ import { SESSION_RECORDING_REMOTE_CONFIG } from '../../../constants'
 import { SessionIdManager } from '../../../sessionid'
 import { FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE } from '../../../extensions/replay/external/sessionrecording-utils'
 import { PostHog } from '../../../posthog-core'
-import { FlagsResponse, PostHogConfig, Property } from '../../../types'
+import { FlagsResponse, PostHogConfig, Property, RemoteConfig, RemoteConfigResult } from '../../../types'
 import { uuidv7 } from '../../../uuidv7'
 import { SessionRecording } from '../../../extensions/replay/session-recording'
 import { assignableWindow, window } from '../../../utils/globals'
@@ -51,8 +51,8 @@ const createFullSnapshot = (event = {}): fullSnapshotEvent =>
         ...event,
     }) as fullSnapshotEvent
 
-function makeFlagsResponse(partialResponse: Partial<FlagsResponse>) {
-    return partialResponse as unknown as FlagsResponse
+function makeFlagsResponse(partialResponse: Partial<FlagsResponse>): RemoteConfigResult {
+    return { ok: true, config: partialResponse as unknown as RemoteConfig }
 }
 
 const originalLocation = window!.location

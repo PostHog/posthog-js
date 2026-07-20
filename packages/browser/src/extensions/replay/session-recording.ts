@@ -11,7 +11,13 @@ import {
 } from '../../constants'
 import { PostHog } from '../../posthog-core'
 import { RemoteConfigLoader } from '../../remote-config'
-import { Properties, RemoteConfig, SessionRecordingPersistedConfig, SessionStartReason } from '../../types'
+import {
+    Properties,
+    RemoteConfig,
+    RemoteConfigResult,
+    SessionRecordingPersistedConfig,
+    SessionStartReason,
+} from '../../types'
 import { type eventWithTime } from './types/rrweb-types'
 
 import { isNullish, isNumber, isUndefined, isValidSampleRate } from '@posthog/core'
@@ -236,8 +242,11 @@ export class SessionRecording implements Extension {
         }
     }
 
-    onRemoteConfig(response: RemoteConfig) {
-        if (!('sessionRecording' in response)) {
+    onRemoteConfig(result: RemoteConfigResult) {
+        // A failed fetch and a response without a sessionRecording key behave the same:
+        // no fresh server config arrived, so fall back to whatever is already persisted.
+        const response = result.ok ? result.config : undefined
+        if (!response || !('sessionRecording' in response)) {
             if (this._recordingStatus === AWAITING_CONFIG) {
                 this._recordingStatus = MISSING_CONFIG
                 logger.warn('config refresh failed, recording will not start until page reload')

@@ -449,6 +449,11 @@ export type PostHogFlagsResponse = Omit<PostHogRemoteConfig, 'hasFeatureFlags'> 
   quotaLimited?: string[]
   requestId?: string
   evaluatedAt?: number // Unix timestamp in milliseconds
+  /**
+   * Server-controlled gate for minimal `$feature_flag_called` events. `true` only when the
+   * project opted in; omitted otherwise. Absence always means full events.
+   */
+  minimalFlagCalledEvents?: boolean
 }
 
 export type PostHogFeatureFlagsResponse = PartialWithRequired<
@@ -510,7 +515,7 @@ export type PostHogV2FlagsResponse = Omit<PostHogFlagsResponse, 'featureFlags' |
  * so that we can support v1 and v2 of the API.
  */
 export type PostHogFlagsStorageFormat = Pick<PostHogFeatureFlagDetails, 'flags'> &
-  Partial<Pick<PostHogFlagsResponse, 'requestId' | 'evaluatedAt'>> & {
+  Partial<Pick<PostHogFlagsResponse, 'requestId' | 'evaluatedAt' | 'minimalFlagCalledEvents'>> & {
     errorsWhileComputingFlags?: boolean
     quotaLimited?: string[]
     requestError?: FeatureFlagRequestError

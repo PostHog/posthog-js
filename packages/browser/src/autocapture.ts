@@ -18,7 +18,7 @@ import {
 } from './autocapture-utils'
 
 import RageClick from './extensions/rageclick'
-import { AutocaptureConfig, EventName, Properties, RemoteConfig } from './types'
+import { AutocaptureConfig, EventName, Properties, RemoteConfigResult } from './types'
 import { PostHog } from './posthog-core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
@@ -343,16 +343,17 @@ export class Autocapture implements Extension {
         }
     }
 
-    // Failed fetch = opt-out unknown: keep the last known server value instead
-    // of defaulting to enabled, so a network error cannot turn autocapture on
-    // for an opted-out project.
-    public onRemoteConfigFailed(): void {
+    public onRemoteConfig(result: RemoteConfigResult) {
         this._hasReceivedConfigResponse = true
-        this.startIfEnabled()
-    }
+        if (!result.ok) {
+            // Failed fetch = opt-out unknown: keep the last known persisted server
+            // value instead of defaulting to enabled, so a network error cannot turn
+            // autocapture on for an opted-out project. No persistence write.
+            this.startIfEnabled()
+            return
+        }
 
-    public onRemoteConfig(response: RemoteConfig) {
-        this._hasReceivedConfigResponse = true
+        const response = result.config
         if (response.elementsChainAsString) {
             this._elementsChainAsString = response.elementsChainAsString
         }

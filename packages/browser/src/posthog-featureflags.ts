@@ -27,6 +27,7 @@ import {
     PERSISTENCE_FEATURE_FLAG_ERRORS,
     PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
     PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+    PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
     ENABLED_FEATURE_FLAGS,
     STORED_GROUP_PROPERTIES_KEY,
     STORED_PERSON_PROPERTIES_KEY,
@@ -121,6 +122,8 @@ export const parseFlagsResponse = (
             persistence.register({
                 [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: featureFlags,
                 [ENABLED_FEATURE_FLAGS]: $enabled_feature_flags,
+                // Legacy responses never carry the gate — fail safe to full events.
+                [PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS]: false,
             })
         return
     }
@@ -173,6 +176,9 @@ export const parseFlagsResponse = (
             [ENABLED_FEATURE_FLAGS]: newFeatureFlags || {},
             [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: newFeatureFlagPayloads || {},
             [PERSISTENCE_FEATURE_FLAG_DETAILS]: newFeatureFlagDetails || {},
+            // Overwritten on every flags response: an absent field flips the gate off, so
+            // bootstrap/locally injected flags always fail safe to full events.
+            [PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS]: response.minimalFlagCalledEvents === true,
             ...(requestId ? { [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: requestId } : {}),
             ...(evaluatedAt ? { [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: evaluatedAt } : {}),
         })
