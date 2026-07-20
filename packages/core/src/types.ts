@@ -569,8 +569,7 @@ export type FeatureFlagRequestError = {
  * Result type for getFlags that includes either a successful response or error information.
  */
 export type GetFlagsResult =
-  | { success: true; response: PostHogFeatureFlagsResponse }
-  | { success: false; error: FeatureFlagRequestError }
+  { success: true; response: PostHogFeatureFlagsResponse } | { success: false; error: FeatureFlagRequestError }
 
 export type FeatureFlagDetail = {
   key: string

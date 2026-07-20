@@ -698,11 +698,9 @@ describe('Lazy SessionRecording', () => {
                 (
                     _name: string,
                     serverConfig:
-                        | { maskAllInputs?: boolean; maskTextSelector?: string; blockSelector?: string }
-                        | undefined,
+                        { maskAllInputs?: boolean; maskTextSelector?: string; blockSelector?: string } | undefined,
                     clientConfig:
-                        | { maskAllInputs?: boolean; maskTextSelector?: string; blockSelector?: string }
-                        | undefined,
+                        { maskAllInputs?: boolean; maskTextSelector?: string; blockSelector?: string } | undefined,
                     expected: { maskAllInputs: boolean; maskTextSelector?: string; blockSelector?: string } | undefined
                 ) => {
                     posthog.persistence?.register({

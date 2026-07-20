@@ -173,11 +173,7 @@ export type ProductTourCallback = (tours: ProductTour[], context?: { isLoaded: b
 export type ProductTourSelectorError = 'not_found' | 'multiple_matches' | 'not_visible'
 
 export type ProductTourDismissReason =
-    | 'user_clicked_skip'
-    | 'user_clicked_outside'
-    | 'escape_key'
-    | 'element_unavailable'
-    | 'container_unavailable'
+    'user_clicked_skip' | 'user_clicked_outside' | 'escape_key' | 'element_unavailable' | 'container_unavailable'
 
 export type ProductTourRenderReason = 'auto' | 'api' | 'trigger' | 'event'
 

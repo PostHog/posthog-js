@@ -25,13 +25,7 @@ export type KnownEventName =
  * Known events that can be safely edited in beforeCapture without breaking PostHog functionality
  */
 export type KnownUnsafeEditableEvent =
-    | '$set'
-    | '$pageview'
-    | '$pageleave'
-    | '$identify'
-    | '$groupidentify'
-    | '$create_alias'
-    | '$feature_flag_called'
+    '$set' | '$pageview' | '$pageleave' | '$identify' | '$groupidentify' | '$create_alias' | '$feature_flag_called'
 
 export type EventName =
     | KnownUnsafeEditableEvent
