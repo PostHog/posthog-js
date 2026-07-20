@@ -1,4 +1,5 @@
 import type { PostHogConfig, PostHogInterface } from '../types'
+// Initialize shared config with the web SDK identity when this customization is bundled standalone.
 import '../config'
 
 import {
