@@ -113,7 +113,7 @@ describe('DeadClicksAutocapture', () => {
 
         const mockStop = dca.lazyLoadedDeadClicksAutocapture?.stop as jest.Mock
 
-        dca.onRemoteConfig({ captureDeadClicks: false } as any)
+        dca.onRemoteConfig({ ok: true, config: { captureDeadClicks: false } as any })
 
         expect(mockStop).toHaveBeenCalled()
         expect(dca.lazyLoadedDeadClicksAutocapture).toBeUndefined()
@@ -170,8 +170,8 @@ describe('DeadClicksAutocapture', () => {
                 [DEAD_CLICKS_ENABLED_SERVER_SIDE]: true,
             })
 
-            // Call with empty config (simulating config fetch failure)
-            instance.deadClicksAutocapture.onRemoteConfig({} as RemoteConfig)
+            // Call with empty config (server returned no setting for this feature)
+            instance.deadClicksAutocapture.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
 
             // Should NOT have overwritten the existing value
             expect(instance.persistence?.props[DEAD_CLICKS_ENABLED_SERVER_SIDE]).toBe(true)
@@ -183,8 +183,11 @@ describe('DeadClicksAutocapture', () => {
             })
 
             instance.deadClicksAutocapture.onRemoteConfig({
-                captureDeadClicks: false,
-            } as RemoteConfig)
+                ok: true,
+                config: {
+                    captureDeadClicks: false,
+                } as RemoteConfig,
+            })
 
             expect(instance.persistence?.props[DEAD_CLICKS_ENABLED_SERVER_SIDE]).toBe(false)
         })

@@ -1539,24 +1539,33 @@ describe('surveys', () => {
 
         it('is disabled by having no results in onRemoteConfig', () => {
             surveys.onRemoteConfig({
-                surveys: [],
-            } as Partial<RemoteConfig> as RemoteConfig)
+                ok: true,
+                config: {
+                    surveys: [],
+                } as Partial<RemoteConfig> as RemoteConfig,
+            })
             expect(surveys['_isSurveysEnabled']).toBe(false)
         })
 
         it('is enabled by having results in onRemoteConfig', () => {
             expect(surveys['_isSurveysEnabled']).toBe(undefined)
             surveys.onRemoteConfig({
-                surveys: ['example' as unknown as Survey],
-            } as Partial<RemoteConfig> as RemoteConfig)
+                ok: true,
+                config: {
+                    surveys: ['example' as unknown as Survey],
+                } as Partial<RemoteConfig> as RemoteConfig,
+            })
             expect(surveys['_isSurveysEnabled']).toBe(true)
         })
 
         it('can be disabled by config despite results of onRemoteConfig', () => {
             surveys['_instance'].config.disable_surveys = true
             surveys.onRemoteConfig({
-                surveys: ['example' as unknown as Survey],
-            } as Partial<RemoteConfig> as RemoteConfig)
+                ok: true,
+                config: {
+                    surveys: ['example' as unknown as Survey],
+                } as Partial<RemoteConfig> as RemoteConfig,
+            })
             expect(surveys['_isSurveysEnabled']).toBe(undefined)
         })
     })

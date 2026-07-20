@@ -4,7 +4,13 @@ import * as globals from '../utils/globals'
 import { document, window } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
 import { isUndefined } from '@posthog/core'
-import { ENABLE_PERSON_PROCESSING, SESSION_RECORDING_REMOTE_CONFIG, USER_STATE } from '../constants'
+import {
+    AUTOCAPTURE_DISABLED_SERVER_SIDE,
+    ENABLE_PERSON_PROCESSING,
+    HEATMAPS_ENABLED_SERVER_SIDE,
+    SESSION_RECORDING_REMOTE_CONFIG,
+    USER_STATE,
+} from '../constants'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
 import { PostHogConfig, RemoteConfig } from '../types'
 import { configRenames, PostHog } from '../posthog-core'
@@ -397,17 +403,53 @@ describe('posthog core', () => {
     })
 
     describe('_onRemoteConfig failure dispatch', () => {
-        it('routes failure to onRemoteConfigFailed and gives other extensions an empty config', async () => {
+        it('passes the failure result to every extension', async () => {
             const posthog = await createPosthogInstance()
-            const autocaptureFailed = jest.spyOn(posthog.autocapture!, 'onRemoteConfigFailed')
-            const autocaptureConfig = jest.spyOn(posthog.autocapture!, 'onRemoteConfig')
-            const heatmapsConfig = jest.spyOn(posthog.heatmaps!, 'onRemoteConfig')
+            const autocaptureResult = jest.spyOn(posthog.autocapture!, 'onRemoteConfig')
+            const heatmapsResult = jest.spyOn(posthog.heatmaps!, 'onRemoteConfig')
+
+            // the test helper delivers a successful config during init; clear that
+            // state so this test observes what a failure does on a fresh page
+            posthog.autocapture!['_isDisabledServerSide'] = null
+            posthog.persistence!.unregister(AUTOCAPTURE_DISABLED_SERVER_SIDE)
 
             posthog._onRemoteConfig({ ok: false })
 
-            expect(autocaptureFailed).toHaveBeenCalledTimes(1)
-            expect(autocaptureConfig).not.toHaveBeenCalled()
-            expect(heatmapsConfig).toHaveBeenCalledWith(expect.objectContaining({ supportedCompression: [] }))
+            // autocapture keeps waiting for a server verdict: stays disabled,
+            // with no server opt-out value persisted
+            expect(autocaptureResult).toHaveBeenCalledWith({ ok: false })
+            expect(posthog.autocapture!.isEnabled).toBe(false)
+            expect(posthog.persistence!.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]).toBeUndefined()
+
+            // heatmaps behaves as it would for a config without a heatmaps key:
+            // nothing persisted, not started
+            expect(heatmapsResult).toHaveBeenCalledWith({ ok: false })
+            expect(posthog.persistence!.props[HEATMAPS_ENABLED_SERVER_SIDE]).toBeUndefined()
+            expect(posthog.heatmaps!.isEnabled).toBe(false)
+        })
+
+        it('reaches every registered extension and no failure branch throws', async () => {
+            const posthog = await createPosthogInstance()
+            const handlers = (posthog as any)._extensions.filter((ext: any) => ext.onRemoteConfig)
+            expect(handlers.length).toBeGreaterThanOrEqual(10)
+            const spies = handlers.map((ext: any) => jest.spyOn(ext, 'onRemoteConfig'))
+
+            expect(() => posthog._onRemoteConfig({ ok: false })).not.toThrow()
+
+            for (const spy of spies) {
+                expect(spy).toHaveBeenCalledWith({ ok: false })
+            }
+        })
+
+        it('session recording treats a failure like a config without recording settings', async () => {
+            const posthog = await createPosthogInstance()
+            posthog.sessionRecording!.onRemoteConfig({ ok: false })
+
+            const other = await createPosthogInstance()
+            other.sessionRecording!.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
+
+            expect(posthog.sessionRecording!.status).toBe(other.sessionRecording!.status)
+            expect(posthog.sessionRecording!.started).toBe(false)
         })
     })
 

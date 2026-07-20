@@ -1,6 +1,6 @@
 import { assignableWindow, window } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
-import { RemoteConfig } from '../../types'
+import { RemoteConfigResult } from '../../types'
 
 import { createLogger } from '../../utils/logger'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
@@ -129,7 +129,13 @@ export class ExceptionObserver {
         this._unwrapConsoleError = undefined
     }
 
-    onRemoteConfig(response: RemoteConfig) {
+    onRemoteConfig(result: RemoteConfigResult) {
+        if (!result.ok) {
+            // Failure behaves like a response without an autocaptureExceptions key.
+            return
+        }
+
+        const response = result.config
         if (!('autocaptureExceptions' in response)) {
             return
         }
