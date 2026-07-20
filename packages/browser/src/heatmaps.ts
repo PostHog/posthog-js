@@ -1,5 +1,5 @@
 import RageClick from './extensions/rageclick'
-import { DeadClickCandidate, Properties, RemoteConfig } from './types'
+import { DeadClickCandidate, Properties, RemoteConfigResult } from './types'
 import { PostHog } from './posthog-core'
 
 import { document, window } from './utils/globals'
@@ -124,7 +124,13 @@ export class Heatmaps implements Extension {
         }
     }
 
-    public onRemoteConfig(response: RemoteConfig) {
+    public onRemoteConfig(result: RemoteConfigResult) {
+        if (!result.ok) {
+            // Failure behaves like a response without a heatmaps key.
+            return
+        }
+
+        const response = result.config
         if (!('heatmaps' in response)) {
             return
         }

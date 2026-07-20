@@ -1,7 +1,7 @@
 import { LOAD_EXT_NOT_FOUND } from './constants'
 import Config from './config'
 import { PostHog } from './posthog-core'
-import type { CaptureLogOptions, RemoteConfig, Logger, LogSdkContext, OtlpLogsPayload } from './types'
+import type { CaptureLogOptions, RemoteConfigResult, Logger, LogSdkContext, OtlpLogsPayload } from './types'
 import {
     PostHogLogs as CorePostHogLogs,
     buildOtlpLogsPayload,
@@ -136,8 +136,13 @@ export class PostHogLogs implements Extension {
         this.loadIfEnabled()
     }
 
-    onRemoteConfig(response: RemoteConfig) {
-        const logCapture = response.logs?.captureConsoleLogs
+    onRemoteConfig(result: RemoteConfigResult) {
+        if (!result.ok) {
+            // Failure behaves like a response without a logs key.
+            return
+        }
+
+        const logCapture = result.config.logs?.captureConsoleLogs
         if (isNullish(logCapture) || !logCapture) {
             return
         }

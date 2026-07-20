@@ -68,7 +68,6 @@ import {
     Properties,
     Property,
     QueuedRequestWithOptions,
-    RemoteConfig,
     RemoteConfigResult,
     RequestCallback,
     SessionIdChangedCallback,
@@ -444,7 +443,7 @@ export class PostHog implements PostHogInterface {
     compression?: Compression
     __request_queue: QueuedRequestWithOptions[]
     _pendingRemoteConfig?: RemoteConfigResult
-    _lastRemoteConfig?: RemoteConfig
+    _lastRemoteConfig?: RemoteConfigResult
     _remoteConfigLoader?: RemoteConfigLoader
     analyticsDefaultEndpoint: string
     version: string = Config.LIB_VERSION
@@ -1017,49 +1016,39 @@ export class PostHog implements PostHogInterface {
             this._pendingRemoteConfig = result
         }
 
-        // On failure, extensions without onRemoteConfigFailed still initialize with
-        // their defaults from an empty config, as they would for absent keys.
-        const config: RemoteConfig = result.ok
-            ? result.config
-            : {
-                  supportedCompression: [],
-                  toolbarParams: {},
-                  toolbarVersion: 'toolbar',
-                  isAuthenticated: false,
-                  siteApps: [],
-              }
-
-        // Cache the latest remote config so extensions that are created later
+        // Cache the latest remote config result so extensions that are created later
         // (e.g. sessionRecording after opt_in_capturing from cookieless mode) can
         // replay it and pick up server-side settings like recording enable flags.
-        this._lastRemoteConfig = config
+        // Storing the result (not just a config) means a replayed failure is
+        // distinguishable from a successful empty config.
+        this._lastRemoteConfig = result
 
         this.compression = undefined
-        if (config.supportedCompression && !this.config.disable_compression) {
-            this.compression = includes(config['supportedCompression'], Compression.GZipJS)
-                ? Compression.GZipJS
-                : includes(config['supportedCompression'], Compression.Base64)
-                  ? Compression.Base64
-                  : undefined
+        if (result.ok) {
+            const config = result.config
+            if (config.supportedCompression && !this.config.disable_compression) {
+                this.compression = includes(config['supportedCompression'], Compression.GZipJS)
+                    ? Compression.GZipJS
+                    : includes(config['supportedCompression'], Compression.Base64)
+                      ? Compression.Base64
+                      : undefined
+            }
+
+            if (config.analytics?.endpoint) {
+                this.analyticsDefaultEndpoint = config.analytics.endpoint
+            }
         }
 
-        if (config.analytics?.endpoint) {
-            this.analyticsDefaultEndpoint = config.analytics.endpoint
-        }
-
+        // Runs on failure too: the person_profiles default must be applied even when
+        // the remote config could not be fetched.
         this.set_config({
             person_profiles: this._initialPersonProfilesConfig
                 ? this._initialPersonProfilesConfig
                 : PERSON_PROFILES_IDENTIFIED_ONLY,
         })
 
-        this._extensions.forEach((ext) => {
-            if (!result.ok && ext.onRemoteConfigFailed) {
-                ext.onRemoteConfigFailed()
-            } else {
-                ext.onRemoteConfig?.(config)
-            }
-        })
+        // Every extension receives the full result and handles the failure case itself.
+        this._extensions.forEach((ext) => ext.onRemoteConfig?.(result))
     }
 
     _loaded(): void {
@@ -3917,9 +3906,9 @@ export class PostHog implements PostHogInterface {
                     this.sessionRecording,
                     new SessionRecordingClass(this) as SessionRecording
                 )
-                // Replay the cached remote config so the new recorder picks up server-side
-                // settings (enable flag, endpoint, sampling) that arrived while we were
-                // still in cookieless mode and sessionRecording didn't yet exist.
+                // Replay the cached remote config result so the new recorder picks up
+                // server-side settings (enable flag, endpoint, sampling) that arrived while
+                // we were still in cookieless mode and sessionRecording didn't yet exist.
                 if (this._lastRemoteConfig) {
                     this.sessionRecording?.onRemoteConfig?.(this._lastRemoteConfig)
                 }

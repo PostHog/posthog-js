@@ -171,8 +171,11 @@ describe('web vitals', () => {
 
                 // need to force this to get the web vitals script loaded
                 posthog.webVitalsAutocapture!.onRemoteConfig({
-                    capturePerformance: { web_vitals: true },
-                } as unknown as FlagsResponse)
+                    ok: true,
+                    config: {
+                        capturePerformance: { web_vitals: true },
+                    } as unknown as FlagsResponse,
+                })
 
                 expect(posthog.webVitalsAutocapture.allowedMetrics).toEqual(expectedAllowedMetrics)
             })
@@ -299,8 +302,11 @@ describe('web vitals', () => {
             assignableWindow.__PosthogExtensions__.loadExternalDependency = loadScriptMock
 
             posthog.webVitalsAutocapture!.onRemoteConfig({
-                capturePerformance: { web_vitals: true },
-            } as unknown as FlagsResponse)
+                ok: true,
+                config: {
+                    capturePerformance: { web_vitals: true },
+                } as unknown as FlagsResponse,
+            })
 
             expect(posthog.webVitalsAutocapture!.allowedMetrics).toEqual(['CLS', 'FCP'])
         })
@@ -387,8 +393,11 @@ describe('web vitals', () => {
             assignableWindow.__PosthogExtensions__.loadExternalDependency = loadScriptMock
 
             posthog.webVitalsAutocapture!.onRemoteConfig({
-                capturePerformance: { web_vitals: true },
-            } as unknown as FlagsResponse)
+                ok: true,
+                config: {
+                    capturePerformance: { web_vitals: true },
+                } as unknown as FlagsResponse,
+            })
 
             expect(posthog.webVitalsAutocapture!.allowedMetrics).toEqual(['CLS', 'FCP'])
         })
@@ -454,8 +463,11 @@ describe('web vitals', () => {
             })
 
             posthog.webVitalsAutocapture!.onRemoteConfig({
-                capturePerformance: { web_vitals: true },
-            } as RemoteConfig)
+                ok: true,
+                config: {
+                    capturePerformance: { web_vitals: true },
+                } as RemoteConfig,
+            })
 
             expect(loadScriptMock).toHaveBeenCalledWith(expect.anything(), expectedBundle, expect.any(Function))
         })
@@ -476,8 +488,8 @@ describe('web vitals', () => {
                 [WEB_VITALS_ALLOWED_METRICS]: ['LCP', 'FCP'],
             })
 
-            // Call with empty config (simulating config fetch failure)
-            posthog.webVitalsAutocapture!.onRemoteConfig({} as RemoteConfig)
+            // Call with empty config (server returned no setting for this feature)
+            posthog.webVitalsAutocapture!.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
 
             // Should NOT have overwritten the existing values
             expect(posthog.persistence!.props[WEB_VITALS_ENABLED_SERVER_SIDE]).toBe(true)
@@ -491,8 +503,11 @@ describe('web vitals', () => {
             })
 
             posthog.webVitalsAutocapture!.onRemoteConfig({
-                capturePerformance: { web_vitals: false, web_vitals_allowed_metrics: ['CLS'] },
-            } as RemoteConfig)
+                ok: true,
+                config: {
+                    capturePerformance: { web_vitals: false, web_vitals_allowed_metrics: ['CLS'] },
+                } as RemoteConfig,
+            })
 
             expect(posthog.persistence!.props[WEB_VITALS_ENABLED_SERVER_SIDE]).toBe(false)
             expect(posthog.persistence!.props[WEB_VITALS_ALLOWED_METRICS]).toEqual(['CLS'])
@@ -550,8 +565,11 @@ describe('web vitals', () => {
             (clientSideOptIn, serverSideOptIn, expected) => {
                 posthog.config.capture_performance = { web_vitals: clientSideOptIn }
                 posthog.webVitalsAutocapture!.onRemoteConfig({
-                    capturePerformance: { web_vitals: serverSideOptIn },
-                } as FlagsResponse)
+                    ok: true,
+                    config: {
+                        capturePerformance: { web_vitals: serverSideOptIn },
+                    } as FlagsResponse,
+                })
                 expect(posthog.webVitalsAutocapture!.isEnabled).toBe(expected)
             }
         )
@@ -573,10 +591,13 @@ describe('web vitals', () => {
         })
 
         posthog.webVitalsAutocapture!.onRemoteConfig({
-            capturePerformance: {
-                web_vitals: true,
-            },
-        } as RemoteConfig)
+            ok: true,
+            config: {
+                capturePerformance: {
+                    web_vitals: true,
+                },
+            } as RemoteConfig,
+        })
 
         expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
     })
@@ -597,8 +618,11 @@ describe('web vitals', () => {
         })
 
         posthog.webVitalsAutocapture!.onRemoteConfig({
-            capturePerformance: { web_vitals: true },
-        } as RemoteConfig)
+            ok: true,
+            config: {
+                capturePerformance: { web_vitals: true },
+            } as RemoteConfig,
+        })
 
         expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
     })
@@ -651,8 +675,11 @@ describe('web vitals', () => {
         })
 
         posthog.webVitalsAutocapture!.onRemoteConfig({
-            capturePerformance: { web_vitals: true },
-        } as RemoteConfig)
+            ok: true,
+            config: {
+                capturePerformance: { web_vitals: true },
+            } as RemoteConfig,
+        })
 
         expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
     })
@@ -673,8 +700,11 @@ describe('web vitals', () => {
         })
 
         posthog.webVitalsAutocapture!.onRemoteConfig({
-            capturePerformance: { web_vitals: true },
-        } as FlagsResponse)
+            ok: true,
+            config: {
+                capturePerformance: { web_vitals: true },
+            } as FlagsResponse,
+        })
 
         expect(posthog.webVitalsAutocapture!.isEnabled).toBe(true)
     })
@@ -735,8 +765,11 @@ describe('web vitals', () => {
 
                 // need to force this to get the web vitals script loaded
                 posthog.webVitalsAutocapture!.onRemoteConfig({
-                    capturePerformance: { web_vitals: true },
-                } as unknown as FlagsResponse)
+                    ok: true,
+                    config: {
+                        capturePerformance: { web_vitals: true },
+                    } as unknown as FlagsResponse,
+                })
             })
 
             it('masks properties accordingly', async () => {

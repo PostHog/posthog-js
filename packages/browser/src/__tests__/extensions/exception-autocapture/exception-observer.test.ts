@@ -72,7 +72,7 @@ describe('Exception Observer', () => {
 
     describe('when enabled remotely', () => {
         beforeEach(() => {
-            exceptionObserver.onRemoteConfig({ autocaptureExceptions: true } as FlagsResponse)
+            exceptionObserver.onRemoteConfig({ ok: true, config: { autocaptureExceptions: true } as FlagsResponse })
         })
 
         it('should instrument enabled handlers only when started', () => {
@@ -220,7 +220,7 @@ describe('Exception Observer', () => {
             window!.onerror = originalOnError
             window!.onunhandledrejection = originalOnUnhandledRejection
 
-            exceptionObserver.onRemoteConfig({ autocaptureExceptions: true } as FlagsResponse)
+            exceptionObserver.onRemoteConfig({ ok: true, config: { autocaptureExceptions: true } as FlagsResponse })
         })
 
         it('should wrap original onerror handler if one was present when wrapped', () => {
@@ -279,7 +279,7 @@ describe('Exception Observer', () => {
 
     describe('when disabled', () => {
         beforeEach(() => {
-            exceptionObserver.onRemoteConfig({ autocaptureExceptions: false } as FlagsResponse)
+            exceptionObserver.onRemoteConfig({ ok: true, config: { autocaptureExceptions: false } as FlagsResponse })
         })
 
         it('cannot be started', () => {

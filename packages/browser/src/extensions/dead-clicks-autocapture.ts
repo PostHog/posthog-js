@@ -3,7 +3,7 @@ import { DEAD_CLICKS_ENABLED_SERVER_SIDE } from '../constants'
 import { isBoolean, isObject } from '@posthog/core'
 import { assignableWindow, document, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { createLogger } from '../utils/logger'
-import { DeadClicksAutoCaptureConfig, RemoteConfig } from '../types'
+import { DeadClicksAutoCaptureConfig, RemoteConfigResult } from '../types'
 import type { Extension } from './types'
 
 const logger = createLogger('[Dead Clicks]')
@@ -38,7 +38,13 @@ export class DeadClicksAutocapture implements Extension {
         this.startIfEnabledOrStop()
     }
 
-    public onRemoteConfig(response: RemoteConfig) {
+    public onRemoteConfig(result: RemoteConfigResult) {
+        if (!result.ok) {
+            // Failure behaves like a response without a captureDeadClicks key.
+            return
+        }
+
+        const response = result.config
         if (!('captureDeadClicks' in response)) {
             return
         }
