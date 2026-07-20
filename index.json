@@ -1,4 +1,17 @@
 {
+  "PostHog/posthog-js/issue/4202": {
+    "key": "PostHog/posthog-js/issue/4202",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4202",
+    "url": "https://github.com/PostHog/posthog-js/issues/4202",
+    "conclusion": "Likely valid replay bug: an idle activity-timeout rotation can still leave the new replay session without a flushed FullSnapshot in 1.404.1.",
+    "labels": [
+      "feature/replay",
+      "web"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-20T11:54:29.879Z"
+  },
   "PostHog/posthog-js/issue/4185": {
     "key": "PostHog/posthog-js/issue/4185",
     "repo": "PostHog/posthog-js",
