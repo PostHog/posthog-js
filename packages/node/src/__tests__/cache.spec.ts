@@ -45,6 +45,7 @@ describe('FlagDefinitionCacheProvider Integration', () => {
     ],
     groupTypeMapping: { '0': 'company' },
     cohorts: {},
+    minimalFlagCalledEvents: false,
   }
 
   jest.useFakeTimers()

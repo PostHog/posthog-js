@@ -2261,6 +2261,11 @@
           "description": "Mapping of group type index to group name",
           "type": "Record<string, string>",
           "name": "groupTypeMapping"
+        },
+        {
+          "description": "Server-controlled gate for minimal `$feature_flag_called` events, from the top-level `minimal_flag_called_events` field of the flag-definitions payload. Absent (e.g. cached data written by an older SDK version) means full events.",
+          "type": "boolean",
+          "name": "minimalFlagCalledEvents"
         }
       ],
       "path": "src/extensions/feature-flags/cache.ts"
@@ -3024,6 +3029,10 @@
         {
           "type": "number",
           "name": "evaluatedAt"
+        },
+        {
+          "type": "boolean",
+          "name": "minimalFlagCalledEvents"
         }
       ],
       "path": "../core/src/types.ts"
@@ -3083,6 +3092,10 @@
         {
           "type": "number",
           "name": "evaluatedAt"
+        },
+        {
+          "type": "boolean",
+          "name": "minimalFlagCalledEvents"
         }
       ],
       "path": "../core/src/types.ts"
@@ -3220,6 +3233,11 @@
         {
           "type": "number",
           "name": "evaluatedAt"
+        },
+        {
+          "description": "Server-controlled gate for minimal `$feature_flag_called` events. `true` only when the\nproject opted in; omitted otherwise. Absence always means full events.",
+          "type": "boolean",
+          "name": "minimalFlagCalledEvents"
         }
       ],
       "path": "../core/src/types.ts"

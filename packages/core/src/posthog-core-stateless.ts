@@ -1,7 +1,7 @@
 import type { OtlpLogsPayload, OtlpMetricsPayload } from '@posthog/types'
 import type { SendMetricsBatchOutcome } from './metrics/types'
 import { SimpleEventEmitter } from './eventemitter'
-import { getFeatureFlagValue, normalizeFlagsResponse } from './featureFlagUtils'
+import { getFeatureFlagValue, minimizeFlagCalledEventProperties, normalizeFlagsResponse } from './featureFlagUtils'
 import { gzipCompress, isGzipSupported } from './gzip'
 import {
   PostHogFlagsResponse,
@@ -406,16 +406,34 @@ export abstract class PostHogCoreStateless {
     properties?: PostHogEventProperties
   }): PostHogEventProperties {
     const userProperties = payload.properties || {}
-    const properties: PostHogEventProperties = {
+    let properties: PostHogEventProperties = {
       ...userProperties,
       ...this.getCommonEventProperties(), // Common PH props
     }
     applyCallerFeatureFlagOverrides(properties, userProperties)
+    // Customer hooks (before_send) run after this filter and may deliberately re-add stripped
+    // properties; the SDK itself must not enrich beyond allowlisted keys past this point.
+    if (
+      payload.event === '$feature_flag_called' &&
+      properties.$feature_flag_has_experiment === false &&
+      this.isMinimalFlagCalledEventsEnabled()
+    ) {
+      properties = minimizeFlagCalledEventProperties(properties)
+    }
     return {
       distinct_id: payload.distinct_id,
       event: payload.event,
       properties,
     }
+  }
+
+  /**
+   * Whether the server has gated this project into minimal `$feature_flag_called` events.
+   * Overridden by clients that persist the gate from the v2 `/flags` response
+   * (`minimalFlagCalledEvents`). The base implementation fails safe to full events.
+   */
+  protected isMinimalFlagCalledEventsEnabled(): boolean {
+    return false
   }
 
   /**
