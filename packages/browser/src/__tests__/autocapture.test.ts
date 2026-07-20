@@ -535,7 +535,10 @@ describe('Autocapture system', () => {
                     }
 
                     const customAutocapture = customPosthog.autocapture
-                    customAutocapture.onRemoteConfig({ ok: true, config: { autocapture_opt_out: false } as FlagsResponse })
+                    customAutocapture.onRemoteConfig({
+                        ok: true,
+                        config: { autocapture_opt_out: false } as FlagsResponse,
+                    })
 
                     // Create element and simulate clicks
                     const el = document.createElement(clickEvents[0].target)
@@ -1470,7 +1473,10 @@ describe('Autocapture system', () => {
             })
 
             it('ignores a non-boolean value', () => {
-                autocapture.onRemoteConfig({ ok: true, config: { autocapture_opt_out: 'yes' } as unknown as FlagsResponse })
+                autocapture.onRemoteConfig({
+                    ok: true,
+                    config: { autocapture_opt_out: 'yes' } as unknown as FlagsResponse,
+                })
                 expect(autocapture.isEnabled).toBe(false)
                 expect(posthog.persistence!.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]).toBeUndefined()
             })
