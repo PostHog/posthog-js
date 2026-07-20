@@ -20,6 +20,7 @@ jest.mock('../../../uuidv7')
 const mockPosthog = {
     capture: jest.fn(),
     get_session_replay_url: jest.fn().mockReturnValue('http://example.com/replay'),
+    reloadFeatureFlags: jest.fn(),
 }
 
 describe('SurveyPopup', () => {

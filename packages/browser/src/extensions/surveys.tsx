@@ -583,11 +583,21 @@ export class SurveyManager {
     }
 
     private _internalFlagCheckSatisfied(survey: Survey): boolean {
-        return (
-            canActivateRepeatedly(survey) ||
-            this._isSurveyFeatureFlagEnabled(survey.internal_targeting_flag_key) ||
-            isSurveyInProgress(survey)
-        )
+        // Repeatable and in-progress surveys intentionally bypass the internal targeting flag.
+        if (canActivateRepeatedly(survey)) {
+            return true
+        }
+
+        // For every other survey the internal targeting flag is the "already answered this
+        // iteration" gate. Its value is recomputed server-side once a response is recorded, but the
+        // SDK serves the previous value from cache until the next /flags load. Trusting that stale
+        // value on a revisit re-displays the survey and records a duplicate response, so wait until
+        // flags have actually (re)loaded this session before relying on the internal targeting flag.
+        if (survey.internal_targeting_flag_key && !this._posthog.featureFlags?.hasLoadedFlags) {
+            return false
+        }
+
+        return this._isSurveyFeatureFlagEnabled(survey.internal_targeting_flag_key)
     }
 
     public checkSurveyEligibility(survey: Survey): { eligible: boolean; reason?: string } {

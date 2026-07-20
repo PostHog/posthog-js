@@ -451,6 +451,10 @@ export const sendSurveyEvent = ({
         // Only dispatch PHSurveySent if the survey is completed, as that removes the survey from focus
         window.dispatchEvent(new CustomEvent('PHSurveySent', { detail: { surveyId: survey.id } }))
         clearInProgressSurveyState(survey)
+        // Recompute the internal targeting flag promptly. The response we just recorded makes this
+        // person ineligible server-side, but the cached flag still says "eligible", so reloading now
+        // stops a quick revisit from re-showing the survey and recording a duplicate response.
+        posthog.reloadFeatureFlags()
     }
 }
 

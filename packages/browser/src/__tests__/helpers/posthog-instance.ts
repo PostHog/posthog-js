@@ -65,6 +65,7 @@ export const createMockPostHog = (overrides: Partial<PostHog> = {}): PostHog =>
         } as PostHogConfig,
         get_distinct_id: () => 'test-distinct-id',
         capture: jest.fn(),
+        reloadFeatureFlags: jest.fn(),
         _send_request: jest.fn(),
         ...overrides,
     }) as PostHog

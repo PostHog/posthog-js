@@ -115,6 +115,7 @@ describe('posthog-surveys', () => {
                     onConsentChange: jest.fn(),
                 },
                 featureFlags: {
+                    hasLoadedFlags: true,
                     _send_request: jest
                         .fn()
                         .mockImplementation(({ callback }) => callback({ statusCode: 200, json: flagsResponse })),
