@@ -1,4 +1,4 @@
-import { LOAD_EXT_NOT_FOUND } from './constants'
+import { LOAD_EXT_NOT_FOUND, LOGS_CAPTURE_ENABLED_SERVER_SIDE } from './constants'
 import Config from './config'
 import { PostHog } from './posthog-core'
 import type { CaptureLogOptions, RemoteConfig, Logger, LogSdkContext, OtlpLogsPayload } from './types'
@@ -61,7 +61,9 @@ export class PostHogLogs implements Extension {
     private _consecutiveStatusZeroFailures = 0
 
     constructor(private readonly _instance: PostHog) {
-        if (this._instance && this._instance.config.logs?.captureConsoleLogs) {
+        const localEnabled = !!this._instance?.config.logs?.captureConsoleLogs
+        const remoteEnabled = !!this._instance?.persistence?.props?.[LOGS_CAPTURE_ENABLED_SERVER_SIDE]
+        if (localEnabled || remoteEnabled) {
             this._isLogsEnabled = true
         }
         // Flush on reconnect rather than waiting out the retry backoff.
@@ -138,7 +140,15 @@ export class PostHogLogs implements Extension {
 
     onRemoteConfig(response: RemoteConfig) {
         const logCapture = response.logs?.captureConsoleLogs
-        if (isNullish(logCapture) || !logCapture) {
+        const remoteEnabled = !isNullish(logCapture) && !!logCapture
+
+        if (!isNullish(logCapture) && this._instance?.persistence) {
+            this._instance.persistence.register({
+                [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: remoteEnabled,
+            })
+        }
+
+        if (!remoteEnabled) {
             return
         }
         this._isLogsEnabled = true
