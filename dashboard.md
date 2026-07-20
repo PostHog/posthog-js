@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4202](https://github.com/PostHog/posthog-js/issues/4202) | Likely valid replay bug: an idle activity-timeout rotation can still leave the new replay session without a flushed FullSnapshot in 1.404.1. | feature/replay, web |  | no | 2026-07-20T11:54:29.879Z |
 | PostHog/posthog-js | [issue 4185](https://github.com/PostHog/posthog-js/issues/4185) | Valid React Native replay parity gap; full web debug-key parity needs scoping. | enhancement, feature/replay, react-native |  | no | 2026-07-17T10:04:10.802Z |
 | PostHog/posthog-js | [issue 4184](https://github.com/PostHog/posthog-js/issues/4184) | Valid React Native replay parity enhancement; remote masking is not applied today. | enhancement, feature/replay, react-native, feature/mobile |  | no | 2026-07-17T10:01:26.921Z |
 | PostHog/posthog-js | [issue 4183](https://github.com/PostHog/posthog-js/issues/4183) | Valid demand-gathering enhancement, but it appears to duplicate #4179. | enhancement, react-native, feature/error-tracking, team/error-tracking, question |  | no | 2026-07-17T09:22:43.833Z |
