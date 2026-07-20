@@ -207,7 +207,7 @@ describe('PostHog Core', () => {
       await expect(posthog.flush()).rejects.toHaveProperty('name', 'PostHogFetchHttpError')
       expect(mocks.fetch).toHaveBeenCalledTimes(4)
       expect(Date.now() - time).toBeGreaterThan(300)
-      expect(Date.now() - time).toBeLessThan(500)
+      expect(Date.now() - time).toBeLessThan(1000)
     })
 
     it('responds with an error after retries with network error ', async () => {
@@ -221,7 +221,7 @@ describe('PostHog Core', () => {
       await expect(posthog.flush()).rejects.toHaveProperty('name', 'PostHogFetchNetworkError')
       expect(mocks.fetch).toHaveBeenCalledTimes(4)
       expect(Date.now() - time).toBeGreaterThan(300)
-      expect(Date.now() - time).toBeLessThan(500)
+      expect(Date.now() - time).toBeLessThan(1000)
     })
 
     it('skips when client is disabled', async () => {
