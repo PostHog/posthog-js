@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/4208": {
+    "key": "PostHog/posthog-js/issue/4208",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4208",
+    "url": "https://github.com/PostHog/posthog-js/issues/4208",
+    "conclusion": "Valid browser SDK bug: internally saved session referrer can override user-registered $referrer/$referring_domain.",
+    "labels": [
+      "web",
+      "feature/web-analytics",
+      "feature/product-analytics",
+      "team/web-analytics"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-20T20:43:58.201Z"
+  },
   "PostHog/posthog-js/issue/4202": {
     "key": "PostHog/posthog-js/issue/4202",
     "repo": "PostHog/posthog-js",
