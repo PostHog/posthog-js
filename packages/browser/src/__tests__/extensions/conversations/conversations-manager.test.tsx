@@ -8,7 +8,7 @@ import {
 } from '../../../posthog-conversations-types'
 import { PostHog } from '../../../posthog-core'
 import '@testing-library/jest-dom'
-import { act } from '@testing-library/preact'
+import { act, fireEvent, screen } from '@testing-library/preact'
 
 // Mock the persistence layer
 jest.mock('../../../extensions/conversations/external/persistence', () => {
@@ -1143,6 +1143,63 @@ describe('ConversationsManager', () => {
             expect(manager.isVisible()).toBe(true)
             // Widget state is loaded from persistence in _initializeWidget
             // The persistence mock returns 'closed' for loadWidgetState
+        })
+    })
+
+    describe('single open ticket navigation', () => {
+        const openTicket = {
+            id: 'ticket-open-1',
+            status: 'open',
+            message_count: 2,
+            created_at: '2023-01-01T00:00:00Z',
+            last_message_at: '2023-01-01T00:05:00Z',
+            last_message: 'still waiting on this',
+            unread_count: 0,
+        }
+
+        // Serve a fixed set of tickets for the tickets endpoint, keeping the other
+        // endpoint responses from the default mock so message/greeting flows still work.
+        const serveTickets = (tickets: unknown[]): void => {
+            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options: any) => {
+                const url = options.url as string
+                const method = options.method as string
+                if (method === 'GET' && url.includes('/widget/tickets')) {
+                    options.callback({ statusCode: 200, json: { results: tickets, has_more: false } })
+                } else if (method === 'GET' && url.includes('/widget/messages/')) {
+                    options.callback({ statusCode: 200, json: createMockGetMessagesResponse() })
+                } else if (method === 'POST' && url.includes('/read')) {
+                    options.callback({ statusCode: 200, json: createMockMarkAsReadResponse() })
+                }
+            })
+        }
+
+        // Flush pending microtasks without running the recurring polling timers
+        // (jest.runAllTimers would loop forever once _startPolling has set intervals).
+        const flushMicrotasks = async (): Promise<void> => {
+            await act(async () => {
+                await Promise.resolve()
+                await Promise.resolve()
+            })
+        }
+
+        it('lets a user with one open ticket reach the ticket list to start a new conversation', async () => {
+            serveTickets([openTicket])
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            // The widget boots straight into the single open conversation
+            fireEvent.click(screen.getByLabelText('Open chat'))
+            await flushMicrotasks()
+
+            // Back-to-tickets navigation must be present so the user isn't locked in
+            const backButton = screen.getByLabelText('Back to conversations')
+            expect(backButton).toBeInTheDocument()
+
+            // Going back reveals the ticket list, which exposes "New conversation"
+            fireEvent.click(backButton)
+            await flushMicrotasks()
+
+            expect(screen.getByText('New conversation')).toBeInTheDocument()
         })
     })
 })

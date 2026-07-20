@@ -829,13 +829,11 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     private _computeShowTicketList(tickets: Ticket[]): boolean {
-        if (tickets.length > 1) {
-            return true
-        }
-        if (tickets.length === 1 && tickets[0].status === 'resolved') {
-            return true
-        }
-        return false
+        // Surface the ticket-list hub (which holds the "New conversation" button and
+        // the back-to-tickets navigation) whenever the user has any ticket -- including
+        // a single open one. Otherwise a user with one unresolved ticket is locked into
+        // that conversation with no way to start a second one.
+        return tickets.length >= 1
     }
 
     private _isCurrentTicketResolved(): boolean {
