@@ -1406,6 +1406,7 @@ describe('Autocapture system', () => {
         describe('when the remote config fetch fails', () => {
             beforeEach(() => {
                 autocapture['_isDisabledServerSide'] = null
+                autocapture['_hasReceivedConfigResponse'] = false
                 posthog.persistence!.unregister(AUTOCAPTURE_DISABLED_SERVER_SIDE)
             })
 
@@ -1427,11 +1428,18 @@ describe('Autocapture system', () => {
                 autocapture.onRemoteConfigFailed()
                 expect(autocapture.isEnabled).toBe(true)
             })
+
+            it('stays disabled when flags are disabled after the failure', () => {
+                autocapture.onRemoteConfigFailed()
+                posthog.config.advanced_disable_flags = true
+                expect(autocapture.isEnabled).toBe(false)
+            })
         })
 
         describe('when the remote config response is missing autocapture_opt_out', () => {
             beforeEach(() => {
                 autocapture['_isDisabledServerSide'] = null
+                autocapture['_hasReceivedConfigResponse'] = false
                 posthog.persistence!.unregister(AUTOCAPTURE_DISABLED_SERVER_SIDE)
             })
 
@@ -1474,6 +1482,17 @@ describe('Autocapture system', () => {
                 autocapture.onRemoteConfig({ autocapture_opt_out: false } as FlagsResponse)
                 expect(autocapture.isEnabled).toBe(true)
                 expect(posthog.persistence!.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]).toBe(false)
+            })
+
+            it('stays disabled when flags are disabled after the response', () => {
+                autocapture.onRemoteConfig({} as FlagsResponse)
+                posthog.config.advanced_disable_flags = true
+                expect(autocapture.isEnabled).toBe(false)
+            })
+
+            it('is enabled when flags were disabled and no config outcome ever arrived', () => {
+                posthog.config.advanced_disable_flags = true
+                expect(autocapture.isEnabled).toBe(true)
             })
         })
 

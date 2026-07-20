@@ -275,6 +275,7 @@ export class Autocapture implements Extension {
     instance: PostHog
     _initialized: boolean = false
     _isDisabledServerSide: boolean | null = null
+    _hasReceivedConfigResponse: boolean = false
     _elementSelectors: Set<string> | null
     rageclicks: RageClick
     _elementsChainAsString = false
@@ -346,10 +347,12 @@ export class Autocapture implements Extension {
     // of defaulting to enabled, so a network error cannot turn autocapture on
     // for an opted-out project.
     public onRemoteConfigFailed(): void {
+        this._hasReceivedConfigResponse = true
         this.startIfEnabled()
     }
 
     public onRemoteConfig(response: RemoteConfig) {
+        this._hasReceivedConfigResponse = true
         if (response.elementsChainAsString) {
             this._elementsChainAsString = response.elementsChainAsString
         }
@@ -392,8 +395,11 @@ export class Autocapture implements Extension {
         const persistedServerDisabled = this.instance.persistence?.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]
         const memoryDisabled = this._isDisabledServerSide
 
-        if (isNull(memoryDisabled) && !isBoolean(persistedServerDisabled) && !this.instance._shouldDisableFlags()) {
-            // We only enable if we know that the server has not disabled it (unless /flags is disabled)
+        // The /flags-disabled bypass only applies while no config outcome has arrived;
+        // once a response (or failure) has been seen, an unknown opt-out stays off.
+        const clientConfigOnly = this.instance._shouldDisableFlags() && !this._hasReceivedConfigResponse
+        if (isNull(memoryDisabled) && !isBoolean(persistedServerDisabled) && !clientConfigOnly) {
+            // We only enable if we know that the server has not disabled it
             return false
         }
 
