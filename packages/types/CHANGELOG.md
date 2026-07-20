@@ -1,5 +1,12 @@
 # @posthog/types
 
+## 1.397.1
+
+### Patch Changes
+
+- [#4198](https://github.com/PostHog/posthog-js/pull/4198) [`fbfc84f`](https://github.com/PostHog/posthog-js/commit/fbfc84f56dda3cc4332cb8cecffe3da6ddfd5b32) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: make the pending session recording trigger buffer interval configurable
+  (2026-07-20)
+
 ## 1.397.0
 
 ### Minor Changes
