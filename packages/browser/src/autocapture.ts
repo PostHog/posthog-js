@@ -354,9 +354,8 @@ export class Autocapture implements Extension {
             this._elementsChainAsString = response.elementsChainAsString
         }
 
-        // The server always sends a boolean autocapture_opt_out, so a response
-        // without one carries no opt-out information: keep the last known server
-        // value, as with a failed fetch.
+        // A missing autocapture_opt_out carries no opt-out information:
+        // keep the last known server value, as with a failed fetch.
         const optOut = response['autocapture_opt_out']
         if (isBoolean(optOut)) {
             if (this.instance.persistence) {

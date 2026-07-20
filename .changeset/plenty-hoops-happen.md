@@ -2,4 +2,4 @@
 'posthog-js': patch
 ---
 
-fix: a remote config response missing the `autocapture_opt_out` field no longer enables autocapture; the SDK keeps the last known server value, the same as when the config fetch fails
+Keep autocapture off when a remote config response omits `autocapture_opt_out`. The SDK now retains the last known server value for the missing-field case, the same as when the config fetch fails, instead of enabling autocapture.
