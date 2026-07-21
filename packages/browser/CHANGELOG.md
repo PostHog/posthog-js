@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.406.1
+
+### Patch Changes
+
+- [#4127](https://github.com/PostHog/posthog-js/pull/4127) [`220fa2c`](https://github.com/PostHog/posthog-js/commit/220fa2ce1c5cbb65d9f52dad05e3c8070f616e4a) Thanks [@sarmah-rup](https://github.com/sarmah-rup)! - Don't let save_referrer overwrite a $referrer / $referring_domain that was explicitly set via posthog.register(), so registered attribution values survive pageviews in SPA and iframe contexts
+  (2026-07-21)
+
 ## 1.406.0
 
 ### Minor Changes
