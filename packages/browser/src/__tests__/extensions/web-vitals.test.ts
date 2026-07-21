@@ -4,7 +4,7 @@ import { createPosthogInstance } from '../helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { PostHog } from '../../posthog-core'
 import { FlagsResponse, PerformanceCaptureConfig, RemoteConfig, SupportedWebVitalsMetrics } from '../../types'
-import { assignableWindow } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../../utils/globals'
 import { DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS, FIFTEEN_MINUTES_IN_MILLIS } from '../../extensions/web-vitals'
 import {
     WEB_VITALS_ENABLED_SERVER_SIDE,

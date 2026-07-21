@@ -1,5 +1,5 @@
 import { initConversations } from '../extensions/conversations/external'
-import { assignableWindow } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../utils/globals'
 
 assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
 assignableWindow.__PosthogExtensions__.initConversations = initConversations

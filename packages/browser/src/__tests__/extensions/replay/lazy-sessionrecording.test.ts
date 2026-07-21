@@ -33,7 +33,8 @@ import {
     SessionRecordingOptions,
 } from '../../../types'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
-import { assignableWindow, window } from '@posthog/browser-common/utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../../../utils/globals'
 import { RequestRouter } from '../../../utils/request-router'
 import {
     type customEvent,

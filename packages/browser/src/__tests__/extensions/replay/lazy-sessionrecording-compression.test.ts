@@ -51,7 +51,7 @@ async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress }: 
         const {
             LazyLoadedSessionRecording,
         } = require('../../../extensions/replay/external/lazy-loaded-session-recorder')
-        const { assignableWindow } = require('@posthog/browser-common/utils/globals')
+        const { assignableWindow } = require('../../../utils/globals')
         const { PostHogPersistence } = require('../../../posthog-persistence')
         const { SessionIdManager } = require('../../../sessionid')
         const { RequestRouter } = require('../../../utils/request-router')
@@ -334,7 +334,7 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         const { emit, lazyLoadedSessionRecording } = await setupLazyLoadedSessionRecording({
             gzipSupported: true,
         })
-        const { assignableWindow } = require('@posthog/browser-common/utils/globals')
+        const { assignableWindow } = require('../../../utils/globals')
         const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot
 
         // the initial session ships its full snapshot as usual

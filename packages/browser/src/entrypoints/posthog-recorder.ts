@@ -1,6 +1,6 @@
 import { record as rrwebRecord, wasMaxDepthReached, resetMaxDepthState } from '@posthog/rrweb-record'
 import { getRecordConsolePlugin } from '@posthog/rrweb-plugin-console-record'
-import { assignableWindow } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../utils/globals'
 import { getRecordNetworkPlugin } from '../extensions/replay/external/network-plugin'
 import { LazyLoadedSessionRecording } from '../extensions/replay/external/lazy-loaded-session-recorder'
 

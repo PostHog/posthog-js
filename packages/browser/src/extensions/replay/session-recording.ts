@@ -22,12 +22,8 @@ import { type eventWithTime } from './types/rrweb-types'
 
 import { isNullish, isNumber, isUndefined, isValidSampleRate } from '@posthog/core'
 import { createLogger } from '@posthog/browser-common/utils/logger'
-import {
-    assignableWindow,
-    LazyLoadedSessionRecordingInterface,
-    PostHogExtensionKind,
-    window,
-} from '@posthog/browser-common/utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
+import { assignableWindow, LazyLoadedSessionRecordingInterface, PostHogExtensionKind } from '../../utils/globals'
 import { RECORDING_REMOTE_CONFIG_TTL_MS } from './external/lazy-loaded-session-recorder'
 import {
     AWAITING_CONFIG,

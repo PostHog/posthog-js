@@ -5,7 +5,8 @@ import { defaultPostHog } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
 import { isNull } from '@posthog/core'
-import { document, assignableWindow, navigator } from '@posthog/browser-common/utils/globals'
+import { document, navigator } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../utils/globals'
 import { PostHogConfig } from '../types'
 
 const DEFAULT_PERSISTENCE_PREFIX = `__ph_opt_in_out_`

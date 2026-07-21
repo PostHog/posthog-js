@@ -1,7 +1,11 @@
 import Config from '../config'
 import { isUndefined } from '@posthog/core'
 import type { Logger } from '@posthog/types'
-import { assignableWindow, window } from './globals'
+import { window } from './globals'
+
+interface DebugWindow extends Window {
+    POSTHOG_DEBUG?: boolean
+}
 
 export type CreateLoggerOptions = {
     debugEnabled?: boolean
@@ -23,7 +27,7 @@ const _createLogger = (prefix: string, { debugEnabled }: CreateLoggerOptions = {
         _log: (level: 'debug' | 'log' | 'warn' | 'error', ...args: any[]) => {
             if (
                 window &&
-                (Config.DEBUG || assignableWindow.POSTHOG_DEBUG || debugEnabled) &&
+                (Config.DEBUG || (window as DebugWindow).POSTHOG_DEBUG || debugEnabled) &&
                 !isUndefined(window.console) &&
                 window.console
             ) {

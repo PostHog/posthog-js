@@ -1,4 +1,5 @@
-import { assignableWindow, window } from '@posthog/browser-common/utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
 import { RemoteConfigResult } from '../../types'
 

@@ -1,5 +1,5 @@
 import { pickNextRetryDelay, RetryQueue } from '../retry-queue'
-import { assignableWindow } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../utils/globals'
 
 describe('RetryQueue', () => {
     const mockPosthog = {

@@ -3,7 +3,7 @@ import { RequestRouter } from '../utils/request-router'
 import { PostHog } from '../posthog-core'
 import { PostHogConfig, RemoteConfig } from '../types'
 import '../entrypoints/external-scripts-loader'
-import { assignableWindow } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../utils/globals'
 import { createMockPostHog } from './helpers/posthog-instance'
 
 describe('RemoteConfigLoader', () => {

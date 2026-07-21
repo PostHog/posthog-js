@@ -1,7 +1,7 @@
 import { PostHogLogs } from '../posthog-logs'
 import { PostHog } from '../posthog-core'
 
-import { assignableWindow } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../utils/globals'
 
 // Mock the logger to avoid console output during tests
 const mockLogger = {

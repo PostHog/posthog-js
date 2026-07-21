@@ -1,6 +1,6 @@
 import { USER_STATE } from '../constants'
 import { PostHog } from '../posthog-core'
-import { assignableWindow } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../utils/globals'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { defaultPostHog } from './helpers/posthog-instance'
 

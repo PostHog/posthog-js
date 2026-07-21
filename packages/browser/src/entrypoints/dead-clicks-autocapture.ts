@@ -1,8 +1,5 @@
-import {
-    assignableWindow,
-    document,
-    LazyLoadedDeadClicksAutocaptureInterface,
-} from '@posthog/browser-common/utils/globals'
+import { document } from '@posthog/browser-common/utils/globals'
+import { assignableWindow, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { PostHog } from '../posthog-core'
 import { isNull, isNumber, isUndefined } from '@posthog/core'
 import {

@@ -30,12 +30,8 @@ import {
 } from './sessionrecording-utils'
 export { SEVEN_MEGABYTES, splitBuffer } from './sessionrecording-utils'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
-import {
-    assignableWindow,
-    LazyLoadedSessionRecordingInterface,
-    window,
-    document,
-} from '@posthog/browser-common/utils/globals'
+import { window, document } from '@posthog/browser-common/utils/globals'
+import { assignableWindow, LazyLoadedSessionRecordingInterface } from '../../../utils/globals'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { MutationThrottler } from './mutation-throttler'
 import { createLogger } from '@posthog/browser-common/utils/logger'

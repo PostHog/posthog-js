@@ -1,4 +1,4 @@
-import { assignableWindow } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
 
 describe('logs entrypoint', () => {

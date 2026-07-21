@@ -9,7 +9,6 @@
 
 import { isFunction, isNativeFunction } from '@posthog/core'
 
-import { type AssignableWindow } from './globals'
 import { logger } from './logger'
 import { isAngularZonePresent } from './type-utils'
 
@@ -17,11 +16,13 @@ interface NativeImplementationsCache {
     MutationObserver: typeof MutationObserver
 }
 
+type BrowserWindow = Window & typeof globalThis
+
 const cachedImplementations: Partial<NativeImplementationsCache> = {}
 
 export function getNativeImplementation<T extends keyof NativeImplementationsCache>(
     name: T,
-    assignableWindow: AssignableWindow
+    assignableWindow: BrowserWindow
 ): NativeImplementationsCache[T] {
     const cached = cachedImplementations[name]
     if (cached) {
@@ -60,6 +61,6 @@ export function getNativeImplementation<T extends keyof NativeImplementationsCac
     return (cachedImplementations[name] = impl.bind(assignableWindow) as NativeImplementationsCache[T])
 }
 
-export function getNativeMutationObserverImplementation(assignableWindow: AssignableWindow): typeof MutationObserver {
+export function getNativeMutationObserverImplementation(assignableWindow: BrowserWindow): typeof MutationObserver {
     return getNativeImplementation('MutationObserver', assignableWindow)
 }

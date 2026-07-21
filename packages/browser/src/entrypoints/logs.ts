@@ -1,4 +1,4 @@
-import { assignableWindow } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../utils/globals'
 import { PostHog } from '../posthog-core'
 import { isArray, isBoolean, isFunction, isNull, isNumber, isObject } from '@posthog/core'
 import type { LogSeverityLevel } from '@posthog/types'

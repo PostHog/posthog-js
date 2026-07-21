@@ -1,4 +1,4 @@
-import { assignableWindow } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../../utils/globals'
 import type { PostHogConfig } from '../../types'
 import { setAllPersonProfilePropertiesAsPersonPropertiesForFlags } from '../../customizations'
 

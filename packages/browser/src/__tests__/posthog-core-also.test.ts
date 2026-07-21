@@ -2,6 +2,7 @@ import { mockLogger } from './helpers/mock-logger'
 
 import * as globals from '@posthog/browser-common/utils/globals'
 import { document, window } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../utils/globals'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { isUndefined } from '@posthog/core'
 import {
@@ -49,7 +50,7 @@ describe('posthog core', () => {
     const posthogWith = (config: Partial<PostHogConfig>, overrides?: Partial<PostHog>): PostHog => {
         // NOTE: Temporary change whilst testing remote config
         const token = config.token || 'testtoken'
-        globals.assignableWindow._POSTHOG_REMOTE_CONFIG = {
+        assignableWindow._POSTHOG_REMOTE_CONFIG = {
             [token]: {
                 config: {},
                 siteApps: [],

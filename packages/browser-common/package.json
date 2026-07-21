@@ -11,8 +11,6 @@
     "sideEffects": [
         "./dist/utils/array-at-polyfill.js",
         "./dist/utils/array-at-polyfill.mjs",
-        "./dist/utils/globals.js",
-        "./dist/utils/globals.mjs",
         "./dist/utils/uuidv7.js",
         "./dist/utils/uuidv7.mjs"
     ],

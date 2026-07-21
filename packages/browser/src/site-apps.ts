@@ -2,7 +2,8 @@ import type { Extension } from './extensions/types'
 import { PostHog } from './posthog-core'
 import { isNull } from '@posthog/core'
 import { CaptureResult, Properties, RemoteConfigResult, SiteApp, SiteAppGlobals, SiteAppLoader } from './types'
-import { assignableWindow, document } from '@posthog/browser-common/utils/globals'
+import { document } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from './utils/globals'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 
 const logger = createLogger('[SiteApps]')

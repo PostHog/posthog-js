@@ -11,7 +11,8 @@ import {
     stripUrlHash,
 } from '@posthog/core'
 import type { BufferedLogEntry, ResolvedPostHogLogsConfig, SendLogsBatchOutcome } from '@posthog/core'
-import { assignableWindow, window } from '@posthog/browser-common/utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from './utils/globals'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { Extension } from './extensions/types'

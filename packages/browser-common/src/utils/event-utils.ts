@@ -1,11 +1,11 @@
 import { convertToURL, getQueryParam, maskQueryParams } from './request-utils'
-import { isNull, stripLeadingDollar, stripUrlHash } from '@posthog/core'
+import { isNull, isUndefined, stripLeadingDollar, stripUrlHash } from '@posthog/core'
 import type { Properties } from '@posthog/types'
 import Config from '../config'
 import { SDK_DIST_CHANNEL } from '../constants'
 import { each, extend, stripEmptyProperties } from './general-utils'
 import { document, location, userAgent, window } from './globals'
-import type { BrowserDetectionHints } from '@posthog/core'
+import type { BrowserDetectionHints, BrowserDetectionOptions } from '@posthog/core'
 import { detectBrowser, detectBrowserVersion, detectDevice, detectDeviceType, detectOS } from '@posthog/core'
 import { getCookieValue } from './cookie-utils'
 
@@ -298,22 +298,42 @@ export function getEventProperties(
         : []
     const [os_name, os_version] = detectOS(userAgent)
     const browserHints = getBrowserDetectionHints()
-    const browserOptions = { detectGoogleSearchApp }
+    const browserOptions: BrowserDetectionOptions = {}
+    if (!isUndefined(detectGoogleSearchApp)) {
+        browserOptions.detectGoogleSearchApp = detectGoogleSearchApp
+    }
+
+    type DeviceDetectionOptions = NonNullable<Parameters<typeof detectDeviceType>[1]>
+    const deviceOptions: DeviceDetectionOptions = {}
+    // eslint-disable-next-line compat/compat
+    const userAgentDataPlatform = navigator?.userAgentData?.platform
+    const maxTouchPoints = navigator?.maxTouchPoints
+    const screenWidth = window?.screen?.width
+    const screenHeight = window?.screen?.height
+    const devicePixelRatio = window?.devicePixelRatio
+    if (!isUndefined(userAgentDataPlatform)) {
+        deviceOptions.userAgentDataPlatform = userAgentDataPlatform
+    }
+    if (!isUndefined(maxTouchPoints)) {
+        deviceOptions.maxTouchPoints = maxTouchPoints
+    }
+    if (!isUndefined(screenWidth)) {
+        deviceOptions.screenWidth = screenWidth
+    }
+    if (!isUndefined(screenHeight)) {
+        deviceOptions.screenHeight = screenHeight
+    }
+    if (!isUndefined(devicePixelRatio)) {
+        deviceOptions.devicePixelRatio = devicePixelRatio
+    }
 
     const properties = extend(
         stripEmptyProperties({
             $os: os_name,
             $os_version: os_version,
-            $browser: detectBrowser(userAgent, navigator.vendor, browserHints, browserOptions as any),
+            $browser: detectBrowser(userAgent, navigator.vendor, browserHints, browserOptions),
             $device: detectDevice(userAgent),
-            $device_type: detectDeviceType(userAgent, {
-                // eslint-disable-next-line compat/compat
-                userAgentDataPlatform: navigator?.userAgentData?.platform,
-                maxTouchPoints: navigator?.maxTouchPoints,
-                screenWidth: window?.screen?.width,
-                screenHeight: window?.screen?.height,
-                devicePixelRatio: window?.devicePixelRatio,
-            } as any),
+            $device_type: detectDeviceType(userAgent, deviceOptions),
             $timezone: getTimezone(),
             $timezone_offset: getTimezoneOffset(),
         }),
@@ -326,7 +346,7 @@ export function getEventProperties(
             $host: location?.host,
             $pathname: location?.pathname,
             $raw_user_agent: userAgent.length > 1000 ? userAgent.substring(0, 997) + '...' : userAgent,
-            $browser_version: detectBrowserVersion(userAgent, navigator.vendor, browserHints, browserOptions as any),
+            $browser_version: detectBrowserVersion(userAgent, navigator.vendor, browserHints, browserOptions),
             $browser_language: getBrowserLanguage(),
             $browser_language_prefix: getBrowserLanguagePrefix(),
             $screen_height: window?.screen.height,

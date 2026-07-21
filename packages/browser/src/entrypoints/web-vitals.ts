@@ -19,7 +19,7 @@
 // internally) is evaluated, so the bundle doesn't throw on browsers that predate `.at()`.
 import '@posthog/browser-common/utils/array-at-polyfill'
 
-import { assignableWindow } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../utils/globals'
 
 import { onINP, onLCP, onCLS, onFCP } from 'web-vitals'
 

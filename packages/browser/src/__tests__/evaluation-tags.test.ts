@@ -1,7 +1,7 @@
 import { PostHogFeatureFlags } from '../posthog-featureflags'
 import { PostHog } from '../posthog-core'
 import { PostHogConfig } from '../types'
-import { assignableWindow } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../utils/globals'
 
 describe('Evaluation Tags/Contexts', () => {
     let posthog: PostHog
