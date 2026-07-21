@@ -25,6 +25,9 @@ module.exports = {
         '^preact/jsx-runtime$': path.join(preactRoot, 'jsx-runtime/dist/jsxRuntime.js'),
         '^preact/test-utils$': path.join(preactRoot, 'test-utils/dist/testUtils.js'),
         '^@testing-library/preact$': path.join(testingLibraryPreactCjs, 'index.js'),
+        '^@posthog/browser-common/config$': '<rootDir>/../browser-common/src/config.ts',
+        '^@posthog/browser-common/constants$': '<rootDir>/../browser-common/src/constants.ts',
+        '^@posthog/browser-common/utils/(.*)$': '<rootDir>/../browser-common/src/utils/$1.ts',
         '^@posthog/core/surveys$': '<rootDir>/../core/src/surveys/index.ts',
     },
     transform: {

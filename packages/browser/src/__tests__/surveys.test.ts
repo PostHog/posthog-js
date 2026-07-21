@@ -21,8 +21,9 @@ import {
     SurveyType,
 } from '../posthog-surveys-types'
 import { FlagsResponse, PostHogConfig, Properties, RemoteConfig } from '../types'
-import * as globals from '../utils/globals'
-import { assignableWindow, window } from '../utils/globals'
+import * as globals from '@posthog/browser-common/utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../utils/globals'
 import { RequestRouter } from '../utils/request-router'
 import { SurveyEventReceiver } from '../utils/survey-event-receiver'
 import { SURVEY_LOGGER as logger } from '../utils/survey-utils'

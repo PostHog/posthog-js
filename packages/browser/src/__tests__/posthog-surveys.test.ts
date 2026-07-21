@@ -1,4 +1,4 @@
-jest.mock('../utils/logger', () => ({
+jest.mock('@posthog/browser-common/utils/logger', () => ({
     createLogger: jest.fn().mockReturnValue({
         info: jest.fn(),
         warn: jest.fn(),

@@ -6,34 +6,32 @@ import { Survey, SurveyType, SurveyQuestionType } from '../../posthog-surveys-ty
 import { PostHog } from '../../posthog-core'
 import { STORED_PERSON_PROPERTIES_KEY } from '../../constants'
 import Config from '../../config'
+import * as commonGlobals from '@posthog/browser-common/utils/globals'
 
 describe('Survey Translations', () => {
     let mockPostHog: PostHog
-    const originalNavigator = global.navigator
+    const originalLanguage = commonGlobals.navigator?.language
+    const setBrowserLanguage = (language: string | undefined): void => {
+        if (commonGlobals.navigator) {
+            Object.defineProperty(commonGlobals.navigator, 'language', {
+                value: language,
+                writable: true,
+                configurable: true,
+            })
+        }
+    }
 
     beforeEach(() => {
         mockPostHog = {
             get_property: jest.fn(),
             config: {},
         } as unknown as PostHog
-
-        // Reset navigator mock
-        Object.defineProperty(global, 'navigator', {
-            value: { language: undefined },
-            writable: true,
-            configurable: true,
-        })
+        setBrowserLanguage(undefined)
     })
 
     afterEach(() => {
         Config.DEBUG = false
-
-        // Restore original navigator
-        Object.defineProperty(global, 'navigator', {
-            value: originalNavigator,
-            writable: true,
-            configurable: true,
-        })
+        setBrowserLanguage(originalLanguage)
     })
 
     describe('detectUserLanguage', () => {
@@ -114,7 +112,7 @@ describe('Survey Translations', () => {
                 hasGetProperty = true,
             }) => {
                 mockPostHog.config.override_display_language = configLanguage
-                ;(global.navigator as any).language = browserLanguage
+                setBrowserLanguage(browserLanguage)
 
                 if (hasGetProperty) {
                     ;(mockPostHog.get_property as jest.Mock).mockReturnValue(storedPersonProperties)
@@ -150,7 +148,7 @@ describe('Survey Translations', () => {
 
         it('only logs language detection when browser debug logging is enabled', () => {
             const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {})
-            ;(global.navigator as any).language = 'en-US'
+            setBrowserLanguage('en-US')
             ;(mockPostHog.get_property as jest.Mock).mockReturnValue({})
 
             try {

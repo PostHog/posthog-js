@@ -9,7 +9,7 @@
  */
 
 // polyfill for IE11
-import { window } from './utils/globals'
+import { window } from './globals'
 
 import { isNumber, isUndefined } from '@posthog/core'
 
@@ -85,7 +85,7 @@ export class UUID {
     toString(): string {
         let text = ''
         for (let i = 0; i < this.bytes.length; i++) {
-            text = text + (this.bytes[i] >>> 4).toString(16) + (this.bytes[i] & 0xf).toString(16)
+            text = text + (this.bytes[i]! >>> 4).toString(16) + (this.bytes[i]! & 0xf).toString(16)
             if (i === 3 || i === 5 || i === 7 || i === 9) {
                 text += '-'
             }
@@ -115,7 +115,7 @@ export class UUID {
      */
     compareTo(other: UUID): number {
         for (let i = 0; i < 16; i++) {
-            const diff = this.bytes[i] - other.bytes[i]
+            const diff = this.bytes[i]! - other.bytes[i]!
             if (diff !== 0) {
                 return Math.sign(diff)
             }
@@ -234,7 +234,7 @@ class DefaultRandom {
             getRandomValues(this._buffer)
             this._cursor = 0
         }
-        return this._buffer[this._cursor++]
+        return this._buffer[this._cursor++]!
     }
 }
 

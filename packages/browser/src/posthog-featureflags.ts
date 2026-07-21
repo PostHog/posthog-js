@@ -1,4 +1,4 @@
-import { addEventListener, entries, extend } from './utils'
+import { addEventListener, entries, extend } from '@posthog/browser-common/utils/general-utils'
 import { PostHog } from './posthog-core'
 import {
     FlagsResponse,
@@ -39,10 +39,13 @@ import {
 } from './constants'
 
 import { isUndefined, isArray, isNull, getEnabledFromValue, getVariantFromValue, parsePayload } from '@posthog/core'
-import { createLogger } from './utils/logger'
-import { getTimezone } from './utils/event-utils'
-import { window } from './utils/globals'
-import { isStatusZeroFailureCircuitBreakerTripped, updateStatusZeroFailureCount } from './utils/request-utils'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { getTimezone } from '@posthog/browser-common/utils/event-utils'
+import { window } from '@posthog/browser-common/utils/globals'
+import {
+    isStatusZeroFailureCircuitBreakerTripped,
+    updateStatusZeroFailureCount,
+} from '@posthog/browser-common/utils/request-utils'
 
 const logger = createLogger('[FeatureFlags]')
 const forceDebugLogger = createLogger('[FeatureFlags]', { debugEnabled: true })

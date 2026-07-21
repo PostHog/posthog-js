@@ -1,5 +1,5 @@
-import { getDeviceModel } from '../../utils/device-model-utils'
-import { logger } from '../../utils/logger'
+import { getDeviceModel } from '@posthog/browser-common/utils/device-model-utils'
+import { logger } from '@posthog/browser-common/utils/logger'
 import { createPosthogInstance } from '../helpers/posthog-instance'
 
 const setUserAgentData = (value: any): void => {

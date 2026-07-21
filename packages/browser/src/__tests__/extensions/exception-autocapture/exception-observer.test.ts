@@ -1,9 +1,10 @@
 import { PostHog } from '../../../posthog-core'
 import { FlagsResponse } from '../../../types'
 import { ExceptionObserver } from '../../../extensions/exception-autocapture'
-import { assignableWindow, window } from '../../../utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../../../utils/globals'
 import { createPosthogInstance } from '../../helpers/posthog-instance'
-import { uuidv7 } from '../../../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
 import posthogErrorWrappingFunctions from '../../../entrypoints/exception-autocapture'
 import { afterEach } from '@jest/globals'

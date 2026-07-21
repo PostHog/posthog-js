@@ -30,10 +30,11 @@ import {
 } from './sessionrecording-utils'
 export { SEVEN_MEGABYTES, splitBuffer } from './sessionrecording-utils'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
-import { assignableWindow, LazyLoadedSessionRecordingInterface, window, document } from '../../../utils/globals'
-import { addEventListener } from '../../../utils'
+import { window, document } from '@posthog/browser-common/utils/globals'
+import { assignableWindow, LazyLoadedSessionRecordingInterface } from '../../../utils/globals'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { MutationThrottler } from './mutation-throttler'
-import { createLogger } from '../../../utils/logger'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 import {
     clampToRange,
     gzipCompress,
@@ -75,7 +76,7 @@ import {
     SessionRecordingPersistedConfig,
     SessionStartReason,
 } from '../../../types'
-import { isLocalhost, maskQueryParams } from '../../../utils/request-utils'
+import { isLocalhost, maskQueryParams } from '@posthog/browser-common/utils/request-utils'
 import Config from '../../../config'
 import { FlushedSizeTracker } from './flushed-size-tracker'
 import {
@@ -85,7 +86,7 @@ import {
     RecordingStrategyContext,
     decodeSamplingDecision,
 } from './recording-strategies'
-import { MASKED, PERSONAL_DATA_CAMPAIGN_PARAMS } from '../../../utils/event-utils'
+import { MASKED, PERSONAL_DATA_CAMPAIGN_PARAMS } from '@posthog/browser-common/utils/event-utils'
 
 const BASE_ENDPOINT = '/s/'
 const DEFAULT_CANVAS_QUALITY = 0.4

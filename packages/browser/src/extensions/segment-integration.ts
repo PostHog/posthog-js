@@ -17,11 +17,11 @@
  *  ```
  */
 import { PostHog } from '../posthog-core'
-import { createLogger } from '../utils/logger'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 
 import { EVENT_IDENTIFY, EVENT_PAGEVIEW, USER_STATE, USER_STATE_IDENTIFIED } from '../constants'
 import { isFunction } from '@posthog/core'
-import { uuidv7 } from '../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
 import type { SegmentUser, SegmentAnalytics, SegmentContext, SegmentPlugin } from '@posthog/types'
 

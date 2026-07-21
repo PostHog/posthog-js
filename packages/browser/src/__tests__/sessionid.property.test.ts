@@ -6,7 +6,7 @@ import { PostHogConfig, Properties } from '../types'
 import { PostHogPersistence } from '../posthog-persistence'
 import { createMockPostHog } from './helpers/posthog-instance'
 
-jest.mock('../uuidv7')
+jest.mock('@posthog/browser-common/utils/uuidv7')
 jest.mock('../storage')
 
 const SESSION_LENGTH_LIMIT_MS = 24 * 3600 * 1000

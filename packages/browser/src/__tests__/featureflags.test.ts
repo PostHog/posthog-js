@@ -11,8 +11,8 @@ import { RequestRouter } from '../utils/request-router'
 import { isUndefined } from '@posthog/core'
 import { PostHogConfig } from '../types'
 import { createMockPostHog, createPosthogInstance } from './helpers/posthog-instance'
-import { SimpleEventEmitter } from '../utils/simple-event-emitter'
-import { uuidv7 } from '../uuidv7'
+import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
 jest.useFakeTimers()
 jest.spyOn(global, 'setTimeout')

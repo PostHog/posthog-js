@@ -10,8 +10,8 @@ import {
 import { PostHog } from '../../../posthog-core'
 import { FlagVariant, RemoteConfig, SessionRecordingPersistedConfig, SessionRecordingUrlTrigger } from '../../../types'
 import { isNullish, isBoolean, isString, isObject, isUndefined } from '@posthog/core'
-import { logger } from '../../../utils/logger'
-import { getTargetingUrl } from '../../../utils/url-targeting-utils'
+import { logger } from '@posthog/browser-common/utils/logger'
+import { getTargetingUrl } from '@posthog/browser-common/utils/url-targeting-utils'
 
 export const DISABLED = 'disabled'
 export const SAMPLED = 'sampled'

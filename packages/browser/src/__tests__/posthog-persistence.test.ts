@@ -24,8 +24,8 @@ import {
 import { PERSISTENCE_KEY_POLICY } from '../persistence-key-policy'
 import { PostHogConfig } from '../types'
 import { PostHog } from '../posthog-core'
-import { window } from '../utils/globals'
-import { uuidv7 } from '../uuidv7'
+import { window } from '@posthog/browser-common/utils/globals'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import {
     cookieStore,
     localStore,

@@ -1,8 +1,9 @@
-import { assignableWindow, window } from '../../utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
 import { RemoteConfigResult } from '../../types'
 
-import { createLogger } from '../../utils/logger'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
 import { isUndefined, BucketedRateLimiter, isObject, resolveExceptionRateLimiterConfig } from '@posthog/core'
 import { ErrorTracking } from '@posthog/core'

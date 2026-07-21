@@ -1,13 +1,13 @@
 import { defaultPostHog } from './helpers/posthog-instance'
 import type { PostHogConfig } from '../types'
-import { uuidv7 } from '../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { SurveyEventName, SurveyEventProperties } from '../posthog-surveys-types'
 import { ProductTourEventName, ProductTourEventProperties } from '../posthog-product-tours-types'
 import { SURVEY_SEEN_PREFIX } from '../utils/survey-utils'
 import { beforeEach } from '@jest/globals'
 
-jest.mock('../utils/globals', () => {
-    const orig = jest.requireActual('../utils/globals')
+jest.mock('@posthog/browser-common/utils/globals', () => {
+    const orig = jest.requireActual('@posthog/browser-common/utils/globals')
     const mockURL = jest.fn().mockReturnValue('https://example.com')
     const mockReferrer = jest.fn().mockReturnValue('https://referrer.com')
     const mockHostName = jest.fn().mockReturnValue('example.com')
@@ -37,7 +37,7 @@ jest.mock('../utils/globals', () => {
 })
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { mockURL, mockReferrer, mockHostName } = require('../utils/globals')
+const { mockURL, mockReferrer, mockHostName } = require('@posthog/browser-common/utils/globals')
 
 describe('posthog core', () => {
     beforeEach(() => {

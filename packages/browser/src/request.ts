@@ -1,13 +1,24 @@
-import { each, find } from './utils'
+import { each, find } from '@posthog/browser-common/utils/general-utils'
 import Config from './config'
 import { Compression, RequestWithOptions, RequestResponse } from './types'
-import { convertToURL, formDataToQuery, getQueryParam } from './utils/request-utils'
+import {
+    convertToURL,
+    formDataToQuery,
+    getQueryParam,
+    jsonStringify,
+} from '@posthog/browser-common/utils/request-utils'
 
-import { logger } from './utils/logger'
-import { AbortController, CompressionStream, fetch, navigator, XMLHttpRequest } from './utils/globals'
+import { logger } from '@posthog/browser-common/utils/logger'
+import {
+    AbortController,
+    CompressionStream,
+    fetch,
+    navigator,
+    XMLHttpRequest,
+} from '@posthog/browser-common/utils/globals'
 import { gzipSync, strToU8 } from 'fflate'
 
-import { _base64Encode } from './utils/encode-utils'
+import { _base64Encode } from '@posthog/browser-common/utils/encode-utils'
 import {
     gzipCompress,
     isArray,
@@ -16,8 +27,9 @@ import {
     isNativeAsyncGzipError,
     isNativeAsyncGzipReadError,
     isUndefined,
-    safeJsonStringify,
 } from '@posthog/core'
+
+export { jsonStringify }
 
 interface RequestWithEncodedBody extends RequestWithOptions {
     _encodedBody?: EncodedBody
@@ -89,22 +101,6 @@ export const extendURLParams = (url: string, params: Record<string, any>, replac
     }
 
     return `${baseUrl}?${updatedSearch.join('&')}`
-}
-
-export const jsonStringify = (data: any, space?: string | number): string => {
-    try {
-        // Fast path: convert BigInts to strings, since plain JSON.stringify throws on them.
-        // See https://github.com/PostHog/posthog-js/issues/1440.
-        return JSON.stringify(data, (_, value) => (typeof value === 'bigint' ? value.toString() : value), space)
-    } catch {
-        // A self-referential value — most commonly a DOM node that retains a React fiber pointing back
-        // at the element — makes JSON.stringify throw "Converting circular structure to JSON". With
-        // exception autocapture enabled that throw was recaptured as a new $exception, sometimes in a
-        // tight loop. Fall back to the shared circular-safe serializer (which also handles BigInt and
-        // Errors); it replaces only true cycles with "[Circular]", leaving shared-but-acyclic
-        // references intact. `space` formatting is dropped on this rare path.
-        return safeJsonStringify(data)
-    }
 }
 
 const encodeToDataString = (data: string | Record<string, any>): string => {

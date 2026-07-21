@@ -5,7 +5,7 @@ import { PostHog, init_as_module } from '../../posthog-core'
 import { PostHogConfig } from '../../types'
 import { PostHogPersistence } from '../../posthog-persistence'
 import { assignableWindow } from '../../utils/globals'
-import { uuidv7 } from '../../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
 export const createPosthogInstance = async (
     // Use a random UUID for the token, such that we don't have to worry

@@ -15,7 +15,7 @@ import {
     PAUSED,
 } from '../../../extensions/replay/external/triggerMatching'
 import { SessionRecordingTriggerGroup } from '../../../types'
-import { matchTriggerPropertyFilters } from '../../../utils/property-utils'
+import { matchTriggerPropertyFilters } from '@posthog/browser-common/utils/property-utils'
 import { createMockPostHog } from '../../helpers/posthog-instance'
 
 const fakePostHog = createMockPostHog({

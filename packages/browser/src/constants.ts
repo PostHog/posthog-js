@@ -88,8 +88,6 @@ export const INITIAL_CAMPAIGN_PARAMS = '$initial_campaign_params'
 export const INITIAL_REFERRER_INFO = '$initial_referrer_info'
 export const INITIAL_PERSON_INFO = '$initial_person_info'
 export const ENABLE_PERSON_PROCESSING = '$epp'
-export const TOOLBAR_ID = '__POSTHOG_TOOLBAR__'
-export const TOOLBAR_CONTAINER_CLASS = 'toolbar-global-fade-container'
 
 /**
  * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
@@ -100,7 +98,6 @@ export const COOKIELESS_MODE_FLAG_PROPERTY = '$cookieless_mode'
 
 export const WEB_EXPERIMENTS = '$web_experiments'
 
-export const SDK_DIST_CHANNEL = '$sdk_dist_channel'
 export const SDK_DEBUG_EXTENSIONS_INIT_METHOD = '$sdk_debug_extensions_init_method'
 export const SDK_DEBUG_EXTENSIONS_INIT_TIME_MS = '$sdk_debug_extensions_init_time_ms'
 export const SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED = '$sdk_debug_recording_script_not_loaded'

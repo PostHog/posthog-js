@@ -1,7 +1,7 @@
 import { getSurveyIterationKey } from '@posthog/core/surveys'
 
 import { DisplaySurveyOptions, Survey, SurveyType, DisplaySurveyType } from '../posthog-surveys-types'
-import { createLogger } from '../utils/logger'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 
 export { doesSurveyActivateByEvent, getSurveyInteractionProperty } from '@posthog/core/surveys'
 

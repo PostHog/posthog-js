@@ -1,7 +1,7 @@
 import { mockLogger } from './helpers/mock-logger'
 
 import { createPosthogInstance } from './helpers/posthog-instance'
-import { uuidv7 } from '../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { INITIAL_CAMPAIGN_PARAMS, INITIAL_REFERRER_INFO } from '../constants'
 import { RemoteConfig } from '../types'
 
@@ -65,8 +65,8 @@ const CAMPAIGN_PARAMS_NULL = {
     wbraid: null,
 }
 
-jest.mock('../utils/globals', () => {
-    const orig = jest.requireActual('../utils/globals')
+jest.mock('@posthog/browser-common/utils/globals', () => {
+    const orig = jest.requireActual('@posthog/browser-common/utils/globals')
     const mockURLGetter = jest.fn()
     const mockReferrerGetter = jest.fn()
     let mockedCookieVal = ''
@@ -105,7 +105,7 @@ jest.mock('../utils/globals', () => {
 })
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { mockURLGetter, mockReferrerGetter, document } = require('../utils/globals')
+const { mockURLGetter, mockReferrerGetter, document } = require('@posthog/browser-common/utils/globals')
 
 describe('person processing', () => {
     const distinctId = '123'
