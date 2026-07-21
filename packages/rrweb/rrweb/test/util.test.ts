@@ -105,7 +105,9 @@ describe('Utilities for other modules', () => {
     it('should contain a failing deferred hooked setter and preserve the native throw', () => {
       vi.useFakeTimers();
       try {
-        // emulates a native accessor rejecting a foreign `this`
+        // emulates a genuine element whose setter throws (e.g. a file input
+        // rejecting a programmatic value): the getter succeeds, so the probe
+        // passes and the native setter's throw is preserved
         const proto = {} as Record<string, unknown>;
         Object.defineProperty(proto, 'value', {
           configurable: true,
@@ -182,19 +184,23 @@ describe('Utilities for other modules', () => {
       }
     });
 
-    it('should skip the synchronous native setter when `this` is not a genuine instance', () => {
+    it('should skip the synchronous native setter for a non-native `this` reached through assignment', () => {
       vi.useFakeTimers();
       try {
-        // a genuine native setter throws 'Illegal invocation' when invoked
-        // with a `this` that lacks the internal slot (a proxy, custom element,
-        // or cross-realm object)
-        const nativeSet = vi.fn(() => {
-          throw new TypeError('Illegal invocation');
+        // emulate the native internal-slot brand check: both accessors reject a
+        // `this` that was not genuinely constructed, exactly as a DOM accessor
+        // throws 'Illegal invocation' for a proxy/cross-realm/`setPrototypeOf`
+        // object. `isPrototypeOf`/`instanceof` cannot tell those apart from a
+        // real element (they sit on the prototype chain); the getter probe can.
+        const genuine = new WeakSet<object>();
+        const nativeSet = vi.fn(function (this: object) {
+          if (!genuine.has(this)) throw new TypeError('Illegal invocation');
         });
         const proto = {} as Record<string, unknown>;
         Object.defineProperty(proto, 'value', {
           configurable: true,
-          get() {
+          get(this: object) {
+            if (!genuine.has(this)) throw new TypeError('Illegal invocation');
             return '';
           },
           set: nativeSet,
@@ -209,17 +215,34 @@ describe('Utilities for other modules', () => {
           window,
         );
 
-        // `foreign` does not derive from `proto`, so it fails the instanceof
-        // guard — the synchronous native setter must be skipped, not throw
-        const foreign = {} as { value: string };
-        const setter = Object.getOwnPropertyDescriptor(proto, 'value')!.set!;
+        const realInput = Object.create(proto) as { value: string };
+        genuine.add(realInput);
 
-        expect(() => setter.call(foreign, 'test')).not.toThrow();
+        // a transparent proxy forwards the prototype chain, so `.value =`
+        // reaches the hooked setter with `this` = the proxy, which has no
+        // internal slot — the synchronous native setter must be skipped
+        const proxy = new Proxy(realInput, {}) as { value: string };
+        expect(() => {
+          proxy.value = 'via-proxy';
+        }).not.toThrow();
+
+        // a `setPrototypeOf` fake (a known instanceof-spoof pattern) is on the
+        // prototype chain too, and must likewise be skipped rather than throw
+        const fake = {} as { value: string };
+        Object.setPrototypeOf(fake, proto);
+        expect(() => {
+          fake.value = 'via-fake';
+        }).not.toThrow();
+
         expect(nativeSet).not.toHaveBeenCalled();
 
-        // the deferred hooked setter still runs (it does not touch native slots)
-        expect(() => vi.runAllTimers()).not.toThrow();
-        expect(hookedSet).toHaveBeenCalledWith('test');
+        vi.runAllTimers();
+        expect(hookedSet).toHaveBeenCalledWith('via-proxy');
+        expect(hookedSet).toHaveBeenCalledWith('via-fake');
+
+        realInput.value = 'genuine';
+        expect(nativeSet).toHaveBeenCalledTimes(1);
+        expect(nativeSet).toHaveBeenCalledWith('genuine');
 
         reset();
       } finally {
