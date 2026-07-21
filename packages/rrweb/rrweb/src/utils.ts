@@ -166,10 +166,17 @@ export function hookSetter<T>(
               }
             }, 0);
             if (original && original.set) {
-              // deliberately unguarded: this runs synchronously inside the
-              // page's own assignment, where the platform throws even for
-              // genuine elements (e.g. setting a file input's value)
-              original.set.call(this, value);
+              // this runs synchronously inside the page's own assignment, so a
+              // thrown error propagates into the host page. Only forward to the
+              // native setter when `this` genuinely derives from the prototype
+              // the setter belongs to — equivalent to an `instanceof` check
+              // against the native element type. A proxy, custom element, or
+              // cross-realm object fails this check and is skipped rather than
+              // throwing 'Illegal invocation'; genuine elements (including file
+              // inputs that legitimately throw) keep their native behavior.
+              if (win.Object.prototype.isPrototypeOf.call(target, this)) {
+                original.set.call(this, value);
+              }
             }
           },
         },

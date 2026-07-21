@@ -181,6 +181,51 @@ describe('Utilities for other modules', () => {
         vi.useRealTimers();
       }
     });
+
+    it('should skip the synchronous native setter when `this` is not a genuine instance', () => {
+      vi.useFakeTimers();
+      try {
+        // a genuine native setter throws 'Illegal invocation' when invoked
+        // with a `this` that lacks the internal slot (a proxy, custom element,
+        // or cross-realm object)
+        const nativeSet = vi.fn(() => {
+          throw new TypeError('Illegal invocation');
+        });
+        const proto = {} as Record<string, unknown>;
+        Object.defineProperty(proto, 'value', {
+          configurable: true,
+          get() {
+            return '';
+          },
+          set: nativeSet,
+        });
+
+        const hookedSet = vi.fn();
+        const reset = hookSetter(
+          proto,
+          'value',
+          { set: hookedSet },
+          false,
+          window,
+        );
+
+        // `foreign` does not derive from `proto`, so it fails the instanceof
+        // guard — the synchronous native setter must be skipped, not throw
+        const foreign = {} as { value: string };
+        const setter = Object.getOwnPropertyDescriptor(proto, 'value')!.set!;
+
+        expect(() => setter.call(foreign, 'test')).not.toThrow();
+        expect(nativeSet).not.toHaveBeenCalled();
+
+        // the deferred hooked setter still runs (it does not touch native slots)
+        expect(() => vi.runAllTimers()).not.toThrow();
+        expect(hookedSet).toHaveBeenCalledWith('test');
+
+        reset();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe('inDom()', () => {
