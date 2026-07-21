@@ -582,10 +582,10 @@ export class SurveyManager {
         )
     }
 
-    private _internalFlagCheckSatisfied(survey: Survey): boolean {
+    private _internalFlagCheckSatisfied(survey: Survey): { satisfied: boolean; reason?: string } {
         // Repeatable and in-progress surveys intentionally bypass the internal targeting flag.
         if (canActivateRepeatedly(survey)) {
-            return true
+            return { satisfied: true }
         }
 
         // For every other survey the internal targeting flag is the "already answered this
@@ -594,10 +594,13 @@ export class SurveyManager {
         // value on a revisit re-displays the survey and records a duplicate response, so wait until
         // flags have actually (re)loaded this session before relying on the internal targeting flag.
         if (survey.internal_targeting_flag_key && !this._posthog.featureFlags?.hasLoadedFlags) {
-            return false
+            return {
+                satisfied: false,
+                reason: 'Feature flags have not loaded yet; deferring internal targeting flag check',
+            }
         }
 
-        return this._isSurveyFeatureFlagEnabled(survey.internal_targeting_flag_key)
+        return { satisfied: this._isSurveyFeatureFlagEnabled(survey.internal_targeting_flag_key) }
     }
 
     public checkSurveyEligibility(survey: Survey): { eligible: boolean; reason?: string } {
@@ -632,9 +635,11 @@ export class SurveyManager {
             return eligibility
         }
 
-        if (!this._internalFlagCheckSatisfied(survey)) {
+        const internalFlagCheck = this._internalFlagCheckSatisfied(survey)
+        if (!internalFlagCheck.satisfied) {
             eligibility.eligible = false
             eligibility.reason =
+                internalFlagCheck.reason ??
                 'Survey internal targeting flag is not enabled and survey cannot activate repeatedly and survey is not in progress'
             return eligibility
         }

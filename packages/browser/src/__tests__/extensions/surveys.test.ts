@@ -483,6 +483,7 @@ describe('SurveyManager', () => {
             mockPostHog.featureFlags.hasLoadedFlags = false
             const result = surveyManager.checkSurveyEligibility(makeGatedSurvey())
             expect(result.eligible).toBe(false)
+            expect(result.reason).toContain('Feature flags have not loaded yet')
         })
 
         it('is eligible once flags have loaded and the internal flag is enabled', () => {
