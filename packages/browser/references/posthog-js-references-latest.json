@@ -4523,7 +4523,7 @@
           "name": "analytics"
         },
         {
-          "description": "If set, disables autocapture",
+          "description": "If true, disables autocapture. When absent or not a boolean, the SDK keeps the last known server value; a visitor with no stored value keeps autocapture off until a response containing the field arrives.",
           "type": "boolean",
           "name": "autocapture_opt_out"
         },

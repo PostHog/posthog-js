@@ -22,7 +22,7 @@ export const createPosthogInstance = async (
     // NOTE: Temporary change whilst testing remote config
     assignableWindow._POSTHOG_REMOTE_CONFIG = {
         [token]: {
-            config: {},
+            config: { autocapture_opt_out: false },
             siteApps: [],
         },
     } as any
