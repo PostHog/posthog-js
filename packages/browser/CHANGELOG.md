@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.406.2
+
+### Patch Changes
+
+- [#4206](https://github.com/PostHog/posthog-js/pull/4206) [`a3112d9`](https://github.com/PostHog/posthog-js/commit/a3112d9f3328e0dee30505b6f2c242f2b5baa9ec) Thanks [@posthog](https://github.com/apps/posthog)! - fix(surveys): stop recurring surveys re-showing off a stale internal targeting flag
+
+    Recurring surveys could re-display and record a duplicate response when the eligibility
+    check ran against a cached internal targeting flag before fresh flags had loaded. The
+    display loop now waits for feature flags to actually load before trusting the internal
+    targeting flag, and forces a flag reload after a survey is completed so the flag recomputes
+    promptly. (2026-07-21)
+
 ## 1.406.1
 
 ### Patch Changes
