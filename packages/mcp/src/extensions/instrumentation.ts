@@ -436,24 +436,25 @@ function mintStatelessSessionOnInitialize(
   data: MCPAnalyticsData,
   request: MCPRequestLike,
   extra: CompatibleRequestHandlerExtra | undefined
-): void {
+): string | undefined {
   try {
     const headers = extra?.requestInfo?.headers
     if (!headers || typeof headers !== 'object') {
-      return // not an HTTP transport (stdio/in-memory) — nothing to mint into
+      return undefined // not an HTTP transport (stdio/in-memory) — nothing to mint into
     }
     if (readMcpSessionHeader(headers)) {
-      return // client already replays a session id (ours or the transport's)
+      return undefined // client already replays a session id (ours or the transport's)
     }
     const transport = server.transport
     if (!transport || extra?.sessionId || transport.sessionId) {
-      return // stateful transports manage their own session id — leave it alone
+      return undefined // stateful transports manage their own session id — leave it alone
     }
 
     const sessionId = newSessionId()
     const clientInfo = readInitializeClientInfo(request)
     // Minted before the handler negotiates, so only the client's *requested*
-    // version is available. Carried in the token so cross-pod events still get it.
+    // version is available here; `handleInitializeRequest` re-mints the token
+    // with the negotiated version once the handler has run.
     const requestedProtocolVersion = readProtocolVersion(undefined, request)
     const token = encodeSessionId({
       sessionId,
@@ -462,7 +463,7 @@ function mintStatelessSessionOnInitialize(
       protocolVersion: requestedProtocolVersion,
     })
     if (!writeSessionIdToTransport(transport, token)) {
-      return // transport can't carry a response session id — keep generated behavior
+      return undefined // transport can't carry a response session id — keep generated behavior
     }
 
     data.sessionId = sessionId
@@ -472,8 +473,39 @@ function mintStatelessSessionOnInitialize(
     data.sessionInfo.protocolVersion = requestedProtocolVersion
     data.lastActivity = new Date()
     setServerTrackingData(server, data)
+    return sessionId
   } catch (error) {
     log(`Warning: PostHog MCP analytics failed to mint a stateless session id - ${error}`)
+    return undefined
+  }
+}
+
+/**
+ * Rewrite the minted token to carry the *negotiated* protocol version now that
+ * the handler has run. Without this, a server that downgrades the client's
+ * requested version would replay the requested one on later requests (and to
+ * other pods), reporting a version the session is not actually using.
+ */
+function upgradeMintedTokenToNegotiated(
+  server: MCPServerLike,
+  data: MCPAnalyticsData,
+  mintedSessionId: string,
+  negotiatedProtocolVersion: string | undefined
+): void {
+  try {
+    const transport = server.transport
+    if (!transport) {
+      return
+    }
+    const token = encodeSessionId({
+      sessionId: mintedSessionId,
+      clientName: data.sessionInfo.clientName,
+      clientVersion: data.sessionInfo.clientVersion,
+      protocolVersion: negotiatedProtocolVersion,
+    })
+    writeSessionIdToTransport(transport, token)
+  } catch (error) {
+    log(`Warning: PostHog MCP analytics failed to upgrade the stateless session token - ${error}`)
   }
 }
 
@@ -512,7 +544,7 @@ export async function handleInitializeRequest(
   }
 
   // Mint first so the `$mcp_initialize` event below already carries the minted id.
-  mintStatelessSessionOnInitialize(server, data, request, extra)
+  const mintedSessionId = mintStatelessSessionOnInitialize(server, data, request, extra)
   const sessionId = getSessionId(server, extra)
   await handleIdentify(server, data, sessionId, request, extra)
 
@@ -529,11 +561,15 @@ export async function handleInitializeRequest(
   const result = await originalInitializeHandler(request, extra)
   event.response = result
   // The negotiated version (off the response) supersedes the requested one the
-  // mint stored — persist it so every later event on this pod carries it too.
+  // mint stored — persist it so every later event on this pod carries it, and
+  // re-mint the token so pods replaying it report the negotiated version too.
   const negotiatedProtocolVersion = readProtocolVersion(result, request)
   event.protocolVersion = negotiatedProtocolVersion
   data.sessionInfo.protocolVersion = negotiatedProtocolVersion
   setServerTrackingData(server, data)
+  if (mintedSessionId) {
+    upgradeMintedTokenToNegotiated(server, data, mintedSessionId, negotiatedProtocolVersion)
+  }
   captureEvent(server, event)
   return result
 }

@@ -308,6 +308,12 @@ export interface McpCaptureCommon {
   distinctId?: string
   /** Session id → `$session_id`. Omitted from the event entirely when not provided. */
   sessionId?: string
+  /**
+   * Negotiated MCP protocol (spec) version → `$mcp_protocol_version`. Pass it on
+   * every capture for the session (like `sessionId`) so later events carry it too,
+   * not just the initialize event — the `PostHogMCP` client holds no per-session state.
+   */
+  protocolVersion?: string
   /** Person properties → `$set` (e.g. `{ name, email, plan }`). */
   setProperties?: JsonRecord
   /** Group memberships → `$groups`. */
@@ -369,12 +375,6 @@ export interface InitializeCaptureData extends McpCaptureCommon {
   clientName?: string
   /** MCP client version → `$mcp_client_version`. */
   clientVersion?: string
-  /**
-   * Negotiated MCP protocol (spec) version → `$mcp_protocol_version` (e.g.
-   * `2025-06-18`). The version from the initialize response — used to track when
-   * a new spec revision is adopted.
-   */
-  protocolVersion?: string
   /** Captured initialize params → `$mcp_parameters`. */
   parameters?: unknown
   /** Captured initialize result → `$mcp_response`. */

@@ -360,6 +360,21 @@ describe('PostHogMCP', () => {
       expect(p[PostHogMCPAnalyticsProperty.ProtocolVersion]).toBe('2025-06-18')
       expect(p[PostHogMCPAnalyticsProperty.DurationMs]).toBe(7)
     })
+
+    it('stamps $mcp_protocol_version on later captures too (passed per call, like sessionId)', async () => {
+      // The client holds no per-session state, so callers pass protocolVersion on
+      // every capture — not just initialize — to satisfy the every-event contract.
+      posthog.captureToolCall({
+        toolName: 'execute-sql',
+        protocolVersion: '2025-06-18',
+        distinctId: 'user-123',
+        isError: false,
+      })
+      await tick()
+
+      const p = onlyCapture(PostHogMCPAnalyticsEvent.ToolCall).properties
+      expect(p[PostHogMCPAnalyticsProperty.ProtocolVersion]).toBe('2025-06-18')
+    })
   })
 
   describe('identity + session handling', () => {
