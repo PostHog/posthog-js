@@ -20,6 +20,7 @@ jest.mock('@posthog/browser-common/utils/uuidv7')
 const mockPosthog = {
     capture: jest.fn(),
     get_session_replay_url: jest.fn().mockReturnValue('http://example.com/replay'),
+    reloadFeatureFlags: jest.fn(),
 }
 
 const baseSurvey: Survey = {

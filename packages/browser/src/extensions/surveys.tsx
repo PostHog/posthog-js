@@ -582,12 +582,25 @@ export class SurveyManager {
         )
     }
 
-    private _internalFlagCheckSatisfied(survey: Survey): boolean {
-        return (
-            canActivateRepeatedly(survey) ||
-            this._isSurveyFeatureFlagEnabled(survey.internal_targeting_flag_key) ||
-            isSurveyInProgress(survey)
-        )
+    private _internalFlagCheckSatisfied(survey: Survey): { satisfied: boolean; reason?: string } {
+        // Repeatable and in-progress surveys intentionally bypass the internal targeting flag.
+        if (canActivateRepeatedly(survey)) {
+            return { satisfied: true }
+        }
+
+        // For every other survey the internal targeting flag is the "already answered this
+        // iteration" gate. Its value is recomputed server-side once a response is recorded, but the
+        // SDK serves the previous value from cache until the next /flags load. Trusting that stale
+        // value on a revisit re-displays the survey and records a duplicate response, so wait until
+        // flags have actually (re)loaded this session before relying on the internal targeting flag.
+        if (survey.internal_targeting_flag_key && !this._posthog.featureFlags?.hasLoadedFlags) {
+            return {
+                satisfied: false,
+                reason: 'Feature flags have not loaded yet; deferring internal targeting flag check',
+            }
+        }
+
+        return { satisfied: this._isSurveyFeatureFlagEnabled(survey.internal_targeting_flag_key) }
     }
 
     public checkSurveyEligibility(survey: Survey): { eligible: boolean; reason?: string } {
@@ -622,9 +635,11 @@ export class SurveyManager {
             return eligibility
         }
 
-        if (!this._internalFlagCheckSatisfied(survey)) {
+        const internalFlagCheck = this._internalFlagCheckSatisfied(survey)
+        if (!internalFlagCheck.satisfied) {
             eligibility.eligible = false
             eligibility.reason =
+                internalFlagCheck.reason ??
                 'Survey internal targeting flag is not enabled and survey cannot activate repeatedly and survey is not in progress'
             return eligibility
         }

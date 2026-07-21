@@ -203,6 +203,7 @@ describe('surveys', () => {
                 .fn()
                 .mockImplementation(({ callback }) => callback({ statusCode: 200, json: surveysResponse })),
             featureFlags: {
+                hasLoadedFlags: true,
                 _send_request: jest
                     .fn()
                     .mockImplementation(({ callback }) => callback({ statusCode: 200, json: flagsResponse })),
