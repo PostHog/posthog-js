@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4211](https://github.com/PostHog/posthog-js/issues/4211) | Android emulator crash appears to be an upstream react-native-reanimated dev-build issue, not a PostHog SDK bug. | react-native, Android |  | no | 2026-07-21T15:23:06.898Z |
 | PostHog/posthog-js | [issue 4208](https://github.com/PostHog/posthog-js/issues/4208) | Valid browser SDK bug: internally saved session referrer can override user-registered $referrer/$referring_domain. | web, feature/web-analytics, feature/product-analytics, team/web-analytics |  | no | 2026-07-20T20:43:58.201Z |
 | PostHog/posthog-js | [issue 4202](https://github.com/PostHog/posthog-js/issues/4202) | Likely valid replay bug: an idle activity-timeout rotation can still leave the new replay session without a flushed FullSnapshot in 1.404.1. | feature/replay, web |  | no | 2026-07-20T11:54:29.879Z |
 | PostHog/posthog-js | [issue 4185](https://github.com/PostHog/posthog-js/issues/4185) | Valid React Native replay parity gap; full web debug-key parity needs scoping. | enhancement, feature/replay, react-native |  | no | 2026-07-17T10:04:10.802Z |
