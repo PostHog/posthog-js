@@ -151,6 +151,11 @@ function addCommonEventProperties(event: Event, properties: Record<string, unkno
   if (event.clientVersion) {
     properties[PostHogMCPAnalyticsProperty.ClientVersion] = event.clientVersion
   }
+  // Present on every event once negotiated at `initialize` (carried via
+  // sessionInfo / the session token). Absent only before the handshake.
+  if (event.protocolVersion) {
+    properties[PostHogMCPAnalyticsProperty.ProtocolVersion] = event.protocolVersion
+  }
   if (event.userIntent) {
     properties[PostHogMCPAnalyticsProperty.Intent] = event.userIntent
   }
@@ -236,6 +241,9 @@ function buildExceptionEvent(event: Event): PostHogCaptureEvent {
   }
   if (event.clientVersion) {
     properties[PostHogMCPAnalyticsProperty.ClientVersion] = event.clientVersion
+  }
+  if (event.protocolVersion) {
+    properties[PostHogMCPAnalyticsProperty.ProtocolVersion] = event.protocolVersion
   }
 
   addCustomEventProperties(event, properties)

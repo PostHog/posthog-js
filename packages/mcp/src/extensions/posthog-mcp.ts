@@ -112,6 +112,7 @@ export class PostHogMCP extends PostHog {
     const event = baseEvent(MCPAnalyticsEventType.mcpInitialize, data)
     event.clientName = data.clientName
     event.clientVersion = data.clientVersion
+    event.protocolVersion = data.protocolVersion
     event.parameters = data.parameters
     event.response = data.response
     event.duration = data.durationMs

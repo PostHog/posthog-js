@@ -165,6 +165,12 @@ export interface Event {
   listedToolNames?: string[]
   parameters?: unknown
   properties?: JsonRecord | null
+  /**
+   * Negotiated MCP protocol (spec) version → `$mcp_protocol_version`. Learned at
+   * `initialize` and carried onto every event for the session (see SessionInfo) —
+   * used to track spec adoption and to slice event metrics by spec version.
+   */
+  protocolVersion?: string
   resourceName?: string
   response?: unknown
   sdkLanguage?: string
@@ -254,6 +260,11 @@ export interface SessionInfo {
   identifyActorGivenId?: string
   identifyActorGroups?: Record<string, string>
   ipAddress?: string
+  /**
+   * Negotiated MCP protocol (spec) version, learned at `initialize` and carried
+   * forward for the session (across pods via the session token) → `$mcp_protocol_version`.
+   */
+  protocolVersion?: string
   sdkLanguage?: string
   sdkVersion?: string
   serverName?: string
@@ -358,6 +369,12 @@ export interface InitializeCaptureData extends McpCaptureCommon {
   clientName?: string
   /** MCP client version → `$mcp_client_version`. */
   clientVersion?: string
+  /**
+   * Negotiated MCP protocol (spec) version → `$mcp_protocol_version` (e.g.
+   * `2025-06-18`). The version from the initialize response — used to track when
+   * a new spec revision is adopted.
+   */
+  protocolVersion?: string
   /** Captured initialize params → `$mcp_parameters`. */
   parameters?: unknown
   /** Captured initialize result → `$mcp_response`. */

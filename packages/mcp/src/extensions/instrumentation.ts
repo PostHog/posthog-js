@@ -452,7 +452,15 @@ function mintStatelessSessionOnInitialize(
 
     const sessionId = newSessionId()
     const clientInfo = readInitializeClientInfo(request)
-    const token = encodeSessionId({ sessionId, clientName: clientInfo?.name, clientVersion: clientInfo?.version })
+    // Minted before the handler negotiates, so only the client's *requested*
+    // version is available. Carried in the token so cross-pod events still get it.
+    const requestedProtocolVersion = readProtocolVersion(undefined, request)
+    const token = encodeSessionId({
+      sessionId,
+      clientName: clientInfo?.name,
+      clientVersion: clientInfo?.version,
+      protocolVersion: requestedProtocolVersion,
+    })
     if (!writeSessionIdToTransport(transport, token)) {
       return // transport can't carry a response session id — keep generated behavior
     }
@@ -461,6 +469,7 @@ function mintStatelessSessionOnInitialize(
     data.sessionSource = 'token'
     data.sessionInfo.clientName = clientInfo?.name
     data.sessionInfo.clientVersion = clientInfo?.version
+    data.sessionInfo.protocolVersion = requestedProtocolVersion
     data.lastActivity = new Date()
     setServerTrackingData(server, data)
   } catch (error) {
@@ -519,6 +528,27 @@ export async function handleInitializeRequest(
 
   const result = await originalInitializeHandler(request, extra)
   event.response = result
+  // The negotiated version (off the response) supersedes the requested one the
+  // mint stored — persist it so every later event on this pod carries it too.
+  const negotiatedProtocolVersion = readProtocolVersion(result, request)
+  event.protocolVersion = negotiatedProtocolVersion
+  data.sessionInfo.protocolVersion = negotiatedProtocolVersion
+  setServerTrackingData(server, data)
   captureEvent(server, event)
   return result
+}
+
+/**
+ * The MCP spec (protocol) version this session speaks. Prefer the negotiated
+ * version off the initialize response — the version the server committed to and
+ * the session actually runs on — falling back to the client's requested version
+ * if the response omits it. Used to track spec-revision adoption.
+ */
+function readProtocolVersion(result: unknown, request: MCPRequestLike): string | undefined {
+  const negotiated = (result as Record<string, unknown> | null | undefined)?.protocolVersion
+  if (typeof negotiated === 'string' && negotiated.length > 0) {
+    return negotiated
+  }
+  const requested = request.params?.protocolVersion
+  return typeof requested === 'string' && requested.length > 0 ? requested : undefined
 }

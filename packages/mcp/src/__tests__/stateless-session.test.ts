@@ -96,6 +96,9 @@ describe('Stateless session minting', () => {
     expect(initEvents[0].properties.$session_id).toBe(decoded?.sessionId)
     expect(initEvents[0].properties.$mcp_client_name).toBe('Claude')
     expect(initEvents[0].properties.$mcp_client_version).toBe('1.2.3')
+    // Negotiated spec version off the real SDK initialize response (echoes the
+    // requested version, which the SDK supports).
+    expect(initEvents[0].properties.$mcp_protocol_version).toBe('2025-06-18')
   })
 
   it('mints through a getter-only wrapper transport (Node StreamableHTTP shape)', async () => {
@@ -201,6 +204,25 @@ describe('Stateless session minting', () => {
     expect(toolCalls[0].properties.$session_id).toBe(initEvents[0].properties.$session_id)
     expect(toolCalls[0].properties.$mcp_client_name).toBe('Claude')
     expect(toolCalls[0].properties.$mcp_client_version).toBe('1.2.3')
+    // Spec version also rides the token, so pod B stamps it despite never seeing initialize.
+    expect(toolCalls[0].properties.$mcp_protocol_version).toBe('2025-06-18')
+  })
+
+  it('stamps $mcp_protocol_version on same-pod tool calls after initialize (no token replay)', async () => {
+    const { server, lowLevel } = createPod('pod-persist')
+    setFakeTransport(server, {})
+
+    await invokeHandler(lowLevel, 'initialize', INITIALIZE_REQUEST, { requestInfo: { headers: {} } })
+    // A later request with no session header falls back to in-memory session state;
+    // the negotiated version persisted at initialize must still be stamped.
+    await invokeHandler(lowLevel, 'tools/call', {
+      method: 'tools/call',
+      params: { name: 'get_plan', arguments: {} },
+    })
+
+    const toolCalls = eventCapture.findCapturesByEvent('$mcp_tool_call')
+    expect(toolCalls).toHaveLength(1)
+    expect(toolCalls[0].properties.$mcp_protocol_version).toBe('2025-06-18')
   })
 
   describe('identify across stateless pods', () => {

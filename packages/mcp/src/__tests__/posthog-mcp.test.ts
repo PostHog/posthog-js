@@ -348,6 +348,7 @@ describe('PostHogMCP', () => {
       posthog.captureInitialize({
         clientName: 'claude-code',
         clientVersion: '1.2.3',
+        protocolVersion: '2025-06-18',
         distinctId: 'user-123',
         durationMs: 7,
       })
@@ -356,6 +357,7 @@ describe('PostHogMCP', () => {
       const p = onlyCapture(PostHogMCPAnalyticsEvent.Initialize).properties
       expect(p[PostHogMCPAnalyticsProperty.ClientName]).toBe('claude-code')
       expect(p[PostHogMCPAnalyticsProperty.ClientVersion]).toBe('1.2.3')
+      expect(p[PostHogMCPAnalyticsProperty.ProtocolVersion]).toBe('2025-06-18')
       expect(p[PostHogMCPAnalyticsProperty.DurationMs]).toBe(7)
     })
   })
