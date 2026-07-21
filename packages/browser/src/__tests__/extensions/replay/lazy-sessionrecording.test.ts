@@ -3693,50 +3693,32 @@ describe('Lazy SessionRecording', () => {
             expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotIntervalMillis']).toEqual(60_000)
         })
 
-        it('stops rotating the buffer after one of several OR triggers activates', () => {
+        it.each([
+            ['stops rotating the buffer after one of several OR triggers activates', 'any', 'active', true],
+            ['keeps rotating the buffer while an ALL trigger remains pending', 'all', 'buffering', false],
+        ])('%s', (_name, triggerMatchType, expectedStatus, expectActiveEventInBuffer) => {
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
                     sessionRecording: {
                         endpoint: '/s/',
                         eventTriggers: ['$exception'],
                         linkedFlag: 'recording-flag',
-                        triggerMatchType: 'any',
+                        triggerMatchType: triggerMatchType as 'any' | 'all',
                     },
                 })
             )
 
             simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
-            expect(sessionRecording.status).toBe('active')
+            expect(sessionRecording.status).toBe(expectedStatus)
 
             const activeEvent = createIncrementalSnapshot({ data: { source: 1 } })
+            const fullSnapshot = createFullSnapshot()
             _emit(activeEvent)
-            _emit(createFullSnapshot())
+            _emit(fullSnapshot)
 
-            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([
-                activeEvent,
-                createFullSnapshot(),
-            ])
-        })
-
-        it('keeps rotating the buffer while an ALL trigger remains pending', () => {
-            sessionRecording.onRemoteConfig(
-                makeFlagsResponse({
-                    sessionRecording: {
-                        endpoint: '/s/',
-                        eventTriggers: ['$exception'],
-                        linkedFlag: 'recording-flag',
-                        triggerMatchType: 'all',
-                    },
-                })
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual(
+                expectActiveEventInBuffer ? [activeEvent, fullSnapshot] : [fullSnapshot]
             )
-
-            simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
-            expect(sessionRecording.status).toBe('buffering')
-
-            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
-            _emit(createFullSnapshot())
-
-            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([createFullSnapshot()])
         })
 
         it('stores the linked flag on flags response', () => {
