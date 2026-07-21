@@ -817,6 +817,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }, interval)
     }
 
+    private _onTriggerActivated(): void {
+        if (this._urlTriggerMatching.urlBlocked || !['sampled', 'active'].includes(this.status)) {
+            return
+        }
+        this._scheduleFullSnapshot()
+    }
+
     private _pauseRecording() {
         // we check _urlBlocked not status, since more than one thing can affect status
         if (this._urlTriggerMatching.urlBlocked) {
@@ -877,6 +884,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             })
 
             this._strategy?.updateActiveTriggers(this.sessionId)
+            this._onTriggerActivated()
 
             this._flushBuffer()
             this._reportStarted((triggerType + '_trigger_matched') as SessionStartReason, {
@@ -981,7 +989,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 this._instance,
                 this._urlTriggerMatching,
                 this._reportStarted.bind(this),
-                this._tryAddCustomEvent.bind(this)
+                this._tryAddCustomEvent.bind(this),
+                this._onTriggerActivated.bind(this)
             )
         } else {
             this._strategy = new V1RecordingStrategy(
@@ -990,7 +999,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 this._eventTriggerMatching,
                 this._linkedFlagMatching,
                 this._reportStarted.bind(this),
-                this._tryTakeFullSnapshot.bind(this)
+                this._tryTakeFullSnapshot.bind(this),
+                this._onTriggerActivated.bind(this)
             )
         }
 
