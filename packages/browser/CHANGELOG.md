@@ -1,5 +1,19 @@
 # posthog-js
 
+## 1.406.0
+
+### Minor Changes
+
+- [#4194](https://github.com/PostHog/posthog-js/pull/4194) [`d39b903`](https://github.com/PostHog/posthog-js/commit/d39b903f8f77e32f729703156fa5a9430d778104) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Move shared browser utility implementations into `@posthog/browser-common` and consume them directly from `posthog-js`.
+  (2026-07-21)
+
+### Patch Changes
+
+- [#4204](https://github.com/PostHog/posthog-js/pull/4204) [`ba977d0`](https://github.com/PostHog/posthog-js/commit/ba977d0b36ec4fbf0b514008ba0643dcfcca26bf) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Keep autocapture off when a remote config response omits `autocapture_opt_out`. The SDK now retains the last known server value for the missing-field case, the same as when the config fetch fails, instead of enabling autocapture. Values persisted by earlier SDK versions are still trusted; a browser holding a stale value corrects itself on the first config response that includes the field.
+  (2026-07-21)
+- Updated dependencies [[`d39b903`](https://github.com/PostHog/posthog-js/commit/d39b903f8f77e32f729703156fa5a9430d778104)]:
+    - @posthog/browser-common@0.2.0
+
 ## 1.405.3
 
 ### Patch Changes
