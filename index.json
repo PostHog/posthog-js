@@ -1,4 +1,17 @@
 {
+  "PostHog/posthog-js/issue/4211": {
+    "key": "PostHog/posthog-js/issue/4211",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4211",
+    "url": "https://github.com/PostHog/posthog-js/issues/4211",
+    "conclusion": "Android emulator crash appears to be an upstream react-native-reanimated dev-build issue, not a PostHog SDK bug.",
+    "labels": [
+      "react-native",
+      "Android"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-21T15:23:06.898Z"
+  },
   "PostHog/posthog-js/issue/4208": {
     "key": "PostHog/posthog-js/issue/4208",
     "repo": "PostHog/posthog-js",
