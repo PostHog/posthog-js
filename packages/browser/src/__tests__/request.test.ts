@@ -195,7 +195,7 @@ describe('request', () => {
                 createRequest({
                     url: 'https://any.posthog-instance.com/api/surveys/',
                     method: 'GET',
-                    timestampLocation: 'query',
+                    timestampMode: 'query',
                 })
             )
 
@@ -213,7 +213,7 @@ describe('request', () => {
                         url: `https://any.posthog-instance.com${path}`,
                         method: 'POST',
                         data: event,
-                        timestampLocation: 'body',
+                        timestampMode: 'capture-body',
                     })
                 )
 
@@ -239,7 +239,7 @@ describe('request', () => {
                     url: 'https://any.posthog-instance.com/e/',
                     method: 'POST',
                     data: events,
-                    timestampLocation: 'body',
+                    timestampMode: 'capture-body',
                 })
             )
 
@@ -256,7 +256,7 @@ describe('request', () => {
                     url: 'https://any.posthog-instance.com/ingest/s/',
                     method: 'POST',
                     data: { event: '$snapshot' },
-                    timestampLocation: 'query',
+                    timestampMode: 'query',
                 })
             )
 
@@ -275,7 +275,7 @@ describe('request', () => {
                         url: 'https://any.posthog-instance.com/e/',
                         method: 'POST',
                         data: { event: 'test event', properties: { token: 'testtoken' } },
-                        timestampLocation: 'body',
+                        timestampMode: 'capture-body',
                     })
                 )
 
@@ -292,7 +292,7 @@ describe('request', () => {
                     url: 'https://any.posthog-instance.com/e/?ver=1.23.45&foo=bar',
                     method: 'POST',
                     data: { event: 'test event', properties: { token: 'testtoken' } },
-                    timestampLocation: 'body',
+                    timestampMode: 'capture-body',
                 })
             )
 
@@ -300,18 +300,23 @@ describe('request', () => {
             expect(requestedUrl).toBe('https://any.posthog-instance.com/e/?foo=bar')
         })
 
-        it('adds sent_at and keeps ver on POST feature flag requests', () => {
+        it('adds sent_at to the body and keeps ver on POST feature flag requests', () => {
             request(
                 createRequest({
                     url: 'https://any.posthog-instance.com/flags/?v=2',
                     method: 'POST',
-                    timestampLocation: 'query',
+                    data: { token: 'testtoken', distinct_id: 'user-1' },
+                    timestampMode: 'body',
                 })
             )
 
-            expect(mockedFetch.mock.calls[0][0]).toBe(
-                'https://any.posthog-instance.com/flags/?v=2&sent_at=1700000000000&ver=1.23.45'
-            )
+            const [requestedUrl, requestOptions] = mockedFetch.mock.calls[0]
+            expect(requestedUrl).toBe('https://any.posthog-instance.com/flags/?v=2&ver=1.23.45')
+            expect(JSON.parse(requestOptions.body)).toEqual({
+                token: 'testtoken',
+                distinct_id: 'user-1',
+                sent_at: 1700000000000,
+            })
         })
 
         it('does not add sent_at to GET feature flag requests', () => {
@@ -1060,7 +1065,7 @@ describe('request', () => {
                         createRequest({
                             method: 'POST',
                             data: [bigEvent(1), bigEvent(2), bigEvent(3), bigEvent(4)],
-                            timestampLocation: 'body',
+                            timestampMode: 'capture-body',
                         })
                     )
 

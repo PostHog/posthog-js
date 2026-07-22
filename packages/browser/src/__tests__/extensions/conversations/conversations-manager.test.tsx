@@ -756,7 +756,7 @@ describe('ConversationsManager', () => {
                 expect.objectContaining({
                     url: expect.stringContaining('/widget/messages/ticket-123'),
                     method: 'GET',
-                    timestampLocation: 'query',
+                    timestampMode: 'query',
                 })
             )
         })
@@ -981,7 +981,7 @@ describe('ConversationsManager', () => {
                 expect(mockPosthog._send_request).toHaveBeenCalledWith(
                     expect.objectContaining({
                         method: 'GET',
-                        timestampLocation: 'query',
+                        timestampMode: 'query',
                         url: expect.stringContaining('/api/conversations/v1/widget/messages/ticket-123'),
                         headers: {
                             'X-Conversations-Token': 'test-token',

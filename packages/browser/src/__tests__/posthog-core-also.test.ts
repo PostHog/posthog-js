@@ -338,7 +338,7 @@ describe('posthog core', () => {
             expect(posthog._send_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: 'https://us.i.posthog.com/e/',
-                    timestampLocation: 'body',
+                    timestampMode: 'capture-body',
                 })
             )
         })
@@ -371,7 +371,7 @@ describe('posthog core', () => {
             expect(posthog._send_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: 'https://app.posthog.com/s/',
-                    timestampLocation: 'query',
+                    timestampMode: 'query',
                 })
             )
         })

@@ -292,7 +292,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     `/api/conversations/v1/widget/messages/${targetTicketId}?${formDataToQuery(queryParams)}`
                 ),
                 method: 'GET',
-                timestampLocation: 'query',
+                timestampMode: 'query',
                 headers: {
                     'X-Conversations-Token': token,
                 },
@@ -1198,7 +1198,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     `/api/conversations/v1/widget/tickets?${formDataToQuery(queryParams)}`
                 ),
                 method: 'GET',
-                timestampLocation: 'query',
+                timestampMode: 'query',
                 headers: {
                     'X-Conversations-Token': token,
                 },

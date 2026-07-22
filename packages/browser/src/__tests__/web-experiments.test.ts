@@ -162,7 +162,7 @@ describe('Web Experimentation', () => {
 
         webExperiment.getWebExperimentsAndEvaluateDisplayLogic(false)
         expect(posthog._send_request).toHaveBeenLastCalledWith(
-            expect.objectContaining({ method: 'GET', timestampLocation: 'query' })
+            expect.objectContaining({ method: 'GET', timestampMode: 'query' })
         )
         expect(elParent.innerHTML).toEqual(expectedInnerHTML)
     }

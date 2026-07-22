@@ -272,7 +272,7 @@ export class PostHogSurveys implements Extension {
         this._instance._send_request({
             url: this._instance.requestRouter.endpointFor('api', `/api/surveys/?token=${this._config.token}`),
             method: 'GET',
-            timestampLocation: 'query',
+            timestampMode: 'query',
             timeout: this._config.surveys_request_timeout_ms,
             callback: (response) => {
                 this._getSurveysInFlightPromise = null
