@@ -78,7 +78,7 @@ describe('addEvent', () => {
       },
       {
         getCastFn,
-        applyEventsSynchronously: vi.fn(),
+        applyEvents: vi.fn(),
         emitter: { emit: vi.fn(), on: vi.fn(), off: vi.fn() } as any,
       },
     );
@@ -129,5 +129,17 @@ describe('addEvent', () => {
 
     expect(getCastFn).not.toHaveBeenCalled();
     expect(service.state.context.events).toEqual([event]);
+  });
+
+  it('RESET_LAST_PLAYED clears lastPlayedEvent without changing state', () => {
+    const { service } = createService();
+    const event = makeMutationEvent(BASELINE + 1);
+    service.send({ type: 'CAST_EVENT', payload: { event } });
+    expect(service.state.context.lastPlayedEvent).toBe(event);
+
+    service.send({ type: 'RESET_LAST_PLAYED' });
+
+    expect(service.state.context.lastPlayedEvent).toBeNull();
+    expect(service.state.value).toEqual('paused');
   });
 });

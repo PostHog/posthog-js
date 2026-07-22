@@ -27,6 +27,7 @@ import type {
 } from '@posthog/rrdom';
 import * as mittProxy from 'mitt';
 import { polyfill as smoothscrollPolyfill } from './smoothscroll';
+import { applyEventsWithYield } from './fast-forward';
 import { Timer } from './timer';
 import {
   createPlayerService,
@@ -187,6 +188,11 @@ export class Replayer {
   private serviceSubscription?: { unsubscribe: () => void };
   private speedServiceSubscription?: { unsubscribe: () => void };
   private timeouts: Set<ReturnType<typeof setTimeout>> = new Set();
+
+  // Bumped on every seek rebuild; a stale generation means a newer
+  // play/seek superseded the rebuild and its pending chunks must stop.
+  private applyGeneration = 0;
+  private seekRebuildInFlight = false;
   private styleSheetLoadListeners: Map<HTMLLinkElement, () => void> = new Map();
 
   constructor(
@@ -213,13 +219,14 @@ export class Replayer {
       pauseAnimation: true,
       mouseTail: defaultMouseTailConfig,
       useVirtualDom: true, // Virtual-dom optimization is enabled by default.
+      seekYieldBudgetMs: 0,
       logger: console,
     };
     this.config = Object.assign({}, defaultConfig, config);
 
     this.handleResize = this.handleResize.bind(this);
     this.getCastFn = this.getCastFn.bind(this);
-    this.applyEventsSynchronously = this.applyEventsSynchronously.bind(this);
+    this.applyEvents = this.applyEvents.bind(this);
     this.addEmitterHandler(ReplayerEvents.Resize, this.handleResize as Handler);
 
     this.setupDom();
@@ -383,7 +390,7 @@ export class Replayer {
       },
       {
         getCastFn: this.getCastFn,
-        applyEventsSynchronously: this.applyEventsSynchronously,
+        applyEvents: this.applyEvents,
         emitter: this.emitter,
       },
     );
@@ -562,6 +569,11 @@ export class Replayer {
    * @param timeOffset - number
    */
   public play(timeOffset = 0) {
+    if (this.seekRebuildInFlight) {
+      // the superseded rebuild left the DOM with only part of
+      // lastPlayedEvent's history, so a full rebuild is needed
+      this.service.send({ type: 'RESET_LAST_PLAYED' });
+    }
     if (this.service.state.matches('paused')) {
       this.service.send({ type: 'PLAY', payload: { timeOffset } });
     } else {
@@ -771,30 +783,48 @@ export class Replayer {
       .forEach((el) => el.removeAttribute('rr_fullscreen'));
   }
 
-  private applyEventsSynchronously = (events: Array<eventWithTime>) => {
-    for (const event of events) {
-      switch (event.type) {
-        case EventType.DomContentLoaded:
-        case EventType.Load:
-          continue;
-        case EventType.Custom:
-          // Fullscreen carries DOM state that must survive scrubbing; other
-          // custom events are side-effect-free signals and stay skipped.
-          if (event.data.tag !== FullscreenCustomEventTag) {
-            continue;
-          }
-          break;
-        case EventType.FullSnapshot:
-        case EventType.Meta:
-        case EventType.Plugin:
-        case EventType.IncrementalSnapshot:
-          break;
-        default:
-          break;
-      }
-      const castFn = this.getCastFn(event, true);
-      castFn();
+  private shouldCastInSyncMode = (event: eventWithTime): boolean => {
+    switch (event.type) {
+      case EventType.DomContentLoaded:
+      case EventType.Load:
+        return false;
+      case EventType.Custom:
+        // Fullscreen carries DOM state that must survive scrubbing; other
+        // custom events are side-effect-free signals and stay skipped.
+        return event.data.tag === FullscreenCustomEventTag;
+      default:
+        return true;
     }
+  };
+
+  private applyEvents = (
+    events: Array<eventWithTime>,
+    onApplied: () => void,
+  ) => {
+    // a later seek/play supersedes any rebuild still in flight
+    const generation = ++this.applyGeneration;
+    this.seekRebuildInFlight = true;
+    applyEventsWithYield({
+      events: events.filter(this.shouldCastInSyncMode),
+      castEvent: (event) => this.getCastFn(event, true)(),
+      yieldBudgetMs: this.config.seekYieldBudgetMs,
+      // addTimeout so destroy() cancels any pending continuation
+      schedule: (continueApplying) => void this.addTimeout(continueApplying, 0),
+      isCancelled: () => generation !== this.applyGeneration,
+      onComplete: (completedSynchronously) => {
+        this.seekRebuildInFlight = false;
+        this.emitter.emit(ReplayerEvents.Flush);
+        if (completedSynchronously || this.service.state.matches('playing')) {
+          onApplied();
+        } else if (this.service.state.matches('paused')) {
+          // a PAUSE arrived while the rebuild was yielding; net out like the
+          // synchronous path (timer started by PLAY, then cleared by PAUSE)
+          onApplied();
+          this.timer.clear();
+        }
+        // live: TO_LIVE already runs its own timer; leave it alone
+      },
+    });
   };
 
   private getCastFn = (event: eventWithTime, isSync = false) => {

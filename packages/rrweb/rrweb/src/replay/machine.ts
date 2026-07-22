@@ -35,6 +35,12 @@ export type PlayerEvent =
       };
     }
   | { type: 'PAUSE' }
+  /**
+   * Forgets lastPlayedEvent. Sent when a seek rebuild was superseded
+   * mid-flight, leaving the DOM with only part of lastPlayedEvent's history
+   * — the play action's skip-already-applied optimization must not trust it.
+   */
+  | { type: 'RESET_LAST_PLAYED' }
   | { type: 'TO_LIVE'; payload: { baselineTime?: number } }
   | {
       type: 'ADD_EVENT';
@@ -88,12 +94,17 @@ export function discardPriorSnapshots(
 
 type PlayerAssets = {
   emitter: Emitter;
-  applyEventsSynchronously(events: Array<eventWithTime>): void;
+  /**
+   * Applies the fast-forward events of a seek and emits Flush. May complete
+   * asynchronously on long rebuilds; calls onApplied exactly once after the
+   * last event — unless a newer play/seek superseded this one.
+   */
+  applyEvents(events: Array<eventWithTime>, onApplied: () => void): void;
   getCastFn(event: eventWithTime, isSync: boolean): () => void;
 };
 export function createPlayerService(
   context: PlayerContext,
-  { getCastFn, applyEventsSynchronously, emitter }: PlayerAssets,
+  { getCastFn, applyEvents, emitter }: PlayerAssets,
 ) {
   const playerMachine = createMachine<PlayerContext, PlayerEvent, PlayerState>(
     {
@@ -115,6 +126,10 @@ export function createPlayerService(
               target: 'paused',
               actions: ['resetLastPlayedEvent', 'pause'],
             },
+            RESET_LAST_PLAYED: {
+              target: 'playing',
+              actions: ['resetLastPlayedEvent'],
+            },
             ADD_EVENT: {
               target: 'playing',
               actions: ['addEvent'],
@@ -126,6 +141,10 @@ export function createPlayerService(
             PLAY: {
               target: 'playing',
               actions: ['recordTimeOffset', 'play'],
+            },
+            RESET_LAST_PLAYED: {
+              target: 'paused',
+              actions: ['resetLastPlayedEvent'],
             },
             CAST_EVENT: {
               target: 'paused',
@@ -221,9 +240,9 @@ export function createPlayerService(
               });
             }
           }
-          applyEventsSynchronously(syncEvents);
-          emitter.emit(ReplayerEvents.Flush);
-          timer.start();
+          applyEvents(syncEvents, () => {
+            timer.start();
+          });
         },
         pause(ctx) {
           ctx.timer.clear();

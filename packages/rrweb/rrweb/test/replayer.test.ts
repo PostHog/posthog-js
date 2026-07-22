@@ -1275,4 +1275,88 @@ describe('replayer', function () {
     const newColor = 'rgb(255, 255, 0)'; // yellow
     expect(changedColors).toEqual([newColor, newColor]);
   });
+
+  describe('seekYieldBudgetMs', () => {
+    // a sub-millisecond budget forces the smallest possible chunks, so the
+    // rebuild exercises the yielding path even on small fixtures
+    const TINY_BUDGET = 0.0001;
+
+    it('ends a chunked pause(t) in the same state as a synchronous one', async () => {
+      const result = await page.evaluate(`
+        (async () => {
+          const { Replayer } = rrweb;
+          const replayer = new Replayer(events, { seekYieldBudgetMs: ${TINY_BUDGET} });
+          replayer.pause(2500);
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          return {
+            currentTime: replayer.getCurrentTime(),
+            state: replayer['service']['state']['value'],
+            actionLength: replayer['timer']['actions'].length,
+            timerOffset: replayer['timer']['timeOffset'],
+          };
+        })()
+      `);
+      expect(result).toEqual({
+        currentTime: 2500,
+        state: 'paused',
+        actionLength: 0,
+        timerOffset: 0,
+      });
+    });
+
+    it('renders the same DOM as a synchronous seek', async () => {
+      await page.evaluate(`events = ${JSON.stringify(styleSheetRuleEvents)}`);
+      const [chunkedHtml, syncHtml] = await page.evaluate(`
+        (async () => {
+          const { Replayer } = rrweb;
+          const chunked = new Replayer(events, { seekYieldBudgetMs: ${TINY_BUDGET} });
+          chunked.pause(1500);
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          const sync = new Replayer(events);
+          sync.pause(1500);
+          return [
+            chunked.iframe.contentDocument.documentElement.outerHTML,
+            sync.iframe.contentDocument.documentElement.outerHTML,
+          ];
+        })()
+      `);
+      expect(chunkedHtml).toEqual(syncHtml);
+    });
+
+    it('a rapid second seek supersedes the in-flight rebuild', async () => {
+      await page.evaluate(`events = ${JSON.stringify(styleSheetRuleEvents)}`);
+      const [scrubbedHtml, directHtml] = await page.evaluate(`
+        (async () => {
+          const { Replayer } = rrweb;
+          const scrubbed = new Replayer(events, { seekYieldBudgetMs: ${TINY_BUDGET} });
+          scrubbed.pause(2600);
+          scrubbed.pause(1500);
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          const direct = new Replayer(events);
+          direct.pause(1500);
+          return [
+            scrubbed.iframe.contentDocument.documentElement.outerHTML,
+            direct.iframe.contentDocument.documentElement.outerHTML,
+          ];
+        })()
+      `);
+      expect(scrubbedHtml).toEqual(directHtml);
+    });
+
+    it('starts playback once a chunked play(t) rebuild completes', async () => {
+      const result = await page.evaluate(`
+        (async () => {
+          const { Replayer } = rrweb;
+          const replayer = new Replayer(events, { seekYieldBudgetMs: ${TINY_BUDGET} });
+          replayer.play(1500);
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          return {
+            state: replayer['service']['state']['value'],
+            timerActive: replayer['timer'].isActive(),
+          };
+        })()
+      `);
+      expect(result).toEqual({ state: 'playing', timerActive: true });
+    });
+  });
 });
