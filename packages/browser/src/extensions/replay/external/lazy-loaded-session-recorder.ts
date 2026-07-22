@@ -1208,11 +1208,16 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         this._clearConditionalRecordingPersistence()
 
-        // _updateWindowAndSessionIds only drives the restart while rrweb is running and the
-        // recorder has confirmed activity (_isIdle === false), so restart here in every other
-        // state — idle, stopped, or 'unknown' (a tab with no user interaction since rrweb
-        // started stays 'unknown' indefinitely).
-        if (this._isIdle !== false || !this.isStarted) {
+        // The $session_id_change emit above can synchronously re-enter
+        // _updateWindowAndSessionIds (rrweb delivers addCustomEvent through emit), which
+        // adopts the new ids and restarts the recorder itself. Restart here only when the
+        // ids are still stale — confirmed idle, stopped, or states where that emit never
+        // reached the session check (blocked URL, queued emit) — so a rotation restarts
+        // exactly once.
+        if (
+            (this._isIdle !== false || !this.isStarted) &&
+            (this._sessionId !== sessionId || this._windowId !== windowId)
+        ) {
             this._isIdle = 'unknown'
             this.stop()
             this.start('session_id_changed')

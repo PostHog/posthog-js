@@ -1407,6 +1407,53 @@ describe('Lazy SessionRecording', () => {
                 expect(recordMock).toHaveBeenCalledTimes(2)
             })
 
+            it('restarts only once when the $session_id_change emit drives the restart re-entrantly', () => {
+                // Production rrweb delivers addCustomEvent synchronously through emit, so the
+                // $session_id_change custom event emitted inside _onSessionIdCallback re-enters
+                // _updateWindowAndSessionIds, which adopts the rotated ids and restarts. The
+                // callback must then not restart a second time.
+                _addCustomEvent.mockImplementation((tag: string, payload: any) => {
+                    _emit({ type: EventType.Custom, data: { tag, payload }, timestamp: Date.now() })
+                })
+                try {
+                    const recordMock = assignableWindow.__PosthogExtensions__.rrweb.record as Mock
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual('unknown')
+                    expect(recordMock).toHaveBeenCalledTimes(1)
+
+                    sessionIdGeneratorMock.mockClear()
+                    const rotatedSessionId = 'reentrant-rotated-session-id'
+                    sessionIdGeneratorMock.mockImplementation(() => rotatedSessionId)
+
+                    const rotationTimestamp = sessionManager['_sessionTimeoutMs'] + startingTimestamp + 1000
+                    jest.useFakeTimers().setSystemTime(new Date(rotationTimestamp))
+                    sessionManager.checkAndGetSessionAndWindowId(false, rotationTimestamp)
+
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionId']).toEqual(rotatedSessionId)
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual('unknown')
+                    // exactly one restart: the initial start plus a single re-record for the rotation
+                    expect(recordMock).toHaveBeenCalledTimes(2)
+                } finally {
+                    _addCustomEvent.mockReset()
+                }
+            })
+
+            it('flushes the buffer while _isIdle is unknown when it exceeds the max event size', () => {
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual('unknown')
+
+                sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
+
+                // fake having a large buffer, as the idle === true counterpart test does
+                sessionRecording['_lazyLoadedSessionRecording']['_buffer'].size = RECORDING_MAX_EVENT_SIZE - 1
+                sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
+
+                // unlike confirmed idle, the unknown state must respect the size cap and flush
+                expect(posthog.capture).toHaveBeenCalledWith(
+                    '$snapshot',
+                    expect.objectContaining({ $session_id: sessionId }),
+                    expect.any(Object)
+                )
+            })
+
             it('schedules a buffer flush while _isIdle is unknown so background tabs ship their data', () => {
                 jest.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
 

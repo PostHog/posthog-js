@@ -477,12 +477,20 @@ test.describe('Session rotation without user interaction', () => {
                 )
                 .toBe(true)
 
+            // allow a further flush cycle to land so a duplicated restart would be visible below
+            await page.waitForTimeout(2500)
+
             const snapshots = (await page.capturedEvents()).filter((e) => e.event === '$snapshot')
             const newSessionSnapshotData = snapshots
                 .filter((s) => s.properties.$session_id === newSessionId)
                 .flatMap((s: any) => s.properties.$snapshot_data)
 
-            // the new session must open with Meta then FullSnapshot so it is playable
+            // the new session must open with Meta then FullSnapshot so it is playable,
+            // and the rotation must restart the recorder exactly once — a single pair
+            const metaEvents = newSessionSnapshotData.filter((e: any) => e.type === 4)
+            const fullSnapshotEvents = newSessionSnapshotData.filter((e: any) => e.type === 2)
+            expect(metaEvents.length).toEqual(1)
+            expect(fullSnapshotEvents.length).toEqual(1)
             const renderable = newSessionSnapshotData.filter((e: any) => e.type === 4 || e.type === 2)
             expect(renderable[0]?.type).toEqual(4)
             expect(renderable[1]?.type).toEqual(2)
