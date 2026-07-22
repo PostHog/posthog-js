@@ -243,6 +243,7 @@ function baseEvent(eventType: MCPAnalyticsEventType, common: McpCaptureCommon): 
   const event: McpEvent = {
     eventType,
     sessionId: common.sessionId,
+    protocolVersion: common.protocolVersion,
     timestamp: common.timestamp ?? new Date(),
     properties: common.properties,
     groups: common.groups,
