@@ -1,8 +1,25 @@
 import { isArray, isNull, isUndefined } from '@posthog/core'
-import { jsonStringify } from '../request'
-import { PropertyFilters, PropertyOperator } from '../posthog-surveys-types'
-import type { Properties, SessionRecordingTriggerPropertyFilter } from '../types'
+import type { Properties } from '@posthog/types'
+
+import { jsonStringify } from './request-utils'
 import { isMatchingRegex } from './regex-utils'
+
+export type PropertyMatchType = 'exact' | 'is_not' | 'regex' | 'not_regex' | 'icontains' | 'not_icontains'
+export type PropertyOperator = PropertyMatchType | 'gt' | 'lt'
+
+export type PropertyFilters = {
+    [propertyName: string]: {
+        values: string[]
+        operator: PropertyOperator
+    }
+}
+
+export interface SessionRecordingTriggerPropertyFilter {
+    key: string
+    value?: string | number | boolean | (string | number | boolean)[] | null
+    operator?: PropertyOperator | null
+    type?: string | null
+}
 
 export function getPersonPropertiesHash(
     distinct_id: string,

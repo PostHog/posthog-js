@@ -1,10 +1,10 @@
 import { PostHog } from '../../posthog-core'
 import { ActionStepType, PropertyFilters, SurveyActionType, SurveyElement } from '../../posthog-surveys-types'
-import { SimpleEventEmitter } from '../../utils/simple-event-emitter'
+import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
 import { CaptureResult, PropertyMatchType } from '../../types'
 import { isArray, isUndefined } from '@posthog/core'
-import { matchPropertyFilters } from '../../utils/property-utils'
-import { extractTexts, extractHref, matchString, matchTexts } from '../../utils/elements-chain-utils'
+import { matchPropertyFilters } from '@posthog/browser-common/utils/property-utils'
+import { extractTexts, extractHref, matchString, matchTexts } from '@posthog/browser-common/utils/elements-chain-utils'
 
 export class ActionMatcher {
     private readonly _actionRegistry?: Set<SurveyActionType>

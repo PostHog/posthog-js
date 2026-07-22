@@ -4,8 +4,8 @@ import { waitFor } from '@testing-library/dom'
 import 'regenerator-runtime/runtime'
 import { createPosthogInstance } from '../src/__tests__/helpers/posthog-instance'
 import { PostHog } from '../src/posthog-core'
-import { logger } from '../src/utils/logger'
-import { uuidv7 } from '../src/uuidv7'
+import { logger } from '@posthog/browser-common/utils/logger'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { getRequests } from './mock-server'
 
 describe('FunctionalTests / Identify', () => {

@@ -23,6 +23,7 @@ import {
   safeSetTimeout,
   FeatureFlagValue,
   FeatureFlagResultOptions,
+  IsFeatureEnabledOptions,
   ErrorTracking as CoreErrorTracking,
 } from '@posthog/core'
 import { Properties } from '@posthog/types'
@@ -945,7 +946,8 @@ export class PostHog extends PostHogCore {
   /**
    * Checks if a feature flag is enabled for the current user.
    *
-   * Defaults to undefined if not loaded yet or if there was a problem loading.
+   * Defaults to undefined if not loaded yet or if there was a problem loading,
+   * unless `defaultValue` is provided.
    *
    * {@label Feature flags}
    *
@@ -955,13 +957,21 @@ export class PostHog extends PostHogCore {
    * const isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag')
    * ```
    *
+   * @example
+   * ```js
+   * // fall back to false while flags are not loaded
+   * const isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag', { defaultValue: false })
+   * ```
+   *
    * @public
    *
    * @param key The feature flag key
    * @param options Optional per-call settings
-   * @returns True if enabled, false if disabled, undefined if not loaded
+   * @returns True if enabled, false if disabled; when the flag has no value, defaultValue if given, otherwise undefined
    */
-  isFeatureEnabled(key: string, options?: FeatureFlagResultOptions): boolean | undefined {
+  isFeatureEnabled(key: string, options: IsFeatureEnabledOptions & { defaultValue: boolean }): boolean
+  isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined
+  isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined {
     return super.isFeatureEnabled(key, options)
   }
 

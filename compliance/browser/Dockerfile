@@ -7,6 +7,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY tooling ./tooling
 COPY packages/types ./packages/types
 COPY packages/core ./packages/core
+COPY packages/browser-common ./packages/browser-common
 COPY packages/rrweb ./packages/rrweb
 COPY packages/browser ./packages/browser
 
@@ -17,13 +18,14 @@ RUN npm install -g pnpm@11.7.0
 RUN pnpm install --frozen-lockfile
 
 # Build posthog-js's workspace deps in the order their build scripts expect:
-#   - @posthog/types & @posthog/core ship a `build` script
+#   - @posthog/types, @posthog/core, and @posthog/browser-common ship a `build` script
 #   - the in-tree @posthog/rrweb-* packages ship a `prepublish` script (their own
 #     `build` shells out to `pnpm turbo run prepublish`, which races with the
 #     outer turbo if invoked in parallel — running `prepublish` from the top-level
 #     turbo gives us the correct ordering across all rrweb packages with no nesting)
 RUN pnpm --filter @posthog/types build
 RUN pnpm --filter @posthog/core build
+RUN pnpm --filter @posthog/browser-common build
 RUN pnpm turbo run prepublish
 
 # Then build posthog-js (all its workspace deps now have populated `dist/` dirs).

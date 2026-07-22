@@ -32,8 +32,9 @@ import {
     SessionIdChangedCallback,
     SessionRecordingOptions,
 } from '../../../types'
-import { uuidv7 } from '../../../uuidv7'
-import { assignableWindow, window } from '../../../utils/globals'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
+import { window } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../../../utils/globals'
 import { RequestRouter } from '../../../utils/request-router'
 import {
     type customEvent,
@@ -47,7 +48,7 @@ import {
     type pluginEvent,
 } from '../../../extensions/replay/types/rrweb-types'
 import { ConsentManager } from '../../../consent'
-import { SimpleEventEmitter } from '../../../utils/simple-event-emitter'
+import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
 import Mock = jest.Mock
 import { SessionRecording } from '../../../extensions/replay/session-recording'
 import {
@@ -3573,6 +3574,76 @@ describe('Lazy SessionRecording', () => {
                     maskTextSelector: '*',
                 })
             )
+        })
+
+        describe('warns when client-side masking shadows the project setting', () => {
+            let warnSpy: jest.SpyInstance
+
+            beforeEach(() => {
+                // the logger only emits to the console when debug mode is enabled
+                assignableWindow.POSTHOG_DEBUG = true
+                warnSpy = jest.spyOn(window!.console, 'warn').mockImplementation(() => {})
+            })
+
+            afterEach(() => {
+                warnSpy.mockRestore()
+                assignableWindow.POSTHOG_DEBUG = undefined
+            })
+
+            function startWithConfigs(
+                serverMasking: Partial<SessionRecordingOptions> | undefined,
+                clientMasking: Partial<SessionRecordingOptions>
+            ) {
+                posthog.config.session_recording.maskAllInputs = clientMasking.maskAllInputs
+                posthog.config.session_recording.maskTextSelector = clientMasking.maskTextSelector
+                posthog.config.session_recording.blockSelector = clientMasking.blockSelector
+
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            masking: serverMasking,
+                        },
+                    })
+                )
+                sessionRecording['_onScriptLoaded']()
+            }
+
+            // the logger prepends a prefix arg, so the human-readable message is the second call arg
+            const maskingWarnings = () =>
+                warnSpy.mock.calls.filter((call) => typeof call[1] === 'string' && call[1].includes('take precedence'))
+
+            it('warns when client masking diverges from the project masking', () => {
+                startWithConfigs({ maskAllInputs: false, maskTextSelector: undefined }, { maskTextSelector: '*' })
+
+                expect(maskingWarnings()).toHaveLength(1)
+                expect(maskingWarnings()[0][1]).toContain('maskTextSelector')
+            })
+
+            it('only warns once even if masking is re-evaluated on restart', () => {
+                startWithConfigs({ maskAllInputs: false }, { maskAllInputs: true })
+
+                // simulate the recorder re-evaluating masking on subsequent starts
+                sessionRecording['_lazyLoadedSessionRecording']!['_warnIfClientMaskingShadowsServer']()
+                sessionRecording['_lazyLoadedSessionRecording']!['_warnIfClientMaskingShadowsServer']()
+
+                expect(maskingWarnings()).toHaveLength(1)
+            })
+
+            it('does not warn when there is no project masking to shadow', () => {
+                startWithConfigs(undefined, { maskTextSelector: '*' })
+
+                expect(maskingWarnings()).toHaveLength(0)
+            })
+
+            it('does not warn when client and project masking agree', () => {
+                startWithConfigs(
+                    { maskAllInputs: true, maskTextSelector: '*' },
+                    { maskAllInputs: true, maskTextSelector: '*' }
+                )
+
+                expect(maskingWarnings()).toHaveLength(0)
+            })
         })
 
         describe('capturing passwords', () => {

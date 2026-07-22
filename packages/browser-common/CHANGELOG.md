@@ -1,5 +1,12 @@
 # @posthog/browser-common
 
+## 0.2.0
+
+### Minor Changes
+
+- [#4194](https://github.com/PostHog/posthog-js/pull/4194) [`d39b903`](https://github.com/PostHog/posthog-js/commit/d39b903f8f77e32f729703156fa5a9430d778104) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Move shared browser utility implementations into `@posthog/browser-common` and consume them directly from `posthog-js`.
+  (2026-07-21)
+
 ## 0.1.0
 
 ### Minor Changes

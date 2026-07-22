@@ -2,9 +2,9 @@ import './helpers/mock-logger'
 
 import { PostHog } from '../posthog-core'
 import { defaultPostHog } from './helpers/posthog-instance'
-import { uuidv7 } from '../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { PostHogConfig } from '../types'
-import { navigator } from '../utils/globals'
+import { navigator } from '@posthog/browser-common/utils/globals'
 
 describe('bot detection and pageview collection', () => {
     let posthog: PostHog

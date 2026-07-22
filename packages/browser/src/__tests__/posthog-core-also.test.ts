@@ -1,8 +1,9 @@
 import { mockLogger } from './helpers/mock-logger'
 
-import * as globals from '../utils/globals'
-import { document, window } from '../utils/globals'
-import { uuidv7 } from '../uuidv7'
+import * as globals from '@posthog/browser-common/utils/globals'
+import { document, window } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../utils/globals'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { isUndefined } from '@posthog/core'
 import {
     AUTOCAPTURE_DISABLED_SERVER_SIDE,
@@ -27,8 +28,8 @@ import { SessionPropsManager } from '../session-props'
 // eslint-disable-next-line no-var
 var mockGetProperties: jest.Mock
 
-jest.mock('../utils/event-utils', () => {
-    const originalEventUtils = jest.requireActual('../utils/event-utils')
+jest.mock('@posthog/browser-common/utils/event-utils', () => {
+    const originalEventUtils = jest.requireActual('@posthog/browser-common/utils/event-utils')
     mockGetProperties = jest.fn().mockImplementation((...args) => originalEventUtils.getEventProperties(...args))
     return {
         ...originalEventUtils,
@@ -49,7 +50,7 @@ describe('posthog core', () => {
     const posthogWith = (config: Partial<PostHogConfig>, overrides?: Partial<PostHog>): PostHog => {
         // NOTE: Temporary change whilst testing remote config
         const token = config.token || 'testtoken'
-        globals.assignableWindow._POSTHOG_REMOTE_CONFIG = {
+        assignableWindow._POSTHOG_REMOTE_CONFIG = {
             [token]: {
                 config: {},
                 siteApps: [],

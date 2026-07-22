@@ -10,16 +10,16 @@ import {
     ProductTourWaitPeriod,
 } from '../../posthog-product-tours-types'
 import { findElement } from './element-inference'
-import { prepareStylesheet } from '../utils/stylesheet-loader'
-import { document as _document, window as _window } from '../../utils/globals'
+import { prepareStylesheet } from '@posthog/browser-common/utils/stylesheet-loader'
+import { document as _document, window as _window } from '@posthog/browser-common/utils/globals'
 import { getFontFamily, getContrastingTextColor, hexToRgba } from '../surveys/surveys-extension-utils'
-import { createLogger } from '../../utils/logger'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 import { localStore } from '../../storage'
 import { LAST_SEEN_TOUR_DATE_KEY_PREFIX } from './constants'
 
 import productTourStyles from './product-tour.css'
 import { isUndefined } from '@posthog/core'
-import { hasPeriodPassed } from '../utils/matcher-utils'
+import { hasPeriodPassed } from '@posthog/browser-common/utils/matcher-utils'
 
 const logger = createLogger('[Product Tours]')
 

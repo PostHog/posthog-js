@@ -1,6 +1,7 @@
 import { SessionIdManager } from '../sessionid'
 import { patch } from '../extensions/replay/rrweb-plugins/patch'
-import { assignableWindow, window } from '../utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../utils/globals'
 import { COOKIELESS_SENTINEL_VALUE } from '../constants'
 import { isArray, isFunction, isNull, isUndefined } from '@posthog/core'
 import type { TracingHeadersDistinctId, TracingHeadersHostnames } from '../extensions/tracing-headers-types'

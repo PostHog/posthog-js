@@ -3,7 +3,7 @@ import '../src/__tests__/helpers/mock-logger'
 import { createPosthogInstance } from '../src/__tests__/helpers/posthog-instance'
 import { waitFor } from '@testing-library/dom'
 import { getRequests, resetRequests } from './mock-server'
-import { uuidv7 } from '../src/uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
 async function shortWait() {
     // no need to worry about ie11 compat in tests

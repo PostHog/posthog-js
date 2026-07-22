@@ -270,6 +270,9 @@ importers:
 
   packages/browser:
     dependencies:
+      '@posthog/browser-common':
+        specifier: workspace:^
+        version: link:../browser-common
       '@posthog/core':
         specifier: workspace:^
         version: link:../core
@@ -499,6 +502,9 @@ importers:
       '@posthog/core':
         specifier: workspace:^
         version: link:../core
+      '@posthog/types':
+        specifier: workspace:^
+        version: link:../types
     devDependencies:
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*

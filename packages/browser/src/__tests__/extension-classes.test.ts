@@ -5,7 +5,7 @@ import { Autocapture } from '../autocapture'
 import { PostHogFeatureFlags } from '../posthog-featureflags'
 import { SessionRecording } from '../extensions/replay/session-recording'
 import { createPosthogInstance } from './helpers/posthog-instance'
-import { uuidv7 } from '../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { assignableWindow } from '../utils/globals'
 
 describe('__extensionClasses enrollment', () => {

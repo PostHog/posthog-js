@@ -26,7 +26,7 @@ import {
     USER_STATE,
     COOKIELESS_ALWAYS,
 } from './constants'
-import { DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS } from './autocapture-utils'
+import { DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS } from '@posthog/browser-common/utils/autocapture-utils'
 import { isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 import { setupSegmentIntegration } from './extensions/segment-integration'
 import { SentryIntegration, sentryIntegration, SentryIntegrationOptions } from './extensions/sentry-integration'
@@ -62,6 +62,7 @@ import {
     FeatureFlagsCallback,
     FeatureFlagOptions,
     FeatureFlagResult,
+    IsFeatureEnabledOptions,
     JsonType,
     OverrideConfig,
     PostHogConfig,
@@ -85,15 +86,16 @@ import {
     isCrossDomainCookie,
     migrateConfigField,
     safewrapClass,
-} from './utils'
-import { isLikelyBot } from './utils/blocked-uas'
-import { getDeviceModel } from './utils/device-model-utils'
-import { getEventProperties } from './utils/event-utils'
-import { assignableWindow, document, location, navigator, userAgent, window } from './utils/globals'
-import { logger } from './utils/logger'
-import { getPersonPropertiesHash } from './utils/property-utils'
+} from '@posthog/browser-common/utils/general-utils'
+import { isLikelyBot } from '@posthog/browser-common/utils/blocked-uas'
+import { getDeviceModel } from '@posthog/browser-common/utils/device-model-utils'
+import { getEventProperties } from '@posthog/browser-common/utils/event-utils'
+import { document, location, navigator, userAgent, window } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from './utils/globals'
+import { logger } from '@posthog/browser-common/utils/logger'
+import { getPersonPropertiesHash } from '@posthog/browser-common/utils/property-utils'
 import { RequestRouter, RequestRouterRegion } from './utils/request-router'
-import { SimpleEventEmitter } from './utils/simple-event-emitter'
+import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
 import {
     DEFAULT_DISPLAY_SURVEY_OPTIONS,
     getSurveyInteractionProperty,
@@ -117,7 +119,7 @@ import {
     getEventUuid,
     minimizeFlagCalledEventProperties,
 } from '@posthog/core'
-import { uuidv7 } from './uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { ExternalIntegrations } from './extensions/external-integration'
 import type { PostHogSurveys } from './posthog-surveys'
 import type { Autocapture } from './autocapture'
@@ -1637,14 +1639,23 @@ export class PostHog implements PostHogInterface {
         // don't write to the persistence properties object and info
         // properties object by passing in a new object
 
+        // $referrer / $referring_domain are written to the sessionPersistence from document.referrer
+        // on every capture, and sessionPersistence is merged after the regular persistence below, so
+        // they normally win. When the user has explicitly set one of these via posthog.register()
+        // (which writes to the regular persistence), let that value win instead. Resolve the
+        // precedence per property so a single registered key does not suppress the other, and a
+        // stale session value cannot shadow the registered one. Without this an SPA or iframe
+        // reports document.referrer (the iframe's own origin) rather than the registered value.
+        const persistenceProperties = this.persistence.properties()
+        const sessionPersistenceProperties = this.sessionPersistence.properties()
+        each(['$referrer', '$referring_domain'], (referrerKey) => {
+            if (referrerKey in persistenceProperties) {
+                delete sessionPersistenceProperties[referrerKey]
+            }
+        })
+
         // update properties with pageview info and super-properties
-        properties = extend(
-            {},
-            infoProperties,
-            this.persistence.properties(),
-            this.sessionPersistence.properties(),
-            properties
-        )
+        properties = extend({}, infoProperties, persistenceProperties, sessionPersistenceProperties, properties)
 
         properties['$is_identified'] = this._isIdentified()
 
@@ -1998,7 +2009,8 @@ export class PostHog implements PostHogInterface {
      * Checks if a feature flag is enabled for the current user.
      *
      * @remarks
-     * Returns true if the flag is enabled, false if disabled, or undefined if not found.
+     * Returns true if the flag is enabled, false if disabled, or undefined if not found
+     * (unless `defaultValue` is given, which is returned instead of undefined).
      * This is a convenience method that treats any truthy value as enabled.
      *
      * {@label Feature flags}
@@ -2022,11 +2034,13 @@ export class PostHog implements PostHogInterface {
      * @public
      *
      * @param {string} key Key of the feature flag.
-     * @param {FeatureFlagOptions} [options] Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server.
-     * @returns {boolean | undefined} Whether the feature flag is enabled, or undefined if the flag is unavailable.
+     * @param {IsFeatureEnabledOptions} [options] Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server. If `{ defaultValue: false }`, we return that value instead of undefined when the flag has no value.
+     * @returns {boolean | undefined} Whether the feature flag is enabled; when the flag has no value, defaultValue if given, otherwise undefined.
      */
-    isFeatureEnabled(key: string, options?: FeatureFlagOptions): boolean | undefined {
-        return this.featureFlags?.isFeatureEnabled(key, options)
+    isFeatureEnabled(key: string, options: IsFeatureEnabledOptions & { defaultValue: boolean }): boolean
+    isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined
+    isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined {
+        return this.featureFlags?.isFeatureEnabled(key, options) ?? options?.defaultValue
     }
 
     /**

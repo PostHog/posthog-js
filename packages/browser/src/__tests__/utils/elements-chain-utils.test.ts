@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 
-import { extractHref, extractTexts, matchString, matchTexts } from '../../utils/elements-chain-utils'
+import { extractHref, extractTexts, matchString, matchTexts } from '@posthog/browser-common/utils/elements-chain-utils'
 
 describe('elements-chain-utils', () => {
     describe('extractHref', () => {

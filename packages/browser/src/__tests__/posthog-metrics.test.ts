@@ -7,7 +7,7 @@ const mockLogger = {
     error: jest.fn(),
 }
 
-jest.mock('../utils/logger', () => ({
+jest.mock('@posthog/browser-common/utils/logger', () => ({
     createLogger: jest.fn(() => mockLogger),
 }))
 

@@ -1,7 +1,7 @@
 import '../helpers/mock-logger'
 
 import { createPosthogInstance } from '../helpers/posthog-instance'
-import { uuidv7 } from '../../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { PostHog } from '../../posthog-core'
 import { FlagsResponse, PerformanceCaptureConfig, RemoteConfig, SupportedWebVitalsMetrics } from '../../types'
 import { assignableWindow } from '../../utils/globals'
@@ -21,8 +21,8 @@ jest.useFakeTimers()
 // eslint-disable-next-line no-var
 var mockLocation: jest.Mock
 
-jest.mock('../../utils/globals', () => {
-    const original = jest.requireActual('../../utils/globals')
+jest.mock('@posthog/browser-common/utils/globals', () => {
+    const original = jest.requireActual('@posthog/browser-common/utils/globals')
     mockLocation = jest.fn().mockReturnValue({
         protocol: 'http:',
         host: 'localhost',

@@ -1,14 +1,23 @@
 import Config from '../config'
 import { isUndefined } from '@posthog/core'
-import { assignableWindow, window } from './globals'
-import type { Logger } from '@posthog/core'
+import type { Logger } from '@posthog/types'
+import { window } from './globals'
 
-type CreateLoggerOptions = {
+interface DebugWindow extends Window {
+    POSTHOG_DEBUG?: boolean
+}
+
+export type CreateLoggerOptions = {
     debugEnabled?: boolean
 }
 
-type PosthogJsLogger = Omit<Logger, 'createLogger'> & {
+export type PosthogJsLogger = Omit<Logger, 'createLogger' | 'debug' | 'info' | 'warn' | 'error' | 'trace' | 'fatal'> & {
     _log: (level: 'debug' | 'log' | 'warn' | 'error', ...args: any[]) => void
+    debug: (...args: any[]) => void
+    info: (...args: any[]) => void
+    warn: (...args: any[]) => void
+    error: (...args: any[]) => void
+    critical: (...args: any[]) => void
     uninitializedWarning: (methodName: string) => void
     createLogger: (prefix: string, options?: CreateLoggerOptions) => PosthogJsLogger
 }
@@ -18,7 +27,7 @@ const _createLogger = (prefix: string, { debugEnabled }: CreateLoggerOptions = {
         _log: (level: 'debug' | 'log' | 'warn' | 'error', ...args: any[]) => {
             if (
                 window &&
-                (Config.DEBUG || assignableWindow.POSTHOG_DEBUG || debugEnabled) &&
+                (Config.DEBUG || (window as DebugWindow).POSTHOG_DEBUG || debugEnabled) &&
                 !isUndefined(window.console) &&
                 window.console
             ) {

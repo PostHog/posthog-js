@@ -1,10 +1,11 @@
-import { PostHogConfig, Properties } from '../types'
+import { hasOwnProperty, isArray, isFormData, isNullish, isNumber, isString } from '@posthog/core'
+import type { PostHogConfig, Properties } from '@posthog/types'
+
 import { logger } from './logger'
-import { isFormData, isNullish, isNumber, isString, hasOwnProperty, isArray } from '@posthog/core'
 
 export function find<T>(value: T[], predicate: (value: T) => boolean): T | undefined {
     for (let i = 0; i < value.length; i++) {
-        if (predicate(value[i])) {
+        if (predicate(value[i]!)) {
             return value[i]
         }
     }
@@ -57,7 +58,7 @@ export function entries<T = any>(obj: Record<string, T>): [string, T][] {
     const resArray = new Array(i) // preallocate the Array
 
     while (i--) {
-        resArray[i] = [ownProps[i], obj[ownProps[i]]]
+        resArray[i] = [ownProps[i]!, obj[ownProps[i]!] as T]
     }
     return resArray
 }
@@ -88,7 +89,7 @@ export const safewrap = function <F extends (...args: any[]) => any = (...args: 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
 export const safewrapClass = function (klass: Function, functions: string[]): void {
     for (let i = 0; i < functions.length; i++) {
-        klass.prototype[functions[i]] = safewrap(klass.prototype[functions[i]])
+        klass.prototype[functions[i]!] = safewrap(klass.prototype[functions[i]!])
     }
 }
 

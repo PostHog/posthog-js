@@ -1,10 +1,26 @@
-import { each } from './'
+import { isArray, isFile, isUndefined, safeJsonStringify } from '@posthog/core'
 
-import { isArray, isFile, isUndefined } from '@posthog/core'
+import { each } from './general-utils'
+import { document, isBrowserOnline, location } from './globals'
 import { logger } from './logger'
-import { document, isBrowserOnline } from './globals'
 
 const localDomains = ['localhost', '127.0.0.1']
+
+export const jsonStringify = (data: any, space?: string | number): string => {
+    try {
+        // Fast path: convert BigInts to strings, since plain JSON.stringify throws on them.
+        // See https://github.com/PostHog/posthog-js/issues/1440.
+        return JSON.stringify(data, (_, value) => (typeof value === 'bigint' ? value.toString() : value), space)
+    } catch {
+        // A self-referential value — most commonly a DOM node that retains a React fiber pointing back
+        // at the element — makes JSON.stringify throw "Converting circular structure to JSON". With
+        // exception autocapture enabled that throw was recaptured as a new $exception, sometimes in a
+        // tight loop. Fall back to the shared circular-safe serializer (which also handles BigInt and
+        // Errors); it replaces only true cycles with "[Circular]", leaving shared-but-acyclic
+        // references intact. `space` formatting is dropped on this rare path.
+        return safeJsonStringify(data)
+    }
+}
 
 /**
  * IE11 doesn't support `new URL`
@@ -53,7 +69,7 @@ export const getQueryParam = function (url: string, param: string): string {
     let keyValuePair
 
     for (let i = 0; i < queryParts.length; i++) {
-        const parts = queryParts[i].split('=')
+        const parts = queryParts[i]!.split('=')
         if (parts[0] === param) {
             keyValuePair = parts
             break
@@ -63,7 +79,7 @@ export const getQueryParam = function (url: string, param: string): string {
     if (!isArray(keyValuePair) || keyValuePair.length < 2) {
         return ''
     } else {
-        let result = keyValuePair[1]
+        let result = keyValuePair[1]!
         try {
             result = decodeURIComponent(result)
         } catch {
@@ -89,21 +105,21 @@ export const maskQueryParams = function <T extends string | undefined>(
     const hash = splitHash[1]
 
     const splitQuery: string[] = withoutHash.split('?')
-    const queryString: string = splitQuery[1]
-    const urlWithoutQueryAndHash: string = splitQuery[0]
+    const queryString: string = splitQuery[1]!
+    const urlWithoutQueryAndHash: string = splitQuery[0]!
     const queryParts = (queryString || '').split('&')
 
     // use an array of strings rather than an object to preserve ordering and duplicates
     const paramStrings: string[] = []
 
     for (let i = 0; i < queryParts.length; i++) {
-        const keyValuePair = queryParts[i].split('=')
+        const keyValuePair = queryParts[i]!.split('=')
         if (!isArray(keyValuePair)) {
             continue
-        } else if (maskedParams.includes(keyValuePair[0])) {
+        } else if (maskedParams.includes(keyValuePair[0]!)) {
             paramStrings.push(keyValuePair[0] + '=' + mask)
         } else {
-            paramStrings.push(queryParts[i])
+            paramStrings.push(queryParts[i]!)
         }
     }
 
@@ -120,11 +136,11 @@ export const maskQueryParams = function <T extends string | undefined>(
 
 export const _getHashParam = function (hash: string, param: string): string | null {
     const matches = hash.match(new RegExp(param + '=([^&]*)'))
-    return matches ? matches[1] : null
+    return matches ? matches[1]! : null
 }
 
 export const isLocalhost = (): boolean => {
-    return localDomains.includes(location.hostname)
+    return localDomains.includes(location!.hostname)
 }
 
 export const isStatusZeroFailureCircuitBreakerTripped = (
