@@ -32,14 +32,18 @@ jobs:
             - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
               with:
                   fetch-depth: 0
+                  persist-credentials: false
 
             - uses: ./.github/actions/setup
               with:
-                  install: 'false'
+                  install: 'true'
                   build: 'false'
 
-            - name: Install ripgrep for watcher search tools
-              run: sudo apt-get update && sudo apt-get install -y ripgrep
+            - name: Install watcher search tools
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y fd-find ripgrep
+                  sudo ln -sf "$(command -v fdfind)" /usr/local/bin/fd
 
             - name: Sweep issues
               uses: PostHog/posthog-watcher-action@8b166434ccf42ce9da6ee1fda3f622268812aed5
@@ -52,6 +56,10 @@ jobs:
                   allow-fix: 'true'
                   allow-close: 'true'
                   allow-security-ai: 'true'
+                  validation-command: >-
+                      env -i HOME="$HOME" PATH="$PATH" CI=true /bin/bash -c
+                      'pnpm build && pnpm test:unit'
+                  require-reproduction: 'true'
                   max-repair-attempts: '3'
                   max-pi-calls: '16'
                   fix-pr-review-team: PostHog/team-client-libraries

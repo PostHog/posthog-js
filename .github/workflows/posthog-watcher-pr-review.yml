@@ -1,0 +1,43 @@
+name: PostHog Watcher PR review
+
+on:
+    pull_request:
+        types: [opened, synchronize, reopened, ready_for_review]
+    pull_request_review_comment:
+        types: [created]
+
+concurrency:
+    group: posthog-watcher-pr-review-${{ github.repository }}-${{ github.event.pull_request.number }}-${{ github.event.comment.id || 'review' }}
+    cancel-in-progress: true
+
+permissions:
+    contents: read
+    pull-requests: write
+
+jobs:
+    pr-review:
+        if: >-
+            github.event.pull_request.head.repo.full_name == github.repository &&
+            github.event.pull_request.user.login != 'dependabot[bot]' &&
+            (github.event_name != 'pull_request_review_comment' ||
+            contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
+        runs-on: ubuntu-24.04
+        timeout-minutes: 30
+        steps:
+            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+
+            - name: Install watcher search tools
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y fd-find ripgrep
+                  sudo ln -sf "$(command -v fdfind)" /usr/local/bin/fd
+
+            - name: Review pull request
+              uses: PostHog/posthog-watcher-action@8b166434ccf42ce9da6ee1fda3f622268812aed5
+              with:
+                  openai-api-key: ${{ secrets.POSTHOG_WATCHER_OPENAI_API_KEY }}
+                  mode: pr-review
+                  allow-pr-review: 'true'
