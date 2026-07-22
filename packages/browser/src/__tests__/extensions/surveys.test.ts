@@ -502,6 +502,38 @@ describe('SurveyManager', () => {
         })
     })
 
+    describe('respects the event trigger condition (issue #2501)', () => {
+        const EVENT_GATED_SURVEY_ID = 'event-gated-survey'
+
+        const makeEventGatedSurvey = (): Survey => ({
+            ...mockSurveys[0],
+            id: EVENT_GATED_SURVEY_ID,
+            conditions: { events: { values: [{ name: 'survey_trigger_event' }] } },
+        })
+
+        const setActivatedSurveys = (surveyIds: string[]): void => {
+            ;(mockPostHog.surveys as any)._surveyEventReceiver = { getSurveys: () => surveyIds }
+        }
+
+        it('is not eligible until the trigger event has fired', () => {
+            setActivatedSurveys([])
+            const result = surveyManager.checkSurveyEligibility(makeEventGatedSurvey())
+            expect(result.eligible).toBe(false)
+        })
+
+        it('becomes eligible once the trigger event has fired', () => {
+            setActivatedSurveys([EVENT_GATED_SURVEY_ID])
+            const result = surveyManager.checkSurveyEligibility(makeEventGatedSurvey())
+            expect(result.eligible).toBe(true)
+        })
+
+        it('is unaffected for surveys without an event/action trigger', () => {
+            setActivatedSurveys([])
+            const result = surveyManager.checkSurveyEligibility({ ...mockSurveys[0], conditions: null })
+            expect(result.eligible).toBe(true)
+        })
+    })
+
     test('callSurveysAndEvaluateDisplayLogic should handle popup surveys correctly', () => {
         const handlePopoverSurveyMock = jest
             .spyOn(surveyManager as any, 'handlePopoverSurvey')

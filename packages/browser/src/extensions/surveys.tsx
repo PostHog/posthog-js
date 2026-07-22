@@ -656,6 +656,12 @@ export class SurveyManager {
             return eligibility
         }
 
+        if (!this._hasActionOrEventTriggeredSurvey(survey)) {
+            eligibility.eligible = false
+            eligibility.reason = `Survey event/action trigger has not been fired yet`
+            return eligibility
+        }
+
         return eligibility
     }
 
