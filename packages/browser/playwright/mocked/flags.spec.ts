@@ -71,6 +71,8 @@ test.describe('flags', () => {
             $device_id: flagsPayload.$device_id,
             timezone: flagsPayload.timezone,
             person_properties: {
+                $lib: 'web',
+                $lib_version: expect.any(String),
                 $initial__kx: null,
                 $initial_current_url: 'http://localhost:2345/playground/cypress/index.html',
                 $initial_dclid: null,
