@@ -113,7 +113,7 @@ export type IsFeatureEnabledOptions = FeatureFlagOptions & {
     /**
      * Value to return when the flag has no value, e.g. flags have not loaded yet or no flag with that key exists.
      */
-    default_value?: boolean
+    defaultValue?: boolean
 }
 
 /**

@@ -1022,21 +1022,21 @@ export class PostHogFeatureFlags implements Extension {
      * @param {boolean} [options.fresh=false] If true, only returns values loaded from the server, not cached localStorage values.
      *                  Use this when you need to ensure the flag value reflects the current server state.
      *                  Returns undefined until the /flags endpoint responds.
-     * @param {boolean} [options.default_value] Value to return when the flag has no value, e.g. flags have not loaded yet or no flag with that key exists.
-     * @returns {boolean | undefined} Whether the flag is enabled; when the flag has no value, default_value if given, otherwise undefined.
+     * @param {boolean} [options.defaultValue] Value to return when the flag has no value, e.g. flags have not loaded yet or no flag with that key exists.
+     * @returns {boolean | undefined} Whether the flag is enabled; when the flag has no value, defaultValue if given, otherwise undefined.
      */
-    isFeatureEnabled(key: string, options: IsFeatureEnabledOptions & { default_value: boolean }): boolean
+    isFeatureEnabled(key: string, options: IsFeatureEnabledOptions & { defaultValue: boolean }): boolean
     isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined
     isFeatureEnabled(key: string, options: IsFeatureEnabledOptions = {}): boolean | undefined {
         if (options.fresh && !this._flagsLoadedFromRemote) {
-            return options.default_value
+            return options.defaultValue
         }
         if (!this._hasLoadedFlags && !(this.getFlags() && this.getFlags().length > 0)) {
             logger.warn('isFeatureEnabled for key "' + key + FLAG_TIMEOUT_MSG)
-            return options.default_value
+            return options.defaultValue
         }
         const flagValue = this.getFeatureFlag(key, options)
-        return isUndefined(flagValue) ? options.default_value : !!flagValue
+        return isUndefined(flagValue) ? options.defaultValue : !!flagValue
     }
 
     addFeatureFlagsHandler(handler: FeatureFlagsCallback): void {

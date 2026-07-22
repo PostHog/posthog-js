@@ -1804,11 +1804,11 @@ export class PostHog implements PostHogInterface {
      * @public
      *
      * @param {Object} properties An associative array of properties to store about the user
-     * @param {*} [default_value] Value to override if already set in super properties (ex: 'False') Default: 'None'
+     * @param {*} [defaultValue] Value to override if already set in super properties (ex: 'False') Default: 'None'
      * @param {Number} [days] How many days since the users last visit to store the super properties
      */
-    register_once(properties: Properties, default_value?: Property, days?: number): void {
-        this.persistence?.register_once(properties, default_value, days)
+    register_once(properties: Properties, defaultValue?: Property, days?: number): void {
+        this.persistence?.register_once(properties, defaultValue, days)
     }
 
     /**
@@ -2010,7 +2010,7 @@ export class PostHog implements PostHogInterface {
      *
      * @remarks
      * Returns true if the flag is enabled, false if disabled, or undefined if not found
-     * (unless `default_value` is given, which is returned instead of undefined).
+     * (unless `defaultValue` is given, which is returned instead of undefined).
      * This is a convenience method that treats any truthy value as enabled.
      *
      * {@label Feature flags}
@@ -2034,13 +2034,13 @@ export class PostHog implements PostHogInterface {
      * @public
      *
      * @param {string} key Key of the feature flag.
-     * @param {IsFeatureEnabledOptions} [options] Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server. If `{ default_value: false }`, we return that value instead of undefined when the flag has no value.
-     * @returns {boolean | undefined} Whether the feature flag is enabled; when the flag has no value, default_value if given, otherwise undefined.
+     * @param {IsFeatureEnabledOptions} [options] Optional lookup settings. If `{ send_event: false }`, we won't send a `$feature_flag_called` event to PostHog. If `{ fresh: true }`, we won't return cached values from localStorage - only values loaded from the server. If `{ defaultValue: false }`, we return that value instead of undefined when the flag has no value.
+     * @returns {boolean | undefined} Whether the feature flag is enabled; when the flag has no value, defaultValue if given, otherwise undefined.
      */
-    isFeatureEnabled(key: string, options: IsFeatureEnabledOptions & { default_value: boolean }): boolean
+    isFeatureEnabled(key: string, options: IsFeatureEnabledOptions & { defaultValue: boolean }): boolean
     isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined
     isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined {
-        return this.featureFlags?.isFeatureEnabled(key, options) ?? options?.default_value
+        return this.featureFlags?.isFeatureEnabled(key, options) ?? options?.defaultValue
     }
 
     /**

@@ -332,10 +332,10 @@ export interface PostHog {
      * @param options - Options for the feature flag lookup
      * @param options.send_event - Whether to send a $feature_flag_called event (default: true)
      * @param options.fresh - If true, only return values loaded from the server, not cached localStorage values (default: false)
-     * @param options.default_value - Value to return when the flag has no value (default: undefined)
+     * @param options.defaultValue - Value to return when the flag has no value (default: undefined)
      * @returns Whether the feature flag is enabled
      */
-    isFeatureEnabled(key: string, options: IsFeatureEnabledOptions & { default_value: boolean }): boolean
+    isFeatureEnabled(key: string, options: IsFeatureEnabledOptions & { defaultValue: boolean }): boolean
     isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined
 
     /**
@@ -436,10 +436,10 @@ export interface PostHog {
      * Register properties to be sent with every event, but only if they haven't been set before.
      *
      * @param properties - The properties to register
-     * @param default_value - Default value for the property
+     * @param defaultValue - Default value for the property
      * @param days - Number of days to persist the properties
      */
-    register_once(properties: Properties, default_value?: any, days?: number): void
+    register_once(properties: Properties, defaultValue?: any, days?: number): void
 
     /**
      * Register properties for the current session only.
