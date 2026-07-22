@@ -194,17 +194,6 @@ describe('request', () => {
             )
         })
 
-        it('removes an existing ver query parameter', () => {
-            request(
-                createRequest({
-                    url: 'https://any.posthog-instance.com/e/?ver=1.23.45&foo=bar',
-                })
-            )
-
-            const requestedUrl = mockedFetch.mock.calls[0][0]
-            expect(requestedUrl).toBe('https://any.posthog-instance.com/e/?foo=bar&_=1700000000000')
-        })
-
         it.each([
             [
                 'does not add a compression query param for gzip requests',

@@ -451,15 +451,10 @@ const _sendBeacon = (options: RequestWithOptions) => {
 }
 
 const buildRequestURL = (url: string, compression?: RequestWithOptions['compression']): string => {
-    const requestURL = removeURLParam(url, 'ver')
-
-    return extendURLParams(
-        compression === Compression.GZipJS ? removeURLParam(requestURL, 'compression') : requestURL,
-        {
-            _: new Date().getTime().toString(),
-            ...(compression === Compression.GZipJS ? {} : { compression }),
-        }
-    )
+    return extendURLParams(compression === Compression.GZipJS ? removeURLParam(url, 'compression') : url, {
+        _: new Date().getTime().toString(),
+        ...(compression === Compression.GZipJS ? {} : { compression }),
+    })
 }
 
 const AVAILABLE_TRANSPORTS: {
