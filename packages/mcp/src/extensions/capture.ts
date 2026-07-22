@@ -54,6 +54,10 @@ export function captureEvent(server: MCPServerLike, eventInput: McpEvent): Promi
     identifyActorData: sessionInfo.identifyActorData,
     groups: sessionInfo.identifyActorGroups,
     resourceName: eventInput.resourceName,
+    // The `initialize` event sets the negotiated version directly; every other
+    // event inherits it from sessionInfo (persisted at initialize, recovered
+    // cross-pod from the session token).
+    protocolVersion: eventInput.protocolVersion ?? sessionInfo.protocolVersion,
     toolCategory: eventInput.toolCategory,
     toolDescription: eventInput.toolDescription,
     listedToolNames: eventInput.listedToolNames,
