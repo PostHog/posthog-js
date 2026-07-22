@@ -1804,11 +1804,11 @@ export class PostHog implements PostHogInterface {
      * @public
      *
      * @param {Object} properties An associative array of properties to store about the user
-     * @param {*} [defaultValue] Value to override if already set in super properties (ex: 'False') Default: 'None'
+     * @param {*} [default_value] Value to override if already set in super properties (ex: 'False') Default: 'None'
      * @param {Number} [days] How many days since the users last visit to store the super properties
      */
-    register_once(properties: Properties, defaultValue?: Property, days?: number): void {
-        this.persistence?.register_once(properties, defaultValue, days)
+    register_once(properties: Properties, default_value?: Property, days?: number): void {
+        this.persistence?.register_once(properties, default_value, days)
     }
 
     /**

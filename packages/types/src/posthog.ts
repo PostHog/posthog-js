@@ -436,10 +436,10 @@ export interface PostHog {
      * Register properties to be sent with every event, but only if they haven't been set before.
      *
      * @param properties - The properties to register
-     * @param defaultValue - Default value for the property
+     * @param default_value - Default value for the property
      * @param days - Number of days to persist the properties
      */
-    register_once(properties: Properties, defaultValue?: any, days?: number): void
+    register_once(properties: Properties, default_value?: any, days?: number): void
 
     /**
      * Register properties for the current session only.
