@@ -97,11 +97,7 @@ describe('request', () => {
                     },
                 })
             )
-            expect(mockedXHR.open).toHaveBeenCalledWith(
-                'GET',
-                'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45',
-                true
-            )
+            expect(mockedXHR.open).toHaveBeenCalledWith('GET', 'https://any.posthog-instance.com/?ver=1.23.45', true)
 
             expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith('x-header', 'value')
         })
@@ -184,7 +180,7 @@ describe('request', () => {
             const headers = mockedFetch.mock.calls[0][1].headers as Headers
             expect(headers.get('x-header')).toEqual('value')
             expect(mockedFetch).toHaveBeenCalledWith(
-                `https://any.posthog-instance.com?ver=1.23.45&_=1700000000000`,
+                `https://any.posthog-instance.com?ver=1.23.45`,
                 expect.objectContaining({
                     body: undefined,
                     headers: new Headers(),
@@ -194,27 +190,48 @@ describe('request', () => {
             )
         })
 
-        it.each(['/e/', '/s/', '/i/v0/e/', '/i/v0/s/'])('does not add ver to browser capture endpoint %s', (path) => {
+        it('adds the cache-busting parameter only when requested', () => {
             request(
                 createRequest({
-                    url: `https://any.posthog-instance.com${path}`,
+                    url: 'https://any.posthog-instance.com/api/surveys/',
+                    method: 'GET',
+                    timestampParam: '_',
                 })
             )
 
-            const requestedUrl = mockedFetch.mock.calls[0][0]
-            expect(requestedUrl).toContain('_=1700000000000')
-            expect(requestedUrl).not.toContain('ver=')
+            expect(mockedFetch.mock.calls[0][0]).toBe(
+                'https://any.posthog-instance.com/api/surveys/?_=1700000000000&ver=1.23.45'
+            )
         })
+
+        it.each(['/e/', '/s/', '/i/v0/e/', '/i/v0/s/'])(
+            'adds sent_at and does not add ver to browser capture endpoint %s',
+            (path) => {
+                request(
+                    createRequest({
+                        url: `https://any.posthog-instance.com${path}`,
+                        method: 'POST',
+                        timestampParam: 'sent_at',
+                    })
+                )
+
+                const requestedUrl = mockedFetch.mock.calls[0][0]
+                expect(requestedUrl).toContain('sent_at=1700000000000')
+                expect(requestedUrl).not.toContain('_=')
+                expect(requestedUrl).not.toContain('ver=')
+            }
+        )
 
         it('does not add ver to proxied capture endpoints', () => {
             request(
                 createRequest({
                     url: 'https://any.posthog-instance.com/ingest/s/',
+                    timestampParam: 'sent_at',
                 })
             )
 
             const requestedUrl = mockedFetch.mock.calls[0][0]
-            expect(requestedUrl).toBe('https://any.posthog-instance.com/ingest/s/?_=1700000000000')
+            expect(requestedUrl).toBe('https://any.posthog-instance.com/ingest/s/?sent_at=1700000000000')
         })
 
         it('does not rely on String.prototype.endsWith for capture endpoint matching', () => {
@@ -226,11 +243,12 @@ describe('request', () => {
                 request(
                     createRequest({
                         url: 'https://any.posthog-instance.com/e/',
+                        timestampParam: 'sent_at',
                     })
                 )
 
                 const requestedUrl = mockedFetch.mock.calls[0][0]
-                expect(requestedUrl).toBe('https://any.posthog-instance.com/e/?_=1700000000000')
+                expect(requestedUrl).toBe('https://any.posthog-instance.com/e/?sent_at=1700000000000')
             } finally {
                 String.prototype.endsWith = originalEndsWith
             }
@@ -240,35 +258,49 @@ describe('request', () => {
             request(
                 createRequest({
                     url: 'https://any.posthog-instance.com/e/?ver=1.23.45&foo=bar',
+                    timestampParam: 'sent_at',
                 })
             )
 
             const requestedUrl = mockedFetch.mock.calls[0][0]
-            expect(requestedUrl).toBe('https://any.posthog-instance.com/e/?foo=bar&_=1700000000000')
+            expect(requestedUrl).toBe('https://any.posthog-instance.com/e/?foo=bar&sent_at=1700000000000')
         })
 
-        it('keeps ver on feature flag requests', () => {
+        it('adds sent_at and keeps ver on POST feature flag requests', () => {
             request(
                 createRequest({
                     url: 'https://any.posthog-instance.com/flags/?v=2',
+                    method: 'POST',
+                    timestampParam: 'sent_at',
                 })
             )
 
             expect(mockedFetch.mock.calls[0][0]).toBe(
-                'https://any.posthog-instance.com/flags/?v=2&_=1700000000000&ver=1.23.45'
+                'https://any.posthog-instance.com/flags/?v=2&sent_at=1700000000000&ver=1.23.45'
             )
+        })
+
+        it('does not add sent_at to GET feature flag requests', () => {
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/flags/?v=2',
+                    method: 'GET',
+                })
+            )
+
+            expect(mockedFetch.mock.calls[0][0]).toBe('https://any.posthog-instance.com/flags/?v=2&ver=1.23.45')
         })
 
         it.each([
             [
                 'does not add a compression query param for gzip requests',
                 'https://any.posthog-instance.com?ver=1.23.45',
-                'https://any.posthog-instance.com?ver=1.23.45&_=1700000000000',
+                'https://any.posthog-instance.com?ver=1.23.45',
             ],
             [
                 'removes an existing compression query param for gzip requests',
                 'https://any.posthog-instance.com?ver=1.23.45&compression=gzip-js',
-                'https://any.posthog-instance.com?ver=1.23.45&_=1700000000000',
+                'https://any.posthog-instance.com?ver=1.23.45',
             ],
         ])('%s', (_label, url, expectedUrl) => {
             request(
@@ -656,7 +688,7 @@ describe('request', () => {
                         })
                     )
                     expect(mockedFetch).toHaveBeenCalledWith(
-                        `https://any.posthog-instance.com?ver=1.23.45&_=1700000000000${expectedURLParams}`,
+                        `https://any.posthog-instance.com?ver=1.23.45${expectedURLParams}`,
                         expect.objectContaining({
                             headers: new Headers(),
                             keepalive: expectedKeepAlive,
@@ -874,7 +906,7 @@ describe('request', () => {
                 )
 
                 expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
-                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&compression=base64',
+                    'https://any.posthog-instance.com/?ver=1.23.45&compression=base64',
                     expect.any(Blob)
                 )
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
@@ -900,7 +932,7 @@ describe('request', () => {
                 )
 
                 expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
-                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45&compression=base64',
+                    'https://any.posthog-instance.com/?ver=1.23.45&compression=base64',
                     expect.any(Blob)
                 )
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
@@ -926,7 +958,7 @@ describe('request', () => {
                 )
 
                 expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
-                    'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45',
+                    'https://any.posthog-instance.com/?ver=1.23.45',
                     expect.any(Blob)
                 )
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob

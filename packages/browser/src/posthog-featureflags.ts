@@ -661,6 +661,7 @@ export class PostHogFeatureFlags implements Extension {
             url,
             data,
             compression: this._config.disable_compression ? undefined : Compression.Base64,
+            timestampParam: 'sent_at',
             timeout: this._config.feature_flag_request_timeout_ms,
             callback: (response) => {
                 let errorsLoading = true
@@ -993,6 +994,7 @@ export class PostHogFeatureFlags implements Extension {
             url: this._instance.requestRouter.endpointFor('flags', '/flags/?v=2'),
             data,
             compression: this._config.disable_compression ? undefined : Compression.Base64,
+            timestampParam: 'sent_at',
             timeout: this._config.feature_flag_request_timeout_ms,
             callback: (response) => {
                 const flagPayloads = response.json?.['featureFlagPayloads']
@@ -1251,6 +1253,7 @@ export class PostHogFeatureFlags implements Extension {
                     `/api/early_access_features/?token=${this._config.token}${stageParams}`
                 ),
                 method: 'GET',
+                timestampParam: '_',
                 callback: (response) => {
                     if (!response.json) {
                         return

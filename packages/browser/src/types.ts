@@ -230,6 +230,8 @@ export interface RequestWithOptions {
     noRetries?: boolean
     disableTransport?: ('XHR' | 'fetch' | 'sendBeacon')[]
     compression?: Compression | 'best-available'
+    /** Include the request dispatch time under the selected query parameter. */
+    timestampParam?: 'sent_at' | '_'
     fetchOptions?: {
         cache?: RequestInit['cache']
         next?: NextOptions

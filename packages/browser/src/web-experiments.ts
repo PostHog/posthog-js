@@ -158,6 +158,7 @@ export class WebExperiments implements Extension {
         this._instance._send_request({
             url: this._instance.requestRouter.endpointFor('api', `/api/web_experiments/?token=${this._config.token}`),
             method: 'GET',
+            timestampParam: '_',
             callback: (response) => {
                 if (response.statusCode !== 200 || !response.json) {
                     return callback([])
