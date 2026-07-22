@@ -149,6 +149,11 @@ describe('PostHog Feature Flags v4', () => {
       expect(posthog.isFeatureEnabled('feature-1')).toEqual(undefined)
     })
 
+    it('isFeatureEnabled should return defaultValue if not loaded', () => {
+      expect(posthog.isFeatureEnabled('my-flag', { defaultValue: true })).toEqual(true)
+      expect(posthog.isFeatureEnabled('my-flag', { defaultValue: false })).toEqual(false)
+    })
+
     it('should load persisted feature flags', () => {
       const flagsResponse = { flags: createMockFeatureFlags() } as PostHogV2FlagsResponse
       const normalizedFeatureFlags = normalizeFlagsResponse(flagsResponse)
@@ -477,6 +482,11 @@ describe('PostHog Feature Flags v4', () => {
           expect(posthog.isFeatureEnabled('feature-variant')).toEqual(true)
           expect(posthog.isFeatureEnabled('feature-missing')).toEqual(false)
           expect(posthog.isFeatureEnabled('x-flag')).toEqual(true)
+
+          expect(posthog.isFeatureEnabled('feature-1', { defaultValue: true })).toEqual(false)
+          expect(posthog.isFeatureEnabled('feature-variant', { defaultValue: false })).toEqual(true)
+          expect(posthog.isFeatureEnabled('feature-missing', { defaultValue: true })).toEqual(true)
+          expect(posthog.isFeatureEnabled('feature-missing', { defaultValue: false })).toEqual(false)
         })
       })
 

@@ -15,6 +15,7 @@ import type {
     EarlyAccessFeatureStage,
     FeatureFlagResult,
     FeatureFlagOptions,
+    IsFeatureEnabledOptions,
     OverrideFeatureFlagsOptions,
 } from './feature-flags'
 import type { SessionIdChangedCallback } from './session-recording'
@@ -331,9 +332,11 @@ export interface PostHog {
      * @param options - Options for the feature flag lookup
      * @param options.send_event - Whether to send a $feature_flag_called event (default: true)
      * @param options.fresh - If true, only return values loaded from the server, not cached localStorage values (default: false)
+     * @param options.default_value - Value to return when the flag has no value (default: undefined)
      * @returns Whether the feature flag is enabled
      */
-    isFeatureEnabled(key: string, options?: FeatureFlagOptions): boolean | undefined
+    isFeatureEnabled(key: string, options: IsFeatureEnabledOptions & { default_value: boolean }): boolean
+    isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined
 
     /**
      * Reload feature flags from the server.
