@@ -2,7 +2,7 @@ import { window } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from '../utils/globals'
 import { ErrorEventArgs } from '../types'
 import { createLogger } from '@posthog/browser-common/utils/logger'
-import type { ErrorTracking } from '@posthog/core'
+import { isFunction, type ErrorTracking } from '@posthog/core'
 import { buildErrorPropertiesBuilder } from '../posthog-exceptions'
 
 const logger = createLogger('[ExceptionAutocapture]')
@@ -22,7 +22,7 @@ const wrapOnError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) 
             mechanism: { handled: false },
         })
         captureFn(errorProperties)
-        return originalOnError?.(...args) ?? false
+        return isFunction(originalOnError) ? (originalOnError(...args) ?? false) : false
     }
     win.onerror.__POSTHOG_INSTRUMENTED__ = true
 
@@ -45,7 +45,7 @@ const wrapUnhandledRejection = (captureFn: (props: ErrorTracking.ErrorProperties
             mechanism: { handled: false },
         })
         captureFn(errorProperties)
-        return originalOnUnhandledRejection?.(ev) ?? false
+        return isFunction(originalOnUnhandledRejection) ? (originalOnUnhandledRejection(ev) ?? false) : false
     }
     win.onunhandledrejection.__POSTHOG_INSTRUMENTED__ = true
 
@@ -77,7 +77,9 @@ const wrapConsoleError = (captureFn: (props: ErrorTracking.ErrorProperties) => v
             skipFirstLines: 2,
         })
         captureFn(errorProperties)
-        return originalConsoleError?.(...args)
+        if (isFunction(originalConsoleError)) {
+            originalConsoleError(...args)
+        }
     }
     con.error.__POSTHOG_INSTRUMENTED__ = true
 
