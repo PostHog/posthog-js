@@ -4,7 +4,6 @@ import {
     doesSurveyUrlMatch,
     getFontFamily,
     getSurveySeen,
-    hasEvents,
     hasWaitPeriodPassed,
     sendSurveyEvent,
 } from '../../extensions/surveys/surveys-extension-utils'
@@ -265,49 +264,6 @@ describe('getSurveySeen', () => {
             localStorage.setItem(`${SURVEY_SEEN_PREFIX}${surveyWithZeroIteration.id}`, 'true')
             expect(getSurveySeen(surveyWithZeroIteration)).toBe(true)
         })
-    })
-})
-
-describe('hasEvents', () => {
-    it('should return false when survey has no conditions', () => {
-        const survey = {
-            conditions: undefined,
-        } as Pick<Survey, 'conditions'>
-        expect(hasEvents(survey)).toBe(false)
-    })
-
-    it('should return false when survey has no events', () => {
-        const survey = {
-            conditions: {
-                events: undefined,
-                actions: { values: [] },
-            },
-        } as Pick<Survey, 'conditions'>
-        expect(hasEvents(survey)).toBe(false)
-    })
-
-    it('should return false when survey has empty events values', () => {
-        const survey = {
-            conditions: {
-                events: {
-                    values: [],
-                },
-                actions: { values: [] },
-            },
-        } as Pick<Survey, 'conditions'>
-        expect(hasEvents(survey)).toBe(false)
-    })
-
-    it('should return true when survey has events values', () => {
-        const survey = {
-            conditions: {
-                events: {
-                    values: [{ name: 'event1' }, { name: 'event2' }],
-                },
-                actions: { values: [] },
-            },
-        } as Pick<Survey, 'conditions'>
-        expect(hasEvents(survey)).toBe(true)
     })
 })
 
@@ -699,7 +655,7 @@ describe('sendSurveyEvent', () => {
 
     it('includes custom properties in captured event', () => {
         const mockCapture = jest.fn()
-        const mockPostHog = { capture: mockCapture } as unknown as PostHog
+        const mockPostHog = { capture: mockCapture, reloadFeatureFlags: jest.fn() } as unknown as PostHog
 
         sendSurveyEvent({
             responses: { $survey_response_q1: 'Great!' },
@@ -726,7 +682,7 @@ describe('sendSurveyEvent', () => {
 
     it('works without custom properties', () => {
         const mockCapture = jest.fn()
-        const mockPostHog = { capture: mockCapture } as unknown as PostHog
+        const mockPostHog = { capture: mockCapture, reloadFeatureFlags: jest.fn() } as unknown as PostHog
 
         sendSurveyEvent({
             responses: { $survey_response_q1: 'Great!' },
@@ -740,5 +696,35 @@ describe('sendSurveyEvent', () => {
         const eventProperties = mockCapture.mock.calls[0][1]
         expect(eventProperties.$survey_id).toBe('test-survey-id')
         expect(eventProperties.$ai_generation_id).toBeUndefined()
+    })
+
+    it('reloads feature flags when the survey is completed so the internal targeting flag recomputes', () => {
+        const mockReload = jest.fn()
+        const mockPostHog = { capture: jest.fn(), reloadFeatureFlags: mockReload } as unknown as PostHog
+
+        sendSurveyEvent({
+            responses: { $survey_response_q1: 'Great!' },
+            survey: baseSurvey,
+            surveySubmissionId: 'submission-123',
+            isSurveyCompleted: true,
+            posthog: mockPostHog,
+        })
+
+        expect(mockReload).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not reload feature flags for a partial (not completed) response', () => {
+        const mockReload = jest.fn()
+        const mockPostHog = { capture: jest.fn(), reloadFeatureFlags: mockReload } as unknown as PostHog
+
+        sendSurveyEvent({
+            responses: { $survey_response_q1: 'Great!' },
+            survey: baseSurvey,
+            surveySubmissionId: 'submission-123',
+            isSurveyCompleted: false,
+            posthog: mockPostHog,
+        })
+
+        expect(mockReload).not.toHaveBeenCalled()
     })
 })

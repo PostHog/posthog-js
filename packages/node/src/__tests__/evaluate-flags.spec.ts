@@ -496,6 +496,74 @@ describe('evaluateFlags', () => {
       expect(byKey['missing-flag'].$feature_flag_error).toEqual('errors_while_computing_flags,flag_missing')
     })
 
+    it('attaches $feature_flag_has_experiment from the response metadata, omitting it when absent', async () => {
+      const response = flagsResponseFixture()
+      response.flags['variant-flag'].metadata!.has_experiment = true
+      response.flags['boolean-flag'].metadata!.has_experiment = false
+      // disabled-flag's metadata omits has_experiment (older servers)
+      mockedFetch.mockImplementation(apiImplementationV4(response))
+
+      const flags = await posthog.evaluateFlags('user-1')
+      flags.isEnabled('variant-flag')
+      flags.isEnabled('boolean-flag')
+      flags.isEnabled('disabled-flag')
+
+      await waitForPromises()
+      const byKey = Object.fromEntries(
+        captures
+          .filter((m) => m.event === '$feature_flag_called')
+          .map((m) => [m.properties.$feature_flag, m.properties])
+      )
+      expect(byKey['variant-flag'].$feature_flag_has_experiment).toBe(true)
+      expect(byKey['boolean-flag'].$feature_flag_has_experiment).toBe(false)
+      expect(byKey['disabled-flag']).not.toHaveProperty('$feature_flag_has_experiment')
+    })
+
+    it('sends minimal $feature_flag_called events when gated, except for experiment-linked flags', async () => {
+      const response = flagsResponseFixture()
+      response.minimalFlagCalledEvents = true
+      response.flags['boolean-flag'].metadata!.has_experiment = false
+      response.flags['variant-flag'].metadata!.has_experiment = true
+      mockedFetch.mockImplementation(apiImplementationV4(response))
+      posthog.register({ super_prop: 'super_value' })
+
+      const flags = await posthog.evaluateFlags('user-1')
+      flags.isEnabled('boolean-flag')
+      flags.isEnabled('variant-flag')
+
+      await waitForPromises()
+      const byKey = Object.fromEntries(
+        captures
+          .filter((m) => m.event === '$feature_flag_called')
+          .map((m) => [m.properties.$feature_flag, m.properties])
+      )
+      // Gated + no experiment: strict allowlist
+      expect(Object.keys(byKey['boolean-flag']).sort()).toEqual(
+        [
+          '$feature_flag',
+          '$feature_flag_response',
+          '$feature_flag_has_experiment',
+          '$feature_flag_id',
+          '$feature_flag_version',
+          '$feature_flag_reason',
+          '$feature_flag_request_id',
+          '$feature_flag_evaluated_at',
+          'locally_evaluated',
+          '$lib',
+          '$lib_version',
+          '$is_server',
+          '$geoip_disable',
+        ].sort()
+      )
+      expect(byKey['boolean-flag'].$is_server).toBe(true)
+      // Gated + experiment: full envelope
+      expect(byKey['variant-flag']).toMatchObject({
+        super_prop: 'super_value',
+        '$feature/variant-flag': 'variant-value',
+        $feature_flag_has_experiment: true,
+      })
+    })
+
     it('reports quota_limited from response.quotaLimited', async () => {
       const response = flagsResponseFixture()
       ;(response as any).quotaLimited = ['feature_flags']
@@ -622,6 +690,32 @@ describe('evaluateFlags', () => {
       await waitForPromises()
       const flagCalled = captures.find((m) => m.event === '$feature_flag_called')
       expect(flagCalled.properties.$feature_flag_definitions_loaded_at).toEqual(expect.any(Number))
+    })
+
+    it('attaches $feature_flag_has_experiment from the local definition', async () => {
+      // The beforeEach client already loaded the fixture definitions; build a fresh
+      // client against definitions that carry has_experiment.
+      await posthog.shutdown()
+      const definitions = localFlagsFixture()
+      ;(definitions.flags[0] as any).has_experiment = true
+      mockedFetch.mockImplementation(apiImplementation({ localFlags: definitions }))
+      setup({ personalApiKey: 'TEST_PERSONAL_API_KEY' })
+
+      const flags = await posthog.evaluateFlags('user-1')
+      flags.isEnabled('local-flag')
+
+      await waitForPromises()
+      const flagCalled = captures.find((m) => m.event === '$feature_flag_called')
+      expect(flagCalled.properties.$feature_flag_has_experiment).toBe(true)
+    })
+
+    it('omits $feature_flag_has_experiment when the local definition omits it', async () => {
+      const flags = await posthog.evaluateFlags('user-1')
+      flags.isEnabled('local-flag')
+
+      await waitForPromises()
+      const flagCalled = captures.find((m) => m.event === '$feature_flag_called')
+      expect(flagCalled.properties).not.toHaveProperty('$feature_flag_has_experiment')
     })
   })
 

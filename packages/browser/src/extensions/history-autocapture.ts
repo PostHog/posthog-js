@@ -1,8 +1,8 @@
 import { PostHog } from '../posthog-core'
 import { EVENT_PAGEVIEW } from '../constants'
-import { window } from '../utils/globals'
-import { addEventListener } from '../utils'
-import { logger } from '../utils/logger'
+import { window } from '@posthog/browser-common/utils/globals'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
+import { logger } from '@posthog/browser-common/utils/logger'
 import { patch } from './replay/rrweb-plugins/patch'
 import type { Extension } from './types'
 
@@ -63,7 +63,6 @@ export class HistoryAutocapture implements Extension {
         }
 
         // Old fashioned, we could also use arrow functions but I think the closure for a patch is more reliable
-        // eslint-disable-next-line @typescript-eslint/no-this-alias
         const self = this
         patch(window.history, method, (originalMethod) => {
             return function patchedHistoryMethod(

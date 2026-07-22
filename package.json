@@ -14,6 +14,7 @@
         "lint:playground:fix": "prettier --write 'playground/**/*.{ts,tsx,js,jsx,mjs,json,md}' && eslint --fix 'playground/**/*.{ts,tsx,js,jsx,mjs}'",
         "test": "turbo test",
         "test:unit": "turbo test:unit",
+        "test:docs-scripts": "node --test \"scripts/docs/__tests__/*.test.js\"",
         "test:functional": "turbo test:functional",
         "test:e2e": "turbo test:e2e",
         "build": "turbo build",
@@ -29,6 +30,7 @@
     "devDependencies": {
         "@changesets/changelog-github": "^0.5.2",
         "@changesets/cli": "^2.29.8",
+        "@eslint-community/eslint-plugin-eslint-comments": "^4.7.2",
         "@microsoft/api-extractor": "^7.58.9",
         "@microsoft/api-extractor-model": "^7.33.8",
         "@microsoft/tsdoc": "^0.15.1",

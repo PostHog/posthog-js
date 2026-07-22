@@ -11,6 +11,7 @@ const rules = {
     'no-empty': 'off',
     'no-console': 'error',
     'no-only-tests/no-only-tests': 'error',
+    '@eslint-community/eslint-comments/no-unused-disable': 'error',
     'posthog-js/no-external-replay-imports': 'error',
     'posthog-js/no-unsafe-web-global': 'off',
     '@typescript-eslint/naming-convention': [
@@ -52,6 +53,7 @@ module.exports = {
         'eslint-plugin-react-hooks',
         'jest',
         'no-only-tests',
+        '@eslint-community/eslint-comments',
     ],
     extends: extend,
     rules,
@@ -71,6 +73,7 @@ module.exports = {
                 'packages/mcp/**',
                 'packages/nextjs-config/**',
                 'packages/nuxt/**',
+                'packages/openfeature-node-provider/**',
                 'packages/openfeature-web-provider/**',
                 'packages/react-native/**',
                 'packages/node/**',
@@ -79,6 +82,7 @@ module.exports = {
                 'packages/rollup-plugin/**',
                 'examples/**',
                 'playground/**',
+                'tooling/**',
             ],
             rules: {
                 'no-console': 'off',
@@ -95,6 +99,20 @@ module.exports = {
                 'posthog-js/no-add-event-listener': 'off',
                 'no-constant-condition': 'off',
                 'compat/compat': 'off',
+            },
+        },
+        {
+            // Object-literal type assertions (`{...} as T`) silently fabricate values that are
+            // missing required fields — prefer `const x: T = {...}` or `satisfies T`, which keep
+            // the compiler checking the literal. Enforced for shipped source only; tests may
+            // still build partial fixtures with casts.
+            files: ['packages/*/src/**/*.ts', 'packages/*/src/**/*.tsx'],
+            excludedFiles: ['**/__tests__/**', '**/__mocks__/**', '**/*.spec.*', '**/*.test.*'],
+            rules: {
+                '@typescript-eslint/consistent-type-assertions': [
+                    'error',
+                    { assertionStyle: 'as', objectLiteralTypeAssertions: 'never' },
+                ],
             },
         },
         {
@@ -119,8 +137,7 @@ module.exports = {
                 'no-restricted-syntax': [
                     'error',
                     {
-                        selector:
-                            "CallExpression[callee.object.name='Promise'][callee.property.name='allSettled']",
+                        selector: "CallExpression[callee.object.name='Promise'][callee.property.name='allSettled']",
                         message:
                             'Use `allSettled` from @posthog/core (packages/core/src/utils) instead of Promise.allSettled — Promise.allSettled can be broken by runtime Promise patching on some RN environments.',
                     },
@@ -129,6 +146,4 @@ module.exports = {
         },
     ],
     ignorePatterns: ['node_modules', 'dist', 'next-env.d.ts', '.next', 'packages/browser/playground/hydration/vendor'],
-
-
 }

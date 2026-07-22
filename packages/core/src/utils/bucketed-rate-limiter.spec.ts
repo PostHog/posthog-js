@@ -1,7 +1,44 @@
 import { Logger } from '@/types'
-import { BucketedRateLimiter } from './bucketed-rate-limiter'
+import {
+  BucketedRateLimiter,
+  DEFAULT_EXCEPTION_RATE_LIMITER_BUCKET_SIZE,
+  DEFAULT_EXCEPTION_RATE_LIMITER_REFILL_RATE,
+  resolveExceptionRateLimiterConfig,
+} from './bucketed-rate-limiter'
 
 jest.useFakeTimers()
+
+describe('resolveExceptionRateLimiterConfig', () => {
+  it('falls back to the shared defaults when nothing is configured', () => {
+    expect(resolveExceptionRateLimiterConfig()).toEqual({
+      refillRate: DEFAULT_EXCEPTION_RATE_LIMITER_REFILL_RATE,
+      bucketSize: DEFAULT_EXCEPTION_RATE_LIMITER_BUCKET_SIZE,
+    })
+  })
+
+  it('prefers the first-class options', () => {
+    expect(
+      resolveExceptionRateLimiterConfig({ exceptionRateLimiterRefillRate: 2, exceptionRateLimiterBucketSize: 20 })
+    ).toEqual({ refillRate: 2, bucketSize: 20 })
+  })
+
+  it('honours the deprecated double-underscore options as a fallback', () => {
+    expect(
+      resolveExceptionRateLimiterConfig({ __exceptionRateLimiterRefillRate: 3, __exceptionRateLimiterBucketSize: 30 })
+    ).toEqual({ refillRate: 3, bucketSize: 30 })
+  })
+
+  it('lets the first-class options win over the deprecated ones', () => {
+    expect(
+      resolveExceptionRateLimiterConfig({
+        exceptionRateLimiterRefillRate: 5,
+        __exceptionRateLimiterRefillRate: 3,
+        exceptionRateLimiterBucketSize: 50,
+        __exceptionRateLimiterBucketSize: 30,
+      })
+    ).toEqual({ refillRate: 5, bucketSize: 50 })
+  })
+})
 
 describe('BucketedRateLimiter', () => {
   let rateLimiter: BucketedRateLimiter<string>

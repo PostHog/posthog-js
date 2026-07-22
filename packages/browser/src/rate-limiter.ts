@@ -1,7 +1,7 @@
 import { CAPTURE_RATE_LIMIT } from './constants'
 import type { PostHog } from './posthog-core'
 import { RequestResponse } from './types'
-import { createLogger } from './utils/logger'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 
 const logger = createLogger('[RateLimiter]')
 

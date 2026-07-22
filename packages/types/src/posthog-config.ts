@@ -4,6 +4,7 @@
 
 import type { JsonType, Properties } from './common'
 import type { LogAttributes, BeforeSendLogFn } from './capture-log'
+import type { MetricAttributes, BeforeSendMetricFn } from './capture-metric'
 import type { BeforeSendFn, CaptureResult } from './capture'
 import type { RequestResponse } from './request'
 import type { CapturedNetworkRequest, NetworkRequest, SessionRecordingCanvasOptions } from './session-recording'
@@ -181,7 +182,7 @@ export interface BootstrapConfig {
      * - a valid UUID v7
      * - the timestamp part must be <= the timestamp of the first event in the session
      * - the timestamp of the last event in the session must be < the timestamp part + 24 hours
-     * **/
+     */
     sessionID?: string
 }
 
@@ -245,8 +246,15 @@ export interface PerformanceCaptureConfig {
 
 export interface DeadClickCandidate {
     node: Element
-    originalEvent: MouseEvent
+    // clicks carry a MouseEvent, swipes carry the TouchEvent that ended the gesture
+    originalEvent: MouseEvent | TouchEvent
     timestamp: number
+    // whether this candidate came from a click (default) or a touch swipe gesture
+    type?: 'click' | 'swipe'
+    // for swipe candidates, the dominant direction of the gesture
+    swipeDirection?: 'left' | 'right' | 'up' | 'down'
+    // for swipe candidates, the straight-line distance in CSS pixels between where the gesture started and ended
+    swipeDistancePx?: number
     // time between click and the most recent scroll
     scrollDelayMs?: number
     // time between click and the most recent mutation
@@ -337,6 +345,43 @@ export type DeadClicksAutoCaptureConfig = {
     capture_clicks_with_modifier_keys?: boolean
 
     /**
+     * Determines whether PostHog should also detect "dead swipes" — touch swipe gestures
+     * (typically on mobile/touch devices) that produce no observable screen change
+     * (no scroll, mutation or selection change while the gesture is in progress, and no
+     * scroll, mutation, selection or visibility change afterwards). These usually indicate
+     * a failed navigation, e.g. swiping to go back or to move a carousel with nothing
+     * happening.
+     *
+     * Dead swipes are captured as `$dead_swipe` events. This only applies to the dead-click
+     * autocapture path, not the heatmaps path.
+     *
+     * Swipes over surfaces whose response cannot be observed — canvas, video and other
+     * media/plugin elements under the finger — are never captured, and capture is limited
+     * per page load (see `max_dead_swipes_per_page_load`).
+     *
+     * @default true
+     */
+    capture_dead_swipes?: boolean
+
+    /**
+     * The minimum straight-line distance in CSS pixels between where a touch gesture starts
+     * and ends for it to be considered a swipe (rather than a tap). Only used when
+     * `capture_dead_swipes` is enabled.
+     *
+     * @default 30
+     */
+    swipe_threshold_px?: number
+
+    /**
+     * The maximum number of dead swipes captured per page load. Swipe gestures are plentiful
+     * on touch devices, so a page whose responses the detector cannot see is capped rather
+     * than allowed to flood events. Only used when `capture_dead_swipes` is enabled.
+     *
+     * @default 10
+     */
+    max_dead_swipes_per_page_load?: number
+
+    /**
      * List of CSS selectors to ignore dead clicks on
      * e.g. ['.my-download-link']
      * we consider the tree of elements from the root to the target element of the click event
@@ -379,7 +424,36 @@ export type ConfigDefaults = '2026-06-25' | '2026-05-30' | '2026-01-30' | '2025-
 
 export type ExternalIntegrationKind = 'intercom' | 'crispChat'
 
-export interface ErrorTrackingOptions {
+/**
+ * Shared configuration for the error tracking burst-protection rate limiter.
+ *
+ * Burst protection is scoped **per exception type** — the limiter is keyed by exception type, so
+ * each distinct `$exception` type gets its own token bucket and there is no aggregate cap across
+ * all types. It applies only to autocaptured exceptions; manual `captureException` calls are
+ * never rate limited. These options let customers with high-cardinality exception types tune the
+ * per-type allowance, and are shared between the browser and Node SDKs.
+ */
+export interface ExceptionRateLimiterConfig {
+    /**
+     * ADVANCED: alters the refill rate for the error tracking rate limiter's token bucket.
+     * Normally only altered alongside PostHog support guidance.
+     * Accepts values between 0 and 100.
+     *
+     * @default 1
+     */
+    exceptionRateLimiterRefillRate?: number
+
+    /**
+     * ADVANCED: alters the bucket size for the error tracking rate limiter's token bucket.
+     * Normally only altered alongside PostHog support guidance.
+     * Accepts values between 0 and 100.
+     *
+     * @default 10
+     */
+    exceptionRateLimiterBucketSize?: number
+}
+
+export interface ErrorTrackingOptions extends ExceptionRateLimiterConfig {
     /**
      * Decide whether exceptions thrown by browser extensions should be captured
      *
@@ -395,20 +469,14 @@ export interface ErrorTrackingOptions {
     __capturePostHogExceptions?: boolean
 
     /**
-     * ADVANCED: alters the refill rate for the token bucket mutation throttling
-     * Normally only altered alongside posthog support guidance.
-     * Accepts values between 0 and 100
-     *
-     * @default 1
+     * @deprecated Use {@link ExceptionRateLimiterConfig.exceptionRateLimiterRefillRate} instead.
+     * Still honoured as a fallback, but will be removed in a future major version.
      */
     __exceptionRateLimiterRefillRate?: number
 
     /**
-     * ADVANCED: alters the bucket size for the token bucket mutation throttling
-     * Normally only altered alongside posthog support guidance.
-     * Accepts values between 0 and 100
-     *
-     * @default 10
+     * @deprecated Use {@link ExceptionRateLimiterConfig.exceptionRateLimiterBucketSize} instead.
+     * Still honoured as a fallback, but will be removed in a future major version.
      */
     __exceptionRateLimiterBucketSize?: number
 
@@ -545,6 +613,21 @@ export interface SessionRecordingOptions {
     recordCrossOriginIframes?: boolean
 
     /**
+     * ADVANCED: limit which DOM attributes are observed for mutations, by passing
+     * the list to the native `MutationObserver` `attributeFilter`. Mutations to
+     * unlisted attributes never reach the recorder at all, so they cost no
+     * recording CPU - useful to exclude high-frequency inline `style` mutations
+     * from JS-driven animations on animation-heavy pages.
+     *
+     * Attributes left off the list are invisible to replay, so only set this when
+     * that loss of fidelity is acceptable. When unset (the default) or set to an
+     * empty array, all attributes are observed.
+     *
+     * Normally only altered alongside posthog support guidance.
+     */
+    attributeFilter?: string[]
+
+    /**
      * Derived from `rrweb.record` options
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
      * @default false
@@ -603,6 +686,18 @@ export interface SessionRecordingOptions {
      * @default 1000 * 60 * 5 (5 minutes)
      */
     full_snapshot_interval_millis?: number
+
+    /**
+     * ADVANCED: controls how much recent replay data is kept in memory while session recording waits for a
+     * conditional trigger. The recorder periodically takes a full snapshot and discards older buffered events,
+     * so increasing this interval retains more pre-trigger history but can increase memory usage and
+     * CPU usage. Performance impacts on your site can start to be visible to users with larger values.
+     * Values must be between 1,000 ms and 3,600,000 ms (1 hour, inclusive); values outside this range,
+     * or non-finite values, are ignored.
+     *
+     * @default 1000 * 60 (1 minute)
+     */
+    trigger_pending_buffer_interval_millis?: number
 
     /**
      * ADVANCED: whether to partially compress rrweb events before sending them to the server,
@@ -763,6 +858,60 @@ export interface LogsConfig extends LogCaptureOptions {
      * @default undefined
      */
     captureConsoleLogs?: boolean
+}
+
+/**
+ * Options for the posthog.metrics API (count, gauge, histogram).
+ */
+export interface MetricsConfig {
+    /**
+     * The service name for metric series.
+     * Maps to the OTel resource attribute 'service.name'.
+     *
+     * @default 'unknown_service'
+     */
+    serviceName?: string
+    /**
+     * The deployment environment for metric series (e.g. 'production', 'staging').
+     * Maps to the OTel resource attribute 'deployment.environment'.
+     */
+    environment?: string
+    /**
+     * The service version for metric series (e.g. '1.2.3').
+     * Maps to the OTel resource attribute 'service.version'.
+     */
+    serviceVersion?: string
+    /**
+     * Additional resource attributes applied to every metrics batch.
+     * These describe the service/deployment, not individual series.
+     * Named fields (serviceName, environment, serviceVersion) are set first;
+     * resourceAttributes can override them.
+     *
+     * @example { 'host.name': 'web-01', 'cloud.region': 'us-east-1' }
+     */
+    resourceAttributes?: MetricAttributes
+    /**
+     * How often the aggregated window is flushed, in milliseconds. Samples
+     * are folded into per-series aggregates in memory between flushes — one
+     * data point per series per window, no matter how many calls.
+     *
+     * @default 10000
+     */
+    flushIntervalMs?: number
+    /**
+     * Cardinality guardrail: maximum distinct series (name + type + unit +
+     * attribute combination) held per flush window. Samples for series
+     * beyond the cap are dropped with a single warning per window.
+     *
+     * @default 1000
+     */
+    maxSeriesPerFlush?: number
+    /**
+     * Pre-aggregation filter for metric samples, as a single function or a
+     * left-to-right chain. Each function inspects, mutates, or drops a
+     * sample (return `null` to drop) before it is aggregated.
+     */
+    beforeSend?: BeforeSendMetricFn | BeforeSendMetricFn[]
 }
 
 // See https://nextjs.org/docs/app/api-reference/functions/fetch#fetchurl-options
@@ -1098,6 +1247,13 @@ export interface PostHogConfig {
     logs?: LogsConfig
 
     /**
+     * Metrics-specific configuration options for the posthog.metrics API.
+     *
+     * @default undefined
+     */
+    metrics?: MetricsConfig
+
+    /**
      * Determines whether PostHog should disable all conversations functionality.
      *
      * @default false
@@ -1245,7 +1401,7 @@ export interface PostHogConfig {
      */
     opt_out_useragent_filter: boolean
 
-    /** @deprecated Use `consent_persistence_name` instead. This will be removed in a future major version. **/
+    /** @deprecated Use `consent_persistence_name` instead. This will be removed in a future major version. */
     opt_out_capturing_cookie_prefix: string | null
 
     /**

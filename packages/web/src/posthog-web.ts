@@ -104,7 +104,6 @@ export class PostHog extends PostHogCore {
     }
 
     // Old fashioned, we could also use arrow functions but I think the closure for a patch is more reliable
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this
 
     patch(window.history, 'pushState', (originalPushState) => {

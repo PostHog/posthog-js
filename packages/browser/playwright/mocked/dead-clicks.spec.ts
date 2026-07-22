@@ -30,6 +30,36 @@ test.describe('Dead clicks', () => {
         expect(deadClick.properties.$dead_click_absolute_timeout).toBe(true)
     })
 
+    test('captures dead swipes when configured to', async ({ page, context }) => {
+        await start(startOptions, page, context)
+
+        const target = page.locator('[data-cy-not-an-order-button]')
+        await target.evaluate((element) => {
+            const boundingBox = element.getBoundingClientRect()
+            const start = { clientX: boundingBox.x + boundingBox.width / 2, clientY: boundingBox.y + 10 }
+            const end = { clientX: start.clientX, clientY: start.clientY + 100 }
+
+            const dispatchTouch = (eventType: 'touchstart' | 'touchend', touch: typeof start): void => {
+                const event = new Event(eventType, { bubbles: true, cancelable: true })
+                Object.defineProperty(event, eventType === 'touchstart' ? 'touches' : 'changedTouches', {
+                    value: [touch],
+                })
+                element.dispatchEvent(event)
+            }
+
+            dispatchTouch('touchstart', start)
+            dispatchTouch('touchend', end)
+        })
+
+        await pollUntilEventCaptured(page, '$dead_swipe')
+
+        const deadSwipes = (await page.capturedEvents()).filter((event) => event.event === '$dead_swipe')
+        expect(deadSwipes).toHaveLength(1)
+        expect(deadSwipes[0].properties.$dead_swipe_direction).toBe('down')
+        expect(deadSwipes[0].properties.$dead_swipe_distance_px).toBe(100)
+        expect(deadSwipes[0].properties.$dead_swipe_absolute_timeout).toBe(true)
+    })
+
     test('does not capture dead click when ctrl key is held', async ({ page, context }) => {
         await start(startOptions, page, context)
 

@@ -11,7 +11,8 @@ import { RequestRouter } from '../utils/request-router'
 import { isUndefined } from '@posthog/core'
 import { PostHogConfig } from '../types'
 import { createMockPostHog, createPosthogInstance } from './helpers/posthog-instance'
-import { SimpleEventEmitter } from '../utils/simple-event-emitter'
+import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
 jest.useFakeTimers()
 jest.spyOn(global, 'setTimeout')
@@ -1373,7 +1374,6 @@ describe('featureflags', () => {
         it('should isolate a throwing callback so later callbacks still fire', () => {
             // The logged error is expected here, so swallow it rather than letting the
             // test setup's console.error guard throw.
-            // eslint-disable-next-line no-console
             console.error = jest.fn()
 
             featureFlags._hasLoadedFlags = true
@@ -2891,6 +2891,106 @@ describe('featureflags', () => {
             )
         })
     })
+
+    describe('Feature Flag Has Experiment', () => {
+        const receiveFlagWithMetadata = (metadata?: Record<string, any>) => {
+            featureFlags.receivedFeatureFlags({
+                featureFlags: { 'test-flag': true },
+                featureFlagPayloads: {},
+                flags: {
+                    'test-flag': {
+                        key: 'test-flag',
+                        enabled: true,
+                        variant: undefined,
+                        reason: undefined,
+                        metadata,
+                    },
+                },
+            })
+            featureFlags._hasLoadedFlags = true
+        }
+
+        it('includes $feature_flag_has_experiment true when server reports has_experiment true', () => {
+            receiveFlagWithMetadata({ id: 1, version: 2, has_experiment: true })
+
+            featureFlags.getFeatureFlag('test-flag')
+
+            expect(instance.capture).toHaveBeenCalledWith(
+                '$feature_flag_called',
+                expect.objectContaining({
+                    $feature_flag: 'test-flag',
+                    $feature_flag_has_experiment: true,
+                })
+            )
+        })
+
+        it('includes $feature_flag_has_experiment false when server reports has_experiment false', () => {
+            receiveFlagWithMetadata({ id: 1, version: 2, has_experiment: false })
+
+            featureFlags.getFeatureFlag('test-flag')
+
+            expect(instance.capture).toHaveBeenCalledWith(
+                '$feature_flag_called',
+                expect.objectContaining({
+                    $feature_flag: 'test-flag',
+                    $feature_flag_has_experiment: false,
+                })
+            )
+        })
+
+        it('omits $feature_flag_has_experiment when server omits has_experiment', () => {
+            receiveFlagWithMetadata({ id: 1, version: 2 })
+
+            featureFlags.getFeatureFlag('test-flag')
+
+            expect(instance.capture).toHaveBeenCalledWith(
+                '$feature_flag_called',
+                expect.not.objectContaining({
+                    $feature_flag_has_experiment: expect.anything(),
+                })
+            )
+        })
+    })
+
+    describe('minimal flag called events gate persistence', () => {
+        const receiveFlags = (response: Record<string, any>) => {
+            featureFlags.receivedFeatureFlags({
+                featureFlags: { 'test-flag': true },
+                featureFlagPayloads: {},
+                flags: {
+                    'test-flag': {
+                        key: 'test-flag',
+                        enabled: true,
+                        variant: undefined,
+                        reason: undefined,
+                        metadata: undefined,
+                    },
+                },
+                ...response,
+            })
+        }
+
+        it('persists the gate from the flags response and never exposes it as an event property', () => {
+            receiveFlags({ minimalFlagCalledEvents: true })
+
+            expect(instance.persistence.props['$minimal_flag_called_events']).toBe(true)
+            expect(instance.persistence.properties()).not.toHaveProperty('$minimal_flag_called_events')
+        })
+
+        it('flips the gate off when a new flags response omits the field', () => {
+            receiveFlags({ minimalFlagCalledEvents: true })
+            receiveFlags({})
+
+            expect(instance.persistence.props['$minimal_flag_called_events']).toBe(false)
+        })
+
+        it('flips the gate off on a legacy v1 array response', () => {
+            receiveFlags({ minimalFlagCalledEvents: true })
+            featureFlags.receivedFeatureFlags({ featureFlags: ['test-flag'] } as any)
+
+            expect(instance.persistence.props['$minimal_flag_called_events']).toBe(false)
+        })
+    })
 })
 
 describe('parseFlagsResponse', () => {
@@ -2917,6 +3017,7 @@ describe('parseFlagsResponse', () => {
         parseFlagsResponse(flagsResponse, persistence)
 
         expect(persistence.register).toHaveBeenCalledWith({
+            $minimal_flag_called_events: false,
             $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
             $enabled_feature_flags: {
                 'beta-feature': true,
@@ -2952,6 +3053,7 @@ describe('parseFlagsResponse', () => {
         parseFlagsResponse(flagsResponse, persistence)
 
         expect(persistence.register).toHaveBeenCalledWith({
+            $minimal_flag_called_events: false,
             $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
             $enabled_feature_flags: {
                 'beta-feature': true,
@@ -3042,6 +3144,7 @@ describe('parseFlagsResponse', () => {
         parseFlagsResponse(flagsResponse, persistence)
 
         expect(persistence.register).toHaveBeenCalledWith({
+            $minimal_flag_called_events: false,
             $active_feature_flags: ['beta-feature', 'alpha-feature', 'multivariate-flag'],
             $enabled_feature_flags: {
                 'alpha-feature': true,
@@ -3131,6 +3234,7 @@ describe('parseFlagsResponse', () => {
         parseFlagsResponse(flagsResponse, persistence)
 
         expect(persistence.register).toHaveBeenLastCalledWith({
+            $minimal_flag_called_events: false,
             $active_feature_flags: ['beta-feature', 'alpha-feature-2'],
             $enabled_feature_flags: { 'beta-feature': true, 'alpha-feature-2': true },
         })
@@ -3191,6 +3295,7 @@ describe('parseFlagsResponse', () => {
         parseFlagsResponse(flagsResponse, persistence)
 
         expect(persistence.register).toHaveBeenCalledWith({
+            $minimal_flag_called_events: false,
             $active_feature_flags: ['test-flag'],
             $enabled_feature_flags: { 'test-flag': true },
             $feature_flag_details: {},
@@ -3229,6 +3334,7 @@ describe('parseFlagsResponse', () => {
         parseFlagsResponse(flagsResponse, persistence)
 
         expect(persistence.register).toHaveBeenCalledWith({
+            $minimal_flag_called_events: false,
             $active_feature_flags: ['test-flag'],
             $enabled_feature_flags: { 'test-flag': true },
             $feature_flag_details: {
@@ -4305,5 +4411,227 @@ describe('$feature_flag_error tracking', () => {
 
             reloadSpy.mockRestore()
         })
+    })
+})
+
+describe('minimal $feature_flag_called events', () => {
+    beforeEach(() => {
+        // Events are dropped via before_send (expected warn) and bootstrap flags go through
+        // the legacy-shape path (expected upgrade warn).
+        jest.spyOn(window.console, 'warn').mockImplementation()
+        jest.spyOn(window.console, 'error').mockImplementation()
+    })
+
+    const gatedFlagsResponse = (options: { minimalFlagCalledEvents?: boolean; hasExperiment?: boolean } = {}) => ({
+        flags: {
+            'test-flag': {
+                key: 'test-flag',
+                enabled: true,
+                variant: undefined,
+                reason: undefined,
+                metadata: {
+                    id: 42,
+                    version: 3,
+                    description: undefined,
+                    payload: undefined,
+                    ...(isUndefined(options.hasExperiment) ? {} : { has_experiment: options.hasExperiment }),
+                },
+            },
+        },
+        requestId: 'minimal-request-id',
+        evaluatedAt: Date.now(),
+        ...(isUndefined(options.minimalFlagCalledEvents)
+            ? {}
+            : { minimalFlagCalledEvents: options.minimalFlagCalledEvents }),
+    })
+
+    const createInstanceWithCapturedEvents = async (config: Record<string, any> = {}, token?: string) => {
+        const events: any[] = []
+        const posthog = await createPosthogInstance(token, {
+            advanced_disable_feature_flags: true,
+            before_send: (event) => {
+                events.push(event)
+                return null
+            },
+            ...config,
+        })
+        return { posthog, events }
+    }
+
+    const findFlagCalledEvent = (events: any[]) => events.find((e) => e.event === '$feature_flag_called')
+
+    it('sends exactly the allowlisted properties when gated and the flag has no experiment', async () => {
+        const { posthog, events } = await createInstanceWithCapturedEvents()
+        // Super properties must be structurally excluded from the minimal event
+        posthog.register({ super_prop: 'super_value' })
+        // $groups must survive minimization — it feeds ingestion dedup and group-flag routing
+        posthog.group('organization', 'org-1')
+        posthog.featureFlags.receivedFeatureFlags(
+            gatedFlagsResponse({ minimalFlagCalledEvents: true, hasExperiment: false })
+        )
+
+        expect(posthog.getFeatureFlag('test-flag')).toBe(true)
+
+        const event = findFlagCalledEvent(events)
+        expect(event).toBeDefined()
+        expect(Object.keys(event.properties).sort()).toEqual(
+            [
+                // transport-level keys the browser SDK carries inside properties
+                'token',
+                'distinct_id',
+                // the strict allowlist
+                '$feature_flag',
+                '$feature_flag_response',
+                '$feature_flag_has_experiment',
+                '$feature_flag_id',
+                '$feature_flag_version',
+                '$feature_flag_request_id',
+                '$feature_flag_evaluated_at',
+                '$groups',
+                '$current_url',
+                '$pathname',
+                '$session_id',
+                '$window_id',
+                '$lib',
+                '$lib_version',
+                '$device_id',
+                '$process_person_profile',
+            ].sort()
+        )
+        expect(event.properties).toMatchObject({
+            $feature_flag: 'test-flag',
+            $feature_flag_response: true,
+            $feature_flag_has_experiment: false,
+            $feature_flag_id: 42,
+            $feature_flag_version: 3,
+            $feature_flag_request_id: 'minimal-request-id',
+            $groups: { organization: 'org-1' },
+        })
+        expect(event.$set_once).toBeUndefined()
+    })
+
+    it('strips the timestamp-override props when captured with an explicit timestamp', async () => {
+        const { posthog, events } = await createInstanceWithCapturedEvents()
+        posthog.featureFlags.receivedFeatureFlags(
+            gatedFlagsResponse({ minimalFlagCalledEvents: true, hasExperiment: false })
+        )
+
+        const overrideTimestamp = new Date(Date.now() - 1000)
+        posthog.capture(
+            '$feature_flag_called',
+            { $feature_flag: 'test-flag', $feature_flag_response: true, $feature_flag_has_experiment: false },
+            { timestamp: overrideTimestamp }
+        )
+
+        const event = findFlagCalledEvent(events)
+        expect(event).toBeDefined()
+        expect(event.properties).not.toHaveProperty('$event_time_override_provided')
+        expect(event.properties).not.toHaveProperty('$event_time_override_system_time')
+        expect(Object.keys(event.properties).sort()).toEqual(
+            [
+                'token',
+                'distinct_id',
+                '$feature_flag',
+                '$feature_flag_response',
+                '$feature_flag_has_experiment',
+                '$feature_flag_request_id',
+                '$current_url',
+                '$pathname',
+                '$session_id',
+                '$window_id',
+                '$lib',
+                '$lib_version',
+                '$device_id',
+                '$process_person_profile',
+            ].sort()
+        )
+        // The transport-level timestamp itself is untouched by minimization
+        expect(event.timestamp).toEqual(overrideTimestamp)
+    })
+
+    it('sends the full event when gated but the flag has an experiment', async () => {
+        const { posthog, events } = await createInstanceWithCapturedEvents()
+        posthog.register({ super_prop: 'super_value' })
+        posthog.featureFlags.receivedFeatureFlags(
+            gatedFlagsResponse({ minimalFlagCalledEvents: true, hasExperiment: true })
+        )
+
+        posthog.getFeatureFlag('test-flag')
+
+        const event = findFlagCalledEvent(events)
+        expect(event.properties).toMatchObject({
+            $feature_flag_has_experiment: true,
+            super_prop: 'super_value',
+            '$feature/test-flag': true,
+            $active_feature_flags: ['test-flag'],
+            $used_bootstrap_value: expect.any(Boolean),
+        })
+    })
+
+    it.each([
+        ['the gate field is absent', gatedFlagsResponse({ hasExperiment: false })],
+        ['the gate field is false', gatedFlagsResponse({ minimalFlagCalledEvents: false, hasExperiment: false })],
+        ['has_experiment is absent', gatedFlagsResponse({ minimalFlagCalledEvents: true })],
+    ])('sends the full event when %s', async (_, response) => {
+        const { posthog, events } = await createInstanceWithCapturedEvents()
+        posthog.register({ super_prop: 'super_value' })
+        posthog.featureFlags.receivedFeatureFlags(response)
+
+        posthog.getFeatureFlag('test-flag')
+
+        const event = findFlagCalledEvent(events)
+        expect(event.properties).toMatchObject({
+            super_prop: 'super_value',
+            '$feature/test-flag': true,
+        })
+    })
+
+    it('sends the full event for bootstrap-only flags (no gate until a real flags response)', async () => {
+        const { posthog, events } = await createInstanceWithCapturedEvents({
+            bootstrap: { featureFlags: { 'test-flag': true } },
+        })
+
+        posthog.getFeatureFlag('test-flag')
+
+        const event = findFlagCalledEvent(events)
+        expect(event.properties).toMatchObject({
+            $feature_flag: 'test-flag',
+            $used_bootstrap_value: true,
+            '$feature/test-flag': true,
+        })
+    })
+
+    it('keeps sending minimal events after a reload backed by the same persistence', async () => {
+        const persistenceName = `reload-test-${uuidv7()}`
+        const { posthog: firstInstance } = await createInstanceWithCapturedEvents({
+            persistence: 'localstorage',
+            persistence_name: persistenceName,
+        })
+        // First page load receives the gated flags but never evaluates them.
+        firstInstance.featureFlags.receivedFeatureFlags(
+            gatedFlagsResponse({ minimalFlagCalledEvents: true, hasExperiment: false })
+        )
+
+        // Simulated reload: fresh instance backed by the same persisted state, no flags response.
+        const events: any[] = []
+        const reloadedInstance = await createPosthogInstance(undefined, {
+            persistence: 'localstorage',
+            persistence_name: persistenceName,
+            advanced_disable_feature_flags: true,
+            before_send: (event) => {
+                events.push(event)
+                return null
+            },
+        })
+
+        expect(reloadedInstance.getFeatureFlag('test-flag')).toBe(true)
+
+        const event = findFlagCalledEvent(events)
+        expect(event).toBeDefined()
+        expect(event.properties.$feature_flag_has_experiment).toBe(false)
+        expect(event.properties).not.toHaveProperty('$feature/test-flag')
+        expect(event.properties).not.toHaveProperty('$active_feature_flags')
+        expect(event.properties).not.toHaveProperty('$used_bootstrap_value')
+        expect(event.properties).not.toHaveProperty('$browser')
     })
 })

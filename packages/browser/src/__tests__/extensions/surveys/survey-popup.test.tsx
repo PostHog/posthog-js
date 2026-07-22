@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/pr
 import { SurveyPopup } from '../../../extensions/surveys'
 import * as surveyUtils from '../../../extensions/surveys/surveys-extension-utils' // Import all utils
 import { Survey, SurveyQuestionType, SurveyType } from '../../../posthog-surveys-types'
-import * as uuid from '../../../uuidv7' // Import uuidv7
+import * as uuid from '@posthog/browser-common/utils/uuidv7' // Import uuidv7
 
 // Mock the utility functions
 jest.mock('../../../extensions/surveys/surveys-extension-utils', () => ({
@@ -14,12 +14,13 @@ jest.mock('../../../extensions/surveys/surveys-extension-utils', () => ({
 }))
 
 // Mock uuidv7
-jest.mock('../../../uuidv7')
+jest.mock('@posthog/browser-common/utils/uuidv7')
 
 // Mock PostHog instance needed by event handlers
 const mockPosthog = {
     capture: jest.fn(),
     get_session_replay_url: jest.fn().mockReturnValue('http://example.com/replay'),
+    reloadFeatureFlags: jest.fn(),
 }
 
 describe('SurveyPopup', () => {
@@ -199,6 +200,8 @@ describe('SurveyPopup', () => {
             surveySubmissionId: generatedId,
             isSurveyCompleted: false,
             posthog: mockPosthog,
+            properties: undefined,
+            surveyLanguage: undefined,
         })
         expect(screen.getByText('Question 2')).toBeVisible()
     })
@@ -242,6 +245,8 @@ describe('SurveyPopup', () => {
             surveySubmissionId: existingState.surveySubmissionId,
             isSurveyCompleted: true,
             posthog: mockPosthog,
+            properties: undefined,
+            surveyLanguage: undefined,
         })
 
         // *** Manually dispatch the event that the real function would dispatch ***

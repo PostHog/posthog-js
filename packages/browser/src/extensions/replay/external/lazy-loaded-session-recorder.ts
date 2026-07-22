@@ -3,6 +3,7 @@ import {
     type customEvent,
     EventType,
     eventWithTime,
+    type fullSnapshotEvent,
     IncrementalSource,
     type listenerHandler,
     RecordPlugin,
@@ -20,6 +21,7 @@ import {
     URLTriggerMatching,
 } from './triggerMatching'
 import {
+    circularReferenceReplacer,
     estimateCompressedEventSize,
     estimateSize,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
@@ -28,10 +30,11 @@ import {
 } from './sessionrecording-utils'
 export { SEVEN_MEGABYTES, splitBuffer } from './sessionrecording-utils'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
-import { assignableWindow, LazyLoadedSessionRecordingInterface, window, document } from '../../../utils/globals'
-import { addEventListener } from '../../../utils'
+import { window, document } from '@posthog/browser-common/utils/globals'
+import { assignableWindow, LazyLoadedSessionRecordingInterface } from '../../../utils/globals'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { MutationThrottler } from './mutation-throttler'
-import { createLogger } from '../../../utils/logger'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 import {
     clampToRange,
     gzipCompress,
@@ -73,7 +76,7 @@ import {
     SessionRecordingPersistedConfig,
     SessionStartReason,
 } from '../../../types'
-import { isLocalhost, maskQueryParams } from '../../../utils/request-utils'
+import { isLocalhost, maskQueryParams } from '@posthog/browser-common/utils/request-utils'
 import Config from '../../../config'
 import { FlushedSizeTracker } from './flushed-size-tracker'
 import {
@@ -83,7 +86,7 @@ import {
     RecordingStrategyContext,
     decodeSamplingDecision,
 } from './recording-strategies'
-import { MASKED, PERSONAL_DATA_CAMPAIGN_PARAMS } from '../../../utils/event-utils'
+import { MASKED, PERSONAL_DATA_CAMPAIGN_PARAMS } from '@posthog/browser-common/utils/event-utils'
 
 const BASE_ENDPOINT = '/s/'
 const DEFAULT_CANVAS_QUALITY = 0.4
@@ -100,6 +103,8 @@ const ONE_KB = 1024
 const ONE_MINUTE = 1000 * 60
 const FIVE_MINUTES = ONE_MINUTE * 5
 const ONE_HOUR = ONE_MINUTE * 60
+const MIN_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS = 1000
+const MAX_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS = ONE_HOUR
 
 /**
  * Extracts the network_timing value from a capturePerformance config.
@@ -220,12 +225,24 @@ function gzipStringToString(serializedData: string): string {
     return strFromU8(gzipSync(strToU8(serializedData)), true)
 }
 
+function serializeForCompression(data: unknown): string {
+    try {
+        // fast path: plain native stringify, since a replacer callback is expensive on
+        // large snapshots and circular event data is rare
+        return JSON.stringify(data)
+    } catch {
+        // circular event data (e.g. a leaked instance graph) degrades gracefully to
+        // '[Circular]' markers instead of throwing, the same two-step approach as jsonStringify
+        return JSON.stringify(data, circularReferenceReplacer())
+    }
+}
+
 function gzipToString(data: unknown): string {
-    return gzipStringToString(JSON.stringify(data))
+    return gzipStringToString(serializeForCompression(data))
 }
 
 async function gzipToStringAsync(data: unknown): Promise<string> {
-    const serializedData = JSON.stringify(data)
+    const serializedData = serializeForCompression(data)
     const compressed = await gzipCompress(serializedData, Config.DEBUG, { rethrow: true })
     return strFromU8(new Uint8Array(await compressed!.arrayBuffer()), true)
 }
@@ -294,18 +311,24 @@ function compressedResult(event: compressedEventWithTime): CompressedEventResult
     return { event, size: estimateCompressedEventSize(event) }
 }
 
-function buildCompressedFullSnapshotEvent(event: eventWithTime, data: string): compressedEventWithTime {
+function buildCompressedFullSnapshotEvent(
+    event: fullSnapshotEvent & { timestamp: number; delay?: number },
+    data: string
+): compressedEventWithTime {
     return {
         ...event,
         data,
-        cv: '2024-10' as const,
-    } as compressedEventWithTime
+        cv: '2024-10',
+    }
 }
 
 function buildCompressedIncrementalEvent(
     event: eventWithTime,
     fields: CompressedMutationFields | CompressedStyleFields
 ): compressedEventWithTime {
+    // reshapes rrweb incremental `data` into its compressed string-field variant — the
+    // compiler cannot relate the incoming union member to the matching compressed member
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
     return {
         ...event,
         cv: '2024-10' as const,
@@ -463,6 +486,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _strategy: RecordingStrategy | undefined
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
     private _fullSnapshotTimestamps: Array<[string, number]> = []
+    // ship-time FullSnapshot tracking for _ensureFullSnapshotForSession (unlike _fullSnapshotTimestamps, which records emit-time debug telemetry)
+    private _lastFullSnapshotSessionId: string | undefined = undefined
+    private _fullSnapshotHealAttemptedFor: string | undefined = undefined
 
     private _windowId: string
     private _sessionId: string
@@ -761,7 +787,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private get _fullSnapshotIntervalMillis(): number {
         if (this._strategy?.hasPendingTriggers(this.sessionId) && !['sampled', 'active'].includes(this.status)) {
-            return ONE_MINUTE
+            const configuredInterval = this._instance.config.session_recording?.trigger_pending_buffer_interval_millis
+            return isNumber(configuredInterval) &&
+                Number.isFinite(configuredInterval) &&
+                configuredInterval >= MIN_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS &&
+                configuredInterval <= MAX_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS
+                ? configuredInterval
+                : ONE_MINUTE
         }
 
         return this._instance.config.session_recording?.full_snapshot_interval_millis ?? FIVE_MINUTES
@@ -784,6 +816,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._fullSnapshotTimer = setInterval(() => {
             this._tryTakeFullSnapshot()
         }, interval)
+    }
+
+    private _onTriggerActivated(): void {
+        if (this._urlTriggerMatching.urlBlocked || !['sampled', 'active'].includes(this.status)) {
+            return
+        }
+        this._scheduleFullSnapshot()
     }
 
     private _pauseRecording() {
@@ -846,6 +885,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             })
 
             this._strategy?.updateActiveTriggers(this.sessionId)
+            this._onTriggerActivated()
 
             this._flushBuffer()
             this._reportStarted((triggerType + '_trigger_matched') as SessionStartReason, {
@@ -950,7 +990,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 this._instance,
                 this._urlTriggerMatching,
                 this._reportStarted.bind(this),
-                this._tryAddCustomEvent.bind(this)
+                this._tryAddCustomEvent.bind(this),
+                this._onTriggerActivated.bind(this)
             )
         } else {
             this._strategy = new V1RecordingStrategy(
@@ -959,7 +1000,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 this._eventTriggerMatching,
                 this._linkedFlagMatching,
                 this._reportStarted.bind(this),
-                this._tryTakeFullSnapshot.bind(this)
+                this._tryTakeFullSnapshot.bind(this),
+                this._onTriggerActivated.bind(this)
             )
         }
 
@@ -1017,11 +1059,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         addEventListener(window, 'online', this._onOnline)
         addEventListener(window, 'visibilitychange', this._onVisibilityChange)
 
-        if (!this._onSessionIdListener) {
+        if (!this._onSessionIdListener && isFunction(this._sessionManager.onSessionId)) {
             this._onSessionIdListener = this._sessionManager.onSessionId(this._onSessionIdCallback)
         }
 
-        if (!this._onSessionIdleResetForcedListener) {
+        // NB: SessionIdManager.on was only added in posthog-js 1.268.6. This recorder chunk is loaded
+        // from the CDN and can run against an older bundled core that has no `on` method, so guard the
+        // call to degrade gracefully (recording still starts, it just skips the forced-idle-reset listener)
+        // rather than throwing a TypeError during start().
+        if (!this._onSessionIdleResetForcedListener && isFunction(this._sessionManager.on)) {
             this._onSessionIdleResetForcedListener = this._sessionManager.on('forcedIdleReset', () => {
                 // a session was forced to reset due to idle timeout and lack of activity
                 this._clearConditionalRecordingPersistence()
@@ -1037,6 +1083,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     }
                 )
             })
+        } else if (!isFunction(this._sessionManager.on)) {
+            logger.warn(
+                'bundled core has no SessionIdManager.on (requires posthog-js >= 1.268.6); ' +
+                    'recording will start but skip forced-idle-reset handling'
+            )
         }
 
         if (isNullish(this._removePageViewCaptureHook)) {
@@ -1258,7 +1309,36 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return
         }
 
+        this._ensureFullSnapshotForSession(event, targetSessionId)
+
         this._captureSnapshotBuffered(properties)
+    }
+
+    // A session whose incrementals ship before any FullSnapshot is unplayable until the next periodic snapshot, so request one from rrweb (once per session id, to avoid loops if taking one keeps failing).
+    private _ensureFullSnapshotForSession(event: eventWithTime, targetSessionId: string) {
+        if (event.type === EventType.FullSnapshot) {
+            this._lastFullSnapshotSessionId = targetSessionId
+            return
+        }
+
+        if (event.type !== EventType.IncrementalSnapshot) {
+            return
+        }
+
+        if (
+            // deliberately conservative: only heal after this recorder shipped a FullSnapshot to another session (the rotation signature), since on a fresh start rrweb's init snapshot is always ordered ahead of any incremental
+            isUndefined(this._lastFullSnapshotSessionId) ||
+            this._lastFullSnapshotSessionId === targetSessionId ||
+            this._fullSnapshotHealAttemptedFor === targetSessionId
+        ) {
+            return
+        }
+
+        this._fullSnapshotHealAttemptedFor = targetSessionId
+        logger.info('incremental snapshot for a session with no full snapshot - requesting one', {
+            sessionId: targetSessionId,
+        })
+        this._tryTakeFullSnapshot()
     }
 
     private _finishQueuedCompressionEvent(queuedEvent: QueuedCompressionEvent) {
@@ -1331,11 +1411,23 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     return
                 }
 
-                const { event: eventToSend, size } = compressionEnabled
-                    ? shouldUseNativeAsyncSessionRecordingGzip(event)
-                        ? await compressEventAsync(event)
-                        : compressEventSync(event)
-                    : { event, size: estimateSize(event) }
+                let eventToSend: eventWithTime | compressedEventWithTime
+                let size: number
+                try {
+                    const result = compressionEnabled
+                        ? shouldUseNativeAsyncSessionRecordingGzip(event)
+                            ? await compressEventAsync(event)
+                            : compressEventSync(event)
+                        : { event, size: estimateSize(event) }
+                    eventToSend = result.event
+                    size = result.size
+                } catch (e) {
+                    // a compression failure must never reject the queue promise chain, since the
+                    // rejection would surface as an unhandled rejection and drop the event
+                    logger.error('could not process queued compression event - will use uncompressed event', e)
+                    eventToSend = event
+                    size = estimateSize(event)
+                }
 
                 this._captureQueuedCompressionEvent(queuedEvent, eventToSend, size)
             } finally {
@@ -1553,6 +1645,26 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._activateTrigger(triggerType)
     }
 
+    private _currentMaskedHostname(): string | undefined {
+        try {
+            const href = window?.location?.href
+            if (!href) {
+                return undefined
+            }
+            const maskedUrl = this._maskReplayUrl(href)
+            if (!maskedUrl) {
+                return undefined
+            }
+            // not convertToURL: it resolves invalid input (e.g. a masking fn returning "REDACTED")
+            // against the current page and would return the real hostname we're trying to mask.
+            // new URL throws instead, so bad input falls through to the catch and we omit the property.
+            // eslint-disable-next-line compat/compat
+            return new URL(maskedUrl).hostname || undefined
+        } catch {
+            return undefined
+        }
+    }
+
     private _clearFlushBufferTimer() {
         if (this._flushBufferTimer) {
             clearTimeout(this._flushBufferTimer)
@@ -1577,6 +1689,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         if (this._buffer.data.length > 0) {
+            const snapshotHostname = this._currentMaskedHostname()
             const snapshotEvents = splitBuffer(this._buffer)
             snapshotEvents.forEach((snapshotBuffer) => {
                 this._flushedSizeTracker?.trackSize(snapshotBuffer.sessionId, snapshotBuffer.size)
@@ -1587,6 +1700,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     $window_id: snapshotBuffer.windowId,
                     $lib: Config.LIB_NAME,
                     $lib_version: Config.LIB_VERSION,
+                    $snapshot_host: snapshotHostname,
                 })
             })
 
@@ -1659,12 +1773,20 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // have different target session IDs than this._sessionId
         const targetSessionId = properties.$session_id as string
 
+        // A session-id mismatch must flush and rebind even while idle, or an idle rotation appends the new session's Meta and FullSnapshot to the old session's buffer and ships them under the old session id.
+        const sessionChanged = this._buffer.sessionId !== targetSessionId
+
         if (
-            !this._isIdle && // we never want to flush when idle
-            (this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE ||
-                this._buffer.sessionId !== targetSessionId)
+            sessionChanged ||
+            // we never want to flush a healthy same-session buffer while idle
+            (!this._isIdle &&
+                this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE)
         ) {
             this._buffer = this._flushBuffer()
+            // A suppressed flush (e.g. buffering, paused, below minimum duration) returns the buffer un-drained, and relabeling the prior session's events would mis-attribute them, so discard them instead.
+            if (sessionChanged && this._buffer.data.length > 0) {
+                this._buffer = this._clearBuffer()
+            }
             // After flushing, update buffer to use the new target session/window IDs
             this._buffer.sessionId = targetSessionId
             this._buffer.windowId = properties.$window_id as string
@@ -1899,6 +2021,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             collectFonts: false,
             inlineStylesheet: true,
             recordCrossOriginIframes: false,
+            attributeFilter: undefined,
         }
 
         // only allows user to set our allowlisted options

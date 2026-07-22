@@ -861,3 +861,70 @@ describe('PostHogAzureOpenAI - streaming error safety', () => {
     expect(unhandledRejections).toEqual([])
   })
 })
+
+describe('PostHogAzureOpenAI - cache token reporting convention', () => {
+  // Deliberately not `conditionalTest`: azure.ts routes captures through the
+  // OpenAI capture helper, and with the credential-gated suite above skipped
+  // in CI (no AZURE_OPENAI_API_KEY), a gated test would never catch the Azure
+  // path bypassing the declaration. Everything here is mocked.
+  test.each([
+    { behavior: 'declares inclusive reporting by default', posthogProperties: undefined, expectedFlag: false },
+    {
+      behavior: 'lets user-provided posthogProperties override the declaration',
+      posthogProperties: { $ai_cache_reporting_exclusive: true },
+      expectedFlag: true,
+    },
+  ])('$behavior', async ({ posthogProperties, expectedFlag }) => {
+    const mockPostHogClient = new (PostHog as any)()
+    const client = new PostHogAzureOpenAI({
+      apiKey: 'mock-azure-key',
+      posthog: mockPostHogClient as any,
+    })
+
+    const ChatMock: any = openaiModule.Chat
+    const originalCreate = (ChatMock.Completions as any).prototype.create
+    ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue({
+      id: 'chatcmpl-cache-convention',
+      model: 'gpt-4',
+      object: 'chat.completion',
+      created: 1234567890,
+      choices: [
+        {
+          index: 0,
+          finish_reason: 'stop',
+          message: {
+            role: 'assistant',
+            content: 'Hello!',
+            refusal: null,
+          },
+          logprobs: null,
+        },
+      ],
+      usage: {
+        prompt_tokens: 32611,
+        completion_tokens: 561,
+        total_tokens: 33172,
+        prompt_tokens_details: {
+          cached_tokens: 27929,
+        },
+      },
+    })
+
+    await client.chat.completions.create({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: 'Hello' }],
+      posthogDistinctId: 'test-id',
+      posthogProperties,
+    })
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { properties } = captureArgs[0]
+
+    expect(properties['$ai_provider']).toBe('azure')
+    expect(properties['$ai_input_tokens']).toBe(32611)
+    expect(properties['$ai_cache_read_input_tokens']).toBe(27929)
+    expect(properties['$ai_cache_reporting_exclusive']).toBe(expectedFlag)
+    ;(ChatMock.Completions as any).prototype.create = originalCreate
+  })
+})

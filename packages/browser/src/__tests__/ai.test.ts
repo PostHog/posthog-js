@@ -1,6 +1,6 @@
 import { defaultPostHog } from './helpers/posthog-instance'
 import type { PostHogConfig } from '../types'
-import { uuidv7 } from '../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
 describe('ai', () => {
     beforeEach(() => {

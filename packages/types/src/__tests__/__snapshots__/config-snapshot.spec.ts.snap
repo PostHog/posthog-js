@@ -256,6 +256,40 @@ exports[`config snapshot for PostHogConfig 1`] = `
       ]
     }
   ],
+  "metrics": [
+    "undefined",
+    {
+      "serviceName": [
+        "undefined",
+        "string"
+      ],
+      "environment": [
+        "undefined",
+        "string"
+      ],
+      "serviceVersion": [
+        "undefined",
+        "string"
+      ],
+      "resourceAttributes": [
+        "undefined",
+        "MetricAttributes"
+      ],
+      "flushIntervalMs": [
+        "undefined",
+        "number"
+      ],
+      "maxSeriesPerFlush": [
+        "undefined",
+        "number"
+      ],
+      "beforeSend": [
+        "undefined",
+        "BeforeSendMetricFn",
+        "BeforeSendMetricFn[]"
+      ]
+    }
+  ],
   "disable_conversations": [
     "false",
     "true"
@@ -444,6 +478,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "false",
       "true"
     ],
+    "attributeFilter": [
+      "undefined",
+      "string[]"
+    ],
     "recordHeaders": [
       "undefined",
       "false",
@@ -478,6 +516,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "(data: NetworkRequest) => NetworkRequest | null | undefined"
     ],
     "full_snapshot_interval_millis": [
+      "undefined",
+      "number"
+    ],
+    "trigger_pending_buffer_interval_millis": [
       "undefined",
       "number"
     ],
@@ -530,6 +572,14 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "exception_steps": [
       "undefined",
       "ExceptionStepsConfig"
+    ],
+    "exceptionRateLimiterRefillRate": [
+      "undefined",
+      "number"
+    ],
+    "exceptionRateLimiterBucketSize": [
+      "undefined",
+      "number"
     ]
   },
   "session_idle_timeout_seconds": "number",
@@ -700,7 +750,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "false",
     "true",
     [
-      "{ scroll_threshold_ms?: number | undefined; selection_change_threshold_ms?: number | undefined; mutation_threshold_ms?: number | undefined; capture_clicks_with_modifier_keys?: boolean | undefined; css_selector_ignorelist?: string[] | undefined; __onCapture?: ((click: DeadClickCandidate, properties: Properties) => vo...",
+      "{ scroll_threshold_ms?: number | undefined; selection_change_threshold_ms?: number | undefined; mutation_threshold_ms?: number | undefined; capture_clicks_with_modifier_keys?: boolean | undefined; ... 4 more ...; __onCapture?: ((click: DeadClickCandidate, properties: Properties) => void) | undefined; }",
       "Pick<AutocaptureConfig, \\"element_attribute_ignorelist\\">"
     ]
   ],

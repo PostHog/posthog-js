@@ -1,4 +1,4 @@
-import { addEventListener, entries, extend } from './utils'
+import { addEventListener, entries, extend } from '@posthog/browser-common/utils/general-utils'
 import { PostHog } from './posthog-core'
 import {
     FlagsResponse,
@@ -27,6 +27,7 @@ import {
     PERSISTENCE_FEATURE_FLAG_ERRORS,
     PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
     PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+    PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
     ENABLED_FEATURE_FLAGS,
     STORED_GROUP_PROPERTIES_KEY,
     STORED_PERSON_PROPERTIES_KEY,
@@ -39,10 +40,13 @@ import {
 
 import { isUndefined, isArray, isNull, getEnabledFromValue, getVariantFromValue, parsePayload } from '@posthog/core'
 import Config from './config'
-import { createLogger } from './utils/logger'
-import { getTimezone } from './utils/event-utils'
-import { window } from './utils/globals'
-import { isStatusZeroFailureCircuitBreakerTripped, updateStatusZeroFailureCount } from './utils/request-utils'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { getTimezone } from '@posthog/browser-common/utils/event-utils'
+import { window } from '@posthog/browser-common/utils/globals'
+import {
+    isStatusZeroFailureCircuitBreakerTripped,
+    updateStatusZeroFailureCount,
+} from '@posthog/browser-common/utils/request-utils'
 
 const logger = createLogger('[FeatureFlags]')
 const forceDebugLogger = createLogger('[FeatureFlags]', { debugEnabled: true })
@@ -122,6 +126,8 @@ export const parseFlagsResponse = (
             persistence.register({
                 [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: featureFlags,
                 [ENABLED_FEATURE_FLAGS]: $enabled_feature_flags,
+                // Legacy responses never carry the gate — fail safe to full events.
+                [PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS]: false,
             })
         return
     }
@@ -174,6 +180,9 @@ export const parseFlagsResponse = (
             [ENABLED_FEATURE_FLAGS]: newFeatureFlags || {},
             [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: newFeatureFlagPayloads || {},
             [PERSISTENCE_FEATURE_FLAG_DETAILS]: newFeatureFlagDetails || {},
+            // Overwritten on every flags response: an absent field flips the gate off, so
+            // bootstrap/locally injected flags always fail safe to full events.
+            [PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS]: response.minimalFlagCalledEvents === true,
             ...(requestId ? { [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: requestId } : {}),
             ...(evaluatedAt ? { [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: evaluatedAt } : {}),
         })
@@ -899,6 +908,10 @@ export class PostHogFeatureFlags implements Extension {
                     $feature_flag_bootstrapped_payload: this._config.bootstrap?.featureFlagPayloads?.[key] || null,
                     // If we haven't yet received a response from the /flags endpoint, we must have used the bootstrapped value
                     $used_bootstrap_value: !this._flagsLoadedFromRemote,
+                }
+
+                if (!isUndefined(flagDetails?.metadata?.has_experiment)) {
+                    properties.$feature_flag_has_experiment = flagDetails.metadata.has_experiment
                 }
 
                 if (!isUndefined(flagDetails?.metadata?.version)) {

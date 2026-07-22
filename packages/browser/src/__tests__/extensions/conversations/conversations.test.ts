@@ -1,4 +1,3 @@
-/* eslint-disable compat/compat */
 import { PostHogConversations, ConversationsManager } from '../../../extensions/conversations/posthog-conversations'
 import { ConversationsRemoteConfig } from '../../../posthog-conversations-types'
 import { PostHog } from '../../../posthog-core'
@@ -75,7 +74,7 @@ describe('PostHogConversations', () => {
                 },
             }
 
-            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+            conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
             conversations.loadIfEnabled()
 
             expect(assignableWindow.__PosthogExtensions__?.loadExternalDependency).not.toHaveBeenCalled()
@@ -86,7 +85,7 @@ describe('PostHogConversations', () => {
                 conversations: null,
             }
 
-            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+            conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
 
             expect(conversations.isAvailable()).toBe(false)
         })
@@ -96,7 +95,7 @@ describe('PostHogConversations', () => {
                 conversations: true,
             }
 
-            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+            conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
 
             // Boolean true without token won't load the manager
             expect(conversations.isAvailable()).toBe(false)
@@ -107,7 +106,7 @@ describe('PostHogConversations', () => {
                 conversations: false,
             }
 
-            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+            conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
 
             expect(conversations.isAvailable()).toBe(false)
         })
@@ -121,7 +120,7 @@ describe('PostHogConversations', () => {
                 } as ConversationsRemoteConfig,
             }
 
-            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+            conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
 
             expect(conversations.isAvailable()).toBe(true)
         })
@@ -134,7 +133,7 @@ describe('PostHogConversations', () => {
                 } as ConversationsRemoteConfig,
             }
 
-            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+            conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
 
             expect(assignableWindow.__PosthogExtensions__?.loadExternalDependency).toHaveBeenCalledWith(
                 mockPostHog,
@@ -153,7 +152,7 @@ describe('PostHogConversations', () => {
         }
 
         it('should not load if already loaded', () => {
-            conversations.onRemoteConfig(validRemoteConfig as RemoteConfig)
+            conversations.onRemoteConfig({ ok: true, config: validRemoteConfig as RemoteConfig })
             expect(assignableWindow.__PosthogExtensions__?.loadExternalDependency).toHaveBeenCalledTimes(1)
 
             conversations.loadIfEnabled()
@@ -162,14 +161,14 @@ describe('PostHogConversations', () => {
 
         it('should not load for toolbar internal instance', () => {
             mockPostHog.config.name = 'ph_toolbar_internal'
-            conversations.onRemoteConfig(validRemoteConfig as RemoteConfig)
+            conversations.onRemoteConfig({ ok: true, config: validRemoteConfig as RemoteConfig })
 
             expect(assignableWindow.__PosthogExtensions__?.loadExternalDependency).not.toHaveBeenCalled()
         })
 
         it('should not load if conversations are disabled', () => {
             mockPostHog.config.disable_conversations = true
-            conversations.onRemoteConfig(validRemoteConfig as RemoteConfig)
+            conversations.onRemoteConfig({ ok: true, config: validRemoteConfig as RemoteConfig })
 
             expect(assignableWindow.__PosthogExtensions__?.loadExternalDependency).not.toHaveBeenCalled()
         })
@@ -178,7 +177,7 @@ describe('PostHogConversations', () => {
             mockPostHog.config.cookieless_mode = 'always'
             ;(mockPostHog.consent.isOptedOut as jest.Mock).mockReturnValue(true)
 
-            conversations.onRemoteConfig(validRemoteConfig as RemoteConfig)
+            conversations.onRemoteConfig({ ok: true, config: validRemoteConfig as RemoteConfig })
 
             expect(assignableWindow.__PosthogExtensions__?.loadExternalDependency).not.toHaveBeenCalled()
         })
@@ -186,7 +185,7 @@ describe('PostHogConversations', () => {
         it('should not load if PostHog extensions are not found', () => {
             assignableWindow.__PosthogExtensions__ = undefined
 
-            conversations.onRemoteConfig(validRemoteConfig as RemoteConfig)
+            conversations.onRemoteConfig({ ok: true, config: validRemoteConfig as RemoteConfig })
 
             expect(conversations.isAvailable()).toBe(false)
         })
@@ -205,7 +204,7 @@ describe('PostHogConversations', () => {
                 } as ConversationsRemoteConfig,
             }
 
-            conversations.onRemoteConfig(disabledConfig as RemoteConfig)
+            conversations.onRemoteConfig({ ok: true, config: disabledConfig as RemoteConfig })
 
             expect(assignableWindow.__PosthogExtensions__?.loadExternalDependency).not.toHaveBeenCalled()
         })
@@ -218,7 +217,7 @@ describe('PostHogConversations', () => {
                 } as ConversationsRemoteConfig,
             }
 
-            conversations.onRemoteConfig(noTokenConfig as RemoteConfig)
+            conversations.onRemoteConfig({ ok: true, config: noTokenConfig as RemoteConfig })
 
             expect(assignableWindow.__PosthogExtensions__?.loadExternalDependency).not.toHaveBeenCalled()
         })
@@ -228,7 +227,7 @@ describe('PostHogConversations', () => {
                 initConversations: jest.fn().mockReturnValue(mockManager),
             }
 
-            conversations.onRemoteConfig(validRemoteConfig as RemoteConfig)
+            conversations.onRemoteConfig({ ok: true, config: validRemoteConfig as RemoteConfig })
 
             expect(assignableWindow.__PosthogExtensions__.initConversations).toHaveBeenCalledWith(
                 expect.objectContaining({ enabled: true, token: 'test-token' }),
@@ -243,7 +242,7 @@ describe('PostHogConversations', () => {
                 }),
             }
 
-            conversations.onRemoteConfig(validRemoteConfig as RemoteConfig)
+            conversations.onRemoteConfig({ ok: true, config: validRemoteConfig as RemoteConfig })
 
             expect(conversations.isAvailable()).toBe(false)
         })
@@ -258,7 +257,7 @@ describe('PostHogConversations', () => {
                 } as ConversationsRemoteConfig,
             }
 
-            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+            conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
             expect(conversations.isAvailable()).toBe(true)
 
             conversations.reset()
@@ -283,7 +282,7 @@ describe('PostHogConversations', () => {
                 } as ConversationsRemoteConfig,
             }
 
-            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+            conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
             expect(conversations.isAvailable()).toBe(true)
 
             conversations.reset()
@@ -300,7 +299,7 @@ describe('PostHogConversations', () => {
                     token: 'test-token',
                 } as ConversationsRemoteConfig,
             }
-            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+            conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
         })
 
         describe('show', () => {
@@ -350,7 +349,7 @@ describe('PostHogConversations', () => {
                 } as ConversationsRemoteConfig,
             }
 
-            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+            conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
         })
 
         it('should pass the PostHog instance directly to initConversations', () => {
@@ -371,7 +370,7 @@ describe('PostHogConversations', () => {
                 } as ConversationsRemoteConfig,
             }
 
-            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+            conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
 
             expect(conversations.isAvailable()).toBe(true)
         })
@@ -381,7 +380,7 @@ describe('PostHogConversations', () => {
                 conversations: false,
             }
 
-            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+            conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
 
             expect(conversations.isAvailable()).toBe(false)
         })
@@ -400,7 +399,7 @@ describe('PostHogConversations', () => {
                 } as ConversationsRemoteConfig,
             }
 
-            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+            conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
 
             expect(conversations.isAvailable()).toBe(true)
             ;(mockManager.isVisible as jest.Mock).mockReturnValue(true)
@@ -451,7 +450,7 @@ describe('PostHogConversations', () => {
                 } as ConversationsRemoteConfig,
             }
 
-            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+            conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
 
             // Bundle should still load - domain check is done in ConversationsManager
             expect(mockInit).toHaveBeenCalled()
@@ -497,7 +496,7 @@ describe('PostHogConversations', () => {
                 } as ConversationsRemoteConfig,
             }
 
-            identifiedConversations.onRemoteConfig(remoteConfig as RemoteConfig)
+            identifiedConversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
 
             // The initConversations is called with the PostHog instance
             // The ConversationsManager will use posthog._isIdentified() to determine

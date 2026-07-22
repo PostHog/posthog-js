@@ -1,5 +1,5 @@
 import { BucketedRateLimiter, isEmptyObject, isNullish, isObject, isUndefined, Logger } from '@posthog/core'
-import { createLogger } from '../utils/logger'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 import type { PostHog } from '../posthog-core'
 
 // types copied from redux toolkit so we can avoid taking a dependency in the library and confusing people using the SDK

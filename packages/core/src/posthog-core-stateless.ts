@@ -1,6 +1,7 @@
-import type { OtlpLogsPayload } from '@posthog/types'
+import type { OtlpLogsPayload, OtlpMetricsPayload } from '@posthog/types'
+import type { SendMetricsBatchOutcome } from './metrics/types'
 import { SimpleEventEmitter } from './eventemitter'
-import { getFeatureFlagValue, normalizeFlagsResponse } from './featureFlagUtils'
+import { getFeatureFlagValue, minimizeFlagCalledEventProperties, normalizeFlagsResponse } from './featureFlagUtils'
 import { gzipCompress, isGzipSupported } from './gzip'
 import {
   PostHogFlagsResponse,
@@ -74,7 +75,6 @@ class PostHogFetchNetworkError extends Error {
 
   constructor(public error: unknown) {
     // TRICKY: "cause" is a newer property but is just ignored otherwise. Cast to any to ignore the type issue.
-    // eslint-disable-next-line @typescript-eslint/prefer-ts-expect-error
     // @ts-ignore
     super('Network error while fetching PostHog', error instanceof Error ? { cause: error } : {})
   }
@@ -178,6 +178,13 @@ export enum QuotaLimitedFeature {
   Recordings = 'recordings',
 }
 
+/**
+ * The single queue route every SDK uses unless it overrides {@link PostHogCoreStateless.getQueueRouteKey}.
+ * With one route the enqueue/flush/shutdown paths behave exactly as they did before route
+ * partitioning existed, so browser/RN stay byte-identical.
+ */
+const DEFAULT_QUEUE_ROUTE = 'default'
+
 export abstract class PostHogCoreStateless {
   // options
   readonly apiKey: string
@@ -189,15 +196,17 @@ export abstract class PostHogCoreStateless {
   private maxQueueSize: number
   private flushInterval: number
   private flushPromise: Promise<any> | null = null
+  private pendingFlushPromise: Promise<void> | null = null
   private flushPromises: Set<Promise<any>> = new Set()
+  private _dequeuedMessagesCount: number = 0
   private shutdownPromise: Promise<void> | null = null
-  private requestTimeout: number
+  protected requestTimeout: number
   private featureFlagsRequestTimeoutMs: number
   private featureFlagsRequestMaxRetries: number
   private remoteConfigRequestTimeoutMs: number
   private removeDebugCallback?: () => void
   private disableGeoip: boolean
-  private historicalMigration: boolean
+  protected historicalMigration: boolean
   private evaluationContexts?: readonly string[]
   protected disabled
   protected disableCompression: boolean
@@ -397,16 +406,34 @@ export abstract class PostHogCoreStateless {
     properties?: PostHogEventProperties
   }): PostHogEventProperties {
     const userProperties = payload.properties || {}
-    const properties: PostHogEventProperties = {
+    let properties: PostHogEventProperties = {
       ...userProperties,
       ...this.getCommonEventProperties(), // Common PH props
     }
     applyCallerFeatureFlagOverrides(properties, userProperties)
+    // Customer hooks (before_send) run after this filter and may deliberately re-add stripped
+    // properties; the SDK itself must not enrich beyond allowlisted keys past this point.
+    if (
+      payload.event === '$feature_flag_called' &&
+      properties.$feature_flag_has_experiment === false &&
+      this.isMinimalFlagCalledEventsEnabled()
+    ) {
+      properties = minimizeFlagCalledEventProperties(properties)
+    }
     return {
       distinct_id: payload.distinct_id,
       event: payload.event,
       properties,
     }
+  }
+
+  /**
+   * Whether the server has gated this project into minimal `$feature_flag_called` events.
+   * Overridden by clients that persist the gate from the v2 `/flags` response
+   * (`minimalFlagCalledEvents`). The base implementation fails safe to full events.
+   */
+  protected isMinimalFlagCalledEventsEnabled(): boolean {
+    return false
   }
 
   /**
@@ -1032,6 +1059,37 @@ export abstract class PostHogCoreStateless {
     // Default: no-op for sync storage implementations
   }
 
+  /**
+   * Route a message to a named queue. Events sharing a route are batched, flushed, retried,
+   * and persisted together, independently of other routes. The default keeps every event on a
+   * single route (byte-identical to the pre-partitioning behavior); override to segregate a
+   * subset of events onto their own queue and transport (see posthog-node's `$ai_*` routing).
+   */
+  protected getQueueRouteKey(_message: PostHogEventProperties): string {
+    return DEFAULT_QUEUE_ROUTE
+  }
+
+  /**
+   * Maps a route key to the persisted-storage key its queue lives under. The default route uses
+   * the historical {@link PostHogPersistedProperty.Queue}; override to point other routes at their
+   * own storage keys (e.g. {@link PostHogPersistedProperty.AiQueue}).
+   */
+  protected persistedQueueKeyForRoute(_route: string): PostHogPersistedProperty {
+    return PostHogPersistedProperty.Queue
+  }
+
+  /**
+   * The set of routes that {@link _flush} and shutdown drain, in order. Must include every route
+   * {@link getQueueRouteKey} can return. Defaults to the single default route.
+   */
+  protected getActiveQueueRoutes(): string[] {
+    return [DEFAULT_QUEUE_ROUTE]
+  }
+
+  private getRouteQueue(route: string): PostHogQueueItem[] {
+    return this.getPersistedProperty<PostHogQueueItem[]>(this.persistedQueueKeyForRoute(route)) || []
+  }
+
   protected enqueue(type: string, _message: any, options?: PostHogCaptureOptions): void {
     this.wrap(() => {
       if (this.optedOut) {
@@ -1048,15 +1106,16 @@ export abstract class PostHogCoreStateless {
       }
       message = this.normalizeMessage(message)
 
-      const queue = this.getPersistedProperty<PostHogQueueItem[]>(PostHogPersistedProperty.Queue) || []
+      const queueKey = this.persistedQueueKeyForRoute(this.getQueueRouteKey(message))
+      const queue = this.getPersistedProperty<PostHogQueueItem[]>(queueKey) || []
 
       if (queue.length >= this.maxQueueSize) {
         queue.shift()
-        this._logger.info('Queue is full, the oldest event is dropped.')
+        this._logger.warn('Queue is full, the oldest event is dropped.')
       }
 
       queue.push({ message })
-      this.setPersistedProperty<PostHogQueueItem[]>(PostHogPersistedProperty.Queue, queue)
+      this.setPersistedProperty<PostHogQueueItem[]>(queueKey, queue)
 
       this._events.emit(type, message)
 
@@ -1095,37 +1154,8 @@ export abstract class PostHogCoreStateless {
     }
     message = this.normalizeMessage(message)
 
-    const data: Record<string, any> = {
-      api_key: this.apiKey,
-      batch: [message],
-      sent_at: currentISOTime(),
-    }
-
-    if (this.historicalMigration) {
-      data.historical_migration = true
-    }
-
-    const payload = safeJsonStringify(data)
-
-    const url = `${this.host}/batch/`
-
-    const gzippedPayload = !this.disableCompression ? await gzipCompress(payload, this.isDebug) : null
-    const fetchOptions: PostHogFetchOptions = {
-      method: 'POST',
-      headers: {
-        ...this.getCustomHeaders(),
-        'Content-Type': 'application/json',
-        ...(gzippedPayload !== null && { 'Content-Encoding': 'gzip' }),
-      },
-      body: gzippedPayload || payload,
-    }
-
     try {
-      const response = await this.fetchWithRetry(url, fetchOptions)
-      // Consume the response body to prevent cross-request promise warnings
-      // in runtimes like Cloudflare Workers that enforce body consumption.
-      // See: https://github.com/PostHog/posthog-js/issues/3173
-      await response.body?.cancel()?.catch(() => {})
+      await this.sendBatch([message], undefined, this.getQueueRouteKey(message))
     } catch (err) {
       this._events.emit('error', err)
     }
@@ -1191,6 +1221,9 @@ export abstract class PostHogCoreStateless {
    * Avoids unnecessary promise errors
    */
   private flushBackground(): void {
+    if (this.pendingFlushPromise) {
+      return
+    }
     void this.flush().catch(async (err) => {
       await logFlushError(err)
     })
@@ -1259,6 +1292,10 @@ export abstract class PostHogCoreStateless {
       return Promise.resolve()
     }
 
+    if (!waitForPendingPromises && this.pendingFlushPromise) {
+      return this.pendingFlushPromise
+    }
+
     const previousFlushPromise = this.flushPromise
     const maxPromiseId = this.promiseQueue.maxId
 
@@ -1275,15 +1312,22 @@ export abstract class PostHogCoreStateless {
       // Use a custom allSettled implementation to avoid issues with patching Promise on RN
       .then(() => allSettled([previousFlushPromise]))
       .then(() => {
+        if (this.pendingFlushPromise === nextFlushPromise) {
+          this.pendingFlushPromise = null
+        }
         return this._flush()
       })
 
+    this.pendingFlushPromise = nextFlushPromise
     this.flushPromise = nextFlushPromise
     this.flushPromises.add(nextFlushPromise)
     void this.addPendingPromise(nextFlushPromise)
 
     allSettled([nextFlushPromise]).then(() => {
       this.flushPromises.delete(nextFlushPromise)
+      if (this.pendingFlushPromise === nextFlushPromise) {
+        this.pendingFlushPromise = null
+      }
       // If there are no others waiting to flush, clear the promise.
       // We don't strictly need to do this, but it could make debugging easier
       if (this.flushPromise === nextFlushPromise) {
@@ -1307,57 +1351,115 @@ export abstract class PostHogCoreStateless {
     return headers
   }
 
+  /**
+   * Builds and sends one `/batch/` request for the given already-normalized
+   * messages, throwing on transport/HTTP error. Batch-size (413) shrinking,
+   * queue persistence, and error recovery stay with the callers (`_flush` and
+   * `sendImmediate`). This is the overridable seam that lets a subclass swap the
+   * capture submission transport (e.g. Capture V1) for both the batched and the
+   * immediate send paths at once.
+   *
+   * `route` identifies which queue route the batch came from (see
+   * {@link getQueueRouteKey}); a subclass can dispatch to a different transport per
+   * route. The default `/batch/` transport ignores it — every event is homogeneous.
+   */
+  protected async sendBatch(
+    batchMessages: (PostHogEventProperties | undefined)[],
+    retryOptions?: Partial<RetriableOptions>,
+    _route: string = DEFAULT_QUEUE_ROUTE
+  ): Promise<void> {
+    const data: Record<string, any> = {
+      api_key: this.apiKey,
+      batch: batchMessages,
+      sent_at: currentISOTime(),
+    }
+
+    if (this.historicalMigration) {
+      data.historical_migration = true
+    }
+
+    const payload = safeJsonStringify(data)
+
+    const url = `${this.host}/batch/`
+
+    const gzippedPayload = !this.disableCompression ? await gzipCompress(payload, this.isDebug) : null
+    const fetchOptions: PostHogFetchOptions = {
+      method: 'POST',
+      headers: {
+        ...this.getCustomHeaders(),
+        'Content-Type': 'application/json',
+        ...(gzippedPayload !== null && { 'Content-Encoding': 'gzip' }),
+      },
+      body: gzippedPayload || payload,
+    }
+
+    const response = await this.fetchWithRetry(url, fetchOptions, retryOptions)
+    // Consume the response body to prevent cross-request promise warnings
+    // in runtimes like Cloudflare Workers that enforce body consumption.
+    // See: https://github.com/PostHog/posthog-js/issues/3173
+    await response.body?.cancel()?.catch(() => {})
+  }
+
   private async _flush(): Promise<void> {
     this.clearFlushTimer()
     await this._initPromise
 
-    let queue = this.getPersistedProperty<PostHogQueueItem[]>(PostHogPersistedProperty.Queue) || []
+    const routes = this.getActiveQueueRoutes()
+
+    // Nothing queued on any route: return without emitting 'flush' (matches the original
+    // single-queue early return, so empty flushes stay silent).
+    if (!routes.some((route) => this.getRouteQueue(route).length > 0)) {
+      return
+    }
+
+    const sentMessages: any[] = []
+    // Drain each route independently so a failure on one route can't roll back or re-send a
+    // batch already accepted on another. We attempt every route, then surface the first error
+    // (if any). With a single route this is identical to the previous single-queue flush.
+    let firstError: unknown = undefined
+    for (const route of routes) {
+      try {
+        await this._flushRoute(route, sentMessages)
+      } catch (err) {
+        if (firstError === undefined) {
+          firstError = err
+        }
+      }
+    }
+
+    // Preserve the original contract: on error, propagate without emitting 'flush'.
+    if (firstError !== undefined) {
+      throw firstError
+    }
+
+    this._events.emit('flush', sentMessages)
+  }
+
+  private async _flushRoute(route: string, sentMessages: any[]): Promise<void> {
+    const queueKey = this.persistedQueueKeyForRoute(route)
+    let queue = this.getPersistedProperty<PostHogQueueItem[]>(queueKey) || []
 
     if (!queue.length) {
       return
     }
 
-    const sentMessages: any[] = []
     const originalQueueLength = queue.length
+    let sentFromRoute = 0
 
-    while (queue.length > 0 && sentMessages.length < originalQueueLength) {
+    while (queue.length > 0 && sentFromRoute < originalQueueLength) {
       const batchItems = queue.slice(0, this.maxBatchSize)
       const batchMessages = batchItems.map((item) =>
         item.message === undefined ? item.message : this.normalizeMessage(item.message)
       )
 
       const persistQueueChange = async (): Promise<void> => {
-        const refreshedQueue = this.getPersistedProperty<PostHogQueueItem[]>(PostHogPersistedProperty.Queue) || []
+        const refreshedQueue = this.getPersistedProperty<PostHogQueueItem[]>(queueKey) || []
         const newQueue = refreshedQueue.slice(batchItems.length)
-        this.setPersistedProperty<PostHogQueueItem[]>(PostHogPersistedProperty.Queue, newQueue)
+        this.setPersistedProperty<PostHogQueueItem[]>(queueKey, newQueue)
         queue = newQueue
+        this._dequeuedMessagesCount += batchItems.length
         // Wait for storage to complete to prevent duplicate events on app crash
         await this.flushStorage()
-      }
-
-      const data: Record<string, any> = {
-        api_key: this.apiKey,
-        batch: batchMessages,
-        sent_at: currentISOTime(),
-      }
-
-      if (this.historicalMigration) {
-        data.historical_migration = true
-      }
-
-      const payload = safeJsonStringify(data)
-
-      const url = `${this.host}/batch/`
-
-      const gzippedPayload = !this.disableCompression ? await gzipCompress(payload, this.isDebug) : null
-      const fetchOptions: PostHogFetchOptions = {
-        method: 'POST',
-        headers: {
-          ...this.getCustomHeaders(),
-          'Content-Type': 'application/json',
-          ...(gzippedPayload !== null && { 'Content-Encoding': 'gzip' }),
-        },
-        body: gzippedPayload || payload,
       }
 
       const retryOptions: Partial<RetriableOptions> = {
@@ -1372,11 +1474,7 @@ export abstract class PostHogCoreStateless {
       }
 
       try {
-        const response = await this.fetchWithRetry(url, fetchOptions, retryOptions)
-        // Consume the response body to prevent cross-request promise warnings
-        // in runtimes like Cloudflare Workers that enforce body consumption.
-        // See: https://github.com/PostHog/posthog-js/issues/3173
-        await response.body?.cancel()?.catch(() => {})
+        await this.sendBatch(batchMessages, retryOptions, route)
       } catch (err) {
         if (isPostHogFetchContentTooLargeError(err) && batchMessages.length > 1) {
           // if we get a 413 error, we want to reduce the batch size and try again
@@ -1401,8 +1499,8 @@ export abstract class PostHogCoreStateless {
       await persistQueueChange()
 
       sentMessages.push(...batchMessages)
+      sentFromRoute += batchMessages.length
     }
-    this._events.emit('flush', sentMessages)
   }
 
   /**
@@ -1449,6 +1547,55 @@ export abstract class PostHogCoreStateless {
         return { kind: 'too-large' }
       }
       if (err instanceof PostHogFetchNetworkError) {
+        return { kind: 'retry-later', error: err }
+      }
+      return { kind: 'fatal', error: err }
+    }
+  }
+
+  /**
+   * Sends a pre-built OTLP metrics payload to `/i/v1/metrics`. Same tagged
+   * outcome contract and error classification as `_sendLogsBatch` — this is
+   * the `MetricsHost._sendMetricsBatch` implementation, so `PostHogMetrics`
+   * can use any core-based SDK as its host.
+   */
+  async _sendMetricsBatch(payload: OtlpMetricsPayload): Promise<SendMetricsBatchOutcome> {
+    if (this.disabled) {
+      return { kind: 'fatal', error: new Error('The client is disabled') }
+    }
+
+    const serialized = JSON.stringify(payload)
+    const url = `${this.host}/i/v1/metrics?token=${encodeURIComponent(this.apiKey)}`
+
+    const gzippedPayload = !this.disableCompression ? await gzipCompress(serialized, this.isDebug) : null
+    const fetchOptions: PostHogFetchOptions = {
+      method: 'POST',
+      headers: {
+        ...this.getCustomHeaders(),
+        'Content-Type': 'application/json',
+        ...(gzippedPayload !== null && { 'Content-Encoding': 'gzip' }),
+      },
+      body: gzippedPayload || serialized,
+    }
+
+    try {
+      await this.fetchWithRetry(url, fetchOptions, {
+        retryCheck: (err) => {
+          if (isPostHogFetchContentTooLargeError(err)) {
+            return false
+          }
+          return isPostHogFetchRetryableError(err)
+        },
+      })
+      return { kind: 'ok' }
+    } catch (err) {
+      if (isPostHogFetchContentTooLargeError(err)) {
+        return { kind: 'too-large' }
+      }
+      // Exhausted retries on a retryable failure (network error, 408/429/5xx)
+      // still classify as retry-later so the window rides the next flush; only
+      // non-retryable HTTP errors (and 413 above) drop the batch.
+      if (isPostHogFetchRetryableError(err)) {
         return { kind: 'retry-later', error: err }
       }
       return { kind: 'fatal', error: err }
@@ -1526,11 +1673,13 @@ export abstract class PostHogCoreStateless {
         await this.promiseQueue.join()
 
         while (true) {
-          const queue = this.getPersistedProperty<PostHogQueueItem[]>(PostHogPersistedProperty.Queue) || []
+          const hasQueuedEvents = this.getActiveQueueRoutes().some((route) => this.getRouteQueue(route).length > 0)
 
-          if (queue.length === 0) {
+          if (!hasQueuedEvents) {
             break
           }
+
+          const dequeuedBeforeFlush = this._dequeuedMessagesCount
 
           // flush again to make sure we send all events, some of which might've been added
           // while we were waiting for the pending promises to resolve
@@ -1538,6 +1687,13 @@ export abstract class PostHogCoreStateless {
           await this.flush()
 
           if (hasTimedOut) {
+            break
+          }
+
+          if (this._dequeuedMessagesCount === dequeuedBeforeFlush) {
+            this._logger.warn(
+              'Shutdown flush completed but did not send any queued events. Stopping drain to avoid a loop.'
+            )
             break
           }
         }

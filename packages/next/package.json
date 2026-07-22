@@ -1,6 +1,6 @@
 {
     "name": "@posthog/next",
-    "version": "0.7.1",
+    "version": "0.8.4",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
@@ -41,6 +41,7 @@
             "worker": "./dist/pages.edge.js",
             "browser": "./dist/pages.client.js",
             "react-server": "./dist/pages.js",
+            "node": "./dist/pages.js",
             "default": "./dist/pages.client.js"
         }
     },
@@ -53,9 +54,10 @@
     ],
     "scripts": {
         "clean": "rimraf dist",
-        "build": "tsgo -p tsconfig.build.json && pnpm check:esm-specifiers",
+        "build": "tsgo -p tsconfig.build.json && pnpm check:esm-specifiers && pnpm check:pages-router-ssr",
         "dev": "tsgo -p tsconfig.build.json --watch",
         "check:esm-specifiers": "node ./scripts/check-relative-esm-specifiers.mjs",
+        "check:pages-router-ssr": "node ./scripts/check-pages-router-ssr.mjs",
         "test:unit": "jest",
         "test": "pnpm test:unit",
         "lint": "eslint src",

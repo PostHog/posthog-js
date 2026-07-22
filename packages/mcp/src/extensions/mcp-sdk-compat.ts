@@ -1,6 +1,7 @@
-// Portions of this file are derived from MCPCat/mcpcat-typescript-sdk
-// Copyright (c) 2025 MCPcat
-// Licensed under the MIT License: https://github.com/MCPCat/mcpcat-typescript-sdk/blob/main/LICENSE
+// Portions of this file are derived from agentcathq/agentcat-typescript-sdk
+// (formerly MCPCat/mcpcat-typescript-sdk)
+// Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
+// Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
 /**
  * MCP SDK Compatibility Helpers
@@ -63,7 +64,7 @@ export function createWrappedTool(originalTool: RegisteredTool, wrappedFunction:
   return {
     ...originalTool,
     [key]: wrappedFunction,
-  } as RegisteredTool
+  }
 }
 
 // --- Zod schema internal property helpers ---

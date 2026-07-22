@@ -1,4 +1,4 @@
-import { uuid7ToTimestampMs, uuidv7 } from '../uuidv7'
+import { uuid7ToTimestampMs, uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 const TEN_SECONDS = 10_000
 describe('uuid', () => {
     it('should be a uuid when requested', () => {

@@ -230,7 +230,7 @@ describe('SiteApps', () => {
 
         it('loads stops buffering if no site apps', () => {
             posthog.config.opt_in_site_apps = true
-            siteAppsInstance.onRemoteConfig({} as RemoteConfig)
+            siteAppsInstance.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
 
             expect(removeCaptureHook).toHaveBeenCalled()
             expect(siteAppsInstance['_stopBuffering']).toBeUndefined()
@@ -240,11 +240,14 @@ describe('SiteApps', () => {
         it('does not loads site apps if disabled', () => {
             posthog.config.opt_in_site_apps = false
             siteAppsInstance.onRemoteConfig({
-                siteApps: [
-                    { id: '1', url: '/site_app/1' },
-                    { id: '2', url: '/site_app/2' },
-                ],
-            } as RemoteConfig)
+                ok: true,
+                config: {
+                    siteApps: [
+                        { id: '1', url: '/site_app/1' },
+                        { id: '2', url: '/site_app/2' },
+                    ],
+                } as RemoteConfig,
+            })
 
             expect(removeCaptureHook).toHaveBeenCalled()
             expect(siteAppsInstance['_stopBuffering']).toBeUndefined()
@@ -268,19 +271,25 @@ describe('SiteApps', () => {
                 },
             } as any
             siteAppsInstance.onRemoteConfig({
-                siteApps: [{ id: '1', url: '/site_app/1' }],
-            } as RemoteConfig)
+                ok: true,
+                config: {
+                    siteApps: [{ id: '1', url: '/site_app/1' }],
+                } as RemoteConfig,
+            })
 
             expect(assignableWindow.__PosthogExtensions__?.loadSiteApp).not.toHaveBeenCalled()
         })
 
         it('loads site apps if new global loader is not available', () => {
             siteAppsInstance.onRemoteConfig({
-                siteApps: [
-                    { id: '1', url: '/site_app/1' },
-                    { id: '2', url: '/site_app/2' },
-                ],
-            } as RemoteConfig)
+                ok: true,
+                config: {
+                    siteApps: [
+                        { id: '1', url: '/site_app/1' },
+                        { id: '2', url: '/site_app/2' },
+                    ],
+                } as RemoteConfig,
+            })
 
             expect(removeCaptureHook).toHaveBeenCalled()
             expect(siteAppsInstance['_stopBuffering']).toBeUndefined()
@@ -344,7 +353,7 @@ describe('SiteApps', () => {
 
         it('sets up the eventCaptured listener if site apps', () => {
             init()
-            siteAppsInstance.onRemoteConfig({} as RemoteConfig)
+            siteAppsInstance.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
             expect(posthog.on).toHaveBeenCalledWith('eventCaptured', expect.any(Function))
         })
 
@@ -356,13 +365,13 @@ describe('SiteApps', () => {
                     siteApps: [],
                 },
             } as any
-            siteAppsInstance.onRemoteConfig({} as RemoteConfig)
+            siteAppsInstance.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
             expect(posthog.on).not.toHaveBeenCalled()
         })
 
         it('loads site apps via the window object if defined', () => {
             init()
-            siteAppsInstance.onRemoteConfig({} as RemoteConfig)
+            siteAppsInstance.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
             expect(appConfigs[0]).toBeDefined()
             expect(siteAppsInstance.apps['1']).toEqual({
                 errored: false,
@@ -399,7 +408,7 @@ describe('SiteApps', () => {
                 callback(true)
             })
 
-            siteAppsInstance.onRemoteConfig({} as RemoteConfig)
+            siteAppsInstance.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
 
             const styleElement = document.body.querySelector('div')?.shadowRoot?.querySelector('style')
             expect(posthog.config.prepare_external_dependency_stylesheet).toHaveBeenCalledWith(styleElement)
@@ -443,7 +452,7 @@ describe('SiteApps', () => {
                 callback(true)
             })
 
-            siteAppsInstance.onRemoteConfig({} as RemoteConfig)
+            siteAppsInstance.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
 
             const expectedStyleCount = stylesInsertedPerAppInit * appConfigs.length
             const expectedAttachedStyleCount = 4 * appConfigs.length
@@ -469,7 +478,7 @@ describe('SiteApps', () => {
                 })
             })
 
-            siteAppsInstance.onRemoteConfig({} as RemoteConfig)
+            siteAppsInstance.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
 
             const secondAppStyle = finishInit[1]()
             const stillPendingStyle = document.createElement('style')
@@ -520,7 +529,7 @@ describe('SiteApps', () => {
                 callback(true)
             })
 
-            siteAppsInstance.onRemoteConfig({} as RemoteConfig)
+            siteAppsInstance.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
             expectMethodsUnchanged()
         })
 
@@ -530,7 +539,7 @@ describe('SiteApps', () => {
                 return script
             })
             init()
-            siteAppsInstance.onRemoteConfig({} as RemoteConfig)
+            siteAppsInstance.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
             appConfigs[0].processEvent.mockImplementation(() => {
                 const script = document.createElement('script')
                 document.head.append(script)
@@ -546,7 +555,7 @@ describe('SiteApps', () => {
 
         it('marks site app as errored if callback fails', () => {
             init()
-            siteAppsInstance.onRemoteConfig({} as RemoteConfig)
+            siteAppsInstance.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
             expect(appConfigs[0]).toBeDefined()
             expect(siteAppsInstance.apps['1']).toMatchObject({
                 errored: false,
@@ -566,7 +575,7 @@ describe('SiteApps', () => {
         it('calls the processEvent method if it exists and events are buffered', () => {
             init()
             emitCaptureEvent?.('test_event1', { event: 'test_event1' } as any)
-            siteAppsInstance.onRemoteConfig({} as RemoteConfig)
+            siteAppsInstance.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
             emitCaptureEvent?.('test_event2', { event: 'test_event2' } as any)
             expect(siteAppsInstance['_bufferedInvocations'].length).toBe(2)
             appConfigs[0].callback(true)
@@ -586,7 +595,7 @@ describe('SiteApps', () => {
             emitCaptureEvent?.('test_event2', { event: 'test_event2' } as any)
             expect(siteAppsInstance['_bufferedInvocations'].length).toBe(2)
 
-            siteAppsInstance.onRemoteConfig({} as RemoteConfig)
+            siteAppsInstance.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
             appConfigs[0].callback(true)
             expect(siteAppsInstance['_bufferedInvocations'].length).toBe(2)
             appConfigs[1].callback(true)
@@ -604,7 +613,7 @@ describe('SiteApps', () => {
             emitCaptureEvent?.('test_event2', { event: 'test_event2' } as any)
             expect(siteAppsInstance['_bufferedInvocations'].length).toBe(2)
 
-            siteAppsInstance.onRemoteConfig({} as RemoteConfig)
+            siteAppsInstance.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
             expect(siteAppsInstance['_bufferedInvocations'].length).toBe(0)
 
             expect(siteAppsInstance.apps['1'].processEvent).toHaveBeenCalledTimes(2)
@@ -616,7 +625,7 @@ describe('SiteApps', () => {
             posthog.config.opt_in_site_apps = false
             assignableWindow.POSTHOG_DEBUG = true
 
-            siteAppsInstance.onRemoteConfig({} as RemoteConfig)
+            siteAppsInstance.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
 
             expect(mockLogger.error).toHaveBeenCalledWith(
                 'PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.'

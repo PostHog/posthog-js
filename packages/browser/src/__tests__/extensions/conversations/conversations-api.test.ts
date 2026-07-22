@@ -1,4 +1,3 @@
-/* eslint-disable compat/compat */
 import { PostHogConversations, ConversationsManager } from '../../../extensions/conversations/posthog-conversations'
 import {
     ConversationsRemoteConfig,
@@ -187,7 +186,7 @@ describe('Conversations API Methods', () => {
                 } as ConversationsRemoteConfig,
             }
 
-            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+            conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
             await conversations.loadIfEnabled()
         })
 
@@ -568,7 +567,7 @@ describe('Conversations API Methods', () => {
                 } as ConversationsRemoteConfig,
             }
 
-            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+            conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
             await conversations.loadIfEnabled()
         })
 
@@ -618,7 +617,7 @@ describe('Conversations API Methods', () => {
             }
 
             // onRemoteConfig automatically calls loadIfEnabled()
-            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+            conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
 
             // Wait a tick for the loading to complete
             await new Promise((resolve) => setTimeout(resolve, 0))
@@ -656,7 +655,7 @@ describe('Conversations API Methods', () => {
                 } as ConversationsRemoteConfig,
             }
 
-            conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+            conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
             await conversations.loadIfEnabled()
 
             expect(conversations.isAvailable()).toBe(true)

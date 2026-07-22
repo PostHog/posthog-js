@@ -1,5 +1,96 @@
 # posthog-react-native
 
+## 4.58.0
+
+### Minor Changes
+
+- [#4172](https://github.com/PostHog/posthog-js/pull/4172) [`9621830`](https://github.com/PostHog/posthog-js/commit/9621830c359a9955ffec0db61164e5fc450e5443) Thanks [@haacked](https://github.com/haacked)! - send minimal `$feature_flag_called` events when the server enables it
+
+  When the v2 `/flags` response carries `minimalFlagCalledEvents: true` (or, for posthog-node local evaluation, the flag-definitions payload carries `minimal_flag_called_events: true`) and the evaluated flag is not linked to an experiment (`$feature_flag_has_experiment === false`), `$feature_flag_called` events are rebuilt from a strict allowlist of flag-evaluation, processing-control, and SDK-identity properties. Super properties, `$set`/`$set_once`, the `$feature/<key>` enumeration, `$active_feature_flags`, and the context envelope are stripped. Any missing signal (no gate on the response, bootstrapped or locally injected flags, `has_experiment` unknown) falls back to the full event, and experiment-linked flags always send the full envelope. The gate is stored alongside the cached flags (posthog-js persistence, posthog-node poller state) and is server-controlled, with no SDK-side configuration. `before_send` runs after the filter and may re-add stripped properties. (2026-07-20)
+
+### Patch Changes
+
+- Updated dependencies [[`9621830`](https://github.com/PostHog/posthog-js/commit/9621830c359a9955ffec0db61164e5fc450e5443)]:
+  - @posthog/core@1.44.0
+
+## 4.57.0
+
+### Minor Changes
+
+- [#4159](https://github.com/PostHog/posthog-js/pull/4159) [`fad6d9a`](https://github.com/PostHog/posthog-js/commit/fad6d9adae4163cd63859766916cdcbae629a110) Thanks [@haacked](https://github.com/haacked)! - add `$feature_flag_has_experiment` to `$feature_flag_called` events
+
+  `$feature_flag_called` events now carry a `$feature_flag_has_experiment` boolean sourced from the server's `has_experiment` flag metadata (the `/flags?v=2` response for remote evaluation, the `/api/feature_flag/local_evaluation` definitions for posthog-node local evaluation). The property is only sent when the server explicitly reports `has_experiment`; it is omitted entirely when the value is unknown (older servers, missing metadata, bootstrapped or locally injected flags). (2026-07-16)
+
+### Patch Changes
+
+- Updated dependencies [[`fad6d9a`](https://github.com/PostHog/posthog-js/commit/fad6d9adae4163cd63859766916cdcbae629a110)]:
+  - @posthog/core@1.43.0
+  - @posthog/types@1.396.0
+
+## 4.56.3
+
+### Patch Changes
+
+- [#4117](https://github.com/PostHog/posthog-js/pull/4117) [`1eddff7`](https://github.com/PostHog/posthog-js/commit/1eddff74e63ff539eb3144f075b14ab5ffec84cc) Thanks [@DanielVisca](https://github.com/DanielVisca)! - add the posthog.metrics API (count, gauge, histogram) to posthog-node — alpha
+
+  Backend services can now record metrics through the same statsd-style pre-aggregating client the browser SDK ships, with no OpenTelemetry setup:
+
+  ```ts
+  const client = new PostHog('phc_...', { metrics: { serviceName: 'billing-worker' } })
+  client.metrics.count('invoices.processed', 1, { attributes: { plan: 'pro' } })
+  client.metrics.gauge('queue.depth', 42)
+  client.metrics.histogram('job.duration', 187, { unit: 'ms' })
+  ```
+
+  Samples aggregate in memory and flush as OTLP/JSON to `/i/v1/metrics` (one data point per series per window). Pending metrics are flushed on `shutdown()`. Core gains `_sendMetricsBatch` on `PostHogCoreStateless` (same outcome contract as `_sendLogsBatch`) and a shared `resolveMetricsConfig`, so any core-based SDK can host `PostHogMetrics`. (2026-07-15)
+
+- Updated dependencies [[`1eddff7`](https://github.com/PostHog/posthog-js/commit/1eddff74e63ff539eb3144f075b14ab5ffec84cc)]:
+  - @posthog/core@1.42.0
+
+## 4.56.2
+
+### Patch Changes
+
+- [#4148](https://github.com/PostHog/posthog-js/pull/4148) [`f4694e9`](https://github.com/PostHog/posthog-js/commit/f4694e93eb951beb5eeb87a12cc3d74829d85949) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Expo plugin: `skipOnConflict` now also applies to native iOS dSYM uploads. With `uploadNativeSymbols` enabled, a release build whose dSYM already exists in PostHog with different content no longer fails — the upload is skipped and the existing symbols are kept. Requires posthog-ios >= 3.64.7 and posthog-cli >= 0.7.12; with older posthog-ios versions the option has no effect on dSYM uploads. Changes to `skipOnConflict` or `uploadNativeSymbols.includeSource` now take effect on the next `expo prebuild` without `--clean`; build phases you have customized by hand are never modified.
+  (2026-07-14)
+- Updated dependencies [[`f4694e9`](https://github.com/PostHog/posthog-js/commit/f4694e93eb951beb5eeb87a12cc3d74829d85949)]:
+  - @posthog/react-native-plugin@2.2.2
+
+## 4.56.1
+
+### Patch Changes
+
+- [#4090](https://github.com/PostHog/posthog-js/pull/4090) [`6dd8827`](https://github.com/PostHog/posthog-js/commit/6dd88274193e07a5f9f4bcb816dfca49cfe072d7) Thanks [@lucasheriques](https://github.com/lucasheriques)! - fix: repeating surveys now show again when a new iteration starts. The local seen state is keyed by survey iteration (matching the web SDK), so a survey scheduled to repeat no longer stays hidden on a device after the first response.
+  (2026-07-14)
+- Updated dependencies [[`6dd8827`](https://github.com/PostHog/posthog-js/commit/6dd88274193e07a5f9f4bcb816dfca49cfe072d7)]:
+  - @posthog/core@1.41.1
+
+## 4.56.0
+
+### Minor Changes
+
+- [#4111](https://github.com/PostHog/posthog-js/pull/4111) [`9bfaa8f`](https://github.com/PostHog/posthog-js/commit/9bfaa8fce1358c04e05ee42283afe47408aadc96) Thanks [@ioannisj](https://github.com/ioannisj)! - Enable native crash autocapture (`errorTracking.autocapture.nativeCrashes`) on macOS. The native plugin now loads on macOS (previously iOS/Android only); the legacy session-replay-only fallback stays iOS/Android. Requires `@posthog/react-native-plugin` >= 2.2.0.
+  (2026-07-13)
+
+## 4.55.0
+
+### Minor Changes
+
+- [#4119](https://github.com/PostHog/posthog-js/pull/4119) [`7b86b46`](https://github.com/PostHog/posthog-js/commit/7b86b467bc93bc54a73c69446d2a1613f373771b) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - add a dimmed backdrop behind the survey modal, matching the scrim posthog-ios and posthog-android already render
+  (2026-07-09)
+
+## 4.54.5
+
+### Patch Changes
+
+- [#4121](https://github.com/PostHog/posthog-js/pull/4121) [`e6b5ab2`](https://github.com/PostHog/posthog-js/commit/e6b5ab21acb5c14f903af6fcd84118fb474a7563) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Prevent shutdown from looping forever when a flush makes no queue progress.
+  (2026-07-09)
+
+- [#4120](https://github.com/PostHog/posthog-js/pull/4120) [`d0e531a`](https://github.com/PostHog/posthog-js/commit/d0e531af583fd47c6a9f1d11de421398db55f0c8) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Coalesce concurrent flush requests to avoid chaining redundant flushes while offline.
+  (2026-07-09)
+- Updated dependencies [[`e6b5ab2`](https://github.com/PostHog/posthog-js/commit/e6b5ab21acb5c14f903af6fcd84118fb474a7563), [`d0e531a`](https://github.com/PostHog/posthog-js/commit/d0e531af583fd47c6a9f1d11de421398db55f0c8)]:
+  - @posthog/core@1.40.1
+
 ## 4.54.4
 
 ### Patch Changes

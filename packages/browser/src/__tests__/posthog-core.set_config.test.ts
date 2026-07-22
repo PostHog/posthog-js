@@ -1,5 +1,5 @@
 import { defaultPostHog } from './helpers/posthog-instance'
-import { uuidv7 } from '../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import Config from '../config'
 
 describe('posthog.set_config', () => {
@@ -27,7 +27,6 @@ describe('posthog.set_config', () => {
             configurable: true,
             enumerable: true,
             writable: true,
-            // eslint-disable-next-line compat/compat
             value: new URL('https://example.com'),
         })
 

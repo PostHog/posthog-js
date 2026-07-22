@@ -1,13 +1,14 @@
 const { ApiItemKind } = require('@microsoft/api-extractor-model');
 const utils = require('./utils');
 const documentation = require('./documentation');
+const methods = require('./methods');
 
 // TypeDefinition structure: { name, id, params?, path?, example? }
 // TypeToken structure: { kind, text, canonicalReference? }
 
-function resolveTypeDefinitions(apiPackage) {
+function resolveTypeDefinitions(apiPackage, typeResolver) {
     const allMembers = getAllTypeMembers(apiPackage);
-    const typeDefinitions = allMembers.map((member) => createInitialTypeDef(member, apiPackage));
+    const typeDefinitions = allMembers.map((member) => createInitialTypeDef(member, apiPackage, typeResolver));
     
     const resolvedTypeDefinitions = resolveObjectTypes(
         resolveUnionTypes(typeDefinitions)
@@ -18,8 +19,8 @@ function resolveTypeDefinitions(apiPackage) {
         const result = {
             id: type.id,
             name: type.name,
-            properties: (type.params || []).map(({ description, type: paramType, name }) => ({
-                description, type: paramType, name
+            properties: (type.params || []).map(({ description, type: paramType, name, releaseTag }) => ({
+                description, type: paramType, name, releaseTag
             }))
         };
         
@@ -42,7 +43,7 @@ function getAllTypeMembers(apiPackage) {
 }
 
 // Create initial type definition
-function createInitialTypeDef(member, apiPackage) {
+function createInitialTypeDef(member, apiPackage, typeResolver) {
     const typeDef = {
         name: member.name,
         id: member.name,
@@ -53,7 +54,7 @@ function createInitialTypeDef(member, apiPackage) {
     const processor = {
         [ApiItemKind.Enum]: () => processEnumMember(member, typeDef),
         [ApiItemKind.Interface]: () => processInterfaceMember(member, typeDef),
-        [ApiItemKind.TypeAlias]: () => processTypeAliasMember(member, typeDef, apiPackage)
+        [ApiItemKind.TypeAlias]: () => processTypeAliasMember(member, typeDef, apiPackage, typeResolver)
     }[member.kind];
 
     processor?.();
@@ -61,11 +62,20 @@ function createInitialTypeDef(member, apiPackage) {
 }
 
 // Create member descriptor for enum/interface items
-const createMemberDescriptor = (member, defaultType) => ({
-    name: member.name,
-    type: member.initializerExcerpt?.text || member.propertyTypeExcerpt?.text || defaultType,
-    description: documentation.getDocComment(member)
-});
+const createMemberDescriptor = (member, defaultType) => {
+    const deprecatedText = methods.isMethodDeprecated(member)
+        ? utils.trimDanglingAsterisks(utils.renderDocNodeToText(member.tsdocComment.deprecatedBlock.content)).trim()
+        : '';
+    const summary = documentation.getDocComment(member);
+
+    return {
+        name: member.name,
+        type: member.initializerExcerpt?.text || member.propertyTypeExcerpt?.text || defaultType,
+        description: [summary && utils.trimDanglingAsterisks(summary), deprecatedText && `Deprecated: ${deprecatedText}`]
+            .filter(Boolean).join('\n') || undefined,
+        releaseTag: methods.isMethodDeprecated(member) ? 'deprecated' : undefined
+    };
+};
 
 // Process enum members
 function processEnumMember(member, typeDef) {
@@ -78,23 +88,43 @@ function processEnumMember(member, typeDef) {
 function processInterfaceMember(member, typeDef) {
     typeDef.params = member.members
         .filter((prop) => prop.kind === ApiItemKind.PropertySignature)
+        .filter((prop) => methods.isMethodDeprecated(prop) || !prop.name.startsWith('_'))
         .map((prop) => createMemberDescriptor(prop, 'any'));
 }
 
 // Process type alias members
-function processTypeAliasMember(member, typeDef, apiPackage) {
+function processTypeAliasMember(member, typeDef, apiPackage, typeResolver) {
     const detailedType = extractDetailedTypeInfo(member);
     if (!detailedType) return;
 
-    // Check if this is a callback type and extract full signature
-    const callbackSignature = extractCallbackSignature(detailedType, member);
-    if (callbackSignature) {
-        typeDef.example = callbackSignature;
+    const resolved = typeResolver?.resolveTypeAlias(member.name);
+
+    if (resolved?.kind === 'object') {
+        typeDef.params = resolved.properties;
+        return;
+    }
+
+    if (resolved?.kind === 'signature') {
+        typeDef.example = detailedType.signature;
         typeDef.params = [];
         return;
     }
 
-    const literalValues = extractLiteralValues(member, apiPackage);
+    const isFunctionType = resolved
+        ? resolved.kind === 'function'
+        : hasTopLevelArrow(detailedType.signature) ||
+          utils.isCallbackType(member.name) ||
+          member.name.includes('Callback');
+
+    if (isFunctionType) {
+        typeDef.example = extractCallbackSignature(detailedType);
+        typeDef.params = [];
+        return;
+    }
+
+    // Quoted strings inside object literals, intersections or type arguments
+    // (e.g. Omit<T, 'key'>) are not string-literal union members
+    const literalValues = /[{&<]/.test(detailedType.signature) ? [] : extractLiteralValues(member, apiPackage);
     if (literalValues.length > 0) {
         // For string literal unions, create an example instead of properties
         const literalTypes = literalValues.map(v => v.type).join(' | ');
@@ -108,32 +138,37 @@ function processTypeAliasMember(member, typeDef, apiPackage) {
     }
 }
 
-// Extract callback signature from type alias
-function extractCallbackSignature(detailedType, member) {
-    const signature = detailedType.signature;
-    
-    // Check if this is a function type by looking for function patterns
-    const isFunctionPattern = signature.includes('=>') || 
-                             signature.includes(': ') || 
-                             utils.isCallbackType(member.name) ||
-                             member.name.includes('Callback');
-    
-    if (!isFunctionPattern) {
-        return null;
+// Detects a function type at the top level of a signature, ignoring arrows nested
+// inside object literals, parameter lists, generics or arrays
+function hasTopLevelArrow(signature) {
+    let depth = 0;
+    for (let i = 0; i < signature.length; i++) {
+        const char = signature[i];
+        if (char === '=' && signature[i + 1] === '>') {
+            if (depth === 0) {
+                return true;
+            }
+            i++;
+        } else if ('({[<'.includes(char)) {
+            depth++;
+        } else if (')}]>'.includes(char)) {
+            depth--;
+        }
     }
-    
-    // Extract function signature from the tokens
+    return false;
+}
+
+// Extract callback signature from a type alias already known to be a function type
+function extractCallbackSignature(detailedType) {
     const functionSignature = extractFunctionFromTokens(detailedType.tokens);
     if (functionSignature) {
         return functionSignature;
     }
-    
-    // For known callback patterns, extract the full signature
-    if (signature.includes('=>')) {
-        return signature.trim();
+
+    if (detailedType.signature.includes('=>')) {
+        return detailedType.signature.trim();
     }
-    
-    // Fallback to generic callback for simple function types
+
     return '() => {}';
 }
 

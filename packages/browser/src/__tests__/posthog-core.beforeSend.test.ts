@@ -1,6 +1,6 @@
 import { mockLogger } from './helpers/mock-logger'
 
-import { uuidv7 } from '../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { defaultPostHog } from './helpers/posthog-instance'
 import { CaptureResult, PostHogConfig } from '../types'
 import { PostHog } from '../posthog-core'

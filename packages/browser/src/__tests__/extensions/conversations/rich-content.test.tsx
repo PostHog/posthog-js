@@ -1,4 +1,3 @@
-/* eslint-disable compat/compat */
 import { render } from '@testing-library/preact'
 import '@testing-library/jest-dom'
 import { RichContent } from '../../../extensions/conversations/external/components/RichContent'

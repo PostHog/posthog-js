@@ -1,6 +1,7 @@
 import { SessionIdManager } from '../sessionid'
 import { patch } from '../extensions/replay/rrweb-plugins/patch'
-import { assignableWindow, window } from '../utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../utils/globals'
 import { COOKIELESS_SENTINEL_VALUE } from '../constants'
 import { isArray, isFunction, isNull, isUndefined } from '@posthog/core'
 import type { TracingHeadersDistinctId, TracingHeadersHostnames } from '../extensions/tracing-headers-types'
@@ -77,7 +78,7 @@ const createFetchInitWithHeaders = (init: RequestInit | undefined, headers: Head
         return initWithHeaders
     }
 
-    const target = { headers } as RequestInit & Record<PropertyKey, unknown>
+    const target: RequestInit & Record<PropertyKey, unknown> = { headers }
 
     return new Proxy(target, {
         get(target, property) {
@@ -183,7 +184,6 @@ const patchFetch = (
                         // For fetch(Request, init), construct a new Request so init overrides are applied and the
                         // caller's Request is not mutated. For fetch(url, init), avoid this because it exposes string
                         // bodies as ReadableStreams to downstream wrappers in Safari.
-                        // eslint-disable-next-line compat/compat
                         const req = new Request(url, init)
                         addTracingHeaders(hostnames, distinctId, sessionManager, req.url, req.headers)
                         fetchArgs = [req]

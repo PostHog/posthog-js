@@ -807,6 +807,246 @@ describe('PostHog Feature Flags v4', () => {
         }
       )
 
+      describe('$feature_flag_has_experiment', () => {
+        const mockFlagsWithMetadata = (metadata: Record<string, any>): void => {
+          mocks.fetch.mockImplementation((url) => {
+            if (url.includes('/flags/?v=2')) {
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () =>
+                  Promise.resolve({
+                    flags: {
+                      'feature-1': {
+                        key: 'feature-1',
+                        enabled: true,
+                        variant: undefined,
+                        reason: undefined,
+                        metadata,
+                      },
+                    },
+                  }),
+              })
+            }
+
+            return Promise.resolve({
+              status: 200,
+              text: () => Promise.resolve('ok'),
+              json: () => Promise.resolve({ status: 'ok' }),
+            })
+          })
+        }
+
+        const getFlagCalledProperties = async (): Promise<Record<string, any>> => {
+          await posthog.reloadFeatureFlagsAsync()
+          posthog.getFeatureFlag('feature-1')
+          await waitForPromises()
+          const event = mocks.fetch.mock.calls
+            .flatMap((call) => parseBody(call)?.batch ?? [])
+            .find((e: any) => e.event === '$feature_flag_called')
+          return event.properties
+        }
+
+        it('should send $feature_flag_has_experiment true when the server reports has_experiment true', async () => {
+          mockFlagsWithMetadata({ id: 1, version: 1, description: undefined, payload: undefined, has_experiment: true })
+
+          expect(await getFlagCalledProperties()).toMatchObject({ $feature_flag_has_experiment: true })
+        })
+
+        it('should send $feature_flag_has_experiment false when the server reports has_experiment false', async () => {
+          mockFlagsWithMetadata({
+            id: 1,
+            version: 1,
+            description: undefined,
+            payload: undefined,
+            has_experiment: false,
+          })
+
+          expect(await getFlagCalledProperties()).toMatchObject({ $feature_flag_has_experiment: false })
+        })
+
+        it('should omit $feature_flag_has_experiment when the server omits has_experiment', async () => {
+          mockFlagsWithMetadata({ id: 1, version: 1, description: undefined, payload: undefined })
+
+          expect(await getFlagCalledProperties()).not.toHaveProperty('$feature_flag_has_experiment')
+        })
+      })
+
+      describe('minimal $feature_flag_called events', () => {
+        const flagsResponseJson = (options: { minimalFlagCalledEvents?: boolean; hasExperiment?: boolean }): any => ({
+          flags: {
+            'feature-1': {
+              key: 'feature-1',
+              enabled: true,
+              variant: undefined,
+              reason: undefined,
+              metadata: {
+                id: 1,
+                version: 2,
+                description: undefined,
+                payload: undefined,
+                ...(options.hasExperiment === undefined ? {} : { has_experiment: options.hasExperiment }),
+              },
+            },
+          },
+          requestId: 'minimal-request-id',
+          evaluatedAt: 1640995200000,
+          ...(options.minimalFlagCalledEvents === undefined
+            ? {}
+            : { minimalFlagCalledEvents: options.minimalFlagCalledEvents }),
+        })
+
+        const mockFlagsEndpoint = (options: { minimalFlagCalledEvents?: boolean; hasExperiment?: boolean }): void => {
+          mocks.fetch.mockImplementation((url) => {
+            if (url.includes('/flags/?v=2')) {
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve(flagsResponseJson(options)),
+              })
+            }
+
+            return Promise.resolve({
+              status: 200,
+              text: () => Promise.resolve('ok'),
+              json: () => Promise.resolve({ status: 'ok' }),
+            })
+          })
+        }
+
+        const getFlagCalledProperties = async (): Promise<Record<string, any>> => {
+          // Register a super property to prove it gets stripped from minimal events
+          posthog.register({ super_prop: 'super_value' })
+          await posthog.reloadFeatureFlagsAsync()
+          posthog.getFeatureFlag('feature-1')
+          await waitForPromises()
+          const event = mocks.fetch.mock.calls
+            .flatMap((call) => parseBody(call)?.batch ?? [])
+            .find((e: any) => e.event === '$feature_flag_called')
+          return event.properties
+        }
+
+        it('should send exactly the allowlisted properties when gated and the flag has no experiment', async () => {
+          mockFlagsEndpoint({ minimalFlagCalledEvents: true, hasExperiment: false })
+
+          const properties = await getFlagCalledProperties()
+
+          expect(Object.keys(properties).sort()).toEqual(
+            [
+              '$feature_flag',
+              '$feature_flag_response',
+              '$feature_flag_has_experiment',
+              '$feature_flag_id',
+              '$feature_flag_version',
+              '$feature_flag_request_id',
+              '$feature_flag_evaluated_at',
+              '$session_id',
+              '$lib',
+              '$lib_version',
+              '$process_person_profile',
+            ].sort()
+          )
+          expect(properties).toMatchObject({
+            $feature_flag: 'feature-1',
+            $feature_flag_response: true,
+            $feature_flag_has_experiment: false,
+          })
+        })
+
+        it('should send the full event when gated but the flag has an experiment', async () => {
+          mockFlagsEndpoint({ minimalFlagCalledEvents: true, hasExperiment: true })
+
+          const properties = await getFlagCalledProperties()
+
+          expect(properties).toMatchObject({
+            $feature_flag_has_experiment: true,
+            super_prop: 'super_value',
+            '$feature/feature-1': true,
+            $active_feature_flags: ['feature-1'],
+          })
+        })
+
+        it.each([
+          ['the gate field is absent', {}],
+          ['the gate field is false', { minimalFlagCalledEvents: false }],
+          ['has_experiment is absent', { minimalFlagCalledEvents: true, hasExperiment: undefined }],
+        ])('should send the full event when %s', async (_, options) => {
+          mockFlagsEndpoint({ hasExperiment: false, ...options })
+
+          const properties = await getFlagCalledProperties()
+
+          expect(properties).toMatchObject({
+            super_prop: 'super_value',
+            '$feature/feature-1': true,
+          })
+        })
+
+        it('should flip the gate off when a later flags response omits the field', async () => {
+          mockFlagsEndpoint({ minimalFlagCalledEvents: true, hasExperiment: false })
+          await posthog.reloadFeatureFlagsAsync()
+
+          mockFlagsEndpoint({ hasExperiment: false })
+
+          const properties = await getFlagCalledProperties()
+
+          expect(properties).toMatchObject({
+            super_prop: 'super_value',
+            '$feature/feature-1': true,
+          })
+        })
+
+        it('should keep sending minimal events after a simulated restart on the same storage', async () => {
+          const storageCache: Record<string, any> = {}
+          const setupFetch = (_mocks: PostHogCoreTestClientMocks): void => {
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/?v=2')) {
+                return Promise.resolve({
+                  status: 200,
+                  text: () => Promise.resolve('ok'),
+                  json: () =>
+                    Promise.resolve(flagsResponseJson({ minimalFlagCalledEvents: true, hasExperiment: false })),
+                })
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
+              })
+            })
+          }
+
+          const [firstClient] = createTestClient('TEST_API_KEY', { flushAt: 1 }, setupFetch, storageCache)
+          await firstClient.reloadFeatureFlagsAsync()
+
+          // New client on the same persisted storage; flags are never reloaded remotely.
+          const [restartedClient, restartedMocks] = createTestClient(
+            'TEST_API_KEY',
+            { flushAt: 1, preloadFeatureFlags: false },
+            (_mocks) => {
+              _mocks.fetch.mockImplementation(() =>
+                Promise.resolve({
+                  status: 200,
+                  text: () => Promise.resolve('ok'),
+                  json: () => Promise.resolve({ status: 'ok' }),
+                })
+              )
+            },
+            storageCache
+          )
+
+          expect(restartedClient.getFeatureFlag('feature-1')).toEqual(true)
+          await waitForPromises()
+
+          const event = restartedMocks.fetch.mock.calls
+            .flatMap((call) => parseBody(call)?.batch ?? [])
+            .find((e: any) => e.event === '$feature_flag_called')
+          expect(event.properties.$feature_flag_has_experiment).toBe(false)
+          expect(event.properties).not.toHaveProperty('$feature/feature-1')
+          expect(event.properties).not.toHaveProperty('$active_feature_flags')
+          expect(event.properties).not.toHaveProperty('$used_bootstrap_value')
+        })
+      })
+
       it('should not capture $feature_flag_called again if reloaded flags keep the same value', async () => {
         expect(posthog.getFeatureFlag('feature-1')).toEqual(true)
         await waitForPromises()
@@ -875,6 +1115,7 @@ describe('PostHog Feature Flags v4', () => {
           evaluatedAt: 1640995200000,
           errorsWhileComputingFlags: undefined,
           quotaLimited: undefined,
+          minimalFlagCalledEvents: false,
         })
       })
 

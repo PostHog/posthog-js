@@ -21,8 +21,9 @@ import {
     SurveyType,
 } from '../posthog-surveys-types'
 import { FlagsResponse, PostHogConfig, Properties, RemoteConfig } from '../types'
-import * as globals from '../utils/globals'
-import { assignableWindow, window } from '../utils/globals'
+import * as globals from '@posthog/browser-common/utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../utils/globals'
 import { RequestRouter } from '../utils/request-router'
 import { SurveyEventReceiver } from '../utils/survey-event-receiver'
 import { SURVEY_LOGGER as logger } from '../utils/survey-utils'
@@ -202,6 +203,7 @@ describe('surveys', () => {
                 .fn()
                 .mockImplementation(({ callback }) => callback({ statusCode: 200, json: surveysResponse })),
             featureFlags: {
+                hasLoadedFlags: true,
                 _send_request: jest
                     .fn()
                     .mockImplementation(({ callback }) => callback({ statusCode: 200, json: flagsResponse })),
@@ -236,7 +238,6 @@ describe('surveys', () => {
             configurable: true,
             enumerable: true,
             writable: true,
-            // eslint-disable-next-line compat/compat
             value: new URL('https://example.com'),
         })
     })
@@ -576,7 +577,6 @@ describe('surveys', () => {
             surveysResponse = {
                 surveys: [surveyWithUrl, surveyWithSelector, surveyWithUrlAndSelector],
             }
-            // eslint-disable-next-line compat/compat
             assignableWindow.location = new URL('https://posthog.com') as unknown as Location
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithUrl])
@@ -592,7 +592,6 @@ describe('surveys', () => {
                 document.body.removeChild(testSelectorEl)
             }
 
-            // eslint-disable-next-line compat/compat
             assignableWindow.location = new URL('https://posthogapp.com') as unknown as Location
             document.body.appendChild(document.createElement('div')).id = 'foo'
 
@@ -617,35 +616,31 @@ describe('surveys', () => {
             }
 
             const originalWindowLocation = assignableWindow.location
-            // eslint-disable-next-line compat/compat
+
             assignableWindow.location = new URL('https://regex-url.com/test') as unknown as Location
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithRegexUrl])
             })
             assignableWindow.location = originalWindowLocation
 
-            // eslint-disable-next-line compat/compat
             assignableWindow.location = new URL('https://example.com?name=something') as unknown as Location
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithParamRegexUrl])
             })
             assignableWindow.location = originalWindowLocation
 
-            // eslint-disable-next-line compat/compat
             assignableWindow.location = new URL('https://app.subdomain.com') as unknown as Location
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithWildcardSubdomainUrl])
             })
             assignableWindow.location = originalWindowLocation
 
-            // eslint-disable-next-line compat/compat
             assignableWindow.location = new URL('https://wildcard.com/something/other') as unknown as Location
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithWildcardRouteUrl])
             })
             assignableWindow.location = originalWindowLocation
 
-            // eslint-disable-next-line compat/compat
             assignableWindow.location = new URL('https://example.com/exact') as unknown as Location
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithExactUrlMatch])
@@ -694,7 +689,6 @@ describe('surveys', () => {
                 surveys: [surveyWithUrlDoesNotContain, surveyWithIsNotUrlMatch, surveyWithUrlDoesNotContainRegex],
             }
 
-            // eslint-disable-next-line compat/compat
             assignableWindow.location = new URL('https://posthog.com') as unknown as Location
             surveys.getActiveMatchingSurveys((data) => {
                 // returns surveyWithIsNotUrlMatch and surveyWithUrlDoesNotContainRegex because they don't contain posthog.com
@@ -702,7 +696,6 @@ describe('surveys', () => {
             })
             assignableWindow.location = originalWindowLocation
 
-            // eslint-disable-next-line compat/compat
             assignableWindow.location = new URL('https://example.com/exact') as unknown as Location
             surveys.getActiveMatchingSurveys((data) => {
                 // returns surveyWithUrlDoesNotContain and surveyWithUrlDoesNotContainRegex because they are not exact matches
@@ -710,7 +703,6 @@ describe('surveys', () => {
             })
             assignableWindow.location = originalWindowLocation
 
-            // eslint-disable-next-line compat/compat
             assignableWindow.location = new URL('https://regex-url.com/test') as unknown as Location
             surveys.getActiveMatchingSurveys((data) => {
                 // returns surveyWithUrlDoesNotContain and surveyWithIsNotUrlMatch because they are not regex matches
@@ -769,7 +761,6 @@ describe('surveys', () => {
         })
 
         it('returns surveys that inclusively matches any of the above', () => {
-            // eslint-disable-next-line compat/compat
             assignableWindow.location = new URL('https://posthogapp.com') as unknown as Location
             document.body.appendChild(document.createElement('div')).className = 'test-selector'
             surveysResponse = { surveys: [activeSurvey, surveyWithSelector, surveyWithEverything] }
@@ -1550,24 +1541,33 @@ describe('surveys', () => {
 
         it('is disabled by having no results in onRemoteConfig', () => {
             surveys.onRemoteConfig({
-                surveys: [],
-            } as Partial<RemoteConfig> as RemoteConfig)
+                ok: true,
+                config: {
+                    surveys: [],
+                } as Partial<RemoteConfig> as RemoteConfig,
+            })
             expect(surveys['_isSurveysEnabled']).toBe(false)
         })
 
         it('is enabled by having results in onRemoteConfig', () => {
             expect(surveys['_isSurveysEnabled']).toBe(undefined)
             surveys.onRemoteConfig({
-                surveys: ['example' as unknown as Survey],
-            } as Partial<RemoteConfig> as RemoteConfig)
+                ok: true,
+                config: {
+                    surveys: ['example' as unknown as Survey],
+                } as Partial<RemoteConfig> as RemoteConfig,
+            })
             expect(surveys['_isSurveysEnabled']).toBe(true)
         })
 
         it('can be disabled by config despite results of onRemoteConfig', () => {
             surveys['_instance'].config.disable_surveys = true
             surveys.onRemoteConfig({
-                surveys: ['example' as unknown as Survey],
-            } as Partial<RemoteConfig> as RemoteConfig)
+                ok: true,
+                config: {
+                    surveys: ['example' as unknown as Survey],
+                } as Partial<RemoteConfig> as RemoteConfig,
+            })
             expect(surveys['_isSurveysEnabled']).toBe(undefined)
         })
     })

@@ -1,5 +1,5 @@
 import React from 'react'
-import type { PostHogConfig, BootstrapConfig } from 'posthog-js'
+import type { PostHogConfig } from 'posthog-js'
 import { ClientPostHogProvider } from '../client/ClientPostHogProvider.js'
 import { NEXTJS_CLIENT_DEFAULTS, resolveApiKey, resolveHostOrDefault } from '../shared/config.js'
 
@@ -11,8 +11,6 @@ export interface PagesPostHogProviderProps {
     apiKey?: string
     /** Optional posthog-js configuration overrides. */
     clientOptions?: Partial<PostHogConfig>
-    /** Server-evaluated bootstrap data from getServerSidePostHog. */
-    bootstrap?: BootstrapConfig
     children: React.ReactNode
 }
 
@@ -36,7 +34,7 @@ export interface PagesPostHogProviderProps {
  */
 let apiKeyWarned = false
 
-export function PostHogProvider({ apiKey: apiKeyProp, clientOptions, bootstrap, children }: PagesPostHogProviderProps) {
+export function PostHogProvider({ apiKey: apiKeyProp, clientOptions, children }: PagesPostHogProviderProps) {
     const apiKey = resolveApiKey(apiKeyProp)
     if (!apiKey) {
         return <>{children}</>
@@ -58,7 +56,7 @@ export function PostHogProvider({ apiKey: apiKeyProp, clientOptions, bootstrap, 
     }
 
     return (
-        <ClientPostHogProvider apiKey={apiKey} options={resolvedOptions} bootstrap={bootstrap}>
+        <ClientPostHogProvider apiKey={apiKey} options={resolvedOptions}>
             {children}
         </ClientPostHogProvider>
     )

@@ -24,8 +24,8 @@ import {
 import { PERSISTENCE_KEY_POLICY } from '../persistence-key-policy'
 import { PostHogConfig } from '../types'
 import { PostHog } from '../posthog-core'
-import { window } from '../utils/globals'
-import { uuidv7 } from '../uuidv7'
+import { window } from '@posthog/browser-common/utils/globals'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import {
     cookieStore,
     localStore,
@@ -64,6 +64,7 @@ const LEGACY_RESERVED_PERSISTENCE_KEYS = new Set([
     '$flag_call_reported_session_id',
     '$feature_flag_errors',
     '$feature_flag_evaluated_at',
+    '$minimal_flag_called_events',
     '$client_session_props',
     '$capture_rate_limit',
     '$initial_campaign_params',
