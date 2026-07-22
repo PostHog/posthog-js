@@ -577,6 +577,113 @@ describe('SurveyManager', () => {
         expect(manageWidgetSelectorListenerSpy).toHaveBeenCalledWith(mockSurvey, '.my-selector')
     })
 
+    describe('selector widget survey when the trigger element is removed', () => {
+        // Regression tests for https://github.com/PostHog/posthog-js/issues/2036
+        const selectorSurvey: Survey = {
+            id: 'selectorTriggerSurvey',
+            name: 'Selector Trigger Survey',
+            description: 'Feedback survey opened by a custom CSS selector',
+            type: SurveyType.Widget,
+            questions: [
+                {
+                    question: 'What can we do better?',
+                    type: SurveyQuestionType.Open,
+                    id: 'question-a',
+                },
+            ],
+            appearance: {
+                widgetType: SurveyWidgetType.Selector,
+                widgetSelector: '.survey-trigger',
+            },
+            schedule: SurveySchedule.Always,
+            conditions: null,
+            start_date: '2021-01-01T00:00:00.000Z',
+            end_date: null,
+            current_iteration: null,
+            current_iteration_start_date: null,
+            feature_flag_keys: [],
+            linked_flag_key: null,
+            targeting_flag_key: null,
+            internal_targeting_flag_key: null,
+        }
+
+        const getSurveyContainer = () => document.querySelector(`.PostHogSurvey-${selectorSurvey.id}`)
+        const getOpenPopup = () => getSurveyContainer()?.shadowRoot?.querySelector('.ph-survey') ?? null
+
+        const runEvaluationCycle = () => {
+            act(() => {
+                surveyManager.callSurveysAndEvaluateDisplayLogic()
+            })
+        }
+
+        const clickTrigger = () => {
+            act(() => {
+                fireEvent.click(document.querySelector('.survey-trigger')!)
+            })
+        }
+
+        beforeEach(() => {
+            document.body.innerHTML = '<button class="survey-trigger">Feedback</button>'
+            mockPostHog.surveys.getSurveys = jest.fn((callback) => callback([selectorSurvey]))
+        })
+
+        test('keeps an open survey visible when the trigger element is removed from the DOM', () => {
+            runEvaluationCycle()
+            clickTrigger()
+            expect(getOpenPopup()).toBeTruthy()
+
+            // the trigger unmounts (e.g. it lived inside a dropdown that closed)
+            document.querySelector('.survey-trigger')!.remove()
+            runEvaluationCycle()
+
+            expect(getOpenPopup()).toBeTruthy()
+        })
+
+        test('removes the survey container on the next cycle after the user closes the orphaned popup', () => {
+            jest.useFakeTimers()
+            runEvaluationCycle()
+            clickTrigger()
+            document.querySelector('.survey-trigger')!.remove()
+            runEvaluationCycle()
+            expect(getOpenPopup()).toBeTruthy()
+
+            act(() => {
+                fireEvent.click(getSurveyContainer()!.shadowRoot!.querySelector<HTMLButtonElement>('.form-cancel')!)
+                // resetShowSurvey hides the popup after a 200ms view-transition delay
+                jest.advanceTimersByTime(200)
+            })
+            runEvaluationCycle()
+
+            expect(getSurveyContainer()).toBeNull()
+            jest.useRealTimers()
+        })
+
+        test('removes the widget when the trigger element is removed and the survey is not open', () => {
+            runEvaluationCycle()
+            expect(getSurveyContainer()).toBeTruthy()
+
+            document.querySelector('.survey-trigger')!.remove()
+            runEvaluationCycle()
+
+            expect(getSurveyContainer()).toBeNull()
+        })
+
+        test('keeps an open survey visible when the trigger element is replaced by a new node', () => {
+            runEvaluationCycle()
+            clickTrigger()
+            expect(getOpenPopup()).toBeTruthy()
+
+            // the trigger is re-rendered (e.g. a framework replaced the node), so element identity changes
+            document.querySelector('.survey-trigger')!.remove()
+            const newTrigger = document.createElement('button')
+            newTrigger.className = 'survey-trigger'
+            document.body.appendChild(newTrigger)
+            runEvaluationCycle()
+
+            expect(getOpenPopup()).toBeTruthy()
+        })
+    })
+
     test('callSurveysAndEvaluateDisplayLogic should not call surveys in focus', () => {
         mockPostHog.surveys.getSurveys = jest.fn((callback) => callback(mockSurveys))
 

@@ -292,8 +292,12 @@ export class SurveyManager {
         )
     }
 
-    private _removeWidgetSelectorListener = (survey: Pick<Survey, 'id' | 'type' | 'appearance'>): void => {
-        this._removeSurveyFromDom(survey)
+    private _isSurveyPopupOpen = (survey: Pick<Survey, 'id'>): boolean => {
+        const shadowContainer = document.querySelector(getSurveyContainerClass(survey, true))
+        return !!shadowContainer?.shadowRoot?.querySelector('.ph-survey')
+    }
+
+    private _detachWidgetSelectorListener = (survey: Pick<Survey, 'id'>): void => {
         const existing = this._widgetSelectorListeners.get(survey.id)
         if (existing) {
             existing.element.removeEventListener('click', existing.listener)
@@ -303,12 +307,24 @@ export class SurveyManager {
         }
     }
 
+    private _removeWidgetSelectorListener = (survey: Pick<Survey, 'id' | 'type' | 'appearance'>): void => {
+        this._removeSurveyFromDom(survey)
+        this._detachWidgetSelectorListener(survey)
+    }
+
     private _manageWidgetSelectorListener = (survey: Survey, selector: string): void => {
         const currentElement = document.querySelector(selector)
         const existingListenerData = this._widgetSelectorListeners.get(survey.id)
 
         if (!currentElement) {
             if (existingListenerData) {
+                if (this._isSurveyPopupOpen(survey)) {
+                    // The trigger element disappeared (e.g. it lived inside a dropdown that closed)
+                    // while the survey is being answered. Keep the survey on screen and keep the
+                    // listener entry so this branch is re-evaluated; cleanup happens on the first
+                    // cycle after the user closes the survey.
+                    return
+                }
                 this._removeWidgetSelectorListener(survey)
             }
             return
@@ -320,7 +336,9 @@ export class SurveyManager {
             // Listener exists, check if element changed
             if (currentElement !== existingListenerData.element) {
                 logger.info(`Selector element changed for survey ${survey.id}. Re-attaching listener.`)
-                this._removeWidgetSelectorListener(survey)
+                // Only detach the listener; removing the whole survey DOM would close a survey
+                // the user currently has open
+                this._detachWidgetSelectorListener(survey)
                 // Continue to attach listener to the new element below
             } else {
                 // Element is the same, listener already attached, do nothing
