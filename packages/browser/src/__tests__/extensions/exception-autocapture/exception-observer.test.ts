@@ -1,10 +1,10 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { PostHog } from '../../../posthog-core'
 import { FlagsResponse } from '../../../types'
 import { ExceptionObserver } from '../../../extensions/exception-autocapture'
-import { assignableWindow, window } from '../../../utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../../../utils/globals'
 import { createPosthogInstance } from '../../helpers/posthog-instance'
-import { uuidv7 } from '../../../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
 import posthogErrorWrappingFunctions from '../../../entrypoints/exception-autocapture'
 import { afterEach } from '@jest/globals'
@@ -73,7 +73,7 @@ describe('Exception Observer', () => {
 
     describe('when enabled remotely', () => {
         beforeEach(() => {
-            exceptionObserver.onRemoteConfig({ autocaptureExceptions: true } as FlagsResponse)
+            exceptionObserver.onRemoteConfig({ ok: true, config: { autocaptureExceptions: true } as FlagsResponse })
         })
 
         it('should instrument enabled handlers only when started', () => {
@@ -126,7 +126,7 @@ describe('Exception Observer', () => {
             // See e2e tests
             const promiseRejectionEvent = new PromiseRejectionEvent('unhandledrejection', {
                 // this is a test not a browser, so we don't care there's no Promise in IE11
-                // eslint-disable-next-line compat/compat
+
                 promise: Promise.resolve(),
                 reason: error,
             })
@@ -221,7 +221,7 @@ describe('Exception Observer', () => {
             window!.onerror = originalOnError
             window!.onunhandledrejection = originalOnUnhandledRejection
 
-            exceptionObserver.onRemoteConfig({ autocaptureExceptions: true } as FlagsResponse)
+            exceptionObserver.onRemoteConfig({ ok: true, config: { autocaptureExceptions: true } as FlagsResponse })
         })
 
         it('should wrap original onerror handler if one was present when wrapped', () => {
@@ -247,7 +247,7 @@ describe('Exception Observer', () => {
             const error = new Error('test error')
             const promiseRejectionEvent = new PromiseRejectionEvent('unhandledrejection', {
                 // this is a test not a browser, so we don't care there's no Promise in IE11
-                // eslint-disable-next-line compat/compat
+
                 promise: Promise.resolve(),
                 reason: error,
             })
@@ -280,7 +280,7 @@ describe('Exception Observer', () => {
 
     describe('when disabled', () => {
         beforeEach(() => {
-            exceptionObserver.onRemoteConfig({ autocaptureExceptions: false } as FlagsResponse)
+            exceptionObserver.onRemoteConfig({ ok: true, config: { autocaptureExceptions: false } as FlagsResponse })
         })
 
         it('cannot be started', () => {

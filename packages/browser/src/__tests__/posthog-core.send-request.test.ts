@@ -1,5 +1,5 @@
 import { createPosthogInstance } from './helpers/posthog-instance'
-import { uuidv7 } from '../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { PostHog } from '../posthog-core'
 
 // Guards the `fireCallbackOnDrop` opt-in on `_send_request`. The two early

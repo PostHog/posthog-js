@@ -37,6 +37,7 @@ const REACT_NATIVE_TYPE_EXAMPLES = {
 const config = {
     packageDir: path.resolve(__dirname, '..'),  // packages/react-native
     apiJsonPath: path.resolve(__dirname, '../docs/posthog-react-native.api.json'),
+    dtsEntryPath: path.resolve(__dirname, '../dist/index.d.ts'),
     outputPath: path.resolve(__dirname, `../references/posthog-react-native-references-${version}.json`),
     version: version,
     id: REACT_NATIVE_SPEC_INFO.id,

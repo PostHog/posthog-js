@@ -139,13 +139,15 @@ describe('Pages PostHogProvider', () => {
         delete process.env.NEXT_PUBLIC_POSTHOG_HOST
     })
 
-    it('passes bootstrap prop through to ClientPostHogProvider', () => {
+    it('passes clientOptions.bootstrap to ClientPostHogProvider', () => {
         const bootstrap = { featureFlags: { 'flag-a': true } }
         render(
-            <PostHogProvider apiKey="phc_test123" bootstrap={bootstrap}>
+            <PostHogProvider apiKey="phc_test123" clientOptions={{ bootstrap }}>
                 <div>Child</div>
             </PostHogProvider>
         )
-        expect(mockClientPostHogProvider).toHaveBeenCalledWith(expect.objectContaining({ bootstrap }))
+        expect(mockClientPostHogProvider).toHaveBeenCalledWith(
+            expect.objectContaining({ options: expect.objectContaining({ bootstrap }) })
+        )
     })
 })

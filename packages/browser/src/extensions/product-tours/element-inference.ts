@@ -1,5 +1,5 @@
 import { querySelectorAllDeep } from 'query-selector-shadow-dom'
-import { window as _window } from '../../utils/globals'
+import { window as _window } from '@posthog/browser-common/utils/globals'
 import { createLogger, isArray, isUndefined } from '@posthog/core'
 
 const window = _window as Window & typeof globalThis

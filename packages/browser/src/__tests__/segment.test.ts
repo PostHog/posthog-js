@@ -1,4 +1,3 @@
-/* eslint-disable compat/compat */
 /*
  * Test that integration with Segment works as expected. The integration should:
  *

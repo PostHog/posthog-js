@@ -1,5 +1,33 @@
 # @posthog/mcp
 
+## 0.10.0
+
+### Minor Changes
+
+- [#4210](https://github.com/PostHog/posthog-js/pull/4210) [`e732595`](https://github.com/PostHog/posthog-js/commit/e7325959c4c365895945ae06091fd74439ecb2db) Thanks [@gesh](https://github.com/gesh)! - feat(mcp): capture the negotiated MCP protocol version as `$mcp_protocol_version`
+
+  The SDK now stamps `$mcp_protocol_version` — the MCP spec version negotiated at `initialize` (read off the server's initialize response) — on the `$mcp_initialize` event and on **every** subsequent event for the session (tool calls, listings, and the `$exception` sibling). It's persisted in per-server session info and, on stateless / multi-pod deployments, recovered on other pods from the session token, which now carries the client's requested version in a new `pv` field. Use it to track MCP spec-revision adoption and to break event metrics (error rate, latency) down by spec version.
+
+  `SessionTokenPayload` gains an optional `protocolVersion`, and `PostHogMCP.captureInitialize` accepts an optional `protocolVersion`. (2026-07-21) (2026-07-22)
+
+## 0.9.1
+
+### Patch Changes
+
+- [#4144](https://github.com/PostHog/posthog-js/pull/4144) [`3c8e17e`](https://github.com/PostHog/posthog-js/commit/3c8e17e5a8c83083a15e8075f766b7b75cebdcc5) Thanks [@gesh](https://github.com/gesh)! - fix(mcp): publish `$identify` at most once per session instead of before every tool call
+
+  On stateless / multi-pod deployments the SDK rebuilds its per-server identity cache on every request, so the dedupe check saw an empty cache each time and emitted a standalone `$identify` before every `$mcp_tool_call`. The SDK now publishes `$identify` at most once per session — at `initialize`, when a long-lived server first sees the identity, or when the identity materially changes. Every event still carries `distinct_id`/`$set`, so no person data is lost when a standalone `$identify` is suppressed. (2026-07-15)
+
+## 0.9.0
+
+### Minor Changes
+
+- [#4123](https://github.com/PostHog/posthog-js/pull/4123) [`c8d036e`](https://github.com/PostHog/posthog-js/commit/c8d036e1656aa30a63405a2e672f4695eae5c5b9) Thanks [@gesh](https://github.com/gesh)! - feat(mcp): stable sessions and client metadata on stateless / multi-pod MCP servers
+
+  On stateless servers every request became its own session and `$mcp_client_name`/`$mcp_client_version` were missing after `initialize`. The SDK now mints the `Mcp-Session-Id` response header at `initialize` as a token carrying the session id and client name/version; clients replay it on every request, so any pod recovers both with no server-side store. Auto-minting requires `enableJsonResponse: true` on `StreamableHTTPServerTransport`; SSE-mode servers can set the header at the HTTP layer with the new exports.
+
+  New exports: `encodeSessionId`, `decodeSessionId`, `MCP_SESSION_HEADER`, `SessionTokenPayload`, `newSessionId`. (2026-07-10)
+
 ## 0.8.0
 
 ### Minor Changes

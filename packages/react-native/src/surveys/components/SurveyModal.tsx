@@ -116,7 +116,7 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
     >
       {contentMounted && (
         <KeyboardAvoidingView behavior={keyboardBehavior} style={styles.fill}>
-          <View style={[styles.fill, { justifyContent: vertical }]} onTouchStart={Keyboard.dismiss}>
+          <View style={[styles.fill, styles.backdrop, { justifyContent: vertical }]} onTouchStart={Keyboard.dismiss}>
             <View style={[styles.modalRow, { justifyContent: horizontal }]}>
               <View style={styles.modalContent} pointerEvents="box-none">
                 <View
@@ -171,6 +171,9 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
 const styles = createSafeStyleSheet({
   fill: {
     flex: 1,
+  },
+  backdrop: {
+    backgroundColor: 'rgba(0, 0, 0, 0.32)',
   },
   modalRow: {
     flexDirection: 'row',

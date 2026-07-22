@@ -1,10 +1,17 @@
 import { mockLogger } from './helpers/mock-logger'
 
-import * as globals from '../utils/globals'
-import { document, window } from '../utils/globals'
-import { uuidv7 } from '../uuidv7'
+import * as globals from '@posthog/browser-common/utils/globals'
+import { document, window } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../utils/globals'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { isUndefined } from '@posthog/core'
-import { ENABLE_PERSON_PROCESSING, SESSION_RECORDING_REMOTE_CONFIG, USER_STATE } from '../constants'
+import {
+    AUTOCAPTURE_DISABLED_SERVER_SIDE,
+    ENABLE_PERSON_PROCESSING,
+    HEATMAPS_ENABLED_SERVER_SIDE,
+    SESSION_RECORDING_REMOTE_CONFIG,
+    USER_STATE,
+} from '../constants'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
 import { PostHogConfig, RemoteConfig } from '../types'
 import { configRenames, PostHog } from '../posthog-core'
@@ -21,8 +28,8 @@ import { SessionPropsManager } from '../session-props'
 // eslint-disable-next-line no-var
 var mockGetProperties: jest.Mock
 
-jest.mock('../utils/event-utils', () => {
-    const originalEventUtils = jest.requireActual('../utils/event-utils')
+jest.mock('@posthog/browser-common/utils/event-utils', () => {
+    const originalEventUtils = jest.requireActual('@posthog/browser-common/utils/event-utils')
     mockGetProperties = jest.fn().mockImplementation((...args) => originalEventUtils.getEventProperties(...args))
     return {
         ...originalEventUtils,
@@ -43,7 +50,7 @@ describe('posthog core', () => {
     const posthogWith = (config: Partial<PostHogConfig>, overrides?: Partial<PostHog>): PostHog => {
         // NOTE: Temporary change whilst testing remote config
         const token = config.token || 'testtoken'
-        globals.assignableWindow._POSTHOG_REMOTE_CONFIG = {
+        assignableWindow._POSTHOG_REMOTE_CONFIG = {
             [token]: {
                 config: {},
                 siteApps: [],
@@ -337,7 +344,7 @@ describe('posthog core', () => {
 
         it('sends payloads to alternative endpoint if given', () => {
             const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
-            posthog._onRemoteConfig({ analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: { analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig })
 
             posthog.capture('event-name', { foo: 'bar', length: 0 })
 
@@ -362,7 +369,7 @@ describe('posthog core', () => {
 
         it('sends payloads to overriden _url, even if alternative endpoint is set', () => {
             const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
-            posthog._onRemoteConfig({ analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: { analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig })
 
             posthog.capture('event-name', { foo: 'bar', length: 0 }, { _url: 'https://app.posthog.com/s/' })
 
@@ -396,36 +403,90 @@ describe('posthog core', () => {
         })
     })
 
+    describe('_onRemoteConfig failure dispatch', () => {
+        it('passes the failure result to every extension', async () => {
+            const posthog = await createPosthogInstance()
+            const autocaptureResult = jest.spyOn(posthog.autocapture!, 'onRemoteConfig')
+            const heatmapsResult = jest.spyOn(posthog.heatmaps!, 'onRemoteConfig')
+
+            // the test helper delivers a successful config during init; clear that
+            // state so this test observes what a failure does on a fresh page
+            posthog.autocapture!['_isDisabledServerSide'] = null
+            posthog.persistence!.unregister(AUTOCAPTURE_DISABLED_SERVER_SIDE)
+
+            posthog._onRemoteConfig({ ok: false })
+
+            // autocapture keeps waiting for a server verdict: stays disabled,
+            // with no server opt-out value persisted
+            expect(autocaptureResult).toHaveBeenCalledWith({ ok: false })
+            expect(posthog.autocapture!.isEnabled).toBe(false)
+            expect(posthog.persistence!.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]).toBeUndefined()
+
+            // heatmaps behaves as it would for a config without a heatmaps key:
+            // nothing persisted, not started
+            expect(heatmapsResult).toHaveBeenCalledWith({ ok: false })
+            expect(posthog.persistence!.props[HEATMAPS_ENABLED_SERVER_SIDE]).toBeUndefined()
+            expect(posthog.heatmaps!.isEnabled).toBe(false)
+        })
+
+        it('reaches every registered extension and no failure branch throws', async () => {
+            const posthog = await createPosthogInstance()
+            const handlers = (posthog as any)._extensions.filter((ext: any) => ext.onRemoteConfig)
+            expect(handlers.length).toBeGreaterThanOrEqual(10)
+            const spies = handlers.map((ext: any) => jest.spyOn(ext, 'onRemoteConfig'))
+
+            expect(() => posthog._onRemoteConfig({ ok: false })).not.toThrow()
+
+            for (const spy of spies) {
+                expect(spy).toHaveBeenCalledWith({ ok: false })
+            }
+        })
+
+        it('session recording treats a failure like a config without recording settings', async () => {
+            const posthog = await createPosthogInstance()
+            posthog.sessionRecording!.onRemoteConfig({ ok: false })
+
+            const other = await createPosthogInstance()
+            other.sessionRecording!.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
+
+            expect(posthog.sessionRecording!.status).toBe(other.sessionRecording!.status)
+            expect(posthog.sessionRecording!.started).toBe(false)
+        })
+    })
+
     describe('_afterFlagsResponse', () => {
         it('enables compression from flags response', () => {
             const posthog = posthogWith({})
 
-            posthog._onRemoteConfig({ supportedCompression: ['gzip-js', 'base64'] } as RemoteConfig)
+            posthog._onRemoteConfig({
+                ok: true,
+                config: { supportedCompression: ['gzip-js', 'base64'] } as RemoteConfig,
+            })
 
             expect(posthog.compression).toEqual('gzip-js')
         })
         it('ignores legacy field defaultIdentifiedOnly from flags response', () => {
             const posthog = posthogWith({})
 
-            posthog._onRemoteConfig({ defaultIdentifiedOnly: true } as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: { defaultIdentifiedOnly: true } as RemoteConfig })
             expect(posthog.config.person_profiles).toEqual('identified_only')
 
-            posthog._onRemoteConfig({ defaultIdentifiedOnly: false } as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: { defaultIdentifiedOnly: false } as RemoteConfig })
             expect(posthog.config.person_profiles).toEqual('identified_only')
 
-            posthog._onRemoteConfig({} as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: {} as RemoteConfig })
             expect(posthog.config.person_profiles).toEqual('identified_only')
         })
         it('defaultIdentifiedOnly does not override person_profiles if already set', () => {
             const posthog = posthogWith({ person_profiles: 'always' })
-            posthog._onRemoteConfig({ defaultIdentifiedOnly: true } as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: { defaultIdentifiedOnly: true } as RemoteConfig })
             expect(posthog.config.person_profiles).toEqual('always')
         })
 
         it('enables compression from flags response when only one received', () => {
             const posthog = posthogWith({})
 
-            posthog._onRemoteConfig({ supportedCompression: ['base64'] } as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: { supportedCompression: ['base64'] } as RemoteConfig })
 
             expect(posthog.compression).toEqual('base64')
         })
@@ -433,7 +494,10 @@ describe('posthog core', () => {
         it('does not enable compression from flags response if compression is disabled', () => {
             const posthog = posthogWith({ disable_compression: true, persistence: 'memory' })
 
-            posthog._onRemoteConfig({ supportedCompression: ['gzip-js', 'base64'] } as RemoteConfig)
+            posthog._onRemoteConfig({
+                ok: true,
+                config: { supportedCompression: ['gzip-js', 'base64'] } as RemoteConfig,
+            })
 
             expect(posthog.compression).toEqual(undefined)
         })
@@ -441,7 +505,7 @@ describe('posthog core', () => {
         it('defaults to /e if no endpoint is given', () => {
             const posthog = posthogWith({})
 
-            posthog._onRemoteConfig({} as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: {} as RemoteConfig })
 
             expect(posthog.analyticsDefaultEndpoint).toEqual('/e/')
         })
@@ -449,7 +513,7 @@ describe('posthog core', () => {
         it('uses the specified analytics endpoint if given', () => {
             const posthog = posthogWith({})
 
-            posthog._onRemoteConfig({ analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: { analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig })
 
             expect(posthog.analyticsDefaultEndpoint).toEqual('/i/v0/e/')
         })

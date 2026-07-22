@@ -5,7 +5,7 @@ import { PostHog, init_as_module } from '../../posthog-core'
 import { PostHogConfig } from '../../types'
 import { PostHogPersistence } from '../../posthog-persistence'
 import { assignableWindow } from '../../utils/globals'
-import { uuidv7 } from '../../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
 export const createPosthogInstance = async (
     // Use a random UUID for the token, such that we don't have to worry
@@ -22,12 +22,11 @@ export const createPosthogInstance = async (
     // NOTE: Temporary change whilst testing remote config
     assignableWindow._POSTHOG_REMOTE_CONFIG = {
         [token]: {
-            config: {},
+            config: { autocapture_opt_out: false },
             siteApps: [],
         },
     } as any
 
-    // eslint-disable-next-line compat/compat
     return await new Promise<PostHog>((resolve) =>
         posthog.init(
             token,
@@ -66,6 +65,7 @@ export const createMockPostHog = (overrides: Partial<PostHog> = {}): PostHog =>
         } as PostHogConfig,
         get_distinct_id: () => 'test-distinct-id',
         capture: jest.fn(),
+        reloadFeatureFlags: jest.fn(),
         _send_request: jest.fn(),
         ...overrides,
     }) as PostHog

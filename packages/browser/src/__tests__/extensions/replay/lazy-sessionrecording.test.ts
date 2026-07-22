@@ -1,6 +1,7 @@
 /// <reference lib="dom" />
 
 import '@testing-library/jest-dom'
+import { isUndefined } from '@posthog/core'
 
 import { PostHogPersistence } from '../../../posthog-persistence'
 import {
@@ -26,11 +27,14 @@ import {
     PerformanceCaptureConfig,
     PostHogConfig,
     Property,
+    RemoteConfig,
+    RemoteConfigResult,
     SessionIdChangedCallback,
     SessionRecordingOptions,
 } from '../../../types'
-import { uuidv7 } from '../../../uuidv7'
-import { assignableWindow, window } from '../../../utils/globals'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
+import { window } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../../../utils/globals'
 import { RequestRouter } from '../../../utils/request-router'
 import {
     type customEvent,
@@ -44,7 +48,7 @@ import {
     type pluginEvent,
 } from '../../../extensions/replay/types/rrweb-types'
 import { ConsentManager } from '../../../consent'
-import { SimpleEventEmitter } from '../../../utils/simple-event-emitter'
+import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
 import Mock = jest.Mock
 import { SessionRecording } from '../../../extensions/replay/session-recording'
 import {
@@ -173,8 +177,8 @@ const createPluginSnapshot = (event = {}): pluginEvent => ({
     ...event,
 })
 
-function makeFlagsResponse(partialResponse: Partial<FlagsResponse>) {
-    return partialResponse as unknown as FlagsResponse
+function makeFlagsResponse(partialResponse: Partial<FlagsResponse>): RemoteConfigResult {
+    return { ok: true, config: partialResponse as unknown as RemoteConfig }
 }
 
 const originalLocation = window!.location
@@ -1074,6 +1078,7 @@ describe('Lazy SessionRecording', () => {
                         $window_id: expect.any(String),
                         $lib: 'web',
                         $lib_version: '0.0.1',
+                        $snapshot_host: 'localhost',
                     },
                     {
                         _batchKey: 'recordings',
@@ -1178,6 +1183,7 @@ describe('Lazy SessionRecording', () => {
                         $window_id: expect.any(String),
                         $lib: 'web',
                         $lib_version: '0.0.1',
+                        $snapshot_host: 'localhost',
                     },
                     {
                         _batchKey: 'recordings',
@@ -1206,6 +1212,7 @@ describe('Lazy SessionRecording', () => {
                         $window_id: expect.any(String),
                         $lib: 'web',
                         $lib_version: '0.0.1',
+                        $snapshot_host: 'localhost',
                     },
                     {
                         _batchKey: 'recordings',
@@ -1585,6 +1592,8 @@ describe('Lazy SessionRecording', () => {
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotTimestamps']).toEqual([
                     [firstSessionId, 1000],
                     [firstSessionId, 2000],
+                    // the incremental arriving before the rotated session's full snapshot triggers a healing snapshot
+                    ['rotated-session-id', undefined],
                     ['rotated-session-id', 3000],
                 ])
             })
@@ -1747,6 +1756,49 @@ describe('Lazy SessionRecording', () => {
                         $window_id: 'windowId',
                         $lib: 'web',
                         $lib_version: '0.0.1',
+                        $snapshot_host: 'localhost',
+                    },
+                    captureOptions
+                )
+            })
+
+            it.each([
+                [
+                    'a direct self-reference',
+                    (data: Record<string, any>) => {
+                        data.circularReference = data
+                    },
+                ],
+                [
+                    'a cycle through an array',
+                    (data: Record<string, any>) => {
+                        // shape seen in production: object -> array -> element -> back to the root
+                        data.plugins = [{ instance: data }]
+                    },
+                ],
+            ])('compresses full snapshot data containing %s without throwing', (_name, addCycle) => {
+                const data: Record<string, any> = { content: Array(30).fill(uuidv7()).join('') }
+                addCycle(data)
+
+                expect(() => _emit(createFullSnapshot({ data }))).not.toThrow()
+                sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+                expect(posthog.capture).toHaveBeenCalledWith(
+                    '$snapshot',
+                    {
+                        $snapshot_data: [
+                            {
+                                data: expect.any(String),
+                                cv: '2024-10',
+                                type: 2,
+                            },
+                        ],
+                        $session_id: sessionId,
+                        $snapshot_bytes: expect.any(Number),
+                        $window_id: 'windowId',
+                        $lib: 'web',
+                        $lib_version: '0.0.1',
+                        $snapshot_host: 'localhost',
                     },
                     captureOptions
                 )
@@ -1778,6 +1830,7 @@ describe('Lazy SessionRecording', () => {
                         $window_id: 'windowId',
                         $lib: 'web',
                         $lib_version: '0.0.1',
+                        $snapshot_host: 'localhost',
                     },
                     captureOptions
                 )
@@ -1810,6 +1863,7 @@ describe('Lazy SessionRecording', () => {
                         $window_id: 'windowId',
                         $lib: 'web',
                         $lib_version: '0.0.1',
+                        $snapshot_host: 'localhost',
                     },
                     captureOptions
                 )
@@ -1831,6 +1885,7 @@ describe('Lazy SessionRecording', () => {
                         $window_id: 'windowId',
                         $lib: 'web',
                         $lib_version: '0.0.1',
+                        $snapshot_host: 'localhost',
                     },
                     captureOptions
                 )
@@ -1857,6 +1912,7 @@ describe('Lazy SessionRecording', () => {
                         $window_id: 'windowId',
                         $lib: 'web',
                         $lib_version: '0.0.1',
+                        $snapshot_host: 'localhost',
                     },
                     captureOptions
                 )
@@ -1882,6 +1938,7 @@ describe('Lazy SessionRecording', () => {
                         $window_id: 'windowId',
                         $lib: 'web',
                         $lib_version: '0.0.1',
+                        $snapshot_host: 'localhost',
                     },
                     captureOptions
                 )
@@ -1916,6 +1973,48 @@ describe('Lazy SessionRecording', () => {
                 inlineStylesheet: true,
                 recordCrossOriginIframes: false,
             })
+        })
+
+        it('passes a configured attributeFilter through to rrweb.record', () => {
+            posthog.config.session_recording.attributeFilter = ['class', 'value']
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    attributeFilter: ['class', 'value'],
+                })
+            )
+        })
+
+        it('still starts when the bundled core has no SessionIdManager.on (version skew with CDN recorder)', () => {
+            // The recorder chunk is loaded from the CDN and can run against an older bundled core.
+            // SessionIdManager.on was only added in posthog-js 1.268.6, so simulate an older core that
+            // lacks it and assert start() degrades gracefully instead of throwing a TypeError.
+            // @ts-expect-error deliberately removing the method to emulate an older core (it lives on
+            // the prototype, so overriding the instance property is how we make it "not a function")
+            sessionManager.on = undefined
+
+            expect(() =>
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                        },
+                    })
+                )
+            ).not.toThrow()
+
+            // recording still starts, it just skips the forced-idle-reset listener
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalled()
+            expect(sessionRecording['_lazyLoadedSessionRecording']['isStarted']).toEqual(true)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_onSessionIdleResetForcedListener']).toBeUndefined()
         })
 
         it('records events emitted before and after starting recording', () => {
@@ -1970,6 +2069,7 @@ describe('Lazy SessionRecording', () => {
                     $window_id: 'windowId',
                     $lib: 'web',
                     $lib_version: '0.0.1',
+                    $snapshot_host: 'localhost',
                 },
                 {
                     _url: 'https://test.com/s/',
@@ -2051,6 +2151,7 @@ describe('Lazy SessionRecording', () => {
                     ],
                     $lib: 'web',
                     $lib_version: '0.0.1',
+                    $snapshot_host: 'localhost',
                 },
                 {
                     _url: 'https://test.com/s/',
@@ -2156,6 +2257,7 @@ describe('Lazy SessionRecording', () => {
                     $snapshot_bytes: 39,
                     $lib: 'web',
                     $lib_version: '0.0.1',
+                    $snapshot_host: 'localhost',
                 },
                 {
                     _url: 'https://test.com/s/',
@@ -2619,6 +2721,91 @@ describe('Lazy SessionRecording', () => {
     })
 
     describe('Event triggering', () => {
+        it('uses the active snapshot interval immediately after a trigger matches', () => {
+            jest.useFakeTimers()
+            try {
+                posthog.config.session_recording!.full_snapshot_interval_millis = 30_000
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            eventTriggers: ['$exception'],
+                        },
+                    })
+                )
+
+                const takeFullSnapshot = jest.spyOn(
+                    sessionRecording['_lazyLoadedSessionRecording'] as any,
+                    '_tryTakeFullSnapshot'
+                )
+
+                simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+                expect(sessionRecording.status).toBe('active')
+
+                jest.advanceTimersByTime(30_000)
+                expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
+            } finally {
+                jest.useRealTimers()
+            }
+        })
+
+        it('does not restart the snapshot timer when a trigger matches on a blocked URL', () => {
+            jest.useFakeTimers()
+            try {
+                fakeNavigateTo('https://test.com/blocked')
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            eventTriggers: ['$exception'],
+                            urlBlocklist: [{ url: '/blocked', matching: 'regex' }],
+                        },
+                    })
+                )
+
+                _emit(createFullSnapshot())
+                expect(sessionRecording.status).toBe('paused')
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotTimer']).toBeUndefined()
+
+                simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+
+                expect(sessionRecording.status).toBe('paused')
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotTimer']).toBeUndefined()
+            } finally {
+                jest.useRealTimers()
+            }
+        })
+
+        it.each([
+            [undefined, 60_000],
+            [120_000, 120_000],
+            [1000, 1000],
+            [3_600_000, 3_600_000],
+            [0, 60_000],
+            [-1, 60_000],
+            [999, 60_000],
+            [3_600_001, 60_000],
+            [Number.NaN, 60_000],
+            [Number.POSITIVE_INFINITY, 60_000],
+        ])('uses pending trigger buffer interval %s as %s', (configuredInterval, expectedInterval) => {
+            if (!isUndefined(configuredInterval)) {
+                posthog.config.session_recording!.trigger_pending_buffer_interval_millis = configuredInterval
+            }
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        eventTriggers: ['$exception'],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotIntervalMillis']).toBe(
+                expectedInterval
+            )
+        })
+
         it('flushes buffer and starts when sees event', async () => {
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
@@ -3445,6 +3632,59 @@ describe('Lazy SessionRecording', () => {
     })
 
     describe('linked flags', () => {
+        it('uses the active snapshot interval immediately after a linked flag matches', () => {
+            jest.useFakeTimers()
+            try {
+                posthog.config.session_recording!.full_snapshot_interval_millis = 30_000
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
+                )
+
+                const takeFullSnapshot = jest.spyOn(
+                    sessionRecording['_lazyLoadedSessionRecording'] as any,
+                    '_tryTakeFullSnapshot'
+                )
+
+                onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': 'literally-anything' })
+                expect(sessionRecording.status).toBe('active')
+
+                jest.advanceTimersByTime(30_000)
+                expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
+            } finally {
+                jest.useRealTimers()
+            }
+        })
+
+        it('does not postpone the full snapshot when the linked flag stays truthy across reloads', () => {
+            jest.useFakeTimers()
+            try {
+                posthog.config.session_recording!.full_snapshot_interval_millis = 30_000
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
+                )
+
+                const takeFullSnapshot = jest.spyOn(
+                    sessionRecording['_lazyLoadedSessionRecording'] as any,
+                    '_tryTakeFullSnapshot'
+                )
+
+                onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': true })
+                expect(sessionRecording.status).toBe('active')
+
+                // flags reload repeatedly while the linked flag stays truthy; this must not
+                // restart the interval and starve the periodic full snapshot
+                jest.advanceTimersByTime(20_000)
+                onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': true })
+                jest.advanceTimersByTime(20_000)
+                onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': true })
+
+                // 40s of wall-clock have elapsed with a 30s interval, so the snapshot must have fired
+                expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
+            } finally {
+                jest.useRealTimers()
+            }
+        })
+
         it('stores the linked flag on flags response', () => {
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
@@ -4596,6 +4836,82 @@ describe('Lazy SessionRecording', () => {
         })
     })
 
+    describe('$snapshot_host stamping', () => {
+        const startRecorder = () => {
+            addRRwebToWindow()
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            sessionRecording['_onScriptLoaded']()
+        }
+
+        it('stamps the current hostname on every flushed $snapshot', () => {
+            fakeNavigateTo('https://sub.example.com/some/path?query=1')
+            startRecorder()
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            _emit(createIncrementalSnapshot({ data: { source: 2 } }))
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            const snapshotCalls = (posthog.capture as jest.Mock).mock.calls.filter((call) => call[0] === '$snapshot')
+            expect(snapshotCalls.length).toBe(2)
+            snapshotCalls.forEach((call) => {
+                expect(call[1].$snapshot_host).toBe('sub.example.com')
+            })
+        })
+
+        it('stamps the host of the masked URL when a masking function rewrites it', () => {
+            fakeNavigateTo('https://internal.example.com/secret')
+            startRecorder()
+            posthog.config.session_recording.maskCapturedNetworkRequestFn = (data) => ({
+                ...data,
+                name: 'https://masked.example.net/',
+            })
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                expect.objectContaining({ $snapshot_host: 'masked.example.net' }),
+                expect.anything()
+            )
+        })
+
+        it('omits the property when masking removes the URL', () => {
+            fakeNavigateTo('https://internal.example.com/secret')
+            startRecorder()
+            posthog.config.session_recording.maskCapturedNetworkRequestFn = () => null
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                expect.not.objectContaining({ $snapshot_host: expect.anything() }),
+                expect.anything()
+            )
+        })
+
+        it('omits the property when the masked URL does not parse', () => {
+            fakeNavigateTo('https://internal.example.com/secret')
+            startRecorder()
+            posthog.config.session_recording.maskCapturedNetworkRequestFn = (data) => ({
+                ...data,
+                name: 'not a url',
+            })
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                expect.not.objectContaining({ $snapshot_host: expect.anything() }),
+                expect.anything()
+            )
+        })
+    })
+
     describe('wait for fresh config before starting', () => {
         beforeEach(() => {
             addRRwebToWindow()
@@ -4786,6 +5102,45 @@ describe('Lazy SessionRecording', () => {
     })
 
     describe('V2 Trigger Groups Integration', () => {
+        it('uses the active snapshot interval immediately after a trigger group matches', () => {
+            jest.useFakeTimers()
+            try {
+                posthog.config.session_recording!.full_snapshot_interval_millis = 30_000
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            version: 2,
+                            triggerGroups: [
+                                {
+                                    id: 'error-group',
+                                    name: 'Error Tracking',
+                                    sampleRate: 1.0,
+                                    conditions: {
+                                        matchType: 'any',
+                                        events: [{ name: '$exception' }],
+                                    },
+                                },
+                            ],
+                        },
+                    })
+                )
+
+                const takeFullSnapshot = jest.spyOn(
+                    sessionRecording['_lazyLoadedSessionRecording'] as any,
+                    '_tryTakeFullSnapshot'
+                )
+
+                simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+                expect(sessionRecording.status).toBe('sampled')
+
+                jest.advanceTimersByTime(30_000)
+                expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
+            } finally {
+                jest.useRealTimers()
+            }
+        })
+
         it('registers session properties when trigger group matches and is sampled', () => {
             const registerSpy = jest.spyOn(posthog, 'register_for_session')
 

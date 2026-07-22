@@ -1,18 +1,22 @@
 import RageClick from './extensions/rageclick'
-import { DeadClickCandidate, Properties, RemoteConfig } from './types'
+import { DeadClickCandidate, Properties, RemoteConfigResult } from './types'
 import { PostHog } from './posthog-core'
 
-import { document, window } from './utils/globals'
-import { getEventTarget, getParentElement, shouldCaptureRageclick } from './autocapture-utils'
+import { document, window } from '@posthog/browser-common/utils/globals'
+import {
+    getEventTarget,
+    getParentElement,
+    shouldCaptureRageclick,
+} from '@posthog/browser-common/utils/autocapture-utils'
 import { DOM_EVENT_BEFOREUNLOAD, DOM_EVENT_VISIBILITYCHANGE, HEATMAPS_ENABLED_SERVER_SIDE } from './constants'
 import { isNumber, isNullish, isEmptyObject, isObject, stripUrlHash } from '@posthog/core'
-import { createLogger } from './utils/logger'
-import { isElementInToolbar, isElementNode, isTag } from './utils/element-utils'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { isElementInToolbar, isElementNode, isTag } from '@posthog/browser-common/utils/element-utils'
 import { DeadClicksAutocapture, isDeadClicksEnabledForHeatmaps } from './extensions/dead-clicks-autocapture'
 import { includes } from '@posthog/core'
-import { addEventListener } from './utils'
-import { maskQueryParams } from './utils/request-utils'
-import { PERSONAL_DATA_CAMPAIGN_PARAMS, MASKED } from './utils/event-utils'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
+import { maskQueryParams } from '@posthog/browser-common/utils/request-utils'
+import { PERSONAL_DATA_CAMPAIGN_PARAMS, MASKED } from '@posthog/browser-common/utils/event-utils'
 import type { Extension } from './extensions/types'
 
 const DEFAULT_FLUSH_INTERVAL = 5000
@@ -124,7 +128,13 @@ export class Heatmaps implements Extension {
         }
     }
 
-    public onRemoteConfig(response: RemoteConfig) {
+    public onRemoteConfig(result: RemoteConfigResult) {
+        if (!result.ok) {
+            // Failure behaves like a response without a heatmaps key.
+            return
+        }
+
+        const response = result.config
         if (!('heatmaps' in response)) {
             return
         }
@@ -148,6 +158,11 @@ export class Heatmaps implements Extension {
     }
 
     private _onDeadClick(click: DeadClickCandidate): void {
+        // heatmaps only plots click coordinates; this also rejects swipe candidates (never
+        // expected on this path), since a swipe's TouchEvent has no clientX/clientY
+        if (!isValidMouseEvent(click.originalEvent)) {
+            return
+        }
         this._onClick(click.originalEvent, 'deadclick')
     }
 

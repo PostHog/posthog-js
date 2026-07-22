@@ -1,5 +1,57 @@
 # @posthog/types
 
+## 1.397.1
+
+### Patch Changes
+
+- [#4198](https://github.com/PostHog/posthog-js/pull/4198) [`fbfc84f`](https://github.com/PostHog/posthog-js/commit/fbfc84f56dda3cc4332cb8cecffe3da6ddfd5b32) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: make the pending session recording trigger buffer interval configurable
+  (2026-07-20)
+
+## 1.397.0
+
+### Minor Changes
+
+- [#4149](https://github.com/PostHog/posthog-js/pull/4149) [`607bf54`](https://github.com/PostHog/posthog-js/commit/607bf543b63dd8f9c9a2ad891048194601a942e8) Thanks [@pauldambra](https://github.com/pauldambra)! - Add dead swipe detection to dead clicks autocapture. When dead clicks autocapture is enabled, touch swipe gestures that produce no observable screen change (no scroll, mutation, selection or visibility change) are now captured as `$dead_swipe` events, surfacing failed navigations on touch devices. Configurable via `capture_dead_swipes` (default `true`) and `swipe_threshold_px` (default `30`) on the `capture_dead_clicks` config. Swipes over surfaces whose response cannot be observed (canvas, video and other media elements under the finger) are skipped, and captures are limited per page load via `max_dead_swipes_per_page_load` (default `10`).
+  (2026-07-16)
+
+## 1.396.0
+
+### Minor Changes
+
+- [#4159](https://github.com/PostHog/posthog-js/pull/4159) [`fad6d9a`](https://github.com/PostHog/posthog-js/commit/fad6d9adae4163cd63859766916cdcbae629a110) Thanks [@haacked](https://github.com/haacked)! - add `$feature_flag_has_experiment` to `$feature_flag_called` events
+
+    `$feature_flag_called` events now carry a `$feature_flag_has_experiment` boolean sourced from the server's `has_experiment` flag metadata (the `/flags?v=2` response for remote evaluation, the `/api/feature_flag/local_evaluation` definitions for posthog-node local evaluation). The property is only sent when the server explicitly reports `has_experiment`; it is omitted entirely when the value is unknown (older servers, missing metadata, bootstrapped or locally injected flags). (2026-07-16)
+
+## 1.395.0
+
+### Minor Changes
+
+- [#4129](https://github.com/PostHog/posthog-js/pull/4129) [`800af7c`](https://github.com/PostHog/posthog-js/commit/800af7cae4e2cf103d0089918e778a97dccee35f) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: add `session_recording.attributeFilter` option that passes an attribute allowlist through to the native MutationObserver, so mutations to unlisted attributes (e.g. animation-driven inline `style` churn) never cost recording CPU (port of upstream rrweb #1873)
+  (2026-07-15)
+
+## 1.394.0
+
+### Minor Changes
+
+- [#4101](https://github.com/PostHog/posthog-js/pull/4101) [`dc2aa5b`](https://github.com/PostHog/posthog-js/commit/dc2aa5b3175dd4112347c16d16725045d63387f9) Thanks [@posthog](https://github.com/apps/posthog)! - Normalize the error tracking rate-limiter config to first-class options. The browser SDK now reads `exceptionRateLimiterRefillRate` / `exceptionRateLimiterBucketSize` on `error_tracking`, with the previous double-underscore `__exceptionRateLimiterRefillRate` / `__exceptionRateLimiterBucketSize` options deprecated but still honoured as a fallback. The option shape (`ExceptionRateLimiterConfig`) and default-resolution logic (`resolveExceptionRateLimiterConfig`) now live in `@posthog/core` and are shared between the browser and Node SDKs.
+  (2026-07-14)
+
+## 1.393.0
+
+### Minor Changes
+
+- [#4115](https://github.com/PostHog/posthog-js/pull/4115) [`86bb3a5`](https://github.com/PostHog/posthog-js/commit/86bb3a50c122852b47b7ced16bec239b801d05f2) Thanks [@DanielVisca](https://github.com/DanielVisca)! - add the posthog.metrics API (count, gauge, histogram) — alpha
+
+    A statsd-style pre-aggregating metrics client for the PostHog Metrics product (alpha). Samples are folded into per-series aggregates in memory (counts sum, gauges keep the last value, histograms accumulate buckets) and flushed periodically as OTLP/JSON to `/i/v1/metrics` — one data point per series per flush window, no matter how many calls. No OpenTelemetry SDK setup required:
+
+    ```ts
+    posthog.metrics.count('orders_created', 1)
+    posthog.metrics.gauge('active_connections', 42)
+    posthog.metrics.histogram('api_latency', 187, { unit: 'ms' })
+    ```
+
+    Configure via `metrics: { serviceName, environment, flushIntervalMs, maxSeriesPerFlush, beforeSend, ... }`. (2026-07-08)
+
 ## 1.392.1
 
 ### Patch Changes

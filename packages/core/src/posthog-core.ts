@@ -159,7 +159,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   /**
    * Resets the user's ID and clears all persisted properties.
    *
-   * Note: The event queue (`PostHogPersistedProperty.Queue`) and logs queue
+   * Note: The event queues (`PostHogPersistedProperty.Queue` and the isolated
+   * `PostHogPersistedProperty.AiQueue`) and the logs queue
    * (`PostHogPersistedProperty.LogsQueue`) are always preserved regardless
    * of what is passed in `propertiesToKeep`, to ensure in-flight data
    * is not lost when identity changes.
@@ -170,6 +171,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     this.wrap(() => {
       const allPropertiesToKeep = [
         PostHogPersistedProperty.Queue,
+        PostHogPersistedProperty.AiQueue,
         PostHogPersistedProperty.LogsQueue,
         ...(propertiesToKeep || []),
       ]
@@ -180,7 +182,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       // clear cached person properties
       this._cachedPersonProperties = null
 
-      for (const key of <(keyof typeof PostHogPersistedProperty)[]>Object.keys(PostHogPersistedProperty)) {
+      for (const key of Object.keys(PostHogPersistedProperty) as (keyof typeof PostHogPersistedProperty)[]) {
         if (!allPropertiesToKeep.includes(PostHogPersistedProperty[key])) {
           this.setPersistedProperty((PostHogPersistedProperty as any)[key], null)
         }
@@ -644,7 +646,6 @@ export abstract class PostHogCore extends PostHogCoreStateless {
    *
    * @param _response The remote config or flags response containing config fields
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   protected onRemoteConfig(_response: PostHogRemoteConfig): void {
     // Override in subclasses
   }
@@ -795,9 +796,12 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
         if (!result.success) {
           if (!this.disableRemoteFeatureFlags) {
+            // Keep the persisted gate alongside the kept flags — a failed request is not a
+            // signal that the server turned minimal flag-called events off.
             this.setKnownFeatureFlagDetails({
               flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
               requestError: result.error,
+              minimalFlagCalledEvents: this.getStoredFlagDetails()?.minimalFlagCalledEvents,
             })
           }
           return undefined
@@ -810,6 +814,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
             this.setKnownFeatureFlagDetails({
               flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
               quotaLimited: res.quotaLimited,
+              minimalFlagCalledEvents: this.getStoredFlagDetails()?.minimalFlagCalledEvents,
             })
           }
           this._logger.warn(
@@ -853,6 +858,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
             evaluatedAt: res.evaluatedAt,
             errorsWhileComputingFlags: res.errorsWhileComputingFlags,
             quotaLimited: res.quotaLimited,
+            // Absence of the field always flips the gate off — fail safe to full events.
+            minimalFlagCalledEvents: res.minimalFlagCalledEvents === true,
           })
           // Mark that we hit the /flags endpoint so we can capture this in the $feature_flag_called event
           this.setPersistedProperty(PostHogPersistedProperty.FlagsEndpointWasHit, true)
@@ -917,6 +924,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
   private getStoredFlagDetails(): PostHogFlagsStorageFormat | undefined {
     return this.getPersistedProperty<PostHogFlagsStorageFormat>(PostHogPersistedProperty.FeatureFlagDetails)
+  }
+
+  protected isMinimalFlagCalledEventsEnabled(): boolean {
+    return this.getStoredFlagDetails()?.minimalFlagCalledEvents === true
   }
 
   protected getKnownFeatureFlags(): PostHogFlagsResponse['featureFlags'] | undefined {
@@ -1039,6 +1050,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         ...maybeAdd('$feature_flag_request_id', details?.requestId),
         ...maybeAdd('$feature_flag_evaluated_at', details?.evaluatedAt),
         ...maybeAdd('$feature_flag_error', featureFlagError),
+        ...maybeAdd('$feature_flag_has_experiment', featureFlag?.metadata?.has_experiment),
       }
 
       this.capture('$feature_flag_called', properties)
@@ -1649,7 +1661,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
     // Apply modifications from CaptureEvent back to internal message
     // Put $set/$set_once back into properties where they belong
-    const resultProps = { ...(result.properties ?? props) } as PostHogEventProperties
+    const resultProps: PostHogEventProperties = { ...(result.properties ?? props) }
     if (result.$set !== undefined) {
       resultProps.$set = result.$set as JsonType
     } else {

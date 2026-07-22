@@ -1,8 +1,8 @@
 import { PostHog } from './posthog-core'
 import { ProductTour, ProductTourCallback } from './posthog-product-tours-types'
 import { PRODUCT_TOURS, PRODUCT_TOURS_ENABLED_SERVER_SIDE } from './constants'
-import { RemoteConfig } from './types'
-import { createLogger } from './utils/logger'
+import { RemoteConfigResult } from './types'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 import { isArray, isNullish } from '@posthog/core'
 import { assignableWindow } from './utils/globals'
 import { Extension } from './extensions/types'
@@ -47,7 +47,13 @@ export class PostHogProductTours implements Extension {
         this.loadIfEnabled()
     }
 
-    onRemoteConfig(response: RemoteConfig): void {
+    onRemoteConfig(result: RemoteConfigResult): void {
+        if (!result.ok) {
+            // Failure behaves like a response without a productTours key.
+            return
+        }
+
+        const response = result.config
         if (!('productTours' in response)) {
             return
         }

@@ -32,16 +32,13 @@ test.beforeEach(async ({ context }) => {
                     // and we can't pass window.fetch to the node context when using page.exposeFunction
                     await pg.evaluate(() => {
                         ;(window as any).wrapFetchForTesting = (badlyBehaved: boolean) => {
-                            // eslint-disable-next-line compat/compat
                             const originalFetch = window.fetch
                             ;(window as any).originalFetch = originalFetch
 
-                            // eslint-disable-next-line compat/compat
                             window.fetch = async function (
                                 requestOrURL: URL | RequestInfo,
                                 init?: RequestInit | undefined
                             ) {
-                                // eslint-disable-next-line compat/compat
                                 const req = new Request(requestOrURL, init)
 
                                 const hasBody = typeof requestOrURL !== 'string' && 'body' in requestOrURL

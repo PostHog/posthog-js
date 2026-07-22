@@ -8,12 +8,12 @@ import {
   withPrivacyMode,
   formatOpenAIResponsesInput,
 } from '../utils'
-import { captureAiGeneration } from '../captureAiGeneration'
+import { captureAiGeneration } from './capture'
 import type { APIPromise } from 'openai'
 import type { Stream } from 'openai/streaming'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
 import type { ResponseCreateParamsWithTools, ExtractParsedContentFromParams } from 'openai/lib/ResponsesParser'
-import type { FormattedMessage, FormattedContent, FormattedFunctionCall } from '../types'
+import type { FormattedMessage, FormattedContent } from '../types'
 import { sanitizeOpenAI } from '../sanitization'
 import { extractPosthogParams } from '../utils'
 import { isResponseTokenChunk, extractRequestId, buildProviderMetadata } from './utils'
@@ -219,7 +219,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                       name: toolCall.name,
                       arguments: toolCall.arguments,
                     },
-                  } as FormattedFunctionCall)
+                  })
                 }
               }
 
@@ -276,7 +276,10 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
               })
               throw error
             }
-          })()
+          })().catch(() => {
+            // Swallow: analytics must never crash the host process. The caller
+            // already receives this error via their own tee of the stream.
+          })
 
           // Return the other stream to the user
           return stream2
@@ -471,7 +474,10 @@ export class WrappedResponses extends AzureOpenAI.Responses {
               })
               throw error
             }
-          })()
+          })().catch(() => {
+            // Swallow: analytics must never crash the host process. The caller
+            // already receives this error via their own tee of the stream.
+          })
 
           return stream2
         }

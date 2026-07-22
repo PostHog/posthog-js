@@ -2,10 +2,11 @@ import './helpers/mock-logger'
 
 import { PostHog } from '../posthog-core'
 import { defaultPostHog } from './helpers/posthog-instance'
-import { uuidv7 } from '../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
 import { isNull } from '@posthog/core'
-import { document, assignableWindow, navigator } from '../utils/globals'
+import { document, navigator } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../utils/globals'
 import { PostHogConfig } from '../types'
 
 const DEFAULT_PERSISTENCE_PREFIX = `__ph_opt_in_out_`
@@ -156,7 +157,6 @@ describe('consentManager', () => {
                 before_send: beforeSendMock,
             })
             // Wait for the initial $pageview to be captured
-            // eslint-disable-next-line compat/compat
             await new Promise((r) => setTimeout(r, 10))
             expect(beforeSendMock).toHaveBeenCalledTimes(1)
             expect(beforeSendMock).lastCalledWith(expect.objectContaining({ event: '$pageview' }))
@@ -175,7 +175,6 @@ describe('consentManager', () => {
             expect(beforeSendMock).toHaveBeenCalledWith(expect.objectContaining({ event: '$opt_in' }))
             expect(beforeSendMock).lastCalledWith(expect.objectContaining({ event: '$pageview' }))
             // Wait for the $pageview timeout to be called
-            // eslint-disable-next-line compat/compat
             await new Promise((r) => setTimeout(r, 10))
             expect(beforeSendMock).toHaveBeenCalledTimes(2)
         })
@@ -190,7 +189,6 @@ describe('consentManager', () => {
             expect(beforeSendMock).toHaveBeenCalledWith(expect.objectContaining({ event: '$opt_in' }))
             expect(beforeSendMock).lastCalledWith(expect.objectContaining({ event: '$pageview' }))
             // Wait for the $pageview timeout to be called
-            // eslint-disable-next-line compat/compat
             await new Promise((r) => setTimeout(r, 10))
             posthog.opt_in_capturing()
             expect(beforeSendMock).toHaveBeenCalledTimes(3)

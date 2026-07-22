@@ -1,7 +1,10 @@
 import type {
   PostHogCoreOptions,
+  ExceptionRateLimiterConfig,
   FeatureFlagValue,
   JsonType,
+  Metrics,
+  MetricsConfig,
   PostHogFetchOptions,
   PostHogFetchResponse,
   PostHogFlagsAndPayloadsResponse,
@@ -143,8 +146,48 @@ export type FeatureFlagBucketingIdentifier = 'distinct_id' | 'device_id' | '' | 
 
 export type BeforeSendFn = (event: EventMessage | null) => EventMessage | null
 
-export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
+export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInterval' | 'maxQueueSize'> & {
   persistence?: 'memory'
+  /**
+   * The interval in milliseconds between periodic flushes
+   *
+   * @default 5000
+   */
+  flushInterval?: number
+  /**
+   * The maximum number of cached messages either in memory or on the local storage (must be higher than `flushAt`)
+   *
+   * @default 10000
+   */
+  maxQueueSize?: number
+  /**
+   * Configuration for the `posthog.metrics` API (count, gauge, histogram).
+   * Set `serviceName` so series can be filtered per service in the Metrics UI.
+   *
+   * @example
+   * ```ts
+   * const client = new PostHog('phc_...', { metrics: { serviceName: 'billing-worker' } })
+   * client.metrics.count('invoices.processed')
+   * ```
+   */
+  metrics?: MetricsConfig
+  /**
+   * Credential that enables local feature flag evaluation and remote config.
+   *
+   * Accepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`).
+   * When provided, the client can evaluate feature flags locally and decrypt remote
+   * config payloads via `getRemoteConfigPayload`. Prefer this over the deprecated
+   * `personalApiKey` option; when both are set, `secretKey` takes precedence.
+   *
+   * @example
+   * ```ts
+   * const client = new PostHog('phc_...', { secretKey: 'phs_...' })
+   * ```
+   */
+  secretKey?: string
+  /**
+   * @deprecated Use `secretKey` instead.
+   */
   personalApiKey?: string
   privacyMode?: boolean
   enableExceptionAutocapture?: boolean
@@ -153,8 +196,8 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
   // Maximum size of cache that deduplicates $feature_flag_called calls per user.
   maxCacheSize?: number
   fetch?: (url: string, options: PostHogFetchOptions) => Promise<PostHogFetchResponse>
-  // Whether to enable feature flag polling for local evaluation by default. Defaults to true when personalApiKey is provided.
-  // We recommend setting this to false if you are only using the personalApiKey for evaluating remote config payloads via `getRemoteConfigPayload` and not using local evaluation.
+  // Whether to enable feature flag polling for local evaluation by default. Defaults to true when secretKey is provided.
+  // We recommend setting this to false if you are only using the secretKey for evaluating remote config payloads via `getRemoteConfigPayload` and not using local evaluation.
   enableLocalEvaluation?: boolean
   /**
    * Optional cache provider for feature flag definitions.
@@ -292,7 +335,7 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send'> & {
    * new PostHog('key', { isServer: false })
    */
   isServer?: boolean
-}
+} & ExceptionRateLimiterConfig
 
 export type PostHogFeatureFlag = {
   id: number
@@ -319,6 +362,8 @@ export type PostHogFeatureFlag = {
   rollout_percentage: null | number
   ensure_experience_continuity: boolean
   experiment_set: number[]
+  /** Whether the flag is linked to an experiment. Absent when the server does not report it. */
+  has_experiment?: boolean
 }
 
 /**
@@ -695,6 +740,13 @@ export interface IPostHog {
    * @returns The current context data, or undefined if no context is set
    */
   getContext(): ContextData | undefined
+
+  /**
+   * @description The `posthog.metrics` API: a statsd-style pre-aggregating metrics client (count,
+   * gauge, histogram) — alpha. Samples are folded into per-series aggregates in memory and flushed
+   * periodically. Configure via the `metrics` client option.
+   */
+  readonly metrics: Metrics
 
   /**
    * @description Flushes the events still in the queue and clears the feature flags poller to allow for

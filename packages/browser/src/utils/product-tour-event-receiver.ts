@@ -2,7 +2,7 @@ import { PRODUCT_TOURS_ACTIVATED, PRODUCT_TOURS_ACTIVATED_SESSION } from '../con
 import { ProductTour, ProductTourEventName } from '../posthog-product-tours-types'
 import { PostHog } from '../posthog-core'
 import { ActivationOutcome, EventReceiver } from './event-receiver'
-import { createLogger } from './logger'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 import { localStore } from '../storage'
 import { TOUR_COMPLETED_KEY_PREFIX, TOUR_DISMISSED_KEY_PREFIX } from '../extensions/product-tours/constants'
 

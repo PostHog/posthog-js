@@ -1,6 +1,7 @@
 import { PostHog } from 'posthog-node'
 import { PostHogAzureOpenAI } from '../src/openai/azure'
 import openaiModule from 'openai'
+import { collectUnhandledRejections } from './test-utils'
 
 let mockAzureEmbeddingResponse: any = {}
 
@@ -766,6 +767,164 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     const [actualParams] = mockCreate.mock.calls[0]
     const posthogParams = Object.keys(actualParams).filter((key) => key.startsWith('posthog'))
     expect(posthogParams).toEqual([])
+    ;(ChatMock.Completions as any).prototype.create = originalCreate
+  })
+})
+
+describe('PostHogAzureOpenAI - streaming error safety', () => {
+  let safetyMockPostHogClient: PostHog
+  let safetyClient: PostHogAzureOpenAI
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    safetyMockPostHogClient = new (PostHog as any)()
+    safetyClient = new PostHogAzureOpenAI({
+      apiKey: 'test-api-key',
+      posthog: safetyMockPostHogClient as any,
+    } as any)
+  })
+
+  const streamErrorCases: {
+    name: string
+    firstChunk: unknown
+    stubCreate: (impl: jest.Mock) => void
+    invoke: () => Promise<unknown>
+  }[] = [
+    {
+      name: 'chat completions',
+      firstChunk: {
+        id: 'chatcmpl-test',
+        model: 'gpt-4',
+        object: 'chat.completion.chunk',
+        created: 1,
+        choices: [{ index: 0, delta: { content: 'partial' }, finish_reason: null, logprobs: null }],
+      },
+      stubCreate: (impl) => {
+        ;((openaiModule as any).Chat.Completions as any).prototype.create = impl
+      },
+      invoke: () =>
+        safetyClient.chat.completions.create({
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Tell me about streaming' }],
+          stream: true,
+          posthogDistinctId: 'test-stream-error-user',
+        } as any),
+    },
+    {
+      name: 'responses',
+      firstChunk: { type: 'response.output_text.delta', delta: 'partial' },
+      stubCreate: (impl) => {
+        ;((openaiModule as any).Responses as any).prototype.create = impl
+      },
+      invoke: () =>
+        safetyClient.responses.create({
+          model: 'gpt-4',
+          input: 'Tell me about streaming',
+          stream: true,
+          posthogDistinctId: 'test-stream-error-user',
+        } as any),
+    },
+  ]
+
+  test.each(streamErrorCases)('$name stream error is not rethrown unhandled', async (streamErrorCase) => {
+    const streamError = new Error('provider error injected into SSE stream')
+    const createErroringIterator = (): { [Symbol.asyncIterator](): AsyncIterator<unknown> } => ({
+      async *[Symbol.asyncIterator]() {
+        yield streamErrorCase.firstChunk
+        throw streamError
+      },
+    })
+
+    streamErrorCase.stubCreate(
+      jest.fn().mockImplementation(() =>
+        Promise.resolve({
+          tee: jest.fn().mockReturnValue([createErroringIterator(), createErroringIterator()]),
+        })
+      )
+    )
+
+    const unhandledRejections = await collectUnhandledRejections(async () => {
+      const stream = await streamErrorCase.invoke()
+
+      // The caller's copy of the stream must still surface the error
+      await expect(async () => {
+        for await (const _chunk of stream as AsyncIterable<unknown>) {
+          // consume until the error
+        }
+      }).rejects.toThrow(streamError)
+    })
+
+    // The analytics error event is still captured
+    expect(safetyMockPostHogClient.capture).toHaveBeenCalledTimes(1)
+
+    // The detached analytics consumer must not crash the host process
+    expect(unhandledRejections).toEqual([])
+  })
+})
+
+describe('PostHogAzureOpenAI - cache token reporting convention', () => {
+  // Deliberately not `conditionalTest`: azure.ts routes captures through the
+  // OpenAI capture helper, and with the credential-gated suite above skipped
+  // in CI (no AZURE_OPENAI_API_KEY), a gated test would never catch the Azure
+  // path bypassing the declaration. Everything here is mocked.
+  test.each([
+    { behavior: 'declares inclusive reporting by default', posthogProperties: undefined, expectedFlag: false },
+    {
+      behavior: 'lets user-provided posthogProperties override the declaration',
+      posthogProperties: { $ai_cache_reporting_exclusive: true },
+      expectedFlag: true,
+    },
+  ])('$behavior', async ({ posthogProperties, expectedFlag }) => {
+    const mockPostHogClient = new (PostHog as any)()
+    const client = new PostHogAzureOpenAI({
+      apiKey: 'mock-azure-key',
+      posthog: mockPostHogClient as any,
+    })
+
+    const ChatMock: any = openaiModule.Chat
+    const originalCreate = (ChatMock.Completions as any).prototype.create
+    ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue({
+      id: 'chatcmpl-cache-convention',
+      model: 'gpt-4',
+      object: 'chat.completion',
+      created: 1234567890,
+      choices: [
+        {
+          index: 0,
+          finish_reason: 'stop',
+          message: {
+            role: 'assistant',
+            content: 'Hello!',
+            refusal: null,
+          },
+          logprobs: null,
+        },
+      ],
+      usage: {
+        prompt_tokens: 32611,
+        completion_tokens: 561,
+        total_tokens: 33172,
+        prompt_tokens_details: {
+          cached_tokens: 27929,
+        },
+      },
+    })
+
+    await client.chat.completions.create({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: 'Hello' }],
+      posthogDistinctId: 'test-id',
+      posthogProperties,
+    })
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { properties } = captureArgs[0]
+
+    expect(properties['$ai_provider']).toBe('azure')
+    expect(properties['$ai_input_tokens']).toBe(32611)
+    expect(properties['$ai_cache_read_input_tokens']).toBe(27929)
+    expect(properties['$ai_cache_reporting_exclusive']).toBe(expectedFlag)
     ;(ChatMock.Completions as any).prototype.create = originalCreate
   })
 })

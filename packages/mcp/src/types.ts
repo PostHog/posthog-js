@@ -1,6 +1,7 @@
-// Portions of this file are derived from MCPCat/mcpcat-typescript-sdk
-// Copyright (c) 2025 MCPcat
-// Licensed under the MIT License: https://github.com/MCPCat/mcpcat-typescript-sdk/blob/main/LICENSE
+// Portions of this file are derived from agentcathq/agentcat-typescript-sdk
+// (formerly MCPCat/mcpcat-typescript-sdk)
+// Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
+// Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { ErrorTracking } from '@posthog/core'
@@ -69,6 +70,8 @@ export interface MCPAnalyticsOptions {
   /**
    * Identify the calling user. Returning a non-null value sets `distinct_id` and `$set`
    * on subsequent events for the session. Object form is treated as a static identity.
+   * A standalone `$identify` event is published once per session — at `initialize`, or
+   * when a long-lived server sees the identity appear or change — never per tool call.
    */
   identify?:
     | ((request: MCPRequestLike, extra?: CompatibleRequestHandlerExtra) => Promise<UserIdentity | null>)
@@ -162,6 +165,12 @@ export interface Event {
   listedToolNames?: string[]
   parameters?: unknown
   properties?: JsonRecord | null
+  /**
+   * Negotiated MCP protocol (spec) version → `$mcp_protocol_version`. Learned at
+   * `initialize` and carried onto every event for the session (see SessionInfo) —
+   * used to track spec adoption and to slice event metrics by spec version.
+   */
+  protocolVersion?: string
   resourceName?: string
   response?: unknown
   sdkLanguage?: string
@@ -179,9 +188,17 @@ export interface Event {
 /** A partially-built MCP event as it flows through the SDK before capture. */
 export type McpEvent = Partial<Event>
 
+/** HTTP request info the SDK's Streamable HTTP transports attach per request. */
+export interface CompatibleRequestInfoLike {
+  headers?: Record<string, string | string[] | undefined>
+  [key: string]: unknown
+}
+
 export interface CompatibleRequestHandlerExtra {
   headers?: Record<string, string | string[]>
   sessionId?: string
+  /** Present on HTTP transports only — headers ride every request, unlike `clientInfo`. */
+  requestInfo?: CompatibleRequestInfoLike
   [key: string]: unknown
 }
 
@@ -199,9 +216,17 @@ export interface HighLevelMCPServerLike {
   tool?(name: string, description: string, paramsSchema: unknown, cb: ToolCallback): void
 }
 
+/** The connected transport as exposed by the SDK's `Protocol.transport` getter. */
+export interface CompatibleTransportLike {
+  sessionId?: string
+  [key: string]: unknown
+}
+
 export interface MCPServerLike {
   _requestHandlers: Map<string, (request: MCPRequestLike, extra?: CompatibleRequestHandlerExtra) => Promise<unknown>>
   _serverInfo?: ServerClientInfoLike
+  /** Optional so older SDKs (and bare test doubles) still validate. */
+  transport?: CompatibleTransportLike
   getClientVersion(): ServerClientInfoLike | undefined
   setRequestHandler(
     schema: unknown,
@@ -235,6 +260,11 @@ export interface SessionInfo {
   identifyActorGivenId?: string
   identifyActorGroups?: Record<string, string>
   ipAddress?: string
+  /**
+   * Negotiated MCP protocol (spec) version, learned at `initialize` and carried
+   * forward for the session (across pods via the session token) → `$mcp_protocol_version`.
+   */
+  protocolVersion?: string
   sdkLanguage?: string
   sdkVersion?: string
   serverName?: string
@@ -245,11 +275,11 @@ export interface MCPAnalyticsData {
   sink: McpEventSink | undefined
   identifiedSessions: IdentityCache
   lastActivity: Date
-  lastMcpSessionId?: string
   options: MCPAnalyticsOptions
   sessionId: string
   sessionInfo: SessionInfo
-  sessionSource: 'generated' | 'mcp'
+  /** `token` = recovered from a self-encoded `Mcp-Session-Id` token (see session-token.ts). */
+  sessionSource: 'generated' | 'mcp' | 'token'
   toolCategories: Map<string, string>
   toolDescriptions: Map<string, string>
 }
@@ -278,6 +308,12 @@ export interface McpCaptureCommon {
   distinctId?: string
   /** Session id → `$session_id`. Omitted from the event entirely when not provided. */
   sessionId?: string
+  /**
+   * Negotiated MCP protocol (spec) version → `$mcp_protocol_version`. Pass it on
+   * every capture for the session (like `sessionId`) so later events carry it too,
+   * not just the initialize event — the `PostHogMCP` client holds no per-session state.
+   */
+  protocolVersion?: string
   /** Person properties → `$set` (e.g. `{ name, email, plan }`). */
   setProperties?: JsonRecord
   /** Group memberships → `$groups`. */

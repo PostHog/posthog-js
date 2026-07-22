@@ -32,6 +32,7 @@ const LEGACY_RESERVED_PERSISTENCE_KEYS = new Set<string>([
     constants.FLAG_CALL_REPORTED_SESSION_ID,
     constants.PERSISTENCE_FEATURE_FLAG_ERRORS,
     constants.PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
+    constants.PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
     constants.CLIENT_SESSION_PROPS,
     constants.CAPTURE_RATE_LIMIT,
     constants.INITIAL_CAMPAIGN_PARAMS,
@@ -508,6 +509,7 @@ describe('persistence key policy', () => {
                     constants.PERSISTENCE_FEATURE_FLAG_PAYLOADS,
                     constants.PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
                     constants.PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
+                    constants.PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
                 ].sort()
             )
         })

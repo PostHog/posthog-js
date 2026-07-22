@@ -130,4 +130,28 @@ describe('exception autocapture', () => {
     // captures until rate limited
     expect(mockedCapture).toHaveBeenCalledTimes(9)
   })
+
+  it('should honour the configured rate limiter bucket size', async () => {
+    jest.spyOn(ErrorTracking, 'buildEventMessage').mockResolvedValue({
+      event: '$exception',
+      distinctId: 'distinct-id',
+      properties: { $exception_list: [{ type: 'Error' }] },
+    })
+
+    const ph = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      fetchRetryCount: 0,
+      disableCompression: true,
+      exceptionRateLimiterBucketSize: 3,
+    })
+
+    const mockedCapture = jest.spyOn(ph, '_capturePreparedEvent').mockResolvedValue(undefined)
+
+    const captureExceptions = Array.from({ length: 20 }).map(() => ph['errorTracking']['onException']({}, {}))
+    await Promise.all(captureExceptions)
+    await ph.flush()
+
+    // captures until rate limited (bucket of 3 leaves 2 through before the limiter kicks in)
+    expect(mockedCapture).toHaveBeenCalledTimes(2)
+  })
 })

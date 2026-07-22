@@ -5,7 +5,7 @@ export interface Env {
     POSTHOG_CACHE: KVNamespace
     POSTHOG_PROJECT_API_KEY: string
     POSTHOG_HOST: string
-    POSTHOG_PERSONAL_API_KEY: string
+    POSTHOG_SECRET_KEY: string
 }
 
 export default {
@@ -15,7 +15,7 @@ export default {
         const cache = new CloudflareKVFlagCacheReader(env.POSTHOG_CACHE, env.POSTHOG_PROJECT_API_KEY)
         const posthog = new PostHog(env.POSTHOG_PROJECT_API_KEY, {
             host: env.POSTHOG_HOST,
-            personalApiKey: env.POSTHOG_PERSONAL_API_KEY,
+            secretKey: env.POSTHOG_SECRET_KEY,
             enableLocalEvaluation: true,
             flagDefinitionCacheProvider: cache,
         })
@@ -45,7 +45,7 @@ export default {
         const cache = new CloudflareKVFlagCacheWriter(env.POSTHOG_CACHE, env.POSTHOG_PROJECT_API_KEY)
         const posthog = new PostHog(env.POSTHOG_PROJECT_API_KEY, {
             host: env.POSTHOG_HOST,
-            personalApiKey: env.POSTHOG_PERSONAL_API_KEY,
+            secretKey: env.POSTHOG_SECRET_KEY,
             enableLocalEvaluation: true,
             featureFlagsPollingInterval: undefined, // Disable polling in scheduled job
             flagDefinitionCacheProvider: cache,

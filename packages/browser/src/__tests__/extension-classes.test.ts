@@ -1,11 +1,11 @@
 import { PostHog } from '../posthog-core'
-import { PostHogConfig, RemoteConfig } from '../types'
+import { PostHogConfig, RemoteConfig, RemoteConfigResult } from '../types'
 import { AllExtensions } from '../extensions/extension-bundles'
 import { Autocapture } from '../autocapture'
 import { PostHogFeatureFlags } from '../posthog-featureflags'
 import { SessionRecording } from '../extensions/replay/session-recording'
 import { createPosthogInstance } from './helpers/posthog-instance'
-import { uuidv7 } from '../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { assignableWindow } from '../utils/globals'
 
 describe('__extensionClasses enrollment', () => {
@@ -165,6 +165,7 @@ describe('extension lifecycle', () => {
                 'heatmaps',
                 'historyAutocapture',
                 'logs',
+                'metrics',
                 'productTours',
                 'sessionRecording',
                 'siteApps',
@@ -224,8 +225,8 @@ describe('extension lifecycle', () => {
 
             class SpyExtension {
                 constructor() {}
-                onRemoteConfig(config: RemoteConfig) {
-                    onRemoteConfigSpy(config)
+                onRemoteConfig(result: RemoteConfigResult) {
+                    onRemoteConfigSpy(result)
                 }
             }
 
@@ -242,11 +243,11 @@ describe('extension lifecycle', () => {
             onRemoteConfigSpy.mockClear()
 
             const remoteConfig = { supportedCompression: [] } as unknown as RemoteConfig
-            posthog._onRemoteConfig(remoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: remoteConfig })
 
             // Two extensions, each should get onRemoteConfig called once
             expect(onRemoteConfigSpy).toHaveBeenCalledTimes(2)
-            expect(onRemoteConfigSpy).toHaveBeenCalledWith(remoteConfig)
+            expect(onRemoteConfigSpy).toHaveBeenCalledWith({ ok: true, config: remoteConfig })
         })
     })
 

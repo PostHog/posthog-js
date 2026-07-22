@@ -14,8 +14,8 @@ import {
     getElementsChainString,
     getClassNames,
     makeSafeText,
-} from '../autocapture-utils'
-import { document } from '../utils/globals'
+} from '@posthog/browser-common/utils/autocapture-utils'
+import { document } from '@posthog/browser-common/utils/globals'
 import { makeMouseEvent } from './autocapture.test'
 import { createMockPostHog } from './helpers/posthog-instance'
 import { AutocaptureConfig, PostHogConfig } from '../types'
@@ -511,6 +511,30 @@ describe(`Autocapture utility functions`, () => {
 
             // cleanup
             ;(el as any).replace = undefined
+        })
+
+        it(`should terminate and fail closed on a cyclic ancestor chain`, () => {
+            // a parentNode cycle is only possible when the page patches parentNode
+            const a = document!.createElement('div')
+            const b = document!.createElement('div')
+            Object.defineProperty(a, 'parentNode', { value: b, configurable: true })
+            Object.defineProperty(b, 'parentNode', { value: a, configurable: true })
+
+            expect(shouldCaptureElement(a)).toBe(false)
+        })
+
+        it(`should fail closed when an ancestor chain exceeds the depth cap`, () => {
+            // ph-no-capture sits beyond the depth cap, so the walk cannot verify safety
+            const root = document!.createElement('div')
+            root.className = 'ph-no-capture'
+            let cur: HTMLElement = root
+            for (let i = 0; i < 1100; i++) {
+                const child = document!.createElement('div')
+                cur.appendChild(child)
+                cur = child
+            }
+
+            expect(shouldCaptureElement(cur)).toBe(false)
         })
     })
 

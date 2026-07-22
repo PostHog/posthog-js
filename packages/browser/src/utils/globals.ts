@@ -1,6 +1,9 @@
+import { window as commonWindow } from '@posthog/browser-common/utils/globals'
+import type { ErrorTracking } from '@posthog/core'
+
 import type { PostHog } from '../posthog-core'
-import { SessionIdManager } from '../sessionid'
-import {
+import type { SessionIdManager } from '../sessionid'
+import type {
     DeadClicksAutoCaptureConfig,
     ExternalIntegrationKind,
     Properties,
@@ -23,21 +26,12 @@ import type {
 // eslint-disable-next-line posthog-js/no-external-replay-imports
 import type { SessionRecordingStatus, TriggerType } from '../extensions/replay/external/triggerMatching'
 import type { TracingHeadersDistinctId, TracingHeadersHostnames } from '../extensions/tracing-headers-types'
-import { eventWithTime } from '../extensions/replay/types/rrweb-types'
-import { ErrorTracking } from '@posthog/core'
+import type { eventWithTime } from '../extensions/replay/types/rrweb-types'
 
 /*
- * Global helpers to protect access to browser globals in a way that is safer for different targets
- * like DOM, SSR, Web workers etc.
- *
- * NOTE: Typically we want the "window" but globalThis works for both the typical browser context as
- * well as other contexts such as the web worker context. Window is still exported for any bits that explicitly require it.
- * If in doubt - export the global you need from this file and use that as an optional value. This way the code path is forced
- * to handle the case where the global is not available.
+ * Browser-v1's contract with its lazily loaded bundles and legacy window globals.
+ * Generic environment access remains owned by browser-common.
  */
-
-// eslint-disable-next-line no-restricted-globals
-const win: (Window & typeof globalThis) | undefined = typeof window !== 'undefined' ? window : undefined
 
 export type AssignableWindow = Window &
     typeof globalThis & {
@@ -281,25 +275,27 @@ interface PostHogExtensions {
     initConversations?: (config: ConversationsRemoteConfig, posthog: PostHog) => LazyLoadedConversationsInterface
 }
 
-const global: typeof globalThis | undefined = typeof globalThis !== 'undefined' ? globalThis : win
+const globalObject: typeof globalThis | undefined = typeof globalThis !== 'undefined' ? globalThis : commonWindow
 
-// React Native polyfills for posthog-js compatibility
-if (typeof self === 'undefined') {
-    ;(global as any).self = global
+// React Native polyfills retained for browser-v1 compatibility.
+if (globalObject && typeof self === 'undefined') {
+    ;(globalObject as any).self = globalObject
 }
-if (typeof File === 'undefined') {
-    ;(global as any).File = function () {}
+if (globalObject && typeof File === 'undefined') {
+    ;(globalObject as any).File = function () {}
 }
 
-export const navigator = global?.navigator
-export const document = global?.document
-export const location = global?.location
-export const fetch = global?.fetch
-export const XMLHttpRequest =
-    global?.XMLHttpRequest && 'withCredentials' in new global.XMLHttpRequest() ? global.XMLHttpRequest : undefined
-export const AbortController = global?.AbortController
-export const CompressionStream = global?.CompressionStream
-export const userAgent = navigator?.userAgent
-export const assignableWindow: AssignableWindow = win ?? ({} as any)
+export {
+    AbortController,
+    CompressionStream,
+    document,
+    fetch,
+    isBrowserOnline,
+    location,
+    navigator,
+    userAgent,
+    window,
+    XMLHttpRequest,
+} from '@posthog/browser-common/utils/globals'
 
-export { win as window }
+export const assignableWindow: AssignableWindow = commonWindow ?? ({} as any)

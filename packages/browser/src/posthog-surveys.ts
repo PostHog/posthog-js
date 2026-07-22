@@ -18,8 +18,9 @@ import {
     SurveyCallback,
     SurveyRenderReason,
 } from './posthog-surveys-types'
-import { Properties, RemoteConfig } from './types'
-import { assignableWindow, document } from './utils/globals'
+import { Properties, RemoteConfigResult } from './types'
+import { document } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from './utils/globals'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import {
     doesSurveyActivateByAction,
@@ -66,13 +67,18 @@ export class PostHogSurveys implements Extension {
         this.loadIfEnabled()
     }
 
-    onRemoteConfig(response: RemoteConfig) {
+    onRemoteConfig(result: RemoteConfigResult) {
         // only load surveys if they are enabled and there are surveys to load
         if (this._config.disable_surveys) {
             return
         }
 
-        const surveys = response['surveys']
+        if (!result.ok) {
+            // Failure behaves like a response without a surveys key: not loaded.
+            return logger.warn('Remote config unavailable. Not loading surveys.')
+        }
+
+        const surveys = result.config['surveys']
         if (isNullish(surveys)) {
             return logger.warn('Flags not loaded yet. Not loading surveys.')
         }
@@ -509,6 +515,6 @@ export class PostHogSurveys implements Extension {
     }
 
     handlePageUnload(): void {
-        this._surveyManager?.handlePageUnload()
+        this._surveyManager?.handlePageUnload?.()
     }
 }

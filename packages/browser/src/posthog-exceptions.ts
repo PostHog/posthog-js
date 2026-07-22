@@ -1,9 +1,9 @@
 import { ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS, ERROR_TRACKING_SUPPRESSION_RULES } from './constants'
 import { Extension } from './extensions/types'
 import { PostHog } from './posthog-core'
-import { CaptureResult, ErrorTrackingSuppressionRule, Properties, RemoteConfig } from './types'
-import { createLogger } from './utils/logger'
-import { propertyComparisons } from './utils/property-utils'
+import { CaptureResult, ErrorTrackingSuppressionRule, Properties, RemoteConfigResult } from './types'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { propertyComparisons } from '@posthog/browser-common/utils/property-utils'
 import { isString, isArray, isObject, ErrorTracking, isNullish } from '@posthog/core'
 
 const logger = createLogger('[Error tracking]')
@@ -42,7 +42,13 @@ export class PostHogExceptions implements Extension {
         this._exceptionStepsBuffer.setConfig(this._exceptionStepsConfig)
     }
 
-    onRemoteConfig(response: RemoteConfig) {
+    onRemoteConfig(result: RemoteConfigResult) {
+        if (!result.ok) {
+            // Failure behaves like a response without an errorTracking key.
+            return
+        }
+
+        const response = result.config
         if (!('errorTracking' in response)) {
             return
         }

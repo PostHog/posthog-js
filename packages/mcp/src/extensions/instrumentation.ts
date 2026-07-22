@@ -1,9 +1,17 @@
-// Portions of this file are derived from MCPCat/mcpcat-typescript-sdk
-// Copyright (c) 2025 MCPcat
-// Licensed under the MIT License: https://github.com/MCPCat/mcpcat-typescript-sdk/blob/main/LICENSE
+// Portions of this file are derived from agentcathq/agentcat-typescript-sdk
+// (formerly MCPCat/mcpcat-typescript-sdk)
+// Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
+// Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
 import type { ListToolsResult } from '@modelcontextprotocol/sdk/types.js'
-import type { CompatibleRequestHandlerExtra, MCPAnalyticsData, MCPRequestLike, MCPServerLike, McpEvent } from '../types'
+import type {
+  CompatibleRequestHandlerExtra,
+  MCPAnalyticsData,
+  MCPRequestLike,
+  MCPServerLike,
+  McpEvent,
+  ServerClientInfoLike,
+} from '../types'
 import { addContextParameterToTools, getContextDescription, isContextEnabled } from './context-parameters'
 import {
   addConversationIdToTools,
@@ -17,11 +25,12 @@ import { captureEvent } from './capture'
 import { MCPAnalyticsEventType } from './event-types'
 import { captureException } from './exceptions'
 import { resolveToolCallIntent, setEventIntent, setExplicitContextIntent } from './intent'
-import { getServerTrackingData, handleIdentify } from './internal'
+import { getServerTrackingData, handleIdentify, setServerTrackingData } from './internal'
 import { log } from './logger'
 import { buildCapturedMcpParameters } from './mcp-payloads'
 import { getLiteralValue, getObjectShape } from './mcp-sdk-compat'
-import { getServerSessionId } from './session'
+import { getSessionId, newSessionId } from './session'
+import { encodeSessionId, readMcpSessionHeader, writeSessionIdToTransport } from './session-token'
 import { getReportMissingToolDescriptor, resolveMissingCapabilityToolName } from './tools'
 import { applyResolvedMetadata, isToolResultError } from './tracing-helpers'
 
@@ -129,7 +138,7 @@ async function prepareToolCallEvent(
   eventType: MCPAnalyticsEventType
 ): Promise<McpEvent | null> {
   try {
-    const sessionId = getServerSessionId(server, extra)
+    const sessionId = getSessionId(server, extra)
     await handleIdentify(server, data, sessionId, request, extra)
 
     const toolName = request.params?.name
@@ -283,7 +292,7 @@ export async function handleListToolsRequest(
   const data = getServerTrackingData(server)
   const startTime = new Date()
   const event: McpEvent = {
-    sessionId: getServerSessionId(server, extra),
+    sessionId: getSessionId(server, extra),
     parameters: buildCapturedMcpParameters(request),
     eventType: MCPAnalyticsEventType.mcpToolsList,
     timestamp: startTime,
@@ -411,6 +420,112 @@ export function cacheToolCategories(cache: Map<string, string>, tools: ListTools
 // --- initialize -----------------------------------------------------------
 
 /**
+ * Stateless servers never issue a session id, so sessions fragment and the
+ * client name/version is lost after `initialize`. Fix: mint the
+ * `Mcp-Session-Id` response header as a token carrying both. Clients replay
+ * the header on every request, so any pod recovers them with no server-side
+ * store (decoded in `getSessionId`).
+ *
+ * The header only reaches the wire when response headers are built after the
+ * handler runs — StreamableHTTP with `enableJsonResponse: true`. SSE flushes
+ * headers first; those servers set the header themselves with the exported
+ * `encodeSessionId`, and this mint is a harmless no-op.
+ */
+function mintStatelessSessionOnInitialize(
+  server: MCPServerLike,
+  data: MCPAnalyticsData,
+  request: MCPRequestLike,
+  extra: CompatibleRequestHandlerExtra | undefined
+): string | undefined {
+  try {
+    const headers = extra?.requestInfo?.headers
+    if (!headers || typeof headers !== 'object') {
+      return undefined // not an HTTP transport (stdio/in-memory) — nothing to mint into
+    }
+    if (readMcpSessionHeader(headers)) {
+      return undefined // client already replays a session id (ours or the transport's)
+    }
+    const transport = server.transport
+    if (!transport || extra?.sessionId || transport.sessionId) {
+      return undefined // stateful transports manage their own session id — leave it alone
+    }
+
+    const sessionId = newSessionId()
+    const clientInfo = readInitializeClientInfo(request)
+    // Minted before the handler negotiates, so only the client's *requested*
+    // version is available here; `handleInitializeRequest` re-mints the token
+    // with the negotiated version once the handler has run.
+    const requestedProtocolVersion = readProtocolVersion(undefined, request)
+    const token = encodeSessionId({
+      sessionId,
+      clientName: clientInfo?.name,
+      clientVersion: clientInfo?.version,
+      protocolVersion: requestedProtocolVersion,
+    })
+    if (!writeSessionIdToTransport(transport, token)) {
+      return undefined // transport can't carry a response session id — keep generated behavior
+    }
+
+    data.sessionId = sessionId
+    data.sessionSource = 'token'
+    data.sessionInfo.clientName = clientInfo?.name
+    data.sessionInfo.clientVersion = clientInfo?.version
+    data.sessionInfo.protocolVersion = requestedProtocolVersion
+    data.lastActivity = new Date()
+    setServerTrackingData(server, data)
+    return sessionId
+  } catch (error) {
+    log(`Warning: PostHog MCP analytics failed to mint a stateless session id - ${error}`)
+    return undefined
+  }
+}
+
+/**
+ * Rewrite the minted token to carry the *negotiated* protocol version now that
+ * the handler has run. Without this, a server that downgrades the client's
+ * requested version would replay the requested one on later requests (and to
+ * other pods), reporting a version the session is not actually using.
+ */
+function upgradeMintedTokenToNegotiated(
+  server: MCPServerLike,
+  data: MCPAnalyticsData,
+  mintedSessionId: string,
+  negotiatedProtocolVersion: string | undefined
+): void {
+  try {
+    const transport = server.transport
+    if (!transport) {
+      return
+    }
+    const token = encodeSessionId({
+      sessionId: mintedSessionId,
+      clientName: data.sessionInfo.clientName,
+      clientVersion: data.sessionInfo.clientVersion,
+      protocolVersion: negotiatedProtocolVersion,
+    })
+    writeSessionIdToTransport(transport, token)
+  } catch (error) {
+    log(`Warning: PostHog MCP analytics failed to upgrade the stateless session token - ${error}`)
+  }
+}
+
+/**
+ * Read the client name/version off the `initialize` request body — the SDK
+ * hasn't stored it yet (`getClientVersion()`) when our patch runs.
+ */
+function readInitializeClientInfo(request: MCPRequestLike): ServerClientInfoLike | undefined {
+  const clientInfo = request.params?.clientInfo
+  if (!clientInfo || typeof clientInfo !== 'object') {
+    return undefined
+  }
+  const { name, version } = clientInfo as Record<string, unknown>
+  return {
+    name: typeof name === 'string' ? name : undefined,
+    version: typeof version === 'string' ? version : undefined,
+  }
+}
+
+/**
  * Captures the connection handshake (and resolves identity) on `initialize`
  * before the original handler runs.
  */
@@ -428,7 +543,9 @@ export async function handleInitializeRequest(
     return await originalInitializeHandler(request, extra)
   }
 
-  const sessionId = getServerSessionId(server, extra)
+  // Mint first so the `$mcp_initialize` event below already carries the minted id.
+  const mintedSessionId = mintStatelessSessionOnInitialize(server, data, request, extra)
+  const sessionId = getSessionId(server, extra)
   await handleIdentify(server, data, sessionId, request, extra)
 
   const event: McpEvent = {
@@ -443,6 +560,31 @@ export async function handleInitializeRequest(
 
   const result = await originalInitializeHandler(request, extra)
   event.response = result
+  // The negotiated version (off the response) supersedes the requested one the
+  // mint stored — persist it so every later event on this pod carries it, and
+  // re-mint the token so pods replaying it report the negotiated version too.
+  const negotiatedProtocolVersion = readProtocolVersion(result, request)
+  event.protocolVersion = negotiatedProtocolVersion
+  data.sessionInfo.protocolVersion = negotiatedProtocolVersion
+  setServerTrackingData(server, data)
+  if (mintedSessionId) {
+    upgradeMintedTokenToNegotiated(server, data, mintedSessionId, negotiatedProtocolVersion)
+  }
   captureEvent(server, event)
   return result
+}
+
+/**
+ * The MCP spec (protocol) version this session speaks. Prefer the negotiated
+ * version off the initialize response — the version the server committed to and
+ * the session actually runs on — falling back to the client's requested version
+ * if the response omits it. Used to track spec-revision adoption.
+ */
+function readProtocolVersion(result: unknown, request: MCPRequestLike): string | undefined {
+  const negotiated = (result as Record<string, unknown> | null | undefined)?.protocolVersion
+  if (typeof negotiated === 'string' && negotiated.length > 0) {
+    return negotiated
+  }
+  const requested = request.params?.protocolVersion
+  return typeof requested === 'string' && requested.length > 0 ? requested : undefined
 }

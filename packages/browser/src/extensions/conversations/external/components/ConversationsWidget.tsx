@@ -1,4 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { h, Component } from 'preact'
 import {
     ConversationsRemoteConfig,
@@ -8,7 +7,7 @@ import {
     UserProvidedTraits,
     Ticket,
 } from '../../../../posthog-conversations-types'
-import { createLogger } from '../../../../utils/logger'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 import { getStyles } from './styles'
 import { OpenChatButton } from './OpenChatButton'
 import { CloseChatButton } from './CloseChatButton'

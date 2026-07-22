@@ -1,6 +1,7 @@
-// Portions of this file are derived from MCPCat/mcpcat-typescript-sdk
-// Copyright (c) 2025 MCPcat
-// Licensed under the MIT License: https://github.com/MCPCat/mcpcat-typescript-sdk/blob/main/LICENSE
+// Portions of this file are derived from agentcathq/agentcat-typescript-sdk
+// (formerly MCPCat/mcpcat-typescript-sdk)
+// Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
+// Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
 import type { PostHog } from 'posthog-node'
 import { isCompatibleServerType, isHighLevelServer } from './extensions/compatibility'
@@ -191,7 +192,16 @@ async function captureCustomEvent(lowLevelServer: MCPServerLike, eventData: Capt
   log(`Captured event "${eventData.event}" for session ${trackingData.sessionId}`)
 }
 
-export { deriveSessionIdFromMCPSession }
+export { deriveSessionIdFromMCPSession, newSessionId }
+// Session tokens for stateless / multi-pod servers. Minted and decoded
+// automatically on JSON-mode StreamableHTTP; SSE servers set the header
+// themselves with `encodeSessionId`.
+export {
+  MCP_SESSION_HEADER,
+  decodeSessionId,
+  encodeSessionId,
+  type SessionTokenPayload,
+} from './extensions/session-token'
 export {
   POSTHOG_MCP_ANALYTICS_SOURCE,
   PostHogMCPAnalyticsEvent,

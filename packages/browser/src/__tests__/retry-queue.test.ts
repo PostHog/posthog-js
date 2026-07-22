@@ -1,5 +1,3 @@
-/* eslint-disable compat/compat */
-
 import { pickNextRetryDelay, RetryQueue } from '../retry-queue'
 import { assignableWindow } from '../utils/globals'
 

@@ -315,7 +315,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       name: runName,
       input,
       startTime: Date.now(),
-    } as SpanMetadata
+    }
   }
 
   private _setLLMMetadata(

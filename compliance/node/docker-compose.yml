@@ -5,6 +5,10 @@ services:
       dockerfile: compliance/node/Dockerfile
     expose:
       - "8080"
+    # Set POSTHOG_CAPTURE_MODE=v1 to run the Capture V1 contract locally; the
+    # adapter then advertises capture_v1 and the harness selects the v1 suite.
+    environment:
+      - POSTHOG_CAPTURE_MODE=${POSTHOG_CAPTURE_MODE:-}
     networks:
       - test-network
 

@@ -61,6 +61,13 @@ type FeatureFlagsPollerOptions = {
   fetch?: (url: string, options: PostHogFetchOptions) => Promise<PostHogFetchResponse>
   onError?: (error: Error) => void
   onLoad?: (count: number) => void
+  /**
+   * Called whenever flag definitions are (re)loaded — from the API, the cache provider, or a
+   * quota reset — with the server gate for minimal `$feature_flag_called` events carried by
+   * that payload. Lets the client keep a single last-writer-wins gate across the local-eval
+   * and remote `/flags` signal sources.
+   */
+  onMinimalFlagCalledEvents?: (enabled: boolean) => void
   customHeaders?: { [key: string]: string }
   cacheProvider?: FlagDefinitionCacheProvider
   strictLocalEvaluation?: boolean
@@ -104,6 +111,7 @@ class FeatureFlagsPoller {
   private nextFetchAllowedAt?: number
   private strictLocalEvaluation: boolean
   private flagDefinitionsLoadedAt?: number
+  private onMinimalFlagCalledEvents?: (enabled: boolean) => void
 
   constructor({
     pollingInterval,
@@ -129,6 +137,7 @@ class FeatureFlagsPoller {
     this.onError = options.onError
     this.customHeaders = customHeaders
     this.onLoad = options.onLoad
+    this.onMinimalFlagCalledEvents = options.onMinimalFlagCalledEvents
     this.cacheProvider = options.cacheProvider
     this.strictLocalEvaluation = options.strictLocalEvaluation ?? false
     void this.loadFeatureFlags()
@@ -672,13 +681,15 @@ class FeatureFlagsPoller {
    */
   private updateFlagState(flagData: FlagDefinitionCacheData): void {
     this.featureFlags = flagData.flags
-    this.featureFlagsByKey = flagData.flags.reduce(
+    this.featureFlagsByKey = flagData.flags.reduce<Record<string, PostHogFeatureFlag>>(
       (acc, curr) => ((acc[curr.key] = curr), acc),
-      <Record<string, PostHogFeatureFlag>>{}
+      {}
     )
     this.groupTypeMapping = flagData.groupTypeMapping
     this.cohorts = flagData.cohorts
     this.loadedSuccessfullyOnce = true
+    // Absence of the field (older cached data, older servers) always means full events.
+    this.onMinimalFlagCalledEvents?.(flagData.minimalFlagCalledEvents === true)
   }
 
   /**
@@ -884,7 +895,7 @@ class FeatureFlagsPoller {
           // Invalid API key
           this.beginBackoff()
           throw new ClientError(
-            `Your project key or personal API key is invalid. Setting next polling interval to ${this.getPollingInterval()}ms. More information: https://posthog.com/docs/api#rate-limiting`
+            `Your project key or secret key is invalid. Setting next polling interval to ${this.getPollingInterval()}ms. More information: https://posthog.com/docs/api#rate-limiting`
           )
 
         case 402:
@@ -896,13 +907,14 @@ class FeatureFlagsPoller {
           this.featureFlagsByKey = {}
           this.groupTypeMapping = {}
           this.cohorts = {}
+          this.onMinimalFlagCalledEvents?.(false)
           return
 
         case 403:
           // Permissions issue
           this.beginBackoff()
           throw new ClientError(
-            `Your personal API key does not have permission to fetch feature flag definitions for local evaluation. Setting next polling interval to ${this.getPollingInterval()}ms. Are you sure you're using the correct personal and Project API key pair? More information: https://posthog.com/docs/api/overview`
+            `Your secret key does not have permission to fetch feature flag definitions for local evaluation. Setting next polling interval to ${this.getPollingInterval()}ms. Are you sure you're using the correct secret and Project API key pair? More information: https://posthog.com/docs/api/overview`
           )
 
         case 429:
@@ -928,6 +940,8 @@ class FeatureFlagsPoller {
             flags: (responseJson.flags as PostHogFeatureFlag[]) ?? [],
             groupTypeMapping: (responseJson.group_type_mapping as Record<string, string>) || {},
             cohorts: (responseJson.cohorts as Record<string, PropertyGroup>) || {},
+            // Absence of the field always flips the gate off — fail safe to full events.
+            minimalFlagCalledEvents: responseJson.minimal_flag_called_events === true,
           }
 
           this.updateFlagState(flagData)

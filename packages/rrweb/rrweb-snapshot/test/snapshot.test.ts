@@ -32,6 +32,42 @@ const serializeNode = (node: Node): serializedNodeWithId | null => {
   });
 };
 
+describe('iframe load listener cleanup', () => {
+  it('should not throw when iframe removeEventListener is missing', () => {
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    const mirror = new Mirror();
+    let disposer: (() => void) | undefined;
+
+    serializeNodeWithId(iframe, {
+      doc: document,
+      mirror,
+      blockClass: 'blockblock',
+      blockSelector: null,
+      maskTextClass: 'maskmask',
+      maskTextSelector: null,
+      skipChild: false,
+      inlineStylesheet: true,
+      maskTextFn: undefined,
+      maskInputFn: undefined,
+      slimDOMOptions: {},
+      onIframeListenerRegistered: (_iframeNode, iframeDisposer) => {
+        disposer = iframeDisposer;
+      },
+    });
+
+    Object.defineProperty(iframe, 'removeEventListener', {
+      configurable: true,
+      value: undefined,
+    });
+
+    expect(disposer).toBeDefined();
+    expect(() => disposer?.()).not.toThrow();
+
+    document.body.removeChild(iframe);
+  });
+});
+
 describe('absolute url to stylesheet', () => {
   const href = 'http://localhost/css/style.css';
 

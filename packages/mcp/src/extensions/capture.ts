@@ -1,6 +1,7 @@
-// Portions of this file are derived from MCPCat/mcpcat-typescript-sdk
-// Copyright (c) 2025 MCPcat
-// Licensed under the MIT License: https://github.com/MCPCat/mcpcat-typescript-sdk/blob/main/LICENSE
+// Portions of this file are derived from agentcathq/agentcat-typescript-sdk
+// (formerly MCPCat/mcpcat-typescript-sdk)
+// Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
+// Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
 import type { MCPServerLike, McpEvent } from '../types'
 import { MCPAnalyticsEventType } from './event-types'
@@ -53,6 +54,10 @@ export function captureEvent(server: MCPServerLike, eventInput: McpEvent): Promi
     identifyActorData: sessionInfo.identifyActorData,
     groups: sessionInfo.identifyActorGroups,
     resourceName: eventInput.resourceName,
+    // The `initialize` event sets the negotiated version directly; every other
+    // event inherits it from sessionInfo (persisted at initialize, recovered
+    // cross-pod from the session token).
+    protocolVersion: eventInput.protocolVersion ?? sessionInfo.protocolVersion,
     toolCategory: eventInput.toolCategory,
     toolDescription: eventInput.toolDescription,
     listedToolNames: eventInput.listedToolNames,

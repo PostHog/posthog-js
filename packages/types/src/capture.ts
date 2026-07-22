@@ -16,6 +16,7 @@ export type KnownEventName =
     | '$$heatmap'
     | '$web_vitals'
     | '$dead_click'
+    | '$dead_swipe'
     | '$autocapture'
     | '$copy_autocapture'
     | '$rageclick'

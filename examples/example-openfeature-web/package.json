@@ -1,0 +1,21 @@
+{
+  "name": "example-openfeature-web",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "type": "module",
+  "scripts": {
+    "start": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@openfeature/web-sdk": "^1.9.0",
+    "@posthog/openfeature-web-provider": "*",
+    "posthog-js": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2",
+    "vite": "^6.2.0"
+  }
+}

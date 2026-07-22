@@ -1,14 +1,16 @@
 import { RetriableRequestWithOptions } from './types'
 
 import { isPositiveNumber, isUndefined } from '@posthog/core'
-import { logger } from './utils/logger'
-import { window } from './utils/globals'
+import { logger } from '@posthog/browser-common/utils/logger'
+import { window } from '@posthog/browser-common/utils/globals'
 import { PostHog } from './posthog-core'
 import { extendURLParams } from './request'
-import { addEventListener } from './utils'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 
 const thirtyMinutes = 30 * 60 * 1000
 const DEFAULT_MAX_RETRIES = 10
+// NOTE: posthog-logs.ts mirrors this budget with its own `MAX_CONSECUTIVE_STATUS_ZERO_FAILURES`.
+// Keep the constant value and the warning copy in sync.
 const STATUS_CODE_ZERO_MAX_RETRIES = 3
 
 /**
@@ -180,7 +182,6 @@ export class RetryQueue {
         for (const { requestOptions } of this._queue) {
             try {
                 // we've had send beacon in place for at least 2 years
-                // eslint-disable-next-line compat/compat
                 this._instance._send_request({
                     ...requestOptions,
                     transport: 'sendBeacon',

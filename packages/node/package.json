@@ -1,6 +1,6 @@
 {
   "name": "posthog-node",
-  "version": "5.39.4",
+  "version": "5.46.0",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -47,7 +47,7 @@
     "@edge-runtime/jest-environment": "^4.0.0",
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@rslib/core": "catalog:",
-    "@types/express": "^5.0.5",
+    "@types/express": "^5.0.6",
     "@types/jest": "catalog:",
     "@types/node": "^20.0.0",
     "jest": "catalog:",

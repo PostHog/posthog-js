@@ -616,6 +616,45 @@ describe('PostHog Node.js', () => {
     })
   })
 
+  describe('flushInterval', () => {
+    it('defaults to 5000 for Node', () => {
+      const ph = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+      })
+
+      expect((ph as any).flushInterval).toBe(5000)
+    })
+  })
+
+  describe('maxQueueSize', () => {
+    it('defaults to 10000, higher than the shared core default of 1000', () => {
+      const ph = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+      })
+
+      expect((ph as any).maxQueueSize).toBe(10000)
+    })
+
+    it('still honors an explicit override', () => {
+      const ph = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        maxQueueSize: 42,
+        flushAt: 1,
+      })
+
+      expect((ph as any).maxQueueSize).toBe(42)
+    })
+
+    it('keeps the Node default when a wrapper forwards maxQueueSize: undefined', () => {
+      const ph = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        maxQueueSize: undefined,
+      })
+
+      expect((ph as any).maxQueueSize).toBe(10000)
+    })
+  })
+
   describe('before_send', () => {
     it('should allow events through when before_send returns the event', async () => {
       const beforeSendFn = jest.fn((event) => event)
@@ -940,6 +979,55 @@ describe('PostHog Node.js', () => {
 
       expect(logSpy).toHaveBeenCalledWith('[PostHog]', "Event 'test-event' was rejected in beforeSend function")
       logSpy.mockRestore()
+    })
+  })
+
+  describe('flush coalescing', () => {
+    beforeEach(() => {
+      jest.useRealTimers()
+    })
+
+    afterEach(() => {
+      jest.useFakeTimers()
+    })
+
+    it('coalesces threshold-triggered flushes while fetch is failing', async () => {
+      const rejectFetch: Array<(err: Error) => void> = []
+      mockedFetch.mockImplementation(() => new Promise((_, reject) => rejectFetch.push(reject)) as any)
+
+      const ph = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        fetchRetryCount: 0,
+        flushAt: 2,
+        disableCompression: true,
+      })
+
+      for (let i = 0; i < 20; i++) {
+        ph.capture({ event: `offline-event-${i}`, distinctId: '123' })
+      }
+
+      // all 20 captures coalesced into a single flush — not one flush per capture
+      await wait(10)
+      expect(mockedFetch).toHaveBeenCalledTimes(1)
+
+      rejectFetch.shift()!(new Error('network down'))
+      await wait(10)
+      expect(mockedFetch).toHaveBeenCalledTimes(1)
+
+      // coalescing doesn't leave flushing permanently stuck
+      ph.capture({ event: 'offline-event-20', distinctId: '123' })
+      await wait(10)
+      expect(mockedFetch).toHaveBeenCalledTimes(2)
+
+      rejectFetch.shift()!(new Error('network down'))
+      await wait(10)
+
+      mockedFetch.mockResolvedValue({
+        status: 200,
+        text: () => Promise.resolve('ok'),
+        json: () => Promise.resolve({ status: 'ok' }),
+      } as any)
+      await ph.shutdown()
     })
   })
 
@@ -1397,6 +1485,35 @@ describe('PostHog Node.js', () => {
       expect(posthog.apiKey).toEqual('TEST_API_KEY')
       expect(posthog.host).toEqual('http://example.com')
       expect(posthog.options.personalApiKey).toEqual('TEST_PERSONAL_API_KEY')
+    })
+
+    it.each([
+      { name: 'resolves secretKey into the personal api key', keyOption: { secretKey: 'TEST_SECRET_KEY' } },
+      {
+        name: 'still accepts the deprecated personalApiKey alias',
+        keyOption: { personalApiKey: 'TEST_PERSONAL_API_KEY' },
+      },
+    ])('$name', async ({ keyOption }) => {
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        fetchRetryCount: 0,
+        ...keyOption,
+        disableCompression: true,
+      })
+
+      expect(posthog.options.personalApiKey).toEqual(Object.values(keyOption)[0])
+    })
+
+    it('prefers secretKey over personalApiKey when both are set', async () => {
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        fetchRetryCount: 0,
+        secretKey: 'TEST_SECRET_KEY',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        disableCompression: true,
+      })
+
+      expect(posthog.options.personalApiKey).toEqual('TEST_SECRET_KEY')
     })
 
     it('should not start local evaluation polling or fetch flags when api key is missing', async () => {

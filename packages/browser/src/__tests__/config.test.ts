@@ -1,6 +1,6 @@
 import { PostHog } from '../posthog-core'
 import type { PostHogConfig } from '../types'
-import { DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS } from '../autocapture-utils'
+import { DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS } from '@posthog/browser-common/utils/autocapture-utils'
 import { isFunction } from '@posthog/core'
 
 describe('config', () => {

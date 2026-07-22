@@ -1,6 +1,7 @@
-// Portions of this file are derived from MCPCat/mcpcat-typescript-sdk
-// Copyright (c) 2025 MCPcat
-// Licensed under the MIT License: https://github.com/MCPCat/mcpcat-typescript-sdk/blob/main/LICENSE
+// Portions of this file are derived from agentcathq/agentcat-typescript-sdk
+// (formerly MCPCat/mcpcat-typescript-sdk)
+// Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
+// Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
 export const INACTIVITY_TIMEOUT_IN_MINUTES = 30
 
@@ -47,6 +48,7 @@ export const PostHogMCPAnalyticsProperty = {
   IntentSource: '$mcp_intent_source',
   ListedToolNames: '$mcp_listed_tool_names',
   Parameters: '$mcp_parameters',
+  ProtocolVersion: '$mcp_protocol_version',
   ResourceName: '$mcp_resource_name',
   Response: '$mcp_response',
   ServerName: '$mcp_server_name',

@@ -2,9 +2,9 @@ import { SurveyActionType, SurveyEventType, SurveyEventWithFilters } from '../po
 import { ActionMatcher } from '../extensions/surveys/action-matcher'
 import { PostHog } from '../posthog-core'
 import { CaptureResult } from '../types'
-import { matchPropertyFilters } from './property-utils'
+import { matchPropertyFilters } from '@posthog/browser-common/utils/property-utils'
 import { isUndefined } from '@posthog/core'
-import { createLogger } from './logger'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 
 /**
  * Interface for items that can be triggered by events/actions.

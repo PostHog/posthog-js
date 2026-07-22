@@ -1,39 +1,81 @@
 {
     "name": "@posthog/browser-common",
-    "version": "0.0.0",
-    "private": true,
-    "description": "Shared browser extension primitives for PostHog JavaScript SDKs",
+    "version": "0.2.0",
+    "description": "Internal shared browser utilities and extension primitives for PostHog Browser SDKs",
     "license": "MIT",
     "repository": {
         "type": "git",
         "url": "git+https://github.com/PostHog/posthog-js.git",
         "directory": "packages/browser-common"
     },
-    "type": "module",
-    "sideEffects": false,
-    "main": "./src/index.ts",
-    "types": "./src/index.ts",
+    "sideEffects": [
+        "./dist/utils/array-at-polyfill.js",
+        "./dist/utils/array-at-polyfill.mjs",
+        "./dist/utils/uuidv7.js",
+        "./dist/utils/uuidv7.mjs"
+    ],
+    "files": [
+        "dist",
+        "README.md"
+    ],
+    "main": "dist/index.js",
+    "module": "dist/index.mjs",
+    "types": "dist/index.d.ts",
+    "typesVersions": {
+        "*": {
+            "config": [
+                "dist/config.d.ts"
+            ],
+            "constants": [
+                "dist/constants.d.ts"
+            ],
+            "utils/*": [
+                "dist/utils/*.d.ts"
+            ]
+        }
+    },
     "exports": {
         ".": {
-            "types": "./src/index.ts",
-            "import": "./src/index.ts"
+            "types": "./dist/index.d.ts",
+            "require": "./dist/index.js",
+            "import": "./dist/index.mjs"
+        },
+        "./config": {
+            "types": "./dist/config.d.ts",
+            "require": "./dist/config.js",
+            "import": "./dist/config.mjs"
+        },
+        "./constants": {
+            "types": "./dist/constants.d.ts",
+            "require": "./dist/constants.js",
+            "import": "./dist/constants.mjs"
+        },
+        "./utils/*": {
+            "types": "./dist/utils/*.d.ts",
+            "require": "./dist/utils/*.js",
+            "import": "./dist/utils/*.mjs"
         }
     },
     "scripts": {
+        "clean": "rimraf dist",
         "lint": "eslint src tests",
         "lint:fix": "eslint src tests --fix",
-        "build": "tsc -p tsconfig.json --noEmit",
+        "build": "rslib build",
+        "dev": "rslib build -w",
         "test:unit": "jest -c jest.config.cjs",
-        "check-types": "pnpm build"
+        "check-types": "pnpm build",
+        "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
     },
     "dependencies": {
-        "@posthog/core": "workspace:^"
+        "@posthog/core": "workspace:^",
+        "@posthog/types": "workspace:^"
     },
     "devDependencies": {
         "@posthog-tooling/tsconfig-base": "workspace:*",
+        "@rslib/core": "catalog:",
         "@types/jest": "catalog:",
         "jest": "catalog:",
         "ts-jest": "catalog:",
-        "typescript": "^6.0.3"
+        "typescript": "catalog:"
     }
 }

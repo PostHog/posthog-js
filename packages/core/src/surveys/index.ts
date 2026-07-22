@@ -16,3 +16,5 @@ export {
   getLanguageFromStoredPersonProperties,
   normalizeLanguageCode,
 } from './translations'
+export { canSurveyActivateRepeatedly, doesSurveyActivateByEvent } from './activation'
+export { getSurveyIterationKey, isSurveyKeyForSurvey, type SurveyWithIteration } from './keys'

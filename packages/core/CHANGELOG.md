@@ -1,5 +1,114 @@
 # @posthog/core
 
+## 1.44.0
+
+### Minor Changes
+
+- [#4172](https://github.com/PostHog/posthog-js/pull/4172) [`9621830`](https://github.com/PostHog/posthog-js/commit/9621830c359a9955ffec0db61164e5fc450e5443) Thanks [@haacked](https://github.com/haacked)! - send minimal `$feature_flag_called` events when the server enables it
+
+  When the v2 `/flags` response carries `minimalFlagCalledEvents: true` (or, for posthog-node local evaluation, the flag-definitions payload carries `minimal_flag_called_events: true`) and the evaluated flag is not linked to an experiment (`$feature_flag_has_experiment === false`), `$feature_flag_called` events are rebuilt from a strict allowlist of flag-evaluation, processing-control, and SDK-identity properties. Super properties, `$set`/`$set_once`, the `$feature/<key>` enumeration, `$active_feature_flags`, and the context envelope are stripped. Any missing signal (no gate on the response, bootstrapped or locally injected flags, `has_experiment` unknown) falls back to the full event, and experiment-linked flags always send the full envelope. The gate is stored alongside the cached flags (posthog-js persistence, posthog-node poller state) and is server-controlled, with no SDK-side configuration. `before_send` runs after the filter and may re-add stripped properties. (2026-07-20)
+
+## 1.43.1
+
+### Patch Changes
+
+- [#4168](https://github.com/PostHog/posthog-js/pull/4168) [`06d19a2`](https://github.com/PostHog/posthog-js/commit/06d19a2c5ab7801971219f8b50131f19e5f0ed17) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Avoid Next.js Edge runtime warnings for native compression and fatal error handling.
+  (2026-07-16)
+
+## 1.43.0
+
+### Minor Changes
+
+- [#4159](https://github.com/PostHog/posthog-js/pull/4159) [`fad6d9a`](https://github.com/PostHog/posthog-js/commit/fad6d9adae4163cd63859766916cdcbae629a110) Thanks [@haacked](https://github.com/haacked)! - add `$feature_flag_has_experiment` to `$feature_flag_called` events
+
+  `$feature_flag_called` events now carry a `$feature_flag_has_experiment` boolean sourced from the server's `has_experiment` flag metadata (the `/flags?v=2` response for remote evaluation, the `/api/feature_flag/local_evaluation` definitions for posthog-node local evaluation). The property is only sent when the server explicitly reports `has_experiment`; it is omitted entirely when the value is unknown (older servers, missing metadata, bootstrapped or locally injected flags). (2026-07-16)
+
+### Patch Changes
+
+- Updated dependencies [[`fad6d9a`](https://github.com/PostHog/posthog-js/commit/fad6d9adae4163cd63859766916cdcbae629a110)]:
+  - @posthog/types@1.396.0
+
+## 1.42.1
+
+### Patch Changes
+
+- [#4153](https://github.com/PostHog/posthog-js/pull/4153) [`fc2cb2e`](https://github.com/PostHog/posthog-js/commit/fc2cb2e6e7accf23ed1f075f6da996f6ba575276) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Log a `warn` (previously `info`) when the local event queue is full and the oldest event is dropped, matching the severity Python and Rust already use for this condition.
+  (2026-07-15)
+
+## 1.42.0
+
+### Minor Changes
+
+- [#4117](https://github.com/PostHog/posthog-js/pull/4117) [`1eddff7`](https://github.com/PostHog/posthog-js/commit/1eddff74e63ff539eb3144f075b14ab5ffec84cc) Thanks [@DanielVisca](https://github.com/DanielVisca)! - add the posthog.metrics API (count, gauge, histogram) to posthog-node — alpha
+
+  Backend services can now record metrics through the same statsd-style pre-aggregating client the browser SDK ships, with no OpenTelemetry setup:
+
+  ```ts
+  const client = new PostHog('phc_...', { metrics: { serviceName: 'billing-worker' } })
+  client.metrics.count('invoices.processed', 1, { attributes: { plan: 'pro' } })
+  client.metrics.gauge('queue.depth', 42)
+  client.metrics.histogram('job.duration', 187, { unit: 'ms' })
+  ```
+
+  Samples aggregate in memory and flush as OTLP/JSON to `/i/v1/metrics` (one data point per series per window). Pending metrics are flushed on `shutdown()`. Core gains `_sendMetricsBatch` on `PostHogCoreStateless` (same outcome contract as `_sendLogsBatch`) and a shared `resolveMetricsConfig`, so any core-based SDK can host `PostHogMetrics`. (2026-07-15)
+
+## 1.41.1
+
+### Patch Changes
+
+- [#4090](https://github.com/PostHog/posthog-js/pull/4090) [`6dd8827`](https://github.com/PostHog/posthog-js/commit/6dd88274193e07a5f9f4bcb816dfca49cfe072d7) Thanks [@lucasheriques](https://github.com/lucasheriques)! - chore: survey seen-key and repeat-activation helpers now live in @posthog/core, shared by the web and React Native SDKs. Core's survey enums are now const-object literal unions (matching the web SDK's existing pattern), so the same values type-check across both SDKs. No behavior change. Type-level note: enum members no longer work as standalone type annotations (e.g. `SurveyType.Popover` as a type); use the exported union types instead. Runtime values are unchanged.
+  (2026-07-14)
+
+## 1.41.0
+
+### Minor Changes
+
+- [#4101](https://github.com/PostHog/posthog-js/pull/4101) [`dc2aa5b`](https://github.com/PostHog/posthog-js/commit/dc2aa5b3175dd4112347c16d16725045d63387f9) Thanks [@posthog](https://github.com/apps/posthog)! - Normalize the error tracking rate-limiter config to first-class options. The browser SDK now reads `exceptionRateLimiterRefillRate` / `exceptionRateLimiterBucketSize` on `error_tracking`, with the previous double-underscore `__exceptionRateLimiterRefillRate` / `__exceptionRateLimiterBucketSize` options deprecated but still honoured as a fallback. The option shape (`ExceptionRateLimiterConfig`) and default-resolution logic (`resolveExceptionRateLimiterConfig`) now live in `@posthog/core` and are shared between the browser and Node SDKs.
+  (2026-07-14)
+
+### Patch Changes
+
+- Updated dependencies [[`dc2aa5b`](https://github.com/PostHog/posthog-js/commit/dc2aa5b3175dd4112347c16d16725045d63387f9)]:
+  - @posthog/types@1.394.0
+
+## 1.40.2
+
+### Patch Changes
+
+- [#4105](https://github.com/PostHog/posthog-js/pull/4105) [`203284a`](https://github.com/PostHog/posthog-js/commit/203284ad0234a667153ec96c34d0e61c4847f4b2) Thanks [@eli-r-ph](https://github.com/eli-r-ph)! - Extract the `/batch/` submission out of `_flush()` and `sendImmediate()` into a single overridable `protected sendBatch()` seam on `PostHogCoreStateless`, and widen `requestTimeout`/`historicalMigration` to `protected`. Add an overridable queue-route seam (`getQueueRouteKey`, `persistedQueueKeyForRoute`, `getActiveQueueRoutes`) so a subclass can partition events across independent queues that batch, flush, retry, and persist separately, plus an `AiQueue` persisted-property key and a `route` argument on `sendBatch`. This is an internal, behavior-preserving refactor — with the default single route the enqueue/flush/shutdown/reset paths are byte-identical (v0 request shape, retry, 413 handling, and error surfacing unchanged), so browser and React Native are unaffected. Groundwork for opt-in Capture V1 support in `posthog-node`, where `$ai_*` events stay on the legacy transport isolated from the V1 route.
+  (2026-07-11)
+
+## 1.40.1
+
+### Patch Changes
+
+- [#4121](https://github.com/PostHog/posthog-js/pull/4121) [`e6b5ab2`](https://github.com/PostHog/posthog-js/commit/e6b5ab21acb5c14f903af6fcd84118fb474a7563) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Prevent shutdown from looping forever when a flush makes no queue progress.
+  (2026-07-09)
+
+- [#4120](https://github.com/PostHog/posthog-js/pull/4120) [`d0e531a`](https://github.com/PostHog/posthog-js/commit/d0e531af583fd47c6a9f1d11de421398db55f0c8) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Coalesce concurrent flush requests to avoid chaining redundant flushes while offline.
+  (2026-07-09)
+
+## 1.40.0
+
+### Minor Changes
+
+- [#4115](https://github.com/PostHog/posthog-js/pull/4115) [`86bb3a5`](https://github.com/PostHog/posthog-js/commit/86bb3a50c122852b47b7ced16bec239b801d05f2) Thanks [@DanielVisca](https://github.com/DanielVisca)! - add the posthog.metrics API (count, gauge, histogram) — alpha
+
+  A statsd-style pre-aggregating metrics client for the PostHog Metrics product (alpha). Samples are folded into per-series aggregates in memory (counts sum, gauges keep the last value, histograms accumulate buckets) and flushed periodically as OTLP/JSON to `/i/v1/metrics` — one data point per series per flush window, no matter how many calls. No OpenTelemetry SDK setup required:
+
+  ```ts
+  posthog.metrics.count('orders_created', 1)
+  posthog.metrics.gauge('active_connections', 42)
+  posthog.metrics.histogram('api_latency', 187, { unit: 'ms' })
+  ```
+
+  Configure via `metrics: { serviceName, environment, flushIntervalMs, maxSeriesPerFlush, beforeSend, ... }`. (2026-07-08)
+
+### Patch Changes
+
+- Updated dependencies [[`86bb3a5`](https://github.com/PostHog/posthog-js/commit/86bb3a50c122852b47b7ced16bec239b801d05f2)]:
+  - @posthog/types@1.393.0
+
 ## 1.39.6
 
 ### Patch Changes

@@ -102,13 +102,17 @@ export function OpenTextQuestion({
         }
         return ''
     })
+    const disableAutofocus = appearance?.disableAutofocus
     useEffect(() => {
+        if (disableAutofocus) {
+            return
+        }
         setTimeout(() => {
             if (!isPreviewMode) {
                 inputRef.current?.focus()
             }
         }, 100)
-    }, [isPreviewMode])
+    }, [isPreviewMode, disableAutofocus])
 
     const htmlFor = `surveyQuestion${displayQuestionIndex}`
 

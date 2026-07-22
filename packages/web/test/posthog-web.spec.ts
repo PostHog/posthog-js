@@ -127,7 +127,6 @@ describe('PostHogWeb', () => {
     })
 
     it('should not patch history methods when captureHistoryEvents is disabled', () => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const posthog = new PostHog('TEST_API_KEY', {
         captureHistoryEvents: false,
       })
@@ -137,7 +136,6 @@ describe('PostHogWeb', () => {
     })
 
     it('should patch history methods when captureHistoryEvents is enabled', () => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const posthog = new PostHog('TEST_API_KEY', {
         captureHistoryEvents: true,
       })

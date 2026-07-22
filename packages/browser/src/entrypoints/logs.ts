@@ -296,9 +296,9 @@ const stringifyArgsSafely = (
 ): { body: string; truncated: boolean; attributes: Record<string, any> } => {
     const parts: string[] = []
     const budget = { remaining: sizeLimit, truncated: false }
-    const attributeCollector = isObject(args[0])
+    const attributeCollector: AttributeCollector | undefined = isObject(args[0])
         ? {
-              result: {} as Record<string, any>,
+              result: {},
               keysRemaining: LOG_ATTRIBUTES_LIMIT,
               sizeRemaining: LOG_BODY_SIZE_LIMIT,
               truncated: false,
@@ -343,18 +343,37 @@ const LEVEL_MAP: Record<ConsoleLevel, LogSeverityLevel> = {
     info: 'info',
 }
 
+const originalConsoleMethod = (method: any): any => {
+    while (method?.__rrweb_original__) {
+        method = method.__rrweb_original__
+    }
+    return method
+}
+
 const initializeLogs = (posthog: PostHog) => {
     // `host` is carried here because the core SDK context has no equivalent. Session
     // attributes (window.id, sessionStartTimestamp, lastActivityTimestamp) are added
     // downstream by the core pipeline from the SDK context, alongside sessionId.
     const attributes: Record<string, string> = { host: assignableWindow.location.host }
 
+    // Re-entrancy guard: the capture path itself logs — `_captureConsoleLog` calls into
+    // session management, which emits internal debug lines through PostHog's own logger,
+    // which in turn writes to the (now wrapped) console. Without this flag that would
+    // re-enter capture and recurse until the stack overflows.
+    let isCapturingLog = false
+
     for (const level of Object.keys(LEVEL_MAP) as ConsoleLevel[]) {
         const logWrapper =
             (originalConsoleLog: any) =>
             (...args: any[]) => {
+                // Tracks whether *this* invocation acquired the re-entrancy guard, so that a
+                // nested console call which skips capture doesn't release the guard early and
+                // reopen the capture path while the outer invocation is still running.
+                let acquiredGuard = false
                 try {
-                    if (args.length > 0 && posthog.is_capturing()) {
+                    if (args.length > 0 && !isCapturingLog && posthog.is_capturing()) {
+                        isCapturingLog = true
+                        acquiredGuard = true
                         const {
                             body,
                             truncated,
@@ -379,12 +398,21 @@ const initializeLogs = (posthog: PostHog) => {
                     // Capture must never break the page's own console output, so the
                     // real console call below always runs even if capture throws.
                 } finally {
+                    if (acquiredGuard) {
+                        isCapturingLog = false
+                    }
                     originalConsoleLog.apply(assignableWindow.console, args)
                 }
             }
 
         const originalConsoleLog = assignableWindow.console[level]
-        assignableWindow.console[level] = logWrapper(originalConsoleLog)
+        const wrapped = logWrapper(originalConsoleLog)
+        // Expose the original console method the same way rrweb's console plugin does, so
+        // PostHog's internal logger (utils/logger.ts) writes to the real console instead of
+        // re-entering this wrapper when it emits debug lines from inside the capture path.
+        // Flatten an existing marker if another console plugin already wrapped this method.
+        ;(wrapped as any).__rrweb_original__ = originalConsoleMethod(originalConsoleLog)
+        assignableWindow.console[level] = wrapped
     }
 }
 

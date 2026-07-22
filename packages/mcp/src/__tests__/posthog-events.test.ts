@@ -59,6 +59,23 @@ describe('buildPostHogCaptureEvents', () => {
     expect(event.properties).not.toHaveProperty('project_id')
   })
 
+  it('stamps $mcp_protocol_version on any event carrying it, including the $exception sibling', () => {
+    // Not initialize-only: a tool call inherits the session's negotiated version.
+    const [toolCall] = buildPostHogCaptureEvents(makeEvent({ protocolVersion: '2025-06-18' }))
+    expect(toolCall.properties[PostHogMCPAnalyticsProperty.ProtocolVersion]).toBe('2025-06-18')
+
+    // The $exception sibling carries it too (surfaced for debugging failures).
+    const errored = buildPostHogCaptureEvents(
+      makeEvent({ protocolVersion: '2025-06-18', isError: true, error: makeError('boom') })
+    )
+    const exception = findEvent(errored, PostHogMCPAnalyticsEvent.Exception)
+    expect(exception?.properties[PostHogMCPAnalyticsProperty.ProtocolVersion]).toBe('2025-06-18')
+
+    // Absent before the handshake negotiates it.
+    const [preHandshake] = buildPostHogCaptureEvents(makeEvent())
+    expect(preHandshake.properties).not.toHaveProperty(PostHogMCPAnalyticsProperty.ProtocolVersion)
+  })
+
   it('does not stamp $lib/$lib_version in the built properties (the client owns those)', () => {
     // `$lib` / `$lib_version` are set by the posthog-node client via
     // `getLibraryId()` / `getLibraryVersion()` (see `applyMcpLibIdentity`), not

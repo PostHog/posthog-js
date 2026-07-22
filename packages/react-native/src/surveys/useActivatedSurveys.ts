@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
-import { hasEvents, matchPropertyFilters, PropertyFilters, SurveyEventWithFilters } from './surveys-utils'
+import { doesSurveyActivateByEvent } from '@posthog/core/surveys'
+import { matchPropertyFilters, PropertyFilters, SurveyEventWithFilters } from './surveys-utils'
 import { Survey } from '@posthog/core'
 import { PostHog } from '../posthog-rn'
 
@@ -16,7 +17,7 @@ export function useActivatedSurveys(posthog: PostHog, surveys: Survey[]): Readon
 
   const eventMap = useMemo(() => {
     const newEventMap = new Map<string, EventSurveyConfig[]>()
-    for (const survey of surveys.filter(hasEvents)) {
+    for (const survey of surveys.filter(doesSurveyActivateByEvent)) {
       for (const event of (survey.conditions?.events?.values ?? []) as SurveyEventWithFilters[]) {
         const configs = newEventMap.get(event.name) ?? []
         configs.push({

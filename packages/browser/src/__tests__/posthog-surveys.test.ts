@@ -1,5 +1,4 @@
-/* eslint-disable compat/compat */
-jest.mock('../utils/logger', () => ({
+jest.mock('@posthog/browser-common/utils/logger', () => ({
     createLogger: jest.fn().mockReturnValue({
         info: jest.fn(),
         warn: jest.fn(),
@@ -116,6 +115,7 @@ describe('posthog-surveys', () => {
                     onConsentChange: jest.fn(),
                 },
                 featureFlags: {
+                    hasLoadedFlags: true,
                     _send_request: jest
                         .fn()
                         .mockImplementation(({ callback }) => callback({ statusCode: 200, json: flagsResponse })),
@@ -845,6 +845,14 @@ describe('posthog-surveys', () => {
                 // otherwise a surveys-API outage becomes a per-poll request storm.
                 surveys.getSurveys(mockCallback)
                 expect(mockPostHog._send_request).toHaveBeenCalledTimes(1)
+            })
+        })
+
+        describe('handlePageUnload', () => {
+            it('does not throw when a stale survey manager is missing handlePageUnload', () => {
+                surveys['_surveyManager'] = {} as unknown as SurveyManager
+
+                expect(() => surveys.handlePageUnload()).not.toThrow()
             })
         })
 

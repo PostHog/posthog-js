@@ -38,11 +38,14 @@ jobs:
                   install: 'false'
                   build: 'false'
 
-            - name: Install ripgrep for watcher search tools
-              run: sudo apt-get update && sudo apt-get install -y ripgrep
+            - name: Install watcher search tools
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y fd-find ripgrep
+                  sudo ln -sf "$(command -v fdfind)" /usr/local/bin/fd
 
             - name: Sweep issues
-              uses: PostHog/posthog-watcher-action@66668349cf7569a534d518ec70bd3f9afb8932ab
+              uses: PostHog/posthog-watcher-action@8b166434ccf42ce9da6ee1fda3f622268812aed5
               with:
                   openai-api-key: ${{ secrets.POSTHOG_WATCHER_OPENAI_API_KEY }}
                   mode: sweep
@@ -57,3 +60,6 @@ jobs:
                   fix-pr-review-team: PostHog/team-client-libraries
                   approve-project-resources: 'true'
                   state-enabled: 'true'
+                  pi-session-sharing: 'true'
+                  pi-session-sharing-mode: gist
+                  pi-session-gist-token: ${{ secrets.PI_SESSION_GIST_TOKEN }}
