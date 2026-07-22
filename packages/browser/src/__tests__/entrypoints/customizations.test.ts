@@ -48,14 +48,12 @@ describe('customizations entrypoints', () => {
             ).default
             Config.LIB_NAME = 'test-sentinel'
             Config.LIB_VERSION = '0.0.0-test'
-            Config.JS_SDK_VERSION = '0.0.0-test'
 
             jest.requireActual('../../entrypoints/customizations.es')
 
             expect(Config).toMatchObject({
                 LIB_NAME: 'web',
                 LIB_VERSION: packageInfo.version,
-                JS_SDK_VERSION: packageInfo.version,
             })
         })
     })

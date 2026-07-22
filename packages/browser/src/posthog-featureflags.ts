@@ -620,13 +620,13 @@ export class PostHogFeatureFlags implements Extension {
         const data: Record<string, any> = {
             token: token,
             distinct_id: this._instance.get_distinct_id(),
-            $lib: Config.LIB_NAME,
-            $lib_version: Config.LIB_VERSION,
             groups: this._instance.getGroups(),
             $anon_distinct_id: this.$anon_distinct_id,
             person_properties: {
                 ...(this._persistence?.get_initial_props() || {}),
                 ...(this._prop(STORED_PERSON_PROPERTIES_KEY) || {}),
+                $lib: Config.LIB_NAME,
+                $lib_version: Config.LIB_VERSION,
             },
             group_properties: this._prop(STORED_GROUP_PROPERTIES_KEY),
             timezone: getTimezone(),
@@ -979,8 +979,10 @@ export class PostHogFeatureFlags implements Extension {
         const data: Record<string, any> = {
             distinct_id: this._instance.get_distinct_id(),
             token,
-            $lib: Config.LIB_NAME,
-            $lib_version: Config.LIB_VERSION,
+            person_properties: {
+                $lib: Config.LIB_NAME,
+                $lib_version: Config.LIB_VERSION,
+            },
         }
 
         // Add evaluation contexts if configured
