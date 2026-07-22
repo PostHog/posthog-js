@@ -1208,9 +1208,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         this._clearConditionalRecordingPersistence()
 
-        // When rrweb isn't running _updateWindowAndSessionIds can't drive the restart,
-        // so we restart here. Otherwise it handles the restart after this callback returns.
-        if (this._isIdle === true || !this.isStarted) {
+        // _updateWindowAndSessionIds only drives the restart while rrweb is running and the
+        // recorder has confirmed activity (_isIdle === false), so restart here in every other
+        // state — idle, stopped, or 'unknown' (a tab with no user interaction since rrweb
+        // started stays 'unknown' indefinitely).
+        if (this._isIdle !== false || !this.isStarted) {
             this._isIdle = 'unknown'
             this.stop()
             this.start('session_id_changed')
@@ -1828,8 +1830,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         if (
             sessionChanged ||
-            // we never want to flush a healthy same-session buffer while idle
-            (!this._isIdle &&
+            // we never want to flush a healthy same-session buffer while confirmed idle, but
+            // 'unknown' still captures so its buffer must respect the size cap or it grows unbounded
+            (this._isIdle !== true &&
                 this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE)
         ) {
             this._buffer = this._flushBuffer()
@@ -1846,7 +1849,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._buffer.data.push(properties.$snapshot_data)
         this._buffer.sizes.push(properties.$snapshot_bytes)
 
-        if (!this._flushBufferTimer && !this._isIdle) {
+        // Schedule the flush unless confirmed idle: a tab that never sees user interaction stays
+        // 'unknown' indefinitely, and without a timer its captured events (including the initial
+        // full snapshot after a session rotation) would never ship until the next rotation or unload.
+        if (!this._flushBufferTimer && this._isIdle !== true) {
             this._flushBufferTimer = setTimeout(() => {
                 this._flushBuffer()
             }, RECORDING_BUFFER_TIMEOUT)
@@ -2002,7 +2008,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             }
         }
 
-        if (this._isIdle) {
+        // Only bail on confirmed idle: while 'unknown' the recorder still captures, so it must
+        // also keep checking for session changes or its events are stamped with a stale session id.
+        if (this._isIdle === true) {
             return
         }
 

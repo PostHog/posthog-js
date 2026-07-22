@@ -54,6 +54,7 @@ import { SessionRecording } from '../../../extensions/replay/session-recording'
 import {
     LazyLoadedSessionRecording,
     RECORDING_IDLE_THRESHOLD_MS,
+    RECORDING_BUFFER_TIMEOUT,
     RECORDING_MAX_EVENT_SIZE,
     RECORDING_REMOTE_CONFIG_TTL_MS,
 } from '../../../extensions/replay/external/lazy-loaded-session-recorder'
@@ -1308,6 +1309,121 @@ describe('Lazy SessionRecording', () => {
                 expect(recordMock).toHaveBeenCalledTimes(2)
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionId']).toEqual(rotatedSessionId)
                 expect(sessionRecording['_lazyLoadedSessionRecording']['isStarted']).toEqual(true)
+            })
+
+            it('restarts recorder when session rotates externally while _isIdle is unknown', () => {
+                // Regression test for #4202: a tab that never sees user interaction keeps
+                // _isIdle === 'unknown'. An analytics event can still rotate the session via
+                // activityTimeout; the recorder must follow the rotation or every later event
+                // ships under the old session id and the new session never gets a full snapshot.
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual('unknown')
+                const firstSessionId = sessionRecording['_lazyLoadedSessionRecording']['_sessionId']
+                const recordMock = assignableWindow.__PosthogExtensions__.rrweb.record as Mock
+                expect(recordMock).toHaveBeenCalledTimes(1)
+
+                sessionIdGeneratorMock.mockClear()
+                const rotatedSessionId = 'unknown-idle-rotated-session-id'
+                sessionIdGeneratorMock.mockImplementation(() => rotatedSessionId)
+
+                const rotationTimestamp = sessionManager['_sessionTimeoutMs'] + startingTimestamp + 1000
+                jest.useFakeTimers().setSystemTime(new Date(rotationTimestamp))
+                const { sessionId: newSessionId } = sessionManager.checkAndGetSessionAndWindowId(
+                    false,
+                    rotationTimestamp
+                )
+                expect(newSessionId).toEqual(rotatedSessionId)
+                expect(newSessionId).not.toEqual(firstSessionId)
+
+                // the session-id callback restarts the recorder immediately
+                expect(recordMock).toHaveBeenCalledTimes(2)
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionId']).toEqual(rotatedSessionId)
+
+                // and post-rotation events are attributed to the new session
+                emitInactiveEvent(rotationTimestamp + 100, 'unknown')
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].sessionId).toEqual(rotatedSessionId)
+            })
+
+            it('takes a full snapshot for the new session on a second idle rotation without user interaction', () => {
+                // Regression test for #4202, reported production sequence: interaction, idle,
+                // rotation (restart leaves _isIdle 'unknown'), no further interaction, second
+                // rotation. The second rotation must also restart the recorder.
+                const recordMock = assignableWindow.__PosthogExtensions__.rrweb.record as Mock
+                const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+
+                emitActiveEvent(startingTimestamp + 100)
+                emitInactiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000, true)
+
+                sessionIdGeneratorMock.mockClear()
+                sessionIdGeneratorMock.mockImplementation(() => 'second-session-id')
+                const firstRotationTimestamp = sessionManager['_sessionTimeoutMs'] + startingTimestamp + 1000
+                jest.useFakeTimers().setSystemTime(new Date(firstRotationTimestamp))
+                sessionManager.checkAndGetSessionAndWindowId(false, firstRotationTimestamp)
+
+                // first rotation while confirmed idle restarts and leaves _isIdle 'unknown'
+                expect(lazyRecorder['_sessionId']).toEqual('second-session-id')
+                expect(recordMock).toHaveBeenCalledTimes(2)
+                expect(lazyRecorder['_isIdle']).toEqual('unknown')
+
+                // the restarted rrweb ships its initial full snapshot; still no user interaction
+                _emit(createFullSnapshot({ timestamp: firstRotationTimestamp + 10 }))
+                emitInactiveEvent(firstRotationTimestamp + 20, 'unknown')
+                expect(lazyRecorder['_buffer'].sessionId).toEqual('second-session-id')
+
+                sessionIdGeneratorMock.mockImplementation(() => 'third-session-id')
+                const secondRotationTimestamp = sessionManager['_sessionTimeoutMs'] + firstRotationTimestamp + 1000
+                jest.useFakeTimers().setSystemTime(new Date(secondRotationTimestamp))
+                const { sessionId: newSessionId } = sessionManager.checkAndGetSessionAndWindowId(
+                    false,
+                    secondRotationTimestamp
+                )
+                expect(newSessionId).toEqual('third-session-id')
+
+                // the second rotation must restart the recorder too
+                expect(recordMock).toHaveBeenCalledTimes(3)
+                expect(lazyRecorder['_sessionId']).toEqual('third-session-id')
+
+                // and the new session's full snapshot is attributed to it
+                _emit(createFullSnapshot({ timestamp: secondRotationTimestamp + 10 }))
+                expect(lazyRecorder['_buffer'].sessionId).toEqual('third-session-id')
+                const fullSnapshotSessions = lazyRecorder['_fullSnapshotTimestamps'].map(
+                    ([sid]: [string, number]) => sid
+                )
+                expect(fullSnapshotSessions).toContain('third-session-id')
+            })
+
+            it('re-syncs a stale session id from the session manager while _isIdle is unknown', () => {
+                // If the recorder's session id ever diverges from the session manager while no
+                // user interaction has confirmed activity, the next event must re-sync and
+                // restart rather than shipping events under the stale id.
+                const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+                const recordMock = assignableWindow.__PosthogExtensions__.rrweb.record as Mock
+                expect(lazyRecorder['_isIdle']).toEqual('unknown')
+                const realSessionId = lazyRecorder['_sessionId']
+                lazyRecorder['_sessionId'] = 'stale-session-id'
+
+                emitInactiveEvent(startingTimestamp + 100, 'unknown')
+
+                expect(lazyRecorder['_sessionId']).toEqual(realSessionId)
+                expect(recordMock).toHaveBeenCalledTimes(2)
+            })
+
+            it('schedules a buffer flush while _isIdle is unknown so background tabs ship their data', () => {
+                jest.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+
+                const snapshot = emitInactiveEvent(startingTimestamp + 100, 'unknown')
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toContain(snapshot)
+                expect(posthog.capture).not.toHaveBeenCalled()
+
+                jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                expect(posthog.capture).toHaveBeenCalledWith(
+                    '$snapshot',
+                    expect.objectContaining({
+                        $session_id: sessionId,
+                        $snapshot_data: [snapshot],
+                    }),
+                    expect.any(Object)
+                )
             })
 
             it('recorder follows an adopted sibling-tab session id (does not record under the stale id)', () => {
@@ -4333,6 +4449,9 @@ describe('Lazy SessionRecording', () => {
 
         it('emits session linking events on activity timeout', () => {
             const tryAddCustomEvent = sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent'] as any
+            // confirm user activity so the rotation callback defers the restart to
+            // _updateWindowAndSessionIds and only the linking events are captured below
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: Date.now() }))
             tryAddCustomEvent.mockClear()
 
             const newSessionId = 'new-session-id'
@@ -4388,6 +4507,9 @@ describe('Lazy SessionRecording', () => {
 
         it('emits session linking events on session past maximum length', () => {
             const tryAddCustomEvent = sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent'] as any
+            // confirm user activity so the rotation callback defers the restart to
+            // _updateWindowAndSessionIds and only the linking events are captured below
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: Date.now() }))
             tryAddCustomEvent.mockClear()
 
             const newSessionId = 'new-session-id-2'
@@ -4483,6 +4605,9 @@ describe('Lazy SessionRecording', () => {
 
         it('does NOT emit linking events when only noSessionId is true (like after reset)', () => {
             const tryAddCustomEvent = sessionRecording['_lazyLoadedSessionRecording']['_tryAddCustomEvent'] as any
+            // confirm user activity so the rotation callback defers the restart to
+            // _updateWindowAndSessionIds and only the linking events are captured below
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: Date.now() }))
             tryAddCustomEvent.mockClear()
 
             const newSessionId = 'new-session-after-reset'
