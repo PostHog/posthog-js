@@ -1156,12 +1156,13 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   isFeatureEnabled(key: string, options: IsFeatureEnabledOptions & { defaultValue: boolean }): boolean
   isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined
   isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined {
-    const result = this._getFeatureFlagResult(key, {
-      sendEvent: options?.sendEvent,
-      missingFlagBehavior: options?.defaultValue === undefined ? 'getFeatureFlag' : undefined,
-    })
+    if (options?.defaultValue === undefined) {
+      const response = this.getFeatureFlag(key, options)
+      return response === undefined ? undefined : !!response
+    }
+    const result = this._getFeatureFlagResult(key, { sendEvent: options.sendEvent })
     const value = result?.variant ?? result?.enabled
-    return value === undefined ? options?.defaultValue : !!value
+    return value === undefined ? options.defaultValue : !!value
   }
 
   // Used when we want to trigger the reload but we don't care about the result
