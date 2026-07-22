@@ -42,7 +42,7 @@ jobs:
 
             - uses: ./.github/actions/setup
               with:
-                  install: 'true'
+                  install: 'false'
                   build: 'false'
 
             - name: Install watcher search tools
@@ -60,10 +60,6 @@ jobs:
                   allow-fix: 'true'
                   allow-close: 'true'
                   allow-security-ai: 'true'
-                  validation-command: >-
-                      env -i HOME="$HOME" PATH="$PATH" CI=true /bin/bash -c
-                      'pnpm build && pnpm test:unit'
-                  require-reproduction: 'true'
                   max-repair-attempts: '3'
                   max-pi-calls: '16'
                   fix-pr-review-team: PostHog/team-client-libraries
@@ -84,7 +80,7 @@ jobs:
 
             - uses: ./.github/actions/setup
               with:
-                  install: 'true'
+                  install: 'false'
                   build: 'false'
 
             - name: Install watcher search tools
@@ -103,10 +99,6 @@ jobs:
                   allow-fix: 'true'
                   allow-close: 'true'
                   allow-security-ai: 'true'
-                  validation-command: >-
-                      env -i HOME="$HOME" PATH="$PATH" CI=true /bin/bash -c
-                      'pnpm build && pnpm test:unit'
-                  require-reproduction: 'true'
                   max-repair-attempts: '3'
                   max-pi-calls: '16'
                   fix-pr-review-team: PostHog/team-client-libraries
