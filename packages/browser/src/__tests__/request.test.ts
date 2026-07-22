@@ -195,7 +195,7 @@ describe('request', () => {
                 createRequest({
                     url: 'https://any.posthog-instance.com/api/surveys/',
                     method: 'GET',
-                    timestampParam: '_',
+                    timestampLocation: 'query',
                 })
             )
 
@@ -204,29 +204,59 @@ describe('request', () => {
             )
         })
 
-        it.each(['/e/', '/s/', '/i/v0/e/', '/i/v0/s/'])(
-            'adds sent_at and does not add ver to browser capture endpoint %s',
+        it.each(['/e/', '/i/v0/e/'])(
+            'adds sent_at to the body and does not add ver to browser analytics endpoint %s',
             (path) => {
+                const event = { event: 'test event', properties: { token: 'testtoken' } }
                 request(
                     createRequest({
                         url: `https://any.posthog-instance.com${path}`,
                         method: 'POST',
-                        timestampParam: 'sent_at',
+                        data: event,
+                        timestampLocation: 'body',
                     })
                 )
 
-                const requestedUrl = mockedFetch.mock.calls[0][0]
-                expect(requestedUrl).toContain('sent_at=1700000000000')
+                const [requestedUrl, requestOptions] = mockedFetch.mock.calls[0]
+                expect(requestedUrl).not.toContain('sent_at=')
                 expect(requestedUrl).not.toContain('_=')
                 expect(requestedUrl).not.toContain('ver=')
+                expect(JSON.parse(requestOptions.body)).toEqual({
+                    api_key: 'testtoken',
+                    batch: [event],
+                    sent_at: '2023-11-14T22:13:20.000Z',
+                })
             }
         )
 
-        it('does not add ver to proxied capture endpoints', () => {
+        it('puts batched analytics events in one sent_at body envelope', () => {
+            const events = [
+                { event: 'first event', properties: { token: 'testtoken' } },
+                { event: 'second event', properties: { token: 'testtoken' } },
+            ]
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/e/',
+                    method: 'POST',
+                    data: events,
+                    timestampLocation: 'body',
+                })
+            )
+
+            expect(JSON.parse(mockedFetch.mock.calls[0][1].body)).toEqual({
+                api_key: 'testtoken',
+                batch: events,
+                sent_at: '2023-11-14T22:13:20.000Z',
+            })
+        })
+
+        it('adds sent_at to the query for session recording requests', () => {
             request(
                 createRequest({
                     url: 'https://any.posthog-instance.com/ingest/s/',
-                    timestampParam: 'sent_at',
+                    method: 'POST',
+                    data: { event: '$snapshot' },
+                    timestampLocation: 'query',
                 })
             )
 
@@ -243,12 +273,14 @@ describe('request', () => {
                 request(
                     createRequest({
                         url: 'https://any.posthog-instance.com/e/',
-                        timestampParam: 'sent_at',
+                        method: 'POST',
+                        data: { event: 'test event', properties: { token: 'testtoken' } },
+                        timestampLocation: 'body',
                     })
                 )
 
                 const requestedUrl = mockedFetch.mock.calls[0][0]
-                expect(requestedUrl).toBe('https://any.posthog-instance.com/e/?sent_at=1700000000000')
+                expect(requestedUrl).toBe('https://any.posthog-instance.com/e/')
             } finally {
                 String.prototype.endsWith = originalEndsWith
             }
@@ -258,12 +290,14 @@ describe('request', () => {
             request(
                 createRequest({
                     url: 'https://any.posthog-instance.com/e/?ver=1.23.45&foo=bar',
-                    timestampParam: 'sent_at',
+                    method: 'POST',
+                    data: { event: 'test event', properties: { token: 'testtoken' } },
+                    timestampLocation: 'body',
                 })
             )
 
             const requestedUrl = mockedFetch.mock.calls[0][0]
-            expect(requestedUrl).toBe('https://any.posthog-instance.com/e/?foo=bar&sent_at=1700000000000')
+            expect(requestedUrl).toBe('https://any.posthog-instance.com/e/?foo=bar')
         })
 
         it('adds sent_at and keeps ver on POST feature flag requests', () => {
@@ -271,7 +305,7 @@ describe('request', () => {
                 createRequest({
                     url: 'https://any.posthog-instance.com/flags/?v=2',
                     method: 'POST',
-                    timestampParam: 'sent_at',
+                    timestampLocation: 'query',
                 })
             )
 
@@ -1000,7 +1034,12 @@ describe('request', () => {
             })
 
             describe('quota rejection (sendBeacon returns false)', () => {
-                const bigEvent = (i: number) => ({ event: 'big', i, payload: 'x'.repeat(8 * 1024) })
+                const bigEvent = (i: number) => ({
+                    event: 'big',
+                    i,
+                    payload: 'x'.repeat(8 * 1024),
+                    properties: { token: 'testtoken' },
+                })
                 let warnSpy: jest.SpyInstance
 
                 beforeEach(() => {
@@ -1014,13 +1053,14 @@ describe('request', () => {
                     warnSpy.mockRestore()
                 })
 
-                it('splits a rejected over-quota batch in half and re-sends each piece', () => {
+                it('splits a rejected sent_at body envelope in half and re-sends each piece', () => {
                     mockedNavigator!.sendBeacon.mockReturnValueOnce(false).mockReturnValue(true)
 
                     request(
                         createRequest({
                             method: 'POST',
                             data: [bigEvent(1), bigEvent(2), bigEvent(3), bigEvent(4)],
+                            timestampLocation: 'body',
                         })
                     )
 

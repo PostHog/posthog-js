@@ -1510,7 +1510,7 @@ export class PostHog implements PostHogInterface {
             url: options?._url ?? this.requestRouter.endpointFor('api', this.analyticsDefaultEndpoint),
             data,
             compression: 'best-available',
-            timestampParam: 'sent_at',
+            timestampLocation: options?._batchKey === 'recordings' ? 'query' : 'body',
             batchKey: options?._batchKey,
             transport: options?.transport,
         }

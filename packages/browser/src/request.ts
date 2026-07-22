@@ -100,7 +100,7 @@ export const extendURLParams = (url: string, params: Record<string, any>, replac
         updatedSearch.push(remaining)
     }
 
-    return `${baseUrl}?${updatedSearch.join('&')}`
+    return updatedSearch.length > 0 ? `${baseUrl}?${updatedSearch.join('&')}` : baseUrl
 }
 
 const encodeToDataString = (data: string | Record<string, any>): string => {
@@ -439,10 +439,13 @@ const _sendBeacon = (options: RequestWithOptions) => {
 
         // rejected: over the page's shared ~64KiB in-flight keepalive quota
         // (https://fetch.spec.whatwg.org/#http-network-or-cache-fetch) — halve so what fits still delivers
-        if (isArray(options.data) && options.data.length > 1 && (estimatedSize ?? 0) > BEACON_SPLIT_FLOOR_BYTES) {
-            const mid = Math.ceil(options.data.length / 2)
-            _sendBeacon({ ...options, data: options.data.slice(0, mid) })
-            _sendBeacon({ ...options, data: options.data.slice(mid) })
+        const batch = isArray(options.data) ? options.data : options.data?.batch
+        if (isArray(batch) && batch.length > 1 && (estimatedSize ?? 0) > BEACON_SPLIT_FLOOR_BYTES) {
+            const mid = Math.ceil(batch.length / 2)
+            const splitData = (events: Record<string, any>[]): RequestWithOptions['data'] =>
+                isArray(options.data) ? events : { ...options.data, batch: events }
+            _sendBeacon({ ...options, data: splitData(batch.slice(0, mid)) })
+            _sendBeacon({ ...options, data: splitData(batch.slice(mid)) })
             return
         }
 
@@ -476,11 +479,13 @@ const isVersionlessEndpoint = (url: string): boolean => {
 
 const buildRequestURL = (
     url: string,
+    method: RequestWithOptions['method'],
     compression?: RequestWithOptions['compression'],
-    timestampParam?: RequestWithOptions['timestampParam']
+    timestampLocation?: RequestWithOptions['timestampLocation']
 ): string => {
     const versionlessEndpoint = isVersionlessEndpoint(url)
     const requestURL = versionlessEndpoint ? removeURLParam(url, 'ver') : url
+    const timestampParam = timestampLocation === 'query' ? (method === 'POST' ? 'sent_at' : '_') : undefined
 
     return extendURLParams(
         compression === Compression.GZipJS ? removeURLParam(requestURL, 'compression') : requestURL,
@@ -490,6 +495,17 @@ const buildRequestURL = (
             ...(compression === Compression.GZipJS ? {} : { compression }),
         }
     )
+}
+
+const addSentAtToCaptureBody = (data: NonNullable<RequestWithOptions['data']>): Record<string, any> => {
+    const batch = isArray(data) ? data : [data]
+    const firstEvent = batch[0]
+
+    return {
+        api_key: firstEvent?.properties?.token ?? firstEvent?.token,
+        batch,
+        sent_at: new Date().toISOString(),
+    }
 }
 
 const AVAILABLE_TRANSPORTS: {
@@ -533,7 +549,11 @@ export const request = (_options: RequestWithOptions) => {
         options.compression = Compression.Base64
     }
 
-    options.url = buildRequestURL(options.url, options.compression, options.timestampParam)
+    if (options.timestampLocation === 'body' && options.method === 'POST' && options.data) {
+        options.data = addSentAtToCaptureBody(options.data)
+    }
+
+    options.url = buildRequestURL(options.url, options.method, options.compression, options.timestampLocation)
 
     const availableTransports = AVAILABLE_TRANSPORTS.filter(
         (t) => !options.disableTransport || !t.transport || !options.disableTransport.includes(t.transport)
@@ -567,7 +587,7 @@ export const request = (_options: RequestWithOptions) => {
                     transportMethod({
                         ...options,
                         compression: undefined,
-                        url: buildRequestURL(_options.url, undefined, _options.timestampParam),
+                        url: buildRequestURL(_options.url, _options.method, undefined, _options.timestampLocation),
                     })
                     return
                 }

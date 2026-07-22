@@ -105,7 +105,7 @@ describe('PostHogProductTours', () => {
             const consumer = jest.fn()
             instance.productTours.getProductTours(consumer, true)
             expect(requests).toHaveLength(1)
-            expect(requests[0]).toEqual(expect.objectContaining({ method: 'GET', timestampParam: '_' }))
+            expect(requests[0]).toEqual(expect.objectContaining({ method: 'GET', timestampLocation: 'query' }))
 
             instance.productTours.onRemoteConfig({ ok: true, config: { productTours: false } as RemoteConfig })
 

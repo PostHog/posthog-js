@@ -260,7 +260,7 @@ describe('surveys', () => {
             url: 'https://us.i.posthog.com/api/surveys/?token=testtoken',
             timeout: SURVEYS_REQUEST_TIMEOUT_MS,
             method: 'GET',
-            timestampParam: '_',
+            timestampLocation: 'query',
             callback: expect.any(Function),
         })
         expect(instance._send_request).toHaveBeenCalledTimes(1)
@@ -307,7 +307,7 @@ describe('surveys', () => {
             url: 'https://us.i.posthog.com/api/surveys/?token=testtoken',
             timeout: SURVEYS_REQUEST_TIMEOUT_MS,
             method: 'GET',
-            timestampParam: '_',
+            timestampLocation: 'query',
             callback: expect.any(Function),
         })
         expect(instance._send_request).toHaveBeenCalledTimes(1)

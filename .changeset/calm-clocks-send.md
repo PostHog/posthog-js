@@ -2,4 +2,4 @@
 'posthog-js': patch
 ---
 
-Send request timestamps only to endpoints that use them while preserving cache busting for dynamic GET requests.
+Send analytics timestamps in the request body, retain query timestamps where required, and preserve cache busting for dynamic GET requests.

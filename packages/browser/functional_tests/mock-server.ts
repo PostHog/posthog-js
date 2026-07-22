@@ -36,7 +36,9 @@ const handleRequest = (group: string) => (req: RestRequest, res: ResponseComposi
         }
     }
 
-    capturedRequests[group] = [...(capturedRequests[group] || []), body]
+    const requests =
+        group === '/e/' ? (Array.isArray(body) ? body : Array.isArray(body.batch) ? body.batch : [body]) : [body]
+    capturedRequests[group] = [...(capturedRequests[group] || []), ...requests]
 
     return res(ctx.json({}))
 }

@@ -1063,7 +1063,7 @@ describe('featureflags', () => {
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0]).toEqual(
-                expect.objectContaining({ method: 'POST', timestampParam: 'sent_at' })
+                expect.objectContaining({ method: 'POST', timestampLocation: 'query' })
             )
             expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(undefined)
         })
@@ -1518,7 +1518,7 @@ describe('featureflags', () => {
             expect(instance._send_request).toHaveBeenCalledWith({
                 url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
                 method: 'GET',
-                timestampParam: '_',
+                timestampLocation: 'query',
                 callback: expect.any(Function),
             })
             expect(instance._send_request).toHaveBeenCalledTimes(1)
@@ -1549,7 +1549,7 @@ describe('featureflags', () => {
             expect(instance._send_request).toHaveBeenCalledWith({
                 url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
                 method: 'GET',
-                timestampParam: '_',
+                timestampLocation: 'query',
                 callback: expect.any(Function),
             })
             expect(instance._send_request).toHaveBeenCalledTimes(1)
@@ -1584,7 +1584,7 @@ describe('featureflags', () => {
             expect(instance._send_request).toHaveBeenCalledWith({
                 url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token&stage=concept&stage=beta',
                 method: 'GET',
-                timestampParam: '_',
+                timestampLocation: 'query',
                 callback: expect.any(Function),
             })
         })
