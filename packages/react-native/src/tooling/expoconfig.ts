@@ -2,7 +2,8 @@
 // Copyright (c) 2017 Sentry
 // Licensed under the MIT License: https://github.com/getsentry/sentry-react-native/blob/main/LICENSE.md
 
-const { withAppBuildGradle, withProjectBuildGradle, withXcodeProject } = require('@expo/config-plugins')
+const { withAppBuildGradle, withGradleProperties, withProjectBuildGradle, withXcodeProject } =
+  require('@expo/config-plugins')
 
 // com.posthog.android uploads R8 mapping files and injects a matching map-id so native
 // crash stack traces can be deobfuscated.
@@ -314,6 +315,81 @@ export function disableUserScriptSandboxing(xcodeProject: any): void {
   }
 }
 
+const POSTHOG_DOTENV_BUILD_SETTING = 'POSTHOG_CLI_DOTENV_FILE'
+const POSTHOG_DOTENV_GRADLE_PROPERTY = 'posthog.dotenvFile'
+
+// Strips a leading ./ so relative props join cleanly onto their per-platform prefix.
+function normalizeDotenvFileProp(dotenvFile: string): string {
+  return dotenvFile.replace(/^\.\//, '')
+}
+
+// Posix root or a Windows drive prefix — enough without pulling in `path`,
+// whose isAbsolute is platform-bound while prebuild can run anywhere.
+function isAbsoluteDotenvPath(dotenvFile: string): boolean {
+  return dotenvFile.startsWith('/') || /^[A-Za-z]:[\\/]/.test(dotenvFile)
+}
+
+// pbxproj stores build-setting values quoted; escape so paths with quotes or
+// backslashes survive serialization. $(SRCROOT) is the generated ios/ dir, so
+// project-root-relative props live one level up.
+export function buildIosDotenvFileBuildSetting(dotenvFile: string): string {
+  const value = isAbsoluteDotenvPath(dotenvFile) ? dotenvFile : `$(SRCROOT)/../${normalizeDotenvFileProp(dotenvFile)}`
+  return '"' + value.replace(/(["\\])/g, '\\$1') + '"'
+}
+
+// Xcode exports build settings as env vars to every Run Script phase, so one
+// setting feeds both the bundle-phase hermes upload and the dSYM upload phase;
+// posthog-cli (>= 0.8.4) reads POSTHOG_CLI_DOTENV_FILE itself, no script
+// changes needed. Removing the prop removes the setting again so changes take
+// effect without a clean prebuild.
+export function applyDotenvFileBuildSetting(xcodeProject: any, dotenvFile?: string): void {
+  const configurations = xcodeProject.pbxXCBuildConfigurationSection()
+  for (const key in configurations) {
+    const configuration = configurations[key]
+    if (configuration && configuration.buildSettings) {
+      if (dotenvFile) {
+        configuration.buildSettings[POSTHOG_DOTENV_BUILD_SETTING] = buildIosDotenvFileBuildSetting(dotenvFile)
+      } else {
+        delete configuration.buildSettings[POSTHOG_DOTENV_BUILD_SETTING]
+      }
+    }
+  }
+}
+
+type GradlePropertiesItem = { type: string; key?: string; value?: string }
+
+// gradle.properties lives in android/, so a project-root-relative prop becomes ../<path>.
+export function buildAndroidDotenvFileGradleValue(dotenvFile: string): string {
+  return isAbsoluteDotenvPath(dotenvFile) ? dotenvFile : `../${normalizeDotenvFileProp(dotenvFile)}`
+}
+
+// Managed posthog.dotenvFile entry in android/gradle.properties, consumed by
+// both gradle hooks (the SDK's posthog.gradle hermes upload and the
+// com.posthog.android mapping upload). Added when the prop is set, removed
+// when it isn't.
+export function updateDotenvFileGradleProperties(
+  properties: GradlePropertiesItem[],
+  dotenvFile?: string
+): GradlePropertiesItem[] {
+  const rest = properties.filter((item) => !(item.type === 'property' && item.key === POSTHOG_DOTENV_GRADLE_PROPERTY))
+  if (!dotenvFile) {
+    return rest
+  }
+  rest.push({
+    type: 'property',
+    key: POSTHOG_DOTENV_GRADLE_PROPERTY,
+    value: buildAndroidDotenvFileGradleValue(dotenvFile),
+  })
+  return rest
+}
+
+const withPostHogGradleProperties = (config: any, dotenvFile?: string) => {
+  return withGradleProperties(config, (config: any) => {
+    config.modResults = updateDotenvFileGradleProperties(config.modResults, dotenvFile)
+    return config
+  })
+}
+
 type PostHogPluginProps = {
   /**
    * Whether to disable Xcode's user script sandboxing (ENABLE_USER_SCRIPT_SANDBOXING=NO).
@@ -364,6 +440,23 @@ type PostHogPluginProps = {
    * Default: false.
    */
   skipOnConflict?: boolean
+
+  /**
+   * Path to a dotenv file with POSTHOG_CLI_* credentials (API key, project id,
+   * optional host), relative to the project root — or absolute.
+   *
+   * The path reaches every upload hook as POSTHOG_CLI_DOTENV_FILE: on iOS as a
+   * build setting (Xcode exports it to the bundle and dSYM script phases), on
+   * Android as a `posthog.dotenvFile` entry in android/gradle.properties read
+   * by both gradle hooks. Process env always wins inside the CLI; a missing
+   * file is a warning, not a build failure.
+   *
+   * Requires posthog-cli >= 0.8.4 — older CLIs ignore the variable and fall
+   * back to their other credential sources. With `disableSandboxing: false`,
+   * Xcode's script sandbox can block reading the file, which is a hard CLI
+   * error (an unreadable-but-present file does not fall through).
+   */
+  dotenvFile?: string
 }
 
 // Normalizes the uploadNativeSymbols prop (boolean | { includeSource }) into a
@@ -397,6 +490,8 @@ const withIosPlugin = (config: any, props: PostHogPluginProps = {}) => {
       addDsymUploadBuildPhase(xcodeProject, nativeSymbols.includeSource, props.skipOnConflict === true)
     }
 
+    applyDotenvFileBuildSetting(xcodeProject, props.dotenvFile)
+
     if (props.disableSandboxing !== false) {
       disableUserScriptSandboxing(xcodeProject)
       console.warn(
@@ -418,6 +513,8 @@ const withPostHogPlugin = (config: any, props: PostHogPluginProps = {}) => {
   if (resolveNativeSymbolUpload(props.uploadNativeSymbols).enabled) {
     config = withAndroidNativeSymbolsPlugin(config)
   }
+  // Runs unconditionally so removing the prop also removes the managed entry.
+  config = withPostHogGradleProperties(config, props.dotenvFile)
   return withIosPlugin(config, props)
 }
 
@@ -437,3 +534,7 @@ module.exports.resolveNativeSymbolUpload = resolveNativeSymbolUpload
 module.exports.buildAndroidSkipOnConflictGradleLine = buildAndroidSkipOnConflictGradleLine
 module.exports.addPostHogAndroidGradlePluginClasspath = addPostHogAndroidGradlePluginClasspath
 module.exports.applyPostHogAndroidGradlePlugin = applyPostHogAndroidGradlePlugin
+module.exports.buildIosDotenvFileBuildSetting = buildIosDotenvFileBuildSetting
+module.exports.applyDotenvFileBuildSetting = applyDotenvFileBuildSetting
+module.exports.buildAndroidDotenvFileGradleValue = buildAndroidDotenvFileGradleValue
+module.exports.updateDotenvFileGradleProperties = updateDotenvFileGradleProperties

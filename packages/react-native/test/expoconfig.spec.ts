@@ -4,12 +4,16 @@ import {
   addDsymUploadBuildPhase,
   addPostHogAndroidGradlePluginClasspath,
   addPostHogWithBundledScriptsToBundleShellScript,
+  applyDotenvFileBuildSetting,
   applyPostHogAndroidGradlePlugin,
+  buildAndroidDotenvFileGradleValue,
   buildAndroidSkipOnConflictGradleLine,
   buildDsymUploadShellScript,
+  buildIosDotenvFileBuildSetting,
   disableUserScriptSandboxing,
   modifyExistingXcodeBuildScript,
   resolveNativeSymbolUpload,
+  updateDotenvFileGradleProperties,
 } from '../src/tooling/expoconfig'
 
 type MockBuildConfig = { buildSettings: Record<string, string> }
@@ -418,6 +422,99 @@ describe('addPostHogAndroidGradlePluginClasspath', () => {
     // The only dependencies block is in allprojects, outside buildscript — must not be used.
     expect(result.classpathPresent).toBe(false)
     expect(result.contents).toBe(contents)
+  })
+})
+
+describe('buildIosDotenvFileBuildSetting', () => {
+  it('anchors relative paths one level above the generated ios/ dir', () => {
+    expect(buildIosDotenvFileBuildSetting('.env')).toBe('"$(SRCROOT)/../.env"')
+    expect(buildIosDotenvFileBuildSetting('config/.env.posthog')).toBe('"$(SRCROOT)/../config/.env.posthog"')
+  })
+
+  it('strips a leading ./ before joining', () => {
+    expect(buildIosDotenvFileBuildSetting('./.env')).toBe('"$(SRCROOT)/../.env"')
+  })
+
+  it('passes absolute paths through unanchored', () => {
+    expect(buildIosDotenvFileBuildSetting('/secrets/.env')).toBe('"/secrets/.env"')
+  })
+
+  it('escapes quotes and backslashes for the pbxproj serialization', () => {
+    expect(buildIosDotenvFileBuildSetting('we"ird\\path.env')).toBe('"$(SRCROOT)/../we\\"ird\\\\path.env"')
+  })
+})
+
+describe('applyDotenvFileBuildSetting', () => {
+  it('sets POSTHOG_CLI_DOTENV_FILE on every build configuration', () => {
+    const xp = mockXcodeProject()
+    applyDotenvFileBuildSetting(xp, '.env')
+    for (const key of Object.keys(xp.configs)) {
+      expect(xp.configs[key].buildSettings.POSTHOG_CLI_DOTENV_FILE).toBe('"$(SRCROOT)/../.env"')
+    }
+  })
+
+  it('removes the setting again when the prop is absent', () => {
+    const xp = mockXcodeProject()
+    applyDotenvFileBuildSetting(xp, '.env')
+    applyDotenvFileBuildSetting(xp)
+    for (const key of Object.keys(xp.configs)) {
+      expect(xp.configs[key].buildSettings).not.toHaveProperty('POSTHOG_CLI_DOTENV_FILE')
+    }
+  })
+
+  it('preserves existing build settings', () => {
+    const xp = mockXcodeProject()
+    applyDotenvFileBuildSetting(xp, '.env')
+    expect(xp.configs['1A:Release'].buildSettings.PRODUCT_NAME).toBe('"MyApp"')
+  })
+
+  it('is idempotent — running twice yields the same result', () => {
+    const xp = mockXcodeProject()
+    applyDotenvFileBuildSetting(xp, '.env')
+    applyDotenvFileBuildSetting(xp, '.env')
+    expect(xp.configs['1A:Release'].buildSettings.POSTHOG_CLI_DOTENV_FILE).toBe('"$(SRCROOT)/../.env"')
+  })
+})
+
+describe('buildAndroidDotenvFileGradleValue', () => {
+  it('anchors relative paths one level above the generated android/ dir', () => {
+    expect(buildAndroidDotenvFileGradleValue('.env')).toBe('../.env')
+    expect(buildAndroidDotenvFileGradleValue('./.env')).toBe('../.env')
+  })
+
+  it('passes absolute paths through unanchored', () => {
+    expect(buildAndroidDotenvFileGradleValue('/secrets/.env')).toBe('/secrets/.env')
+  })
+})
+
+describe('updateDotenvFileGradleProperties', () => {
+  const unrelated = [
+    { type: 'comment', value: 'Project-wide Gradle settings.' },
+    { type: 'property', key: 'android.useAndroidX', value: 'true' },
+    { type: 'empty' },
+  ]
+
+  it('appends the posthog.dotenvFile entry when the prop is set', () => {
+    const result = updateDotenvFileGradleProperties([...unrelated], '.env')
+    expect(result).toEqual([...unrelated, { type: 'property', key: 'posthog.dotenvFile', value: '../.env' }])
+  })
+
+  it('replaces an existing entry instead of duplicating it', () => {
+    const withEntry = updateDotenvFileGradleProperties([...unrelated], '.env')
+    const result = updateDotenvFileGradleProperties(withEntry, 'config/.env.posthog')
+    expect(result.filter((item) => item.key === 'posthog.dotenvFile')).toEqual([
+      { type: 'property', key: 'posthog.dotenvFile', value: '../config/.env.posthog' },
+    ])
+  })
+
+  it('removes the entry when the prop is absent', () => {
+    const withEntry = updateDotenvFileGradleProperties([...unrelated], '.env')
+    expect(updateDotenvFileGradleProperties(withEntry)).toEqual(unrelated)
+  })
+
+  it('leaves unrelated properties untouched', () => {
+    const result = updateDotenvFileGradleProperties([...unrelated], '.env')
+    expect(result.slice(0, unrelated.length)).toEqual(unrelated)
   })
 })
 
