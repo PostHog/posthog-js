@@ -422,3 +422,59 @@ test.describe('Session rotation scenarios', () => {
         expect(allCustomTags).not.toContain('$session_id_change')
     })
 })
+
+test.describe('Session rotation without user interaction', () => {
+    // Regression test for #4202: a tab with no user interaction keeps the recorder in the
+    // 'unknown' idle state. An analytics-driven activity-timeout rotation must still restart
+    // the recorder and ship a full snapshot under the new session id, with no interaction at all.
+    test('ships a full snapshot for the new session after rotation with no user interaction', async ({
+        page,
+        context,
+    }) => {
+        await page.waitingForNetworkCausedBy({
+            urlPatternsToWaitFor: ['**/*recorder.js*'],
+            action: async () => {
+                await start(startOptions, page, context)
+            },
+        })
+        await waitForSessionRecordingToStart(page)
+        await page.resetCapturedEvents()
+
+        const initialSessionId = await getSessionId(page)
+
+        await simulateFrozenTabIdle(page)
+
+        // an analytics event (e.g. a background tab capturing a network failure) rotates the session
+        await page.evaluate(() => {
+            ;(window as WindowWithPostHog).posthog?.capture('background_tab_event')
+        })
+
+        const newSessionId = await getSessionId(page)
+        expect(newSessionId).not.toEqual(initialSessionId)
+
+        const capturedAnalytics = await page.capturedEvents()
+        const backgroundEvent = capturedAnalytics.find((e) => e.event === 'background_tab_event')
+        expect(backgroundEvent?.properties.$session_id).toEqual(newSessionId)
+
+        // without any further interaction, replay data for the new session must still flush
+        await expect
+            .poll(
+                async () => {
+                    const snapshots = (await page.capturedEvents()).filter((e) => e.event === '$snapshot')
+                    return snapshots.some((s) => s.properties.$session_id === newSessionId)
+                },
+                { timeout: 10000 }
+            )
+            .toBe(true)
+
+        const snapshots = (await page.capturedEvents()).filter((e) => e.event === '$snapshot')
+        const newSessionSnapshotData = snapshots
+            .filter((s) => s.properties.$session_id === newSessionId)
+            .flatMap((s: any) => s.properties.$snapshot_data)
+
+        // the new session must open with Meta then FullSnapshot so it is playable
+        const renderable = newSessionSnapshotData.filter((e: any) => e.type === 4 || e.type === 2)
+        expect(renderable[0]?.type).toEqual(4)
+        expect(renderable[1]?.type).toEqual(2)
+    })
+})
