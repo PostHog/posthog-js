@@ -137,7 +137,8 @@ export function applyPostHogAndroidGradlePlugin(appBuildGradle: string): string 
 
 const withAndroidNativeSymbolsPlugin = (config: any) => {
   // Couple the classpath and `apply plugin`: applying without the classpath breaks the build.
-  // Expo compiles projectBuildGradle before appBuildGradle, so this flag is set before it's read.
+  // Expo evaluates mods in key-insertion order, so this plugin must register before anything
+  // else touches appBuildGradle — otherwise the flag is read before projectBuildGradle sets it.
   let classpathPresent = false
 
   config = withProjectBuildGradle(config, (config: any) => {
@@ -508,11 +509,15 @@ const withIosPlugin = (config: any, props: PostHogPluginProps = {}) => {
 }
 
 const withPostHogPlugin = (config: any, props: PostHogPluginProps = {}) => {
-  config = withAndroidPlugin(config, props.skipOnConflict === true)
+  // Must register first: it inserts the projectBuildGradle mod key ahead of appBuildGradle,
+  // and expo evaluates mods in key-insertion order. Registering withAndroidPlugin first would
+  // make appBuildGradle run before projectBuildGradle, so `classpathPresent` would still be
+  // false and `apply plugin: "com.posthog.android"` would silently never be written.
   // includeSource is iOS-only, so on Android we only care whether upload is enabled.
   if (resolveNativeSymbolUpload(props.uploadNativeSymbols).enabled) {
     config = withAndroidNativeSymbolsPlugin(config)
   }
+  config = withAndroidPlugin(config, props.skipOnConflict === true)
   // Runs unconditionally so removing the prop also removes the managed entry.
   config = withPostHogGradleProperties(config, props.dotenvFile)
   return withIosPlugin(config, props)
