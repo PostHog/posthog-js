@@ -12,6 +12,7 @@ import {
   buildIosDotenvFileBuildSetting,
   disableUserScriptSandboxing,
   modifyExistingXcodeBuildScript,
+  resolveDotenvFileProp,
   resolveNativeSymbolUpload,
   updateDotenvFileGradleProperties,
 } from '../src/tooling/expoconfig'
@@ -473,6 +474,19 @@ describe('applyDotenvFileBuildSetting', () => {
     applyDotenvFileBuildSetting(xp, '.env')
     applyDotenvFileBuildSetting(xp, '.env')
     expect(xp.configs['1A:Release'].buildSettings.POSTHOG_CLI_DOTENV_FILE).toBe('"$(SRCROOT)/../.env"')
+  })
+})
+
+describe('resolveDotenvFileProp', () => {
+  it('treats undefined, empty, and whitespace-only values as unset', () => {
+    expect(resolveDotenvFileProp(undefined)).toBeUndefined()
+    expect(resolveDotenvFileProp('')).toBeUndefined()
+    expect(resolveDotenvFileProp('   ')).toBeUndefined()
+  })
+
+  it('trims surrounding whitespace from real values', () => {
+    expect(resolveDotenvFileProp(' .env ')).toBe('.env')
+    expect(resolveDotenvFileProp('.env.production')).toBe('.env.production')
   })
 })
 

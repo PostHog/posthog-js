@@ -324,6 +324,13 @@ function normalizeDotenvFileProp(dotenvFile: string): string {
   return dotenvFile.replace(/^\.\//, '')
 }
 
+// Empty/whitespace-only values (easy to produce from templated app.config values)
+// count as unset — mirrors the trim guard in posthog.gradle.
+export function resolveDotenvFileProp(dotenvFile?: string): string | undefined {
+  const trimmed = dotenvFile?.trim()
+  return trimmed ? trimmed : undefined
+}
+
 // Posix root or a Windows drive prefix — enough without pulling in `path`,
 // whose isAbsolute is platform-bound while prebuild can run anywhere.
 function isAbsoluteDotenvPath(dotenvFile: string): boolean {
@@ -446,11 +453,14 @@ type PostHogPluginProps = {
    * Path to a dotenv file with POSTHOG_CLI_* credentials (API key, project id,
    * optional host), relative to the project root — or absolute.
    *
-   * The path reaches every upload hook as POSTHOG_CLI_DOTENV_FILE: on iOS as a
+   * The path reaches the upload hooks as POSTHOG_CLI_DOTENV_FILE: on iOS as a
    * build setting (Xcode exports it to the bundle and dSYM script phases), on
    * Android as a `posthog.dotenvFile` entry in android/gradle.properties read
-   * by both gradle hooks. Process env always wins inside the CLI; a missing
-   * file is a warning, not a build failure.
+   * by the SDK's `posthog.gradle` hermes upload. The `com.posthog.android`
+   * mapping upload reads the same property once a gradle plugin release ships
+   * support for it (not in 1.3.0 or earlier — until then the mapping upload
+   * still needs credentials from another source). Process env always wins
+   * inside the CLI; a missing file is a warning, not a build failure.
    *
    * Requires posthog-cli >= 0.8.4 — older CLIs ignore the variable and fall
    * back to their other credential sources. With `disableSandboxing: false`,
@@ -508,7 +518,8 @@ const withIosPlugin = (config: any, props: PostHogPluginProps = {}) => {
   })
 }
 
-const withPostHogPlugin = (config: any, props: PostHogPluginProps = {}) => {
+const withPostHogPlugin = (config: any, rawProps: PostHogPluginProps = {}) => {
+  const props = { ...rawProps, dotenvFile: resolveDotenvFileProp(rawProps.dotenvFile) }
   // Must register first: it inserts the projectBuildGradle mod key ahead of appBuildGradle,
   // and expo evaluates mods in key-insertion order. Registering withAndroidPlugin first would
   // make appBuildGradle run before projectBuildGradle, so `classpathPresent` would still be
@@ -541,5 +552,6 @@ module.exports.addPostHogAndroidGradlePluginClasspath = addPostHogAndroidGradleP
 module.exports.applyPostHogAndroidGradlePlugin = applyPostHogAndroidGradlePlugin
 module.exports.buildIosDotenvFileBuildSetting = buildIosDotenvFileBuildSetting
 module.exports.applyDotenvFileBuildSetting = applyDotenvFileBuildSetting
+module.exports.resolveDotenvFileProp = resolveDotenvFileProp
 module.exports.buildAndroidDotenvFileGradleValue = buildAndroidDotenvFileGradleValue
 module.exports.updateDotenvFileGradleProperties = updateDotenvFileGradleProperties
