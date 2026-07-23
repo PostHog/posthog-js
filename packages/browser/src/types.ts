@@ -231,8 +231,8 @@ export interface RequestWithOptions {
     noRetries?: boolean
     disableTransport?: ('XHR' | 'fetch' | 'sendBeacon')[]
     compression?: Compression | 'best-available'
-    /** Include the request dispatch time in a body field or query string. */
-    timestampMode?: 'body' | 'query'
+    /** Include the request dispatch time in a body field, capture envelope, or query string. */
+    timestampMode?: 'body' | 'capture-body' | 'query'
     fetchOptions?: {
         cache?: RequestInit['cache']
         next?: NextOptions

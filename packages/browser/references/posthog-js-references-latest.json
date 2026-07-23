@@ -4698,8 +4698,8 @@
           "name": "timeout"
         },
         {
-          "description": "Include the request dispatch time in a body field or query string.",
-          "type": "'body' | 'query'",
+          "description": "Include the request dispatch time in a body field, capture envelope, or query string.",
+          "type": "'body' | 'capture-body' | 'query'",
           "name": "timestampMode"
         },
         {
