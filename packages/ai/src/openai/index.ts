@@ -753,110 +753,12 @@ export class WrappedResponses extends Responses {
     body: Params & MonitoringParams,
     options?: RequestOptions
   ): ResponseStream<ParsedT> {
-    const { providerParams: openAIParams, posthogParams } = extractPosthogParams(body)
-    const startTime = Date.now()
-
-    const runner = super.stream<Params, ParsedT>(openAIParams, options)
-
-    ;(async () => {
-      let completionIdFromResponse: string | undefined
-      try {
-        let firstTokenTime: number | undefined
-        let stopReason: string | undefined
-        let usage: {
-          inputTokens?: number
-          outputTokens?: number
-          reasoningTokens?: number
-          cacheReadInputTokens?: number
-          webSearchCount?: number
-        } = { inputTokens: 0, outputTokens: 0, webSearchCount: 0 }
-        let rawUsageData: unknown
-
-        for await (const chunk of runner) {
-          if (firstTokenTime === undefined && isResponseTokenChunk(chunk)) {
-            firstTokenTime = Date.now()
-          }
-
-          if ('response' in chunk && chunk.response) {
-            if (!completionIdFromResponse && chunk.response.id) {
-              completionIdFromResponse = chunk.response.id
-            }
-            const chunkWebSearchCount = calculateWebSearchCount(chunk.response)
-            if (chunkWebSearchCount > 0 && chunkWebSearchCount > (usage.webSearchCount ?? 0)) {
-              usage.webSearchCount = chunkWebSearchCount
-            }
-          }
-
-          if (chunk.type === 'response.completed' && 'response' in chunk && chunk.response?.status) {
-            stopReason = chunk.response.status
-          }
-
-          if ('response' in chunk && chunk.response?.usage) {
-            rawUsageData = chunk.response.usage
-            usage = {
-              ...usage,
-              inputTokens: chunk.response.usage.input_tokens ?? 0,
-              outputTokens: chunk.response.usage.output_tokens ?? 0,
-              reasoningTokens: chunk.response.usage.output_tokens_details?.reasoning_tokens ?? 0,
-              cacheReadInputTokens: chunk.response.usage.input_tokens_details?.cached_tokens ?? 0,
-            }
-          }
-        }
-
-        const finalResponse = await runner.finalResponse()
-        const latency = (Date.now() - startTime) / 1000
-        const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
-        const availableTools = extractAvailableToolCalls('openai', openAIParams)
-
-        await captureAiGeneration(this.phClient, {
-          ...posthogParams,
-          model: (openAIParams as ResponsesCreateParamsBase).model ?? finalResponse.model,
-          provider: 'openai',
-          input: formatOpenAIResponsesInput(
-            sanitizeOpenAIResponse((openAIParams as ResponsesCreateParamsBase).input),
-            (openAIParams as ResponsesCreateParamsBase).instructions
-          ),
-          output: finalResponse.output,
-          latency,
-          timeToFirstToken,
-          baseURL: this.baseURL,
-          modelParameters: getModelParams(body as any), // eslint-disable-line @typescript-eslint/no-explicit-any
-          httpStatus: 200,
-          usage: {
-            inputTokens: usage.inputTokens,
-            outputTokens: usage.outputTokens,
-            reasoningTokens: usage.reasoningTokens,
-            cacheReadInputTokens: usage.cacheReadInputTokens,
-            webSearchCount: usage.webSearchCount,
-            rawUsage: rawUsageData,
-          },
-          stopReason,
-          tools: availableTools,
-          completionId: completionIdFromResponse ?? finalResponse.id,
-        })
-      } catch (error: unknown) {
-        await captureAiGeneration(this.phClient, {
-          ...posthogParams,
-          model: (openAIParams as ResponsesCreateParamsBase).model,
-          provider: 'openai',
-          input: formatOpenAIResponsesInput(
-            sanitizeOpenAIResponse((openAIParams as ResponsesCreateParamsBase).input),
-            (openAIParams as ResponsesCreateParamsBase).instructions
-          ),
-          output: [],
-          latency: 0,
-          baseURL: this.baseURL,
-          modelParameters: getModelParams(body as any), // eslint-disable-line @typescript-eslint/no-explicit-any
-          usage: { inputTokens: 0, outputTokens: 0 },
-          completionId: completionIdFromResponse,
-          error,
-        })
-      }
-    })().catch(() => {
-      // Swallow: analytics must never crash the host process.
-    })
-
-    return runner
+    // Strip PostHog params before forwarding. Capture is handled by the wrapped
+    // create() that ResponseStream calls internally — no separate loop needed,
+    // and avoids double-capture + the early-cancel false-error that a shared
+    // iterator would produce.
+    const { providerParams: openAIParams } = extractPosthogParams(body)
+    return super.stream<Params, ParsedT>(openAIParams, options)
   }
 }
 

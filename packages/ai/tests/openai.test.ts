@@ -1375,35 +1375,44 @@ describe('PostHogOpenAI - Jest test suite', () => {
   })
 
   describe('responses.stream()', () => {
-    conditionalTest('captures $ai_generation event with posthog params via responses.stream()', async () => {
-      const responseCompletedChunk = {
-        type: 'response.completed',
-        response: {
-          id: 'resp-stream-test',
-          model: 'gpt-4o',
-          status: 'completed',
-          output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Hello!' }] }],
-          usage: { input_tokens: 10, output_tokens: 5, output_tokens_details: { reasoning_tokens: 0 }, input_tokens_details: { cached_tokens: 0 } },
+    conditionalTest('captures exactly one $ai_generation event with correct distinctId via responses.stream()', async () => {
+      // Mock at the network level (Responses.prototype.create) so the real
+      // ResponseStream machinery runs, catching any double-capture regression
+      // where stream() re-enters the wrapped create().
+      const chunks = [
+        {
+          type: 'response.output_text.delta',
+          delta: 'Hello!',
         },
-      }
-
-      const mockStream = {
-        [Symbol.asyncIterator]: () => {
-          const chunks = [responseCompletedChunk]
-          let i = 0
-          return { next: async () => i < chunks.length ? { value: chunks[i++], done: false } : { value: undefined, done: true } }
+        {
+          type: 'response.completed',
+          response: {
+            id: 'resp-stream-test',
+            model: 'gpt-4o',
+            status: 'completed',
+            output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Hello!' }] }],
+            usage: {
+              input_tokens: 10,
+              output_tokens: 5,
+              output_tokens_details: { reasoning_tokens: 0 },
+              input_tokens_details: { cached_tokens: 0 },
+            },
+          },
         },
-        finalResponse: jest.fn().mockResolvedValue({
-          id: 'resp-stream-test',
-          model: 'gpt-4o',
-          status: 'completed',
-          output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Hello!' }] }],
-          usage: { input_tokens: 10, output_tokens: 5, output_tokens_details: { reasoning_tokens: 0 }, input_tokens_details: { cached_tokens: 0 } },
-        }),
-      }
+      ]
 
-      const ResponsesMock: any = openaiModule.Responses
-      ResponsesMock.prototype.stream = jest.fn().mockReturnValue(mockStream)
+      const streamChunks = chunks
+      ;(openaiModule.Responses as any).prototype.create = jest.fn().mockImplementation((params: any) => {
+        if (params.stream) {
+          const mockStream = {
+            tee: jest
+              .fn()
+              .mockReturnValue([createMockAsyncIterator(streamChunks), createMockAsyncIterator(streamChunks)]),
+          }
+          return createMockAPIPromise(mockStream)
+        }
+        return createMockAPIPromise(mockOpenAiParsedResponse)
+      })
 
       const runner = client.responses.stream({
         model: 'gpt-4o',
@@ -1414,6 +1423,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       for await (const _ of runner) { /* consume */ }
       await flushPromises()
 
+      // Must be exactly one capture — no double-fire from re-entrancy
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
       const { distinctId, event, properties } = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
       expect(distinctId).toBe('test-stream-user')
