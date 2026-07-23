@@ -39,6 +39,22 @@ describe('error wrapping functions', () => {
             expect(result).toBe(true)
             expect(captureFn).toHaveBeenCalled()
         })
+
+        it('collects source/lineno/colno from the positional args when there is no Error object', () => {
+            win.onerror = null
+            unwrap = wrapOnError(captureFn)
+
+            win.onerror('Uncaught TypeError: x is not a function', 'https://example.com/app.js', 42, 13, undefined)
+
+            expect(captureFn).toHaveBeenCalledTimes(1)
+            const exception = captureFn.mock.calls[0][0].$exception_list[0]
+            expect(exception.value).toBe('Uncaught TypeError: x is not a function')
+            expect(exception.stacktrace?.frames?.[0]).toMatchObject({
+                filename: 'https://example.com/app.js',
+                lineno: 42,
+                colno: 13,
+            })
+        })
     })
 
     describe('wrapUnhandledRejection', () => {
