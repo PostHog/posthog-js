@@ -315,7 +315,7 @@ describe('request', () => {
             expect(JSON.parse(requestOptions.body)).toEqual({
                 token: 'testtoken',
                 distinct_id: 'user-1',
-                sent_at: 1700000000000,
+                sent_at: '2023-11-14T22:13:20.000Z',
             })
         })
 

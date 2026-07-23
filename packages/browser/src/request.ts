@@ -553,7 +553,7 @@ export const request = (_options: RequestWithOptions) => {
         if (options.timestampMode === 'capture-body') {
             options.data = addSentAtToCaptureBody(options.data)
         } else if (options.timestampMode === 'body' && !isArray(options.data)) {
-            options.data = { ...options.data, sent_at: Date.now() }
+            options.data = { ...options.data, sent_at: new Date().toISOString() }
         }
     }
 
