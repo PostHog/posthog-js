@@ -20,12 +20,6 @@ function normalizeHost(value: unknown, defaultHost: string): string {
 
 interface PostHogSpanProcessorBaseOptions {
   /**
-   * PostHog host URL. Defaults to `https://us.i.posthog.com` for direct
-   * ingestion and `https://ai-gateway.us.posthog.com` for AI Gateway.
-   */
-  host?: string
-
-  /**
    * @internal Injected processor for testing — bypasses exporter creation.
    */
   _spanProcessor?: SpanProcessor
@@ -36,6 +30,8 @@ export type PostHogSpanProcessorOptions = PostHogSpanProcessorBaseOptions &
     | {
         /** Your PostHog project token (the `phc_...` key). */
         projectToken: string
+        /** PostHog ingestion host. Defaults to `https://us.i.posthog.com`. */
+        host?: string
         aiGateway?: never
       }
     | {
@@ -45,8 +41,11 @@ export type PostHogSpanProcessorOptions = PostHogSpanProcessorBaseOptions &
         aiGateway: {
           /** Your PostHog project secret (the `phs_...` key). */
           projectSecret: string
+          /** AI Gateway host. Defaults to `https://ai-gateway.us.posthog.com`. */
+          host?: string
         }
         projectToken?: never
+        host?: never
       }
   )
 
@@ -55,7 +54,8 @@ interface PostHogSpanProcessorRuntimeOptions extends PostHogSpanProcessorBaseOpt
    * Your PostHog project token (the `phc_...` key).
    */
   projectToken?: string
-  aiGateway?: { projectSecret?: unknown }
+  host?: unknown
+  aiGateway?: { projectSecret?: unknown; host?: unknown }
 }
 
 class NoopSpanProcessor implements SpanProcessor {
@@ -76,10 +76,11 @@ class NoopSpanProcessor implements SpanProcessor {
 /**
  * An OpenTelemetry `SpanProcessor` that sends AI traces to PostHog.
  *
- * Set `aiGateway: { projectSecret: 'phs_...' }` to send telemetry through
- * PostHog AI Gateway. Set `projectToken: 'phc_...'` to send directly to
- * PostHog's OTLP ingestion endpoint. A blank credential disables the processor
- * as a defensive no-op.
+ * Set `aiGateway: { projectSecret: 'phs_...', host: '...' }` to send telemetry
+ * through a PostHog AI Gateway deployment. The gateway host defaults to US;
+ * set it for EU, development, or self-hosted deployments. Set
+ * `projectToken: 'phc_...'` to send directly to PostHog's OTLP ingestion
+ * endpoint. A blank credential disables the processor as a defensive no-op.
  *
  * Internally batches spans and exports them to PostHog's OTLP ingestion
  * endpoint. Only AI-related spans (those whose name or attribute keys
@@ -124,7 +125,8 @@ export class PostHogSpanProcessor implements SpanProcessor {
       this.inner = runtimeOptions._spanProcessor
     } else {
       const defaultHost = projectSecret ? DEFAULT_AI_GATEWAY_HOST : DEFAULT_OTEL_HOST
-      const host = new URL(normalizeHost(runtimeOptions.host, defaultHost)).origin
+      const configuredHost = projectSecret ? runtimeOptions.aiGateway?.host : runtimeOptions.host
+      const host = new URL(normalizeHost(configuredHost, defaultHost)).origin
       const exporter = new OTLPTraceExporter({
         url: `${host}/i/v0/ai/otel`,
         headers: {

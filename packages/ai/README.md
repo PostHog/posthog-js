@@ -11,7 +11,7 @@ SDK usage examples and code snippets live in the official documentation so they 
 
 ## AI gateway tracing
 
-Set `aiGateway` with a PostHog project secret (`phs_...`) to send AI telemetry through PostHog AI Gateway. Gateway routing is explicit at the call site and defaults to `https://ai-gateway.us.posthog.com`; you do not need to set `host`.
+Set `aiGateway` with a PostHog project secret (`phs_...`) to send AI telemetry through PostHog AI Gateway. Gateway routing is explicit at the call site. Its host defaults to `https://ai-gateway.us.posthog.com`; set `aiGateway.host` to `https://ai-gateway.eu.posthog.com` for EU or to your development or self-hosted gateway URL.
 
 ```ts
 import { PostHogSpanProcessor } from '@posthog/ai/otel'
@@ -22,6 +22,7 @@ const sdk = new NodeSDK({
     new PostHogSpanProcessor({
       aiGateway: {
         projectSecret: process.env.POSTHOG_PROJECT_SECRET_KEY!,
+        host: process.env.POSTHOG_AI_GATEWAY_HOST,
       },
     }),
   ],
