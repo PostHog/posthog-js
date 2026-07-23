@@ -1089,6 +1089,9 @@ describe('featureflags', () => {
             jest.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0]).toEqual(
+                expect.objectContaining({ method: 'POST', timestampMode: 'body' })
+            )
             expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(undefined)
         })
 
@@ -1542,6 +1545,7 @@ describe('featureflags', () => {
             expect(instance._send_request).toHaveBeenCalledWith({
                 url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
                 method: 'GET',
+                timestampMode: 'query',
                 callback: expect.any(Function),
             })
             expect(instance._send_request).toHaveBeenCalledTimes(1)
@@ -1572,6 +1576,7 @@ describe('featureflags', () => {
             expect(instance._send_request).toHaveBeenCalledWith({
                 url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
                 method: 'GET',
+                timestampMode: 'query',
                 callback: expect.any(Function),
             })
             expect(instance._send_request).toHaveBeenCalledTimes(1)
@@ -1606,6 +1611,7 @@ describe('featureflags', () => {
             expect(instance._send_request).toHaveBeenCalledWith({
                 url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token&stage=concept&stage=beta',
                 method: 'GET',
+                timestampMode: 'query',
                 callback: expect.any(Function),
             })
         })

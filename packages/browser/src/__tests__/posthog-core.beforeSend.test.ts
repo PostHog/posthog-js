@@ -80,6 +80,7 @@ describe('posthog core - before send', () => {
             compression: 'best-available',
             data: capturedData,
             method: 'POST',
+            timestampMode: 'query',
             url: 'https://us.i.posthog.com/e/',
         })
     })
@@ -148,6 +149,7 @@ describe('posthog core - before send', () => {
             compression: 'best-available',
             data: capturedData[0],
             method: 'POST',
+            timestampMode: 'query',
             url: 'https://us.i.posthog.com/e/',
         })
     })
@@ -170,6 +172,7 @@ describe('posthog core - before send', () => {
             compression: 'best-available',
             data: capturedData,
             method: 'POST',
+            timestampMode: 'query',
             url: 'https://us.i.posthog.com/e/',
         })
     })
@@ -192,6 +195,7 @@ describe('posthog core - before send', () => {
             compression: 'best-available',
             data: capturedData,
             method: 'POST',
+            timestampMode: 'query',
             url: 'https://us.i.posthog.com/e/',
         })
         expect(mockLogger.warn).toHaveBeenCalledWith(

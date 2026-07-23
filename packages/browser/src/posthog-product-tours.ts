@@ -129,6 +129,7 @@ export class PostHogProductTours implements Extension {
                 `/api/product_tours/?token=${this._instance.config.token}`
             ),
             method: 'GET',
+            timestampMode: 'query',
             callback: (response) => {
                 if (!isProductToursEnabled(this._instance)) {
                     // a disable can land while this request is in flight; honouring
