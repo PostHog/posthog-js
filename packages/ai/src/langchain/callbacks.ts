@@ -707,6 +707,51 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     return breakdown[0] + breakdown[1] > 0 ? breakdown : undefined
   }
 
+  private _extractBedrockCacheCreationTtlBreakdown(
+    cacheDetails: unknown,
+    aggregateValues: unknown[]
+  ): [number, number] | undefined {
+    if (!Array.isArray(cacheDetails)) {
+      return undefined
+    }
+
+    let cache5m = 0
+    let cache1h = 0
+
+    for (const detail of cacheDetails) {
+      if (!isRecord(detail)) {
+        continue
+      }
+
+      const ttl = typeof detail.ttl === 'string' ? detail.ttl.toLowerCase() : undefined
+      const inputTokens = detail.inputTokens
+      if (
+        (ttl !== '5m' && ttl !== 't5m' && ttl !== '1h' && ttl !== 't1h') ||
+        typeof inputTokens !== 'number' ||
+        !Number.isFinite(inputTokens) ||
+        inputTokens < 0
+      ) {
+        continue
+      }
+
+      if (ttl === '5m' || ttl === 't5m') {
+        cache5m += inputTokens
+      } else {
+        cache1h += inputTokens
+      }
+    }
+
+    const total = cache5m + cache1h
+    const validAggregates = aggregateValues.filter(
+      (value): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0
+    )
+    if (total === 0 || validAggregates.some((aggregate) => aggregate !== total)) {
+      return undefined
+    }
+
+    return [cache5m, cache1h]
+  }
+
   private _parseUsageModel(
     usage: any,
     provider?: string,
@@ -764,7 +809,15 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
 
     const cacheCreationTtl =
       this._extractCacheCreationTtlBreakdown(usage.cache_creation) ??
-      this._extractCacheCreationTtlBreakdown(rawUsage?.cache_creation)
+      this._extractCacheCreationTtlBreakdown(rawUsage?.cache_creation) ??
+      this._extractBedrockCacheCreationTtlBreakdown(usage.cacheDetails, [
+        usage.cacheWriteInputTokens,
+        additionalTokenData.cacheWriteInputTokens,
+      ]) ??
+      this._extractBedrockCacheCreationTtlBreakdown(rawUsage?.cacheDetails, [
+        rawUsage?.cacheWriteInputTokens,
+        additionalTokenData.cacheWriteInputTokens,
+      ])
     if (cacheCreationTtl) {
       const [cacheWrite5mInputTokens, cacheWrite1hInputTokens] = cacheCreationTtl
       additionalTokenData.cacheWrite5mInputTokens = cacheWrite5mInputTokens
@@ -871,7 +924,17 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
         const generationResponseMetadata = isRecord(generationInfo.response_metadata)
           ? generationInfo.response_metadata
           : undefined
-        rawGenerationUsage ??= messageResponseMetadata?.usage ?? generationResponseMetadata?.usage
+        const messageStreamMetadata = isRecord(messageResponseMetadata?.metadata)
+          ? messageResponseMetadata.metadata
+          : undefined
+        const generationStreamMetadata = isRecord(generationResponseMetadata?.metadata)
+          ? generationResponseMetadata.metadata
+          : undefined
+        rawGenerationUsage ??=
+          messageResponseMetadata?.usage ??
+          messageStreamMetadata?.usage ??
+          generationResponseMetadata?.usage ??
+          generationStreamMetadata?.usage
         fallbackGenerationUsage ??=
           messageResponseMetadata?.['amazon-bedrock-invocationMetrics'] ??
           generationResponseMetadata?.['amazon-bedrock-invocationMetrics'] ??
