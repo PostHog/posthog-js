@@ -224,6 +224,33 @@ describe('featureflags', () => {
         })
     })
 
+    describe('defaultValue option', () => {
+        it('should return defaultValue for a missing flag', () => {
+            expect(featureFlags.isFeatureEnabled('random', { defaultValue: true })).toEqual(true)
+            expect(featureFlags.isFeatureEnabled('random', { defaultValue: false })).toEqual(false)
+        })
+
+        it('should be ignored when the flag has a value', () => {
+            expect(featureFlags.isFeatureEnabled('disabled-flag', { defaultValue: true })).toEqual(false)
+            expect(featureFlags.isFeatureEnabled('multivariate-flag', { defaultValue: false })).toEqual(true)
+        })
+
+        it('should return defaultValue when flags have not loaded', () => {
+            featureFlags._hasLoadedFlags = false
+            instance.persistence.unregister('$enabled_feature_flags')
+            instance.persistence.unregister('$active_feature_flags')
+
+            expect(featureFlags.isFeatureEnabled('beta-feature', { defaultValue: true })).toEqual(true)
+        })
+
+        it('should return defaultValue when fresh: true and flags have not been loaded from remote', () => {
+            featureFlags._hasLoadedFlags = true
+            featureFlags._flagsLoadedFromRemote = false
+
+            expect(featureFlags.isFeatureEnabled('beta-feature', { fresh: true, defaultValue: false })).toEqual(false)
+        })
+    })
+
     it('should return the right feature flag and call capture', () => {
         featureFlags._hasLoadedFlags = false
 
@@ -1062,6 +1089,9 @@ describe('featureflags', () => {
             jest.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0]).toEqual(
+                expect.objectContaining({ method: 'POST', timestampMode: 'body' })
+            )
             expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(undefined)
         })
 
@@ -1515,6 +1545,7 @@ describe('featureflags', () => {
             expect(instance._send_request).toHaveBeenCalledWith({
                 url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
                 method: 'GET',
+                timestampMode: 'query',
                 callback: expect.any(Function),
             })
             expect(instance._send_request).toHaveBeenCalledTimes(1)
@@ -1545,6 +1576,7 @@ describe('featureflags', () => {
             expect(instance._send_request).toHaveBeenCalledWith({
                 url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
                 method: 'GET',
+                timestampMode: 'query',
                 callback: expect.any(Function),
             })
             expect(instance._send_request).toHaveBeenCalledTimes(1)
@@ -1579,6 +1611,7 @@ describe('featureflags', () => {
             expect(instance._send_request).toHaveBeenCalledWith({
                 url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token&stage=concept&stage=beta',
                 method: 'GET',
+                timestampMode: 'query',
                 callback: expect.any(Function),
             })
         })

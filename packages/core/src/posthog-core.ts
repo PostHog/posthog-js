@@ -10,6 +10,7 @@ import type {
   FeatureFlagValue,
   FeatureFlagResult,
   FeatureFlagResultOptions,
+  IsFeatureEnabledOptions,
   PostHogV2FlagsResponse,
   PostHogV1FlagsResponse,
   PostHogFeatureFlagDetails,
@@ -1152,12 +1153,16 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     }
   }
 
-  isFeatureEnabled(key: string, options?: FeatureFlagResultOptions): boolean | undefined {
-    const response = this.getFeatureFlag(key, options)
-    if (response === undefined) {
-      return undefined
+  isFeatureEnabled(key: string, options: IsFeatureEnabledOptions & { defaultValue: boolean }): boolean
+  isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined
+  isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined {
+    if (options?.defaultValue === undefined) {
+      const response = this.getFeatureFlag(key, options)
+      return response === undefined ? undefined : !!response
     }
-    return !!response
+    const result = this._getFeatureFlagResult(key, { sendEvent: options.sendEvent })
+    const value = result?.variant ?? result?.enabled
+    return value === undefined ? options.defaultValue : !!value
   }
 
   // Used when we want to trigger the reload but we don't care about the result

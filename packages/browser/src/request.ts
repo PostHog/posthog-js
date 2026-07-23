@@ -100,7 +100,7 @@ export const extendURLParams = (url: string, params: Record<string, any>, replac
         updatedSearch.push(remaining)
     }
 
-    return `${baseUrl}?${updatedSearch.join('&')}`
+    return updatedSearch.length > 0 ? `${baseUrl}?${updatedSearch.join('&')}` : baseUrl
 }
 
 const encodeToDataString = (data: string | Record<string, any>): string => {
@@ -474,14 +474,20 @@ const isVersionlessEndpoint = (url: string): boolean => {
     return VERSIONLESS_ENDPOINTS.some((endpoint) => hasEndpointSuffix(path, endpoint))
 }
 
-const buildRequestURL = (url: string, compression?: RequestWithOptions['compression']): string => {
+const buildRequestURL = (
+    url: string,
+    method: RequestWithOptions['method'],
+    compression?: RequestWithOptions['compression'],
+    timestampMode?: RequestWithOptions['timestampMode']
+): string => {
     const versionlessEndpoint = isVersionlessEndpoint(url)
     const requestURL = versionlessEndpoint ? removeURLParam(url, 'ver') : url
+    const timestampParam = timestampMode === 'query' ? (method === 'POST' ? 'sent_at' : '_') : undefined
 
     return extendURLParams(
         compression === Compression.GZipJS ? removeURLParam(requestURL, 'compression') : requestURL,
         {
-            _: new Date().getTime().toString(),
+            ...(timestampParam ? { [timestampParam]: Date.now().toString() } : {}),
             ...(versionlessEndpoint ? {} : { ver: Config.JS_SDK_VERSION }),
             ...(compression === Compression.GZipJS ? {} : { compression }),
         }
@@ -529,7 +535,11 @@ export const request = (_options: RequestWithOptions) => {
         options.compression = Compression.Base64
     }
 
-    options.url = buildRequestURL(options.url, options.compression)
+    if (options.timestampMode === 'body' && options.method === 'POST' && options.data && !isArray(options.data)) {
+        options.data = { ...options.data, sent_at: new Date().toISOString() }
+    }
+
+    options.url = buildRequestURL(options.url, options.method, options.compression, options.timestampMode)
 
     const availableTransports = AVAILABLE_TRANSPORTS.filter(
         (t) => !options.disableTransport || !t.transport || !options.disableTransport.includes(t.transport)
@@ -563,7 +573,7 @@ export const request = (_options: RequestWithOptions) => {
                     transportMethod({
                         ...options,
                         compression: undefined,
-                        url: buildRequestURL(_options.url, undefined),
+                        url: buildRequestURL(_options.url, _options.method, undefined, _options.timestampMode),
                     })
                     return
                 }

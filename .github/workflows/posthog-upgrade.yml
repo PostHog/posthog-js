@@ -100,6 +100,9 @@ jobs:
                   HUSKY: '0'
               with:
                   token: ${{ steps.upgrader.outputs.token }}
+                  # Commit through the GitHub API so the bump is GPG-verified by GitHub and
+                  # attributed to the upgrader app, instead of an unsigned github-actions[bot] commit.
+                  sign-commits: true
                   commit-message: ${{ steps.generate-pr-details.outputs.title }}
                   branch: ${{ steps.generate-pr-details.outputs.branch_name }}
                   delete-branch: true

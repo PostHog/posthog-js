@@ -178,6 +178,14 @@ describe('survey-event-receiver', () => {
         let config: PostHogConfig
         let instance: PostHog
         let mockAddCaptureHook: jest.Mock
+        // Mutable so tests can simulate a session rollover between reloads.
+        let currentSessionId: string
+        // Captures the receiver's onSessionId subscription so tests can drive a live rotation.
+        let sessionIdListeners: Array<(sessionId: string) => void>
+        const rotateSession = (sessionId: string): void => {
+            currentSessionId = sessionId
+            sessionIdListeners.forEach((listener) => listener(sessionId))
+        }
 
         const makeSurvey = (overrides: Partial<Survey>): Survey =>
             ({
@@ -209,6 +217,11 @@ describe('survey-event-receiver', () => {
                 persistence: new PostHogPersistence(config),
                 _addCaptureHook: mockAddCaptureHook,
                 getSurveys: jest.fn((callback) => callback([survey])),
+                get_session_id: () => currentSessionId,
+                onSessionId: (listener: (sessionId: string) => void) => {
+                    sessionIdListeners.push(listener)
+                    return () => {}
+                },
             })
             const receiver = new SurveyEventReceiver(instance)
             receiver.register([survey])
@@ -218,6 +231,8 @@ describe('survey-event-receiver', () => {
 
         beforeEach(() => {
             mockAddCaptureHook = jest.fn()
+            currentSessionId = 'session-1'
+            sessionIdListeners = []
         })
 
         afterEach(() => {
@@ -288,6 +303,62 @@ describe('survey-event-receiver', () => {
             expect(new SurveyEventReceiver(instance).getSurveys()).not.toContain('lifecycle-survey')
         })
 
+        it('does not re-display a shown-but-unanswered survey in a brand-new session', () => {
+            const { hook } = setup(makeSurvey({}))
+
+            // Triggered and shown in session-1 (persisted so it survives a reload)...
+            hook('trigger_event')
+            hook(SurveyEventName.SHOWN, surveyEventPayload('lifecycle-survey', SurveyEventName.SHOWN))
+            expect(new SurveyEventReceiver(instance).getSurveys()).toContain('lifecycle-survey')
+
+            // ...but a brand-new session (no fresh trigger event) must not re-display it.
+            currentSessionId = 'session-2'
+            expect(new SurveyEventReceiver(instance).getSurveys()).not.toContain('lifecycle-survey')
+        })
+
+        it('re-arms in a new session only when the trigger fires again', () => {
+            const { hook } = setup(makeSurvey({}))
+
+            hook('trigger_event')
+            hook(SurveyEventName.SHOWN, surveyEventPayload('lifecycle-survey', SurveyEventName.SHOWN))
+
+            // New session: stale activation is dropped until the trigger fires again.
+            currentSessionId = 'session-2'
+            const afterRollover = new SurveyEventReceiver(instance)
+            afterRollover.register([makeSurvey({})])
+            expect(afterRollover.getSurveys()).not.toContain('lifecycle-survey')
+
+            const rearmHook = mockAddCaptureHook.mock.calls.at(-1)?.[0]
+            rearmHook('trigger_event')
+            expect(afterRollover.getSurveys()).toContain('lifecycle-survey')
+        })
+
+        it('drops a shown survey when the session rotates live (idle timeout), without a reload', () => {
+            const { receiver, hook } = setup(makeSurvey({}))
+
+            hook('trigger_event')
+            hook(SurveyEventName.SHOWN, surveyEventPayload('lifecycle-survey', SurveyEventName.SHOWN))
+            expect(receiver.getSurveys()).toContain('lifecycle-survey')
+
+            // The session rotates in-place (e.g. idle timeout) on the same receiver — a case the
+            // read-only session read cannot observe, so the onSessionId subscription must handle it.
+            rotateSession('session-2')
+            expect(receiver.getSurveys()).not.toContain('lifecycle-survey')
+            // Cleared from persistence too, so a subsequent reload doesn't resurrect it.
+            expect(new SurveyEventReceiver(instance).getSurveys()).not.toContain('lifecycle-survey')
+        })
+
+        it('keeps a shown survey when the session id fires but is unchanged (e.g. window-id-only change)', () => {
+            const { receiver, hook } = setup(makeSurvey({}))
+
+            hook('trigger_event')
+            hook(SurveyEventName.SHOWN, surveyEventPayload('lifecycle-survey', SurveyEventName.SHOWN))
+
+            // onSessionId can fire without the session id actually changing; that must not clear it.
+            sessionIdListeners.forEach((listener) => listener('session-1'))
+            expect(receiver.getSurveys()).toContain('lifecycle-survey')
+        })
+
         it.each([
             [
                 'repeatedActivation',
@@ -336,6 +407,7 @@ describe('survey-event-receiver', () => {
                 persistence: new PostHogPersistence(config),
                 _addCaptureHook: mockAddCaptureHook,
                 getSurveys: jest.fn((callback) => callback([armed, shown])),
+                get_session_id: () => currentSessionId,
             })
             const receiver = new SurveyEventReceiver(instance)
             receiver.register([armed, shown])

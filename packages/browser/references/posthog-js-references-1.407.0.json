@@ -2,7 +2,7 @@
   "id": "posthog-js",
   "hogRef": "0.3",
   "info": {
-    "version": "<version>",
+    "version": "1.407.0",
     "id": "posthog-js",
     "title": "PostHog JavaScript Web SDK",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
@@ -4696,11 +4696,6 @@
         {
           "type": "number",
           "name": "timeout"
-        },
-        {
-          "description": "Include the request dispatch time in a body field or query string.",
-          "type": "'body' | 'query'",
-          "name": "timestampMode"
         },
         {
           "type": "'XHR' | 'fetch' | 'sendBeacon'",

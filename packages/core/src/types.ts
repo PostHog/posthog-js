@@ -430,6 +430,11 @@ export type FeatureFlagResultOptions = {
   sendEvent?: boolean
 }
 
+export type IsFeatureEnabledOptions = FeatureFlagResultOptions & {
+  /** Value to return when the flag has no value, e.g. flags have not loaded yet or no flag with that key exists. */
+  defaultValue?: boolean
+}
+
 export type PostHogFlagsResponse = Omit<PostHogRemoteConfig, 'hasFeatureFlags'> & {
   featureFlags: {
     [key: string]: FeatureFlagValue
