@@ -21,6 +21,7 @@ import {
   injectConversationIdPromptBack,
   resolveConversationId,
 } from './conversation-id'
+import { applyMetaClientInfo } from './client-identity'
 import { captureEvent } from './capture'
 import { MCPAnalyticsEventType } from './event-types'
 import { captureException } from './exceptions'
@@ -139,6 +140,9 @@ async function prepareToolCallEvent(
 ): Promise<McpEvent | null> {
   try {
     const sessionId = getSessionId(server, extra)
+    // Modern (stateless) clients carry client name/version + protocol version in
+    // `_meta` on every request rather than at `initialize`; pick them up here.
+    applyMetaClientInfo(data, request)
     await handleIdentify(server, data, sessionId, request, extra)
 
     const toolName = request.params?.name
@@ -291,6 +295,9 @@ export async function handleListToolsRequest(
 ): Promise<{ tools: ListToolsResult['tools'] }> {
   const data = getServerTrackingData(server)
   const startTime = new Date()
+  if (data) {
+    applyMetaClientInfo(data, request)
+  }
   const event: McpEvent = {
     sessionId: getSessionId(server, extra),
     parameters: buildCapturedMcpParameters(request),
@@ -546,6 +553,9 @@ export async function handleInitializeRequest(
   // Mint first so the `$mcp_initialize` event below already carries the minted id.
   const mintedSessionId = mintStatelessSessionOnInitialize(server, data, request, extra)
   const sessionId = getSessionId(server, extra)
+  // Harmless for a legacy `initialize` (client info rides the body there); picks
+  // up client info if a client happens to also send it in `_meta`.
+  applyMetaClientInfo(data, request)
   await handleIdentify(server, data, sessionId, request, extra)
 
   const event: McpEvent = {
