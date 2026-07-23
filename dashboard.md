@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4242](https://github.com/PostHog/posthog-js/issues/4242) | Valid React Native surveys enhancement: popover surveys are always auto-presented and the provider has no public deferral control. | enhancement, react-native, feature/mobile |  | no | 2026-07-23T23:24:46.779Z |
 | PostHog/posthog-js | [issue 4239](https://github.com/PostHog/posthog-js/issues/4239) | Confirmed replay seek-boundary bug with a narrow but stateful fix required. | feature/replay, web |  | no | 2026-07-23T17:45:36.606Z |
 | PostHog/posthog-js | [issue 4217](https://github.com/PostHog/posthog-js/issues/4217) | Valid replay performance bug; not a small/safe fix. | feature/replay, web |  | no | 2026-07-22T06:22:53.018Z |
 | PostHog/posthog-js | [issue 4211](https://github.com/PostHog/posthog-js/issues/4211) | Android emulator crash appears to be an upstream react-native-reanimated dev-build issue, not a PostHog SDK bug. | react-native, Android |  | no | 2026-07-21T15:23:06.898Z |
