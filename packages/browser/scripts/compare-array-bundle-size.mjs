@@ -43,6 +43,11 @@ function resolveRef(ref) {
     }
 }
 
+function pathsAtCommit(commit, filePaths) {
+    const existingPaths = new Set(git(['ls-tree', '--name-only', commit, '--', ...filePaths]).split('\n'))
+    return filePaths.filter((filePath) => existingPaths.has(filePath))
+}
+
 function defaultBaseline() {
     for (const ref of ['origin/main', 'main']) {
         if (resolveRef(ref)) {
@@ -171,11 +176,12 @@ async function main() {
     const temporaryRoot = await mkdtemp(path.join(tmpdir(), 'posthog-array-size-'))
     const snapshotRoot = path.join(temporaryRoot, 'baseline')
     const archivePath = path.join(temporaryRoot, 'baseline.tar')
+    const baselineSnapshotPaths = pathsAtCommit(baselineCommit, snapshotPaths)
 
     try {
         execFileSync(
             'git',
-            ['archive', '--format=tar', `--output=${archivePath}`, baselineCommit, '--', ...snapshotPaths],
+            ['archive', '--format=tar', `--output=${archivePath}`, baselineCommit, '--', ...baselineSnapshotPaths],
             { cwd: repositoryRoot, stdio: ['ignore', 'ignore', 'pipe'] }
         )
         await mkdir(snapshotRoot)
