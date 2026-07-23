@@ -1,4 +1,6 @@
 import snapshot, {
+  snapshotWithBudget,
+  type SnapshotWithBudgetOptions,
   serializeNodeWithId,
   transformAttribute,
   ignoreAttribute,
@@ -19,6 +21,8 @@ export * from './utils';
 
 export {
   snapshot,
+  snapshotWithBudget,
+  type SnapshotWithBudgetOptions,
   serializeNodeWithId,
   transformAttribute,
   ignoreAttribute,

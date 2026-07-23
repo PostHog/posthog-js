@@ -599,6 +599,19 @@ export interface SessionRecordingOptions {
     collectFonts?: boolean
 
     /**
+     * Maximum milliseconds of continuous main-thread work while serializing
+     * a full snapshot before the recorder yields to the event loop. On
+     * pages with very large DOMs the full snapshot can otherwise block the
+     * main thread for seconds in a single long task.
+     *
+     * 0 (default) keeps the fully-synchronous behavior.
+     *
+     * Derived from `rrweb.record` options
+     * @default 0
+     */
+    fullSnapshotYieldBudgetMs?: number
+
+    /**
      * Derived from `rrweb.record` options
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
      * @default true
