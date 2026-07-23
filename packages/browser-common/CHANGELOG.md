@@ -1,5 +1,12 @@
 # @posthog/browser-common
 
+## 0.2.1
+
+### Patch Changes
+
+- [#4225](https://github.com/PostHog/posthog-js/pull/4225) [`4bf533a`](https://github.com/PostHog/posthog-js/commit/4bf533a629fafd0c525e6259ed27250ce1367964) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Represent extension capability tokens as branded runtime strings so independently compiled bundles resolve the same providers.
+  (2026-07-23)
+
 ## 0.2.0
 
 ### Minor Changes
