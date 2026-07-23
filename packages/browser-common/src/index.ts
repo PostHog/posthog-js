@@ -5,6 +5,7 @@
 export type { Extension } from './extension'
 export { CoreExtension } from './core-extension'
 export type {
+    DeepReadonly,
     SessionContext,
     NewSessionReason,
     NewSessionInfo,

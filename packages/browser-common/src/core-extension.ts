@@ -5,14 +5,21 @@ import type { Extension } from './extension'
 import type { Listener } from './pubsub'
 import type { ExtensionToken } from './token'
 
+/** Recursively marks object properties as readonly while preserving callable values. */
+export type DeepReadonly<T> = T extends (...args: never[]) => unknown
+    ? T
+    : T extends object
+      ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
+      : T
+
 /** The current session, stamped on events to tie them to a session and a browser tab. */
 export interface SessionContext {
     /** The stable session identifier attached to events captured during this session. */
-    sessionId: string
+    readonly sessionId: string
     /** The logical browser tab/window identifier attached alongside the session id. */
-    windowId: string
+    readonly windowId: string
     /** When the session started, as a Unix timestamp in milliseconds. */
-    sessionStartTimestamp: number
+    readonly sessionStartTimestamp: number
 }
 
 /** Why a new session started (a `reset` also starts a new session). */
@@ -21,15 +28,15 @@ export type NewSessionReason = 'initial' | 'reset' | 'idleTimeout' | 'maxLength'
 /** Details emitted when the client starts or adopts a new session. */
 export interface NewSessionInfo extends SessionContext {
     /** The condition that caused this session to begin. */
-    reason: NewSessionReason
+    readonly reason: NewSessionReason
 }
 
 /** A captured event, as observed by `onEvent`. */
 export interface CapturedEventInfo {
     /** The finalized captured event name. */
-    event: string
+    readonly event: string
     /** The final event properties after client defaults and dynamic properties are applied. */
-    properties: Record<string, unknown>
+    readonly properties: DeepReadonly<Record<string, unknown>>
 }
 
 /** Per-call capture overrides, mirroring the client's public capture options. */
@@ -48,7 +55,7 @@ export interface CaptureOptions {
  * Server-provided configuration shared across core and product extensions. A
  * loose record by design — each extension reads only the keys it owns.
  */
-export type RemoteConfig = Record<string, unknown>
+export type RemoteConfig = DeepReadonly<Record<string, unknown>>
 
 /**
  * The host SDK's core analytics behavior, exposed as an extension so shared
@@ -61,7 +68,7 @@ export interface CoreExtension extends Extension {
     /** The anonymous device id carried across identify calls. */
     readonly anonymousId: string
     /** Active group memberships attached to events as `$groups`. */
-    readonly groups: Record<string, string>
+    readonly groups: DeepReadonly<Record<string, string>>
     /** The current session, created on first read if needed. */
     readonly session: SessionContext
 
@@ -74,7 +81,7 @@ export interface CoreExtension extends Extension {
      */
     registerDynamicEventProperties(producer: () => Record<string, unknown>): Disposable
 
-    /** Fires for every captured event with a detached snapshot that cannot change the outbound event. */
+    /** Fires for every captured event through a deeply readonly view. */
     readonly onEvent: Listener<CapturedEventInfo>
     /** Fires when a new session starts, including on reset. */
     readonly onNewSession: Listener<NewSessionInfo>
@@ -85,7 +92,7 @@ export interface CoreExtension extends Extension {
      * changes are published through `onRemoteConfig`.
      */
     getRemoteConfig(): Promise<RemoteConfig | undefined>
-    /** Fires with a detached snapshot when server-provided config arrives or changes successfully. */
+    /** Fires through a deeply readonly view when server-provided config arrives or changes successfully. */
     readonly onRemoteConfig: Listener<RemoteConfig>
 }
 
