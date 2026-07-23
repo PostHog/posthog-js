@@ -224,6 +224,17 @@ const collectPersistenceKeyIdentifiers = (): ScanResult => {
                 return
             }
 
+            // The extension KV boundary intentionally accepts caller-owned keys verbatim.
+            if (
+                filePath.endsWith('/extensions/browser-client.ts') &&
+                expression &&
+                ts.isIdentifier(expression) &&
+                expression.text === 'key' &&
+                ['set', 'remove'].includes(getEnclosingClassMethodName(node) ?? '')
+            ) {
+                return
+            }
+
             const resolution = resolvePolicyIdentifiers(expression, variableInitializers)
 
             resolution.identifiers.forEach((identifier) => identifiers.add(identifier))

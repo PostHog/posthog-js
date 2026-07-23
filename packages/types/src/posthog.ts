@@ -199,8 +199,8 @@ export interface PostHog {
      * already flushes on page unload, so this best-effort flushes queued events and
      * always resolves — it never throws — which makes isomorphic teardown safe.
      *
-     * @param {number} [shutdownTimeoutMs] Accepted for parity with the Node.js SDK; unused in the browser.
-     * @returns {Promise<void>} Resolves once teardown is complete.
+     * @param {number} [shutdownTimeoutMs=30000] Maximum time to wait for browser extension teardown before queued events are flushed.
+     * @returns {Promise<void>} Resolves after best-effort teardown and queue flushing; never rejects.
      */
     shutdown(shutdownTimeoutMs?: number): Promise<void>
 

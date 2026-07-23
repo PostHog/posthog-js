@@ -126,18 +126,23 @@ describe('deferred extension initialization', () => {
                 disable_session_recording: true,
             })
 
+            const sharedRemoteConfigs: RemoteConfig[] = []
+            posthog
+                ._getBrowserExtensionHost()
+                .onRemoteConfig((config) => sharedRemoteConfigs.push(config as unknown as RemoteConfig))
+
             // Call _onRemoteConfig before extensions are ready
             posthog._onRemoteConfig({ ok: true, config: remoteConfig })
             expect((posthog as any)._pendingRemoteConfig).toEqual({ ok: true, config: remoteConfig })
 
-            // Spy on _onRemoteConfig to see if it gets called again during replay
-            const onRemoteConfigSpy = jest.spyOn(posthog as any, '_onRemoteConfig')
+            // Legacy extensions replay config application without republishing it to shared extensions.
+            const applyRemoteConfigSpy = jest.spyOn(posthog as any, '_applyRemoteConfig')
 
             // Wait for extensions to initialize
             await new Promise((resolve) => setTimeout(resolve, 200))
 
-            // _onRemoteConfig should have been called again with the pending config during replay
-            expect(onRemoteConfigSpy).toHaveBeenCalledWith({ ok: true, config: remoteConfig })
+            expect(applyRemoteConfigSpy).toHaveBeenCalledWith({ ok: true, config: remoteConfig })
+            expect(sharedRemoteConfigs).toEqual([remoteConfig])
             // Extensions should be initialized, proving the replay worked
             expect(posthog.sessionRecording).toBeDefined()
             expect(posthog.autocapture).toBeDefined()
