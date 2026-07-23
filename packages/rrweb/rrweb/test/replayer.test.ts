@@ -164,7 +164,8 @@ describe('replayer', function () {
     expect(currentState).toEqual('paused');
   });
 
-  // KNOWN BUG: `play` classifies an event exactly at the seek target as
+  // KNOWN BUG (https://github.com/PostHog/posthog-js/issues/4239):
+  // `play` classifies an event exactly at the seek target as
   // "future" (`timestamp < baselineTime`), so a paused seek to exactly a
   // FullSnapshot's timestamp schedules the snapshot on the timer and then
   // clears it — the later frame stays on screen. Flipping the comparison to

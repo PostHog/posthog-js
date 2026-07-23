@@ -216,6 +216,10 @@ export type playerConfig = {
    * recordings can otherwise block the page for many seconds on a seek.
    * 0 (default) keeps the whole rebuild synchronous, so the target frame is
    * fully rendered when pause(t)/play(t) return.
+   *
+   * While a chunked rebuild is still applying, getCurrentTime() already
+   * reports the seek target, but the rendered frame lags until the rebuild's
+   * Flush — don't read the iframe DOM right after a seek with a budget set.
    */
   seekYieldBudgetMs?: number;
   logger: {
