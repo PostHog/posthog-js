@@ -4698,6 +4698,11 @@
           "name": "timeout"
         },
         {
+          "description": "Include the request dispatch time in a body field or query string.",
+          "type": "'body' | 'query'",
+          "name": "timestampMode"
+        },
+        {
           "type": "'XHR' | 'fetch' | 'sendBeacon'",
           "name": "transport"
         },
