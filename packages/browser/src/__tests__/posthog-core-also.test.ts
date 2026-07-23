@@ -385,6 +385,7 @@ describe('posthog core', () => {
             expect(posthog._send_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: 'https://app.posthog.com/s/',
+                    timestampMode: 'query',
                 })
             )
         })
