@@ -1,5 +1,20 @@
 # posthog-react-native
 
+## 4.60.0
+
+### Minor Changes
+
+- [#4219](https://github.com/PostHog/posthog-js/pull/4219) [`96bd6b6`](https://github.com/PostHog/posthog-js/commit/96bd6b6333c63266023f4c439903fefaa9ca8387) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - feat(react-native): Expo plugin `dotenvFile` option + fix `com.posthog.android` never being applied
+
+  New `dotenvFile` prop on the Expo config plugin: path to a dotenv file with `POSTHOG_CLI_*` credentials, delivered to every upload hook as `POSTHOG_CLI_DOTENV_FILE` (Xcode build setting on iOS, `posthog.dotenvFile` gradle property on Android — hermes, dSYM, and R8 mapping uploads; the injected `com.posthog.android` gradle plugin is bumped to 1.4.0, the first version that reads the property). No more exporting credentials into the shell/daemon environment; process env still wins, a missing file is a warning. Requires posthog-cli >= 0.8.4.
+
+  Also fixes `uploadNativeSymbols` on Android: mod ordering made the plugin inject the `com.posthog.android` classpath but silently skip the `apply plugin` line, so mapping uploads never ran. (2026-07-23)
+
+### Patch Changes
+
+- Updated dependencies [[`6c8fde0`](https://github.com/PostHog/posthog-js/commit/6c8fde02691d7f4aae257b6d7b0753e72d946ccb)]:
+  - @posthog/core@1.45.1
+
 ## 4.59.0
 
 ### Minor Changes
