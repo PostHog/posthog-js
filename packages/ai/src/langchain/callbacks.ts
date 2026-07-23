@@ -13,6 +13,9 @@ import { sanitizeLangChain } from '../sanitization'
 import { stringifyError } from '../serializeError'
 import { warnIfPostHogAiGateway } from '../gatewayWarning'
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value)
+
 interface SpanMetadata {
   /** Name of the trace/span (e.g. chain name) */
   name: string
@@ -500,6 +503,13 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       if (additionalTokenData.cacheWriteInputTokens) {
         eventProperties['$ai_cache_creation_input_tokens'] = additionalTokenData.cacheWriteInputTokens
       }
+      if (
+        additionalTokenData.cacheWrite5mInputTokens !== undefined &&
+        additionalTokenData.cacheWrite1hInputTokens !== undefined
+      ) {
+        eventProperties['$ai_cache_creation_5m_input_tokens'] = additionalTokenData.cacheWrite5mInputTokens
+        eventProperties['$ai_cache_creation_1h_input_tokens'] = additionalTokenData.cacheWrite1hInputTokens
+      }
       if (additionalTokenData.reasoningTokens) {
         eventProperties['$ai_reasoning_tokens'] = additionalTokenData.reasoningTokens
       }
@@ -676,7 +686,34 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     return undefined
   }
 
-  private _parseUsageModel(usage: any, provider?: string, model?: string): [number, number, Record<string, any>] {
+  private _extractCacheCreationTtlBreakdown(cacheCreation: unknown): [number, number] | undefined {
+    if (!isRecord(cacheCreation)) {
+      return undefined
+    }
+
+    const { ephemeral_5m_input_tokens: cache5m, ephemeral_1h_input_tokens: cache1h } = cacheCreation
+    const providedValues = [cache5m, cache1h].filter((value) => value != null)
+    if (
+      providedValues.length === 0 ||
+      !providedValues.every((value) => typeof value === 'number' && Number.isFinite(value) && value >= 0)
+    ) {
+      return undefined
+    }
+
+    const breakdown: [number, number] = [
+      typeof cache5m === 'number' ? cache5m : 0,
+      typeof cache1h === 'number' ? cache1h : 0,
+    ]
+    return breakdown[0] + breakdown[1] > 0 ? breakdown : undefined
+  }
+
+  private _parseUsageModel(
+    usage: any,
+    provider?: string,
+    model?: string,
+    inputIncludesCacheTokens = true,
+    rawUsage?: any
+  ): [number, number, Record<string, any>] {
     const conversionList: Array<[string, 'input' | 'output']> = [
       ['promptTokens', 'input'],
       ['completionTokens', 'output'],
@@ -723,6 +760,16 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       additionalTokenData.cacheWriteInputTokens = usage.cache_creation_input_tokens
     } else if (usage.input_token_details?.cache_creation != null) {
       additionalTokenData.cacheWriteInputTokens = usage.input_token_details.cache_creation
+    }
+
+    const cacheCreationTtl =
+      this._extractCacheCreationTtlBreakdown(usage.cache_creation) ??
+      this._extractCacheCreationTtlBreakdown(rawUsage?.cache_creation)
+    if (cacheCreationTtl) {
+      const [cacheWrite5mInputTokens, cacheWrite1hInputTokens] = cacheCreationTtl
+      additionalTokenData.cacheWrite5mInputTokens = cacheWrite5mInputTokens
+      additionalTokenData.cacheWrite1hInputTokens = cacheWrite1hInputTokens
+      additionalTokenData.cacheWriteInputTokens = cacheWrite5mInputTokens + cacheWrite1hInputTokens
     }
 
     // Check for reasoning tokens in various formats
@@ -790,7 +837,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       isAnthropic = true
     }
 
-    if (isAnthropic && parsedUsage.input) {
+    if (isAnthropic && inputIncludesCacheTokens && parsedUsage.input) {
       const cacheTokens =
         (additionalTokenData.cacheReadInputTokens || 0) + (additionalTokenData.cacheWriteInputTokens || 0)
       if (cacheTokens > 0) {
@@ -802,40 +849,58 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
   }
 
   private parseUsage(response: LLMResult, provider?: string, model?: string): [number, number, Record<string, any>] {
-    let llmUsage: [number, number, Record<string, any>] = [0, 0, {}]
+    let normalizedGenerationUsage: any
+    let rawGenerationUsage: any
+    let fallbackGenerationUsage: any
+
+    for (const generation of response.generations ?? []) {
+      for (const genChunk of generation) {
+        const generationInfo = genChunk.generationInfo ?? {}
+        const message = 'message' in genChunk ? genChunk.message : undefined
+        const messageUsage =
+          message && typeof message === 'object' && 'usage_metadata' in message ? message.usage_metadata : undefined
+        normalizedGenerationUsage ??= messageUsage ?? generationInfo.usage_metadata
+
+        const messageResponseMetadata =
+          message &&
+          typeof message === 'object' &&
+          'response_metadata' in message &&
+          isRecord(message.response_metadata)
+            ? message.response_metadata
+            : undefined
+        const generationResponseMetadata = isRecord(generationInfo.response_metadata)
+          ? generationInfo.response_metadata
+          : undefined
+        rawGenerationUsage ??= messageResponseMetadata?.usage ?? generationResponseMetadata?.usage
+        fallbackGenerationUsage ??=
+          messageResponseMetadata?.['amazon-bedrock-invocationMetrics'] ??
+          generationResponseMetadata?.['amazon-bedrock-invocationMetrics'] ??
+          generationInfo.usage_metadata
+      }
+    }
+
+    const isAnthropic = provider?.toLowerCase() === 'anthropic' || model?.toLowerCase().includes('anthropic') === true
+    if (isAnthropic && normalizedGenerationUsage) {
+      return this._parseUsageModel(normalizedGenerationUsage, provider, model, true, rawGenerationUsage)
+    }
+
     const llmUsageKeys = ['token_usage', 'usage', 'tokenUsage']
 
     if (response.llmOutput != null) {
       const key = llmUsageKeys.find((k) => response.llmOutput?.[k] != null)
       if (key) {
-        llmUsage = this._parseUsageModel(response.llmOutput[key], provider, model)
+        const llmUsage = response.llmOutput[key]
+        return this._parseUsageModel(llmUsage, provider, model, key !== 'usage', llmUsage)
       }
     }
 
-    // If top-level usage info was not found, try checking the generations.
-    if (llmUsage[0] === 0 && llmUsage[1] === 0 && response.generations) {
-      for (const generation of response.generations) {
-        for (const genChunk of generation) {
-          // Check other paths for usage information
-          if (genChunk.generationInfo?.usage_metadata) {
-            llmUsage = this._parseUsageModel(genChunk.generationInfo.usage_metadata, provider, model)
-            return llmUsage
-          }
-
-          const messageChunk = genChunk.generationInfo ?? {}
-          const responseMetadata = messageChunk.response_metadata ?? {}
-          const chunkUsage =
-            responseMetadata['usage'] ??
-            responseMetadata['amazon-bedrock-invocationMetrics'] ??
-            messageChunk.usage_metadata
-          if (chunkUsage) {
-            llmUsage = this._parseUsageModel(chunkUsage, provider, model)
-            return llmUsage
-          }
-        }
-      }
+    if (rawGenerationUsage) {
+      return this._parseUsageModel(rawGenerationUsage, provider, model, false, rawGenerationUsage)
+    }
+    if (fallbackGenerationUsage) {
+      return this._parseUsageModel(fallbackGenerationUsage, provider, model)
     }
 
-    return llmUsage
+    return [0, 0, {}]
   }
 }

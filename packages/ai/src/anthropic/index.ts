@@ -95,7 +95,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
           cacheReadInputTokens: 0,
           webSearchCount: 0,
         }
-        let lastRawUsage: unknown
+        let rawUsage: Record<string, unknown> = {}
         if ('tee' in value) {
           const [stream1, stream2] = value.tee()
           ;(async () => {
@@ -189,14 +189,17 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 }
 
                 if (chunk.type == 'message_start') {
-                  lastRawUsage = chunk.message.usage
+                  rawUsage = { ...chunk.message.usage }
                   usage.inputTokens = chunk.message.usage.input_tokens ?? 0
                   usage.cacheCreationInputTokens = chunk.message.usage.cache_creation_input_tokens ?? 0
                   usage.cacheReadInputTokens = chunk.message.usage.cache_read_input_tokens ?? 0
                   usage.webSearchCount = chunk.message.usage.server_tool_use?.web_search_requests ?? 0
                 }
                 if ('usage' in chunk) {
-                  lastRawUsage = chunk.usage
+                  rawUsage = {
+                    ...rawUsage,
+                    ...Object.fromEntries(Object.entries(chunk.usage).filter(([, value]) => value != null)),
+                  }
                   usage.outputTokens = chunk.usage.output_tokens ?? 0
                   // Update web search count if present in delta
                   if (chunk.usage.server_tool_use?.web_search_requests !== undefined) {
@@ -211,7 +214,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                   }
                 }
               }
-              usage.rawUsage = lastRawUsage
+              usage.rawUsage = rawUsage
 
               const latency = (Date.now() - startTime) / 1000
               const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
