@@ -75,7 +75,7 @@ describe('PostHogSpanProcessor', () => {
   })
 
   it('routes project secrets through the AI gateway', () => {
-    new PostHogSpanProcessor({ projectSecret: '  phs_test123  ' })
+    new PostHogSpanProcessor({ aiGateway: { projectSecret: '  phs_test123  ' } })
 
     expect(OTLPTraceExporter).toHaveBeenCalledWith({
       url: 'https://ai-gateway.us.posthog.com/i/v0/ai/otel',
@@ -85,7 +85,7 @@ describe('PostHogSpanProcessor', () => {
   })
 
   it('routes project secrets through the AI gateway when host is blank', () => {
-    new PostHogSpanProcessor({ projectSecret: 'phs_test123', host: '  \n\t ' })
+    new PostHogSpanProcessor({ aiGateway: { projectSecret: 'phs_test123' }, host: '  \n\t ' })
 
     expect(OTLPTraceExporter).toHaveBeenCalledWith({
       url: 'https://ai-gateway.us.posthog.com/i/v0/ai/otel',
@@ -98,6 +98,7 @@ describe('PostHogSpanProcessor', () => {
     ['missing', {}],
     ['empty', { projectToken: '' }],
     ['blank', { projectToken: '  \n\t ' }],
+    ['empty AI Gateway secret', { aiGateway: { projectSecret: '' } }],
   ])('disables and no-ops when projectToken is %s', async (_case, options) => {
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
     const processor = new PostHogSpanProcessor(options as any)
@@ -110,7 +111,7 @@ describe('PostHogSpanProcessor', () => {
     expect(OTLPTraceExporter).not.toHaveBeenCalled()
     expect(BatchSpanProcessor).not.toHaveBeenCalled()
     expect(warnSpy).toHaveBeenCalledWith(
-      '[PostHogSpanProcessor] projectToken or projectSecret is missing or blank; the processor will be disabled.'
+      '[PostHogSpanProcessor] projectToken or aiGateway.projectSecret is missing or blank; the processor will be disabled.'
     )
     warnSpy.mockRestore()
   })

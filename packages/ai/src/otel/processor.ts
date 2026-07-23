@@ -20,8 +20,8 @@ function normalizeHost(value: unknown, defaultHost: string): string {
 
 interface PostHogSpanProcessorBaseOptions {
   /**
-   * PostHog host URL. Defaults to `https://us.i.posthog.com` for project tokens
-   * and `https://ai-gateway.us.posthog.com` for project secrets.
+   * PostHog host URL. Defaults to `https://us.i.posthog.com` for direct
+   * ingestion and `https://ai-gateway.us.posthog.com` for AI Gateway.
    */
   host?: string
 
@@ -36,14 +36,16 @@ export type PostHogSpanProcessorOptions = PostHogSpanProcessorBaseOptions &
     | {
         /** Your PostHog project token (the `phc_...` key). */
         projectToken: string
-        projectSecret?: never
+        aiGateway?: never
       }
     | {
         /**
-         * Your PostHog project secret (the `phs_...` key). Selecting this
-         * credential routes telemetry through PostHog AI Gateway.
+         * Route telemetry through PostHog AI Gateway.
          */
-        projectSecret: string
+        aiGateway: {
+          /** Your PostHog project secret (the `phs_...` key). */
+          projectSecret: string
+        }
         projectToken?: never
       }
   )
@@ -53,8 +55,7 @@ interface PostHogSpanProcessorRuntimeOptions extends PostHogSpanProcessorBaseOpt
    * Your PostHog project token (the `phc_...` key).
    */
   projectToken?: string
-  /** Your PostHog project secret (the `phs_...` key). */
-  projectSecret?: string
+  aiGateway?: { projectSecret?: unknown }
 }
 
 class NoopSpanProcessor implements SpanProcessor {
@@ -75,10 +76,10 @@ class NoopSpanProcessor implements SpanProcessor {
 /**
  * An OpenTelemetry `SpanProcessor` that sends AI traces to PostHog.
  *
- * Credential choice controls the route: `projectSecret: 'phs_...'` sends
- * telemetry through PostHog AI Gateway, while `projectToken: 'phc_...'` sends
- * directly to PostHog's OTLP ingestion endpoint. A blank credential disables
- * the processor as a defensive no-op.
+ * Set `aiGateway: { projectSecret: 'phs_...' }` to send telemetry through
+ * PostHog AI Gateway. Set `projectToken: 'phc_...'` to send directly to
+ * PostHog's OTLP ingestion endpoint. A blank credential disables the processor
+ * as a defensive no-op.
  *
  * Internally batches spans and exports them to PostHog's OTLP ingestion
  * endpoint. Only AI-related spans (those whose name or attribute keys
@@ -106,17 +107,17 @@ export class PostHogSpanProcessor implements SpanProcessor {
   constructor(options: PostHogSpanProcessorOptions) {
     const runtimeOptions = options as PostHogSpanProcessorRuntimeOptions
     const projectToken = normalizeToken(runtimeOptions.projectToken)
-    const projectSecret = normalizeToken(runtimeOptions.projectSecret)
+    const projectSecret = normalizeToken(runtimeOptions.aiGateway?.projectSecret)
     const token = projectSecret || projectToken
     if (!token) {
       console.warn(
-        '[PostHogSpanProcessor] projectToken or projectSecret is missing or blank; the processor will be disabled.'
+        '[PostHogSpanProcessor] projectToken or aiGateway.projectSecret is missing or blank; the processor will be disabled.'
       )
       this.inner = new NoopSpanProcessor()
       return
     }
     if (projectToken && projectSecret) {
-      throw new TypeError('[PostHogSpanProcessor] provide either projectToken or projectSecret, not both.')
+      throw new TypeError('[PostHogSpanProcessor] provide either projectToken or aiGateway, not both.')
     }
 
     if (runtimeOptions._spanProcessor) {
