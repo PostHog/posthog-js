@@ -4698,7 +4698,7 @@
           "name": "timeout"
         },
         {
-          "description": "Controls where the request dispatch time is sent. `body` adds ISO `sent_at` to the existing request object, `capture-body` wraps events in `{ api_key, batch, sent_at }`, and `query` adds numeric `sent_at` to POST requests or cache-busting `_` to GET requests.",
+          "description": "Controls where the request dispatch time is sent. - `body` adds ISO `sent_at` to the existing request object (for example, flags). - `capture-body` wraps events in `{ api_key, batch, sent_at }` with an ISO timestamp. - `query` adds numeric `sent_at` to POST requests or cache-busting `_` to GET requests.",
           "type": "'body' | 'capture-body' | 'query'",
           "name": "timestampMode"
         },
