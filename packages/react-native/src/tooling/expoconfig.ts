@@ -7,7 +7,7 @@ const { withAppBuildGradle, withGradleProperties, withProjectBuildGradle, withXc
 
 // com.posthog.android uploads R8 mapping files and injects a matching map-id so native
 // crash stack traces can be deobfuscated.
-const POSTHOG_ANDROID_GRADLE_PLUGIN_VERSION = '1.2.0'
+const POSTHOG_ANDROID_GRADLE_PLUGIN_VERSION = '1.4.0'
 
 const resolvePostHogReactNativePackageJsonPath =
   "[\"node\", \"--print\", \"require('path').join(require('path').dirname(require.resolve('posthog-react-native')), '..', 'tooling', 'posthog.gradle')\"].execute().text.trim()"
@@ -453,14 +453,13 @@ type PostHogPluginProps = {
    * Path to a dotenv file with POSTHOG_CLI_* credentials (API key, project id,
    * optional host), relative to the project root — or absolute.
    *
-   * The path reaches the upload hooks as POSTHOG_CLI_DOTENV_FILE: on iOS as a
+   * The path reaches every upload hook as POSTHOG_CLI_DOTENV_FILE: on iOS as a
    * build setting (Xcode exports it to the bundle and dSYM script phases), on
    * Android as a `posthog.dotenvFile` entry in android/gradle.properties read
-   * by the SDK's `posthog.gradle` hermes upload. The `com.posthog.android`
-   * mapping upload reads the same property once a gradle plugin release ships
-   * support for it (not in 1.3.0 or earlier — until then the mapping upload
-   * still needs credentials from another source). Process env always wins
-   * inside the CLI; a missing file is a warning, not a build failure.
+   * by the SDK's `posthog.gradle` hermes upload and, on gradle plugin >= 1.4.0
+   * (the version this plugin injects), by the `com.posthog.android` mapping
+   * upload. Process env always wins inside the CLI; a missing file is a
+   * warning, not a build failure.
    *
    * Requires posthog-cli >= 0.8.4 — older CLIs ignore the variable and fall
    * back to their other credential sources. With `disableSandboxing: false`,
