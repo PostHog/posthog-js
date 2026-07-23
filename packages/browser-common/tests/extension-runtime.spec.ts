@@ -162,6 +162,41 @@ describe('ExtensionRuntime', () => {
         await runtime.dispose()
     })
 
+    it('preserves reverse order when an older setup fails during disposal', async () => {
+        const order: string[] = []
+        const { runtime, add } = createRuntime()
+        let rejectOlderSetup: ((error: Error) => void) | undefined
+        let resolveNewerSetup: (() => void) | undefined
+        const olderDispose = jest.fn(() => order.push('older'))
+        const newerDispose = jest.fn(() => order.push('newer'))
+
+        const olderRegistration = add(
+            testExtension(
+                'older',
+                () => new Promise<void>((_resolve, reject) => (rejectOlderSetup = reject)),
+                olderDispose
+            )
+        )
+        const newerRegistration = add(
+            testExtension('newer', () => new Promise<void>((resolve) => (resolveNewerSetup = resolve)), newerDispose)
+        )
+
+        const disposal = runtime.dispose()
+        rejectOlderSetup?.(new Error('setup failed'))
+        await olderRegistration
+
+        expect(order).toEqual([])
+        expect(olderDispose).not.toHaveBeenCalled()
+        expect(newerDispose).not.toHaveBeenCalled()
+
+        resolveNewerSetup?.()
+        await Promise.all([newerRegistration, disposal])
+
+        expect(order).toEqual(['newer', 'older'])
+        expect(olderDispose).toHaveBeenCalledTimes(1)
+        expect(newerDispose).toHaveBeenCalledTimes(1)
+    })
+
     it('coordinates setup failure with concurrent reverse-order disposal exactly once', async () => {
         const order: string[] = []
         const { runtime, add } = createRuntime()

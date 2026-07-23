@@ -23,7 +23,6 @@ export class ExtensionRuntime implements Disposable {
     private readonly _providerReservations = new Map<string, RegisteredExtension>()
     private readonly _providers = new Map<string, unknown>()
     private _disposePromise: Promise<void> | undefined
-    private _disposed = false
 
     constructor(private readonly _logger: Logger) {}
 
@@ -32,7 +31,7 @@ export class ExtensionRuntime implements Disposable {
      * Names and tokens remain reserved while asynchronous setup is pending.
      */
     add(extension: Extension, client: Client): Promise<void> {
-        if (this._disposed) {
+        if (this._disposePromise) {
             throw new Error('Cannot add an extension to a disposed ExtensionRuntime')
         }
         if (this._extensions.has(extension.name)) {
@@ -79,7 +78,6 @@ export class ExtensionRuntime implements Disposable {
     /** Disposes every registered extension once, in reverse registration order. */
     dispose(): Promise<void> {
         if (!this._disposePromise) {
-            this._disposed = true
             this._disposePromise = this._disposeAll()
         }
         return this._disposePromise
@@ -100,6 +98,9 @@ export class ExtensionRuntime implements Disposable {
     private async _handleSetupFailure(registered: RegisteredExtension, error: unknown): Promise<void> {
         this._removeRegistration(registered)
         this._logger.error(`Failed to set up browser extension "${registered.extension.name}"`, error)
+        if (this._disposePromise) {
+            return
+        }
         await this._disposeRegistration(registered)
         const index = this._registrationOrder.indexOf(registered)
         if (index !== -1) {
@@ -133,7 +134,7 @@ export class ExtensionRuntime implements Disposable {
     }
 
     private _publishRegistration(registered: RegisteredExtension): void {
-        if (this._disposed || this._extensions.get(registered.extension.name) !== registered) {
+        if (this._disposePromise || this._extensions.get(registered.extension.name) !== registered) {
             return
         }
         for (const token of registered.extension.provides ?? []) {
