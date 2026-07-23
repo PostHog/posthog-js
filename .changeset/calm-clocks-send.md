@@ -2,4 +2,4 @@
 'posthog-js': patch
 ---
 
-Send ISO analytics and feature flag timestamps in request bodies, retain numeric query timestamps for session recording, and preserve cache busting for dynamic GET requests.
+Send ISO feature flag timestamps in request bodies, use numeric `sent_at` query timestamps for capture POSTs, and preserve `_` cache busting for dynamic GET requests.
