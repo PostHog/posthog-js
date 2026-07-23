@@ -11,6 +11,8 @@ SDK usage examples and code snippets live in the official documentation so they 
 
 ## AI gateway tracing
 
+Pass a PostHog project secret (`phs_...`) as `projectSecret` to send AI telemetry through PostHog AI Gateway. This selects the gateway automatically and defaults to `https://ai-gateway.us.posthog.com`; you do not need to set `host`.
+
 ```ts
 import { PostHogSpanProcessor } from '@posthog/ai/otel'
 import { NodeSDK } from '@opentelemetry/sdk-node'
@@ -26,7 +28,7 @@ const sdk = new NodeSDK({
 sdk.start()
 ```
 
-`PostHogSpanProcessor` is the recommended tracing integration. `PostHogTraceExporter` remains available for frameworks that only accept a trace exporter. Evaluation logs use the standard OpenTelemetry logs pipeline.
+Using `projectToken: 'phc_...'` instead sends traces directly to PostHog's OTLP ingestion endpoint and does not use AI Gateway. `PostHogSpanProcessor` is the recommended tracing integration. `PostHogTraceExporter` remains available for frameworks that only accept a trace exporter. Evaluation logs use the standard OpenTelemetry logs pipeline.
 
 ## Questions?
 

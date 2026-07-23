@@ -39,7 +39,10 @@ export type PostHogSpanProcessorOptions = PostHogSpanProcessorBaseOptions &
         projectSecret?: never
       }
     | {
-        /** Your AI gateway project secret (the `phs_...` key). */
+        /**
+         * Your PostHog project secret (the `phs_...` key). Selecting this
+         * credential routes telemetry through PostHog AI Gateway.
+         */
         projectSecret: string
         projectToken?: never
       }
@@ -50,7 +53,7 @@ interface PostHogSpanProcessorRuntimeOptions extends PostHogSpanProcessorBaseOpt
    * Your PostHog project token (the `phc_...` key).
    */
   projectToken?: string
-  /** Your AI gateway project secret (the `phs_...` key). */
+  /** Your PostHog project secret (the `phs_...` key). */
   projectSecret?: string
 }
 
@@ -72,9 +75,10 @@ class NoopSpanProcessor implements SpanProcessor {
 /**
  * An OpenTelemetry `SpanProcessor` that sends AI traces to PostHog.
  *
- * Provide either a `projectToken` for direct PostHog ingestion or a
- * `projectSecret` for AI gateway ingestion. A blank credential disables the
- * processor as a defensive no-op.
+ * Credential choice controls the route: `projectSecret: 'phs_...'` sends
+ * telemetry through PostHog AI Gateway, while `projectToken: 'phc_...'` sends
+ * directly to PostHog's OTLP ingestion endpoint. A blank credential disables
+ * the processor as a defensive no-op.
  *
  * Internally batches spans and exports them to PostHog's OTLP ingestion
  * endpoint. Only AI-related spans (those whose name or attribute keys
