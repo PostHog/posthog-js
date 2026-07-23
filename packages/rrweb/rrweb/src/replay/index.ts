@@ -817,10 +817,14 @@ export class Replayer {
         if (completedSynchronously || this.service.state.matches('playing')) {
           onApplied();
         } else if (this.service.state.matches('paused')) {
-          // a PAUSE arrived while the rebuild was yielding; net out like the
-          // synchronous path (timer started by PLAY, then cleared by PAUSE)
-          onApplied();
+          // a PAUSE arrived while the rebuild was yielding. Skip onApplied:
+          // it would schedule every future event and start the timer, only
+          // for all of it to be discarded while paused (resuming recomputes
+          // the schedule from scratch). Just net the timer out to the same
+          // state the synchronous path leaves behind (started by PLAY, then
+          // cleared by PAUSE): no actions, no raf, offset reset.
           this.timer.clear();
+          this.timer.timeOffset = 0;
         }
         // live: TO_LIVE already runs its own timer; leave it alone
       },

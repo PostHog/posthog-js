@@ -97,7 +97,9 @@ type PlayerAssets = {
   /**
    * Applies the fast-forward events of a seek and emits Flush. May complete
    * asynchronously on long rebuilds; calls onApplied exactly once after the
-   * last event — unless a newer play/seek superseded this one.
+   * last event — unless a newer play/seek superseded this one, or playback
+   * paused/went live while the rebuild was yielding. A paused player must
+   * not schedule or start the timer; resuming recomputes the schedule.
    */
   applyEvents(events: Array<eventWithTime>, onApplied: () => void): void;
   getCastFn(event: eventWithTime, isSync: boolean): () => void;
