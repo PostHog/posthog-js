@@ -55,7 +55,11 @@ export const generate = action({
             },
         })
 
-        await provider.forceFlush()
+        try {
+            await provider.forceFlush()
+        } catch (error) {
+            console.error('Failed to flush PostHog telemetry', error)
+        }
 
         return {
             text: result.text,
