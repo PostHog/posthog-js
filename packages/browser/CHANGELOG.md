@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.407.1
+
+### Patch Changes
+
+- [#4218](https://github.com/PostHog/posthog-js/pull/4218) [`33f0bd7`](https://github.com/PostHog/posthog-js/commit/33f0bd7b7510ee05ea7927580a24f68936f77b9a) Thanks [@marandaneto](https://github.com/marandaneto)! - Send ISO feature flag timestamps in request bodies, use numeric `sent_at` query timestamps for capture POSTs, and preserve `_` cache busting for dynamic GET requests.
+  (2026-07-23)
+
 ## 1.407.0
 
 ### Minor Changes
