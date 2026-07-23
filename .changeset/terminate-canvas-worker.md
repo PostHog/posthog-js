@@ -1,5 +1,4 @@
 ---
-'posthog-js': patch
 '@posthog/rrweb': patch
 ---
 

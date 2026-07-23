@@ -152,6 +152,25 @@ describe('CanvasManager FPS observer', () => {
     expect(rafCallbacks.size).toBe(0);
   });
 
+  it('should terminate the worker on normal teardown, exactly once', () => {
+    const win = {
+      document: { querySelectorAll: vi.fn(() => []) },
+      OffscreenCanvas: class {},
+    };
+
+    const manager = createCanvasManager(win);
+    manager.acquire();
+    const worker = workerControl.instances[0];
+    expect(worker).toBeDefined();
+
+    manager.reset();
+    // A second reset must not double-terminate (teardown is latched).
+    manager.reset();
+
+    expect(worker.terminate).toHaveBeenCalledTimes(1);
+    expect(rafCallbacks.size).toBe(0);
+  });
+
   it('should recover from createImageBitmap errors', async () => {
     const fakeCanvas = {
       width: 300,
