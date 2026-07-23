@@ -1,4 +1,4 @@
-import type { Properties } from '@posthog/types'
+import type { JsonRecord, Properties } from '@posthog/types'
 
 import type { Disposable } from './disposable'
 import type { Extension } from './extension'
@@ -36,7 +36,7 @@ export interface CapturedEventInfo {
     /** The finalized captured event name. */
     readonly event: string
     /** The final event properties after client defaults and dynamic properties are applied. */
-    readonly properties: DeepReadonly<Record<string, unknown>>
+    readonly properties: DeepReadonly<JsonRecord>
 }
 
 /** Per-call capture overrides, mirroring the client's public capture options. */
@@ -55,7 +55,7 @@ export interface CaptureOptions {
  * Server-provided configuration shared across core and product extensions. A
  * loose record by design — each extension reads only the keys it owns.
  */
-export type RemoteConfig = DeepReadonly<Record<string, unknown>>
+export type RemoteConfig = DeepReadonly<JsonRecord>
 
 /**
  * The host SDK's core analytics behavior, exposed as an extension so shared

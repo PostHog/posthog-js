@@ -29,10 +29,6 @@ export class Publisher<T> implements Disposable {
         this._subscriptions.push(subscription)
 
         return createDisposable(() => {
-            if (!subscription.isActive) {
-                return
-            }
-
             subscription.isActive = false
 
             const index = this._subscriptions.indexOf(subscription)
