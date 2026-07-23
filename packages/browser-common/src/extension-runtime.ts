@@ -30,7 +30,7 @@ export class ExtensionRuntime implements Disposable {
      * Sets up an extension and publishes its capabilities once setup succeeds.
      * Names and tokens remain reserved while asynchronous setup is pending.
      */
-    add(extension: Extension, client: Client): Promise<void> {
+    async add(extension: Extension, client: Client): Promise<void> {
         if (this._disposePromise) {
             throw new Error('Cannot add an extension to a disposed ExtensionRuntime')
         }

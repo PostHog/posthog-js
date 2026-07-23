@@ -92,7 +92,7 @@ describe('ExtensionRuntime', () => {
 
         const registration = add(provider)
         expect(runtime.getExtension(equivalentToken)).toBeUndefined()
-        expect(() => add(testExtension('collision', jest.fn(), jest.fn(), [equivalentToken]))).toThrow(
+        await expect(add(testExtension('collision', jest.fn(), jest.fn(), [equivalentToken]))).rejects.toThrow(
             'token "posthog.test.async" is already registered'
         )
 
@@ -155,8 +155,8 @@ describe('ExtensionRuntime', () => {
         const { runtime, add } = createRuntime()
         add(testExtension('first', jest.fn(), jest.fn(), [token]))
 
-        expect(() => add(testExtension('first'))).toThrow('already registered')
-        expect(() => add(testExtension('second', jest.fn(), jest.fn(), [equivalentToken]))).toThrow(
+        await expect(add(testExtension('first'))).rejects.toThrow('already registered')
+        await expect(add(testExtension('second', jest.fn(), jest.fn(), [equivalentToken]))).rejects.toThrow(
             'token "posthog.test.shared" is already registered'
         )
         await runtime.dispose()
@@ -230,6 +230,6 @@ describe('ExtensionRuntime', () => {
         await Promise.all([firstDisposal, secondDisposal])
         expect(order).toEqual(['failed', 'first'])
         expect(failedDispose).toHaveBeenCalledTimes(1)
-        expect(() => add(testExtension('late'))).toThrow('disposed')
+        await expect(add(testExtension('late'))).rejects.toThrow('disposed')
     })
 })
