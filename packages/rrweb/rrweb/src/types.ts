@@ -217,7 +217,7 @@ export type playerConfig = {
    * 0 (default) keeps the whole rebuild synchronous, so the target frame is
    * fully rendered when pause(t)/play(t) return.
    */
-  seekYieldBudgetMs: number;
+  seekYieldBudgetMs?: number;
   logger: {
     log: (...args: Parameters<typeof console.log>) => void;
     warn: (...args: Parameters<typeof console.warn>) => void;

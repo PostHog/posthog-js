@@ -230,7 +230,19 @@ export function createPlayerService(
             }
             if (event.timestamp < baselineTime) {
               syncEvents.push(event);
-            } else {
+            }
+          }
+          applyEvents(syncEvents, () => {
+            // schedule future events only now, from the live events array:
+            // while a chunked rebuild was yielding, the timer was inactive, so
+            // ADD_EVENT could only insert into ctx.events without scheduling
+            for (const event of discardPriorSnapshots(
+              ctx.events,
+              baselineTime,
+            )) {
+              if (event.timestamp < baselineTime) {
+                continue;
+              }
               const castFn = getCastFn(event, false);
               timer.addAction({
                 doAction: () => {
@@ -239,8 +251,6 @@ export function createPlayerService(
                 delay: event.delay!,
               });
             }
-          }
-          applyEvents(syncEvents, () => {
             timer.start();
           });
         },

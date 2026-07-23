@@ -164,6 +164,36 @@ describe('replayer', function () {
     expect(currentState).toEqual('paused');
   });
 
+  // KNOWN BUG: `play` classifies an event exactly at the seek target as
+  // "future" (`timestamp < baselineTime`), so a paused seek to exactly a
+  // FullSnapshot's timestamp schedules the snapshot on the timer and then
+  // clears it — the later frame stays on screen. Flipping the comparison to
+  // `<=` is not enough: it moves boundary events out of the timer path, which
+  // also changes lastPlayedEvent bookkeeping that other flows rely on.
+  it.fails(
+    'applies the full snapshot when pausing exactly at its timestamp',
+    async () => {
+      await page.evaluate(`events = ${JSON.stringify(styleSheetRuleEvents)}`);
+      const result = await page.evaluate(`
+      (() => {
+        const { Replayer } = rrweb;
+        const replayer = new Replayer(events);
+        const fsEvent = events.find((e) => e.type === 2);
+        const fsOffset = fsEvent.timestamp - events[0].timestamp;
+        // the mutation at +400 adds a data-jss style element on top of the snapshot
+        replayer.pause(1500);
+        const laterHasJss = replayer.iframe.contentDocument.head.innerHTML.includes('data-jss');
+        // scrubbing back to the exact snapshot timestamp must re-render the
+        // snapshot frame, not leave the later state on screen
+        replayer.pause(fsOffset);
+        const snapshotHasJss = replayer.iframe.contentDocument.head.innerHTML.includes('data-jss');
+        return { laterHasJss, snapshotHasJss };
+      })()
+    `);
+      expect(result).toEqual({ laterHasJss: true, snapshotHasJss: false });
+    },
+  );
+
   it('can fast forward past StyleSheetRule changes on virtual elements', async () => {
     await page.evaluate(`events = ${JSON.stringify(styleSheetRuleEvents)}`);
     const actionLength = await page.evaluate(`
@@ -1357,6 +1387,57 @@ describe('replayer', function () {
         })()
       `);
       expect(result).toEqual({ state: 'playing', timerActive: true });
+    });
+
+    it('destroy() during a chunked rebuild cancels it cleanly', async () => {
+      const errors = await page.evaluate(`
+        (async () => {
+          const errs = [];
+          window.addEventListener('error', (e) => errs.push(String(e.message)));
+          const { Replayer } = rrweb;
+          const replayer = new Replayer(events, { seekYieldBudgetMs: ${TINY_BUDGET} });
+          replayer.pause(2500);
+          replayer.destroy();
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          return errs;
+        })()
+      `);
+      expect(errors).toEqual([]);
+    });
+
+    it('Finish fires only after a chunked seek to the end has fully applied', async () => {
+      const order = await page.evaluate(`
+        (async () => {
+          const { Replayer } = rrweb;
+          const replayer = new Replayer(events, { seekYieldBudgetMs: ${TINY_BUDGET} });
+          const order = [];
+          replayer.on('flush', () => order.push('flush'));
+          replayer.on('finish', () => order.push('finish'));
+          replayer.pause(replayer.getMetaData().totalTime + 100);
+          await new Promise((resolve) => setTimeout(resolve, 800));
+          return order;
+        })()
+      `);
+      expect(order).toContain('flush');
+      expect(order).toContain('finish');
+      expect(order.indexOf('finish')).toBeGreaterThan(order.indexOf('flush'));
+    });
+
+    it('going live during a chunked rebuild leaves the live timer alone', async () => {
+      const result = await page.evaluate(`
+        (async () => {
+          const { Replayer } = rrweb;
+          const replayer = new Replayer(events, { seekYieldBudgetMs: ${TINY_BUDGET}, liveMode: true });
+          replayer.pause(1500);
+          replayer.startLive();
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          return {
+            state: replayer['service']['state']['value'],
+            timerActive: replayer['timer'].isActive(),
+          };
+        })()
+      `);
+      expect(result).toEqual({ state: 'live', timerActive: true });
     });
   });
 });

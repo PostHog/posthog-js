@@ -807,7 +807,7 @@ export class Replayer {
     applyEventsWithYield({
       events: events.filter(this.shouldCastInSyncMode),
       castEvent: (event) => this.getCastFn(event, true)(),
-      yieldBudgetMs: this.config.seekYieldBudgetMs,
+      yieldBudgetMs: this.config.seekYieldBudgetMs ?? 0,
       // addTimeout so destroy() cancels any pending continuation
       schedule: (continueApplying) => void this.addTimeout(continueApplying, 0),
       isCancelled: () => generation !== this.applyGeneration,
@@ -947,7 +947,18 @@ export class Replayer {
         !this.config.liveMode &&
         event === this.service.state.context.events[last_index]
       ) {
+        const generationAtCast = this.applyGeneration;
         const finish = () => {
+          if (generationAtCast !== this.applyGeneration) {
+            // a newer seek owns playback now
+            return;
+          }
+          if (this.seekRebuildInFlight) {
+            // the chunked rebuild that cast this event is still applying;
+            // Finish must not fire before the frame is fully built
+            this.addTimeout(finish, 50);
+            return;
+          }
           if (last_index < this.service.state.context.events.length - 1) {
             // more events have been added since the setTimeout
             return;
