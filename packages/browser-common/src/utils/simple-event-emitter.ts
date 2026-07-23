@@ -8,8 +8,15 @@ export class SimpleEventEmitter {
         this._events[event].push(listener)
 
         return () => {
-            this._events[event] = this._events[event]!.filter((x) => x !== listener)
+            const listeners = this._events[event]
+            if (listeners) {
+                this._events[event] = listeners.filter((x) => x !== listener)
+            }
         }
+    }
+
+    clear(event: string): void {
+        delete this._events[event]
     }
 
     emit(event: string, payload: any): void {
