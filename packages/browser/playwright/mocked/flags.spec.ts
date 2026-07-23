@@ -70,6 +70,7 @@ test.describe('flags', () => {
             distinct_id: 'new-id',
             $device_id: flagsPayload.$device_id,
             timezone: flagsPayload.timezone,
+            sent_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
             person_properties: {
                 $lib: 'web',
                 $lib_version: expect.any(String),

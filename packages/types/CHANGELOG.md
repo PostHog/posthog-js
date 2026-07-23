@@ -1,5 +1,13 @@
 # @posthog/types
 
+## 1.398.0
+
+### Minor Changes
+
+- [#4222](https://github.com/PostHog/posthog-js/pull/4222) [`0f2407b`](https://github.com/PostHog/posthog-js/commit/0f2407bbd98cab7d38a23f0466bbdccf3e0bdbf3) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - feat: add a default-value option to `isFeatureEnabled`
+
+    `isFeatureEnabled(key, { defaultValue: false })` now returns the given default when the flag has no value — flags not loaded yet, or no flag with that key — and the return type narrows to `boolean`. The option name is the same in posthog-js, posthog-js-lite, and posthog-react-native. Without `defaultValue`, behavior is unchanged: `boolean | undefined`. (2026-07-22)
+
 ## 1.397.1
 
 ### Patch Changes

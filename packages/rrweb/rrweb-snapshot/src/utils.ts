@@ -388,15 +388,22 @@ export function isNodeMetaEqual(a: serializedNode, b: serializedNode): boolean {
  * where passwords should be masked.
  */
 export function getInputType(element: HTMLElement): Lowercase<string> | null {
-  // when omitting the type of input element(e.g. <input />), the type is treated as text
-  const type = (element as HTMLInputElement).type;
+  try {
+    // when omitting the type of input element(e.g. <input />), the type is treated as text
+    const type = (element as HTMLInputElement).type;
 
-  return element.hasAttribute('data-rr-is-password')
-    ? 'password'
-    : type
-    ? // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-      toLowerCase(type)
-    : null;
+    return element.hasAttribute('data-rr-is-password')
+      ? 'password'
+      : type
+      ? // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+        toLowerCase(type)
+      : null;
+  } catch {
+    // reading the native `type` accessor / `hasAttribute` on a non-native
+    // `this` (a proxy or cross-realm object) throws 'Illegal invocation';
+    // treat it as an untyped element rather than letting the error propagate
+    return null;
+  }
 }
 
 /**

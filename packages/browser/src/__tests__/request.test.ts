@@ -97,11 +97,7 @@ describe('request', () => {
                     },
                 })
             )
-            expect(mockedXHR.open).toHaveBeenCalledWith(
-                'GET',
-                'https://any.posthog-instance.com/?_=1700000000000',
-                true
-            )
+            expect(mockedXHR.open).toHaveBeenCalledWith('GET', 'https://any.posthog-instance.com/', true)
 
             expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith('x-header', 'value')
         })
@@ -184,7 +180,7 @@ describe('request', () => {
             const headers = mockedFetch.mock.calls[0][1].headers as Headers
             expect(headers.get('x-header')).toEqual('value')
             expect(mockedFetch).toHaveBeenCalledWith(
-                `https://any.posthog-instance.com?_=1700000000000`,
+                `https://any.posthog-instance.com`,
                 expect.objectContaining({
                     body: undefined,
                     headers: new Headers(),
@@ -194,16 +190,127 @@ describe('request', () => {
             )
         })
 
+        it('adds the cache-busting parameter only when requested', () => {
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/api/surveys/',
+                    method: 'GET',
+                    timestampMode: 'query',
+                })
+            )
+
+            expect(mockedFetch.mock.calls[0][0]).toBe('https://any.posthog-instance.com/api/surveys/?_=1700000000000')
+        })
+
+        it.each([
+            ['/e/', 'https://any.posthog-instance.com/e/?sent_at=1700000000000'],
+            ['/i/v0/e/', 'https://any.posthog-instance.com/i/v0/e/?sent_at=1700000000000'],
+            ['/batch/', 'https://any.posthog-instance.com/batch/?sent_at=1700000000000'],
+            ['/capture/', 'https://any.posthog-instance.com/capture/?sent_at=1700000000000'],
+            ['/track/', 'https://any.posthog-instance.com/track/?sent_at=1700000000000'],
+            ['/engage/', 'https://any.posthog-instance.com/engage/?sent_at=1700000000000'],
+        ])('adds sent_at to the query without changing the capture body for %s', (path, expectedUrl) => {
+            const event = { event: 'test event', properties: { token: 'testtoken' } }
+            request(
+                createRequest({
+                    url: `https://any.posthog-instance.com${path}`,
+                    method: 'POST',
+                    data: event,
+                    timestampMode: 'query',
+                })
+            )
+
+            const [requestedUrl, requestOptions] = mockedFetch.mock.calls[0]
+            expect(requestedUrl).toBe(expectedUrl)
+            expect(JSON.parse(requestOptions.body)).toEqual(event)
+        })
+
+        it('keeps batched analytics bodies unchanged and adds sent_at to the query', () => {
+            const events = [
+                { event: 'first event', properties: { token: 'testtoken' } },
+                { event: 'second event', properties: { token: 'testtoken' } },
+            ]
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/e/',
+                    method: 'POST',
+                    data: events,
+                    timestampMode: 'query',
+                })
+            )
+
+            expect(mockedFetch.mock.calls[0][0]).toBe('https://any.posthog-instance.com/e/?sent_at=1700000000000')
+            expect(JSON.parse(mockedFetch.mock.calls[0][1].body)).toEqual(events)
+        })
+
+        it('adds sent_at to the query for session recording requests', () => {
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/ingest/s/',
+                    method: 'POST',
+                    data: { event: '$snapshot' },
+                    timestampMode: 'query',
+                })
+            )
+
+            const requestedUrl = mockedFetch.mock.calls[0][0]
+            expect(requestedUrl).toBe('https://any.posthog-instance.com/ingest/s/?sent_at=1700000000000')
+        })
+
+        it('preserves caller-provided query parameters', () => {
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/e/?ver=1.23.45&foo=bar',
+                    method: 'POST',
+                    data: { event: 'test event', properties: { token: 'testtoken' } },
+                    timestampMode: 'query',
+                })
+            )
+
+            const requestedUrl = mockedFetch.mock.calls[0][0]
+            expect(requestedUrl).toBe('https://any.posthog-instance.com/e/?ver=1.23.45&foo=bar&sent_at=1700000000000')
+        })
+
+        it('adds sent_at to the body of POST feature flag requests', () => {
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/flags/?v=2',
+                    method: 'POST',
+                    data: { token: 'testtoken', distinct_id: 'user-1' },
+                    timestampMode: 'body',
+                })
+            )
+
+            const [requestedUrl, requestOptions] = mockedFetch.mock.calls[0]
+            expect(requestedUrl).toBe('https://any.posthog-instance.com/flags/?v=2')
+            expect(JSON.parse(requestOptions.body)).toEqual({
+                token: 'testtoken',
+                distinct_id: 'user-1',
+                sent_at: '2023-11-14T22:13:20.000Z',
+            })
+        })
+
+        it('does not add sent_at to GET feature flag requests', () => {
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/flags/?v=2',
+                    method: 'GET',
+                })
+            )
+
+            expect(mockedFetch.mock.calls[0][0]).toBe('https://any.posthog-instance.com/flags/?v=2')
+        })
+
         it.each([
             [
                 'does not add a compression query param for gzip requests',
                 'https://any.posthog-instance.com',
-                'https://any.posthog-instance.com?_=1700000000000',
+                'https://any.posthog-instance.com',
             ],
             [
                 'removes an existing compression query param for gzip requests',
                 'https://any.posthog-instance.com?compression=gzip-js',
-                'https://any.posthog-instance.com?_=1700000000000',
+                'https://any.posthog-instance.com',
             ],
         ])('%s', (_label, url, expectedUrl) => {
             request(
@@ -557,7 +664,7 @@ describe('request', () => {
                     'small',
                     Compression.Base64,
                     true,
-                    '&compression=base64',
+                    '?compression=base64',
                 ],
                 ['never keepalive with GET', 'GET', undefined, Compression.GZipJS, false, ''],
                 ['never keepalive with large JSON POST', 'POST', veryLargeBodyData, undefined, false, ''],
@@ -568,7 +675,7 @@ describe('request', () => {
                     veryLargeBodyData,
                     Compression.Base64,
                     false,
-                    '&compression=base64',
+                    '?compression=base64',
                 ],
             ])(
                 `uses keep alive: %s`,
@@ -591,7 +698,7 @@ describe('request', () => {
                         })
                     )
                     expect(mockedFetch).toHaveBeenCalledWith(
-                        `https://any.posthog-instance.com?_=1700000000000${expectedURLParams}`,
+                        `https://any.posthog-instance.com${expectedURLParams}`,
                         expect.objectContaining({
                             headers: new Headers(),
                             keepalive: expectedKeepAlive,
@@ -809,7 +916,7 @@ describe('request', () => {
                 )
 
                 expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
-                    'https://any.posthog-instance.com/?_=1700000000000&compression=base64',
+                    'https://any.posthog-instance.com/?compression=base64',
                     expect.any(Blob)
                 )
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
@@ -835,7 +942,7 @@ describe('request', () => {
                 )
 
                 expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
-                    'https://any.posthog-instance.com/?_=1700000000000&compression=base64',
+                    'https://any.posthog-instance.com/?compression=base64',
                     expect.any(Blob)
                 )
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
@@ -861,7 +968,7 @@ describe('request', () => {
                 )
 
                 expect(mockedNavigator?.sendBeacon).toHaveBeenCalledWith(
-                    'https://any.posthog-instance.com/?_=1700000000000',
+                    'https://any.posthog-instance.com/',
                     expect.any(Blob)
                 )
                 const blob = mockedNavigator?.sendBeacon.mock.calls[0][1] as Blob
@@ -917,13 +1024,15 @@ describe('request', () => {
                     warnSpy.mockRestore()
                 })
 
-                it('splits a rejected over-quota batch in half and re-sends each piece', () => {
+                it('splits a rejected over-quota batch without dropping sent_at', () => {
                     mockedNavigator!.sendBeacon.mockReturnValueOnce(false).mockReturnValue(true)
 
                     request(
                         createRequest({
+                            url: 'https://any.posthog-instance.com/e/',
                             method: 'POST',
                             data: [bigEvent(1), bigEvent(2), bigEvent(3), bigEvent(4)],
+                            timestampMode: 'query',
                         })
                     )
 
@@ -933,6 +1042,11 @@ describe('request', () => {
                     )
                     expect(firstHalf).toBeLessThan(full)
                     expect(secondHalf).toBeLessThan(full)
+                    expect(mockedNavigator?.sendBeacon.mock.calls.map((call) => call[0])).toEqual([
+                        'https://any.posthog-instance.com/e/?sent_at=1700000000000&compression=base64',
+                        'https://any.posthog-instance.com/e/?sent_at=1700000000000&compression=base64',
+                        'https://any.posthog-instance.com/e/?sent_at=1700000000000&compression=base64',
+                    ])
                     expect(mockedFetch).not.toHaveBeenCalled()
                 })
 
@@ -1076,7 +1190,7 @@ describe('request', () => {
             isolatedCompression = (await import('../types')).Compression
         })
 
-        it('retries uncompressed and disables native async gzip after NotReadableError', async () => {
+        it('retries uncompressed without dropping sent_at after NotReadableError', async () => {
             mockedIsolatedGzipCompress.mockRejectedValueOnce({ name: 'NotReadableError' })
 
             isolatedRequestModule.request({
@@ -1087,13 +1201,14 @@ describe('request', () => {
                 transport: 'fetch',
                 method: 'POST',
                 compression: isolatedCompression.GZipJS,
+                timestampMode: 'query',
             })
 
             await flushPromises()
 
             expect(mockedIsolatedGzipCompress).toHaveBeenCalledTimes(1)
             expect(mockedIsolatedFetch).toHaveBeenCalledTimes(1)
-            expect(mockedIsolatedFetch.mock.calls[0][0]).not.toContain('&compression=gzip-js')
+            expect(mockedIsolatedFetch.mock.calls[0][0]).toMatch(/^https:\/\/any\.posthog-instance\.com\?sent_at=\d+$/)
             expect(mockedIsolatedFetch.mock.calls[0][1].body).toBe('{"foo":"bar"}')
 
             mockedIsolatedFetch.mockClear()

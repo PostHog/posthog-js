@@ -16,9 +16,9 @@ private func hedgeLog(_ message: String) {
     }
 #endif
 
-// Deduplication works on Android (both architectures), iOS (old architecture only), and macOS.
-// On the iOS new architecture, fatal JS exception events surface as a generic SIGABRT
-// crash event with no JS-error text in any field, so they currently cannot be filtered.
+/// Deduplication works on Android (both architectures), iOS (old architecture only), and macOS.
+/// On the iOS new architecture, fatal JS exception events surface as a generic SIGABRT
+/// crash event with no JS-error text in any field, so they currently cannot be filtered.
 private let fatalJsErrorMarkers = ["Unhandled JS Exception", "ExceptionsManager.reportException", "facebook::jsi::JSError"]
 
 private func containsFatalJsErrorMarker(_ text: String?) -> Bool {
