@@ -1,17 +1,13 @@
 import {
   META_CLIENT_INFO_KEY,
   META_PROTOCOL_VERSION_KEY,
-  applyMetaClientInfo,
   readMetaClientInfo,
+  stampMetaClientInfo,
 } from '../extensions/client-identity'
-import type { MCPAnalyticsData, MCPRequestLike, SessionInfo } from '../types'
+import type { McpEvent, MCPRequestLike } from '../types'
 
 function requestWithMeta(meta: Record<string, unknown> | undefined): MCPRequestLike {
   return { method: 'tools/call', params: { name: 'echo', arguments: {}, _meta: meta } }
-}
-
-function dataWithSessionInfo(sessionInfo: Partial<SessionInfo> = {}): MCPAnalyticsData {
-  return { sessionInfo } as unknown as MCPAnalyticsData
 }
 
 describe('client-identity (_meta client info)', () => {
@@ -53,34 +49,45 @@ describe('client-identity (_meta client info)', () => {
     })
   })
 
-  describe('applyMetaClientInfo', () => {
-    it('copies present fields onto sessionInfo', () => {
-      const data = dataWithSessionInfo()
-      applyMetaClientInfo(
-        data,
+  describe('stampMetaClientInfo', () => {
+    it('stamps present fields onto the event', () => {
+      const event: McpEvent = {}
+      stampMetaClientInfo(
+        event,
         requestWithMeta({
           [META_CLIENT_INFO_KEY]: { name: 'codex', version: '1.2.3' },
           [META_PROTOCOL_VERSION_KEY]: '2026-07-28',
         })
       )
-      expect(data.sessionInfo.clientName).toBe('codex')
-      expect(data.sessionInfo.clientVersion).toBe('1.2.3')
-      expect(data.sessionInfo.protocolVersion).toBe('2026-07-28')
+      expect(event.clientName).toBe('codex')
+      expect(event.clientVersion).toBe('1.2.3')
+      expect(event.protocolVersion).toBe('2026-07-28')
     })
 
-    it('leaves existing values untouched when _meta is absent', () => {
-      const data = dataWithSessionInfo({ clientName: 'existing', protocolVersion: '2025-11-25' })
-      applyMetaClientInfo(data, requestWithMeta(undefined))
-      expect(data.sessionInfo.clientName).toBe('existing')
-      expect(data.sessionInfo.protocolVersion).toBe('2025-11-25')
+    it('leaves the event untouched when _meta is absent', () => {
+      const event: McpEvent = { clientName: 'existing', protocolVersion: '2025-11-25' }
+      stampMetaClientInfo(event, requestWithMeta(undefined))
+      expect(event.clientName).toBe('existing')
+      expect(event.protocolVersion).toBe('2025-11-25')
     })
 
     it('only overwrites the fields the request actually carries', () => {
-      const data = dataWithSessionInfo({ clientName: 'existing', clientVersion: '0.0.1' })
-      applyMetaClientInfo(data, requestWithMeta({ [META_PROTOCOL_VERSION_KEY]: '2026-07-28' }))
-      expect(data.sessionInfo.clientName).toBe('existing')
-      expect(data.sessionInfo.clientVersion).toBe('0.0.1')
-      expect(data.sessionInfo.protocolVersion).toBe('2026-07-28')
+      const event: McpEvent = { clientName: 'existing', clientVersion: '0.0.1' }
+      stampMetaClientInfo(event, requestWithMeta({ [META_PROTOCOL_VERSION_KEY]: '2026-07-28' }))
+      expect(event.clientName).toBe('existing')
+      expect(event.clientVersion).toBe('0.0.1')
+      expect(event.protocolVersion).toBe('2026-07-28')
+    })
+
+    it('does not cross-attribute across two concurrent requests sharing a server', () => {
+      // Each request stamps its OWN event, so one can't clobber the other's
+      // identity — the property the shared-state approach lacked.
+      const eventA: McpEvent = {}
+      const eventB: McpEvent = {}
+      stampMetaClientInfo(eventA, requestWithMeta({ [META_CLIENT_INFO_KEY]: { name: 'codex', version: '1.0.0' } }))
+      stampMetaClientInfo(eventB, requestWithMeta({ [META_CLIENT_INFO_KEY]: { name: 'claude', version: '2.0.0' } }))
+      expect(eventA.clientName).toBe('codex')
+      expect(eventB.clientName).toBe('claude')
     })
   })
 })

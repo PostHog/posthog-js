@@ -21,7 +21,7 @@ import {
   injectConversationIdPromptBack,
   resolveConversationId,
 } from './conversation-id'
-import { applyMetaClientInfo } from './client-identity'
+import { stampMetaClientInfo } from './client-identity'
 import { captureEvent } from './capture'
 import { MCPAnalyticsEventType } from './event-types'
 import { captureException } from './exceptions'
@@ -140,9 +140,6 @@ async function prepareToolCallEvent(
 ): Promise<McpEvent | null> {
   try {
     const sessionId = getSessionId(server, extra)
-    // Modern (stateless) clients carry client name/version + protocol version in
-    // `_meta` on every request rather than at `initialize`; pick them up here.
-    applyMetaClientInfo(data, request)
     await handleIdentify(server, data, sessionId, request, extra)
 
     const toolName = request.params?.name
@@ -156,6 +153,10 @@ async function prepareToolCallEvent(
       toolCategory: toolName ? data.toolCategories.get(toolName) : undefined,
       toolDescription: toolName ? data.toolDescriptions.get(toolName) : undefined,
     }
+    // Modern (stateless) clients carry client name/version + protocol version in
+    // `_meta` on every request rather than at `initialize`; stamp them onto this
+    // event now so concurrent requests can't cross-attribute it.
+    stampMetaClientInfo(event, request)
 
     await applyResolvedMetadata(event, data, request, extra)
     setEventIntent(event, await resolveToolCallIntent(data, request, extra))
@@ -295,15 +296,13 @@ export async function handleListToolsRequest(
 ): Promise<{ tools: ListToolsResult['tools'] }> {
   const data = getServerTrackingData(server)
   const startTime = new Date()
-  if (data) {
-    applyMetaClientInfo(data, request)
-  }
   const event: McpEvent = {
     sessionId: getSessionId(server, extra),
     parameters: buildCapturedMcpParameters(request),
     eventType: MCPAnalyticsEventType.mcpToolsList,
     timestamp: startTime,
   }
+  stampMetaClientInfo(event, request)
 
   if (data) {
     await applyResolvedMetadata(event, data, request, extra)
@@ -553,9 +552,6 @@ export async function handleInitializeRequest(
   // Mint first so the `$mcp_initialize` event below already carries the minted id.
   const mintedSessionId = mintStatelessSessionOnInitialize(server, data, request, extra)
   const sessionId = getSessionId(server, extra)
-  // Harmless for a legacy `initialize` (client info rides the body there); picks
-  // up client info if a client happens to also send it in `_meta`.
-  applyMetaClientInfo(data, request)
   await handleIdentify(server, data, sessionId, request, extra)
 
   const event: McpEvent = {
@@ -565,6 +561,10 @@ export async function handleInitializeRequest(
     parameters: buildCapturedMcpParameters(request),
     timestamp: new Date(),
   }
+  // Harmless for a legacy `initialize` (client info rides the body there, and the
+  // negotiated protocol version below overrides any `_meta` one); picks up client
+  // info if a client also sends it in `_meta`.
+  stampMetaClientInfo(event, request)
 
   await applyResolvedMetadata(event, data, request, extra)
 

@@ -1,4 +1,4 @@
-import type { MCPAnalyticsData, MCPRequestLike } from '../types'
+import type { McpEvent, MCPRequestLike } from '../types'
 
 /**
  * Client identity under the MCP 2026-07-28 (stateless) revision.
@@ -52,25 +52,30 @@ export function readMetaClientInfo(request: MCPRequestLike): MetaClientInfo | un
 }
 
 /**
- * Copies any client identity found in `params._meta` onto the shared session
- * info, so events built later in the request carry `$mcp_client_name`,
+ * Stamps any client identity found in `params._meta` directly onto the event
+ * being built for *this* request, so it carries `$mcp_client_name`,
  * `$mcp_client_version`, and `$mcp_protocol_version` even when there was no
- * `initialize` to learn them from (the modern stateless case). Only fields the
- * request actually carries are written — a request without `_meta` leaves the
- * existing values (from a session token / initialize) untouched.
+ * `initialize` to learn them from (the modern stateless case).
+ *
+ * Writing to the event — a per-request object — rather than the server-wide
+ * `sessionInfo` keeps identity correct when one instrumented server multiplexes
+ * concurrent requests from different clients (which the stateless spec allows):
+ * a sibling request can't clobber this event's attribution between now and when
+ * it's captured. Only fields the request actually carries are set, so a request
+ * without `_meta` leaves the event's existing values untouched.
  */
-export function applyMetaClientInfo(data: MCPAnalyticsData, request: MCPRequestLike): void {
+export function stampMetaClientInfo(event: McpEvent, request: MCPRequestLike): void {
   const info = readMetaClientInfo(request)
   if (!info) {
     return
   }
   if (info.clientName) {
-    data.sessionInfo.clientName = info.clientName
+    event.clientName = info.clientName
   }
   if (info.clientVersion) {
-    data.sessionInfo.clientVersion = info.clientVersion
+    event.clientVersion = info.clientVersion
   }
   if (info.protocolVersion) {
-    data.sessionInfo.protocolVersion = info.protocolVersion
+    event.protocolVersion = info.protocolVersion
   }
 }
