@@ -111,6 +111,17 @@ All SDK packages have the following scripts:
 - `test:functional` - Run functional/integration tests (if applicable)
 - `package` - Create a tarball of this package that can be installed inside an example or playground project
 
+### Playwright
+
+For non-interactive or agent-run Playwright tests, run from `packages/browser` and prefer the line reporter:
+
+```bash
+cd packages/browser
+pnpm exec playwright test --reporter=line
+```
+
+The default HTML reporter serves the report and waits after local failures, which can make the command appear stuck. Add test paths and `--project` filters before `--reporter=line` for focused runs.
+
 ### Using Turbo to Target Specific Packages
 
 You can run commands using the `turbo` CLI and target specific packages. Useful examples:
