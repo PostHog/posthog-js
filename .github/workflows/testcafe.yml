@@ -8,6 +8,9 @@ env:
   BROWSERSTACK_USE_AUTOMATE: "true"
   BROWSERSTACK_PROJECT_NAME: "PostHog JS SDK"
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
