@@ -17,6 +17,10 @@ interface MockAnthropicResponseOptions {
     output_tokens: number
     cache_creation_input_tokens?: number
     cache_read_input_tokens?: number
+    cache_creation?: {
+      ephemeral_5m_input_tokens: number
+      ephemeral_1h_input_tokens: number
+    }
     server_tool_use?: {
       web_search_requests?: number
     }
@@ -159,6 +163,7 @@ const createMockStreamChunks = (options: MockAnthropicResponseOptions = {}): Moc
         input_tokens: options.usage?.input_tokens || 20,
         cache_creation_input_tokens: options.usage?.cache_creation_input_tokens || 0,
         cache_read_input_tokens: options.usage?.cache_read_input_tokens || 0,
+        ...(options.usage?.cache_creation ? { cache_creation: options.usage.cache_creation } : {}),
         output_tokens: 0,
         ...(options.usage?.server_tool_use?.web_search_requests
           ? {
@@ -807,6 +812,51 @@ describe('PostHogAnthropic', () => {
         cacheCreationInputTokens: 10,
         cacheReadInputTokens: 5,
       })
+    })
+
+    it('should retain cache creation TTL usage after the final streaming delta', async () => {
+      mockStreamChunks = createMockStreamChunks({
+        content: 'Streaming response',
+        usage: {
+          input_tokens: 75,
+          output_tokens: 40,
+          cache_creation_input_tokens: 30,
+          cache_read_input_tokens: 5,
+          cache_creation: {
+            ephemeral_5m_input_tokens: 10,
+            ephemeral_1h_input_tokens: 20,
+          },
+        },
+      })
+
+      const stream = await client.messages.create({
+        model: 'claude-3-opus-20240229',
+        messages: [{ role: 'user', content: 'Hello' }],
+        max_tokens: 100,
+        stream: true,
+        posthogDistinctId: 'test-user-123',
+      })
+
+      for await (const _chunk of stream) {
+        // Consume the stream so the monitoring branch reaches message_delta.
+      }
+      await waitForAsyncCapture()
+
+      const captureMock = mockPostHogClient.capture as jest.Mock
+      const [captureArgs] = captureMock.mock.calls
+
+      expect(captureArgs[0].properties['$ai_usage']).toEqual({
+        input_tokens: 75,
+        output_tokens: 40,
+        cache_creation_input_tokens: 30,
+        cache_read_input_tokens: 5,
+        cache_creation: {
+          ephemeral_5m_input_tokens: 10,
+          ephemeral_1h_input_tokens: 20,
+        },
+      })
+      expect(captureArgs[0].properties['$ai_cache_creation_input_tokens']).toBe(30)
+      expect(captureArgs[0].properties['$ai_output_tokens']).toBe(40)
     })
   })
 

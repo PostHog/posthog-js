@@ -1,6 +1,7 @@
 import { LangChainCallbackHandler } from '../src/langchain/callbacks'
 import { PostHog } from 'posthog-node'
 import { AIMessage } from '@langchain/core/messages'
+import type { ChatGeneration } from '@langchain/core/outputs'
 import { version } from '../package.json'
 
 const mockPostHogClient = {
@@ -365,6 +366,135 @@ describe('LangChainCallbackHandler', () => {
     expect(captureCall[0].properties['$ai_cache_read_input_tokens']).toBe(50)
   })
 
+  it('should use generation info usage when message response metadata is empty', async () => {
+    const serialized = {
+      lc: 1,
+      type: 'constructor' as const,
+      id: ['langchain', 'llms', 'openai', 'OpenAI'],
+      kwargs: {},
+    }
+    const runId = 'run_generation_info_usage_test'
+    handler.handleLLMStart(serialized, ['Use generation info'], runId, undefined, {}, undefined, {
+      ls_model_name: 'gpt-4',
+      ls_provider: 'openai',
+    })
+
+    const generation = {
+      text: 'Response with generation info usage.',
+      message: new AIMessage({
+        content: 'Response with generation info usage.',
+        response_metadata: {},
+      }),
+      generationInfo: {
+        response_metadata: {
+          usage: {
+            input_tokens: 21,
+            output_tokens: 9,
+          },
+        },
+      },
+    } satisfies ChatGeneration
+
+    handler.handleLLMEnd(
+      {
+        generations: [[generation]],
+      },
+      runId
+    )
+
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    expect(captureCall[0].properties['$ai_input_tokens']).toBe(21)
+    expect(captureCall[0].properties['$ai_output_tokens']).toBe(9)
+  })
+
+  it('should ignore empty top-level usage and fall back to generation metadata', async () => {
+    const serialized = {
+      lc: 1,
+      type: 'constructor' as const,
+      id: ['langchain', 'llms', 'openai', 'OpenAI'],
+      kwargs: {},
+    }
+    const runId = 'run_empty_top_level_usage_test'
+    handler.handleLLMStart(serialized, ['Use generation info'], runId, undefined, {}, undefined, {
+      ls_model_name: 'gpt-4',
+      ls_provider: 'openai',
+    })
+
+    const generation = {
+      text: 'Response with generation info usage.',
+      message: new AIMessage({
+        content: 'Response with generation info usage.',
+        response_metadata: {},
+      }),
+      generationInfo: {
+        response_metadata: {
+          usage: {
+            input_tokens: 21,
+            output_tokens: 9,
+          },
+        },
+      },
+    } satisfies ChatGeneration
+
+    handler.handleLLMEnd(
+      {
+        generations: [[generation]],
+        llmOutput: {
+          tokenUsage: {},
+        },
+      },
+      runId
+    )
+
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    expect(captureCall[0].properties['$ai_input_tokens']).toBe(21)
+    expect(captureCall[0].properties['$ai_output_tokens']).toBe(9)
+  })
+
+  it('should prefer top-level usage for non-Anthropic providers', async () => {
+    const serialized = {
+      lc: 1,
+      type: 'constructor' as const,
+      id: ['langchain', 'llms', 'openai', 'OpenAI'],
+      kwargs: {},
+    }
+    const runId = 'run_top_level_usage_precedence_test'
+    handler.handleLLMStart(serialized, ['Use top-level usage'], runId, undefined, {}, undefined, {
+      ls_model_name: 'gpt-4',
+      ls_provider: 'openai',
+    })
+
+    const generation = {
+      text: 'Response with differing usage sources.',
+      message: new AIMessage({
+        content: 'Response with differing usage sources.',
+        usage_metadata: {
+          input_tokens: 999,
+          output_tokens: 888,
+          total_tokens: 1887,
+        },
+      }),
+    } satisfies ChatGeneration
+
+    handler.handleLLMEnd(
+      {
+        generations: [[generation]],
+        llmOutput: {
+          tokenUsage: {
+            promptTokens: 100,
+            completionTokens: 20,
+            totalTokens: 120,
+          },
+        },
+      },
+      runId
+    )
+
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    expect(captureCall[0].properties['$ai_input_tokens']).toBe(100)
+    expect(captureCall[0].properties['$ai_output_tokens']).toBe(20)
+  })
+
   it('should subtract cache_read_tokens from input_tokens for Anthropic provider', async () => {
     const serialized = {
       lc: 1,
@@ -575,6 +705,8 @@ describe('LangChainCallbackHandler', () => {
     expect(captureCall[0].properties['$ai_input_tokens']).toBe(200)
     expect(captureCall[0].properties['$ai_output_tokens']).toBe(50)
     expect(captureCall[0].properties['$ai_cache_creation_input_tokens']).toBe(800)
+    expect(captureCall[0].properties['$ai_cache_creation_5m_input_tokens']).toBeUndefined()
+    expect(captureCall[0].properties['$ai_cache_creation_1h_input_tokens']).toBeUndefined()
   })
 
   it('should subtract both cache_read and cache_creation tokens for Anthropic', async () => {
@@ -631,6 +763,385 @@ describe('LangChainCallbackHandler', () => {
     expect(captureCall[0].properties['$ai_output_tokens']).toBe(50)
     expect(captureCall[0].properties['$ai_cache_read_input_tokens']).toBe(800)
     expect(captureCall[0].properties['$ai_cache_creation_input_tokens']).toBe(500)
+  })
+
+  it('should preserve Anthropic cache creation TTLs from LangChain response metadata', async () => {
+    const serialized = {
+      lc: 1,
+      type: 'constructor' as const,
+      id: ['langchain', 'chat_models', 'anthropic', 'ChatAnthropic'],
+      kwargs: {},
+    }
+
+    const runId = 'run_anthropic_cache_ttl_test'
+    const metadata = { ls_model_name: 'claude-sonnet-4-6', ls_provider: 'anthropic' }
+    handler.handleLLMStart(serialized, ['Use the cached context'], runId, undefined, {}, undefined, metadata)
+
+    const llmResult = {
+      generations: [
+        [
+          {
+            text: 'Response from Anthropic with cache creation TTLs.',
+            message: new AIMessage({
+              content: 'Response from Anthropic with cache creation TTLs.',
+              response_metadata: {
+                usage: {
+                  input_tokens: 18,
+                  output_tokens: 50,
+                  cache_creation_input_tokens: 300,
+                  cache_read_input_tokens: 0,
+                  cache_creation: {
+                    ephemeral_5m_input_tokens: 100,
+                    ephemeral_1h_input_tokens: 200,
+                  },
+                },
+              },
+              usage_metadata: {
+                input_tokens: 318,
+                output_tokens: 50,
+                total_tokens: 368,
+                input_token_details: {
+                  cache_creation: 300,
+                  cache_read: 0,
+                },
+              },
+            }),
+          },
+        ],
+      ],
+    }
+
+    handler.handleLLMEnd(llmResult, runId)
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+    expect(captureCall[0].properties['$ai_input_tokens']).toBe(18)
+    expect(captureCall[0].properties['$ai_output_tokens']).toBe(50)
+    expect(captureCall[0].properties['$ai_cache_creation_input_tokens']).toBe(300)
+    expect(captureCall[0].properties['$ai_cache_creation_5m_input_tokens']).toBe(100)
+    expect(captureCall[0].properties['$ai_cache_creation_1h_input_tokens']).toBe(200)
+  })
+
+  it('should keep the Anthropic aggregate when the direct TTL breakdown does not match', async () => {
+    const serialized = {
+      lc: 1,
+      type: 'constructor' as const,
+      id: ['langchain', 'chat_models', 'anthropic', 'ChatAnthropic'],
+      kwargs: {},
+    }
+
+    const runId = 'run_anthropic_cache_ttl_mismatch_test'
+    const metadata = { ls_model_name: 'claude-sonnet-4-6', ls_provider: 'anthropic' }
+    handler.handleLLMStart(serialized, ['Use the cached context'], runId, undefined, {}, undefined, metadata)
+
+    const llmResult = {
+      generations: [
+        [
+          {
+            text: 'Response from Anthropic with mismatched cache creation TTLs.',
+            message: new AIMessage({
+              content: 'Response from Anthropic with mismatched cache creation TTLs.',
+              response_metadata: {
+                usage: {
+                  input_tokens: 18,
+                  output_tokens: 50,
+                  cache_creation_input_tokens: 300,
+                  cache_read_input_tokens: 0,
+                  cache_creation: {
+                    ephemeral_5m_input_tokens: 100,
+                    ephemeral_1h_input_tokens: 100,
+                  },
+                },
+              },
+              usage_metadata: {
+                input_tokens: 318,
+                output_tokens: 50,
+                total_tokens: 368,
+                input_token_details: {
+                  cache_creation: 300,
+                  cache_read: 0,
+                },
+              },
+            }),
+          },
+        ],
+      ],
+    }
+
+    handler.handleLLMEnd(llmResult, runId)
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+    expect(captureCall[0].properties['$ai_input_tokens']).toBe(18)
+    expect(captureCall[0].properties['$ai_output_tokens']).toBe(50)
+    expect(captureCall[0].properties['$ai_cache_creation_input_tokens']).toBe(300)
+    expect(captureCall[0].properties['$ai_cache_creation_5m_input_tokens']).toBeUndefined()
+    expect(captureCall[0].properties['$ai_cache_creation_1h_input_tokens']).toBeUndefined()
+  })
+
+  it('should not subtract cache creation twice from raw Anthropic usage', async () => {
+    const serialized = {
+      lc: 1,
+      type: 'constructor' as const,
+      id: ['langchain', 'chat_models', 'anthropic', 'ChatAnthropic'],
+      kwargs: {},
+    }
+
+    const runId = 'run_anthropic_raw_cache_ttl_test'
+    const metadata = { ls_model_name: 'claude-sonnet-4-6', ls_provider: 'anthropic' }
+    handler.handleLLMStart(serialized, ['Use the cached context'], runId, undefined, {}, undefined, metadata)
+
+    const rawUsage = {
+      input_tokens: 18,
+      output_tokens: 50,
+      cache_creation_input_tokens: 300,
+      cache_read_input_tokens: 0,
+      cache_creation: {
+        ephemeral_5m_input_tokens: 100,
+        ephemeral_1h_input_tokens: 200,
+      },
+    }
+    const llmResult = {
+      generations: [
+        [
+          {
+            text: 'Response from Anthropic with cache creation TTLs.',
+            message: new AIMessage({
+              content: 'Response from Anthropic with cache creation TTLs.',
+              response_metadata: { usage: rawUsage },
+              usage_metadata: {
+                input_tokens: 318,
+                output_tokens: 50,
+                total_tokens: 368,
+                input_token_details: {
+                  cache_creation: 300,
+                  cache_read: 0,
+                },
+              },
+            }),
+          },
+        ],
+      ],
+      llmOutput: { usage: rawUsage },
+    }
+
+    handler.handleLLMEnd(llmResult, runId)
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+    expect(captureCall[0].properties['$ai_input_tokens']).toBe(18)
+    expect(captureCall[0].properties['$ai_output_tokens']).toBe(50)
+    expect(captureCall[0].properties['$ai_cache_creation_input_tokens']).toBe(300)
+    expect(captureCall[0].properties['$ai_cache_creation_5m_input_tokens']).toBe(100)
+    expect(captureCall[0].properties['$ai_cache_creation_1h_input_tokens']).toBe(200)
+  })
+
+  it('should preserve Anthropic cache creation TTLs from Bedrock Converse response metadata', async () => {
+    const serialized = {
+      lc: 1,
+      type: 'constructor' as const,
+      id: ['langchain', 'chat_models', 'bedrock', 'ChatBedrockConverse'],
+      kwargs: {},
+    }
+
+    const runId = 'run_bedrock_converse_cache_ttl_test'
+    const metadata = {
+      ls_model_name: 'us.anthropic.claude-sonnet-4-6-v1:0',
+      ls_provider: 'amazon_bedrock',
+    }
+    handler.handleLLMStart(serialized, ['Use the cached context'], runId, undefined, {}, undefined, metadata)
+
+    const llmResult = {
+      generations: [
+        [
+          {
+            text: 'Response from Bedrock Converse with cache creation TTLs.',
+            message: new AIMessage({
+              content: 'Response from Bedrock Converse with cache creation TTLs.',
+              response_metadata: {
+                usage: {
+                  inputTokens: 18,
+                  outputTokens: 50,
+                  cacheWriteInputTokens: 300,
+                  cacheReadInputTokens: 0,
+                  cacheDetails: [
+                    { ttl: '5m', inputTokens: 100 },
+                    { ttl: '1h', inputTokens: 200 },
+                  ],
+                },
+              },
+              usage_metadata: {
+                input_tokens: 318,
+                output_tokens: 50,
+                total_tokens: 368,
+                input_token_details: {
+                  cache_creation: 300,
+                  cache_read: 0,
+                },
+              },
+            }),
+          },
+        ],
+      ],
+    }
+
+    handler.handleLLMEnd(llmResult, runId)
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+    expect(captureCall[0].properties['$ai_input_tokens']).toBe(18)
+    expect(captureCall[0].properties['$ai_output_tokens']).toBe(50)
+    expect(captureCall[0].properties['$ai_cache_creation_input_tokens']).toBe(300)
+    expect(captureCall[0].properties['$ai_cache_creation_5m_input_tokens']).toBe(100)
+    expect(captureCall[0].properties['$ai_cache_creation_1h_input_tokens']).toBe(200)
+  })
+
+  it('should preserve Anthropic cache creation TTLs from aggregated Bedrock Converse stream metadata', async () => {
+    const serialized = {
+      lc: 1,
+      type: 'constructor' as const,
+      id: ['langchain', 'chat_models', 'bedrock', 'ChatBedrockConverse'],
+      kwargs: {},
+    }
+
+    const runId = 'run_bedrock_converse_stream_cache_ttl_test'
+    const metadata = {
+      ls_model_name: 'us.anthropic.claude-sonnet-4-6-v1:0',
+      ls_provider: 'amazon_bedrock',
+    }
+    handler.handleLLMStart(serialized, ['Use the cached context'], runId, undefined, {}, undefined, metadata)
+
+    const llmResult = {
+      generations: [
+        [
+          {
+            text: 'Streamed response from Bedrock Converse with cache creation TTLs.',
+            message: new AIMessage({
+              content: 'Streamed response from Bedrock Converse with cache creation TTLs.',
+              response_metadata: {
+                metadata: {
+                  usage: {
+                    inputTokens: 18,
+                    outputTokens: 50,
+                    cacheWriteInputTokens: 300,
+                    cacheReadInputTokens: 0,
+                    cacheDetails: [
+                      { ttl: '5m', inputTokens: 100 },
+                      { ttl: '1h', inputTokens: 200 },
+                    ],
+                  },
+                },
+              },
+              usage_metadata: {
+                input_tokens: 318,
+                output_tokens: 50,
+                total_tokens: 368,
+                input_token_details: {
+                  cache_creation: 300,
+                  cache_read: 0,
+                },
+              },
+            }),
+          },
+        ],
+      ],
+    }
+
+    handler.handleLLMEnd(llmResult, runId)
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+    expect(captureCall[0].properties['$ai_input_tokens']).toBe(18)
+    expect(captureCall[0].properties['$ai_output_tokens']).toBe(50)
+    expect(captureCall[0].properties['$ai_cache_creation_input_tokens']).toBe(300)
+    expect(captureCall[0].properties['$ai_cache_creation_5m_input_tokens']).toBe(100)
+    expect(captureCall[0].properties['$ai_cache_creation_1h_input_tokens']).toBe(200)
+  })
+
+  it.each([
+    {
+      name: 'sums repeated buckets and accepts AWS SDK enum values',
+      aggregate: 300,
+      cacheDetails: [
+        { ttl: 'T5M', inputTokens: 40 },
+        { ttl: 't5m', inputTokens: 60 },
+        { ttl: 'T1H', inputTokens: 200 },
+      ],
+      expected5m: 100,
+      expected1h: 200,
+    },
+    {
+      name: 'fills the missing bucket when one TTL is reported',
+      aggregate: 200,
+      cacheDetails: [{ ttl: '1h', inputTokens: 200 }],
+      expected5m: 0,
+      expected1h: 200,
+    },
+    {
+      name: 'keeps aggregate-only fallback when valid details do not match it',
+      aggregate: 300,
+      cacheDetails: [
+        { ttl: '5m', inputTokens: 100 },
+        { ttl: '1h', inputTokens: 100 },
+        { ttl: 'unknown', inputTokens: 100 },
+        { ttl: '5m', inputTokens: -1 },
+        { ttl: '1h', inputTokens: Number.NaN },
+      ],
+      expected5m: undefined,
+      expected1h: undefined,
+    },
+  ])('$name', async ({ aggregate, cacheDetails, expected5m, expected1h }) => {
+    const serialized = {
+      lc: 1,
+      type: 'constructor' as const,
+      id: ['langchain', 'chat_models', 'bedrock', 'ChatBedrockConverse'],
+      kwargs: {},
+    }
+    const runId = `run_bedrock_cache_details_${aggregate}_${expected5m ?? 'fallback'}`
+    handler.handleLLMStart(serialized, ['Use the cached context'], runId, undefined, {}, undefined, {
+      ls_model_name: 'us.anthropic.claude-sonnet-4-6-v1:0',
+      ls_provider: 'amazon_bedrock',
+    })
+
+    const generation = {
+      text: 'Response from Bedrock Converse.',
+      message: new AIMessage({
+        content: 'Response from Bedrock Converse.',
+        response_metadata: {
+          usage: {
+            inputTokens: 18,
+            outputTokens: 50,
+            cacheWriteInputTokens: aggregate,
+            cacheDetails,
+          },
+        },
+        usage_metadata: {
+          input_tokens: 18 + aggregate,
+          output_tokens: 50,
+          total_tokens: 68 + aggregate,
+          input_token_details: { cache_creation: aggregate },
+        },
+      }),
+    } satisfies ChatGeneration
+
+    handler.handleLLMEnd(
+      {
+        generations: [[generation]],
+      },
+      runId
+    )
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    expect(captureCall[0].properties['$ai_input_tokens']).toBe(18)
+    expect(captureCall[0].properties['$ai_cache_creation_input_tokens']).toBe(aggregate)
+    expect(captureCall[0].properties['$ai_cache_creation_5m_input_tokens']).toBe(expected5m)
+    expect(captureCall[0].properties['$ai_cache_creation_1h_input_tokens']).toBe(expected1h)
   })
 
   it('should not subtract cache_creation_input_tokens for non-Anthropic providers', async () => {
