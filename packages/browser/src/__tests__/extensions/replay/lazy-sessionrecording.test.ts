@@ -4452,6 +4452,59 @@ describe('Lazy SessionRecording', () => {
             )
         })
 
+        it('passes canvas masking options that read the live config', () => {
+            config.session_recording.captureCanvas = { requireMaskProvider: true }
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', canvasQuality: '0.2', canvasFps: 6, recordCanvas: true },
+                })
+            )
+
+            sessionRecording['_onScriptLoaded']()
+
+            const mockParams = assignableWindow.__PosthogExtensions__.rrweb.record.mock.calls[0][0]
+            expect(mockParams.canvasMasking.required).toBe(true)
+
+            const canvas = {} as HTMLCanvasElement
+            expect(mockParams.canvasMasking.regionsFn(canvas)).toBe(null)
+
+            const regions = [{ x: 1, y: 2, width: 3, height: 4 }]
+            const regionsFn = jest.fn(() => regions)
+            config.session_recording.captureCanvas = {
+                ...config.session_recording.captureCanvas,
+                canvasMaskRegionsFn: regionsFn,
+            }
+            expect(mockParams.canvasMasking.regionsFn(canvas)).toBe(regions)
+            expect(regionsFn).toHaveBeenCalledWith(canvas)
+        })
+
+        it('coerces a truthy non-boolean requireMaskProvider to required', () => {
+            config.session_recording.captureCanvas = { requireMaskProvider: 1 as any }
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', canvasQuality: '0.2', canvasFps: 6, recordCanvas: true },
+                })
+            )
+
+            sessionRecording['_onScriptLoaded']()
+
+            const mockParams = assignableWindow.__PosthogExtensions__.rrweb.record.mock.calls[0][0]
+            expect(mockParams.canvasMasking.required).toBe(true)
+        })
+
+        it('defaults canvas masking to not required', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', canvasQuality: '0.2', canvasFps: 6, recordCanvas: true },
+                })
+            )
+
+            sessionRecording['_onScriptLoaded']()
+
+            const mockParams = assignableWindow.__PosthogExtensions__.rrweb.record.mock.calls[0][0]
+            expect(mockParams.canvasMasking.required).toBe(false)
+        })
+
         it('skips when any config variable is missing', () => {
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({

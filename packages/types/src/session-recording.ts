@@ -35,6 +35,42 @@ export type SessionRecordingCanvasOptions = {
      * @default null-ish
      */
     canvasQuality?: string | null
+
+    /**
+     * If set, called once per canvas per captured frame; the returned regions
+     * (CSS pixels, relative to the canvas element) are painted black before the
+     * frame is encoded, so the covered pixels never leave the capture pipeline.
+     * Lets apps that render into canvas (e.g. Flutter web) mask content that
+     * DOM-based masking cannot see. Re-read from config on every frame, so it
+     * can be registered after recording has started (see `requireMaskProvider`
+     * for how frames before registration are handled).
+     * Client-side only, cannot be set via remote configuration.
+     *
+     * @default undefined
+     */
+    canvasMaskRegionsFn?: ((canvas: HTMLCanvasElement) => CanvasMaskRegion[] | null | undefined) | null
+
+    /**
+     * If true, any canvas frame whose mask regions could not be computed — no
+     * `canvasMaskRegionsFn` registered yet, or it threw — is fully blacked out
+     * instead of recorded unmasked. Set this in the init config when the mask
+     * provider registers later (e.g. a Flutter web app that registers during
+     * engine startup), so frames captured before registration cannot leak.
+     *
+     * @default false
+     */
+    requireMaskProvider?: boolean
+}
+
+/**
+ * A rectangle to paint over a recorded canvas frame, in CSS pixels relative
+ * to the canvas element.
+ */
+export type CanvasMaskRegion = {
+    x: number
+    y: number
+    width: number
+    height: number
 }
 
 /* for rrweb/network@1

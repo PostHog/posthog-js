@@ -2107,6 +2107,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             sessionRecordingOptions.sampling = { canvas: this._canvasRecording.fps }
             sessionRecordingOptions.dataURLOptions = { type: 'image/webp', quality: this._canvasRecording.quality }
             sessionRecordingOptions.canvasResolutionScale = this._canvasResolutionScale
+            sessionRecordingOptions.canvasMasking = {
+                required: !!this._instance.config.session_recording?.captureCanvas?.requireMaskProvider,
+                // read live so a provider registered after recording started (e.g. by
+                // a plugin that boots later than posthog-js) takes effect immediately
+                regionsFn: (canvas) =>
+                    this._instance.config.session_recording?.captureCanvas?.canvasMaskRegionsFn?.(canvas) ?? null,
+            }
         }
 
         if (this._masking) {

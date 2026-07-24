@@ -42,6 +42,14 @@ type MaskInputFn = (text: string, element: HTMLElement) => string
 // Replication of `MaskTextFn` from inside `@posthog/rrweb-record`/`@posthog/rrweb-snapshot`
 type MaskTextFn = (text: string, element: HTMLElement | null) => string
 
+// Replication of `CanvasMasking` from inside `@posthog/rrweb-types`
+type CanvasMasking = {
+    required?: boolean
+    regionsFn?: (
+        canvas: HTMLCanvasElement
+    ) => Array<{ x: number; y: number; width: number; height: number }> | null | undefined
+}
+
 // Replication of `SlimDOMOptions` from inside `@posthog/rrweb-record`/`@posthog/rrweb-snapshot`
 type SlimDOMOptions = Partial<{
     script: boolean
@@ -90,6 +98,7 @@ export type recordOptions = {
     sampling?: SamplingStrategy
     dataURLOptions?: DataURLOptions
     canvasResolutionScale?: number
+    canvasMasking?: CanvasMasking
     recordDOM?: boolean
     recordCanvas?: boolean
     recordCrossOriginIframes?: boolean

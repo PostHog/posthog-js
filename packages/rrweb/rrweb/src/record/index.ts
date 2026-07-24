@@ -107,6 +107,7 @@ function record<T = eventWithTime>(
     sampling = {},
     dataURLOptions: _dataURLOptions = {},
     canvasResolutionScale,
+    canvasMasking,
     mousemoveWait,
     recordDOM = true,
     recordCanvas = false,
@@ -384,6 +385,7 @@ function record<T = eventWithTime>(
     sampling: sampling.canvas,
     dataURLOptions,
     resolutionScale: canvasResolutionScale,
+    canvasMasking,
   });
 
   const shadowDomManager = new ShadowDomManager({

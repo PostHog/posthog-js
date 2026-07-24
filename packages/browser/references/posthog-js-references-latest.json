@@ -4431,6 +4431,16 @@
           "name": "version"
         },
         {
+          "description": "If set, called once per canvas per captured frame; the returned regions\n(CSS pixels, relative to the canvas element) are painted black before the\nframe is encoded, so the covered pixels never leave the capture pipeline.\nLets apps that render into canvas (e.g. Flutter web) mask content that\nDOM-based masking cannot see. Re-read from config on every frame, so it\ncan be registered after recording has started (see `requireMaskProvider`\nfor how frames before registration are handled).\nClient-side only, cannot be set via remote configuration.",
+          "type": "(canvas: HTMLCanvasElement) => CanvasMaskRegion[] | null | undefined",
+          "name": "canvasMaskRegionsFn"
+        },
+        {
+          "description": "If true, any canvas frame whose mask regions could not be computed — no\n`canvasMaskRegionsFn` registered yet, or it threw — is fully blacked out\ninstead of recorded unmasked. Set this in the init config when the mask\nprovider registers later (e.g. a Flutter web app that registers during\nengine startup), so frames captured before registration cannot leak.",
+          "type": "boolean",
+          "name": "requireMaskProvider"
+        },
+        {
           "type": "string",
           "name": "endpoint"
         },
