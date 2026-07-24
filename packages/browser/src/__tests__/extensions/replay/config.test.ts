@@ -107,21 +107,21 @@ describe('config', () => {
                 ],
                 [
                     {
-                        name: 'https://app.posthog.com/s/?ver=123',
+                        name: 'https://app.posthog.com/s/?_=123',
                     },
                     undefined,
                     undefined,
                 ],
                 [
                     {
-                        name: 'https://app.posthog.com/e/?ver=123',
+                        name: 'https://app.posthog.com/e/?_=123',
                     },
                     undefined,
                     undefined,
                 ],
                 [
                     {
-                        name: 'https://app.posthog.com/i/v0/e/?ver=123',
+                        name: 'https://app.posthog.com/i/v0/e/?_=123',
                     },
                     undefined,
                     undefined,
@@ -129,7 +129,7 @@ describe('config', () => {
                 [
                     {
                         // even an imaginary future world of rust session replay capture
-                        name: 'https://app.posthog.com/i/v0/s/?ver=123',
+                        name: 'https://app.posthog.com/i/v0/s/?_=123',
                     },
                     undefined,
                     undefined,
@@ -137,7 +137,7 @@ describe('config', () => {
                 [
                     {
                         // using a relative path as a reverse proxy api host
-                        name: 'https://app.posthog.com/ingest/s/?ver=123',
+                        name: 'https://app.posthog.com/ingest/s/?_=123',
                     },
                     undefined,
                     '/ingest',
@@ -145,7 +145,7 @@ describe('config', () => {
                 [
                     {
                         // using a reverse proxy with a path
-                        name: 'https://app.posthog.com/ingest/s/?ver=123',
+                        name: 'https://app.posthog.com/ingest/s/?_=123',
                     },
                     undefined,
                     'https://app.posthog.com/ingest',

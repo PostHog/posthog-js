@@ -40,6 +40,7 @@ import {
 } from './constants'
 
 import { isUndefined, isArray, isNull, getEnabledFromValue, getVariantFromValue, parsePayload } from '@posthog/core'
+import Config from './config'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { getTimezone } from '@posthog/browser-common/utils/event-utils'
 import { window } from '@posthog/browser-common/utils/globals'
@@ -625,6 +626,8 @@ export class PostHogFeatureFlags implements Extension {
             person_properties: {
                 ...(this._persistence?.get_initial_props() || {}),
                 ...(this._prop(STORED_PERSON_PROPERTIES_KEY) || {}),
+                $lib: Config.LIB_NAME,
+                $lib_version: Config.LIB_VERSION,
             },
             group_properties: this._prop(STORED_GROUP_PROPERTIES_KEY),
             timezone: getTimezone(),
@@ -978,6 +981,10 @@ export class PostHogFeatureFlags implements Extension {
         const data: Record<string, any> = {
             distinct_id: this._instance.get_distinct_id(),
             token,
+            person_properties: {
+                $lib: Config.LIB_NAME,
+                $lib_version: Config.LIB_VERSION,
+            },
         }
 
         // Add evaluation contexts if configured
