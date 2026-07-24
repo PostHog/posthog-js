@@ -82,6 +82,7 @@
         "_checkStepText",
         "_checkStepUrl",
         "_checkSurveyEligibility",
+        "_checkSurveyRenderability",
         "_cleanup",
         "_clearBuffer",
         "_clearBufferBeforeMostRecentMeta",
