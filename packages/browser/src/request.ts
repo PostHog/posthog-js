@@ -439,10 +439,13 @@ const _sendBeacon = (options: RequestWithOptions) => {
 
         // rejected: over the page's shared ~64KiB in-flight keepalive quota
         // (https://fetch.spec.whatwg.org/#http-network-or-cache-fetch) — halve so what fits still delivers
-        if (isArray(options.data) && options.data.length > 1 && (estimatedSize ?? 0) > BEACON_SPLIT_FLOOR_BYTES) {
-            const mid = Math.ceil(options.data.length / 2)
-            _sendBeacon({ ...options, data: options.data.slice(0, mid) })
-            _sendBeacon({ ...options, data: options.data.slice(mid) })
+        const batch = isArray(options.data) ? options.data : options.data?.batch
+        if (isArray(batch) && batch.length > 1 && (estimatedSize ?? 0) > BEACON_SPLIT_FLOOR_BYTES) {
+            const mid = Math.ceil(batch.length / 2)
+            const splitData = (events: Record<string, any>[]): RequestWithOptions['data'] =>
+                isArray(options.data) ? events : { ...options.data, batch: events }
+            _sendBeacon({ ...options, data: splitData(batch.slice(0, mid)) })
+            _sendBeacon({ ...options, data: splitData(batch.slice(mid)) })
             return
         }
 
@@ -494,6 +497,17 @@ const buildRequestURL = (
     )
 }
 
+const addSentAtToCaptureBody = (data: NonNullable<RequestWithOptions['data']>): Record<string, any> => {
+    const batch = isArray(data) ? data : [data]
+    const firstEvent = batch[0]
+
+    return {
+        api_key: firstEvent?.properties?.token ?? firstEvent?.token,
+        batch,
+        sent_at: new Date().toISOString(),
+    }
+}
+
 const AVAILABLE_TRANSPORTS: {
     transport: RequestWithOptions['transport']
     method: (options: RequestWithOptions) => void
@@ -535,8 +549,12 @@ export const request = (_options: RequestWithOptions) => {
         options.compression = Compression.Base64
     }
 
-    if (options.timestampMode === 'body' && options.method === 'POST' && options.data && !isArray(options.data)) {
-        options.data = { ...options.data, sent_at: new Date().toISOString() }
+    if (options.method === 'POST' && options.data) {
+        if (options.timestampMode === 'capture-body') {
+            options.data = addSentAtToCaptureBody(options.data)
+        } else if (options.timestampMode === 'body' && !isArray(options.data)) {
+            options.data = { ...options.data, sent_at: new Date().toISOString() }
+        }
     }
 
     options.url = buildRequestURL(options.url, options.method, options.compression, options.timestampMode)

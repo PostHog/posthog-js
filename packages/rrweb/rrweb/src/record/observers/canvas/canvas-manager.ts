@@ -371,6 +371,10 @@ export class CanvasManager {
     this.resetObservers = () => {
       canvasContextReset();
       cancelAnimationFrame(rafId);
+      // a dedicated worker is not terminated by becoming unreachable; without
+      // this, every recorder restart leaks a worker thread plus its
+      // capture-resolution OffscreenCanvas
+      worker.terminate?.();
     };
   }
 

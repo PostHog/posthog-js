@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.407.1",
+    "version": "1.407.2",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
@@ -15,6 +15,7 @@
         "start": "pnpm build-react && NODE_OPTIONS=\"--max-old-space-size=8192\" pnpm build-rollup -w",
         "dev": "tsc -b && NODE_OPTIONS=\"--max-old-space-size=8192\" rollup -cw",
         "build": "tsc -b && rollup -c",
+        "bundle-size:array": "node scripts/compare-array-bundle-size.mjs",
         "postbuild": "node scripts/strip-lib-package-json.js && node scripts/check-mangled-property-consistency.js && node scripts/copy-rrweb-worker-maps.js",
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
         "lint": "eslint src && eslint playwright",

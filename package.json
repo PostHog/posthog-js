@@ -6,6 +6,7 @@
     },
     "scripts": {
         "build-rollup": "pnpm --filter=posthog-js build-rollup",
+        "bundle-size:array": "node packages/browser/scripts/compare-array-bundle-size.mjs",
         "clean": "turbo clean",
         "clean:dep": "rm -rf node_modules && pnpm -r exec rm -rf node_modules",
         "lint": "turbo lint",
