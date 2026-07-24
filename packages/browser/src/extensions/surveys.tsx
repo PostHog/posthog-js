@@ -1327,7 +1327,12 @@ export function Questions({
     } = useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(() => {
         const inProgressSurveyData = getInProgressSurveyState(survey)
-        return previewPageIndex || inProgressSurveyData?.lastQuestionIndex || 0
+        // A stale persisted index (e.g. left over from a prior completion) can point past the
+        // end of the questions array, which would make the question renderer bail and leave the
+        // survey container empty. Clamp it back into range so an inline re-display still renders.
+        const savedIndex = inProgressSurveyData?.lastQuestionIndex ?? 0
+        const validSavedIndex = savedIndex >= 0 && savedIndex < survey.questions.length ? savedIndex : 0
+        return previewPageIndex || validSavedIndex
     })
     const [visitedIndices, setVisitedIndices] = useState<number[]>(() => {
         const inProgressSurveyData = getInProgressSurveyState(survey)
