@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4268](https://github.com/PostHog/posthog-js/issues/4268) | Valid AI observability enhancement: the SDK currently forwards OTLP spans without implementing per-span identity or group semantics, while its examples configure identity on the process-level Resource. | enhancement, feature, team/llm-analytics |  | no | 2026-07-24T16:40:00.534Z |
 | PostHog/posthog-js | [issue 4267](https://github.com/PostHog/posthog-js/issues/4267) | Valid @posthog/ai tracing-parity feature request for Google Gemini's Interactions API. | enhancement, feature |  | no | 2026-07-24T14:44:56.101Z |
 | PostHog/posthog-js | [issue 4242](https://github.com/PostHog/posthog-js/issues/4242) | Valid React Native surveys enhancement: popover surveys are always auto-presented and the provider has no public deferral control. | enhancement, react-native, feature/mobile |  | no | 2026-07-23T23:24:46.779Z |
 | PostHog/posthog-js | [issue 4239](https://github.com/PostHog/posthog-js/issues/4239) | Confirmed replay seek-boundary bug with a narrow but stateful fix required. | feature/replay, web |  | no | 2026-07-23T17:45:36.606Z |
