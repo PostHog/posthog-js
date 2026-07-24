@@ -1,7 +1,7 @@
 import type { Logger } from '@posthog/core'
 import type { Properties } from '@posthog/types'
 
-import type { ApiRequestInit, ApiResponse, Client } from '../../src/client'
+import type { ApiResponse, Client, SendRequestInit } from '../../src/client'
 import { CoreExtension as CoreExtensionToken } from '../../src/core-extension'
 import type {
     CaptureOptions,
@@ -22,19 +22,20 @@ export interface TestCapturedEvent {
     options: CaptureOptions | undefined
 }
 
-export interface TestApiRequest {
+export interface TestSentRequest {
     path: string
-    init: ApiRequestInit | undefined
+    init: SendRequestInit | undefined
 }
 
 export interface TestClientOptions {
+    projectToken?: string
     distinctId?: string
     anonymousId?: string
     groups?: Record<string, string>
     session?: SessionContext
     remoteConfig?: RemoteConfig
     logger?: Logger
-    apiResponse?: ApiResponse
+    requestResponse?: ApiResponse
 }
 
 export class InMemoryKeyValueStore implements KeyValueStore {
@@ -155,28 +156,30 @@ export class TestCoreExtension implements CoreExtension {
 }
 
 export class TestClient implements Client {
-    readonly apiRequests: TestApiRequest[] = []
+    readonly projectToken: string
+    readonly sentRequests: TestSentRequest[] = []
     readonly core: TestCoreExtension
     readonly kv: KeyValueStore = new InMemoryKeyValueStore()
     readonly logger: Logger
 
-    private _apiResponse: ApiResponse
+    private _requestResponse: ApiResponse
     private _extensions = new Map<string, unknown>()
 
     constructor(options: TestClientOptions = {}) {
+        this.projectToken = options.projectToken ?? 'test-project-token'
         this.core = new TestCoreExtension(options)
         this._extensions.set(CoreExtensionToken, this.core)
         this.logger = options.logger ?? noopLogger
-        this._apiResponse = options.apiResponse ?? createDefaultApiResponse()
+        this._requestResponse = options.requestResponse ?? createDefaultApiResponse()
     }
 
     get capturedEvents(): TestCapturedEvent[] {
         return this.core.capturedEvents
     }
 
-    async apiRequest(path: string, init?: ApiRequestInit): Promise<ApiResponse> {
-        this.apiRequests.push({ path, init })
-        return this._apiResponse
+    async sendRequest(path: string, init?: SendRequestInit): Promise<ApiResponse> {
+        this.sentRequests.push({ path, init })
+        return this._requestResponse
     }
 
     getExtension<T>(token: ExtensionToken<T>): T | undefined {

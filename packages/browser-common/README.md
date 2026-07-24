@@ -60,7 +60,7 @@ callback into idempotent teardown.
 
 What an extension is given in `setup` — the host's extension services:
 
-- **transport**: `apiRequest(path, init?)`
+- **transport**: `projectToken`, `sendRequest(path, init?)`
 - **registry**: `getExtension(token)`
 - **storage & logging**: `kv`, `logger`
 
@@ -75,9 +75,9 @@ owned by the PostHog client's analytics core:
 - **lifecycle**: `onNewSession(...)`
 - **server config**: `getRemoteConfig()` (current), `onRemoteConfig(...)` (changes)
 
-Identity and session are always-ready synchronous reads. Operations that perform
-I/O, including `capture`, `apiRequest`, `kv`, and `getRemoteConfig`, are
-awaitable.
+Identity, session, and the public project token are always-ready synchronous
+reads. Operations that perform I/O, including `capture`, `sendRequest`, `kv`,
+and `getRemoteConfig`, are awaitable.
 
 ### Host runtime
 
