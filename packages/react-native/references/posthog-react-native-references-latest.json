@@ -4042,6 +4042,11 @@
       "name": "PostHogSurveyProviderProps",
       "properties": [
         {
+          "description": "Whether eligible popover surveys are automatically presented. (Default: true)\nSet to false to defer presentation — e.g. while a native-stack formSheet/modal is on top.\nDeferral is display-only: the survey stays armed and presents once this is true again.\nA survey already on screen is not interrupted when this becomes false.",
+          "type": "boolean",
+          "name": "autoPresentSurveys"
+        },
+        {
           "description": "The default appearance for surveys when not specified in PostHog.",
           "type": "SurveyAppearance",
           "name": "defaultSurveyAppearance"

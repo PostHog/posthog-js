@@ -112,9 +112,12 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
       .catch(() => {})
   }, [posthog])
 
-  // Whenever state changes and there's no active survey, check if there is a new survey to show
+  // Whenever state changes, re-select the popover survey to show. A survey that has already
+  // painted is left alone; an armed-but-deferred one is re-validated so it can't be presented
+  // after it stops matching (e.g. its targeting flag flips off during a long deferral).
   useEffect(() => {
-    if (activeSurvey) {
+    const isShown = !!activeSurvey && shownSurveyIdRef.current === activeSurvey.id
+    if (isShown) {
       return
     }
 
@@ -130,9 +133,11 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
     // TODO: sort by appearance delay, implement delay
     // const popoverSurveyQueue = sortSurveysByAppearanceDelay(popoverSurveys)
 
-    if (popoverSurveys.length > 0) {
-      setActiveSurvey(popoverSurveys[0])
+    if (activeSurvey && popoverSurveys.some((survey) => survey.id === activeSurvey.id)) {
+      return
     }
+
+    setActiveSurvey(popoverSurveys.length > 0 ? popoverSurveys[0] : undefined)
   }, [activeSurvey, flags, surveys, seenSurveys, activatedSurveys])
 
   const translatedActiveSurvey = useMemo(() => {

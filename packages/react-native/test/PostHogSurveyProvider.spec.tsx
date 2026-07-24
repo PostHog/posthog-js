@@ -178,6 +178,42 @@ describe('PostHogSurveyProvider — autoPresentSurveys gating', () => {
     expect(sendSurveyShownEvent).toHaveBeenCalledTimes(1)
   })
 
+  it('re-validates a deferred survey: does not present one that became ineligible mid-deferral', async () => {
+    let flags: Record<string, any> = { f1: true }
+    let flagCb: ((f: any) => void) | undefined
+    const flaggedSurvey = { ...popoverSurvey, id: 's-flag', linked_flag_key: 'f1' } as unknown as Survey
+    mockClient = {
+      ...makeClient([flaggedSurvey]),
+      getFeatureFlags: jest.fn(() => flags),
+      onFeatureFlags: jest.fn((cb: any) => {
+        flagCb = cb
+        return () => {}
+      }),
+    }
+
+    // Armed while eligible, but deferred (gate off) so it never paints.
+    const { queryByTestId, rerender } = renderProvider(false)
+    await flush()
+    expect(queryByTestId('survey-modal')).toBeNull()
+
+    // Its linked flag flips off during the deferral window.
+    await act(async () => {
+      flags = {}
+      flagCb?.({})
+    })
+
+    // Un-defer: the survey no longer matches, so nothing is presented.
+    rerender(
+      <PostHogSurveyProvider client={mockClient} autoPresentSurveys={true}>
+        <div data-testid="child" />
+      </PostHogSurveyProvider>
+    )
+    await flush()
+
+    expect(queryByTestId('survey-modal')).toBeNull()
+    expect(sendSurveyShownEvent).not.toHaveBeenCalled()
+  })
+
   it('clears the latch on close so a new gated survey stays deferred', async () => {
     const { queryByTestId, rerender } = renderProvider(true)
     await flush()
