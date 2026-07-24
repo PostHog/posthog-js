@@ -545,6 +545,22 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "false",
       "true"
     ],
+    "sampling": [
+      "undefined",
+      {
+        "mousemove": [
+          "undefined",
+          "number",
+          "false",
+          "true"
+        ],
+        "mouseInteraction": [
+          "undefined",
+          "false",
+          "true"
+        ]
+      }
+    ],
     "sampleRate": [
       "undefined",
       "number"

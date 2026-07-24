@@ -3834,6 +3834,124 @@ describe('Lazy SessionRecording', () => {
         })
     })
 
+    describe('sampling passthrough', () => {
+        it('passes user sampling for mousemove and mouseInteraction to rrweb.record', () => {
+            posthog.config.session_recording.sampling = { mousemove: false, mouseInteraction: false }
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    sampling: { mousemove: false, mouseInteraction: false },
+                })
+            )
+        })
+
+        it('passes a falsy numeric mousemove value of 0 to rrweb.record', () => {
+            posthog.config.session_recording.sampling = { mousemove: 0 }
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    sampling: { mousemove: 0 },
+                })
+            )
+        })
+
+        it('passes a numeric mousemove throttle to rrweb.record', () => {
+            posthog.config.session_recording.sampling = { mousemove: 250 }
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    sampling: { mousemove: 250 },
+                })
+            )
+        })
+
+        it('merges user sampling with canvas sampling', () => {
+            posthog.config.session_recording.sampling = { mousemove: false }
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        canvasQuality: '0.2',
+                        canvasFps: 6,
+                        recordCanvas: true,
+                    },
+                })
+            )
+
+            sessionRecording['_onScriptLoaded']()
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    recordCanvas: true,
+                    sampling: { mousemove: false, canvas: 6 },
+                })
+            )
+        })
+
+        it('ignores sampling keys that are not allowlisted', () => {
+            posthog.config.session_recording.sampling = {
+                canvas: 1,
+                scroll: 100,
+                mousemove: false,
+            } as any
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    sampling: { mousemove: false },
+                })
+            )
+        })
+
+        it('does not set sampling when not configured', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    sampling: undefined,
+                })
+            )
+        })
+    })
+
     describe('console logs', () => {
         it('if not enabled, plugin is not used', () => {
             posthog.config.enable_recording_console_log = false
