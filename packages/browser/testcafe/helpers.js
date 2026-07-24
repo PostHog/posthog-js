@@ -18,6 +18,7 @@ export const {
 } = currentEnv
 
 const HEADERS = { Authorization: `Bearer ${POSTHOG_PERSONAL_API_KEY}` }
+const INITIAL_INGESTION_DELAY = 5 * 1000 // 5 seconds
 
 export const captureLogger = RequestLogger(/\/(e|batch|s)\//, {
     logRequestHeaders: true,
@@ -127,6 +128,8 @@ export async function retryUntilResults(
     let last_validation_error = null
     let elapsedSeconds = 0
 
+    await delay(INITIAL_INGESTION_DELAY)
+
     do {
         attempts++
         let results
@@ -149,8 +152,7 @@ export async function retryUntilResults(
                     return results
                 } catch (err) {
                     last_validation_error = err
-                    const message = err instanceof Error ? err.message : String(err)
-                    log(`Validation failed with ${results.length} results (attempt ${attempts}): ${message}`)
+                    log(`Validation pending with ${results.length} results (attempt ${attempts})`)
                 }
             } else if (results.length >= target_results) {
                 log(
