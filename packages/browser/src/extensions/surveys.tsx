@@ -293,6 +293,13 @@ export class SurveyManager {
     }
 
     private _removeWidgetSelectorListener = (survey: Pick<Survey, 'id' | 'type' | 'appearance'>): void => {
+        // Defer teardown while the survey is open (issue #2036). The trigger element may have
+        // been unmounted mid-survey — e.g. a dropdown/menu that hosts it was closed — and tearing
+        // the survey down here would make the open survey abruptly vanish. Keep it in place; the
+        // next display poll retries this cleanup once the user has closed the survey.
+        if (this._isWidgetSurveyOpen(survey)) {
+            return
+        }
         this._removeSurveyFromDom(survey)
         const existing = this._widgetSelectorListeners.get(survey.id)
         if (existing) {
@@ -300,6 +307,17 @@ export class SurveyManager {
             existing.element.removeAttribute(WIDGET_LISTENER_ATTRIBUTE)
             this._widgetSelectorListeners.delete(survey.id)
             logger.info(`Removed click listener for survey ${survey.id}`)
+        }
+    }
+
+    private _isWidgetSurveyOpen = (survey: Pick<Survey, 'id' | 'type' | 'appearance'>): boolean => {
+        try {
+            // The survey popup (`.ph-survey`) is only present in the shadow root while the survey
+            // is actually open; when only the widget/trigger is mounted it is absent.
+            const shadowContainer = document.querySelector(getSurveyContainerClass(survey, true))
+            return !!shadowContainer?.shadowRoot?.querySelector('.ph-survey')
+        } catch {
+            return false
         }
     }
 
