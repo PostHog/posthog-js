@@ -172,10 +172,16 @@ const plugins = (es5, noExternal) => [
                               // used in conversations - external bundle needs to access these on the posthog instance
                               '_conversationsManager',
                               '_conversations',
-                              '_send_request', // called by conversations external bundle
 
-                              // used in product-tours - external bundle needs to access this on the posthog instance
+                              // private ABI between the independently emitted slim core and extension bundles.
+                              // These MUST be preserved because no-external builds don't mangle properties.
+                              '_shouldDisableFlags',
+                              '_internalEventEmitter',
+                              '_onRemoteConfig',
+                              '_send_request',
                               '_addCaptureHook',
+                              '_onIdentityChanged',
+                              '_onIdentityCleared',
 
                               // part of setup/teardown code, preserve these out of caution
                               '_init',

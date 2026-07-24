@@ -7,7 +7,6 @@
     <div id="status">loading...</div>
 
     <script type="module">
-        import posthog from '/dist/module.slim.js'
         import {
             AllExtensions,
             FeatureFlagsExtensions,
@@ -23,6 +22,10 @@
             SiteAppsExtensions,
             TracingExtensions,
         } from '/dist/extension-bundles.js'
+
+        const bundle = new URLSearchParams(window.location.search).get('bundle')
+        const slimBundle = bundle === 'no-external' ? 'module.slim.no-external.js' : 'module.slim.js'
+        const { default: posthog } = await import(`/dist/${slimBundle}`)
 
         window.posthog = posthog
         window.AllExtensions = AllExtensions

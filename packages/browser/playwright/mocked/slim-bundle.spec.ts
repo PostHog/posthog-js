@@ -16,6 +16,7 @@ import { PostHog } from '@/posthog-core'
  */
 
 const SLIM_BUNDLE_URL = '/playground/slim-bundle/index.html'
+const SLIM_NO_EXTERNAL_BUNDLE_URL = `${SLIM_BUNDLE_URL}?bundle=no-external`
 
 /** Helper: wait for ES modules on the page to finish loading. */
 async function waitForSlimBundleReady(page: import('@playwright/test').Page) {
@@ -348,6 +349,74 @@ test.describe('slim bundle + extension bundles (#3313)', () => {
             expect(errors).toEqual([])
         })
     }
+
+    // ── Slim no-external + extension bundles ────────────────────────────
+
+    test('slim no-external: reported extension combination does not crash', async ({ page }) => {
+        const errors: string[] = []
+        page.on('pageerror', (error) => errors.push(error.message))
+
+        await page.goto(SLIM_NO_EXTERNAL_BUNDLE_URL)
+        await waitForSlimBundleReady(page)
+
+        const error = await page.evaluate(() => {
+            try {
+                const ph = (window as any).posthog as PostHog
+                ph.init('test-token', {
+                    api_host: 'https://localhost:1234',
+                    debug: true,
+                    ip: false,
+                    capture_pageview: false,
+                    autocapture: true,
+                    __extensionClasses: {
+                        ...(window as any).SessionReplayExtensions,
+                        ...(window as any).AnalyticsExtensions,
+                        ...(window as any).ErrorTrackingExtensions,
+                    },
+                    opt_out_useragent_filter: true,
+                } as Partial<PostHogConfig>)
+                ph.captureException(new Error('test error'))
+                return null
+            } catch (e: any) {
+                return e.message
+            }
+        })
+
+        await page.waitForTimeout(1000)
+        expect(error).toBeNull()
+        expect(errors).toEqual([])
+    })
+
+    test('slim no-external: conversations identity callbacks do not crash', async ({ page }) => {
+        const errors: string[] = []
+        page.on('pageerror', (error) => errors.push(error.message))
+
+        await page.goto(SLIM_NO_EXTERNAL_BUNDLE_URL)
+        await waitForSlimBundleReady(page)
+
+        const error = await page.evaluate(() => {
+            try {
+                const ph = (window as any).posthog as PostHog
+                ph.init('test-token', {
+                    api_host: 'https://localhost:1234',
+                    debug: true,
+                    ip: false,
+                    capture_pageview: false,
+                    __extensionClasses: { ...(window as any).ConversationsExtensions },
+                    opt_out_useragent_filter: true,
+                } as Partial<PostHogConfig>)
+                ph.setIdentity('user_123', 'identity_hash')
+                ph.clearIdentity()
+                return null
+            } catch (e: any) {
+                return e.message
+            }
+        })
+
+        await page.waitForTimeout(1000)
+        expect(error).toBeNull()
+        expect(errors).toEqual([])
+    })
 
     // ── AllExtensions ───────────────────────────────────────────────────
 
