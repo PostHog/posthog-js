@@ -23,15 +23,7 @@ describe('PostHog Core', () => {
     })
 
     it('respects timeout', async () => {
-      mocks.fetch.mockImplementation(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 1000))
-        console.log('FETCH RETURNED')
-        return {
-          status: 200,
-          text: () => Promise.resolve('ok'),
-          json: () => Promise.resolve({ status: 'ok' }),
-        }
-      })
+      mocks.fetch.mockImplementation(() => new Promise(() => {}))
 
       posthog.capture('test-event')
 
@@ -81,14 +73,7 @@ describe('PostHog Core', () => {
     })
 
     it('return the same promise if called multiple times in parallel', async () => {
-      mocks.fetch.mockImplementation(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 1000))
-        return {
-          status: 200,
-          text: () => Promise.resolve('ok'),
-          json: () => Promise.resolve({ status: 'ok' }),
-        }
-      })
+      mocks.fetch.mockImplementation(() => new Promise(() => {}))
 
       posthog.capture('test-event')
 
