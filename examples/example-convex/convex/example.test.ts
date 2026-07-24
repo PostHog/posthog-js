@@ -10,10 +10,11 @@ jest.setTimeout(15000)
 let fetchCalls: Array<{ url: string; body: unknown }> = []
 const originalFetch = global.fetch
 
-function mockFetch(responseByUrl?: Record<string, unknown>) {
+function mockFetch(responseByUrl?: Record<string, unknown>, statusByUrl?: Record<string, number>) {
     fetchCalls = []
     return jest.fn(async (url: string | URL, init?: RequestInit) => {
         const urlStr = url.toString()
+        const status = Object.entries(statusByUrl ?? {}).find(([pattern]) => urlStr.includes(pattern))?.[1] ?? 200
         let body: unknown
         if (init?.body) {
             let rawText: string
@@ -40,7 +41,7 @@ function mockFetch(responseByUrl?: Record<string, unknown>) {
             for (const [pattern, response] of Object.entries(responseByUrl)) {
                 if (urlStr.includes(pattern)) {
                     return new Response(JSON.stringify(response), {
-                        status: 200,
+                        status,
                         headers: { 'Content-Type': 'application/json' },
                     })
                 }
@@ -48,7 +49,7 @@ function mockFetch(responseByUrl?: Record<string, unknown>) {
         }
 
         return new Response(JSON.stringify({ status: 1 }), {
-            status: 200,
+            status,
             headers: { 'Content-Type': 'application/json' },
         })
     }) as unknown as typeof fetch
@@ -1099,6 +1100,18 @@ describe('evaluateFlag (remote)', () => {
         expect(allBatchEvents()[0].event).toBe('$feature_flag_called')
     })
 
+    test('returns the flag value when telemetry fails', async () => {
+        global.fetch = mockFetch(flagsResponse({ 'test-flag': 'variant-a' }), { '/batch': 400 })
+        const t = initConvexTest()
+
+        const value = await t.action(components.posthog.lib.evaluateFlag, {
+            key: 'test-flag',
+            distinctId: 'user-123',
+        })
+
+        expect(value).toBe('variant-a')
+    })
+
     test('returns null for missing flags', async () => {
         global.fetch = mockFetch(flagsResponse({}))
         const t = initConvexTest()
@@ -1204,5 +1217,16 @@ describe('evaluateAllFlags (remote)', () => {
         expect(result.featureFlagPayloads).toEqual({ 'flag-a': { config: 'value' } })
         expect(allBatchEvents()).toHaveLength(3)
         expect(allBatchEvents().every((event) => event.event === '$feature_flag_called')).toBe(true)
+    })
+
+    test('returns all flags when telemetry fails', async () => {
+        global.fetch = mockFetch(flagsResponse({ 'flag-a': true }), { '/batch': 400 })
+        const t = initConvexTest()
+
+        const result = await t.action(components.posthog.lib.evaluateAllFlags, {
+            distinctId: 'user-123',
+        })
+
+        expect(result.featureFlags).toEqual({ 'flag-a': true })
     })
 })
