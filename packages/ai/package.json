@@ -22,11 +22,11 @@
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
   "devDependencies": {
-    "@ai-sdk/provider": "^3.0.8",
-    "@anthropic-ai/sdk": "^0.78.0",
-    "@google/genai": "^1.43.0",
-    "@langchain/core": "^1.1.29",
-    "openai": "^6.25.0",
+    "@ai-sdk/provider": "^3.0.14",
+    "@anthropic-ai/sdk": "^0.111.0",
+    "@google/genai": "^1.52.0",
+    "@langchain/core": "^1.2.2",
+    "openai": "^6.46.0",
     "@openai/agents": "^0.8.0",
     "@openai/agents-core": "^0.8.0",
     "@opentelemetry/api": "^1.9.0",
@@ -62,10 +62,10 @@
     "zod": "^4.1.13"
   },
   "peerDependencies": {
-    "@anthropic-ai/sdk": "^0.78.0",
-    "@google/genai": "^1.43.0",
-    "@langchain/core": "^1.1.29",
-    "openai": "^6.25.0",
+    "@anthropic-ai/sdk": "^0.111.0",
+    "@google/genai": "^1.52.0",
+    "@langchain/core": "^1.2.2",
+    "openai": "^6.46.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/exporter-trace-otlp-http": ">=0.200.0 <1.0.0",
     "@opentelemetry/sdk-trace-base": "^2.0.0",
