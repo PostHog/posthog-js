@@ -379,7 +379,7 @@ const entrypointTargets = entrypoints.map((file) => {
                           },
                       }
                     : {}),
-                ...(format === 'cjs' ? { exports: 'auto' } : {}),
+                ...(format === 'cjs' ? { exports: 'named' } : {}),
             },
         ],
         plugins: [...pluginsForThisFile, visualizer({ filename: `bundle-stats-${fileName}.html`, gzipSize: true })],
