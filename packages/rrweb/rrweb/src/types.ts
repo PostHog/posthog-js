@@ -210,6 +210,18 @@ export type playerConfig = {
       };
   unpackFn?: UnpackFn;
   useVirtualDom: boolean;
+  /**
+   * Maximum milliseconds of continuous main-thread work while fast-forwarding
+   * to a seek target before yielding to the event loop; long, event-dense
+   * recordings can otherwise block the page for many seconds on a seek.
+   * 0 (default) keeps the whole rebuild synchronous, so the target frame is
+   * fully rendered when pause(t)/play(t) return.
+   *
+   * While a chunked rebuild is still applying, getCurrentTime() already
+   * reports the seek target, but the rendered frame lags until the rebuild's
+   * Flush — don't read the iframe DOM right after a seek with a budget set.
+   */
+  seekYieldBudgetMs?: number;
   logger: {
     log: (...args: Parameters<typeof console.log>) => void;
     warn: (...args: Parameters<typeof console.warn>) => void;

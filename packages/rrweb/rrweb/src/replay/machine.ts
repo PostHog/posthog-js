@@ -35,6 +35,12 @@ export type PlayerEvent =
       };
     }
   | { type: 'PAUSE' }
+  /**
+   * Forgets lastPlayedEvent. Sent when a seek rebuild was superseded
+   * mid-flight, leaving the DOM with only part of lastPlayedEvent's history
+   * — the play action's skip-already-applied optimization must not trust it.
+   */
+  | { type: 'RESET_LAST_PLAYED' }
   | { type: 'TO_LIVE'; payload: { baselineTime?: number } }
   | {
       type: 'ADD_EVENT';
@@ -88,12 +94,19 @@ export function discardPriorSnapshots(
 
 type PlayerAssets = {
   emitter: Emitter;
-  applyEventsSynchronously(events: Array<eventWithTime>): void;
+  /**
+   * Applies the fast-forward events of a seek and emits Flush. May complete
+   * asynchronously on long rebuilds; calls onApplied exactly once after the
+   * last event — unless a newer play/seek superseded this one, or playback
+   * paused/went live while the rebuild was yielding. A paused player must
+   * not schedule or start the timer; resuming recomputes the schedule.
+   */
+  applyEvents(events: Array<eventWithTime>, onApplied: () => void): void;
   getCastFn(event: eventWithTime, isSync: boolean): () => void;
 };
 export function createPlayerService(
   context: PlayerContext,
-  { getCastFn, applyEventsSynchronously, emitter }: PlayerAssets,
+  { getCastFn, applyEvents, emitter }: PlayerAssets,
 ) {
   const playerMachine = createMachine<PlayerContext, PlayerEvent, PlayerState>(
     {
@@ -115,6 +128,10 @@ export function createPlayerService(
               target: 'paused',
               actions: ['resetLastPlayedEvent', 'pause'],
             },
+            RESET_LAST_PLAYED: {
+              target: 'playing',
+              actions: ['resetLastPlayedEvent'],
+            },
             ADD_EVENT: {
               target: 'playing',
               actions: ['addEvent'],
@@ -126,6 +143,10 @@ export function createPlayerService(
             PLAY: {
               target: 'playing',
               actions: ['recordTimeOffset', 'play'],
+            },
+            RESET_LAST_PLAYED: {
+              target: 'paused',
+              actions: ['resetLastPlayedEvent'],
             },
             CAST_EVENT: {
               target: 'paused',
@@ -211,7 +232,19 @@ export function createPlayerService(
             }
             if (event.timestamp < baselineTime) {
               syncEvents.push(event);
-            } else {
+            }
+          }
+          applyEvents(syncEvents, () => {
+            // schedule future events only now, from the live events array:
+            // while a chunked rebuild was yielding, the timer was inactive, so
+            // ADD_EVENT could only insert into ctx.events without scheduling
+            for (const event of discardPriorSnapshots(
+              ctx.events,
+              baselineTime,
+            )) {
+              if (event.timestamp < baselineTime) {
+                continue;
+              }
               const castFn = getCastFn(event, false);
               timer.addAction({
                 doAction: () => {
@@ -220,10 +253,8 @@ export function createPlayerService(
                 delay: event.delay!,
               });
             }
-          }
-          applyEventsSynchronously(syncEvents);
-          emitter.emit(ReplayerEvents.Flush);
-          timer.start();
+            timer.start();
+          });
         },
         pause(ctx) {
           ctx.timer.clear();

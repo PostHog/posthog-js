@@ -164,6 +164,37 @@ describe('replayer', function () {
     expect(currentState).toEqual('paused');
   });
 
+  // KNOWN BUG (https://github.com/PostHog/posthog-js/issues/4239):
+  // `play` classifies an event exactly at the seek target as
+  // "future" (`timestamp < baselineTime`), so a paused seek to exactly a
+  // FullSnapshot's timestamp schedules the snapshot on the timer and then
+  // clears it — the later frame stays on screen. Flipping the comparison to
+  // `<=` is not enough: it moves boundary events out of the timer path, which
+  // also changes lastPlayedEvent bookkeeping that other flows rely on.
+  it.fails(
+    'applies the full snapshot when pausing exactly at its timestamp',
+    async () => {
+      await page.evaluate(`events = ${JSON.stringify(styleSheetRuleEvents)}`);
+      const result = await page.evaluate(`
+      (() => {
+        const { Replayer } = rrweb;
+        const replayer = new Replayer(events);
+        const fsEvent = events.find((e) => e.type === 2);
+        const fsOffset = fsEvent.timestamp - events[0].timestamp;
+        // the mutation at +400 adds a data-jss style element on top of the snapshot
+        replayer.pause(1500);
+        const laterHasJss = replayer.iframe.contentDocument.head.innerHTML.includes('data-jss');
+        // scrubbing back to the exact snapshot timestamp must re-render the
+        // snapshot frame, not leave the later state on screen
+        replayer.pause(fsOffset);
+        const snapshotHasJss = replayer.iframe.contentDocument.head.innerHTML.includes('data-jss');
+        return { laterHasJss, snapshotHasJss };
+      })()
+    `);
+      expect(result).toEqual({ laterHasJss: true, snapshotHasJss: false });
+    },
+  );
+
   it('can fast forward past StyleSheetRule changes on virtual elements', async () => {
     await page.evaluate(`events = ${JSON.stringify(styleSheetRuleEvents)}`);
     const actionLength = await page.evaluate(`
@@ -1274,5 +1305,140 @@ describe('replayer', function () {
 `);
     const newColor = 'rgb(255, 255, 0)'; // yellow
     expect(changedColors).toEqual([newColor, newColor]);
+  });
+
+  describe('seekYieldBudgetMs', () => {
+    // a sub-millisecond budget forces the smallest possible chunks, so the
+    // rebuild exercises the yielding path even on small fixtures
+    const TINY_BUDGET = 0.0001;
+
+    it('ends a chunked pause(t) in the same state as a synchronous one', async () => {
+      const result = await page.evaluate(`
+        (async () => {
+          const { Replayer } = rrweb;
+          const replayer = new Replayer(events, { seekYieldBudgetMs: ${TINY_BUDGET} });
+          replayer.pause(2500);
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          return {
+            currentTime: replayer.getCurrentTime(),
+            state: replayer['service']['state']['value'],
+            actionLength: replayer['timer']['actions'].length,
+            timerOffset: replayer['timer']['timeOffset'],
+          };
+        })()
+      `);
+      expect(result).toEqual({
+        currentTime: 2500,
+        state: 'paused',
+        actionLength: 0,
+        timerOffset: 0,
+      });
+    });
+
+    it('renders the same DOM as a synchronous seek', async () => {
+      await page.evaluate(`events = ${JSON.stringify(styleSheetRuleEvents)}`);
+      const [chunkedHtml, syncHtml] = await page.evaluate(`
+        (async () => {
+          const { Replayer } = rrweb;
+          const chunked = new Replayer(events, { seekYieldBudgetMs: ${TINY_BUDGET} });
+          chunked.pause(1500);
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          const sync = new Replayer(events);
+          sync.pause(1500);
+          return [
+            chunked.iframe.contentDocument.documentElement.outerHTML,
+            sync.iframe.contentDocument.documentElement.outerHTML,
+          ];
+        })()
+      `);
+      expect(chunkedHtml).toEqual(syncHtml);
+    });
+
+    it('a rapid second seek supersedes the in-flight rebuild', async () => {
+      await page.evaluate(`events = ${JSON.stringify(styleSheetRuleEvents)}`);
+      const [scrubbedHtml, directHtml] = await page.evaluate(`
+        (async () => {
+          const { Replayer } = rrweb;
+          const scrubbed = new Replayer(events, { seekYieldBudgetMs: ${TINY_BUDGET} });
+          scrubbed.pause(2600);
+          scrubbed.pause(1500);
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          const direct = new Replayer(events);
+          direct.pause(1500);
+          return [
+            scrubbed.iframe.contentDocument.documentElement.outerHTML,
+            direct.iframe.contentDocument.documentElement.outerHTML,
+          ];
+        })()
+      `);
+      expect(scrubbedHtml).toEqual(directHtml);
+    });
+
+    it('starts playback once a chunked play(t) rebuild completes', async () => {
+      const result = await page.evaluate(`
+        (async () => {
+          const { Replayer } = rrweb;
+          const replayer = new Replayer(events, { seekYieldBudgetMs: ${TINY_BUDGET} });
+          replayer.play(1500);
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          return {
+            state: replayer['service']['state']['value'],
+            timerActive: replayer['timer'].isActive(),
+          };
+        })()
+      `);
+      expect(result).toEqual({ state: 'playing', timerActive: true });
+    });
+
+    it('destroy() during a chunked rebuild cancels it cleanly', async () => {
+      const errors = await page.evaluate(`
+        (async () => {
+          const errs = [];
+          window.addEventListener('error', (e) => errs.push(String(e.message)));
+          const { Replayer } = rrweb;
+          const replayer = new Replayer(events, { seekYieldBudgetMs: ${TINY_BUDGET} });
+          replayer.pause(2500);
+          replayer.destroy();
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          return errs;
+        })()
+      `);
+      expect(errors).toEqual([]);
+    });
+
+    it('Finish fires only after a chunked seek to the end has fully applied', async () => {
+      const order = await page.evaluate(`
+        (async () => {
+          const { Replayer } = rrweb;
+          const replayer = new Replayer(events, { seekYieldBudgetMs: ${TINY_BUDGET} });
+          const order = [];
+          replayer.on('flush', () => order.push('flush'));
+          replayer.on('finish', () => order.push('finish'));
+          replayer.pause(replayer.getMetaData().totalTime + 100);
+          await new Promise((resolve) => setTimeout(resolve, 800));
+          return order;
+        })()
+      `);
+      expect(order).toContain('flush');
+      expect(order).toContain('finish');
+      expect(order.indexOf('finish')).toBeGreaterThan(order.indexOf('flush'));
+    });
+
+    it('going live during a chunked rebuild leaves the live timer alone', async () => {
+      const result = await page.evaluate(`
+        (async () => {
+          const { Replayer } = rrweb;
+          const replayer = new Replayer(events, { seekYieldBudgetMs: ${TINY_BUDGET}, liveMode: true });
+          replayer.pause(1500);
+          replayer.startLive();
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          return {
+            state: replayer['service']['state']['value'],
+            timerActive: replayer['timer'].isActive(),
+          };
+        })()
+      `);
+      expect(result).toEqual({ state: 'live', timerActive: true });
+    });
   });
 });
