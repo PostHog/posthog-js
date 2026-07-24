@@ -12,9 +12,7 @@ import { BaseMessage } from '@langchain/core/messages'
 import { sanitizeLangChain } from '../sanitization'
 import { stringifyError } from '../serializeError'
 import { warnIfPostHogAiGateway } from '../gatewayWarning'
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  value !== null && typeof value === 'object' && !Array.isArray(value)
+import { isObject } from '../typeGuards'
 
 interface SpanMetadata {
   /** Name of the trace/span (e.g. chain name) */
@@ -686,8 +684,11 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     return undefined
   }
 
-  private _extractCacheCreationTtlBreakdown(cacheCreation: unknown): [number, number] | undefined {
-    if (!isRecord(cacheCreation)) {
+  private _extractCacheCreationTtlBreakdown(
+    cacheCreation: unknown,
+    aggregateValues: unknown[]
+  ): [number, number] | undefined {
+    if (!isObject(cacheCreation)) {
       return undefined
     }
 
@@ -704,7 +705,11 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       typeof cache5m === 'number' ? cache5m : 0,
       typeof cache1h === 'number' ? cache1h : 0,
     ]
-    return breakdown[0] + breakdown[1] > 0 ? breakdown : undefined
+    const total = breakdown[0] + breakdown[1]
+    const validAggregates = aggregateValues.filter(
+      (value): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0
+    )
+    return total > 0 && !validAggregates.some((aggregate) => aggregate !== total) ? breakdown : undefined
   }
 
   private _extractBedrockCacheCreationTtlBreakdown(
@@ -719,7 +724,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     let cache1h = 0
 
     for (const detail of cacheDetails) {
-      if (!isRecord(detail)) {
+      if (!isObject(detail)) {
         continue
       }
 
@@ -807,9 +812,18 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       additionalTokenData.cacheWriteInputTokens = usage.input_token_details.cache_creation
     }
 
+    const directCacheCreationAggregates = [
+      usage.cache_creation_input_tokens,
+      usage.input_token_details?.cache_creation,
+      usage.cacheWriteInputTokens,
+      rawUsage?.cache_creation_input_tokens,
+      rawUsage?.input_token_details?.cache_creation,
+      rawUsage?.cacheWriteInputTokens,
+      additionalTokenData.cacheWriteInputTokens,
+    ]
     const cacheCreationTtl =
-      this._extractCacheCreationTtlBreakdown(usage.cache_creation) ??
-      this._extractCacheCreationTtlBreakdown(rawUsage?.cache_creation) ??
+      this._extractCacheCreationTtlBreakdown(usage.cache_creation, directCacheCreationAggregates) ??
+      this._extractCacheCreationTtlBreakdown(rawUsage?.cache_creation, directCacheCreationAggregates) ??
       this._extractBedrockCacheCreationTtlBreakdown(usage.cacheDetails, [
         usage.cacheWriteInputTokens,
         additionalTokenData.cacheWriteInputTokens,
@@ -918,16 +932,16 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
           message &&
           typeof message === 'object' &&
           'response_metadata' in message &&
-          isRecord(message.response_metadata)
+          isObject(message.response_metadata)
             ? message.response_metadata
             : undefined
-        const generationResponseMetadata = isRecord(generationInfo.response_metadata)
+        const generationResponseMetadata = isObject(generationInfo.response_metadata)
           ? generationInfo.response_metadata
           : undefined
-        const messageStreamMetadata = isRecord(messageResponseMetadata?.metadata)
+        const messageStreamMetadata = isObject(messageResponseMetadata?.metadata)
           ? messageResponseMetadata.metadata
           : undefined
-        const generationStreamMetadata = isRecord(generationResponseMetadata?.metadata)
+        const generationStreamMetadata = isObject(generationResponseMetadata?.metadata)
           ? generationResponseMetadata.metadata
           : undefined
         rawGenerationUsage ??=
@@ -950,9 +964,11 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     const llmUsageKeys = ['token_usage', 'usage', 'tokenUsage']
 
     if (response.llmOutput != null) {
-      const key = llmUsageKeys.find((k) => response.llmOutput?.[k] != null)
-      if (key) {
+      for (const key of llmUsageKeys) {
         const llmUsage = response.llmOutput[key]
+        if (!isObject(llmUsage) || Object.keys(llmUsage).length === 0) {
+          continue
+        }
         return this._parseUsageModel(llmUsage, provider, model, key !== 'usage', llmUsage)
       }
     }
