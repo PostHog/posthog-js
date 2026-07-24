@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4267](https://github.com/PostHog/posthog-js/issues/4267) | Valid @posthog/ai feature request: the Gemini wrapper does not currently instrument the Interactions API. | enhancement, feature |  | no | 2026-07-24T14:41:26.011Z |
 | PostHog/posthog-js | [issue 4242](https://github.com/PostHog/posthog-js/issues/4242) | Valid React Native surveys enhancement: popover surveys are always auto-presented and the provider has no public deferral control. | enhancement, react-native, feature/mobile |  | no | 2026-07-23T23:24:46.779Z |
 | PostHog/posthog-js | [issue 4239](https://github.com/PostHog/posthog-js/issues/4239) | Confirmed replay seek-boundary bug with a narrow but stateful fix required. | feature/replay, web |  | no | 2026-07-23T17:45:36.606Z |
 | PostHog/posthog-js | [issue 4217](https://github.com/PostHog/posthog-js/issues/4217) | Valid replay performance bug; not a small/safe fix. | feature/replay, web |  | no | 2026-07-22T06:22:53.018Z |
