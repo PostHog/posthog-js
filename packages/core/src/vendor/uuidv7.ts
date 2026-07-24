@@ -286,7 +286,7 @@ export class V7Generator {
    * {@link generateOrResetCore} for the low-level primitive.
    */
   generate(): UUID {
-    return this.generateOrResetCore(Date.now(), 10_000);
+    return this.generateOrResetCore(clampUnixTsMs(Date.now()), 10_000);
   }
 
   /**
@@ -303,7 +303,7 @@ export class V7Generator {
    * {@link generateOrAbortCore} for the low-level primitive.
    */
   generateOrAbort(): UUID | undefined {
-    return this.generateOrAbortCore(Date.now(), 10_000);
+    return this.generateOrAbortCore(clampUnixTsMs(Date.now()), 10_000);
   }
 
   /**
@@ -429,10 +429,42 @@ const getDefaultRandom = (): { nextUint32(): number } => {
 //     };
 //   }
   return {
+    // Coerce the result with `>>> 0` (ToUint32) so a misbehaving `Math.random()`
+    // that returns NaN or a value outside [0, 1) — observed on real Android
+    // hardware — cannot yield an out-of-range field that makes fromFieldsV7
+    // throw `RangeError: invalid field value`. On a healthy RNG the expression
+    // is already a 32-bit unsigned integer, so this is a no-op and the output
+    // is byte-for-byte identical.
     nextUint32: (): number =>
-      Math.trunc(Math.random() * 0x1_0000) * 0x1_0000 +
-      Math.trunc(Math.random() * 0x1_0000),
+      (Math.trunc(Math.random() * 0x1_0000) * 0x1_0000 +
+        Math.trunc(Math.random() * 0x1_0000)) >>>
+      0,
   };
+};
+
+/**
+ * Clamps a millisecond timestamp into the 48-bit positive range accepted by
+ * {@link UUID.fromFieldsV7}. A broken or clobbered clock — e.g. a page whose
+ * `Date` is replaced by a legacy polyfill (see
+ * https://github.com/PostHog/posthog-js/issues/710) or a device whose system
+ * clock returns a nonsense value — can otherwise make `Date.now()` return a
+ * non-integer or out-of-range value that throws `RangeError` and fatals every
+ * SDK id generation. Clamping keeps the id a valid **v7** UUID (preserving the
+ * version that session tracking and id bootstrapping rely on) instead of
+ * degrading to another UUID version.
+ */
+const clampUnixTsMs = (unixTsMs: number): number => {
+  if (!Number.isFinite(unixTsMs)) {
+    return 1;
+  }
+  const truncated = Math.trunc(unixTsMs);
+  if (truncated < 1) {
+    return 1;
+  }
+  if (truncated > 0xffff_ffff_ffff) {
+    return 0xffff_ffff_ffff;
+  }
+  return truncated;
 };
 
 // /**
@@ -456,6 +488,16 @@ let defaultGenerator: V7Generator | undefined;
 
 /**
  * Generates a UUIDv7 string.
+ *
+ * `V7Generator` validates its timestamp and random fields and throws
+ * `RangeError` when `Date.now()` or `Math.random()` misbehaves — e.g. a page
+ * clobbered by a legacy `Date` polyfill (see
+ * https://github.com/PostHog/posthog-js/issues/710) or a device with a broken
+ * RNG/clock. Those inputs are sanitized at the source ({@link clampUnixTsMs}
+ * for the clock, ToUint32 coercion in {@link getDefaultRandom} for the RNG),
+ * so generation always yields a valid **v7** UUID and never throws — id
+ * generation cannot crash the host app, and the v7 version that session
+ * tracking and id bootstrapping depend on is preserved.
  *
  * @returns The 8-4-4-4-12 canonical hexadecimal string representation
  * ("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx").
