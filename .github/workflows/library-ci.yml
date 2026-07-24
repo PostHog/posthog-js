@@ -14,6 +14,17 @@ permissions:
   contents: read
 
 jobs:
+  affected:
+    uses: ./.github/workflows/check-affected.yml
+    with:
+      package-name: posthog-js
+      additional-paths: |
+        packages/browser/
+        .github/workflows/library-ci.yml
+        .github/workflows/check-affected.yml
+        .github/actions/is-affected/action.yaml
+        .github/actions/setup/action.yaml
+
   unit:
     name: Unit tests
     runs-on: ubuntu-22.04
@@ -41,38 +52,34 @@ jobs:
 
   integration:
     name: Playwright E2E tests
+    needs: affected
     runs-on: depot-ubuntu-latest-8
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          fetch-depth: 0
+        if: needs.affected.outputs.is-affected == 'true'
 
       - name: Setup environment
+        if: needs.affected.outputs.is-affected == 'true'
         uses: ./.github/actions/setup
         with:
           build: false
 
-      - uses: ./.github/actions/is-affected
-        id: is-affected
-        with:
-          package-name: posthog-js
-
       - name: Build package
         run: pnpm build
-        if: steps.is-affected.outputs.is-affected == 'true'
+        if: needs.affected.outputs.is-affected == 'true'
 
       - name: Install Playwright Browsers
-        if: steps.is-affected.outputs.is-affected == 'true'
+        if: needs.affected.outputs.is-affected == 'true'
         run: pnpm exec playwright install --with-deps
         working-directory: packages/browser
 
       - name: Run Playwright tests
-        if: steps.is-affected.outputs.is-affected == 'true'
+        if: needs.affected.outputs.is-affected == 'true'
         run: pnpm exec playwright test --workers=5
         working-directory: packages/browser
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: ${{ !cancelled() && steps.is-affected.outputs.is-affected == 'true' }}
+        if: ${{ !cancelled() && needs.affected.outputs.is-affected == 'true' }}
         with:
           name: playwright-report
           path: packages/browser/playwright-report/
@@ -80,6 +87,7 @@ jobs:
 
   compat:
     name: Backward compatibility tests
+    needs: affected
     runs-on: depot-ubuntu-latest-8
     if: github.event_name == 'pull_request'
     permissions:
@@ -87,31 +95,26 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          fetch-depth: 0
+        if: needs.affected.outputs.is-affected == 'true'
 
       - name: Setup environment
+        if: needs.affected.outputs.is-affected == 'true'
         uses: ./.github/actions/setup
         with:
           build: false
 
-      - uses: ./.github/actions/is-affected
-        id: is-affected
-        with:
-          package-name: posthog-js
-
       - name: Build package
         run: pnpm build
-        if: steps.is-affected.outputs.is-affected == 'true'
+        if: needs.affected.outputs.is-affected == 'true'
 
       - name: Install Playwright Browsers
-        if: steps.is-affected.outputs.is-affected == 'true'
+        if: needs.affected.outputs.is-affected == 'true'
         run: pnpm exec playwright install --with-deps chromium
         working-directory: packages/browser
 
       - name: Run backward compatibility tests
         id: compat-tests
-        if: steps.is-affected.outputs.is-affected == 'true'
+        if: needs.affected.outputs.is-affected == 'true'
         continue-on-error: true
         run: |
           pnpm exec playwright test --config playwright.config.compat.ts --project chromium-compat --workers=5 --reporter=json > compat-results.json 2>&1 || true
@@ -119,7 +122,7 @@ jobs:
         working-directory: packages/browser
 
       - name: Process compat test results
-        if: steps.is-affected.outputs.is-affected == 'true'
+        if: needs.affected.outputs.is-affected == 'true'
         id: process-results
         working-directory: packages/browser
         run: |
@@ -203,7 +206,7 @@ jobs:
             </details>
 
       - name: Delete compat comment if tests pass
-        if: ${{ steps.process-results.outputs.has_failures == 'false' && steps.is-affected.outputs.is-affected == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ steps.process-results.outputs.has_failures == 'false' && needs.affected.outputs.is-affected == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
         uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4.0.0
         id: find-passing-comment
         with:
@@ -225,7 +228,7 @@ jobs:
             })
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: ${{ !cancelled() && steps.is-affected.outputs.is-affected == 'true' }}
+        if: ${{ !cancelled() && needs.affected.outputs.is-affected == 'true' }}
         with:
           name: playwright-compat-report
           path: packages/browser/playwright-report/
@@ -247,19 +250,50 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          fetch-depth: 0
 
-      - name: Setup environment
-        uses: ./.github/actions/setup
-        with:
-          build: false
+      - name: Fetch comparison history
+        env:
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref || github.ref_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          REFS=("+refs/heads/$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH")
+          if [[ -n "$PR_NUMBER" ]]; then
+            REFS+=("+refs/pull/$PR_NUMBER/merge:refs/remotes/pull/$PR_NUMBER/merge")
+          fi
+
+          git fetch --no-tags --unshallow origin "${REFS[@]}"
 
       - name: Check if rrweb packages changed
         id: changed
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          CHANGED=$(git diff --name-only origin/main...HEAD | grep -c '^packages/rrweb/' || true)
-          echo "rrweb-changed=$([[ $CHANGED -gt 0 ]] && echo true || echo false)" >> $GITHUB_OUTPUT
+          set -euo pipefail
+
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]] || ! git rev-parse --verify "${BASE_SHA}^{commit}" >/dev/null 2>&1; then
+            echo "Unable to determine the base commit; running rrweb tests"
+            echo "rrweb-changed=true" >> "$GITHUB_OUTPUT"
+          elif git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- \
+            packages/rrweb/ \
+            package.json \
+            pnpm-lock.yaml \
+            pnpm-workspace.yaml \
+            turbo.json \
+            .github/actions/setup/ \
+            .github/workflows/library-ci.yml; then
+            echo "rrweb-changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "rrweb-changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup environment
+        if: steps.changed.outputs.rrweb-changed == 'true'
+        uses: ./.github/actions/setup
+        with:
+          build: false
 
       - name: Build rrweb packages
         if: steps.changed.outputs.rrweb-changed == 'true'
