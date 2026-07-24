@@ -4,13 +4,13 @@
     "repo": "PostHog/posthog-js",
     "item": "issue 4267",
     "url": "https://github.com/PostHog/posthog-js/issues/4267",
-    "conclusion": "Valid @posthog/ai feature request: the Gemini wrapper does not currently instrument the Interactions API.",
+    "conclusion": "Valid @posthog/ai tracing-parity feature request for Google Gemini's Interactions API.",
     "labels": [
       "enhancement",
       "feature"
     ],
     "closed": false,
-    "updatedAt": "2026-07-24T14:41:26.011Z"
+    "updatedAt": "2026-07-24T14:44:56.101Z"
   },
   "PostHog/posthog-js/issue/4242": {
     "key": "PostHog/posthog-js/issue/4242",
