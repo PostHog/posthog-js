@@ -114,6 +114,7 @@ describe('posthog-surveys', () => {
                     reset: jest.fn(),
                     onConsentChange: jest.fn(),
                 },
+                onFeatureFlags: jest.fn().mockReturnValue(() => {}),
                 featureFlags: {
                     hasLoadedFlags: true,
                     _send_request: jest

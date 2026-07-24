@@ -126,6 +126,7 @@ export const getModelParams = (
     'language',
     'response_format',
     'timestamp_granularities',
+    'service_tier',
   ] as const
 
   for (const key of paramKeys) {
