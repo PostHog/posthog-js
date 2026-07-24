@@ -3,6 +3,13 @@ import copy from 'rollup-plugin-copy'
 
 const extensions = ['.js', '.jsx', '.ts', '.tsx']
 
+const onLog = (level, log, defaultHandler) => {
+    if (log.code === 'UNKNOWN_OPTION') {
+        throw new Error(log.message)
+    }
+    defaultHandler(level, log)
+}
+
 const plugins = [
     // Resolve modules from node_modules
     resolve({
@@ -165,4 +172,4 @@ export default [
     buildSurveysEsm,
     buildSurveysUmd,
     buildSurveysTypes,
-]
+].map((config) => ({ ...config, onLog }))
