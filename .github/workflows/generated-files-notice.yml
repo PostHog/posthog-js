@@ -36,8 +36,7 @@ jobs:
         run: |
           MATCHING_PATHS_FILE=$(mktemp)
           git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- \
-            ':(glob)packages/*/references/*-references-latest.json' \
-            ':(glob)packages/*/references/*-references-[0-9]*.json' \
+            ':(glob)packages/*/references/**' \
             ':(glob)packages/**/CHANGELOG.md' \
             ':(glob)packages/**/_generated/**' \
             ':(glob)examples/**/_generated/**' \
