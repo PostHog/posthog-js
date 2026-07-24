@@ -2,7 +2,7 @@
   "id": "posthog-js",
   "hogRef": "0.3",
   "info": {
-    "version": "<version>",
+    "version": "1.407.2",
     "id": "posthog-js",
     "title": "PostHog JavaScript Web SDK",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
@@ -4698,8 +4698,8 @@
           "name": "timeout"
         },
         {
-          "description": "Controls where the request dispatch time is sent. - `body` adds ISO `sent_at` to the existing request object (for example, flags). - `capture-body` wraps events in `{ api_key, batch, sent_at }` with an ISO timestamp. - `query` adds numeric `sent_at` to POST requests or cache-busting `_` to GET requests.",
-          "type": "'body' | 'capture-body' | 'query'",
+          "description": "Include the request dispatch time in a body field or query string.",
+          "type": "'body' | 'query'",
           "name": "timestampMode"
         },
         {

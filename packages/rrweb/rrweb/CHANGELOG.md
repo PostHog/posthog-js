@@ -1,5 +1,12 @@
 # rrweb
 
+## 0.1.5
+
+### Patch Changes
+
+- [#4223](https://github.com/PostHog/posthog-js/pull/4223) [`045d79c`](https://github.com/PostHog/posthog-js/commit/045d79cf5ce9a5b58872b987bc5689a396321485) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Terminate the canvas encode worker when session recording stops. Previously stopping a recording with canvas capture enabled cancelled the capture loop but left the dedicated worker running; dedicated workers are not cleaned up by becoming unreachable, so every stop/start cycle leaked a worker thread along with its capture-resolution OffscreenCanvas (~8MB of pixel buffer at 1080p) and frame-fingerprint state.
+  (2026-07-23)
+
 ## 0.1.4
 
 ### Patch Changes

@@ -27,6 +27,7 @@ async function downloadNpmVersion(): Promise<void> {
     }
     const packageInfo = await registryResponse.json()
     const version = packageInfo.version
+    process.env.COMPAT_VERSION = version
 
     // eslint-disable-next-line no-console
     console.log(`Compat tests using posthog-js@${version} from NPM`)

@@ -96,10 +96,12 @@ if (flags && (await flags.getFeatureFlag('beta-ui'))) {
 }
 ```
 
-A token is implementation-free, so importing it never pulls the provider's code
-into your bundle — each extension stays independently tree-shakable and lazily
-loadable. An extension that provides a capability declares its token(s) in
-`provides`.
+A token is an implementation-free branded string, so importing it never pulls
+the provider's code into your bundle — each extension stays independently
+tree-shakable and lazily loadable. Use a package-qualified runtime string, such
+as `posthog.featureFlags`, that is globally unique and stable so separately
+compiled scripts resolve the same capability. An extension that provides a
+capability declares its token(s) in `provides`.
 
 ## Utilities
 

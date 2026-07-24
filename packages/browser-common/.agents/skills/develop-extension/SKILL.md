@@ -123,7 +123,7 @@ export interface FeatureFlagsExtension extends Extension {
     onChange: Listener<FeatureFlagsChange>
 }
 
-export const FeatureFlags: ExtensionToken<FeatureFlagsExtension> = { name: 'featureFlags' }
+export const FeatureFlags = 'posthog.featureFlags' as ExtensionToken<FeatureFlagsExtension>
 ```
 
 ```ts
@@ -151,7 +151,8 @@ export function featureFlags(): FeatureFlagsExtension {
 ```
 
 The extension must be assignable to each token's type (the registry casts on lookup — the compiler does not check this
-for you).
+for you). A token is a branded runtime string, so use a package-qualified value that is globally unique and stable across
+separately compiled scripts (for example, `posthog.featureFlags`).
 
 ## Depending on another extension
 
