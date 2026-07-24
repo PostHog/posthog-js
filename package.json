@@ -44,7 +44,7 @@
         "eslint": "8.57.0",
         "eslint-config-posthog-js": "link:tooling/eslint-plugin-posthog-js",
         "eslint-config-prettier": "^8.10.2",
-        "eslint-plugin-compat": "^6.0.2",
+        "eslint-plugin-compat": "^6.2.1",
         "eslint-plugin-jest": "^28.14.0",
         "eslint-plugin-no-only-tests": "^3.3.0",
         "eslint-plugin-posthog-js": "link:tooling/eslint-plugin-posthog-js",
