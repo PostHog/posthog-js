@@ -3,19 +3,19 @@
  * clients.
  */
 export type { Extension } from './extension'
-export type { Disposable } from './disposable'
-export type { ExtensionToken } from './token'
-export type { Listener } from './pubsub'
-export { Publisher } from './pubsub'
+export { CoreExtension } from './core-extension'
 export type {
-    Client,
+    DeepReadonly,
     SessionContext,
     NewSessionReason,
     NewSessionInfo,
     CapturedEventInfo,
     CaptureOptions,
-    ApiResponse,
-    ApiRequestInit,
     RemoteConfig,
-} from './client'
+} from './core-extension'
+export { createDisposable, type Disposable } from './disposable'
+export type { ExtensionToken } from './token'
+export type { Listener } from './pubsub'
+export { Publisher } from './pubsub'
+export type { Client, ApiResponse, ApiRequestInit } from './client'
 export type { KeyValueStore } from './persistence'
