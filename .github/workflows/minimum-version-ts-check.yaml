@@ -24,7 +24,7 @@ jobs:
             extra-flags: "--module commonjs --moduleResolution node"
           - version: "6.0.3"
             extra-flags: "--module commonjs --ignoreConfig"
-          - version: "7.0.2"
+          - version: "latest"
             extra-flags: "--module nodenext --moduleResolution nodenext --ignoreConfig"
           - version: "7.1.0-dev.20260715.1"
             extra-flags: "--module nodenext --moduleResolution nodenext --ignoreConfig"
@@ -38,10 +38,11 @@ jobs:
           build: true
 
       # once its built we can see if we can use it on the forced version
+      # Intentionally don't set minimumReleaseAgeExclude so TypeScript versions respect the supply-chain policy.
       - name: Override TypeScript version
         env:
           TS_VERSION: ${{ matrix.typescript-version.version }}
-        run: yq -i '.catalog.typescript = strenv(TS_VERSION) | .minimumReleaseAgeExclude += ["typescript"]' pnpm-workspace.yaml && pnpm install --no-frozen-lockfile
+        run: yq -i '.catalog.typescript = strenv(TS_VERSION)' pnpm-workspace.yaml && pnpm install --no-frozen-lockfile
 
       - name: Test TypeScript Import
         run: |
