@@ -175,12 +175,13 @@ export class V1RecordingStrategy implements RecordingStrategy {
         this._sampleRate = isNumber(config.sampleRate) ? config.sampleRate : null
 
         // Setup trigger matching strategy (AND vs OR)
+        const triggerMatchers = [this._eventTriggerMatching, this._urlTriggerMatching, this._linkedFlagMatching]
         if (config.triggerMatchType === 'any') {
-            this._triggerStatusMatcher = new OrTriggerMatching([this._eventTriggerMatching, this._urlTriggerMatching])
+            this._triggerStatusMatcher = new OrTriggerMatching(triggerMatchers)
             this._recordingStatusFunction = anyMatchSessionRecordingStatus
         } else {
             // either the setting is "ALL" or we default to the most restrictive
-            this._triggerStatusMatcher = new AndTriggerMatching([this._eventTriggerMatching, this._urlTriggerMatching])
+            this._triggerStatusMatcher = new AndTriggerMatching(triggerMatchers)
             this._recordingStatusFunction = allMatchSessionRecordingStatus
         }
 

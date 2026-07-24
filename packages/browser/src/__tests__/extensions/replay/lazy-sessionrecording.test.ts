@@ -3918,6 +3918,43 @@ describe('Lazy SessionRecording', () => {
             }
         })
 
+        it('uses the pending trigger snapshot interval while waiting for a linked flag', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
+            )
+
+            expect(sessionRecording.status).toEqual('buffering')
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotIntervalMillis']).toEqual(60_000)
+        })
+
+        it.each([
+            ['stops rotating the buffer after one of several OR triggers activates', 'any', 'active', true],
+            ['keeps rotating the buffer while an ALL trigger remains pending', 'all', 'buffering', false],
+        ])('%s', (_name, triggerMatchType, expectedStatus, expectActiveEventInBuffer) => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        eventTriggers: ['$exception'],
+                        linkedFlag: 'recording-flag',
+                        triggerMatchType: triggerMatchType as 'any' | 'all',
+                    },
+                })
+            )
+
+            simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+            expect(sessionRecording.status).toBe(expectedStatus)
+
+            const activeEvent = createIncrementalSnapshot({ data: { source: 1 } })
+            const fullSnapshot = createFullSnapshot()
+            _emit(activeEvent)
+            _emit(fullSnapshot)
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual(
+                expectActiveEventInBuffer ? [activeEvent, fullSnapshot] : [fullSnapshot]
+            )
+        })
+
         it('stores the linked flag on flags response', () => {
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
