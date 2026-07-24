@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 
 import { dismissedSurveyEvent, sendSurveyShownEvent } from './components/Surveys'
 
@@ -58,11 +58,13 @@ const FeedbackSurveyContext = React.createContext<
 // }
 
 export type PostHogSurveyProviderProps = {
-  // /**
-  //  * Whether to show the default survey modal when there is an active survey. (Default true)
-  //  * If false, you can call useActiveSurvey and render survey content yourself.
-  //  **/
-  // automaticSurveyModal?: boolean
+  /**
+   * Whether eligible popover surveys are automatically presented. (Default: true)
+   * Set to false to defer presentation — e.g. while a native-stack formSheet/modal is on top.
+   * Deferral is display-only: the survey stays armed and presents once this is true again.
+   * A survey already on screen is not interrupted when this becomes false.
+   */
+  autoPresentSurveys?: boolean
 
   /**
    * The default appearance for surveys when not specified in PostHog.
@@ -93,6 +95,9 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
   const { seenSurveys, setSeenSurvey, setLastSeenSurveyDate } = useSurveyStorage()
   const [surveys, setSurveys] = useState<Survey[]>([])
   const [activeSurvey, setActiveSurvey] = useState<Survey | undefined>(undefined)
+  // Latches the id of the survey once its modal has actually painted, so deferring presentation
+  // (autoPresentSurveys=false) never tears down a survey the user is already interacting with.
+  const shownSurveyIdRef = useRef<string | undefined>(undefined)
   const activatedSurveys = useActivatedSurveys(posthog, surveys)
 
   const flags = useFeatureFlags(posthog)
@@ -165,10 +170,12 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
       survey: translatedActiveSurvey.survey,
       surveyLanguage: translatedActiveSurvey.language,
       onShow: () => {
+        shownSurveyIdRef.current = activeSurvey.id
         sendSurveyShownEvent(translatedActiveSurvey.survey, posthog, translatedActiveSurvey.language)
         setLastSeenSurveyDate(new Date())
       },
       onClose: (submitted: boolean, responses: SurveyResponses) => {
+        shownSurveyIdRef.current = undefined
         setSeenSurvey(activeSurvey)
         setActiveSurvey(undefined)
         if (!submitted) {
@@ -178,9 +185,13 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
     }
   }, [activeSurvey, posthog, setLastSeenSurveyDate, setSeenSurvey, translatedActiveSurvey])
 
-  // Modal is shown for PopOver surveys or if automaticSurveyModal is true, and for all widget surveys
-  // because these would have been invoked by the useFeedbackSurvey hook's showSurveyModal() method
-  const shouldShowModal = activeContext && activeContext.survey.type === SurveyType.Popover
+  // Present a popover survey when autoPresentSurveys is on. Once it has painted (shownSurveyIdRef),
+  // keep it mounted regardless of the gate so a mid-interaction survey is never yanked — the gate
+  // defers not-yet-shown surveys, it does not interrupt a live one.
+  const autoPresent = props.autoPresentSurveys !== false
+  const isAlreadyShown = !!activeSurvey && shownSurveyIdRef.current === activeSurvey.id
+  const shouldShowModal =
+    activeContext && activeContext.survey.type === SurveyType.Popover && (autoPresent || isAlreadyShown)
 
   return (
     <ActiveSurveyContext.Provider value={activeContext}>
