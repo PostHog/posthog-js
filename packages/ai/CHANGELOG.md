@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.4.0
+
+### Minor Changes
+
+- [#4163](https://github.com/PostHog/posthog-js/pull/4163) [`45f5488`](https://github.com/PostHog/posthog-js/commit/45f54889a5e51b537cd3d8dda65d81ad9b81667a) Thanks [@jurajmajerik](https://github.com/jurajmajerik)! - feat(ai): add a `label` option to `Prompts.get()` to fetch the prompt version a label (e.g. `production`) currently points to. Labeled fetches are cached separately, results carry the resolved `label`, and a warning is logged when the server does not resolve the requested label (older PostHog versions ignore the parameter and return the latest version).
+  (2026-07-17)
+
 ## 8.3.1
 
 ### Patch Changes

@@ -2,9 +2,10 @@ import { Toolbar } from '../../extensions/toolbar'
 import { isString, isUndefined } from '@posthog/core'
 import { PostHog } from '../../posthog-core'
 import { ToolbarParams } from '../../types'
-import { assignableWindow, window } from '../../utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../../utils/globals'
 import { RequestRouter } from '../../utils/request-router'
-import { TOOLBAR_ID } from '../../constants'
+import { TOOLBAR_ID } from '@posthog/browser-common/constants'
 import { createMockPostHog, createMockConfig } from '../helpers/posthog-instance'
 
 const makeToolbarParams = (overrides: Partial<ToolbarParams>): ToolbarParams => ({

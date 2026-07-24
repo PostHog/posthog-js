@@ -2,16 +2,16 @@ import { isNullish } from '@posthog/core'
 
 export function extractHref(elementsChain: string): string {
     const match = elementsChain.match(/(?::|")href="(.*?)"/)
-    return match ? match[1] : ''
+    return match ? match[1]! : ''
 }
 
 export function extractTexts(elementsChain: string): string[] {
     const texts: string[] = []
     const regex = /(?::|")text="(.*?)"/g
-    let match
+    let match: RegExpExecArray | null
     while (!isNullish((match = regex.exec(elementsChain)))) {
-        if (!texts.includes(match[1])) {
-            texts.push(match[1])
+        if (!texts.includes(match[1]!)) {
+            texts.push(match[1]!)
         }
     }
     return texts

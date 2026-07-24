@@ -1,9 +1,9 @@
 import { CapturedNetworkRequest, NetworkRecordOptions, PostHogConfig } from '../../../types'
 import { isFunction, isNullish, isString, isUndefined } from '@posthog/core'
-import { convertToURL } from '../../../utils/request-utils'
-import { logger } from '../../../utils/logger'
-import { shouldCaptureValue } from '../../../autocapture-utils'
-import { each } from '../../../utils'
+import { convertToURL } from '@posthog/browser-common/utils/request-utils'
+import { logger } from '@posthog/browser-common/utils/logger'
+import { shouldCaptureValue } from '@posthog/browser-common/utils/autocapture-utils'
+import { each } from '@posthog/browser-common/utils/general-utils'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 
@@ -296,6 +296,8 @@ export const buildNetworkRequestOptions = (
     if (hasDeprecatedMaskFunction) {
         instanceConfig.session_recording.maskCapturedNetworkRequestFn = (data: CapturedNetworkRequest) => {
             const cleanedURL = instanceConfig.session_recording.maskNetworkRequestFn!({ url: data.name })
+            // the deprecated mask fn can suppress the URL, leaving `name` undefined on purpose
+            // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
             return {
                 ...data,
                 name: cleanedURL?.url,

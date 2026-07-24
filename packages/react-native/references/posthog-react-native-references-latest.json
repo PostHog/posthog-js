@@ -732,7 +732,7 @@
         },
         {
           "category": "Feature flags",
-          "description": "Checks if a feature flag is enabled for the current user.\nDefaults to undefined if not loaded yet or if there was a problem loading.",
+          "description": "Checks if a feature flag is enabled for the current user.\nDefaults to undefined if not loaded yet or if there was a problem loading, unless `defaultValue` is provided.",
           "details": null,
           "id": "isFeatureEnabled",
           "showDocs": true,
@@ -741,7 +741,12 @@
             {
               "id": "check_if_feature_flag_is_enabled",
               "name": "check if feature flag is enabled",
-              "code": "\n\n// check if feature flag is enabled\nconst isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag')\n\n\n\n"
+              "code": "\n\n// check if feature flag is enabled\nconst isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag')\n\n\n"
+            },
+            {
+              "id": "fall_back_to_false_while_flags_are_not_loaded",
+              "name": "fall back to false while flags are not loaded",
+              "code": "\n\n// fall back to false while flags are not loaded\nconst isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag', { defaultValue: false })\n\n\n\n"
             }
           ],
           "releaseTag": "public",
@@ -754,14 +759,14 @@
             },
             {
               "description": "Optional per-call settings",
-              "isOptional": true,
-              "type": "FeatureFlagResultOptions",
+              "isOptional": false,
+              "type": "IsFeatureEnabledOptions & {\n        defaultValue: boolean;\n    }",
               "name": "options"
             }
           ],
           "returnType": {
-            "id": "boolean | undefined",
-            "name": "boolean | undefined"
+            "id": "boolean",
+            "name": "boolean"
           },
           "path": "dist/posthog-rn.d.ts"
         },
@@ -2627,6 +2632,13 @@
       "example": "(filename: string | undefined) => string | undefined"
     },
     {
+      "id": "IsFeatureEnabledOptions",
+      "name": "IsFeatureEnabledOptions",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "FeatureFlagResultOptions & {\n    defaultValue?: boolean;\n}"
+    },
+    {
       "id": "JsonType",
       "name": "JsonType",
       "properties": [],
@@ -3369,6 +3381,10 @@
         {
           "type": "number",
           "name": "evaluatedAt"
+        },
+        {
+          "type": "boolean",
+          "name": "minimalFlagCalledEvents"
         }
       ],
       "path": "../core/src/types.ts"
@@ -3428,6 +3444,10 @@
         {
           "type": "number",
           "name": "evaluatedAt"
+        },
+        {
+          "type": "boolean",
+          "name": "minimalFlagCalledEvents"
         }
       ],
       "path": "../core/src/types.ts"
@@ -3550,6 +3570,11 @@
         {
           "type": "number",
           "name": "evaluatedAt"
+        },
+        {
+          "description": "Server-controlled gate for minimal `$feature_flag_called` events. `true` only when the\nproject opted in; omitted otherwise. Absence always means full events.",
+          "type": "boolean",
+          "name": "minimalFlagCalledEvents"
         }
       ],
       "path": "../core/src/types.ts"

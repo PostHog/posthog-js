@@ -1,4 +1,4 @@
-import { extend } from './utils'
+import { extend } from '@posthog/browser-common/utils/general-utils'
 import { PersistentStore, Properties } from './types'
 import {
     DEVICE_ID,
@@ -11,9 +11,10 @@ import {
 } from './constants'
 
 import { isNull, isUndefined } from '@posthog/core'
-import { logger } from './utils/logger'
-import { window, document } from './utils/globals'
-import { uuidv7 } from './uuidv7'
+import { logger } from '@posthog/browser-common/utils/logger'
+import { window, document } from '@posthog/browser-common/utils/globals'
+import { getCookieValue } from '@posthog/browser-common/utils/cookie-utils'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
 // we store the discovered subdomain in memory because it might be read multiple times
 let firstNonPublicSubDomain = ''
@@ -99,26 +100,7 @@ export const cookieStore: PersistentStore = {
         logger.error('cookieStore error: ' + msg)
     },
 
-    _get: function (name) {
-        if (!document) {
-            return
-        }
-
-        try {
-            const nameEQ = name + '='
-            const ca = document.cookie.split(';').filter((x) => x.length)
-            for (let i = 0; i < ca.length; i++) {
-                let c = ca[i]
-                while (c.charAt(0) == ' ') {
-                    c = c.substring(1, c.length)
-                }
-                if (c.indexOf(nameEQ) === 0) {
-                    return decodeURIComponent(c.substring(nameEQ.length, c.length))
-                }
-            }
-        } catch {}
-        return null
-    },
+    _get: getCookieValue,
 
     _parse: function (name) {
         let cookie

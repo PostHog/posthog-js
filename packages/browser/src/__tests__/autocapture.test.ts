@@ -7,12 +7,16 @@ import {
     getPropertiesFromElement,
     previousElementSibling,
 } from '../autocapture'
-import { DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS, shouldCaptureDomEvent } from '../autocapture-utils'
+import {
+    DEFAULT_CONTENT_IGNORELIST_WITH_STEPPERS,
+    shouldCaptureDomEvent,
+} from '@posthog/browser-common/utils/autocapture-utils'
 import { AutocaptureConfig, FlagsResponse, PostHogConfig, RageclickConfig } from '../types'
+import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
 import { PostHog } from '../posthog-core'
-import { window } from '../utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
 import { createPosthogInstance } from './helpers/posthog-instance'
-import { uuidv7 } from '../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { isUndefined } from '@posthog/core'
 
 // JS DOM doesn't have ClipboardEvent, so we need to mock it
@@ -377,7 +381,7 @@ describe('Autocapture system', () => {
         beforeEach(() => {
             posthog.config.rageclick = true
             // Trigger proper enabling
-            autocapture.onRemoteConfig({} as FlagsResponse)
+            autocapture.onRemoteConfig({ ok: true, config: { autocapture_opt_out: false } as FlagsResponse })
         })
 
         test.each([
@@ -534,7 +538,10 @@ describe('Autocapture system', () => {
                     }
 
                     const customAutocapture = customPosthog.autocapture
-                    customAutocapture.onRemoteConfig({} as FlagsResponse)
+                    customAutocapture.onRemoteConfig({
+                        ok: true,
+                        config: { autocapture_opt_out: false } as FlagsResponse,
+                    })
 
                     // Create element and simulate clicks
                     const el = document.createElement(clickEvents[0].target)
@@ -859,7 +866,7 @@ describe('Autocapture system', () => {
 
         it('should not capture events when config returns false, when an element matching any of the event selectors is clicked', () => {
             posthog.config.autocapture = false
-            autocapture.onRemoteConfig({} as FlagsResponse)
+            autocapture.onRemoteConfig({ ok: true, config: { autocapture_opt_out: false } as FlagsResponse })
 
             const eventElement1 = document.createElement('div')
             const eventElement2 = document.createElement('div')
@@ -882,8 +889,11 @@ describe('Autocapture system', () => {
 
         it('should not capture events when config returns true but server setting is disabled', () => {
             autocapture.onRemoteConfig({
-                autocapture_opt_out: true,
-            } as FlagsResponse)
+                ok: true,
+                config: {
+                    autocapture_opt_out: true,
+                } as FlagsResponse,
+            })
 
             const eventElement = document.createElement('a')
             document.body.appendChild(eventElement)
@@ -1290,8 +1300,11 @@ describe('Autocapture system', () => {
             } as unknown as MouseEvent
 
             autocapture.onRemoteConfig({
-                elementsChainAsString: true,
-            } as FlagsResponse)
+                ok: true,
+                config: {
+                    elementsChainAsString: true,
+                } as FlagsResponse,
+            })
 
             autocapture['_captureEvent'](e)
             const props1 = beforeSendMock.mock.calls[0][0].properties
@@ -1360,7 +1373,7 @@ describe('Autocapture system', () => {
         beforeEach(() => {
             document.title = 'test page'
             posthog.config.mask_all_element_attributes = false
-            autocapture.onRemoteConfig({} as FlagsResponse)
+            autocapture.onRemoteConfig({ ok: true, config: { autocapture_opt_out: false } as FlagsResponse })
         })
 
         it('should capture click events', () => {
@@ -1393,13 +1406,109 @@ describe('Autocapture system', () => {
         })
 
         it('should be disabled when remote config has autocapture_opt_out', () => {
-            autocapture.onRemoteConfig({ autocapture_opt_out: true } as FlagsResponse)
+            autocapture.onRemoteConfig({ ok: true, config: { autocapture_opt_out: true } as FlagsResponse })
             expect(autocapture.isEnabled).toBe(false)
         })
 
         it('should be disabled before the flags response if client side opted out', () => {
             posthog.config.autocapture = false
             expect(autocapture.isEnabled).toBe(false)
+        })
+
+        describe('when the remote config fetch fails', () => {
+            beforeEach(() => {
+                autocapture['_isDisabledServerSide'] = null
+                autocapture['_hasReceivedConfigResponse'] = false
+                posthog.persistence!.unregister(AUTOCAPTURE_DISABLED_SERVER_SIDE)
+            })
+
+            it('stays disabled when there has never been a successful config response', () => {
+                autocapture.onRemoteConfig({ ok: false })
+                expect(autocapture.isEnabled).toBe(false)
+                expect(posthog.persistence!.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]).toBeUndefined()
+            })
+
+            it('keeps a persisted server-side opt-out', () => {
+                posthog.persistence!.register({ [AUTOCAPTURE_DISABLED_SERVER_SIDE]: true })
+                autocapture.onRemoteConfig({ ok: false })
+                expect(autocapture.isEnabled).toBe(false)
+                expect(posthog.persistence!.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]).toBe(true)
+            })
+
+            it('keeps a persisted enabled state', () => {
+                posthog.persistence!.register({ [AUTOCAPTURE_DISABLED_SERVER_SIDE]: false })
+                autocapture.onRemoteConfig({ ok: false })
+                expect(autocapture.isEnabled).toBe(true)
+            })
+
+            it('stays disabled when flags are disabled after the failure', () => {
+                autocapture.onRemoteConfig({ ok: false })
+                posthog.config.advanced_disable_flags = true
+                expect(autocapture.isEnabled).toBe(false)
+            })
+        })
+
+        describe('when the remote config response is missing autocapture_opt_out', () => {
+            beforeEach(() => {
+                autocapture['_isDisabledServerSide'] = null
+                autocapture['_hasReceivedConfigResponse'] = false
+                posthog.persistence!.unregister(AUTOCAPTURE_DISABLED_SERVER_SIDE)
+            })
+
+            it('stays disabled when there has never been a config response with the field', () => {
+                autocapture.onRemoteConfig({ ok: true, config: {} as FlagsResponse })
+                expect(autocapture.isEnabled).toBe(false)
+                expect(posthog.persistence!.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]).toBeUndefined()
+            })
+
+            it('keeps a persisted server-side opt-out', () => {
+                posthog.persistence!.register({ [AUTOCAPTURE_DISABLED_SERVER_SIDE]: true })
+                autocapture.onRemoteConfig({ ok: true, config: {} as FlagsResponse })
+                expect(autocapture.isEnabled).toBe(false)
+                expect(posthog.persistence!.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]).toBe(true)
+            })
+
+            it('keeps a persisted enabled state', () => {
+                posthog.persistence!.register({ [AUTOCAPTURE_DISABLED_SERVER_SIDE]: false })
+                autocapture.onRemoteConfig({ ok: true, config: {} as FlagsResponse })
+                expect(autocapture.isEnabled).toBe(true)
+                expect(posthog.persistence!.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]).toBe(false)
+            })
+
+            it('ignores a non-boolean value', () => {
+                autocapture.onRemoteConfig({
+                    ok: true,
+                    config: { autocapture_opt_out: 'yes' } as unknown as FlagsResponse,
+                })
+                expect(autocapture.isEnabled).toBe(false)
+                expect(posthog.persistence!.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]).toBeUndefined()
+            })
+
+            it('keeps the in-memory value when persistence has no entry', () => {
+                autocapture['_isDisabledServerSide'] = true
+                autocapture.onRemoteConfig({ ok: true, config: {} as FlagsResponse })
+                expect(autocapture.isEnabled).toBe(false)
+            })
+
+            it('recovers once a response includes the field', () => {
+                autocapture.onRemoteConfig({ ok: true, config: {} as FlagsResponse })
+                expect(autocapture.isEnabled).toBe(false)
+
+                autocapture.onRemoteConfig({ ok: true, config: { autocapture_opt_out: false } as FlagsResponse })
+                expect(autocapture.isEnabled).toBe(true)
+                expect(posthog.persistence!.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]).toBe(false)
+            })
+
+            it('stays disabled when flags are disabled after the response', () => {
+                autocapture.onRemoteConfig({ ok: true, config: {} as FlagsResponse })
+                posthog.config.advanced_disable_flags = true
+                expect(autocapture.isEnabled).toBe(false)
+            })
+
+            it('is enabled when flags were disabled and no config outcome ever arrived', () => {
+                posthog.config.advanced_disable_flags = true
+                expect(autocapture.isEnabled).toBe(true)
+            })
         })
 
         it.each([
@@ -1414,8 +1523,11 @@ describe('Autocapture system', () => {
             (clientSideOptIn, serverSideOptOut, expected) => {
                 posthog.config.autocapture = clientSideOptIn
                 autocapture.onRemoteConfig({
-                    autocapture_opt_out: serverSideOptOut,
-                } as FlagsResponse)
+                    ok: true,
+                    config: {
+                        autocapture_opt_out: serverSideOptOut,
+                    } as FlagsResponse,
+                })
                 expect(autocapture.isEnabled).toBe(expected)
             }
         )
@@ -1423,12 +1535,12 @@ describe('Autocapture system', () => {
         it('should call _addDomEventHandlders if autocapture is true in client config', () => {
             posthog.config.autocapture = true
             autocapture['_initialized'] = false
-            autocapture.onRemoteConfig({} as FlagsResponse)
+            autocapture.onRemoteConfig({ ok: true, config: { autocapture_opt_out: false } as FlagsResponse })
             expect(autocapture['_addDomEventHandlers']).toHaveBeenCalled()
         })
 
         it('should not call _addDomEventHandlders if autocapture is opted out in server config', () => {
-            autocapture.onRemoteConfig({ autocapture_opt_out: true } as FlagsResponse)
+            autocapture.onRemoteConfig({ ok: true, config: { autocapture_opt_out: true } as FlagsResponse })
             expect(autocapture['_addDomEventHandlers']).not.toHaveBeenCalled()
         })
 
@@ -1436,17 +1548,17 @@ describe('Autocapture system', () => {
             expect(autocapture['_addDomEventHandlers']).not.toHaveBeenCalled()
             posthog.config.autocapture = false
 
-            autocapture.onRemoteConfig({} as FlagsResponse)
+            autocapture.onRemoteConfig({ ok: true, config: { autocapture_opt_out: false } as FlagsResponse })
 
             expect(autocapture['_addDomEventHandlers']).not.toHaveBeenCalled()
         })
 
         it('should NOT call _addDomEventHandlders when the token has already been initialized', () => {
             autocapture['_initialized'] = false
-            autocapture.onRemoteConfig({} as FlagsResponse)
+            autocapture.onRemoteConfig({ ok: true, config: { autocapture_opt_out: false } as FlagsResponse })
             expect(autocapture['_addDomEventHandlers']).toHaveBeenCalledTimes(1)
 
-            autocapture.onRemoteConfig({} as FlagsResponse)
+            autocapture.onRemoteConfig({ ok: true, config: { autocapture_opt_out: false } as FlagsResponse })
             expect(autocapture['_addDomEventHandlers']).toHaveBeenCalledTimes(1)
         })
     })

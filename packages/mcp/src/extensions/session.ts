@@ -51,6 +51,7 @@ export function getSessionId(server: MCPServerLike, extra?: CompatibleRequestHan
     data.sessionSource = 'token'
     data.sessionInfo.clientName = token.clientName
     data.sessionInfo.clientVersion = token.clientVersion
+    data.sessionInfo.protocolVersion = token.protocolVersion
     sessionId = token.sessionId
   } else if (extra?.sessionId) {
     // Session id issued by a stateful transport: hash it so the same MCP
@@ -110,6 +111,9 @@ export function getSessionInfo(
     serverVersion: server._serverInfo?.version,
     clientName: clientInfo?.name,
     clientVersion: clientInfo?.version,
+    // No SDK getter for this (unlike getClientVersion) — the MCP SDK never
+    // retains the negotiated version, so it lives only where we stored it.
+    protocolVersion: data?.sessionInfo.protocolVersion,
     identifyActorGivenId: actorInfo?.distinctId,
     identifyActorData: actorInfo?.properties || {},
     identifyActorGroups: actorInfo?.groups,

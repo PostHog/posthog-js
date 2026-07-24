@@ -1,6 +1,6 @@
 import type { Logger } from '@posthog/core'
 
-jest.mock('../../utils/logger', () => {
+jest.mock('@posthog/browser-common/utils/logger', () => {
     const mockLogger: Logger = {
         _log: jest.fn(),
         debug: jest.fn(),
@@ -20,7 +20,7 @@ jest.mock('../../utils/logger', () => {
 })
 
 import { isFunction } from '@posthog/core'
-import { logger } from '../../utils/logger'
+import { logger } from '@posthog/browser-common/utils/logger'
 
 export const clearLoggerMocks = () => {
     Object.values(logger).forEach((mock: any) => {

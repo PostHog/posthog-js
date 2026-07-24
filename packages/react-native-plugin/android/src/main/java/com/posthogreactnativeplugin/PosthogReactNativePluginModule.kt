@@ -96,7 +96,8 @@ class PosthogReactNativePluginModule(
           // Forward custom headers (e.g. Authorization for a reverse proxy) so the native SDK
           // attaches them to the requests it sends directly (session replay, crash uploads).
           val theRequestHeaders =
-            getMap(sdkOptions, "requestHeaders")?.toHashMap()
+            getMap(sdkOptions, "requestHeaders")
+              ?.toHashMap()
               ?.filterValues { it is String }
               ?.mapValues { it.value as String }
 
@@ -112,8 +113,10 @@ class PosthogReactNativePluginModule(
 
               // Keep the native exception-steps buffer aligned with the JS layer (one logical buffer).
               // Absent keys fall back to the native defaults the helpers receive.
-              errorTrackingConfig.exceptionSteps.enabled = getBoolean(exceptionStepsConfig, "enabled", errorTrackingConfig.exceptionSteps.enabled)
-              errorTrackingConfig.exceptionSteps.maxBytes = getInt(exceptionStepsConfig, "maxBytes", errorTrackingConfig.exceptionSteps.maxBytes)
+              errorTrackingConfig.exceptionSteps.enabled =
+                getBoolean(exceptionStepsConfig, "enabled", errorTrackingConfig.exceptionSteps.enabled)
+              errorTrackingConfig.exceptionSteps.maxBytes =
+                getInt(exceptionStepsConfig, "maxBytes", errorTrackingConfig.exceptionSteps.maxBytes)
 
               // React Native rethrows fatal JS errors natively as JavascriptException.
               // The JS layer already captured them, so drop the native duplicate.
@@ -130,7 +133,10 @@ class PosthogReactNativePluginModule(
               val throttleDelayMs =
                 when {
                   hasKey(sdkReplayConfig, "throttleDelayMs") -> getInt(sdkReplayConfig, "throttleDelayMs", DEFAULT_THROTTLE_DELAY_MS)
-                  hasKey(sdkReplayConfig, "androidDebouncerDelayMs") -> getInt(sdkReplayConfig, "androidDebouncerDelayMs", DEFAULT_THROTTLE_DELAY_MS)
+                  hasKey(
+                    sdkReplayConfig,
+                    "androidDebouncerDelayMs",
+                  ) -> getInt(sdkReplayConfig, "androidDebouncerDelayMs", DEFAULT_THROTTLE_DELAY_MS)
                   else -> DEFAULT_THROTTLE_DELAY_MS
                 }
 

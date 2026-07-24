@@ -23,15 +23,15 @@ import { STORED_PERSON_PROPERTIES_KEY } from '../../../constants'
 import { ConversationsManager as ConversationsManagerInterface } from '../posthog-conversations'
 import { ConversationsPersistence } from './persistence'
 import { ConversationsWidget, WidgetView } from './components/ConversationsWidget'
-import { createLogger } from '../../../utils/logger'
-import { document, window } from '../../../utils/globals'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { document, window } from '@posthog/browser-common/utils/globals'
 import {
     formDataToQuery,
     isStatusZeroFailureCircuitBreakerTripped,
     updateStatusZeroFailureCount,
-} from '../../../utils/request-utils'
+} from '@posthog/browser-common/utils/request-utils'
 import { isCurrentDomainAllowed, getRestoreTokenFromUrl, clearRestoreTokenFromUrl } from './url-utils'
-import { addEventListener } from '../../../utils'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 
 const logger = createLogger('[ConversationsManager]')
 
@@ -292,6 +292,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     `/api/conversations/v1/widget/messages/${targetTicketId}?${formDataToQuery(queryParams)}`
                 ),
                 method: 'GET',
+                timestampMode: 'query',
                 headers: {
                     'X-Conversations-Token': token,
                 },
@@ -829,13 +830,11 @@ export class ConversationsManager implements ConversationsManagerInterface {
     }
 
     private _computeShowTicketList(tickets: Ticket[]): boolean {
-        if (tickets.length > 1) {
-            return true
-        }
-        if (tickets.length === 1 && tickets[0].status === 'resolved') {
-            return true
-        }
-        return false
+        // Surface the ticket-list hub (which holds the "New conversation" button and
+        // the back-to-tickets navigation) whenever the user has any ticket -- including
+        // a single open one. Otherwise a user with one unresolved ticket is locked into
+        // that conversation with no way to start a second one.
+        return tickets.length >= 1
     }
 
     private _isCurrentTicketResolved(): boolean {
@@ -1197,6 +1196,7 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     `/api/conversations/v1/widget/tickets?${formDataToQuery(queryParams)}`
                 ),
                 method: 'GET',
+                timestampMode: 'query',
                 headers: {
                     'X-Conversations-Token': token,
                 },

@@ -312,6 +312,7 @@ describe('SurveyManager', () => {
             get_session_replay_url: jest.fn(),
             capture: jest.fn(),
             featureFlags: {
+                hasLoadedFlags: true,
                 _send_request: jest
                     .fn()
                     .mockImplementation(({ callback }) => callback({ statusCode: 200, json: flagsResponse })),
@@ -461,6 +462,43 @@ describe('SurveyManager', () => {
 
             expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(null)
+        })
+    })
+
+    describe('waits for feature flags to load before trusting the internal targeting flag', () => {
+        // Regression guard: a recurring survey re-showed and recorded a duplicate response because
+        // the display loop read a stale-but-eligible cached internal targeting flag on a quick
+        // revisit, before /flags reflected the just-recorded response.
+        const INTERNAL_FLAG = 'enabled-internal-targeting-flag-key'
+
+        const makeGatedSurvey = (): Survey => ({
+            ...mockSurveys[0],
+            id: 'internal-flag-gated-survey',
+            schedule: SurveySchedule.Recurring,
+            internal_targeting_flag_key: INTERNAL_FLAG,
+            conditions: null,
+        })
+
+        it('is not eligible while flags have not loaded, even when the cached flag says eligible', () => {
+            mockPostHog.featureFlags.hasLoadedFlags = false
+            const result = surveyManager.checkSurveyEligibility(makeGatedSurvey())
+            expect(result.eligible).toBe(false)
+            expect(result.reason).toContain('Feature flags have not loaded yet')
+        })
+
+        it('is eligible once flags have loaded and the internal flag is enabled', () => {
+            mockPostHog.featureFlags.hasLoadedFlags = true
+            const result = surveyManager.checkSurveyEligibility(makeGatedSurvey())
+            expect(result.eligible).toBe(true)
+        })
+
+        it('still bypasses the internal flag for repeatable surveys before flags load', () => {
+            mockPostHog.featureFlags.hasLoadedFlags = false
+            const result = surveyManager.checkSurveyEligibility({
+                ...makeGatedSurvey(),
+                schedule: SurveySchedule.Always,
+            })
+            expect(result.eligible).toBe(true)
         })
     })
 

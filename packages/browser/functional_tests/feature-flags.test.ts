@@ -3,7 +3,7 @@ import '../src/__tests__/helpers/mock-logger'
 import { createPosthogInstance } from '../src/__tests__/helpers/posthog-instance'
 import { waitFor } from '@testing-library/dom'
 import { getRequests, resetRequests } from './mock-server'
-import { uuidv7 } from '../src/uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
 async function shortWait() {
     // no need to worry about ie11 compat in tests
@@ -31,6 +31,7 @@ describe('FunctionalTests / Feature Flags', () => {
                     distinct_id: anonymousId,
                     person_properties: expect.any(Object),
                     groups: {},
+                    sent_at: expect.any(String),
                     timezone: expect.any(String),
                     token,
                 },
@@ -90,6 +91,7 @@ describe('FunctionalTests / Feature Flags', () => {
                         email: 'test@email.com',
                     },
                     groups: {},
+                    sent_at: expect.any(String),
                     timezone: expect.any(String),
                     token,
                 },
@@ -110,6 +112,7 @@ describe('FunctionalTests / Feature Flags', () => {
                     distinct_id: anonymousId,
                     person_properties: expect.any(Object),
                     groups: {},
+                    sent_at: expect.any(String),
                     timezone: expect.any(String),
                     token,
                 },
@@ -165,6 +168,7 @@ describe('FunctionalTests / Feature Flags', () => {
                         $initial_utm_term: null,
                         $initial_wbraid: null,
                     },
+                    sent_at: expect.any(String),
                     timezone: expect.any(String),
                     token,
                 },
@@ -215,6 +219,7 @@ describe('FunctionalTests / Feature Flags', () => {
                         $initial_wbraid: null,
                         email: 'test@email.com',
                     },
+                    sent_at: expect.any(String),
                     timezone: expect.any(String),
                     token,
                 },
@@ -235,6 +240,7 @@ describe('FunctionalTests / Feature Flags', () => {
                     distinct_id: anonymousId,
                     person_properties: expect.any(Object),
                     groups: {},
+                    sent_at: expect.any(String),
                     timezone: expect.any(String),
                     token,
                 },
@@ -295,6 +301,7 @@ describe('FunctionalTests / Feature Flags', () => {
                         $initial_wbraid: null,
                         email: 'test2@email.com',
                     },
+                    sent_at: expect.any(String),
                     timezone: expect.any(String),
                     token,
                 },
@@ -358,6 +365,7 @@ describe('FunctionalTests / Feature Flags', () => {
                             length: 8,
                         },
                     },
+                    sent_at: expect.any(String),
                     timezone: expect.any(String),
                     token,
                 },

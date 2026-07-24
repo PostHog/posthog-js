@@ -1,4 +1,4 @@
-jest.mock('../utils/logger', () => ({
+jest.mock('@posthog/browser-common/utils/logger', () => ({
     createLogger: jest.fn().mockReturnValue({
         info: jest.fn(),
         warn: jest.fn(),
@@ -115,6 +115,7 @@ describe('posthog-surveys', () => {
                     onConsentChange: jest.fn(),
                 },
                 featureFlags: {
+                    hasLoadedFlags: true,
                     _send_request: jest
                         .fn()
                         .mockImplementation(({ callback }) => callback({ statusCode: 200, json: flagsResponse })),

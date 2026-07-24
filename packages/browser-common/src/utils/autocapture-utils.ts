@@ -1,13 +1,11 @@
-import { AutocaptureConfig, PostHogConfig, Properties } from './types'
-import type { PostHog } from './posthog-core'
-import { each, entries } from './utils'
+import type { AutocaptureConfig, PostHogConfig, Properties } from '@posthog/types'
+import { each, entries } from './general-utils'
 
-import { isNullish, isString, isUndefined, isArray, isBoolean } from '@posthog/core'
-import { logger } from './utils/logger'
-import { window } from './utils/globals'
-import { getTargetingUrl } from './utils/url-targeting-utils'
-import { isElementNode, isShadowRoot, isTag, isTextNode } from './utils/element-utils'
-import { includes, trim } from '@posthog/core'
+import { isArray, isBoolean, isNullish, isString, isUndefined, includes, trim } from '@posthog/core'
+import { logger } from './logger'
+import { window } from './globals'
+import { getTargetingUrl, type UrlTargetingInstance } from './url-targeting-utils'
+import { isElementNode, isShadowRoot, isTag, isTextNode } from './element-utils'
 
 // Real DOM trees are at most a few hundred nodes deep; a patched parentNode
 // chain could otherwise trap ancestor walks in an unbounded loop.
@@ -17,7 +15,7 @@ export function splitClassString(s: string): string[] {
     return s ? trim(s).split(/\s+/) : []
 }
 
-function checkForURLMatches(urlsList: (string | RegExp)[], instance?: PostHog): boolean {
+function checkForURLMatches(urlsList: (string | RegExp)[], instance?: UrlTargetingInstance): boolean {
     const url = getTargetingUrl(instance)
     return !!(url && urlsList && urlsList.some((regex) => url.match(regex)))
 }
@@ -373,7 +371,7 @@ export function shouldCaptureDomEvent(
     autocaptureConfig: AutocaptureConfig | undefined = undefined,
     captureOnAnyElement?: boolean,
     allowedEventTypes?: string[],
-    instance?: PostHog
+    instance?: UrlTargetingInstance
 ): boolean {
     if (!window || cannotCheckForAutocapture(el)) {
         return false
@@ -630,17 +628,17 @@ export function getElementsChainString(elements: Properties[]): string {
 // This interface is called 'Element' in plugin-scaffold https://github.com/PostHog/plugin-scaffold/blob/b07d3b879796ecc7e22deb71bf627694ba05386b/src/types.ts#L200
 // However 'Element' is a DOM Element when run in the browser, so we have to rename it
 interface PHElement {
-    text?: string
-    tag_name?: string
-    href?: string
-    attr_id?: string
-    attr_class?: string[]
-    nth_child?: number
-    nth_of_type?: number
-    attributes?: Record<string, any>
-    event_id?: number
-    order?: number
-    group_id?: number
+    text?: string | undefined
+    tag_name?: string | undefined
+    href?: string | undefined
+    attr_id?: string | undefined
+    attr_class?: string[] | undefined
+    nth_child?: number | undefined
+    nth_of_type?: number | undefined
+    attributes?: Record<string, any> | undefined
+    event_id?: number | undefined
+    order?: number | undefined
+    group_id?: number | undefined
 }
 
 function escapeQuotes(input: string): string {
@@ -684,6 +682,7 @@ function elementsToString(elements: PHElement[]): string {
 
 function extractElements(elements: Properties[]): PHElement[] {
     return elements.map((el) => {
+        const attributes: { [id: string]: any } = {}
         const response = {
             text: el['$el_text']?.slice(0, 400),
             tag_name: el['tag_name'],
@@ -692,7 +691,7 @@ function extractElements(elements: Properties[]): PHElement[] {
             attr_id: el['attr__id'],
             nth_child: el['nth_child'],
             nth_of_type: el['nth_of_type'],
-            attributes: {} as { [id: string]: any },
+            attributes,
         }
 
         entries(el)

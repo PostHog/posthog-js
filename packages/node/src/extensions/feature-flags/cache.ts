@@ -12,6 +12,12 @@ export interface FlagDefinitionCacheData {
   groupTypeMapping: Record<string, string>
   /** Cohort property groups for local evaluation */
   cohorts: Record<string, PropertyGroup>
+  /**
+   * Server-controlled gate for minimal `$feature_flag_called` events, from the top-level
+   * `minimal_flag_called_events` field of the flag-definitions payload. Absent (e.g. cached
+   * data written by an older SDK version) means full events.
+   */
+  minimalFlagCalledEvents?: boolean
 }
 
 /**

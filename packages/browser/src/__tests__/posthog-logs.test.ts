@@ -10,7 +10,7 @@ const mockLogger = {
     error: jest.fn(),
 }
 
-jest.mock('../utils/logger', () => ({
+jest.mock('@posthog/browser-common/utils/logger', () => ({
     createLogger: jest.fn(() => mockLogger),
 }))
 
@@ -122,7 +122,7 @@ describe('posthog-logs', () => {
                     logs: { captureConsoleLogs: false },
                 }
 
-                logs.onRemoteConfig(response)
+                logs.onRemoteConfig({ ok: true, config: response })
 
                 expect((logs as any)._isLogsEnabled).toBeFalsy()
             })
@@ -137,7 +137,7 @@ describe('posthog-logs', () => {
                     logs: null,
                 } as any
 
-                logs.onRemoteConfig(response)
+                logs.onRemoteConfig({ ok: true, config: response })
 
                 expect((logs as any)._isLogsEnabled).toBeFalsy()
             })
@@ -151,7 +151,7 @@ describe('posthog-logs', () => {
                     siteApps: [],
                 }
 
-                logs.onRemoteConfig(response)
+                logs.onRemoteConfig({ ok: true, config: response })
 
                 expect((logs as any)._isLogsEnabled).toBeFalsy()
             })
@@ -166,7 +166,7 @@ describe('posthog-logs', () => {
                     logs: { captureConsoleLogs: true },
                 }
 
-                logs.onRemoteConfig(response)
+                logs.onRemoteConfig({ ok: true, config: response })
 
                 expect((logs as any)._isLogsEnabled).toBe(true)
             })
@@ -182,7 +182,7 @@ describe('posthog-logs', () => {
                     logs: { captureConsoleLogs: true },
                 }
 
-                logs.onRemoteConfig(response)
+                logs.onRemoteConfig({ ok: true, config: response })
 
                 expect(loadIfEnabledSpy).toHaveBeenCalled()
             })
@@ -288,7 +288,7 @@ describe('posthog-logs', () => {
                     logs: { captureConsoleLogs: true },
                 }
 
-                logs.onRemoteConfig(response)
+                logs.onRemoteConfig({ ok: true, config: response })
 
                 expect((logs as any)._isLogsEnabled).toBe(true)
                 expect(mockLoadExternalDependency).toHaveBeenCalledWith(mockPostHog, 'logs', expect.any(Function))
@@ -305,7 +305,7 @@ describe('posthog-logs', () => {
                     logs: { captureConsoleLogs: false },
                 }
 
-                logs.onRemoteConfig(response)
+                logs.onRemoteConfig({ ok: true, config: response })
                 logs.loadIfEnabled()
 
                 expect(mockLoadExternalDependency).not.toHaveBeenCalled()
@@ -331,15 +331,15 @@ describe('posthog-logs', () => {
                 }
 
                 // First enable
-                logs.onRemoteConfig(enabledResponse)
+                logs.onRemoteConfig({ ok: true, config: enabledResponse })
                 expect((logs as any)._isLogsEnabled).toBe(true)
 
                 // Then disable (should not change the enabled state)
-                logs.onRemoteConfig(disabledResponse)
+                logs.onRemoteConfig({ ok: true, config: disabledResponse })
                 expect((logs as any)._isLogsEnabled).toBe(true) // Still enabled from first call
 
                 // Enable again
-                logs.onRemoteConfig(enabledResponse)
+                logs.onRemoteConfig({ ok: true, config: enabledResponse })
                 expect((logs as any)._isLogsEnabled).toBe(true)
             })
 
@@ -359,7 +359,7 @@ describe('posthog-logs', () => {
 
                 configs.forEach((config) => {
                     const testLogs = new PostHogLogs(mockPostHog)
-                    testLogs.onRemoteConfig(config)
+                    testLogs.onRemoteConfig({ ok: true, config: config })
                     expect((testLogs as any)._isLogsEnabled).toBe(true)
                 })
             })
@@ -377,7 +377,7 @@ describe('posthog-logs', () => {
                     logs: { captureConsoleLogs: true },
                 }
 
-                expect(() => logsWithNullPostHog.onRemoteConfig(response)).not.toThrow()
+                expect(() => logsWithNullPostHog.onRemoteConfig({ ok: true, config: response })).not.toThrow()
                 expect(() => logsWithNullPostHog.loadIfEnabled()).not.toThrow()
                 expect(() => logsWithNullPostHog.reset()).not.toThrow()
             })
@@ -423,7 +423,7 @@ describe('posthog-logs', () => {
 
                 malformedResponses.forEach((response) => {
                     const testLogs = new PostHogLogs(mockPostHog)
-                    expect(() => testLogs.onRemoteConfig(response as any)).not.toThrow()
+                    expect(() => testLogs.onRemoteConfig({ ok: true, config: response as any })).not.toThrow()
                     expect((testLogs as any)._isLogsEnabled).toBeFalsy()
                 })
 
@@ -431,7 +431,7 @@ describe('posthog-logs', () => {
                 const nullUndefinedResponses = [null, undefined]
                 nullUndefinedResponses.forEach((response) => {
                     const testLogs = new PostHogLogs(mockPostHog)
-                    expect(() => testLogs.onRemoteConfig(response as any)).toThrow()
+                    expect(() => testLogs.onRemoteConfig({ ok: true, config: response as any })).toThrow()
                 })
             })
 
@@ -1497,7 +1497,7 @@ describe('posthog-logs', () => {
                     isAuthenticated: false,
                     siteApps: [],
                 }
-                logs.onRemoteConfig({ ...baseConfig, logs: { captureConsoleLogs: true } })
+                logs.onRemoteConfig({ ok: true, config: { ...baseConfig, logs: { captureConsoleLogs: true } } })
                 expect((logs as any)._isLogsEnabled).toBe(true)
                 expect((logs as any)._isLoaded).toBe(true)
 
@@ -1519,16 +1519,16 @@ describe('posthog-logs', () => {
                     siteApps: [],
                 }
 
-                logs.onRemoteConfig({ ...baseConfig, logs: { captureConsoleLogs: false } })
+                logs.onRemoteConfig({ ok: true, config: { ...baseConfig, logs: { captureConsoleLogs: false } } })
                 expect(mockLoadExternalDependency).toHaveBeenCalledTimes(0)
 
-                logs.onRemoteConfig({ ...baseConfig, logs: { captureConsoleLogs: true } })
+                logs.onRemoteConfig({ ok: true, config: { ...baseConfig, logs: { captureConsoleLogs: true } } })
                 expect(mockLoadExternalDependency).toHaveBeenCalledTimes(1)
 
-                logs.onRemoteConfig({ ...baseConfig, logs: { captureConsoleLogs: true } })
+                logs.onRemoteConfig({ ok: true, config: { ...baseConfig, logs: { captureConsoleLogs: true } } })
                 expect(mockLoadExternalDependency).toHaveBeenCalledTimes(1)
 
-                logs.onRemoteConfig({ ...baseConfig, logs: { captureConsoleLogs: false } })
+                logs.onRemoteConfig({ ok: true, config: { ...baseConfig, logs: { captureConsoleLogs: false } } })
                 expect(mockLoadExternalDependency).toHaveBeenCalledTimes(1)
             })
         })

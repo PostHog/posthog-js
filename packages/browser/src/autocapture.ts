@@ -1,4 +1,4 @@
-import { addEventListener, each, extend } from './utils'
+import { addEventListener, each, extend } from '@posthog/browser-common/utils/general-utils'
 import {
     autocaptureCompatibleElements,
     getClassNames,
@@ -15,18 +15,18 @@ import {
     shouldCaptureRageclick,
     shouldCaptureValue,
     splitClassString,
-} from './autocapture-utils'
+} from '@posthog/browser-common/utils/autocapture-utils'
 
 import RageClick from './extensions/rageclick'
-import { AutocaptureConfig, EventName, Properties, RemoteConfig } from './types'
+import { AutocaptureConfig, EventName, Properties, RemoteConfigResult } from './types'
 import { PostHog } from './posthog-core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
 import { isBoolean, isFunction, isNull, isObject, stripUrlHash } from '@posthog/core'
-import { createLogger } from './utils/logger'
-import { document, window } from './utils/globals'
-import { convertToURL } from './utils/request-utils'
-import { isElementNode, isShadowRoot, isTag, isTextNode } from './utils/element-utils'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { document, window } from '@posthog/browser-common/utils/globals'
+import { convertToURL } from '@posthog/browser-common/utils/request-utils'
+import { isElementNode, isShadowRoot, isTag, isTextNode } from '@posthog/browser-common/utils/element-utils'
 import { includes } from '@posthog/core'
 import type { Extension } from './extensions/types'
 
@@ -275,6 +275,7 @@ export class Autocapture implements Extension {
     instance: PostHog
     _initialized: boolean = false
     _isDisabledServerSide: boolean | null = null
+    _hasReceivedConfigResponse: boolean = false
     _elementSelectors: Set<string> | null
     rageclicks: RageClick
     _elementsChainAsString = false
@@ -342,25 +343,33 @@ export class Autocapture implements Extension {
         }
     }
 
-    public onRemoteConfig(response: RemoteConfig) {
+    public onRemoteConfig(result: RemoteConfigResult) {
+        this._hasReceivedConfigResponse = true
+        if (!result.ok) {
+            // Failed fetch = opt-out unknown: keep the last known persisted server
+            // value instead of defaulting to enabled, so a network error cannot turn
+            // autocapture on for an opted-out project. No persistence write.
+            this.startIfEnabled()
+            return
+        }
+
+        const response = result.config
         if (response.elementsChainAsString) {
             this._elementsChainAsString = response.elementsChainAsString
         }
 
-        // NOTE: Unlike other extensions (heatmaps, web-vitals, etc.), we intentionally
-        // DO NOT guard against missing autocapture_opt_out key here. Autocapture uses
-        // a "wait for server, then enable unless explicitly opted out" model:
-        // - Before remote config: autocapture disabled (isEnabled returns false)
-        // - After remote config: enabled unless autocapture_opt_out is explicitly true
-        // Missing/undefined key → !!undefined = false → autocapture enabled
-        // This is intentional and different from opt-in features like heatmaps.
-        if (this.instance.persistence) {
-            this.instance.persistence.register({
-                [AUTOCAPTURE_DISABLED_SERVER_SIDE]: !!response['autocapture_opt_out'],
-            })
+        // A missing autocapture_opt_out carries no opt-out information:
+        // keep the last known server value, as with a failed fetch.
+        const optOut = response['autocapture_opt_out']
+        if (isBoolean(optOut)) {
+            if (this.instance.persistence) {
+                this.instance.persistence.register({
+                    [AUTOCAPTURE_DISABLED_SERVER_SIDE]: optOut,
+                })
+            }
+            // store this in-memory in case persistence is disabled
+            this._isDisabledServerSide = optOut
         }
-        // store this in-memory in case persistence is disabled
-        this._isDisabledServerSide = !!response['autocapture_opt_out']
         this.startIfEnabled()
     }
 
@@ -387,8 +396,11 @@ export class Autocapture implements Extension {
         const persistedServerDisabled = this.instance.persistence?.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]
         const memoryDisabled = this._isDisabledServerSide
 
-        if (isNull(memoryDisabled) && !isBoolean(persistedServerDisabled) && !this.instance._shouldDisableFlags()) {
-            // We only enable if we know that the server has not disabled it (unless /flags is disabled)
+        // The /flags-disabled bypass only applies while no config outcome has arrived;
+        // once a response (or failure) has been seen, an unknown opt-out stays off.
+        const clientConfigOnly = this.instance._shouldDisableFlags() && !this._hasReceivedConfigResponse
+        if (isNull(memoryDisabled) && !isBoolean(persistedServerDisabled) && !clientConfigOnly) {
+            // We only enable if we know that the server has not disabled it
             return false
         }
 

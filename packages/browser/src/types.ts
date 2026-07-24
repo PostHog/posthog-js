@@ -49,6 +49,7 @@ export type {
     EvaluationReason,
     FeatureFlagResult,
     FeatureFlagOptions,
+    IsFeatureEnabledOptions,
     RemoteConfigFeatureFlagCallback,
     EarlyAccessFeature,
     EarlyAccessFeatureStage,
@@ -230,6 +231,13 @@ export interface RequestWithOptions {
     noRetries?: boolean
     disableTransport?: ('XHR' | 'fetch' | 'sendBeacon')[]
     compression?: Compression | 'best-available'
+    /**
+     * Controls where the request dispatch time is sent.
+     * - `body` adds ISO `sent_at` to the existing request object (for example, flags).
+     * - `capture-body` wraps events in `{ api_key, batch, sent_at }` with an ISO timestamp.
+     * - `query` adds numeric `sent_at` to POST requests or cache-busting `_` to GET requests.
+     */
+    timestampMode?: 'body' | 'capture-body' | 'query'
     fetchOptions?: {
         cache?: RequestInit['cache']
         next?: NextOptions
@@ -322,6 +330,12 @@ export type SessionRecordingRemoteConfig = SessionRecordingCanvasOptions & {
 }
 
 /**
+ * Outcome of a remote config fetch: the config, or an explicit failure.
+ * @internal
+ */
+export type RemoteConfigResult = { ok: true; config: RemoteConfig } | { ok: false }
+
+/**
  * Remote configuration for the PostHog instance
  *
  * All of these settings can be configured directly in your PostHog instance
@@ -334,7 +348,9 @@ export interface RemoteConfig {
     supportedCompression: Compression[]
 
     /**
-     * If set, disables autocapture
+     * If true, disables autocapture. When absent or not a boolean, the SDK
+     * keeps the last known server value; a visitor with no stored value
+     * keeps autocapture off until a response containing the field arrives.
      */
     autocapture_opt_out?: boolean
 
@@ -462,6 +478,11 @@ export interface FlagsResponse extends RemoteConfig {
     requestId?: string
     flags: Record<string, FeatureFlagDetail>
     evaluatedAt?: number
+    /**
+     * Server-controlled gate for minimal `$feature_flag_called` events. `true` only when the
+     * project opted in; omitted otherwise. Absence always means full events.
+     */
+    minimalFlagCalledEvents?: boolean
 }
 
 export type SiteAppGlobals = {

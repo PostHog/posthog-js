@@ -1,19 +1,13 @@
 import { convertToURL, getQueryParam, maskQueryParams } from './request-utils'
-import { isNull, stripLeadingDollar, stripUrlHash } from '@posthog/core'
-import { Properties } from '../types'
+import { isNull, isUndefined, stripLeadingDollar, stripUrlHash } from '@posthog/core'
+import type { Properties } from '@posthog/types'
 import Config from '../config'
 import { SDK_DIST_CHANNEL } from '../constants'
-import { each, extend, stripEmptyProperties } from './index'
+import { each, extend, stripEmptyProperties } from './general-utils'
 import { document, location, userAgent, window } from './globals'
-import {
-    BrowserDetectionHints,
-    detectBrowser,
-    detectBrowserVersion,
-    detectDevice,
-    detectDeviceType,
-    detectOS,
-} from '@posthog/core'
-import { cookieStore } from '../storage'
+import type { BrowserDetectionHints, BrowserDetectionOptions } from '@posthog/core'
+import { detectBrowser, detectBrowserVersion, detectDevice, detectDeviceType, detectOS } from '@posthog/core'
+import { getCookieValue } from './cookie-utils'
 
 const URL_REGEX_PREFIX = 'https?://(.*)'
 
@@ -127,7 +121,7 @@ function _getCampaignParamsFromUrl(url: string, customParams?: string[]): Record
 function _getCampaignParamsFromCookie(): Record<string, string> {
     const params: Record<string, any> = {}
     each(COOKIE_CAMPAIGN_PARAMS, function (kwkey) {
-        const kw = cookieStore._get(kwkey)
+        const kw = getCookieValue(kwkey)
         params[kwkey] = kw ? kw : null
     })
 
@@ -304,7 +298,34 @@ export function getEventProperties(
         : []
     const [os_name, os_version] = detectOS(userAgent)
     const browserHints = getBrowserDetectionHints()
-    const browserOptions = { detectGoogleSearchApp }
+    const browserOptions: BrowserDetectionOptions = {}
+    if (!isUndefined(detectGoogleSearchApp)) {
+        browserOptions.detectGoogleSearchApp = detectGoogleSearchApp
+    }
+
+    type DeviceDetectionOptions = NonNullable<Parameters<typeof detectDeviceType>[1]>
+    const deviceOptions: DeviceDetectionOptions = {}
+    // eslint-disable-next-line compat/compat
+    const userAgentDataPlatform = navigator?.userAgentData?.platform
+    const maxTouchPoints = navigator?.maxTouchPoints
+    const screenWidth = window?.screen?.width
+    const screenHeight = window?.screen?.height
+    const devicePixelRatio = window?.devicePixelRatio
+    if (!isUndefined(userAgentDataPlatform)) {
+        deviceOptions.userAgentDataPlatform = userAgentDataPlatform
+    }
+    if (!isUndefined(maxTouchPoints)) {
+        deviceOptions.maxTouchPoints = maxTouchPoints
+    }
+    if (!isUndefined(screenWidth)) {
+        deviceOptions.screenWidth = screenWidth
+    }
+    if (!isUndefined(screenHeight)) {
+        deviceOptions.screenHeight = screenHeight
+    }
+    if (!isUndefined(devicePixelRatio)) {
+        deviceOptions.devicePixelRatio = devicePixelRatio
+    }
 
     const properties = extend(
         stripEmptyProperties({
@@ -312,14 +333,7 @@ export function getEventProperties(
             $os_version: os_version,
             $browser: detectBrowser(userAgent, navigator.vendor, browserHints, browserOptions),
             $device: detectDevice(userAgent),
-            $device_type: detectDeviceType(userAgent, {
-                // eslint-disable-next-line compat/compat
-                userAgentDataPlatform: navigator?.userAgentData?.platform,
-                maxTouchPoints: navigator?.maxTouchPoints,
-                screenWidth: window?.screen?.width,
-                screenHeight: window?.screen?.height,
-                devicePixelRatio: window?.devicePixelRatio,
-            }),
+            $device_type: detectDeviceType(userAgent, deviceOptions),
             $timezone: getTimezone(),
             $timezone_offset: getTimezoneOffset(),
         }),

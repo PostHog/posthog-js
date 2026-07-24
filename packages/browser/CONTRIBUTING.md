@@ -13,6 +13,16 @@ For repository-wide setup, see the root [CONTRIBUTING.md](../../CONTRIBUTING.md)
 - Cypress: run `pnpm start` to have a test server running and separately `pnpm cypress` to launch Cypress test engine.
 - Playwright: run e.g. `pnpm exec playwright test --ui --project webkit --project firefox` to run with UI and in webkit and firefox.
 
+### Comparing `array.js` bundle size
+
+Run `pnpm bundle-size:array` from the repository root for a fast comparison of the current working tree against `origin/main`. Pass another git ref to change the baseline:
+
+```bash
+pnpm bundle-size:array main
+```
+
+The script bundles both versions with the same esbuild settings and reports minified, gzip, and Brotli changes. It is intended for quick percentage comparisons; the production Rollup build will have different absolute sizes.
+
 ### Running TestCafe E2E tests with BrowserStack
 
 Testing on IE11 requires a bit more setup. TestCafe tests use the playground application to test the locally built `array.full.js` bundle. They also verify that the events emitted during the testing of playground are loaded into the PostHog app. By default this uses `https://us.i.posthog.com` and the project with ID `11213`. See the TestCafe tests to override these if needed. PostHog internal users can ask `@benjackwhite` or `@hazzadous` for access. You will need to set `POSTHOG_PERSONAL_API_KEY` and `POSTHOG_PROJECT_API_KEY`.

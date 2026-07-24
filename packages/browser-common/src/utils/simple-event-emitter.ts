@@ -8,7 +8,7 @@ export class SimpleEventEmitter {
         this._events[event].push(listener)
 
         return () => {
-            this._events[event] = this._events[event].filter((x) => x !== listener)
+            this._events[event] = this._events[event]!.filter((x) => x !== listener)
         }
     }
 

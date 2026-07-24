@@ -1,5 +1,133 @@
 # posthog-js
 
+## 1.407.2
+
+### Patch Changes
+
+- [#4224](https://github.com/PostHog/posthog-js/pull/4224) [`ba7042b`](https://github.com/PostHog/posthog-js/commit/ba7042bd38051e1d1190341fb7071ec2ed13e639) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix session replay recordings being unplayable after the session rotated in a tab with no user interaction. When a session expired and rotated (for example in a long-lived background tab), a recorder that had not yet seen user interaction kept attributing snapshots — including full snapshots — to the previous session, so the new session never received a playable full snapshot. The recorder now restarts on rotation in this state, re-syncs its session id from the session manager if they ever diverge, and flushes its buffer on the normal cadence before the first user interaction instead of holding data until the next rotation or page unload.
+  (2026-07-23)
+
+## 1.407.1
+
+### Patch Changes
+
+- [#4218](https://github.com/PostHog/posthog-js/pull/4218) [`33f0bd7`](https://github.com/PostHog/posthog-js/commit/33f0bd7b7510ee05ea7927580a24f68936f77b9a) Thanks [@marandaneto](https://github.com/marandaneto)! - Send ISO feature flag timestamps in request bodies, use numeric `sent_at` query timestamps for capture POSTs, and preserve `_` cache busting for dynamic GET requests.
+  (2026-07-23)
+
+## 1.407.0
+
+### Minor Changes
+
+- [#4222](https://github.com/PostHog/posthog-js/pull/4222) [`0f2407b`](https://github.com/PostHog/posthog-js/commit/0f2407bbd98cab7d38a23f0466bbdccf3e0bdbf3) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - feat: add a default-value option to `isFeatureEnabled`
+
+    `isFeatureEnabled(key, { defaultValue: false })` now returns the given default when the flag has no value — flags not loaded yet, or no flag with that key — and the return type narrows to `boolean`. The option name is the same in posthog-js, posthog-js-lite, and posthog-react-native. Without `defaultValue`, behavior is unchanged: `boolean | undefined`. (2026-07-22)
+
+### Patch Changes
+
+- [#4203](https://github.com/PostHog/posthog-js/pull/4203) [`90e7483`](https://github.com/PostHog/posthog-js/commit/90e7483435757b6e650210e7d9d2f2ed2acb92e7) Thanks [@posthog](https://github.com/apps/posthog)! - fix(conversations): let users start a new conversation while a ticket is still open
+
+    The support widget now surfaces the ticket list navigation (and its "New conversation"
+    button) whenever the user has any ticket, instead of only when they have multiple tickets
+    or a single resolved one. Previously a user sitting on one open, unresolved ticket was
+    locked into that conversation with no way to raise a second issue. (2026-07-22)
+
+- [#4221](https://github.com/PostHog/posthog-js/pull/4221) [`da6e082`](https://github.com/PostHog/posthog-js/commit/da6e082daeb6f03d3982a101d74ac4efae990f8a) Thanks [@posthog](https://github.com/apps/posthog)! - fix(exception-autocapture): don't throw when the page's onerror handler is non-callable
+
+    The wrapped `window.onerror`, `window.onunhandledrejection`, and `console.error` handlers
+    chained to the page's original handler using optional chaining, which only guards against
+    `null`/`undefined`. When a page had one of these set to a truthy non-callable value (e.g.
+    via `Object.defineProperty`, or clobbered by another script/extension), our wrapper threw a
+    `TypeError` from inside its own handler. We now check the original handler is actually
+    callable before invoking it and fall back to `false` otherwise. (2026-07-22)
+
+- [#4209](https://github.com/PostHog/posthog-js/pull/4209) [`569fc62`](https://github.com/PostHog/posthog-js/commit/569fc62f418b3c5b7daed27e8fed38b208e9061c) Thanks [@posthog](https://github.com/apps/posthog)! - Session recording no longer emits an uncaught `TypeError: Illegal invocation` from the input observer's _synchronous_ native-setter call. The previous fix only guarded the deferred hooked setter; the synchronous `original.set.call(this, value)` still ran with a non-native `this` (a proxy, custom element, or cross-realm object) and threw inside the host page's own assignment. The recorder now probes the native getter — which fails the same internal-slot brand check as the setter — before forwarding: a non-native `this` is skipped, so the recorder no longer re-throws from its own frame, while genuine elements (including file inputs that legitimately throw on a programmatic value) keep their native behavior. The input event handler and `getInputType` are similarly guarded against reading native accessors on a non-native `this`.
+  (2026-07-22)
+
+- [#4068](https://github.com/PostHog/posthog-js/pull/4068) [`d5e1188`](https://github.com/PostHog/posthog-js/commit/d5e1188c380832bae0980d82ac6a35069908b7df) Thanks [@posthog](https://github.com/apps/posthog)! - Fix event-triggered surveys re-displaying in a fresh session without their trigger firing. A non-repeatable event/action-triggered survey that was shown but never dismissed or answered had its activation persisted indefinitely, so it kept being treated as "triggered" on later page loads. The persisted activation is now scoped to the triggering session: it still survives a reload within that session, but a brand-new session drops it until the trigger fires again. Repeatable surveys are unaffected.
+  (2026-07-22)
+
+- [#4205](https://github.com/PostHog/posthog-js/pull/4205) [`de3ad61`](https://github.com/PostHog/posthog-js/commit/de3ad612aebbd9bad6b6f63bbe5bc8c1a3ea076c) Thanks [@posthog](https://github.com/apps/posthog)! - Warn when session recording masking options in `posthog.init` shadow the project-level "Privacy and masking" setting. Client-side masking still intentionally takes precedence, but previously the override was silent — a developer could set masking in the dashboard and see it quietly ignored because their SDK config diverged. The recorder now logs a console warning (in debug mode) naming the diverging fields so the precedence is self-explaining.
+  (2026-07-22)
+- Updated dependencies [[`0f2407b`](https://github.com/PostHog/posthog-js/commit/0f2407bbd98cab7d38a23f0466bbdccf3e0bdbf3)]:
+    - @posthog/core@1.45.0
+    - @posthog/types@1.398.0
+
+## 1.406.2
+
+### Patch Changes
+
+- [#4206](https://github.com/PostHog/posthog-js/pull/4206) [`a3112d9`](https://github.com/PostHog/posthog-js/commit/a3112d9f3328e0dee30505b6f2c242f2b5baa9ec) Thanks [@posthog](https://github.com/apps/posthog)! - fix(surveys): stop recurring surveys re-showing off a stale internal targeting flag
+
+    Recurring surveys could re-display and record a duplicate response when the eligibility
+    check ran against a cached internal targeting flag before fresh flags had loaded. The
+    display loop now waits for feature flags to actually load before trusting the internal
+    targeting flag, and forces a flag reload after a survey is completed so the flag recomputes
+    promptly. (2026-07-21)
+
+## 1.406.1
+
+### Patch Changes
+
+- [#4127](https://github.com/PostHog/posthog-js/pull/4127) [`220fa2c`](https://github.com/PostHog/posthog-js/commit/220fa2ce1c5cbb65d9f52dad05e3c8070f616e4a) Thanks [@sarmah-rup](https://github.com/sarmah-rup)! - Don't let save_referrer overwrite a $referrer / $referring_domain that was explicitly set via posthog.register(), so registered attribution values survive pageviews in SPA and iframe contexts
+  (2026-07-21)
+
+## 1.406.0
+
+### Minor Changes
+
+- [#4194](https://github.com/PostHog/posthog-js/pull/4194) [`d39b903`](https://github.com/PostHog/posthog-js/commit/d39b903f8f77e32f729703156fa5a9430d778104) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Move shared browser utility implementations into `@posthog/browser-common` and consume them directly from `posthog-js`.
+  (2026-07-21)
+
+### Patch Changes
+
+- [#4204](https://github.com/PostHog/posthog-js/pull/4204) [`ba977d0`](https://github.com/PostHog/posthog-js/commit/ba977d0b36ec4fbf0b514008ba0643dcfcca26bf) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Keep autocapture off when a remote config response omits `autocapture_opt_out`. The SDK now retains the last known server value for the missing-field case, the same as when the config fetch fails, instead of enabling autocapture. Values persisted by earlier SDK versions are still trusted; a browser holding a stale value corrects itself on the first config response that includes the field.
+  (2026-07-21)
+- Updated dependencies [[`d39b903`](https://github.com/PostHog/posthog-js/commit/d39b903f8f77e32f729703156fa5a9430d778104)]:
+    - @posthog/browser-common@0.2.0
+
+## 1.405.3
+
+### Patch Changes
+
+- [#4200](https://github.com/PostHog/posthog-js/pull/4200) [`91505ba`](https://github.com/PostHog/posthog-js/commit/91505baaeb22c8fb90568c7c53087a490e92ef49) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: apply the active full snapshot interval as soon as a recording trigger matches
+  (2026-07-21)
+
+## 1.405.2
+
+### Patch Changes
+
+- [#4198](https://github.com/PostHog/posthog-js/pull/4198) [`fbfc84f`](https://github.com/PostHog/posthog-js/commit/fbfc84f56dda3cc4332cb8cecffe3da6ddfd5b32) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: make the pending session recording trigger buffer interval configurable
+  (2026-07-20)
+- Updated dependencies [[`fbfc84f`](https://github.com/PostHog/posthog-js/commit/fbfc84f56dda3cc4332cb8cecffe3da6ddfd5b32)]:
+    - @posthog/types@1.397.1
+
+## 1.405.1
+
+### Patch Changes
+
+- [#4193](https://github.com/PostHog/posthog-js/pull/4193) [`dec8fe7`](https://github.com/PostHog/posthog-js/commit/dec8fe7ec1a64da0caa7a49f92b255e1701a2ec7) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Internal restructuring of remote config failure handling across SDK extensions; no behavior change.
+  (2026-07-20)
+
+## 1.405.0
+
+### Minor Changes
+
+- [#4172](https://github.com/PostHog/posthog-js/pull/4172) [`9621830`](https://github.com/PostHog/posthog-js/commit/9621830c359a9955ffec0db61164e5fc450e5443) Thanks [@haacked](https://github.com/haacked)! - send minimal `$feature_flag_called` events when the server enables it
+
+    When the v2 `/flags` response carries `minimalFlagCalledEvents: true` (or, for posthog-node local evaluation, the flag-definitions payload carries `minimal_flag_called_events: true`) and the evaluated flag is not linked to an experiment (`$feature_flag_has_experiment === false`), `$feature_flag_called` events are rebuilt from a strict allowlist of flag-evaluation, processing-control, and SDK-identity properties. Super properties, `$set`/`$set_once`, the `$feature/<key>` enumeration, `$active_feature_flags`, and the context envelope are stripped. Any missing signal (no gate on the response, bootstrapped or locally injected flags, `has_experiment` unknown) falls back to the full event, and experiment-linked flags always send the full envelope. The gate is stored alongside the cached flags (posthog-js persistence, posthog-node poller state) and is server-controlled, with no SDK-side configuration. `before_send` runs after the filter and may re-add stripped properties. (2026-07-20)
+
+### Patch Changes
+
+- Updated dependencies [[`9621830`](https://github.com/PostHog/posthog-js/commit/9621830c359a9955ffec0db61164e5fc450e5443)]:
+    - @posthog/core@1.44.0
+
+## 1.404.1
+
+### Patch Changes
+
+- [#4191](https://github.com/PostHog/posthog-js/pull/4191) [`66c1666`](https://github.com/PostHog/posthog-js/commit/66c1666465c5aa36bedca81b31f025c83f229569) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Honour the project-level autocapture opt-out when the remote config request fails. Previously a failed config fetch (network error, timeout, blocked request) enabled autocapture on opted-out projects and persisted that state for later page loads. Autocapture now keeps the last successfully received server value, and stays off until the first successful config response.
+  (2026-07-17)
+
 ## 1.404.0
 
 ### Minor Changes

@@ -44,11 +44,14 @@ jobs:
                   install: 'false'
                   build: 'false'
 
-            - name: Install ripgrep for watcher search tools
-              run: sudo apt-get update && sudo apt-get install -y ripgrep
+            - name: Install watcher search tools
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y fd-find ripgrep
+                  sudo ln -sf "$(command -v fdfind)" /usr/local/bin/fd
 
             - name: Drain watcher queue
-              uses: PostHog/posthog-watcher-action@4eeb4867209b0f75a1bc8a1ee661f002502afe6b
+              uses: PostHog/posthog-watcher-action@8b166434ccf42ce9da6ee1fda3f622268812aed5
               with:
                   openai-api-key: ${{ secrets.POSTHOG_WATCHER_OPENAI_API_KEY }}
                   mode: drain-queue
@@ -78,11 +81,14 @@ jobs:
                   install: 'false'
                   build: 'false'
 
-            - name: Install ripgrep for watcher search tools
-              run: sudo apt-get update && sudo apt-get install -y ripgrep
+            - name: Install watcher search tools
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y fd-find ripgrep
+                  sudo ln -sf "$(command -v fdfind)" /usr/local/bin/fd
 
             - name: Process watcher issue
-              uses: PostHog/posthog-watcher-action@4eeb4867209b0f75a1bc8a1ee661f002502afe6b
+              uses: PostHog/posthog-watcher-action@8b166434ccf42ce9da6ee1fda3f622268812aed5
               with:
                   openai-api-key: ${{ secrets.POSTHOG_WATCHER_OPENAI_API_KEY }}
                   issue-number: ${{ inputs['issue-number'] }}

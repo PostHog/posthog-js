@@ -1,4 +1,4 @@
-import { addEventListener, entries, extend } from './utils'
+import { addEventListener, entries, extend } from '@posthog/browser-common/utils/general-utils'
 import { PostHog } from './posthog-core'
 import {
     FlagsResponse,
@@ -14,6 +14,7 @@ import {
     FeatureFlagDetail,
     FeatureFlagResult,
     FeatureFlagOptions,
+    IsFeatureEnabledOptions,
     OverrideFeatureFlagsOptions,
 } from './types'
 import { PostHogPersistence } from './posthog-persistence'
@@ -27,6 +28,7 @@ import {
     PERSISTENCE_FEATURE_FLAG_ERRORS,
     PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
     PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+    PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
     ENABLED_FEATURE_FLAGS,
     STORED_GROUP_PROPERTIES_KEY,
     STORED_PERSON_PROPERTIES_KEY,
@@ -38,10 +40,13 @@ import {
 } from './constants'
 
 import { isUndefined, isArray, isNull, getEnabledFromValue, getVariantFromValue, parsePayload } from '@posthog/core'
-import { createLogger } from './utils/logger'
-import { getTimezone } from './utils/event-utils'
-import { window } from './utils/globals'
-import { isStatusZeroFailureCircuitBreakerTripped, updateStatusZeroFailureCount } from './utils/request-utils'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { getTimezone } from '@posthog/browser-common/utils/event-utils'
+import { window } from '@posthog/browser-common/utils/globals'
+import {
+    isStatusZeroFailureCircuitBreakerTripped,
+    updateStatusZeroFailureCount,
+} from '@posthog/browser-common/utils/request-utils'
 
 const logger = createLogger('[FeatureFlags]')
 const forceDebugLogger = createLogger('[FeatureFlags]', { debugEnabled: true })
@@ -121,6 +126,8 @@ export const parseFlagsResponse = (
             persistence.register({
                 [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: featureFlags,
                 [ENABLED_FEATURE_FLAGS]: $enabled_feature_flags,
+                // Legacy responses never carry the gate — fail safe to full events.
+                [PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS]: false,
             })
         return
     }
@@ -173,6 +180,9 @@ export const parseFlagsResponse = (
             [ENABLED_FEATURE_FLAGS]: newFeatureFlags || {},
             [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: newFeatureFlagPayloads || {},
             [PERSISTENCE_FEATURE_FLAG_DETAILS]: newFeatureFlagDetails || {},
+            // Overwritten on every flags response: an absent field flips the gate off, so
+            // bootstrap/locally injected flags always fail safe to full events.
+            [PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS]: response.minimalFlagCalledEvents === true,
             ...(requestId ? { [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: requestId } : {}),
             ...(evaluatedAt ? { [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: evaluatedAt } : {}),
         })
@@ -652,6 +662,7 @@ export class PostHogFeatureFlags implements Extension {
             url,
             data,
             compression: this._config.disable_compression ? undefined : Compression.Base64,
+            timestampMode: 'body',
             timeout: this._config.feature_flag_request_timeout_ms,
             callback: (response) => {
                 let errorsLoading = true
@@ -984,6 +995,7 @@ export class PostHogFeatureFlags implements Extension {
             url: this._instance.requestRouter.endpointFor('flags', '/flags/?v=2'),
             data,
             compression: this._config.disable_compression ? undefined : Compression.Base64,
+            timestampMode: 'body',
             timeout: this._config.feature_flag_request_timeout_ms,
             callback: (response) => {
                 const flagPayloads = response.json?.['featureFlagPayloads']
@@ -1012,18 +1024,21 @@ export class PostHogFeatureFlags implements Extension {
      * @param {boolean} [options.fresh=false] If true, only returns values loaded from the server, not cached localStorage values.
      *                  Use this when you need to ensure the flag value reflects the current server state.
      *                  Returns undefined until the /flags endpoint responds.
-     * @returns {boolean | undefined} Whether the flag is enabled, or undefined if not found or not yet loaded.
+     * @param {boolean} [options.defaultValue] Value to return when the flag has no value, e.g. flags have not loaded yet or no flag with that key exists.
+     * @returns {boolean | undefined} Whether the flag is enabled; when the flag has no value, defaultValue if given, otherwise undefined.
      */
-    isFeatureEnabled(key: string, options: FeatureFlagOptions = {}): boolean | undefined {
+    isFeatureEnabled(key: string, options: IsFeatureEnabledOptions & { defaultValue: boolean }): boolean
+    isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined
+    isFeatureEnabled(key: string, options: IsFeatureEnabledOptions = {}): boolean | undefined {
         if (options.fresh && !this._flagsLoadedFromRemote) {
-            return undefined
+            return options.defaultValue
         }
         if (!this._hasLoadedFlags && !(this.getFlags() && this.getFlags().length > 0)) {
             logger.warn('isFeatureEnabled for key "' + key + FLAG_TIMEOUT_MSG)
-            return undefined
+            return options.defaultValue
         }
         const flagValue = this.getFeatureFlag(key, options)
-        return isUndefined(flagValue) ? undefined : !!flagValue
+        return isUndefined(flagValue) ? options.defaultValue : !!flagValue
     }
 
     addFeatureFlagsHandler(handler: FeatureFlagsCallback): void {
@@ -1242,6 +1257,7 @@ export class PostHogFeatureFlags implements Extension {
                     `/api/early_access_features/?token=${this._config.token}${stageParams}`
                 ),
                 method: 'GET',
+                timestampMode: 'query',
                 callback: (response) => {
                     if (!response.json) {
                         return

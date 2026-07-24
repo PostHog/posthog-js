@@ -1,3 +1,4 @@
+import packageInfo from '../../../package.json'
 import { assignableWindow } from '../../utils/globals'
 import type { PostHogConfig } from '../../types'
 import { setAllPersonProfilePropertiesAsPersonPropertiesForFlags } from '../../customizations'
@@ -38,6 +39,25 @@ describe('customizations entrypoints', () => {
         for (const name of EXPECTED_EXPORTS) {
             expect(typeof assignableWindow.posthogCustomizations?.[name]).toBe('function')
         }
+    })
+
+    it('initializes the shared config with the posthog-js identity', () => {
+        jest.isolateModules(() => {
+            const Config = jest.requireActual<typeof import('@posthog/browser-common/config')>(
+                '@posthog/browser-common/config'
+            ).default
+            Config.LIB_NAME = 'test-sentinel'
+            Config.LIB_VERSION = '0.0.0-test'
+            Config.JS_SDK_VERSION = '0.0.0-test'
+
+            jest.requireActual('../../entrypoints/customizations.es')
+
+            expect(Config).toMatchObject({
+                LIB_NAME: 'web',
+                LIB_VERSION: packageInfo.version,
+                JS_SDK_VERSION: packageInfo.version,
+            })
+        })
     })
 
     it('setAllPersonProfilePropertiesAsPersonPropertiesForFlags accepts the instance passed to `loaded`', () => {

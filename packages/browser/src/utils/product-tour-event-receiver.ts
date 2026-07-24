@@ -1,8 +1,8 @@
-import { PRODUCT_TOURS_ACTIVATED } from '../constants'
+import { PRODUCT_TOURS_ACTIVATED, PRODUCT_TOURS_ACTIVATED_SESSION } from '../constants'
 import { ProductTour, ProductTourEventName } from '../posthog-product-tours-types'
 import { PostHog } from '../posthog-core'
 import { ActivationOutcome, EventReceiver } from './event-receiver'
-import { createLogger } from './logger'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 import { localStore } from '../storage'
 import { TOUR_COMPLETED_KEY_PREFIX, TOUR_DISMISSED_KEY_PREFIX } from '../extensions/product-tours/constants'
 
@@ -15,6 +15,10 @@ export class ProductTourEventReceiver extends EventReceiver<ProductTour> {
 
     protected _getActivatedKey(): string {
         return PRODUCT_TOURS_ACTIVATED
+    }
+
+    protected _getActivatedSessionKey(): string {
+        return PRODUCT_TOURS_ACTIVATED_SESSION
     }
 
     protected _getShownEventName(): string {
@@ -35,6 +39,14 @@ export class ProductTourEventReceiver extends EventReceiver<ProductTour> {
 
     protected _setActivatedItems(eligibleItems: string[]): void {
         this._instance?.persistence?.register({ [PRODUCT_TOURS_ACTIVATED]: eligibleItems })
+    }
+
+    protected _setActivatedSession(sessionId: string): void {
+        this._instance?.persistence?.register({ [PRODUCT_TOURS_ACTIVATED_SESSION]: sessionId })
+    }
+
+    protected _clearActivatedSession(): void {
+        this._instance?.persistence?.unregister(PRODUCT_TOURS_ACTIVATED_SESSION)
     }
 
     protected _isItemPermanentlyIneligible(itemId?: string): boolean {

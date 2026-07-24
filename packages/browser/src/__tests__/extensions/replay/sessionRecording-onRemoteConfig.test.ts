@@ -7,15 +7,16 @@ import { SESSION_RECORDING_REMOTE_CONFIG } from '../../../constants'
 import { SessionIdManager } from '../../../sessionid'
 import { FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE } from '../../../extensions/replay/external/sessionrecording-utils'
 import { PostHog } from '../../../posthog-core'
-import { FlagsResponse, PostHogConfig, Property } from '../../../types'
-import { uuidv7 } from '../../../uuidv7'
+import { FlagsResponse, PostHogConfig, Property, RemoteConfig, RemoteConfigResult } from '../../../types'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { SessionRecording } from '../../../extensions/replay/session-recording'
-import { assignableWindow, window } from '../../../utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../../../utils/globals'
 import { RequestRouter } from '../../../utils/request-router'
 import { type fullSnapshotEvent, type metaEvent } from '../../../extensions/replay/types/rrweb-types'
 import Mock = jest.Mock
 import { ConsentManager } from '../../../consent'
-import { SimpleEventEmitter } from '../../../utils/simple-event-emitter'
+import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
 import { AndTriggerMatching, OrTriggerMatching } from '../../../extensions/replay/external/triggerMatching'
 import {
     LazyLoadedSessionRecording,
@@ -51,8 +52,8 @@ const createFullSnapshot = (event = {}): fullSnapshotEvent =>
         ...event,
     }) as fullSnapshotEvent
 
-function makeFlagsResponse(partialResponse: Partial<FlagsResponse>) {
-    return partialResponse as unknown as FlagsResponse
+function makeFlagsResponse(partialResponse: Partial<FlagsResponse>): RemoteConfigResult {
+    return { ok: true, config: partialResponse as unknown as RemoteConfig }
 }
 
 const originalLocation = window!.location

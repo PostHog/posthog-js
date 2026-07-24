@@ -2,15 +2,15 @@ import { PostHogPersistence } from './posthog-persistence'
 import { COOKIELESS_ALWAYS, DOM_EVENT_BEFOREUNLOAD, SESSION_ID } from './constants'
 import { sessionStore } from './storage'
 import { PostHogConfig, SessionIdChangedCallback } from './types'
-import { uuid7ToTimestampMs, uuidv7 } from './uuidv7'
-import { window } from './utils/globals'
+import { uuid7ToTimestampMs, uuidv7 } from '@posthog/browser-common/utils/uuidv7'
+import { window } from '@posthog/browser-common/utils/globals'
 
-import { createLogger } from './utils/logger'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 
 import { isArray, isNull, isUndefined, clampToRange, isPositiveNumber } from '@posthog/core'
 import { PostHog } from './posthog-core'
-import { addEventListener } from './utils'
-import { SimpleEventEmitter } from './utils/simple-event-emitter'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
+import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
 
 const logger = createLogger('[SessionId]')
 

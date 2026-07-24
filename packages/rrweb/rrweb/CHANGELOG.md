@@ -1,5 +1,22 @@
 # rrweb
 
+## 0.1.5
+
+### Patch Changes
+
+- [#4223](https://github.com/PostHog/posthog-js/pull/4223) [`045d79c`](https://github.com/PostHog/posthog-js/commit/045d79cf5ce9a5b58872b987bc5689a396321485) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Terminate the canvas encode worker when session recording stops. Previously stopping a recording with canvas capture enabled cancelled the capture loop but left the dedicated worker running; dedicated workers are not cleaned up by becoming unreachable, so every stop/start cycle leaked a worker thread along with its capture-resolution OffscreenCanvas (~8MB of pixel buffer at 1080p) and frame-fingerprint state.
+  (2026-07-23)
+
+## 0.1.4
+
+### Patch Changes
+
+- [#4209](https://github.com/PostHog/posthog-js/pull/4209) [`569fc62`](https://github.com/PostHog/posthog-js/commit/569fc62f418b3c5b7daed27e8fed38b208e9061c) Thanks [@posthog](https://github.com/apps/posthog)! - Session recording no longer emits an uncaught `TypeError: Illegal invocation` from the input observer's _synchronous_ native-setter call. The previous fix only guarded the deferred hooked setter; the synchronous `original.set.call(this, value)` still ran with a non-native `this` (a proxy, custom element, or cross-realm object) and threw inside the host page's own assignment. The recorder now probes the native getter — which fails the same internal-slot brand check as the setter — before forwarding: a non-native `this` is skipped, so the recorder no longer re-throws from its own frame, while genuine elements (including file inputs that legitimately throw on a programmatic value) keep their native behavior. The input event handler and `getInputType` are similarly guarded against reading native accessors on a non-native `this`.
+  (2026-07-22)
+- Updated dependencies [[`569fc62`](https://github.com/PostHog/posthog-js/commit/569fc62f418b3c5b7daed27e8fed38b208e9061c)]:
+    - @posthog/rrweb-snapshot@0.0.67
+    - @posthog/rrdom@0.0.67
+
 ## 0.1.3
 
 ### Patch Changes

@@ -429,6 +429,14 @@ function initInputObserver({
   function eventHandler(event: Event) {
     let target = getEventTarget(event) as HTMLElement | null;
     const userTriggered = event.isTrusted;
+    // Reading a native accessor (tagName/value/checked/type) on a non-native
+    // `this` — e.g. a proxy, custom element, or cross-realm object reaching us
+    // through the hooked setter's mock event — throws 'Illegal invocation'.
+    // Bail out unless the target is a genuine element in this document's realm.
+    const view = doc.defaultView;
+    if (target && view && !(target instanceof view.HTMLElement)) {
+      return;
+    }
     const tagName = target && target.tagName;
 
     /**

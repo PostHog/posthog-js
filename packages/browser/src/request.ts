@@ -1,13 +1,24 @@
-import { each, find } from './utils'
+import { each, find } from '@posthog/browser-common/utils/general-utils'
 import Config from './config'
 import { Compression, RequestWithOptions, RequestResponse } from './types'
-import { convertToURL, formDataToQuery, getQueryParam } from './utils/request-utils'
+import {
+    convertToURL,
+    formDataToQuery,
+    getQueryParam,
+    jsonStringify,
+} from '@posthog/browser-common/utils/request-utils'
 
-import { logger } from './utils/logger'
-import { AbortController, CompressionStream, fetch, navigator, XMLHttpRequest } from './utils/globals'
+import { logger } from '@posthog/browser-common/utils/logger'
+import {
+    AbortController,
+    CompressionStream,
+    fetch,
+    navigator,
+    XMLHttpRequest,
+} from '@posthog/browser-common/utils/globals'
 import { gzipSync, strToU8 } from 'fflate'
 
-import { _base64Encode } from './utils/encode-utils'
+import { _base64Encode } from '@posthog/browser-common/utils/encode-utils'
 import {
     gzipCompress,
     isArray,
@@ -16,8 +27,9 @@ import {
     isNativeAsyncGzipError,
     isNativeAsyncGzipReadError,
     isUndefined,
-    safeJsonStringify,
 } from '@posthog/core'
+
+export { jsonStringify }
 
 interface RequestWithEncodedBody extends RequestWithOptions {
     _encodedBody?: EncodedBody
@@ -88,23 +100,7 @@ export const extendURLParams = (url: string, params: Record<string, any>, replac
         updatedSearch.push(remaining)
     }
 
-    return `${baseUrl}?${updatedSearch.join('&')}`
-}
-
-export const jsonStringify = (data: any, space?: string | number): string => {
-    try {
-        // Fast path: convert BigInts to strings, since plain JSON.stringify throws on them.
-        // See https://github.com/PostHog/posthog-js/issues/1440.
-        return JSON.stringify(data, (_, value) => (typeof value === 'bigint' ? value.toString() : value), space)
-    } catch {
-        // A self-referential value — most commonly a DOM node that retains a React fiber pointing back
-        // at the element — makes JSON.stringify throw "Converting circular structure to JSON". With
-        // exception autocapture enabled that throw was recaptured as a new $exception, sometimes in a
-        // tight loop. Fall back to the shared circular-safe serializer (which also handles BigInt and
-        // Errors); it replaces only true cycles with "[Circular]", leaving shared-but-acyclic
-        // references intact. `space` formatting is dropped on this rare path.
-        return safeJsonStringify(data)
-    }
+    return updatedSearch.length > 0 ? `${baseUrl}?${updatedSearch.join('&')}` : baseUrl
 }
 
 const encodeToDataString = (data: string | Record<string, any>): string => {
@@ -443,10 +439,13 @@ const _sendBeacon = (options: RequestWithOptions) => {
 
         // rejected: over the page's shared ~64KiB in-flight keepalive quota
         // (https://fetch.spec.whatwg.org/#http-network-or-cache-fetch) — halve so what fits still delivers
-        if (isArray(options.data) && options.data.length > 1 && (estimatedSize ?? 0) > BEACON_SPLIT_FLOOR_BYTES) {
-            const mid = Math.ceil(options.data.length / 2)
-            _sendBeacon({ ...options, data: options.data.slice(0, mid) })
-            _sendBeacon({ ...options, data: options.data.slice(mid) })
+        const batch = isArray(options.data) ? options.data : options.data?.batch
+        if (isArray(batch) && batch.length > 1 && (estimatedSize ?? 0) > BEACON_SPLIT_FLOOR_BYTES) {
+            const mid = Math.ceil(batch.length / 2)
+            const splitData = (events: Record<string, any>[]): RequestWithOptions['data'] =>
+                isArray(options.data) ? events : { ...options.data, batch: events }
+            _sendBeacon({ ...options, data: splitData(batch.slice(0, mid)) })
+            _sendBeacon({ ...options, data: splitData(batch.slice(mid)) })
             return
         }
 
@@ -478,18 +477,35 @@ const isVersionlessEndpoint = (url: string): boolean => {
     return VERSIONLESS_ENDPOINTS.some((endpoint) => hasEndpointSuffix(path, endpoint))
 }
 
-const buildRequestURL = (url: string, compression?: RequestWithOptions['compression']): string => {
+const buildRequestURL = (
+    url: string,
+    method: RequestWithOptions['method'],
+    compression?: RequestWithOptions['compression'],
+    timestampMode?: RequestWithOptions['timestampMode']
+): string => {
     const versionlessEndpoint = isVersionlessEndpoint(url)
     const requestURL = versionlessEndpoint ? removeURLParam(url, 'ver') : url
+    const timestampParam = timestampMode === 'query' ? (method === 'POST' ? 'sent_at' : '_') : undefined
 
     return extendURLParams(
         compression === Compression.GZipJS ? removeURLParam(requestURL, 'compression') : requestURL,
         {
-            _: new Date().getTime().toString(),
+            ...(timestampParam ? { [timestampParam]: Date.now().toString() } : {}),
             ...(versionlessEndpoint ? {} : { ver: Config.JS_SDK_VERSION }),
             ...(compression === Compression.GZipJS ? {} : { compression }),
         }
     )
+}
+
+const addSentAtToCaptureBody = (data: NonNullable<RequestWithOptions['data']>): Record<string, any> => {
+    const batch = isArray(data) ? data : [data]
+    const firstEvent = batch[0]
+
+    return {
+        api_key: firstEvent?.properties?.token ?? firstEvent?.token,
+        batch,
+        sent_at: new Date().toISOString(),
+    }
 }
 
 const AVAILABLE_TRANSPORTS: {
@@ -533,7 +549,15 @@ export const request = (_options: RequestWithOptions) => {
         options.compression = Compression.Base64
     }
 
-    options.url = buildRequestURL(options.url, options.compression)
+    if (options.method === 'POST' && options.data) {
+        if (options.timestampMode === 'capture-body') {
+            options.data = addSentAtToCaptureBody(options.data)
+        } else if (options.timestampMode === 'body' && !isArray(options.data)) {
+            options.data = { ...options.data, sent_at: new Date().toISOString() }
+        }
+    }
+
+    options.url = buildRequestURL(options.url, options.method, options.compression, options.timestampMode)
 
     const availableTransports = AVAILABLE_TRANSPORTS.filter(
         (t) => !options.disableTransport || !t.transport || !options.disableTransport.includes(t.transport)
@@ -567,7 +591,7 @@ export const request = (_options: RequestWithOptions) => {
                     transportMethod({
                         ...options,
                         compression: undefined,
-                        url: buildRequestURL(_options.url, undefined),
+                        url: buildRequestURL(_options.url, _options.method, undefined, _options.timestampMode),
                     })
                     return
                 }

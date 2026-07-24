@@ -3,6 +3,7 @@ import {
     type customEvent,
     EventType,
     eventWithTime,
+    type fullSnapshotEvent,
     IncrementalSource,
     type listenerHandler,
     RecordPlugin,
@@ -29,10 +30,11 @@ import {
 } from './sessionrecording-utils'
 export { SEVEN_MEGABYTES, splitBuffer } from './sessionrecording-utils'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
-import { assignableWindow, LazyLoadedSessionRecordingInterface, window, document } from '../../../utils/globals'
-import { addEventListener } from '../../../utils'
+import { window, document } from '@posthog/browser-common/utils/globals'
+import { assignableWindow, LazyLoadedSessionRecordingInterface } from '../../../utils/globals'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { MutationThrottler } from './mutation-throttler'
-import { createLogger } from '../../../utils/logger'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 import {
     clampToRange,
     gzipCompress,
@@ -74,7 +76,7 @@ import {
     SessionRecordingPersistedConfig,
     SessionStartReason,
 } from '../../../types'
-import { isLocalhost, maskQueryParams } from '../../../utils/request-utils'
+import { isLocalhost, maskQueryParams } from '@posthog/browser-common/utils/request-utils'
 import Config from '../../../config'
 import { FlushedSizeTracker } from './flushed-size-tracker'
 import {
@@ -84,7 +86,7 @@ import {
     RecordingStrategyContext,
     decodeSamplingDecision,
 } from './recording-strategies'
-import { MASKED, PERSONAL_DATA_CAMPAIGN_PARAMS } from '../../../utils/event-utils'
+import { MASKED, PERSONAL_DATA_CAMPAIGN_PARAMS } from '@posthog/browser-common/utils/event-utils'
 
 const BASE_ENDPOINT = '/s/'
 const DEFAULT_CANVAS_QUALITY = 0.4
@@ -101,6 +103,8 @@ const ONE_KB = 1024
 const ONE_MINUTE = 1000 * 60
 const FIVE_MINUTES = ONE_MINUTE * 5
 const ONE_HOUR = ONE_MINUTE * 60
+const MIN_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS = 1000
+const MAX_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS = ONE_HOUR
 
 /**
  * Extracts the network_timing value from a capturePerformance config.
@@ -307,18 +311,24 @@ function compressedResult(event: compressedEventWithTime): CompressedEventResult
     return { event, size: estimateCompressedEventSize(event) }
 }
 
-function buildCompressedFullSnapshotEvent(event: eventWithTime, data: string): compressedEventWithTime {
+function buildCompressedFullSnapshotEvent(
+    event: fullSnapshotEvent & { timestamp: number; delay?: number },
+    data: string
+): compressedEventWithTime {
     return {
         ...event,
         data,
-        cv: '2024-10' as const,
-    } as compressedEventWithTime
+        cv: '2024-10',
+    }
 }
 
 function buildCompressedIncrementalEvent(
     event: eventWithTime,
     fields: CompressedMutationFields | CompressedStyleFields
 ): compressedEventWithTime {
+    // reshapes rrweb incremental `data` into its compressed string-field variant — the
+    // compiler cannot relate the incoming union member to the matching compressed member
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
     return {
         ...event,
         cv: '2024-10' as const,
@@ -468,6 +478,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _rrwebError = false
     private _rrwebStartAttempted = false
     private _maxDepthExceeded = false
+    // only warn once per recorder instance that client-side masking is shadowing the project setting
+    private _hasWarnedClientMaskingOverride = false
 
     private _linkedFlagMatching: LinkedFlagMatching
     private _urlTriggerMatching: URLTriggerMatching
@@ -574,6 +586,54 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                   blockSelector,
               }
             : undefined
+    }
+
+    /**
+     * Client-side masking config in `posthog.init` intentionally wins over the "Privacy and masking"
+     * project setting (the remote config). That precedence is by-design, but silent: a developer who
+     * sets e.g. `maskTextSelector: '*'` locally can be surprised that their dashboard setting has no
+     * effect. Warn (once per recorder) when the two diverge so the override is self-explaining.
+     */
+    private _warnIfClientMaskingShadowsServer(): void {
+        if (this._hasWarnedClientMaskingOverride) {
+            return
+        }
+
+        const masking_server_side = this._remoteConfig?.masking
+        if (isNullish(masking_server_side)) {
+            return
+        }
+
+        const clientConfig = this._instance.config.session_recording
+        const divergentFields = (['maskAllInputs', 'maskTextSelector', 'blockSelector'] as const).filter((field) => {
+            const clientValue = clientConfig?.[field]
+            const serverValue = masking_server_side[field]
+            // a client value that is set and disagrees with the project's value shadows it — an unset
+            // server value counts as a divergence too, since the client is then masking something the
+            // project setting did not ask for (e.g. maskTextSelector: '*' vs an unset project selector)
+            return !isUndefined(clientValue) && clientValue !== serverValue
+        })
+
+        if (divergentFields.length === 0) {
+            return
+        }
+
+        this._hasWarnedClientMaskingOverride = true
+        logger.warn(
+            'Session recording masking is configured both in `posthog.init` and in your project settings, and they differ. ' +
+                'The `session_recording` options in `posthog.init` take precedence, so the project ("Privacy and masking") setting is ignored for: ' +
+                divergentFields.join(', ') +
+                '. Remove these masking options from `posthog.init` to use the project setting instead. ' +
+                'See https://posthog.com/docs/session-replay/privacy',
+            {
+                client: {
+                    maskAllInputs: clientConfig?.maskAllInputs,
+                    maskTextSelector: clientConfig?.maskTextSelector,
+                    blockSelector: clientConfig?.blockSelector,
+                },
+                project: masking_server_side,
+            }
+        )
     }
 
     // (0,1] fraction of the canvas display size to capture frames at, from
@@ -777,7 +837,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private get _fullSnapshotIntervalMillis(): number {
         if (this._strategy?.hasPendingTriggers(this.sessionId) && !['sampled', 'active'].includes(this.status)) {
-            return ONE_MINUTE
+            const configuredInterval = this._instance.config.session_recording?.trigger_pending_buffer_interval_millis
+            return isNumber(configuredInterval) &&
+                Number.isFinite(configuredInterval) &&
+                configuredInterval >= MIN_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS &&
+                configuredInterval <= MAX_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS
+                ? configuredInterval
+                : ONE_MINUTE
         }
 
         return this._instance.config.session_recording?.full_snapshot_interval_millis ?? FIVE_MINUTES
@@ -800,6 +866,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._fullSnapshotTimer = setInterval(() => {
             this._tryTakeFullSnapshot()
         }, interval)
+    }
+
+    private _onTriggerActivated(): void {
+        if (this._urlTriggerMatching.urlBlocked || !['sampled', 'active'].includes(this.status)) {
+            return
+        }
+        this._scheduleFullSnapshot()
     }
 
     private _pauseRecording() {
@@ -862,6 +935,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             })
 
             this._strategy?.updateActiveTriggers(this.sessionId)
+            this._onTriggerActivated()
 
             this._flushBuffer()
             this._reportStarted((triggerType + '_trigger_matched') as SessionStartReason, {
@@ -966,7 +1040,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 this._instance,
                 this._urlTriggerMatching,
                 this._reportStarted.bind(this),
-                this._tryAddCustomEvent.bind(this)
+                this._tryAddCustomEvent.bind(this),
+                this._onTriggerActivated.bind(this)
             )
         } else {
             this._strategy = new V1RecordingStrategy(
@@ -975,7 +1050,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 this._eventTriggerMatching,
                 this._linkedFlagMatching,
                 this._reportStarted.bind(this),
-                this._tryTakeFullSnapshot.bind(this)
+                this._tryTakeFullSnapshot.bind(this),
+                this._onTriggerActivated.bind(this)
             )
         }
 
@@ -1132,9 +1208,16 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         this._clearConditionalRecordingPersistence()
 
-        // When rrweb isn't running _updateWindowAndSessionIds can't drive the restart,
-        // so we restart here. Otherwise it handles the restart after this callback returns.
-        if (this._isIdle === true || !this.isStarted) {
+        // The $session_id_change emit above can synchronously re-enter
+        // _updateWindowAndSessionIds (rrweb delivers addCustomEvent through emit), which
+        // adopts the new ids and restarts the recorder itself. Restart here only when the
+        // ids are still stale — confirmed idle, stopped, or states where that emit never
+        // reached the session check (blocked URL, queued emit) — so a rotation restarts
+        // exactly once.
+        if (
+            (this._isIdle !== false || !this.isStarted) &&
+            (this._sessionId !== sessionId || this._windowId !== windowId)
+        ) {
             this._isIdle = 'unknown'
             this.stop()
             this.start('session_id_changed')
@@ -1752,8 +1835,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         if (
             sessionChanged ||
-            // we never want to flush a healthy same-session buffer while idle
-            (!this._isIdle &&
+            // we never want to flush a healthy same-session buffer while confirmed idle, but
+            // 'unknown' still captures so its buffer must respect the size cap or it grows unbounded
+            (this._isIdle !== true &&
                 this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE)
         ) {
             this._buffer = this._flushBuffer()
@@ -1770,7 +1854,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._buffer.data.push(properties.$snapshot_data)
         this._buffer.sizes.push(properties.$snapshot_bytes)
 
-        if (!this._flushBufferTimer && !this._isIdle) {
+        // Schedule the flush unless confirmed idle: a tab that never sees user interaction stays
+        // 'unknown' indefinitely, and without a timer its captured events (including the initial
+        // full snapshot after a session rotation) would never ship until the next rotation or unload.
+        if (!this._flushBufferTimer && this._isIdle !== true) {
             this._flushBufferTimer = setTimeout(() => {
                 this._flushBuffer()
             }, RECORDING_BUFFER_TIMEOUT)
@@ -1926,7 +2013,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             }
         }
 
-        if (this._isIdle) {
+        // Only bail on confirmed idle: while 'unknown' the recorder still captures, so it must
+        // also keep checking for session changes or its events are stamped with a stale session id.
+        if (this._isIdle === true) {
             return
         }
 
@@ -2025,6 +2114,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             sessionRecordingOptions.maskTextSelector = this._masking.maskTextSelector ?? undefined
             sessionRecordingOptions.blockSelector = this._masking.blockSelector ?? undefined
         }
+
+        this._warnIfClientMaskingShadowsServer()
 
         const rrwebRecord = getRRWebRecord()
         if (!rrwebRecord) {

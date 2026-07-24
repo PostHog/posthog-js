@@ -11,3 +11,18 @@ export interface Disposable {
      */
     dispose(): void | Promise<void>
 }
+
+/** Invokes teardown at most once and returns its first result to every caller. */
+export function createDisposable(dispose: () => void | Promise<void>): Disposable {
+    let active = true
+    let result: void | Promise<void>
+    return {
+        dispose: () => {
+            if (active) {
+                active = false
+                result = dispose()
+            }
+            return result
+        },
+    }
+}
