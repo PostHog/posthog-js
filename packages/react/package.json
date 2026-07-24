@@ -48,8 +48,6 @@
         "@babel/preset-react": "catalog:",
         "@babel/preset-typescript": "catalog:",
         "@posthog-tooling/rollup-utils": "workspace:*",
-        "@rollup/plugin-inject": "^4.0.2",
-        "@rollup/plugin-replace": "^2.3.4",
         "@testing-library/dom": "catalog:",
         "@testing-library/jest-dom": "catalog:",
         "@testing-library/react": "catalog:",
@@ -62,7 +60,7 @@
         "react": "catalog:",
         "react-dom": "catalog:",
         "react-test-renderer": "catalog:",
-        "rollup": "^2.35.1",
+        "rollup": "catalog:",
         "rollup-plugin-copy": "^3.5.0",
         "tslib": "catalog:",
         "typescript": "catalog:"
