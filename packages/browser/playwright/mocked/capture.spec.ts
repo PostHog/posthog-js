@@ -65,8 +65,11 @@ test.describe('event capture', () => {
         // see e.g. https://github.com/microsoft/playwright/issues/6479
         if (browserName !== 'webkit') {
             const payload = getGzipEncodedPayloady(captureRequest)
-            expect(payload.event).toEqual('$pageview')
-            expect(Object.keys(payload.properties).length).toBeGreaterThan(0)
+            expect(payload.api_key).toEqual('test token')
+            expect(payload.sent_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
+            expect(payload.batch).toHaveLength(1)
+            expect(payload.batch[0].event).toEqual('$pageview')
+            expect(Object.keys(payload.batch[0].properties).length).toBeGreaterThan(0)
         }
     })
 

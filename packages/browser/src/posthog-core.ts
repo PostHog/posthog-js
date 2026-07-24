@@ -1506,12 +1506,14 @@ export class PostHog implements PostHogInterface {
 
         this._internalEventEmitter.emit('eventCaptured', data)
 
+        const url = options?._url ?? this.requestRouter.endpointFor('api', this.analyticsDefaultEndpoint)
+        const isSessionRecording = options?._batchKey === 'recordings' || /\/s\/(?:\?|$)/.test(url)
         const requestOptions: QueuedRequestWithOptions = {
             method: 'POST',
-            url: options?._url ?? this.requestRouter.endpointFor('api', this.analyticsDefaultEndpoint),
+            url,
             data,
             compression: 'best-available',
-            timestampMode: 'query',
+            timestampMode: isSessionRecording ? 'query' : 'capture-body',
             batchKey: options?._batchKey,
             transport: options?.transport,
         }

@@ -280,6 +280,8 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         })
 
         // an idle rotation adopts the new session id before any user interaction clears the idle state
+        // (the session manager must agree, or the recorder re-syncs the stale id from it on the next event)
+        posthog.sessionManager['_setSessionId']('rotated-session-id', 123, 123)
         lazyLoadedSessionRecording['_isIdle'] = 'unknown'
         lazyLoadedSessionRecording['_sessionId'] = 'rotated-session-id'
 
@@ -310,6 +312,7 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         const originalGetStatus = strategy.getStatus.bind(strategy)
         strategy.getStatus = () => 'buffering'
 
+        posthog.sessionManager['_setSessionId']('rotated-session-id', 123, 123)
         lazyLoadedSessionRecording['_isIdle'] = 'unknown'
         lazyLoadedSessionRecording['_sessionId'] = 'rotated-session-id'
         emit(createFullSnapshot({ content: 'post-rotation snapshot' }))
@@ -331,7 +334,7 @@ describe('LazyLoadedSessionRecording compression paths', () => {
     })
 
     it('requests a full snapshot when an incremental ships for a rotated session without one', async () => {
-        const { emit, lazyLoadedSessionRecording } = await setupLazyLoadedSessionRecording({
+        const { emit, posthog, lazyLoadedSessionRecording } = await setupLazyLoadedSessionRecording({
             gzipSupported: true,
         })
         const { assignableWindow } = require('../../../utils/globals')
@@ -343,6 +346,7 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         expect(takeFullSnapshot).not.toHaveBeenCalled()
 
         // an idle rotation adopts the new session id whose full snapshot never ships (the rotation bug), so the next incremental must trigger a healing snapshot
+        posthog.sessionManager['_setSessionId']('rotated-session-id', 123, 123)
         lazyLoadedSessionRecording['_isIdle'] = 'unknown'
         lazyLoadedSessionRecording['_sessionId'] = 'rotated-session-id'
         emit(createIncrementalSnapshot(100))

@@ -231,8 +231,13 @@ export interface RequestWithOptions {
     noRetries?: boolean
     disableTransport?: ('XHR' | 'fetch' | 'sendBeacon')[]
     compression?: Compression | 'best-available'
-    /** Include the request dispatch time in a body field or query string. */
-    timestampMode?: 'body' | 'query'
+    /**
+     * Controls where the request dispatch time is sent.
+     * - `body` adds ISO `sent_at` to the existing request object (for example, flags).
+     * - `capture-body` wraps events in `{ api_key, batch, sent_at }` with an ISO timestamp.
+     * - `query` adds numeric `sent_at` to POST requests or cache-busting `_` to GET requests.
+     */
+    timestampMode?: 'body' | 'capture-body' | 'query'
     fetchOptions?: {
         cache?: RequestInit['cache']
         next?: NextOptions

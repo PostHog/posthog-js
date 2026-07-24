@@ -203,29 +203,35 @@ describe('request', () => {
         })
 
         it.each([
-            ['/e/', 'https://any.posthog-instance.com/e/?sent_at=1700000000000'],
-            ['/i/v0/e/', 'https://any.posthog-instance.com/i/v0/e/?sent_at=1700000000000'],
-            ['/batch/', 'https://any.posthog-instance.com/batch/?sent_at=1700000000000'],
-            ['/capture/', 'https://any.posthog-instance.com/capture/?sent_at=1700000000000'],
-            ['/track/', 'https://any.posthog-instance.com/track/?sent_at=1700000000000'],
-            ['/engage/', 'https://any.posthog-instance.com/engage/?sent_at=1700000000000'],
-        ])('adds sent_at to the query without changing the capture body for %s', (path, expectedUrl) => {
+            ['/e/', 'https://any.posthog-instance.com/e/'],
+            ['/i/v0/e/', 'https://any.posthog-instance.com/i/v0/e/'],
+            ['/batch/', 'https://any.posthog-instance.com/batch/'],
+            ['/capture/', 'https://any.posthog-instance.com/capture/'],
+            ['/track/', 'https://any.posthog-instance.com/track/'],
+            ['/engage/', 'https://any.posthog-instance.com/engage/'],
+        ])('adds sent_at to the capture body for analytics endpoint %s', (path, expectedUrl) => {
             const event = { event: 'test event', properties: { token: 'testtoken' } }
             request(
                 createRequest({
                     url: `https://any.posthog-instance.com${path}`,
                     method: 'POST',
                     data: event,
-                    timestampMode: 'query',
+                    timestampMode: 'capture-body',
                 })
             )
 
             const [requestedUrl, requestOptions] = mockedFetch.mock.calls[0]
             expect(requestedUrl).toBe(expectedUrl)
-            expect(JSON.parse(requestOptions.body)).toEqual(event)
+            expect(requestedUrl).not.toContain('sent_at=')
+            expect(requestedUrl).not.toContain('_=')
+            expect(JSON.parse(requestOptions.body)).toEqual({
+                api_key: 'testtoken',
+                batch: [event],
+                sent_at: '2023-11-14T22:13:20.000Z',
+            })
         })
 
-        it('keeps batched analytics bodies unchanged and adds sent_at to the query', () => {
+        it('puts batched analytics events in one sent_at body envelope', () => {
             const events = [
                 { event: 'first event', properties: { token: 'testtoken' } },
                 { event: 'second event', properties: { token: 'testtoken' } },
@@ -235,26 +241,49 @@ describe('request', () => {
                     url: 'https://any.posthog-instance.com/e/',
                     method: 'POST',
                     data: events,
-                    timestampMode: 'query',
+                    timestampMode: 'capture-body',
                 })
             )
 
-            expect(mockedFetch.mock.calls[0][0]).toBe('https://any.posthog-instance.com/e/?sent_at=1700000000000')
-            expect(JSON.parse(mockedFetch.mock.calls[0][1].body)).toEqual(events)
+            expect(JSON.parse(mockedFetch.mock.calls[0][1].body)).toEqual({
+                api_key: 'testtoken',
+                batch: events,
+                sent_at: '2023-11-14T22:13:20.000Z',
+            })
         })
 
-        it('adds sent_at to the query for session recording requests', () => {
+        it('uses a top-level event token in the capture body envelope', () => {
+            const event = { event: 'test event', token: 'testtoken' }
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/e/',
+                    method: 'POST',
+                    data: event,
+                    timestampMode: 'capture-body',
+                })
+            )
+
+            expect(JSON.parse(mockedFetch.mock.calls[0][1].body)).toEqual({
+                api_key: 'testtoken',
+                batch: [event],
+                sent_at: '2023-11-14T22:13:20.000Z',
+            })
+        })
+
+        it('keeps session recording bodies unchanged and adds sent_at to the query', () => {
+            const recording = { event: '$snapshot' }
             request(
                 createRequest({
                     url: 'https://any.posthog-instance.com/ingest/s/',
                     method: 'POST',
-                    data: { event: '$snapshot' },
+                    data: recording,
                     timestampMode: 'query',
                 })
             )
 
-            const requestedUrl = mockedFetch.mock.calls[0][0]
+            const [requestedUrl, requestOptions] = mockedFetch.mock.calls[0]
             expect(requestedUrl).toBe('https://any.posthog-instance.com/ingest/s/?sent_at=1700000000000')
+            expect(JSON.parse(requestOptions.body)).toEqual(recording)
         })
 
         it('preserves caller-provided query parameters', () => {
@@ -263,12 +292,12 @@ describe('request', () => {
                     url: 'https://any.posthog-instance.com/e/?ver=1.23.45&foo=bar',
                     method: 'POST',
                     data: { event: 'test event', properties: { token: 'testtoken' } },
-                    timestampMode: 'query',
+                    timestampMode: 'capture-body',
                 })
             )
 
             const requestedUrl = mockedFetch.mock.calls[0][0]
-            expect(requestedUrl).toBe('https://any.posthog-instance.com/e/?ver=1.23.45&foo=bar&sent_at=1700000000000')
+            expect(requestedUrl).toBe('https://any.posthog-instance.com/e/?ver=1.23.45&foo=bar')
         })
 
         it('adds sent_at to the body of POST feature flag requests', () => {
@@ -1010,7 +1039,12 @@ describe('request', () => {
             })
 
             describe('quota rejection (sendBeacon returns false)', () => {
-                const bigEvent = (i: number) => ({ event: 'big', i, payload: 'x'.repeat(8 * 1024) })
+                const bigEvent = (i: number) => ({
+                    event: 'big',
+                    i,
+                    payload: 'x'.repeat(8 * 1024),
+                    properties: { token: 'testtoken' },
+                })
                 let warnSpy: jest.SpyInstance
 
                 beforeEach(() => {
@@ -1024,15 +1058,14 @@ describe('request', () => {
                     warnSpy.mockRestore()
                 })
 
-                it('splits a rejected over-quota batch without dropping sent_at', () => {
+                it('splits a rejected sent_at body envelope in half and re-sends each piece', async () => {
                     mockedNavigator!.sendBeacon.mockReturnValueOnce(false).mockReturnValue(true)
 
                     request(
                         createRequest({
-                            url: 'https://any.posthog-instance.com/e/',
                             method: 'POST',
                             data: [bigEvent(1), bigEvent(2), bigEvent(3), bigEvent(4)],
-                            timestampMode: 'query',
+                            timestampMode: 'capture-body',
                         })
                     )
 
@@ -1042,10 +1075,30 @@ describe('request', () => {
                     )
                     expect(firstHalf).toBeLessThan(full)
                     expect(secondHalf).toBeLessThan(full)
-                    expect(mockedNavigator?.sendBeacon.mock.calls.map((call) => call[0])).toEqual([
-                        'https://any.posthog-instance.com/e/?sent_at=1700000000000&compression=base64',
-                        'https://any.posthog-instance.com/e/?sent_at=1700000000000&compression=base64',
-                        'https://any.posthog-instance.com/e/?sent_at=1700000000000&compression=base64',
+
+                    const splitBodies = await Promise.all(
+                        mockedNavigator!.sendBeacon.mock.calls.slice(1).map(async (call) => {
+                            const text = await new Promise<string>((resolve) => {
+                                const reader = new FileReader()
+                                reader.onload = () => resolve(reader.result as string)
+                                reader.readAsText(call[1] as Blob)
+                            })
+                            return JSON.parse(
+                                Buffer.from(decodeURIComponent(text.slice('data='.length)), 'base64').toString()
+                            )
+                        })
+                    )
+                    expect(splitBodies).toEqual([
+                        {
+                            api_key: 'testtoken',
+                            batch: [bigEvent(1), bigEvent(2)],
+                            sent_at: '2023-11-14T22:13:20.000Z',
+                        },
+                        {
+                            api_key: 'testtoken',
+                            batch: [bigEvent(3), bigEvent(4)],
+                            sent_at: '2023-11-14T22:13:20.000Z',
+                        },
                     ])
                     expect(mockedFetch).not.toHaveBeenCalled()
                 })
@@ -1190,26 +1243,31 @@ describe('request', () => {
             isolatedCompression = (await import('../types')).Compression
         })
 
-        it('retries uncompressed without dropping sent_at after NotReadableError', async () => {
+        it('retries uncompressed without dropping the capture envelope after NotReadableError', async () => {
             mockedIsolatedGzipCompress.mockRejectedValueOnce({ name: 'NotReadableError' })
+            const event = { event: 'test event', properties: { token: 'testtoken' } }
 
             isolatedRequestModule.request({
-                url: 'https://any.posthog-instance.com',
-                data: { foo: 'bar' },
+                url: 'https://any.posthog-instance.com/e/',
+                data: event,
                 headers: {},
                 callback: jest.fn(),
                 transport: 'fetch',
                 method: 'POST',
                 compression: isolatedCompression.GZipJS,
-                timestampMode: 'query',
+                timestampMode: 'capture-body',
             })
 
             await flushPromises()
 
             expect(mockedIsolatedGzipCompress).toHaveBeenCalledTimes(1)
             expect(mockedIsolatedFetch).toHaveBeenCalledTimes(1)
-            expect(mockedIsolatedFetch.mock.calls[0][0]).toMatch(/^https:\/\/any\.posthog-instance\.com\?sent_at=\d+$/)
-            expect(mockedIsolatedFetch.mock.calls[0][1].body).toBe('{"foo":"bar"}')
+            expect(mockedIsolatedFetch.mock.calls[0][0]).toBe('https://any.posthog-instance.com/e/')
+            expect(JSON.parse(mockedIsolatedFetch.mock.calls[0][1].body)).toEqual({
+                api_key: 'testtoken',
+                batch: [event],
+                sent_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
+            })
 
             mockedIsolatedFetch.mockClear()
 

@@ -1,5 +1,14 @@
 # posthog-node
 
+## 5.46.1
+
+### Patch Changes
+
+- [#4234](https://github.com/PostHog/posthog-js/pull/4234) [`6c8fde0`](https://github.com/PostHog/posthog-js/commit/6c8fde02691d7f4aae257b6d7b0753e72d946ccb) Thanks [@hpouillot](https://github.com/hpouillot)! - Normalize V8 Promise combinator stack frames so input indexes are not treated as source filenames.
+  (2026-07-23)
+- Updated dependencies [[`6c8fde0`](https://github.com/PostHog/posthog-js/commit/6c8fde02691d7f4aae257b6d7b0753e72d946ccb)]:
+  - @posthog/core@1.45.1
+
 ## 5.46.0
 
 ### Minor Changes

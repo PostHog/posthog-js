@@ -8,6 +8,9 @@ import { UNKNOWN_FUNCTION } from './base'
 /** Node Stack line parser */
 const FILENAME_MATCH = /^\s*[-]{4,}$/
 const FULL_MATCH = /at (?:async )?(?:(.+?)\s+\()?(?:(.+):(\d+):(\d+)?|([^)]+))\)?/
+const PROMISE_COMBINATOR = /^Promise\.(?:all|any)$/
+const PROMISE_INDEX = /^index \d+$/
+const PROMISE_FRAME_FILENAME = 'node:internal/promise'
 
 export const nodeStackLineParser: StackLineParser = (line: string, platform: Platform) => {
   const lineMatch = line.match(FULL_MATCH)
@@ -64,6 +67,11 @@ export const nodeStackLineParser: StackLineParser = (line: string, platform: Pla
 
     if (!filename && lineMatch[5] && !isNative) {
       filename = lineMatch[5]
+    }
+
+    // V8's Promise index identifies the input promise rather than a source file.
+    if (PROMISE_COMBINATOR.test(functionName) && PROMISE_INDEX.test(filename || '')) {
+      filename = PROMISE_FRAME_FILENAME
     }
 
     return {
