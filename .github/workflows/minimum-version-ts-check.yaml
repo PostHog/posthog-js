@@ -32,19 +32,29 @@ jobs:
 
       - uses: ./.github/actions/setup
         with:
-          node_version: ${{ matrix.node-version }}
+          node_version: 24
           build: true
 
-      # once its built we can see if we can use it on the forced version
-      - name: Override TypeScript version
+      - name: Prepare consumer fixture
+        run: |
+          cp -R .github/fixtures/minimum-version-ts "${RUNNER_TEMP}/minimum-version-ts"
+          PACKAGE_DEST="${RUNNER_TEMP}/minimum-version-ts" pnpm --filter=posthog-js package
+
+      - uses: ./.github/actions/setup
+        with:
+          node_version: ${{ matrix.node-version }}
+          install: false
+          build: false
+
+      - name: Install TypeScript version
         env:
           TS_VERSION: ${{ matrix.typescript-version.version }}
-        run: yq -i '.catalog.typescript = strenv(TS_VERSION)' pnpm-workspace.yaml && pnpm install --no-frozen-lockfile
+        run: pnpm add --save-dev --save-exact "typescript@${TS_VERSION}"
+        working-directory: ${{ runner.temp }}/minimum-version-ts
 
       - name: Test TypeScript Import
         run: |
-          rm ci-ts-file.js || true
           pnpm exec tsc --version
           pnpm exec tsc ci-ts-file.ts --strict --target es2017 --skipLibCheck ${{ matrix.typescript-version.extra-flags }}
           node ci-ts-file.js
-        working-directory: packages/browser
+        working-directory: ${{ runner.temp }}/minimum-version-ts
