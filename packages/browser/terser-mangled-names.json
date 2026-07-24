@@ -342,6 +342,7 @@
         "_isWidgetEnabled",
         "_isWidgetOpen",
         "_isWidgetRendered",
+        "_isWidgetSurveyOpen",
         "_is_persistence_disabled",
         "_is_supported",
         "_keepaliveDisabled",

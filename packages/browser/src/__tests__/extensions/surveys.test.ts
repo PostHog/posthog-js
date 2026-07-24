@@ -7,7 +7,7 @@ import {
     useHideSurveyOnURLChange,
     usePopupVisibility,
 } from '../../extensions/surveys'
-import { retrieveSurveyShadow } from '../../extensions/surveys/surveys-extension-utils'
+import { getSurveyContainerClass, retrieveSurveyShadow } from '../../extensions/surveys/surveys-extension-utils'
 import {
     Survey,
     SurveyQuestionBranchingType,
@@ -575,6 +575,55 @@ describe('SurveyManager', () => {
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
         expect(manageWidgetSelectorListenerSpy).toHaveBeenCalledWith(mockSurvey, '.my-selector')
+    })
+
+    it('does not tear down an open selector-widget survey when its trigger element unmounts (issue #2036)', async () => {
+        const survey = {
+            id: 'openSelectorWidgetSurvey',
+            name: 'Open Selector Widget Survey',
+            description: 'A selector widget survey',
+            type: SurveyType.Widget,
+            questions: [{ id: 'q1', question: 'How are we doing?', type: SurveyQuestionType.Open }],
+            appearance: { widgetType: SurveyWidgetType.Selector, widgetSelector: '.my-selector' },
+            conditions: null,
+            start_date: '2021-01-01T00:00:00.000Z',
+            end_date: null,
+            current_iteration: null,
+            current_iteration_start_date: null,
+            feature_flag_keys: [],
+            linked_flag_key: null,
+            targeting_flag_key: null,
+            internal_targeting_flag_key: null,
+        } as unknown as Survey
+
+        mockPostHog.surveys.getSurveys = jest.fn().mockImplementation((callback) => callback([survey]))
+        document.body.innerHTML = '<div class="my-selector">Click Me</div>'
+
+        const surveyPopup = () =>
+            document.querySelector(getSurveyContainerClass(survey, true))?.shadowRoot?.querySelector('.ph-survey') ??
+            null
+
+        // attaches the click listener and renders the feedback widget into the shadow container
+        await act(async () => {
+            surveyManager.callSurveysAndEvaluateDisplayLogic()
+        })
+
+        // open the survey, as if the trigger element was clicked
+        await act(async () => {
+            window.dispatchEvent(new CustomEvent('ph:show_survey_widget', { detail: { surveyId: survey.id } }))
+        })
+        expect(surveyPopup()).not.toBeNull()
+
+        // the trigger element is unmounted (e.g. a dropdown that hosts it closes) while the survey is open
+        document.querySelector('.my-selector')!.remove()
+
+        // the display poll runs again and finds the trigger gone
+        await act(async () => {
+            surveyManager.callSurveysAndEvaluateDisplayLogic()
+        })
+
+        // the open survey must still be in the DOM, not abruptly removed
+        expect(surveyPopup()).not.toBeNull()
     })
 
     test('callSurveysAndEvaluateDisplayLogic should not call surveys in focus', () => {
