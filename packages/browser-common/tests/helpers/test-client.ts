@@ -8,12 +8,12 @@ import type {
     CapturedEventInfo,
     CoreExtension,
     NewSessionInfo,
-    RemoteConfig,
     SessionContext,
 } from '../../src/core-extension'
 import { createDisposable, type Disposable } from '../../src/disposable'
 import type { KeyValueStore } from '../../src/persistence'
 import { Publisher } from '../../src/pubsub'
+import type { RemoteConfig } from '../../src/types/remote-config'
 import type { ExtensionToken } from '../../src/token'
 
 export interface TestCapturedEvent {
