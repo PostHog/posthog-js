@@ -1,4 +1,4 @@
-import { defaultPostHog } from './helpers/posthog-instance'
+import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
 import type { PostHogConfig } from '../types'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { SurveyEventName, SurveyEventProperties } from '../posthog-surveys-types'
@@ -693,6 +693,84 @@ describe('posthog core', () => {
             expect(captureSpy).toHaveBeenCalledWith('test-event')
             captureSpy.mockRestore()
             delete (posthog as any).parseInvalidJson
+        })
+    })
+
+    describe('register_for_session()', () => {
+        it('clears session-registered props when PostHog session rotates due to activity timeout', async () => {
+            const posthog = await createPosthogInstance(uuidv7(), { persistence: 'localStorage' })
+
+            posthog.register_for_session({ link_id: 'abc123', flow: 'signup' })
+            expect(posthog.sessionPersistence?.props['link_id']).toBe('abc123')
+            expect(posthog.sessionPersistence?.props['flow']).toBe('signup')
+
+            // Simulate a session rotation caused by activity timeout
+            const handlers: any[] = []
+            const realOnSessionId = posthog.sessionManager!.onSessionId.bind(posthog.sessionManager)
+            jest.spyOn(posthog.sessionManager!, 'onSessionId').mockImplementation((cb) => {
+                handlers.push(cb)
+                return realOnSessionId(cb)
+            })
+
+            // Fire the change handler directly as if a session timed out
+            ;(posthog as any)._clearSessionRegisteredProps()
+
+            expect(posthog.sessionPersistence?.props['link_id']).toBeUndefined()
+            expect(posthog.sessionPersistence?.props['flow']).toBeUndefined()
+        })
+
+        it('does not clear session-registered props on initial session creation', async () => {
+            const posthog = await createPosthogInstance(uuidv7(), { persistence: 'localStorage' })
+
+            posthog.register_for_session({ link_id: 'abc123' })
+            expect(posthog.sessionPersistence?.props['link_id']).toBe('abc123')
+
+            // Simulate a session change with noSessionId (first ever session) — should NOT clear
+            const sessionIdChangedHandlers = (posthog.sessionManager as any)._sessionIdChangedHandlers as ((
+                sessionId: string,
+                windowId: string,
+                changeReason: any
+            ) => void)[]
+
+            sessionIdChangedHandlers.forEach((handler) =>
+                handler('new-session-id', 'window-id', {
+                    noSessionId: true,
+                    activityTimeout: false,
+                    sessionPastMaximumLength: false,
+                    crossTabAdoption: false,
+                })
+            )
+
+            // Props should still be present — noSessionId is first-ever init, not a rotation
+            expect(posthog.sessionPersistence?.props['link_id']).toBe('abc123')
+        })
+
+        it('clears only user-registered keys, not system-managed session storage keys', async () => {
+            const posthog = await createPosthogInstance(uuidv7(), { persistence: 'localStorage' })
+
+            posthog.register_for_session({ my_prop: 'user-value' })
+            // Simulate a system-managed prop being written to sessionPersistence
+            posthog.sessionPersistence?.register({ $referring_domain: 'google.com' })
+
+            ;(posthog as any)._clearSessionRegisteredProps()
+
+            expect(posthog.sessionPersistence?.props['my_prop']).toBeUndefined()
+            // System-managed prop should be untouched
+            expect(posthog.sessionPersistence?.props['$referring_domain']).toBe('google.com')
+        })
+
+        it('removes keys from the tracked set when unregister_for_session is called', async () => {
+            const posthog = await createPosthogInstance(uuidv7(), { persistence: 'localStorage' })
+
+            posthog.register_for_session({ link_id: 'abc123', flow: 'signup' })
+            posthog.unregister_for_session('flow')
+
+            ;(posthog as any)._clearSessionRegisteredProps()
+
+            // 'flow' was unregistered before rotation — should already be gone
+            expect(posthog.sessionPersistence?.props['flow']).toBeUndefined()
+            // 'link_id' was still registered — cleared on rotation
+            expect(posthog.sessionPersistence?.props['link_id']).toBeUndefined()
         })
     })
 })
