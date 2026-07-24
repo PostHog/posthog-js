@@ -3,9 +3,9 @@ import type { Logger } from '@posthog/core'
 import type { KeyValueStore } from './persistence'
 import type { ExtensionToken } from './token'
 
-/** A minimal response from {@link Client.apiRequest}. */
+/** A minimal response from {@link Client.sendRequest}. */
 export interface ApiResponse {
-    /** The HTTP status code returned by the transport, or a client-defined best-effort status for unload sends. */
+    /** The HTTP status code returned by the transport, or a client-defined best-effort status for sendBeacon sends. */
     statusCode: number
     /** The response body parsed as JSON when available. */
     json?: unknown
@@ -15,22 +15,26 @@ export interface ApiResponse {
     error?: unknown
 }
 
-/** Options for sending a request through {@link Client.apiRequest}. */
-export interface ApiRequestInit {
-    /** HTTP method to use; defaults to the client's normal request method for the endpoint. */
+/** Configured host used to resolve a relative request path. */
+export type RequestTarget = 'api' | 'flags' | 'assets'
+
+/** Browser transport requested for a send. */
+export type RequestTransport = 'XHR' | 'fetch' | 'sendBeacon'
+
+/** Options for sending a request through {@link Client.sendRequest}. */
+export interface SendRequestInit {
+    /** Configured host to send through; defaults to the regular API host. */
+    target?: RequestTarget
+    /** HTTP method to use; the host transport's default applies when omitted. */
     method?: 'GET' | 'POST'
     /** JSON-serialized by the client. */
     body?: unknown
     /** Query string parameters appended to the request URL. */
     query?: Record<string, string>
-    /**
-     * Mark this as a teardown send (pagehide / shutdown): the client picks the
-     * most reliable fire-and-forget transport available — `sendBeacon`, fetch
-     * `keepalive`, or sync XHR. The response is best-effort: `json` may be
-     * unavailable (e.g. `sendBeacon` only reports "queued"), so callers must not
-     * depend on it.
-     */
-    unload?: boolean
+    /** Additional headers merged with the host SDK's configured request headers. */
+    headers?: Record<string, string>
+    /** Browser transport to prefer. `sendBeacon` returns a best-effort response immediately. */
+    transport?: RequestTransport
     /** Abort the request if it does not complete within this many milliseconds. */
     timeoutMs?: number
 }
@@ -45,12 +49,14 @@ export interface ApiRequestInit {
  * analytics behavior is provided separately by the core extension.
  */
 export interface Client {
+    /** Public project token used to authenticate endpoint-specific requests. */
+    readonly projectToken: string
+
     /**
-     * Sends a request to a PostHog endpoint; the client owns auth, headers, and
-     * transport (fetch / XHR / keepalive). `path` is relative to the configured
-     * API host, e.g. `/s/`, `/flags/`, `/api/surveys/`.
+     * Sends a request through the host SDK's transport. The extension owns the
+     * endpoint-specific path, method, authentication shape, body, and headers.
      */
-    apiRequest(path: string, init?: ApiRequestInit): Promise<ApiResponse>
+    sendRequest(path: string, init?: SendRequestInit): Promise<ApiResponse>
 
     /**
      * Resolves another registered extension by a capability token it provides, or

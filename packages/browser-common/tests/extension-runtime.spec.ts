@@ -35,7 +35,8 @@ function createRuntime(): {
     const add = (extension: Extension): Promise<void> => {
         clientNames.push(extension.name)
         return runtime.add(extension, {
-            apiRequest: async () => ({ statusCode: 200 }),
+            projectToken: 'test-project-token',
+            sendRequest: async () => ({ statusCode: 200 }),
             getExtension: (token) => runtime.getExtension(token),
             kv: new InMemoryKeyValueStore(),
             logger,
