@@ -65,6 +65,7 @@ export type { Headers, RequestResponse, RequestCallback } from '@posthog/types'
 // Session recording types
 export type {
     SessionRecordingCanvasOptions,
+    CanvasMaskRegion,
     InitiatorType,
     NetworkRequest,
     CapturedNetworkRequest,

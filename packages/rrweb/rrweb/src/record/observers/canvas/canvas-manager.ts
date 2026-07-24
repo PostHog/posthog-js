@@ -8,10 +8,12 @@ import type {
   IWindow,
   listenerHandler,
   CanvasArg,
+  CanvasMasking,
   DataURLOptions,
 } from '@posthog/rrweb-types';
 import { isBlocked } from '../../../utils';
 import { CanvasContext } from '@posthog/rrweb-types';
+import { computeFrameMaskRegions } from './canvas-mask';
 import initCanvas2DMutationObserver from './2d';
 import initCanvasContextObserver from './canvas';
 import initCanvasWebGLMutationObserver from './webgl';
@@ -106,6 +108,7 @@ export class CanvasManager {
     // so playback dimensions/aspect are unchanged, just softer. invalid/unset defaults to 1
     // (full resolution).
     resolutionScale?: number;
+    canvasMasking?: CanvasMasking;
   }) {
     const {
       sampling = 'all',
@@ -115,6 +118,7 @@ export class CanvasManager {
       recordCanvas,
       dataURLOptions,
       resolutionScale,
+      canvasMasking,
     } = options;
     this.mutationCb = options.mutationCb;
     this.mirror = options.mirror;
@@ -130,6 +134,7 @@ export class CanvasManager {
       this.initCanvasFPSObserver(sampling, win, blockClass, blockSelector, {
         dataURLOptions,
         resolutionScale,
+        canvasMasking,
       });
   }
 
@@ -158,6 +163,7 @@ export class CanvasManager {
     options: {
       dataURLOptions: DataURLOptions;
       resolutionScale?: number;
+      canvasMasking?: CanvasMasking;
     },
   ) {
     if (!('OffscreenCanvas' in win)) {
@@ -333,6 +339,16 @@ export class CanvasManager {
             // display size, so playback dimensions/aspect are unchanged, just softer.
             const captureWidth = Math.max(1, Math.round(displayWidth * scale));
             const captureHeight = Math.max(1, Math.round(displayHeight * scale));
+            // computed before the await so regions and display dims describe
+            // the same frame even if the canvas resizes mid-snapshot
+            const maskRegions = computeFrameMaskRegions(
+              options.canvasMasking,
+              canvas,
+              captureWidth,
+              captureHeight,
+              displayWidth,
+              displayHeight,
+            );
             const bitmap = await createImageBitmap(
               canvas,
               // only ask for a quality resampling filter when we're actually downscaling;
@@ -356,6 +372,7 @@ export class CanvasManager {
                 displayWidth,
                 displayHeight,
                 dataURLOptions: options.dataURLOptions,
+                maskRegions,
               },
               [bitmap],
             );
