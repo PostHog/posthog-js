@@ -8,13 +8,28 @@ env:
   BROWSERSTACK_USE_AUTOMATE: "true"
   BROWSERSTACK_PROJECT_NAME: "PostHog JS SDK"
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  affected:
+    uses: ./.github/workflows/check-affected.yml
+    with:
+      package-name: posthog-js
+      additional-paths: |
+        packages/browser/
+        .github/workflows/testcafe.yml
+        .github/workflows/check-affected.yml
+        .github/actions/is-affected/action.yaml
+        .github/actions/setup/action.yaml
+
   browsers:
     name: Test on ${{ matrix.name }}
+    needs: affected
     runs-on: ubuntu-22.04
     env:
       BROWSERSTACK_ACCESS_KEY: "${{ secrets.BROWSERSTACK_ACCESS_KEY }}"
@@ -36,31 +51,23 @@ jobs:
         run: echo "Skipping ${{ matrix.name }} TestCafe tests for fork PRs because required BrowserStack/PostHog secrets are unavailable."
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
-        with:
-          fetch-depth: 0
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && needs.affected.outputs.is-affected == 'true' }}
 
       - uses: ./.github/actions/setup
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && needs.affected.outputs.is-affected == 'true' }}
         with:
           build: false
 
-      - uses: ./.github/actions/is-affected
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
-        id: is-affected
-        with:
-          package-name: posthog-js
-
       - name: Build packages
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.is-affected.outputs.is-affected == 'true' }}
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && needs.affected.outputs.is-affected == 'true' }}
         run: pnpm build
 
       - name: Serve static files
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.is-affected.outputs.is-affected == 'true' }}
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && needs.affected.outputs.is-affected == 'true' }}
         run: python -m http.server 8080 &
 
       - name: Run ${{ matrix.name }} test
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.is-affected.outputs.is-affected == 'true' }}
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && needs.affected.outputs.is-affected == 'true' }}
         timeout-minutes: 10
         env:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
@@ -98,7 +105,7 @@ jobs:
         working-directory: packages/browser
 
       - name: Check ${{ matrix.name }} events
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.is-affected.outputs.is-affected == 'true' }}
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && needs.affected.outputs.is-affected == 'true' }}
         timeout-minutes: 30
         run: pnpm check-testcafe-results
         working-directory: packages/browser

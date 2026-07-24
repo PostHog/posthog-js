@@ -20,9 +20,12 @@ export default {
     projects: [
         ...(baseConfig.projects || []),
         {
-            name: 'msedge',
+            name: 'chromium-es5',
+            metadata: {
+                testBrowser: 'chromium-es5',
+            },
             use: {
-                ...devices['Desktop Edge'],
+                ...devices['Desktop Chrome'],
                 staticOverrides: {
                     'array.full.js': 'array.full.es5.js',
                 },
