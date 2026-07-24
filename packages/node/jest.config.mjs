@@ -1,4 +1,5 @@
 export default {
+  testEnvironment: '<rootDir>/../react-native/jest-handle-environment.cjs',
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
