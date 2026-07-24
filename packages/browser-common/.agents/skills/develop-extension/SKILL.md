@@ -84,12 +84,16 @@ if (!core) {
 | record an event                                             | `await core.capture(event, properties?, options?)`                            |
 | add properties to **every** event                           | `core.registerDynamicEventProperties(() => ({ … }))`                          |
 | **react** to events others capture                          | `core.onEvent(({ event, properties }) => …)`                                  |
-| call a PostHog endpoint (`/s/`, `/flags/`, `/api/surveys/`) | `await client.apiRequest(path, init?)`                                        |
+| call a PostHog endpoint (`/s/`, `/flags/`, `/api/surveys/`) | `await client.sendRequest(path, init?)`                                       |
 | server config (decide/flags response)                       | `await core.getRemoteConfig()` (current) / `core.onRemoteConfig(…)` (changes) |
 | react to a new session / reset                              | `core.onNewSession(({ reason, … }) => …)`                                     |
 | use another extension                                       | `client.getExtension(SomeToken)`                                              |
 | persist small state                                         | `client.kv` (`get`/`set`/`remove` are awaitable and use keys verbatim)        |
 | log                                                         | `client.logger`                                                               |
+
+`sendRequest` is a low-level transport bridge. Select the configured origin with `target` (`api`, `flags`, or
+`assets`) and construct the endpoint's authentication using `client.projectToken` in the required query parameter,
+body, header, or path. Do not infer authentication from the request path.
 
 ## Hard rules
 
@@ -101,8 +105,8 @@ if (!core) {
 - **Do not drop disposables.** Anything returned from `core.onEvent`, `core.registerDynamicEventProperties`,
   `core.onNewSession`, another `Listener`, or a timer wrapper must be stored and disposed in your `dispose()`. Use
   `createDisposable(teardown)` when adapting callback teardown into a reusable idempotent handle.
-- **Reads are sync, I/O is awaitable.** Core identity and session are synchronous in-memory reads. `capture`,
-  `apiRequest`, `kv`, and `getRemoteConfig` are awaitable.
+- **Reads are sync, I/O is awaitable.** Core identity, session, and `client.projectToken` are synchronous in-memory
+  reads. `capture`, `sendRequest`, `kv`, and `getRemoteConfig` are awaitable.
 - **Design for async readiness.** Your extension may be set up _after_ events have already been captured (dynamic
   loading) or before flags/remote-config have loaded. Never assume you saw the first event or that data is present at
   `setup`; `await core.getRemoteConfig()` / the providing extension's reads resolve once ready.
@@ -194,21 +198,21 @@ free of its code and keeps it lazily loadable.
 
 Map v1's reach-into-`this._instance` calls onto `Client` and the resolved `CoreExtension`:
 
-| v1                                                            | Shared extension                                       |
-| ------------------------------------------------------------- | ------------------------------------------------------ |
-| `instance.capture(e, p)`                                      | `core.capture(e, p)`                                   |
-| `instance.get_distinct_id()`                                  | `core.distinctId` (sync)                               |
-| `instance.get_property(k)` / `persistence`                    | `client.kv.get(k)` (awaitable)                         |
-| `instance.config.X` (static)                                  | constructor                                            |
-| `instance.config.X` (server-driven)                           | `core.getRemoteConfig()` / `onRemoteConfig`            |
-| `instance.sessionManager.checkAndGetSessionAndWindowId(true)` | `core.session` (sync)                                  |
-| `_addCaptureHook` / observing events                          | `core.onEvent(...)`                                    |
-| returned unregister / subscription disposables                | store and dispose in `dispose()`                       |
-| `instance.onFeatureFlags(cb)`                                 | `client.getExtension(FeatureFlags)?.onChange(cb)`      |
-| `instance.featureFlags.getFeatureFlag(k)`                     | `client.getExtension(FeatureFlags)?.getFeatureFlag(k)` |
-| registering an enricher                                       | `core.registerDynamicEventProperties(fn)`              |
-| `requestRouter.endpointFor(...)` + `_send_request`            | `client.apiRequest(path, init?)`                       |
-| snapshot/keepalive send on unload                             | `client.apiRequest(path, { unload: true })`            |
+| v1                                                            | Shared extension                                        |
+| ------------------------------------------------------------- | ------------------------------------------------------- |
+| `instance.capture(e, p)`                                      | `core.capture(e, p)`                                    |
+| `instance.get_distinct_id()`                                  | `core.distinctId` (sync)                                |
+| `instance.get_property(k)` / `persistence`                    | `client.kv.get(k)` (awaitable)                          |
+| `instance.config.X` (static)                                  | constructor                                             |
+| `instance.config.X` (server-driven)                           | `core.getRemoteConfig()` / `onRemoteConfig`             |
+| `instance.sessionManager.checkAndGetSessionAndWindowId(true)` | `core.session` (sync)                                   |
+| `_addCaptureHook` / observing events                          | `core.onEvent(...)`                                     |
+| returned unregister / subscription disposables                | store and dispose in `dispose()`                        |
+| `instance.onFeatureFlags(cb)`                                 | `client.getExtension(FeatureFlags)?.onChange(cb)`       |
+| `instance.featureFlags.getFeatureFlag(k)`                     | `client.getExtension(FeatureFlags)?.getFeatureFlag(k)`  |
+| registering an enricher                                       | `core.registerDynamicEventProperties(fn)`               |
+| `requestRouter.endpointFor(...)` + `_send_request`            | `client.sendRequest(path, init?)`                       |
+| snapshot/keepalive send on unload                             | `client.sendRequest(path, { transport: 'sendBeacon' })` |
 
 ## Checklist
 
