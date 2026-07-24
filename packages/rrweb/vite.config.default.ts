@@ -130,6 +130,12 @@ export default function (
 
       emptyOutDir,
 
+      rollupOptions: {
+        output: {
+          exports: 'named',
+        },
+      },
+
       // Leaving this unminified so you can see what exactly gets included in
       // the bundles
       minify: false,
