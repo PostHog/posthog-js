@@ -24,7 +24,7 @@ jobs:
             extra-flags: "--module commonjs --moduleResolution node"
           - version: "6.0.3"
             extra-flags: "--module commonjs --ignoreConfig"
-          - version: "7.0.2"
+          - version: "latest"
             extra-flags: "--module nodenext --moduleResolution nodenext --ignoreConfig"
           - version: "7.1.0-dev.20260723.1"
             extra-flags: "--module nodenext --moduleResolution nodenext --ignoreConfig"
