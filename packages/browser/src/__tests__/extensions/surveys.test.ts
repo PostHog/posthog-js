@@ -515,21 +515,29 @@ describe('SurveyManager', () => {
             ;(mockPostHog.surveys as any)._surveyEventReceiver = { getSurveys: () => surveyIds }
         }
 
-        it('is not eligible until the trigger event has fired', () => {
+        it('is not renderable until the trigger event has fired', () => {
             setActivatedSurveys([])
-            const result = surveyManager.checkSurveyEligibility(makeEventGatedSurvey())
+            const result = surveyManager.checkSurveyRenderability(makeEventGatedSurvey())
             expect(result.eligible).toBe(false)
         })
 
-        it('becomes eligible once the trigger event has fired', () => {
+        it('becomes renderable once the trigger event has fired', () => {
             setActivatedSurveys([EVENT_GATED_SURVEY_ID])
-            const result = surveyManager.checkSurveyEligibility(makeEventGatedSurvey())
+            const result = surveyManager.checkSurveyRenderability(makeEventGatedSurvey())
             expect(result.eligible).toBe(true)
         })
 
         it('is unaffected for surveys without an event/action trigger', () => {
             setActivatedSurveys([])
-            const result = surveyManager.checkSurveyEligibility({ ...mockSurveys[0], conditions: null })
+            const result = surveyManager.checkSurveyRenderability({ ...mockSurveys[0], conditions: null })
+            expect(result.eligible).toBe(true)
+        })
+
+        // Regression guard: the trigger gate must live only in checkSurveyRenderability, not in
+        // checkSurveyEligibility, so explicit displaySurvey('id') calls are not silently suppressed.
+        it('checkSurveyEligibility stays eligible for an event-gated survey whose trigger has not fired', () => {
+            setActivatedSurveys([])
+            const result = surveyManager.checkSurveyEligibility(makeEventGatedSurvey())
             expect(result.eligible).toBe(true)
         })
     })

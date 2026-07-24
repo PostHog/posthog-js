@@ -656,12 +656,24 @@ export class SurveyManager {
             return eligibility
         }
 
-        if (!this._hasActionOrEventTriggeredSurvey(survey)) {
-            eligibility.eligible = false
-            eligibility.reason = `Survey event/action trigger has not been fired yet`
-            return eligibility
-        }
+        return eligibility
+    }
 
+    /**
+     * Renderability = eligibility (running, type, flags, wait period, already-seen) plus the
+     * survey's event/action activation trigger. Used by the programmatic `canRenderSurvey` /
+     * `canRenderSurveyAsync` checks so they match the display loop.
+     *
+     * The trigger is intentionally kept out of `checkSurveyEligibility`: that method is also
+     * used by the explicit `displaySurvey` path, and the trigger state only lives in memory
+     * (a reload clears it, server-side events never set it). Gating eligibility on it would
+     * make explicit `displaySurvey('id')` calls silently show nothing.
+     */
+    public checkSurveyRenderability(survey: Survey): { eligible: boolean; reason?: string } {
+        const eligibility = this.checkSurveyEligibility(survey)
+        if (eligibility.eligible && !this._hasActionOrEventTriggeredSurvey(survey)) {
+            return { eligible: false, reason: `Survey event/action trigger has not been fired yet` }
+        }
         return eligibility
     }
 
