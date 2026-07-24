@@ -527,6 +527,22 @@ export type canvasManagerMutationCallback = (
   p: canvasMutationWithType,
 ) => void;
 
+export type CanvasMaskRegion = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type CanvasMasking = {
+  // CSS-pixel regions relative to the canvas element, re-read every frame.
+  // `undefined` means no provider is configured; `null` means a configured
+  // provider could not compute this frame, which skips it
+  regionsFn?: (
+    canvas: HTMLCanvasElement,
+  ) => CanvasMaskRegion[] | null | undefined;
+};
+
 export type ImageBitmapDataURLWorkerParams = {
   id: number;
   bitmap: ImageBitmap;
@@ -538,6 +554,8 @@ export type ImageBitmapDataURLWorkerParams = {
   displayWidth: number;
   displayHeight: number;
   dataURLOptions: DataURLOptions;
+  // capture-resolution pixels, painted over before the frame is encoded
+  maskRegions?: CanvasMaskRegion[];
 };
 
 export type ImageBitmapDataURLWorkerResponse =

@@ -7,7 +7,12 @@ import type { LogAttributes, BeforeSendLogFn } from './capture-log'
 import type { MetricAttributes, BeforeSendMetricFn } from './capture-metric'
 import type { BeforeSendFn, CaptureResult } from './capture'
 import type { RequestResponse } from './request'
-import type { CapturedNetworkRequest, NetworkRequest, SessionRecordingCanvasOptions } from './session-recording'
+import type {
+    CanvasMaskRegion,
+    CapturedNetworkRequest,
+    NetworkRequest,
+    SessionRecordingCanvasOptions,
+} from './session-recording'
 import type { SegmentAnalytics } from './segment'
 import type { PostHog } from './posthog'
 
@@ -653,7 +658,42 @@ export interface SessionRecordingOptions {
     /**
      * Allows local config to override remote canvas recording settings from the flags response
      */
-    captureCanvas?: SessionRecordingCanvasOptions
+    captureCanvas?: SessionRecordingCanvasOptions & {
+        /**
+         * If set, called once per canvas per captured frame; the returned regions
+         * (CSS pixels, relative to the canvas element) are painted black before the
+         * frame is encoded. Lets apps that render into canvas (e.g. Flutter web)
+         * mask content that DOM-based masking cannot see. Re-read from config on
+         * every frame, so the real provider can be swapped in after recording has
+         * started.
+         *
+         * Return `[]` for a frame with nothing to mask (recorded as is), or `null`
+         * if regions could not be computed — that frame is skipped rather than
+         * recorded unmasked. Anything other than an array — `null`, a thrown error,
+         * or an implicit `undefined` from an untyped caller — skips that frame.
+         * Not setting this at all records the canvas unmasked.
+         *
+         * Called synchronously on the main thread for every captured frame (canvas
+         * FPS is 4 by default, 12 max), so keep it cheap — avoid forcing layout,
+         * and return few regions.
+         *
+         * Masks frame capture only. The full DOM snapshot taken at recording start
+         * and at each `full_snapshot_interval_millis` serializes canvas pixels on a
+         * separate path (`rr_dataURL`) that does not see these regions, so a 2D
+         * canvas — or any canvas whose context rrweb did not observe — can still be
+         * captured unmasked there.
+         *
+         * An app whose real provider only exists once its runtime has booted picks
+         * what happens in between by what it declares in `posthog.init`: a function
+         * covering the whole canvas blacks those frames out, `() => null` skips
+         * them, and declaring nothing records them.
+         *
+         * Client-side only, cannot be set via remote configuration.
+         *
+         * @default undefined
+         */
+        canvasMaskRegionsFn?: ((canvas: HTMLCanvasElement) => CanvasMaskRegion[] | null) | null
+    }
 
     /**
      * Tune how canvas frames are captured for replay. Only has any effect when canvas recording

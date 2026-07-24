@@ -12,6 +12,7 @@ import type { RRNode } from '@posthog/rrdom';
 import type { CanvasManager } from './record/observers/canvas/canvas-manager';
 import type { StylesheetManager } from './record/stylesheet-manager';
 import type {
+  CanvasMasking,
   DataURLOptions,
   addedNodeMutation,
   blockClass,
@@ -79,6 +80,7 @@ export type recordOptions<T> = {
   // (0,1] fraction of canvas display size to capture FPS-snapshot frames at; replay upscales
   // back to display size, so playback dimensions are unchanged, just softer. defaults to 1.
   canvasResolutionScale?: number;
+  canvasMasking?: CanvasMasking;
   recordDOM?: boolean;
   recordCanvas?: boolean;
   recordCrossOriginIframes?: boolean;

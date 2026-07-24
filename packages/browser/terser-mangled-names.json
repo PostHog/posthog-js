@@ -47,6 +47,7 @@
         "_cancelAllPendingTours",
         "_cancelEventToItems",
         "_cancelPendingItem",
+        "_canvasMaskRegionsFnFailed",
         "_canvasRecording",
         "_canvasResolutionScale",
         "_capture",

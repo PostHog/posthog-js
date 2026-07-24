@@ -480,6 +480,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _maxDepthExceeded = false
     // only warn once per recorder instance that client-side masking is shadowing the project setting
     private _hasWarnedClientMaskingOverride = false
+    private _canvasMaskRegionsFnFailed = false
 
     private _linkedFlagMatching: LinkedFlagMatching
     private _urlTriggerMatching: URLTriggerMatching
@@ -2107,6 +2108,27 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             sessionRecordingOptions.sampling = { canvas: this._canvasRecording.fps }
             sessionRecordingOptions.dataURLOptions = { type: 'image/webp', quality: this._canvasRecording.quality }
             sessionRecordingOptions.canvasResolutionScale = this._canvasResolutionScale
+            sessionRecordingOptions.canvasMasking = {
+                // read live so a provider registered after recording started (e.g. by
+                // a plugin that boots later than posthog-js) takes effect immediately.
+                // undefined must stay distinct from null, or every canvas without a
+                // provider would fail closed
+                regionsFn: (canvas) => {
+                    const fn = this._instance.config.session_recording?.captureCanvas?.canvasMaskRegionsFn
+                    if (!isFunction(fn)) {
+                        return undefined
+                    }
+                    try {
+                        return fn(canvas) ?? null
+                    } catch (e) {
+                        if (!this._canvasMaskRegionsFnFailed) {
+                            this._canvasMaskRegionsFnFailed = true
+                            logger.warn('canvasMaskRegionsFn threw, canvas frames will be skipped', e)
+                        }
+                        return null
+                    }
+                },
+            }
         }
 
         if (this._masking) {

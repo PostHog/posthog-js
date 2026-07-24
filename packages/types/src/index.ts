@@ -47,6 +47,7 @@ export type { Headers, RequestResponse, RequestCallback } from './request'
 // Session recording types
 export type {
     SessionRecordingCanvasOptions,
+    CanvasMaskRegion,
     InitiatorType,
     NetworkRequest,
     CapturedNetworkRequest,
