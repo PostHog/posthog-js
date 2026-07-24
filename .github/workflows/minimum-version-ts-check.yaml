@@ -5,17 +5,14 @@ on:
   push:
     branches:
       - main
-  schedule:
-    - cron: '17 8 * * *'
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   unit:
     name: Check minimum TS version
-    if: github.event_name != 'schedule'
     runs-on: ubuntu-22.04
     strategy:
       matrix:
@@ -54,7 +51,7 @@ jobs:
 
   latest-smoke-test:
     name: Check latest TS version
-    if: github.event_name == 'schedule'
+    if: github.event_name == 'pull_request'
     continue-on-error: true
     runs-on: ubuntu-22.04
     steps:
