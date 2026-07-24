@@ -2,6 +2,7 @@ import { expect, test } from './utils/posthog-playwright-test-base'
 import { start } from './utils/setup'
 import { pollUntilCondition, pollUntilEventCaptured } from './utils/event-capture-utils'
 import { Request } from '@playwright/test'
+import { satisfies } from 'compare-versions'
 import { decompressSync, strFromU8 } from 'fflate'
 
 function getGzipEncodedPayloady(req: Request): Record<string, any> {
@@ -65,11 +66,21 @@ test.describe('event capture', () => {
         // see e.g. https://github.com/microsoft/playwright/issues/6479
         if (browserName !== 'webkit') {
             const payload = getGzipEncodedPayloady(captureRequest)
-            expect(payload.api_key).toEqual('test token')
-            expect(payload.sent_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
-            expect(payload.batch).toHaveLength(1)
-            expect(payload.batch[0].event).toEqual('$pageview')
-            expect(Object.keys(payload.batch[0].properties).length).toBeGreaterThan(0)
+            // Batched capture request envelopes were introduced in posthog-js 1.407.3.
+            const usesLegacyCapturePayload =
+                process.env.COMPAT_VERSION !== undefined && satisfies(process.env.COMPAT_VERSION, '<1.407.3')
+
+            if (usesLegacyCapturePayload) {
+                expect(payload.event).toEqual('$pageview')
+                expect(payload.properties.token).toEqual('test token')
+                expect(Object.keys(payload.properties).length).toBeGreaterThan(0)
+            } else {
+                expect(payload.api_key).toEqual('test token')
+                expect(payload.sent_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
+                expect(payload.batch).toHaveLength(1)
+                expect(payload.batch[0].event).toEqual('$pageview')
+                expect(Object.keys(payload.batch[0].properties).length).toBeGreaterThan(0)
+            }
         }
     })
 

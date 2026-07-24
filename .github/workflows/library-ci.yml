@@ -114,37 +114,68 @@ jobs:
         if: steps.is-affected.outputs.is-affected == 'true'
         continue-on-error: true
         run: |
-          pnpm exec playwright test --config playwright.config.compat.ts --project chromium-compat --workers=5 --reporter=json > compat-results.json 2>&1 || true
-          cat compat-results.json
+          PLAYWRIGHT_JSON_OUTPUT_FILE=compat-results.json pnpm exec playwright test --config playwright.config.compat.ts --project chromium-compat --workers=5 --reporter=json
         working-directory: packages/browser
 
       - name: Process compat test results
         if: steps.is-affected.outputs.is-affected == 'true'
         id: process-results
         working-directory: packages/browser
+        env:
+          COMPAT_TEST_OUTCOME: ${{ steps.compat-tests.outcome }}
         run: |
+          report_failures() {
+            echo "has_failures=true" >> "$GITHUB_OUTPUT"
+            EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+            echo "failed_tests<<$EOF" >> "$GITHUB_OUTPUT"
+            echo "$1" >> "$GITHUB_OUTPUT"
+            echo "$EOF" >> "$GITHUB_OUTPUT"
+          }
+
           if [ ! -f compat-results.json ]; then
-            echo "has_failures=false" >> $GITHUB_OUTPUT
+            report_failures "- Compatibility test results were not created. Check the test step logs."
             exit 0
           fi
 
-          # Extract failed tests
-          FAILED_TESTS=$(cat compat-results.json | jq -r '
-            .suites[]?.suites[]?.specs[]? |
-            select(.tests[]?.results[]?.status == "failed") |
-            "- `\(.title)`"
-          ' 2>/dev/null || echo "")
+          if ! jq -e '(.stats.unexpected | type == "number") and (.errors | type == "array")' compat-results.json > /dev/null; then
+            report_failures "- Compatibility test results could not be parsed. Check the test step logs."
+            exit 0
+          fi
+
+          UNEXPECTED=$(jq -r '.stats.unexpected' compat-results.json)
+          RUNNER_ERRORS=$(jq -r '.errors | length' compat-results.json)
+          if [ "$COMPAT_TEST_OUTCOME" = "success" ] && [ "$UNEXPECTED" -eq 0 ] && [ "$RUNNER_ERRORS" -eq 0 ]; then
+            echo "has_failures=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          FAILED_TESTS=$(jq -r '
+            [
+              .. | objects |
+              select(.tests? and (.tests | type == "array")) |
+              select(any(.tests[]?; .status == "unexpected")) |
+              "- `\(.title)`"
+            ] | unique[]?
+          ' compat-results.json)
+
+          if [ "$RUNNER_ERRORS" -gt 0 ]; then
+            RUNNER_FAILURES="- $RUNNER_ERRORS Playwright runner error(s) were reported. Check the test step logs for details."
+            if [ -n "$FAILED_TESTS" ]; then
+              FAILED_TESTS="$FAILED_TESTS
+          $RUNNER_FAILURES"
+            else
+              FAILED_TESTS="$RUNNER_FAILURES"
+            fi
+          fi
 
           if [ -z "$FAILED_TESTS" ]; then
-            echo "has_failures=false" >> $GITHUB_OUTPUT
-          else
-            echo "has_failures=true" >> $GITHUB_OUTPUT
-            # Store failed tests for the comment
-            EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
-            echo "failed_tests<<$EOF" >> $GITHUB_OUTPUT
-            echo "$FAILED_TESTS" >> $GITHUB_OUTPUT
-            echo "$EOF" >> $GITHUB_OUTPUT
+            if [ "$UNEXPECTED" -gt 0 ]; then
+              FAILED_TESTS="- $UNEXPECTED unexpected test(s) were reported. Check the test step logs for details."
+            else
+              FAILED_TESTS="- Compatibility test command completed with outcome: $COMPAT_TEST_OUTCOME. Check the test step logs."
+            fi
           fi
+          report_failures "$FAILED_TESTS"
 
       - name: Find existing compat comment
         if: ${{ steps.process-results.outputs.has_failures == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
