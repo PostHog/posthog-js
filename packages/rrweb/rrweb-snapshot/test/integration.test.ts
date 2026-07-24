@@ -2,7 +2,6 @@ import * as fs from 'fs';
 import * as http from 'http';
 import * as path from 'path';
 import * as puppeteer from 'puppeteer';
-import * as url from 'url';
 import {
   afterAll,
   assert,
@@ -38,9 +37,8 @@ const startServer = (defaultPort: number = 3030) =>
       '.png': 'image/png',
     };
     const s = http.createServer((req, res) => {
-      const parsedUrl = url.parse(req.url!);
       const sanitizePath = path
-        .normalize(parsedUrl.pathname!)
+        .normalize(new URL(req.url!, 'http://localhost').pathname)
         .replace(/^(\.\.[\/\\])+/, '');
       let pathname = path.join(__dirname, sanitizePath);
       try {

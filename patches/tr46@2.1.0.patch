@@ -1,0 +1,7 @@
+diff --git a/index.js b/index.js
+index 9ba36d82e60514e4848f5c8f7481e3bfff4fabb2..8903a652a8e004a6c010b92500a0168f6a863717 100644
+--- a/index.js
++++ b/index.js
+@@ -3 +3 @@
+-const punycode = require("punycode");
++const punycode = require("punycode/");
