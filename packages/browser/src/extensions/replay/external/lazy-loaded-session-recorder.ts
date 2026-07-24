@@ -211,9 +211,7 @@ export type compressedIncrementalStyleSnapshotEvent = {
 }
 
 export type compressedEvent =
-    | compressedIncrementalStyleSnapshotEvent
-    | compressedFullSnapshotEvent
-    | compressedIncrementalSnapshotEvent
+    compressedIncrementalStyleSnapshotEvent | compressedFullSnapshotEvent | compressedIncrementalSnapshotEvent
 export type compressedEventWithTime = compressedEvent & {
     timestamp: number
     delay?: number
@@ -566,8 +564,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private get _masking():
-        | Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector' | 'blockSelector'>
-        | undefined {
+        Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector' | 'blockSelector'> | undefined {
         const masking_server_side = this._remoteConfig?.masking
         const masking_client_side = {
             maskAllInputs: this._instance.config.session_recording?.maskAllInputs,
@@ -687,8 +684,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // network payload capture config has three parts
     // each can be configured server side or client side
     private get _networkPayloadCapture():
-        | Pick<NetworkRecordOptions, 'recordHeaders' | 'recordBody' | 'recordPerformance'>
-        | undefined {
+        Pick<NetworkRecordOptions, 'recordHeaders' | 'recordBody' | 'recordPerformance'> | undefined {
         const networkPayloadCapture_server_side = this._remoteConfig?.networkPayloadCapture
         const networkPayloadCapture_client_side = {
             recordHeaders: this._instance.config.session_recording?.recordHeaders,

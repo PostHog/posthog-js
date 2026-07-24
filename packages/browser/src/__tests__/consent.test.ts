@@ -28,9 +28,8 @@ jest.retryTimes(3)
 
 describe('consentManager', () => {
     const createPostHog = async (config: Partial<PostHogConfig> = {}) => {
-        const posthog = await new Promise<PostHog>(
-            (resolve) =>
-                defaultPostHog().init('testtoken', { ...config, loaded: (posthog) => resolve(posthog) }, uuidv7())!
+        const posthog = await new Promise<PostHog>((resolve) =>
+            defaultPostHog().init('testtoken', { ...config, loaded: (posthog) => resolve(posthog) }, uuidv7())!
         )
         posthog.debug()
         return posthog

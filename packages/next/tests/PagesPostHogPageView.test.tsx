@@ -30,8 +30,16 @@ describe('Pages PostHogPageView', () => {
 
     it.each([
         ['keeps hash fragments by default', undefined, 'http://localhost/search?q=hello&page=2#section'],
-        ['keeps hash fragments when disable_capture_url_hashes is false', false, 'http://localhost/search?q=hello&page=2#section'],
-        ['strips hash fragments when disable_capture_url_hashes is true', true, 'http://localhost/search?q=hello&page=2'],
+        [
+            'keeps hash fragments when disable_capture_url_hashes is false',
+            false,
+            'http://localhost/search?q=hello&page=2#section',
+        ],
+        [
+            'strips hash fragments when disable_capture_url_hashes is true',
+            true,
+            'http://localhost/search?q=hello&page=2',
+        ],
     ])('%s', (_description, disableCaptureUrlHashes, expectedUrl) => {
         mockUsePostHog.mockReturnValue({
             capture: mockCapture,

@@ -84,8 +84,7 @@ export function addConversationIdToTools<TTool extends ConversationIdInjectableT
 }
 
 export type ConversationIdResolution =
-  | { minted: false; conversationId: string | undefined }
-  | { minted: true; conversationId: string }
+  { minted: false; conversationId: string | undefined } | { minted: true; conversationId: string }
 
 /**
  * Decides which conversation_id to use for a tool call:

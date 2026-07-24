@@ -122,7 +122,9 @@ describe('postHogMiddleware', () => {
 
             await middleware(req as any)
 
-            expect(warnSpy).toHaveBeenCalledWith('[PostHog Next.js] apiKey is required — PostHog will not be initialized')
+            expect(warnSpy).toHaveBeenCalledWith(
+                '[PostHog Next.js] apiKey is required — PostHog will not be initialized'
+            )
             expect(mockCookiesSet).not.toHaveBeenCalled()
             expect(mockNextResponseNext).toHaveBeenCalled()
             warnSpy.mockRestore()

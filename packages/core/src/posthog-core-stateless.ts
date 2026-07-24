@@ -168,10 +168,7 @@ function isPostHogEventProperties(value: JsonType | undefined): value is PostHog
  *                     batch and surfaces the error
  */
 export type SendLogsBatchOutcome =
-  | { kind: 'ok' }
-  | { kind: 'too-large' }
-  | { kind: 'retry-later'; error: unknown }
-  | { kind: 'fatal'; error: unknown }
+  { kind: 'ok' } | { kind: 'too-large' } | { kind: 'retry-later'; error: unknown } | { kind: 'fatal'; error: unknown }
 
 export enum QuotaLimitedFeature {
   FeatureFlags = 'feature_flags',

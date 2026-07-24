@@ -13,18 +13,17 @@ describe('bot detection and pageview collection', () => {
 
     const createPostHog = async (config: Partial<PostHogConfig> = {}) => {
         beforeSendMock = jest.fn().mockImplementation((e) => e)
-        const posthog = await new Promise<PostHog>(
-            (resolve) =>
-                defaultPostHog().init(
-                    'testtoken',
-                    {
-                        capture_pageview: false, // Disable auto-capture to avoid race conditions
-                        before_send: beforeSendMock,
-                        ...config,
-                        loaded: (posthog) => resolve(posthog),
-                    },
-                    uuidv7()
-                )!
+        const posthog = await new Promise<PostHog>((resolve) =>
+            defaultPostHog().init(
+                'testtoken',
+                {
+                    capture_pageview: false, // Disable auto-capture to avoid race conditions
+                    before_send: beforeSendMock,
+                    ...config,
+                    loaded: (posthog) => resolve(posthog),
+                },
+                uuidv7()
+            )!
         )
         posthog.debug()
         return posthog

@@ -827,11 +827,7 @@ describe('persistence', () => {
                 return <PostHogConfig>{
                     name: '',
                     persistence: persistenceMode as
-                        | 'cookie'
-                        | 'localStorage'
-                        | 'localStorage+cookie'
-                        | 'memory'
-                        | 'sessionStorage',
+                        'cookie' | 'localStorage' | 'localStorage+cookie' | 'memory' | 'sessionStorage',
                     __preview_cookie_wins_on_conflict: cookieWins,
                 }
             }

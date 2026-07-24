@@ -77,8 +77,7 @@ export interface PostHogOptions extends PostHogCoreOptions {
   persistence?: 'memory' | 'file'
   /** Allows you to provide your own implementation of the common information about your App or a function to modify the default App properties generated */
   customAppProperties?:
-    | PostHogCustomAppProperties
-    | ((properties: PostHogCustomAppProperties) => PostHogCustomAppProperties)
+    PostHogCustomAppProperties | ((properties: PostHogCustomAppProperties) => PostHogCustomAppProperties)
   /**
    * Allows you to provide a custom asynchronous storage such as async-storage, expo-file-system or a synchronous storage such as mmkv.
    * If not provided, PostHog will attempt to use the best available storage via optional peer dependencies (async-storage, expo-file-system).
@@ -2281,10 +2280,7 @@ export class PostHog extends PostHogCore {
 
     let recordingActive = true
     const linkedFlag = cachedSessionReplayConfig['linkedFlag'] as
-      | string
-      | { [key: string]: JsonType }
-      | null
-      | undefined
+      string | { [key: string]: JsonType } | null | undefined
 
     if (typeof linkedFlag === 'string') {
       const value = cachedFeatureFlags[linkedFlag]
@@ -2425,8 +2421,7 @@ export class PostHog extends PostHogCore {
     if (!isMemoryPersistence) {
       const prevAppBuild = this.getPersistedProperty(PostHogPersistedProperty.InstalledAppBuild) as string | undefined
       const prevAppVersion = this.getPersistedProperty(PostHogPersistedProperty.InstalledAppVersion) as
-        | string
-        | undefined
+        string | undefined
 
       if (!appBuild || !appVersion) {
         this._logger.warn(
