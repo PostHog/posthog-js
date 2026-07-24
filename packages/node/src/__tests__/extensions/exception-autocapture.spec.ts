@@ -85,8 +85,10 @@ describe('exception autocapture', () => {
     const workerFilename = __dirname + '/exception-autocapture.worker.mjs'
     const worker = new Worker(workerFilename)
     try {
+      const exitPromise = once(worker, 'exit')
       worker.postMessage({ action: 'reject_promise', data: exceptionMessage })
       const [message] = await once(worker, 'message')
+      await exitPromise
       expect(message.method).toBe('capture')
       const firstException = message.event.properties.$exception_list[0]
       checkException(firstException, {
@@ -101,7 +103,9 @@ describe('exception autocapture', () => {
         lastFrameHasContext: true,
       })
     } finally {
-      await worker.terminate()
+      if (worker.threadId !== -1) {
+        await worker.terminate()
+      }
     }
   })
 

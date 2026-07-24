@@ -8,7 +8,12 @@ jest.useRealTimers()
 const clients: PostHog[] = []
 
 const newPostHog = (errorTracking?: Record<string, unknown>): PostHog => {
-  const client = new PostHog('test-token', { persistence: 'memory', flushInterval: 0, errorTracking } as any)
+  const client = new PostHog('test-token', {
+    persistence: 'memory',
+    flushInterval: 0,
+    disabled: true,
+    errorTracking,
+  } as any)
   clients.push(client)
   return client
 }
