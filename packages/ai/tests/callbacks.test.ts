@@ -686,3 +686,45 @@ describe('LangChainCallbackHandler', () => {
     expect(captureCall[0].properties['$ai_cache_creation_input_tokens']).toBe(800)
   })
 })
+
+describe('LangChainCallbackHandler trace/span state sanitization', () => {
+  it('redacts base64 data URLs from $ai_input_state and $ai_output_state', () => {
+    const handler = new LangChainCallbackHandler({ client: mockPostHogClient })
+    jest.clearAllMocks()
+
+    const dataUrl = 'data:image/jpeg;base64,' + 'A'.repeat(2000)
+    const serialized = {
+      lc: 1,
+      type: 'constructor' as const,
+      id: ['langchain', 'schema', 'runnable', 'RunnableSequence'],
+      kwargs: {},
+    }
+    const runId = 'run_chain_redact'
+
+    handler.handleChainStart(serialized, {
+      messages: [
+        {
+          content: [
+            { type: 'text', text: 'describe this image' },
+            { type: 'image_url', image_url: { url: dataUrl } },
+          ],
+        },
+      ],
+    } as any, runId)
+    handler.handleChainEnd({ echoed: dataUrl, parsed: { title: 'ok' } }, runId)
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    expect(captureCall[0].event).toBe('$ai_trace')
+
+    const inputState = JSON.stringify(captureCall[0].properties['$ai_input_state'])
+    expect(inputState).toContain('describe this image')
+    expect(inputState).toContain('[base64 image/jpeg redacted]')
+    expect(inputState).not.toContain('AAAAAAAA')
+
+    const outputState = JSON.stringify(captureCall[0].properties['$ai_output_state'])
+    expect(outputState).toContain('ok')
+    expect(outputState).toContain('[base64 image/jpeg redacted]')
+    expect(outputState).not.toContain('AAAAAAAA')
+  })
+})
