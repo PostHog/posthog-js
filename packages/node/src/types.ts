@@ -8,6 +8,7 @@ import type {
   PostHogFetchOptions,
   PostHogFetchResponse,
   PostHogFlagsAndPayloadsResponse,
+  Properties,
 } from '@posthog/core'
 import { ContextData, ContextOptions } from './extensions/context/types'
 
@@ -33,8 +34,8 @@ export type UnsetPersonPropertiesMessage = {
 
 export type SendFeatureFlagsOptions = {
   onlyEvaluateLocally?: boolean
-  personProperties?: Record<string, any>
-  groupProperties?: Record<string, Record<string, any>>
+  personProperties?: Properties
+  groupProperties?: Record<string, Properties>
   flagKeys?: string[]
 }
 
@@ -106,8 +107,8 @@ export type OverrideFeatureFlagsOptions =
 
 export type BaseFlagEvaluationOptions = {
   groups?: Record<string, string>
-  personProperties?: Record<string, string>
-  groupProperties?: Record<string, Record<string, string>>
+  personProperties?: Properties
+  groupProperties?: Record<string, Properties>
   onlyEvaluateLocally?: boolean
   disableGeoip?: boolean
 }
@@ -501,8 +502,8 @@ export interface IPostHog {
     distinctId: string,
     options?: {
       groups?: Record<string, string>
-      personProperties?: Record<string, string>
-      groupProperties?: Record<string, Record<string, string>>
+      personProperties?: Properties
+      groupProperties?: Record<string, Properties>
       onlyEvaluateLocally?: boolean
       sendFeatureFlagEvents?: boolean
     }
@@ -532,8 +533,8 @@ export interface IPostHog {
     distinctId: string,
     options?: {
       groups?: Record<string, string>
-      personProperties?: Record<string, string>
-      groupProperties?: Record<string, Record<string, string>>
+      personProperties?: Properties
+      groupProperties?: Record<string, Properties>
       onlyEvaluateLocally?: boolean
       sendFeatureFlagEvents?: boolean
     }
