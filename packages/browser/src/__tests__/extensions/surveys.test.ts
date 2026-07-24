@@ -7,7 +7,7 @@ import {
     useHideSurveyOnURLChange,
     usePopupVisibility,
 } from '../../extensions/surveys'
-import { retrieveSurveyShadow } from '../../extensions/surveys/surveys-extension-utils'
+import { retrieveSurveyShadow, setInProgressSurveyState } from '../../extensions/surveys/surveys-extension-utils'
 import {
     Survey,
     SurveyQuestionBranchingType,
@@ -711,6 +711,27 @@ describe('SurveyManager', () => {
             expect(surveyDiv.getElementsByClassName('survey-question').length).toBe(1)
             const descriptionElement = surveyDiv.querySelector('.survey-question-description')
             expect(descriptionElement).not.toBeNull()
+        })
+
+        it('still renders the form when a stale persisted index points past the last question (issue #3575)', () => {
+            // A prior completion/interaction can leave an in-progress index beyond the questions
+            // array. Without clamping, the question renderer bails and the survey container is
+            // injected but empty — the exact symptom reported in #3575.
+            const staleSurvey = { ...mockSurvey, id: 'stale-index-survey' } as unknown as Survey
+            setInProgressSurveyState(staleSurvey, {
+                surveySubmissionId: 'stale',
+                responses: {},
+                lastQuestionIndex: staleSurvey.questions.length, // out of range (only 0..length-1 are valid)
+                visitedIndices: [0],
+            } as any)
+
+            const surveyDiv = document.createElement('div')
+            surveyManager.renderSurvey(staleSurvey, surveyDiv)
+
+            expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
+            expect(surveyDiv.querySelector('.survey-box')?.getAttribute('data-question-index')).toBe('0')
+
+            localStorage.clear()
         })
 
         it('exposes the current question index on .survey-box for embedders', () => {
