@@ -23,7 +23,15 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup
 
-      - run: pnpm test:unit
+      - name: Run unit tests
+        run: |
+          set -o pipefail
+          pnpm test:unit 2>&1 | tee unit-tests.log
+
+          if grep -Eq 'A worker process has failed to exit gracefully|Jest did not exit one second after the test run has completed' unit-tests.log; then
+            echo "::error::Jest leaked resources after the unit test run"
+            exit 1
+          fi
 
       - run: pnpm test:docs-scripts
 

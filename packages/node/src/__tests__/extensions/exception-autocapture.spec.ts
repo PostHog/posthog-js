@@ -3,6 +3,7 @@ import { PostHog } from '@/entrypoints/index.node'
 import { addUncaughtExceptionListener, addUnhandledRejectionListener } from '@/extensions/error-tracking/autocapture'
 import { Worker } from 'worker_threads'
 import { relative } from 'path'
+import { once } from 'events'
 import type { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 
 describe('exception autocapture', () => {
@@ -58,54 +59,50 @@ describe('exception autocapture', () => {
     const workerFilename = __dirname + '/exception-autocapture.worker.mjs'
     const worker = new Worker(workerFilename)
     const exceptionMessage = 'Uncaught Error'
-    const capturePromise = new Promise<void>((res, rej) => {
-      worker.on('message', (message) => {
-        expect(message.method).toBe('capture')
-        const firstException = message.event.properties.$exception_list[0]
-        checkException(firstException, {
-          exceptionType: 'Error',
-          exceptionMessage,
-          mechanism: {
-            handled: false,
-            type: 'onuncaughtexception',
-          },
-          framesLength: 3,
-          lastFrameFileName: relative(process.cwd(), workerFilename),
-          lastFrameHasContext: true,
-        })
-        res()
+    try {
+      worker.postMessage({ action: 'throw_error', data: exceptionMessage })
+      const [message] = await once(worker, 'message')
+      expect(message.method).toBe('capture')
+      const firstException = message.event.properties.$exception_list[0]
+      checkException(firstException, {
+        exceptionType: 'Error',
+        exceptionMessage,
+        mechanism: {
+          handled: false,
+          type: 'onuncaughtexception',
+        },
+        framesLength: 3,
+        lastFrameFileName: relative(process.cwd(), workerFilename),
+        lastFrameHasContext: true,
       })
-    })
-    worker.postMessage({ action: 'throw_error', data: exceptionMessage })
-    await capturePromise
+    } finally {
+      await worker.terminate()
+    }
   })
 
   it('should listen to unhandled rejections', async () => {
     const exceptionMessage = 'Unhandled Promise'
     const workerFilename = __dirname + '/exception-autocapture.worker.mjs'
     const worker = new Worker(workerFilename)
-    const capturePromise = new Promise<void>((res, rej) => {
-      worker.on('message', (message) => {
-        expect(message.method).toBe('capture')
-        const firstException = message.event.properties.$exception_list[0]
-        checkException(firstException, {
-          exceptionType: 'Error',
-          exceptionMessage,
-          mechanism: {
-            handled: false,
-            type: 'onunhandledrejection',
-          },
-          framesLength: 1,
-          lastFrameFileName: relative(process.cwd(), workerFilename),
-          lastFrameHasContext: true,
-        })
-        res()
-        // Suppress jest warning on crashed worker
-        worker.unref()
+    try {
+      worker.postMessage({ action: 'reject_promise', data: exceptionMessage })
+      const [message] = await once(worker, 'message')
+      expect(message.method).toBe('capture')
+      const firstException = message.event.properties.$exception_list[0]
+      checkException(firstException, {
+        exceptionType: 'Error',
+        exceptionMessage,
+        mechanism: {
+          handled: false,
+          type: 'onunhandledrejection',
+        },
+        framesLength: 1,
+        lastFrameFileName: relative(process.cwd(), workerFilename),
+        lastFrameHasContext: true,
       })
-    })
-    worker.postMessage({ action: 'reject_promise', data: 'Unhandled Promise' })
-    await capturePromise
+    } finally {
+      await worker.terminate()
+    }
   })
 
   it('should rate limit when more than 10 of the same exception are caught', async () => {
@@ -121,14 +118,17 @@ describe('exception autocapture', () => {
       disableCompression: true,
     })
 
-    const mockedCapture = jest.spyOn(ph, '_capturePreparedEvent').mockResolvedValue(undefined)
+    try {
+      const mockedCapture = jest.spyOn(ph, '_capturePreparedEvent').mockResolvedValue(undefined)
 
-    const captureExceptions = Array.from({ length: 20 }).map(() => ph['errorTracking']['onException']({}, {}))
-    await Promise.all(captureExceptions)
-    await ph.flush()
+      const captureExceptions = Array.from({ length: 20 }).map(() => ph['errorTracking']['onException']({}, {}))
+      await Promise.all(captureExceptions)
 
-    // captures until rate limited
-    expect(mockedCapture).toHaveBeenCalledTimes(9)
+      // captures until rate limited
+      expect(mockedCapture).toHaveBeenCalledTimes(9)
+    } finally {
+      await ph.shutdown()
+    }
   })
 
   it('should honour the configured rate limiter bucket size', async () => {
@@ -145,13 +145,16 @@ describe('exception autocapture', () => {
       exceptionRateLimiterBucketSize: 3,
     })
 
-    const mockedCapture = jest.spyOn(ph, '_capturePreparedEvent').mockResolvedValue(undefined)
+    try {
+      const mockedCapture = jest.spyOn(ph, '_capturePreparedEvent').mockResolvedValue(undefined)
 
-    const captureExceptions = Array.from({ length: 20 }).map(() => ph['errorTracking']['onException']({}, {}))
-    await Promise.all(captureExceptions)
-    await ph.flush()
+      const captureExceptions = Array.from({ length: 20 }).map(() => ph['errorTracking']['onException']({}, {}))
+      await Promise.all(captureExceptions)
 
-    // captures until rate limited (bucket of 3 leaves 2 through before the limiter kicks in)
-    expect(mockedCapture).toHaveBeenCalledTimes(2)
+      // captures until rate limited (bucket of 3 leaves 2 through before the limiter kicks in)
+      expect(mockedCapture).toHaveBeenCalledTimes(2)
+    } finally {
+      await ph.shutdown()
+    }
   })
 })

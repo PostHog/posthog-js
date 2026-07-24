@@ -69,6 +69,12 @@ function firstBatchEvent(): Record<string, unknown> {
     return batch?.batch?.[0] ?? {}
 }
 
+function allBatchEvents(): Record<string, unknown>[] {
+    return batchCalls().flatMap(
+        (call) => (call.body as { batch: Record<string, unknown>[] }).batch
+    )
+}
+
 async function finishScheduledFunctions(t: ReturnType<typeof initConvexTest>) {
     // Let convex-test advance scheduler timers and wait for each scheduled function to finish.
     // A single timer pass can race with the scheduled action starting, which makes assertions
@@ -1089,6 +1095,8 @@ describe('evaluateFlag (remote)', () => {
         expect(value).toBe('variant-a')
         const flagsCalls = fetchCalls.filter((c) => c.url.includes('/flags'))
         expect(flagsCalls.length).toBeGreaterThanOrEqual(1)
+        expect(allBatchEvents()).toHaveLength(1)
+        expect(allBatchEvents()[0].event).toBe('$feature_flag_called')
     })
 
     test('returns null for missing flags', async () => {
@@ -1194,5 +1202,7 @@ describe('evaluateAllFlags (remote)', () => {
             'flag-c': false,
         })
         expect(result.featureFlagPayloads).toEqual({ 'flag-a': { config: 'value' } })
+        expect(allBatchEvents()).toHaveLength(3)
+        expect(allBatchEvents().every((event) => event.event === '$feature_flag_called')).toBe(true)
     })
 })

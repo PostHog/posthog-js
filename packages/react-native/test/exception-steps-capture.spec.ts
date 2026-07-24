@@ -3,9 +3,15 @@ import { Linking, AppState } from 'react-native'
 
 Linking.getInitialURL = jest.fn(() => Promise.resolve(null))
 AppState.addEventListener = jest.fn()
+jest.useRealTimers()
 
-const newPostHog = (errorTracking?: Record<string, unknown>): PostHog =>
-  new PostHog('test-token', { persistence: 'memory', flushInterval: 0, errorTracking } as any)
+const clients: PostHog[] = []
+
+const newPostHog = (errorTracking?: Record<string, unknown>): PostHog => {
+  const client = new PostHog('test-token', { persistence: 'memory', flushInterval: 0, errorTracking } as any)
+  clients.push(client)
+  return client
+}
 
 const captureSpy = (posthog: PostHog): jest.SpyInstance => jest.spyOn(posthog as any, 'capture')
 
@@ -15,8 +21,18 @@ const exceptionSteps = (spy: jest.SpyInstance): any => {
 }
 
 describe('PostHog React Native exception steps capture', () => {
-  // The attach happens synchronously inside capture(), so these tests avoid ready()/flush
-  // (which depend on timers that are faked in this suite).
+  beforeEach(() => {
+    global.fetch = jest.fn(async () => ({
+      status: 200,
+      json: () => Promise.resolve({ featureFlags: {} }),
+    })) as unknown as typeof fetch
+  })
+
+  afterEach(async () => {
+    await Promise.all(clients.splice(0).map((client) => client.shutdown()))
+  })
+
+  // The attach happens synchronously inside capture(), so the assertions don't need ready()/flush.
   it('attaches buffered steps to a captured exception in order', () => {
     const posthog = newPostHog()
     const spy = captureSpy(posthog)
