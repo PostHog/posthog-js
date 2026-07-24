@@ -28,6 +28,13 @@ jobs:
           set -o pipefail
           pnpm test:unit 2>&1 | tee unit-tests.log
 
+          for package in react node react-native; do
+            for shard in 1 2 3 4; do
+              echo "JEST_LEAK_SHARD packages/$package $shard/4"
+              pnpm --dir "packages/$package" exec jest --shard="$shard/4" --no-coverage 2>&1 | tee -a unit-tests.log
+            done
+          done
+
           if grep -Eq 'A worker process has failed to exit gracefully|Jest did not exit one second after the test run has completed' unit-tests.log; then
             echo "::error::Jest leaked resources after the unit test run"
             exit 1

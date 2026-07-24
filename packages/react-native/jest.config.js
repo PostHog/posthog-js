@@ -1,7 +1,7 @@
 module.exports = {
   preset: 'jest-expo',
   roots: ['<rootDir>'],
-  testEnvironment: '<rootDir>/jest-handle-environment.cjs',
+  testEnvironment: 'node',
   transform: {
     '^.+\\.ts$': 'ts-jest',
   },
