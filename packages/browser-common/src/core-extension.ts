@@ -3,6 +3,7 @@ import type { JsonRecord, Properties } from '@posthog/types'
 import type { Disposable } from './disposable'
 import type { Extension } from './extension'
 import type { Listener } from './pubsub'
+import type { RemoteConfig } from './types/remote-config'
 import type { ExtensionToken } from './token'
 
 /** Recursively marks object properties as readonly while preserving callable values. */
@@ -52,12 +53,6 @@ export interface CaptureOptions {
 }
 
 /**
- * Server-provided configuration shared across core and product extensions. A
- * loose record by design — each extension reads only the keys it owns.
- */
-export type RemoteConfig = DeepReadonly<JsonRecord>
-
-/**
  * The host SDK's core analytics behavior, exposed as an extension so shared
  * extensions can depend on the event pipeline without depending on a concrete
  * PostHog client implementation.
@@ -91,9 +86,9 @@ export interface CoreExtension extends Extension {
      * necessary. A failed outcome resolves to `undefined`; later successful
      * changes are published through `onRemoteConfig`.
      */
-    getRemoteConfig(): Promise<RemoteConfig | undefined>
+    getRemoteConfig(): Promise<DeepReadonly<RemoteConfig> | undefined>
     /** Fires through a deeply readonly view when server-provided config arrives or changes successfully. */
-    readonly onRemoteConfig: Listener<RemoteConfig>
+    readonly onRemoteConfig: Listener<DeepReadonly<RemoteConfig>>
 }
 
 /** Capability token used to resolve the host SDK's core analytics extension. */

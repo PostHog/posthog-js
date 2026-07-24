@@ -2334,156 +2334,6 @@
   ],
   "types": [
     {
-      "id": "ActionStepStringMatching",
-      "name": "ActionStepStringMatching",
-      "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
-      "example": "\"contains\" | \"exact\" | \"regex\""
-    },
-    {
-      "id": "ActionStepType",
-      "name": "ActionStepType",
-      "properties": [
-        {
-          "type": "string | null",
-          "name": "event"
-        },
-        {
-          "description": "ActionStepStringMatching.Exact",
-          "type": "ActionStepStringMatching | null",
-          "name": "href_matching"
-        },
-        {
-          "type": "string | null",
-          "name": "href"
-        },
-        {
-          "description": "Property filters for action step matching",
-          "type": "{\n        key: string;\n        value?: string | number | boolean | (string | number | boolean)[] | null;\n        operator?: PropertyMatchType;\n        type?: string;\n    }[]",
-          "name": "properties"
-        },
-        {
-          "description": "pre-compiled regex pattern for matching selector against $elements_chain",
-          "type": "string | null",
-          "name": "selector_regex"
-        },
-        {
-          "type": "string | null",
-          "name": "selector"
-        },
-        {
-          "description": "Deprecated: Only `selector` should be used now.",
-          "type": "string",
-          "name": "tag_name",
-          "releaseTag": "deprecated"
-        },
-        {
-          "description": "StringMatching.Exact",
-          "type": "ActionStepStringMatching | null",
-          "name": "text_matching"
-        },
-        {
-          "type": "string | null",
-          "name": "text"
-        },
-        {
-          "description": "StringMatching.Contains",
-          "type": "ActionStepStringMatching | null",
-          "name": "url_matching"
-        },
-        {
-          "type": "string | null",
-          "name": "url"
-        }
-      ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
-    },
-    {
-      "id": "BasicSurveyQuestion",
-      "name": "BasicSurveyQuestion",
-      "properties": [
-        {
-          "type": "typeof SurveyQuestionType.Open",
-          "name": "type"
-        }
-      ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
-    },
-    {
-      "id": "Compression",
-      "name": "Compression",
-      "properties": [],
-      "path": "lib/src/types.d.ts",
-      "example": "(typeof Compression)[keyof typeof Compression]"
-    },
-    {
-      "id": "ConversationsRemoteConfig",
-      "name": "ConversationsRemoteConfig",
-      "properties": [
-        {
-          "description": "Whether to show the name field in the identification form   true (when requireEmail is true)",
-          "type": "boolean",
-          "name": "collectName"
-        },
-        {
-          "description": "Primary color for the widget UI",
-          "type": "string",
-          "name": "color"
-        },
-        {
-          "description": "List of allowed domains where the widget should be shown. Supports wildcards like \"https://*.example.com\" Empty array or not present means show on all domains.",
-          "type": "string[]",
-          "name": "domains"
-        },
-        {
-          "description": "Whether conversations are enabled for this team When true, the conversations API is available (posthog.conversations.*)",
-          "type": "boolean",
-          "name": "enabled"
-        },
-        {
-          "description": "Greeting text to show when widget is first opened",
-          "type": "string",
-          "name": "greetingText"
-        },
-        {
-          "description": "Description for the identification form   \"Please provide your details so we can help you better.\"",
-          "type": "string",
-          "name": "identificationFormDescription"
-        },
-        {
-          "description": "Title for the identification form   \"Before we start...\"",
-          "type": "string",
-          "name": "identificationFormTitle"
-        },
-        {
-          "description": "Placeholder text for the message input",
-          "type": "string",
-          "name": "placeholderText"
-        },
-        {
-          "description": "Whether to require email before starting a conversation   false",
-          "type": "boolean",
-          "name": "requireEmail"
-        },
-        {
-          "description": "Public token for authenticating conversations API requests This token is team-scoped and meant to be embedded in client code",
-          "type": "string",
-          "name": "token"
-        },
-        {
-          "description": "Whether the widget UI (button + chat panel) should be shown Only takes effect when enabled is true   false",
-          "type": "boolean",
-          "name": "widgetEnabled"
-        },
-        {
-          "description": "Position of the widget on the screen   'bottom_right'",
-          "type": "WidgetPosition",
-          "name": "widgetPosition"
-        }
-      ],
-      "path": "lib/src/posthog-conversations-types.d.ts"
-    },
-    {
       "id": "ConversationsTraits",
       "name": "ConversationsTraits",
       "properties": [
@@ -2539,56 +2389,11 @@
       "path": "lib/src/posthog-surveys-types.d.ts"
     },
     {
-      "id": "DisplaySurveyType",
-      "name": "DisplaySurveyType",
-      "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
-      "example": "(typeof DisplaySurveyType)[keyof typeof DisplaySurveyType]"
-    },
-    {
       "id": "ErrorEventArgs",
       "name": "ErrorEventArgs",
       "properties": [],
       "path": "lib/src/types.d.ts",
       "example": "[\n    event: string | Event,\n    source?: string | undefined,\n    lineno?: number | undefined,\n    colno?: number | undefined,\n    error?: Error | undefined\n]"
-    },
-    {
-      "id": "ErrorTrackingSuppressionRule",
-      "name": "ErrorTrackingSuppressionRule",
-      "properties": [
-        {
-          "type": "'AND' | 'OR'",
-          "name": "type"
-        },
-        {
-          "type": "ErrorTrackingSuppressionRuleValue[]",
-          "name": "values"
-        }
-      ],
-      "path": "lib/src/types.d.ts"
-    },
-    {
-      "id": "ErrorTrackingSuppressionRuleValue",
-      "name": "ErrorTrackingSuppressionRuleValue",
-      "properties": [
-        {
-          "type": "'$exception_types' | '$exception_values'",
-          "name": "key"
-        },
-        {
-          "type": "PropertyMatchType",
-          "name": "operator"
-        },
-        {
-          "type": "string",
-          "name": "type"
-        },
-        {
-          "type": "string | string[]",
-          "name": "value"
-        }
-      ],
-      "path": "lib/src/types.d.ts"
     },
     {
       "id": "EventHandler",
@@ -2629,21 +2434,6 @@
         {
           "type": "string",
           "name": "requestId"
-        }
-      ],
-      "path": "lib/src/types.d.ts"
-    },
-    {
-      "id": "FlagVariant",
-      "name": "FlagVariant",
-      "properties": [
-        {
-          "type": "string",
-          "name": "flag"
-        },
-        {
-          "type": "string",
-          "name": "variant"
         }
       ],
       "path": "lib/src/types.d.ts"
@@ -2747,21 +2537,6 @@
       "path": "lib/src/posthog-product-tours-types.d.ts"
     },
     {
-      "id": "LinkSurveyQuestion",
-      "name": "LinkSurveyQuestion",
-      "properties": [
-        {
-          "type": "string | null",
-          "name": "link"
-        },
-        {
-          "type": "typeof SurveyQuestionType.Link",
-          "name": "type"
-        }
-      ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
-    },
-    {
       "id": "MarkAsReadResponse",
       "name": "MarkAsReadResponse",
       "properties": [
@@ -2828,85 +2603,6 @@
       "example": "\"customer\" | \"AI\" | \"human\""
     },
     {
-      "id": "MultipleSurveyQuestion",
-      "name": "MultipleSurveyQuestion",
-      "properties": [
-        {
-          "type": "string[]",
-          "name": "choices"
-        },
-        {
-          "type": "boolean",
-          "name": "hasOpenChoice"
-        },
-        {
-          "type": "boolean",
-          "name": "shuffleOptions"
-        },
-        {
-          "type": "boolean",
-          "name": "skipSubmitButton"
-        },
-        {
-          "type": "typeof SurveyQuestionType.SingleChoice | typeof SurveyQuestionType.MultipleChoice",
-          "name": "type"
-        }
-      ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
-    },
-    {
-      "id": "NetworkRecordOptions",
-      "name": "NetworkRecordOptions",
-      "properties": [
-        {
-          "type": "InitiatorType[]",
-          "name": "initiatorTypes"
-        },
-        {
-          "type": "(data: CapturedNetworkRequest) => CapturedNetworkRequest | undefined",
-          "name": "maskRequestFn"
-        },
-        {
-          "type": "boolean | { request: boolean; response: boolean; }",
-          "name": "recordHeaders"
-        },
-        {
-          "type": "boolean | string[] | { request: boolean | string[]; response: boolean | string[]; }",
-          "name": "recordBody"
-        },
-        {
-          "type": "boolean",
-          "name": "recordInitialRequests"
-        },
-        {
-          "description": "whether to record PerformanceEntry events for network requests",
-          "type": "boolean",
-          "name": "recordPerformance"
-        },
-        {
-          "description": "the PerformanceObserver will only observe these entry types",
-          "type": "string[]",
-          "name": "performanceEntryTypeToObserve"
-        },
-        {
-          "description": "the maximum size of the request/response body to record\nNB this will be at most 1MB even if set larger",
-          "type": "number",
-          "name": "payloadSizeLimitBytes"
-        },
-        {
-          "description": "when true, read bodies through a streaming reader that stops at payloadSizeLimitBytes\ninstead of buffering the whole body and then enforcing the limit. Reads only a clone of\nthe body, so it never consumes the stream the page itself reads.",
-          "type": "boolean",
-          "name": "streamNetworkBody"
-        },
-        {
-          "description": "some domains we should never record the payload\nfor example other companies session replay ingestion payloads aren't super useful but are gigantic\nif this isn't provided we use a default list\nif this is provided - we add the provided list to the default list\ni.e. we never record the payloads on the default deny list",
-          "type": "string[]",
-          "name": "payloadHostDenyList"
-        }
-      ],
-      "path": "lib/src/types.d.ts"
-    },
-    {
       "id": "OverrideConfig",
       "name": "OverrideConfig",
       "properties": [
@@ -2940,11 +2636,6 @@
       "name": "PostHogConfig",
       "properties": [
         {
-          "description": "The name this instance will be identified by.\nYou don't need to set this most of the time,\nbut can be useful if you have several Posthog instances running at the same time.",
-          "type": "string",
-          "name": "name"
-        },
-        {
           "description": "URL of your PostHog instance.",
           "type": "string",
           "name": "api_host"
@@ -2961,13 +2652,18 @@
         },
         {
           "description": "The transport method to use for API requests.",
-          "type": "\"fetch\" | \"XHR\"",
+          "type": "\"XHR\" | \"fetch\"",
           "name": "api_transport"
         },
         {
           "description": "The token for your PostHog project.\nIt should NOT be provided manually in the config, but rather passed as the first parameter to `posthog.init()`.",
           "type": "string",
           "name": "token"
+        },
+        {
+          "description": "The name this instance will be identified by.\nYou don't need to set this most of the time,\nbut can be useful if you have several Posthog instances running at the same time.",
+          "type": "string",
+          "name": "name"
         },
         {
           "description": "Determines whether PostHog should autocapture events.\nThis setting does not affect capturing pageview events (see `capture_pageview`).\n\nby default autocapture is ignored on elements that match a `ph-no-capture` css class on the element or a parent",
@@ -4450,27 +4146,6 @@
       "path": "lib/src/posthog-product-tours-types.d.ts"
     },
     {
-      "id": "PropertyFilters",
-      "name": "PropertyFilters",
-      "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
-      "example": "{\n    [propertyName: string]: {\n        values: string[];\n        operator: PropertyOperator;\n    };\n}"
-    },
-    {
-      "id": "PropertyMatchType",
-      "name": "PropertyMatchType",
-      "properties": [],
-      "path": "lib/src/types.d.ts",
-      "example": "\"regex\" | \"not_regex\" | \"exact\" | \"is_not\" | \"icontains\" | \"not_icontains\""
-    },
-    {
-      "id": "PropertyOperator",
-      "name": "PropertyOperator",
-      "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
-      "example": "\"gt\" | \"lt\""
-    },
-    {
       "id": "QueuedRequestWithOptions",
       "name": "QueuedRequestWithOptions",
       "properties": [
@@ -4478,150 +4153,6 @@
           "description": "key of queue, e.g. 'sessionRecording' vs 'event'",
           "type": "string",
           "name": "batchKey"
-        }
-      ],
-      "path": "lib/src/types.d.ts"
-    },
-    {
-      "id": "RatingSurveyQuestion",
-      "name": "RatingSurveyQuestion",
-      "properties": [
-        {
-          "type": "'number' | 'emoji'",
-          "name": "display"
-        },
-        {
-          "type": "string",
-          "name": "lowerBoundLabel"
-        },
-        {
-          "type": "2 | 3 | 5 | 7 | 10",
-          "name": "scale"
-        },
-        {
-          "type": "boolean",
-          "name": "skipSubmitButton"
-        },
-        {
-          "type": "typeof SurveyQuestionType.Rating",
-          "name": "type"
-        },
-        {
-          "type": "string",
-          "name": "upperBoundLabel"
-        }
-      ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
-    },
-    {
-      "id": "RemoteConfig",
-      "name": "RemoteConfig",
-      "properties": [
-        {
-          "description": "Whether we should use a custom endpoint for analytics\nendpoint: \"/e\"",
-          "type": "{\n        endpoint?: string;\n    }",
-          "name": "analytics"
-        },
-        {
-          "description": "If true, disables autocapture. When absent or not a boolean, the SDK keeps the last known server value; a visitor with no stored value keeps autocapture off until a response containing the field arrives.",
-          "type": "boolean",
-          "name": "autocapture_opt_out"
-        },
-        {
-          "description": "This is currently in development and may have breaking changes without a major version bump",
-          "type": "boolean | {\n        endpoint?: string;\n    }",
-          "name": "autocaptureExceptions"
-        },
-        {
-          "description": "Whether to capture dead clicks",
-          "type": "boolean",
-          "name": "captureDeadClicks"
-        },
-        {
-          "description": "originally capturePerformance was replay only and so boolean true is equivalent to  network_timing: true  now capture performance can be separately enabled within replay and as a standalone web vitals tracker people can have them enabled separately they work standalone but enhance each other TODO: deprecate this so we make a new config that doesn't need this explanation",
-          "type": "boolean | PerformanceCaptureConfig",
-          "name": "capturePerformance"
-        },
-        {
-          "description": "Conversations widget configuration",
-          "type": "boolean | ConversationsRemoteConfig",
-          "name": "conversations"
-        },
-        {
-          "description": "Whether to only capture identified users by default",
-          "type": "boolean",
-          "name": "defaultIdentifiedOnly"
-        },
-        {
-          "description": "Deprecated: renamed to toolbarParams, still present on older API responses",
-          "type": "ToolbarParams",
-          "name": "editorParams",
-          "releaseTag": "deprecated"
-        },
-        {
-          "description": "Whether the `$elements_chain` property should be sent as a string or as an array\nfalse",
-          "type": "boolean",
-          "name": "elementsChainAsString"
-        },
-        {
-          "description": "Error tracking configuration options",
-          "type": "{\n        autocaptureExceptions?: boolean;\n        captureExtensionExceptions?: boolean;\n        suppressionRules?: ErrorTrackingSuppressionRule[];\n    }",
-          "name": "errorTracking"
-        },
-        {
-          "description": "Indicates if the team has any flags enabled (if not we don't need to load them)",
-          "type": "boolean",
-          "name": "hasFeatureFlags"
-        },
-        {
-          "description": "Whether heatmaps are enabled",
-          "type": "boolean",
-          "name": "heatmaps"
-        },
-        {
-          "description": "Whether the user is authenticated",
-          "type": "boolean",
-          "name": "isAuthenticated"
-        },
-        {
-          "description": "Whether capturing logs to the logs product is enabled",
-          "type": "{\n        captureConsoleLogs?: boolean;\n    }",
-          "name": "logs"
-        },
-        {
-          "description": "Whether product tours are enabled",
-          "type": "boolean",
-          "name": "productTours"
-        },
-        {
-          "description": "Session recording configuration options",
-          "type": "SessionRecordingRemoteConfig | false",
-          "name": "sessionRecording"
-        },
-        {
-          "description": "List of site apps with their IDs and URLs",
-          "type": "{\n        id: string;\n        url: string;\n    }[]",
-          "name": "siteApps"
-        },
-        {
-          "description": "Supported compression algorithms",
-          "type": "Compression[]",
-          "name": "supportedCompression"
-        },
-        {
-          "description": "Whether surveys are enabled",
-          "type": "boolean | Survey[]",
-          "name": "surveys"
-        },
-        {
-          "description": "Parameters for the toolbar",
-          "type": "ToolbarParams",
-          "name": "toolbarParams"
-        },
-        {
-          "description": "deprecated, moved to toolbarParams",
-          "type": "'toolbar'",
-          "name": "toolbarVersion"
         }
       ],
       "path": "lib/src/types.d.ts"
@@ -4891,26 +4422,11 @@
       "path": "lib/src/posthog-conversations-types.d.ts"
     },
     {
-      "id": "SessionRecordingEventTrigger",
-      "name": "SessionRecordingEventTrigger",
-      "properties": [
-        {
-          "type": "string",
-          "name": "name"
-        },
-        {
-          "type": "SessionRecordingTriggerPropertyFilter[]",
-          "name": "properties"
-        }
-      ],
-      "path": "lib/src/types.d.ts"
-    },
-    {
       "id": "SessionRecordingPersistedConfig",
       "name": "SessionRecordingPersistedConfig",
       "properties": [
         {
-          "description": "Config version - defaults to 1 (legacy)\nWhen version is 2, triggerGroups is used instead of individual trigger fields",
+          "description": "Config version - defaults to 1 (legacy).\nWhen version is 2, triggerGroups is used instead of individual trigger fields.",
           "type": "1 | 2",
           "name": "version"
         },
@@ -4947,12 +4463,12 @@
           "name": "eventTriggers"
         },
         {
-          "description": "Controls how event, url, sampling, and linked flag triggers are combined\n\n`any` means that if any of the triggers match, the session will be recorded\n`all` means that all the triggers must match for the session to be recorded\n\noriginally it was (event || url) && (sampling || linked flag)\nwhich nobody wanted, now the default is all",
+          "description": "Controls how event, URL, sampling, and linked flag triggers are combined.\n\n`any` means that if any of the triggers match, the session will be recorded.\n`all` means that all the triggers must match for the session to be recorded.",
           "type": "\"any\" | \"all\"",
           "name": "triggerMatchType"
         },
         {
-          "description": "V2 Trigger Groups - multiple named trigger groups with their own conditions and sample rates\nOnly used when version === 2",
+          "description": "V2 Trigger Groups - multiple named trigger groups with their own conditions and sample rates.\nOnly used when version === 2.",
           "type": "SessionRecordingTriggerGroup[]",
           "name": "triggerGroups"
         },
@@ -4980,152 +4496,6 @@
         {
           "type": "number",
           "name": "minimumDurationMilliseconds"
-        }
-      ],
-      "path": "lib/src/types.d.ts"
-    },
-    {
-      "id": "SessionRecordingRemoteConfig",
-      "name": "SessionRecordingRemoteConfig",
-      "properties": [
-        {
-          "description": "If set, records the canvas",
-          "type": "boolean",
-          "name": "recordCanvas"
-        },
-        {
-          "description": "If set, records the canvas at the given FPS\nCan be set in the remote configuration\nLimited between 0 and 12\nWhen canvas recording is enabled, if this is not set locally, then remote config sets this as 4",
-          "type": "number",
-          "name": "canvasFps"
-        },
-        {
-          "description": "If set, records the canvas at the given quality\nCan be set in the remote configuration\nMust be a string that is a valid decimal between 0 and 1\nWhen canvas recording is enabled, if this is not set locally, then remote config sets this as \"0.4\"",
-          "type": "string",
-          "name": "canvasQuality"
-        },
-        {
-          "type": "string",
-          "name": "endpoint"
-        },
-        {
-          "type": "boolean",
-          "name": "consoleLogRecordingEnabled"
-        },
-        {
-          "type": "string",
-          "name": "sampleRate"
-        },
-        {
-          "type": "number",
-          "name": "minimumDurationMilliseconds"
-        },
-        {
-          "type": "string | FlagVariant",
-          "name": "linkedFlag"
-        },
-        {
-          "type": "Pick<NetworkRecordOptions, \"recordBody\" | \"recordHeaders\">",
-          "name": "networkPayloadCapture"
-        },
-        {
-          "type": "Pick<SessionRecordingOptions, \"maskAllInputs\" | \"maskTextSelector\" | \"blockSelector\">",
-          "name": "masking"
-        },
-        {
-          "type": "SessionRecordingUrlTrigger[]",
-          "name": "urlTriggers"
-        },
-        {
-          "type": "{ script?: string | undefined; }",
-          "name": "scriptConfig"
-        },
-        {
-          "type": "SessionRecordingUrlTrigger[]",
-          "name": "urlBlocklist"
-        },
-        {
-          "type": "string[]",
-          "name": "eventTriggers"
-        },
-        {
-          "description": "Controls how event, url, sampling, and linked flag triggers are combined\n\n`any` means that if any of the triggers match, the session will be recorded\n`all` means that all the triggers must match for the session to be recorded\n\noriginally it was (event || url) && (sampling || linked flag)\nwhich nobody wanted, now the default is all",
-          "type": "\"any\" | \"all\"",
-          "name": "triggerMatchType"
-        },
-        {
-          "description": "Config version - defaults to 1 (legacy)\nWhen version is 2, triggerGroups is used instead of individual trigger fields",
-          "type": "1 | 2",
-          "name": "version"
-        },
-        {
-          "description": "V2 Trigger Groups - multiple named trigger groups with their own conditions and sample rates\nOnly used when version === 2",
-          "type": "SessionRecordingTriggerGroup[]",
-          "name": "triggerGroups"
-        }
-      ],
-      "path": "lib/src/types.d.ts"
-    },
-    {
-      "id": "SessionRecordingTriggerGroup",
-      "name": "SessionRecordingTriggerGroup",
-      "properties": [
-        {
-          "type": "{\n        matchType: 'any' | 'all';\n        events?: SessionRecordingEventTrigger[];\n        urls?: SessionRecordingUrlTrigger[];\n        flag?: string | FlagVariant;\n        properties?: SessionRecordingTriggerPropertyFilter[];\n    }",
-          "name": "conditions"
-        },
-        {
-          "type": "string",
-          "name": "id"
-        },
-        {
-          "type": "number",
-          "name": "minDurationMs"
-        },
-        {
-          "type": "string",
-          "name": "name"
-        },
-        {
-          "type": "number",
-          "name": "sampleRate"
-        }
-      ],
-      "path": "lib/src/types.d.ts"
-    },
-    {
-      "id": "SessionRecordingTriggerPropertyFilter",
-      "name": "SessionRecordingTriggerPropertyFilter",
-      "properties": [
-        {
-          "type": "string",
-          "name": "key"
-        },
-        {
-          "type": "'exact' | 'is_not' | 'icontains' | 'not_icontains' | 'regex' | 'not_regex' | 'gt' | 'lt'",
-          "name": "operator"
-        },
-        {
-          "type": "'event' | 'person'",
-          "name": "type"
-        },
-        {
-          "type": "string | number | boolean | string[]",
-          "name": "value"
-        }
-      ],
-      "path": "lib/src/types.d.ts"
-    },
-    {
-      "id": "SessionRecordingUrlTrigger",
-      "name": "SessionRecordingUrlTrigger",
-      "properties": [
-        {
-          "type": "'regex'",
-          "name": "matching"
-        },
-        {
-          "type": "string",
-          "name": "url"
         }
       ],
       "path": "lib/src/types.d.ts"
@@ -5221,171 +4591,6 @@
       "example": "[method: string, ...args: any[]]"
     },
     {
-      "id": "Survey",
-      "name": "Survey",
-      "properties": [
-        {
-          "type": "SurveyAppearance | null",
-          "name": "appearance"
-        },
-        {
-          "type": "{\n        url?: string;\n        selector?: string;\n        seenSurveyWaitPeriodInDays?: number;\n        urlMatchType?: PropertyMatchType;\n        events: {\n            repeatedActivation?: boolean;\n            values: SurveyEventWithFilters[];\n        } | null;\n        cancelEvents: {\n            values: SurveyEventWithFilters[];\n        } | null;\n        actions: {\n            values: SurveyActionType[];\n        } | null;\n        deviceTypes?: string[];\n        deviceTypesMatchType?: PropertyMatchType;\n        linkedFlagVariant?: string;\n    } | null",
-          "name": "conditions"
-        },
-        {
-          "type": "string | null",
-          "name": "current_iteration_start_date"
-        },
-        {
-          "type": "number | null",
-          "name": "current_iteration"
-        },
-        {
-          "type": "string",
-          "name": "description"
-        },
-        {
-          "type": "boolean | null",
-          "name": "enable_partial_responses"
-        },
-        {
-          "type": "string | null",
-          "name": "end_date"
-        },
-        {
-          "type": "{\n        key: string;\n        value?: string;\n    }[] | null",
-          "name": "feature_flag_keys"
-        },
-        {
-          "type": "string",
-          "name": "id"
-        },
-        {
-          "type": "string | null",
-          "name": "internal_targeting_flag_key"
-        },
-        {
-          "type": "string | null",
-          "name": "linked_flag_key"
-        },
-        {
-          "type": "string",
-          "name": "name"
-        },
-        {
-          "type": "SurveyQuestion[]",
-          "name": "questions"
-        },
-        {
-          "type": "SurveySchedule | null",
-          "name": "schedule"
-        },
-        {
-          "type": "string | null",
-          "name": "start_date"
-        },
-        {
-          "type": "string | null",
-          "name": "targeting_flag_key"
-        },
-        {
-          "type": "Record<string, SurveyTranslation>",
-          "name": "translations"
-        },
-        {
-          "type": "SurveyType",
-          "name": "type"
-        }
-      ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
-    },
-    {
-      "id": "SurveyActionType",
-      "name": "SurveyActionType",
-      "properties": [
-        {
-          "type": "number",
-          "name": "id"
-        },
-        {
-          "type": "string | null",
-          "name": "name"
-        },
-        {
-          "type": "ActionStepType[]",
-          "name": "steps"
-        }
-      ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
-    },
-    {
-      "id": "SurveyAppearance",
-      "name": "SurveyAppearance",
-      "properties": [
-        {
-          "type": "string",
-          "name": "boxPadding"
-        },
-        {
-          "description": "Deprecated: - not currently used",
-          "type": "string",
-          "name": "descriptionTextColor",
-          "releaseTag": "deprecated"
-        },
-        {
-          "type": "boolean",
-          "name": "disableAutofocus"
-        },
-        {
-          "type": "string",
-          "name": "disabledButtonOpacity"
-        },
-        {
-          "type": "string",
-          "name": "fontFamily"
-        },
-        {
-          "type": "boolean",
-          "name": "hideCancelButton"
-        },
-        {
-          "description": "Deprecated: Use inputBackground instead (inherited from core)",
-          "type": "string",
-          "name": "inputBackgroundColor",
-          "releaseTag": "deprecated"
-        },
-        {
-          "type": "string",
-          "name": "maxWidth"
-        },
-        {
-          "type": "SurveyPosition",
-          "name": "position"
-        },
-        {
-          "type": "string",
-          "name": "ratingButtonHoverColor"
-        },
-        {
-          "type": "SurveyTabPosition",
-          "name": "tabPosition"
-        },
-        {
-          "type": "boolean",
-          "name": "whiteLabel"
-        },
-        {
-          "type": "SurveyWidgetType",
-          "name": "widgetType"
-        },
-        {
-          "type": "string",
-          "name": "zIndex"
-        }
-      ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
-    },
-    {
       "id": "SurveyCallback",
       "name": "SurveyCallback",
       "properties": [],
@@ -5472,127 +4677,9 @@
       "path": "lib/src/posthog-surveys-types.d.ts"
     },
     {
-      "id": "SurveyEventName",
-      "name": "SurveyEventName",
-      "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
-      "example": "(typeof SurveyEventName)[keyof typeof SurveyEventName]"
-    },
-    {
-      "id": "SurveyEventProperties",
-      "name": "SurveyEventProperties",
-      "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
-      "example": "(typeof SurveyEventProperties)[keyof typeof SurveyEventProperties]"
-    },
-    {
-      "id": "SurveyEventType",
-      "name": "SurveyEventType",
-      "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
-      "example": "(typeof SurveyEventType)[keyof typeof SurveyEventType]"
-    },
-    {
-      "id": "SurveyEventWithFilters",
-      "name": "SurveyEventWithFilters",
-      "properties": [
-        {
-          "type": "string",
-          "name": "name"
-        },
-        {
-          "type": "PropertyFilters",
-          "name": "propertyFilters"
-        }
-      ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
-    },
-    {
-      "id": "SurveyPosition",
-      "name": "SurveyPosition",
-      "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
-      "example": "(typeof SurveyPosition)[keyof typeof SurveyPosition]"
-    },
-    {
-      "id": "SurveyQuestion",
-      "name": "SurveyQuestion",
-      "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
-      "example": "BasicSurveyQuestion | LinkSurveyQuestion | RatingSurveyQuestion | MultipleSurveyQuestion"
-    },
-    {
-      "id": "SurveyQuestionBranchingType",
-      "name": "SurveyQuestionBranchingType",
-      "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
-      "example": "(typeof SurveyQuestionBranchingType)[keyof typeof SurveyQuestionBranchingType]"
-    },
-    {
-      "id": "SurveyQuestionDescriptionContentType",
-      "name": "SurveyQuestionDescriptionContentType",
-      "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
-      "example": "\"html\" | \"text\""
-    },
-    {
-      "id": "SurveyQuestionType",
-      "name": "SurveyQuestionType",
-      "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
-      "example": "(typeof SurveyQuestionType)[keyof typeof SurveyQuestionType]"
-    },
-    {
       "id": "SurveyResponseValue",
       "name": "SurveyResponseValue",
       "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts"
-    },
-    {
-      "id": "SurveySchedule",
-      "name": "SurveySchedule",
-      "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
-      "example": "(typeof SurveySchedule)[keyof typeof SurveySchedule]"
-    },
-    {
-      "id": "SurveyTabPosition",
-      "name": "SurveyTabPosition",
-      "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
-      "example": "(typeof SurveyTabPosition)[keyof typeof SurveyTabPosition]"
-    },
-    {
-      "id": "SurveyType",
-      "name": "SurveyType",
-      "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
-      "example": "(typeof SurveyType)[keyof typeof SurveyType]"
-    },
-    {
-      "id": "SurveyWidgetType",
-      "name": "SurveyWidgetType",
-      "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
-      "example": "(typeof SurveyWidgetType)[keyof typeof SurveyWidgetType]"
-    },
-    {
-      "id": "SurveyWithTypeAndAppearance",
-      "name": "SurveyWithTypeAndAppearance",
-      "properties": [
-        {
-          "type": "string",
-          "name": "id"
-        },
-        {
-          "type": "SurveyType",
-          "name": "type"
-        },
-        {
-          "type": "SurveyAppearance",
-          "name": "appearance"
-        }
-      ],
       "path": "lib/src/posthog-surveys-types.d.ts"
     },
     {
@@ -5720,13 +4807,6 @@
         }
       ],
       "path": "lib/src/posthog-conversations-types.d.ts"
-    },
-    {
-      "id": "WidgetPosition",
-      "name": "WidgetPosition",
-      "properties": [],
-      "path": "lib/src/posthog-conversations-types.d.ts",
-      "example": "\"bottom_left\" | \"bottom_right\" | \"top_left\" | \"top_right\""
     }
   ],
   "categories": [
