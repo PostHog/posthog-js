@@ -43,7 +43,7 @@ jobs:
 
       - name: Test TypeScript Import
         run: |
-          rm ci-ts-file.js || true
+          rm -f ci-ts-file.js
           pnpm exec tsc --version
           pnpm exec tsc ci-ts-file.ts --strict --target es2017 --skipLibCheck ${{ matrix.typescript-version.extra-flags }}
           node ci-ts-file.js
