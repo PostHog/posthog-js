@@ -1,5 +1,5 @@
 /* eslint-disable */
-import { posthog } from './dist/module'
+import { posthog } from 'posthog-js'
 import * as ts from 'typescript'
 
 console.log(posthog)
