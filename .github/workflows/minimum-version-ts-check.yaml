@@ -22,6 +22,8 @@ jobs:
             extra-flags: "--module commonjs --moduleResolution node"
           - version: "5.9.2"
             extra-flags: "--module commonjs --moduleResolution node"
+          - version: "6.0.3"
+            extra-flags: "--module commonjs --ignoreConfig"
           - version: "7.0.2"
             extra-flags: "--module nodenext --moduleResolution nodenext --ignoreConfig"
           - version: "7.1.0-dev.20260723.1"
@@ -46,32 +48,5 @@ jobs:
           rm ci-ts-file.js || true
           pnpm exec tsc --version
           pnpm exec tsc ci-ts-file.ts --strict --target es2017 --skipLibCheck ${{ matrix.typescript-version.extra-flags }}
-          node ci-ts-file.js
-        working-directory: packages/browser
-
-  latest-smoke-test:
-    name: Check latest TS version
-    if: github.event_name == 'pull_request'
-    continue-on-error: true
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - uses: ./.github/actions/setup
-        with:
-          node_version: 24
-          build: true
-
-      - name: Override TypeScript version
-        env:
-          TS_VERSION: latest
-        run: yq -i '.catalog.typescript = strenv(TS_VERSION) | .minimumReleaseAgeExclude += ["typescript"]' pnpm-workspace.yaml && pnpm install --no-frozen-lockfile
-
-      - name: Test TypeScript Import
-        run: |
-          rm ci-ts-file.js || true
-          pnpm exec tsc --version
-          pnpm exec tsc ci-ts-file.ts --strict --target es2017 --skipLibCheck --module nodenext --moduleResolution nodenext --ignoreConfig
           node ci-ts-file.js
         working-directory: packages/browser
