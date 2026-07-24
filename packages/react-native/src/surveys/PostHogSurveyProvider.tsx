@@ -63,6 +63,11 @@ export type PostHogSurveyProviderProps = {
    * Set to false to defer presentation — e.g. while a native-stack formSheet/modal is on top.
    * Deferral is display-only: the survey stays armed and presents once this is true again.
    * A survey already on screen is not interrupted when this becomes false.
+   *
+   * You own flipping this back to true (e.g. wire it to route/screen focus). While it stays
+   * false the survey remains deferred and never shows — if the un-defer never happens
+   * (sheet dismissed without re-focusing the provider, an unmount, an error boundary), the
+   * survey stays armed indefinitely and no "survey shown" event fires.
    */
   autoPresentSurveys?: boolean
 
