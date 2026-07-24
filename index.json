@@ -1,4 +1,18 @@
 {
+  "PostHog/posthog-js/issue/4268": {
+    "key": "PostHog/posthog-js/issue/4268",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4268",
+    "url": "https://github.com/PostHog/posthog-js/issues/4268",
+    "conclusion": "Valid AI observability enhancement: the SDK currently forwards OTLP spans without implementing per-span identity or group semantics, while its examples configure identity on the process-level Resource.",
+    "labels": [
+      "enhancement",
+      "feature",
+      "team/llm-analytics"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-24T16:40:00.534Z"
+  },
   "PostHog/posthog-js/issue/4267": {
     "key": "PostHog/posthog-js/issue/4267",
     "repo": "PostHog/posthog-js",
