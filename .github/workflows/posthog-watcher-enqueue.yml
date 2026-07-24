@@ -24,7 +24,16 @@ concurrency:
 
 jobs:
     enqueue:
-        if: ${{ github.event_name == 'issues' || github.event_name == 'issue_comment' || github.event.pull_request.head.repo.full_name == github.repository }}
+        if: >-
+            ${{
+              github.event_name == 'issues' ||
+              (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@posthog-watcher')) ||
+              (
+                github.event.pull_request.head.repo.full_name == github.repository &&
+                startsWith(github.event.pull_request.head.ref, 'posthog-watcher/') &&
+                (github.event_name != 'pull_request_review' || github.event.review.state == 'commented' || github.event.review.state == 'changes_requested')
+              )
+            }}
         runs-on: ubuntu-24.04
         steps:
             - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
