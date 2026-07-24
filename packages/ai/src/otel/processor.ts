@@ -7,32 +7,55 @@ import { isAISpan } from './spans'
 import { warnIfPostHogAiGatewayOtelAttributes } from '../gatewayWarning'
 
 const DEFAULT_OTEL_HOST = 'https://us.i.posthog.com'
+const DEFAULT_AI_GATEWAY_HOST = 'https://ai-gateway.us.posthog.com'
 
 function normalizeToken(value?: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-function normalizeHost(value?: unknown): string {
+function normalizeHost(value: unknown, defaultHost: string): string {
   const normalizedValue = typeof value === 'string' ? value.trim() : ''
-  return normalizedValue || DEFAULT_OTEL_HOST
+  return normalizedValue || defaultHost
 }
 
-export interface PostHogSpanProcessorOptions {
-  /**
-   * Your PostHog project token (the `phc_...` key). Required; a blank token disables the
-   * processor as a defensive no-op.
-   */
-  projectToken: string
-
-  /**
-   * PostHog host URL. Defaults to `https://us.i.posthog.com`.
-   */
-  host?: string
-
+interface PostHogSpanProcessorBaseOptions {
   /**
    * @internal Injected processor for testing — bypasses exporter creation.
    */
   _spanProcessor?: SpanProcessor
+}
+
+export type PostHogSpanProcessorOptions = PostHogSpanProcessorBaseOptions &
+  (
+    | {
+        /** Your PostHog project token (the `phc_...` key). */
+        projectToken: string
+        /** PostHog ingestion host. Defaults to `https://us.i.posthog.com`. */
+        host?: string
+        aiGateway?: never
+      }
+    | {
+        /**
+         * Route telemetry through PostHog AI Gateway.
+         */
+        aiGateway: {
+          /** Your PostHog project secret (the `phs_...` key). */
+          projectSecret: string
+          /** AI Gateway host. Defaults to `https://ai-gateway.us.posthog.com`. */
+          host?: string
+        }
+        projectToken?: never
+        host?: never
+      }
+  )
+
+interface PostHogSpanProcessorRuntimeOptions extends PostHogSpanProcessorBaseOptions {
+  /**
+   * Your PostHog project token (the `phc_...` key).
+   */
+  projectToken?: string
+  host?: unknown
+  aiGateway?: { projectSecret?: unknown; host?: unknown }
 }
 
 class NoopSpanProcessor implements SpanProcessor {
@@ -53,7 +76,11 @@ class NoopSpanProcessor implements SpanProcessor {
 /**
  * An OpenTelemetry `SpanProcessor` that sends AI traces to PostHog.
  *
- * `projectToken` is required; a blank token disables the processor as a defensive no-op.
+ * Set `aiGateway: { projectSecret: 'phs_...', host: '...' }` to send telemetry
+ * through a PostHog AI Gateway deployment. The gateway host defaults to US;
+ * set it for EU, development, or self-hosted deployments. Set
+ * `projectToken: 'phc_...'` to send directly to PostHog's OTLP ingestion
+ * endpoint. A blank credential disables the processor as a defensive no-op.
  *
  * Internally batches spans and exports them to PostHog's OTLP ingestion
  * endpoint. Only AI-related spans (those whose name or attribute keys
@@ -79,17 +106,27 @@ export class PostHogSpanProcessor implements SpanProcessor {
   private readonly inner: SpanProcessor
 
   constructor(options: PostHogSpanProcessorOptions) {
-    const token = normalizeToken(options.projectToken)
+    const runtimeOptions = options as PostHogSpanProcessorRuntimeOptions
+    const projectToken = normalizeToken(runtimeOptions.projectToken)
+    const projectSecret = normalizeToken(runtimeOptions.aiGateway?.projectSecret)
+    const token = projectSecret || projectToken
     if (!token) {
-      console.warn('[PostHogSpanProcessor] projectToken is missing or blank; the processor will be disabled.')
+      console.warn(
+        '[PostHogSpanProcessor] projectToken or aiGateway.projectSecret is missing or blank; the processor will be disabled.'
+      )
       this.inner = new NoopSpanProcessor()
       return
     }
+    if (projectToken && projectSecret) {
+      throw new TypeError('[PostHogSpanProcessor] provide either projectToken or aiGateway, not both.')
+    }
 
-    if (options._spanProcessor) {
-      this.inner = options._spanProcessor
+    if (runtimeOptions._spanProcessor) {
+      this.inner = runtimeOptions._spanProcessor
     } else {
-      const host = new URL(normalizeHost(options.host)).origin
+      const defaultHost = projectSecret ? DEFAULT_AI_GATEWAY_HOST : DEFAULT_OTEL_HOST
+      const configuredHost = projectSecret ? runtimeOptions.aiGateway?.host : runtimeOptions.host
+      const host = new URL(normalizeHost(configuredHost, defaultHost)).origin
       const exporter = new OTLPTraceExporter({
         url: `${host}/i/v0/ai/otel`,
         headers: {
