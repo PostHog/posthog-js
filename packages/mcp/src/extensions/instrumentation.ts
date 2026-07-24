@@ -21,6 +21,7 @@ import {
   injectConversationIdPromptBack,
   resolveConversationId,
 } from './conversation-id'
+import { stampMetaClientInfo } from './client-identity'
 import { captureEvent } from './capture'
 import { MCPAnalyticsEventType } from './event-types'
 import { captureException } from './exceptions'
@@ -152,6 +153,10 @@ async function prepareToolCallEvent(
       toolCategory: toolName ? data.toolCategories.get(toolName) : undefined,
       toolDescription: toolName ? data.toolDescriptions.get(toolName) : undefined,
     }
+    // Modern (stateless) clients carry client name/version + protocol version in
+    // `_meta` on every request rather than at `initialize`; stamp them onto this
+    // event now so concurrent requests can't cross-attribute it.
+    stampMetaClientInfo(event, request)
 
     await applyResolvedMetadata(event, data, request, extra)
     setEventIntent(event, await resolveToolCallIntent(data, request, extra))
@@ -297,6 +302,7 @@ export async function handleListToolsRequest(
     eventType: MCPAnalyticsEventType.mcpToolsList,
     timestamp: startTime,
   }
+  stampMetaClientInfo(event, request)
 
   if (data) {
     await applyResolvedMetadata(event, data, request, extra)
@@ -555,6 +561,10 @@ export async function handleInitializeRequest(
     parameters: buildCapturedMcpParameters(request),
     timestamp: new Date(),
   }
+  // Harmless for a legacy `initialize` (client info rides the body there, and the
+  // negotiated protocol version below overrides any `_meta` one); picks up client
+  // info if a client also sends it in `_meta`.
+  stampMetaClientInfo(event, request)
 
   await applyResolvedMetadata(event, data, request, extra)
 
