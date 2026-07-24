@@ -1,6 +1,8 @@
 import {
   snapshot,
+  snapshotWithBudget,
   type MaskInputOptions,
+  type serializedElementNodeWithId,
   slimDOMDefaults,
   createMirror,
 } from '@posthog/rrweb-snapshot';
@@ -90,6 +92,7 @@ function record<T = eventWithTime>(
     emit,
     checkoutEveryNms,
     checkoutEveryNth,
+    fullSnapshotYieldBudgetMs = 0,
     blockClass = 'rr-block',
     blockSelector = null,
     ignoreClass = 'rr-ignore',
@@ -198,6 +201,15 @@ function record<T = eventWithTime>(
 
   let lastFullSnapshotEvent: eventWithTime;
   let incrementalSnapshotCount = 0;
+  // Budgeted (time-sliced) full snapshot state. While a budgeted snapshot is
+  // in flight the mirror is mid-rebuild, so id-bearing incremental events
+  // must not reach the wire (see wrappedEmit); non-id events are queued and
+  // flushed after the FullSnapshot lands.
+  let budgetedSnapshotInFlight = false;
+  let budgetedSnapshotQueued: { isCheckout: boolean } | null = null;
+  const budgetedSnapshotEventQueue: Array<
+    [eventWithoutTime, boolean | undefined]
+  > = [];
   // Set per id — one iframe id can collect several cleanups across loads.
   const iframeObserverCleanups = new Map<number, Set<listenerHandler>>();
 
@@ -225,6 +237,24 @@ function record<T = eventWithTime>(
   };
   wrappedEmit = (r: eventWithoutTime, isCheckout?: boolean) => {
     const e = r as eventWithTime;
+    if (budgetedSnapshotInFlight) {
+      if (e.type === EventType.IncrementalSnapshot) {
+        // Ids captured while the mirror is mid-rebuild reference a mixed
+        // epoch. The synchronous snapshot suppresses these by construction
+        // (nothing can run during one long task); we reproduce that
+        // semantic. All of these sources are self-healing — the next
+        // scroll/input/move re-emits current state against the new mirror.
+        // (Mutations are unaffected: their buffers are locked and resolve
+        // ids at emit time, after the new mirror is in place.)
+        return;
+      }
+      if (e.type !== EventType.Meta && e.type !== EventType.FullSnapshot) {
+        // custom/plugin/lifecycle events carry no node ids — keep them, in
+        // order, for after the snapshot lands
+        budgetedSnapshotEventQueue.push([r, isCheckout]);
+        return;
+      }
+    }
     e.timestamp = nowTimestamp();
     if (
       mutationBuffers[0]?.isFrozen() &&
@@ -413,10 +443,55 @@ function record<T = eventWithTime>(
     mirror,
   });
 
-  takeFullSnapshot = (isCheckout = false) => {
-    if (!recordDOM) {
-      return;
-    }
+  const buildFullSnapshotOptions = () => ({
+    mirror,
+    blockClass,
+    blockSelector,
+    maskTextClass,
+    maskTextSelector,
+    inlineStylesheet,
+    maskAllInputs: maskInputOptions,
+    maskTextFn,
+    maskInputFn,
+    slimDOM: slimDOMOptions,
+    dataURLOptions,
+    recordCanvas,
+    inlineImages,
+    onSerialize: (n: Node) => {
+      if (isSerializedIframe(n, mirror)) {
+        iframeManager.addIframe(n as HTMLIFrameElement);
+      }
+      if (isSerializedStylesheet(n, mirror)) {
+        stylesheetManager.trackLinkElement(n as HTMLLinkElement);
+      }
+      if (hasShadowRoot(n)) {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        shadowDomManager.addShadowRoot(dom.shadowRoot(n as Node)!, document);
+      }
+    },
+    onIframeLoad: (
+      iframe: HTMLIFrameElement,
+      childSn: serializedElementNodeWithId,
+    ) => {
+      iframeManager.attachIframe(iframe, childSn);
+      shadowDomManager.observeAttachShadow(iframe);
+    },
+    onIframeListenerRegistered: (
+      iframe: HTMLIFrameElement,
+      disposer: () => void,
+    ) => {
+      iframeManager.registerLoadListenerDisposer(iframe, disposer);
+    },
+    onStylesheetLoad: (
+      linkEl: HTMLLinkElement,
+      childSn: serializedElementNodeWithId,
+    ) => {
+      stylesheetManager.attachLinkElement(linkEl, childSn);
+    },
+    keepIframeSrcFn,
+  });
+
+  const emitMetaEvent = (isCheckout: boolean) => {
     wrappedEmit(
       {
         type: EventType.Meta,
@@ -428,6 +503,95 @@ function record<T = eventWithTime>(
       },
       isCheckout,
     );
+  };
+
+  const finishFullSnapshot = () => {
+    if (recordCrossOriginIframes) {
+      iframeManager.reattachIframes();
+    }
+
+    // Some old browsers don't support adoptedStyleSheets.
+    if (document.adoptedStyleSheets && document.adoptedStyleSheets.length > 0)
+      stylesheetManager.adoptStyleSheets(
+        document.adoptedStyleSheets,
+        mirror.getId(document),
+      );
+  };
+
+  // Time-sliced variant: same phases as the synchronous path below, but the
+  // serialization yields to the event loop on the configured budget so a
+  // large document doesn't block the page in one long task. The mutation
+  // buffers stay locked across the whole (sliced) snapshot — buffered
+  // mutations then apply against the newly built mirror on unlock, exactly
+  // as in the synchronous path.
+  const takeFullSnapshotBudgeted = (isCheckout: boolean) => {
+    if (budgetedSnapshotInFlight) {
+      // coalesce concurrent requests into a single follow-up snapshot
+      budgetedSnapshotQueued = {
+        isCheckout: (budgetedSnapshotQueued?.isCheckout ?? false) || isCheckout,
+      };
+      return;
+    }
+    budgetedSnapshotInFlight = true;
+    emitMetaEvent(isCheckout);
+
+    // When we take a full snapshot, old tracked StyleSheets need to be removed.
+    stylesheetManager.reset();
+    shadowDomManager.init();
+
+    mutationBuffers.forEach((buf) => buf.lock()); // don't allow any mirror modifications during snapshotting
+    void snapshotWithBudget(document, {
+      ...buildFullSnapshotOptions(),
+      yieldBudgetMs: fullSnapshotYieldBudgetMs,
+    })
+      .then((node) => {
+        if (!node) {
+          console.warn('Failed to snapshot the document');
+          return;
+        }
+        wrappedEmit(
+          {
+            type: EventType.FullSnapshot,
+            data: {
+              node,
+              initialOffset: getWindowScroll(window),
+            },
+          },
+          isCheckout,
+        );
+      })
+      .catch((error: unknown) => {
+        console.warn('Budgeted full snapshot failed', error);
+      })
+      .finally(() => {
+        // release the emit gate before unlocking so buffered mutations
+        // (which resolve ids against the new mirror) reach the wire
+        budgetedSnapshotInFlight = false;
+        mutationBuffers.forEach((buf) => buf.unlock()); // generate & emit any mutations that happened during snapshotting, as can now apply against the newly built mirror
+        finishFullSnapshot();
+
+        const queuedEvents = budgetedSnapshotEventQueue.splice(0);
+        for (const [event, eventIsCheckout] of queuedEvents) {
+          wrappedEmit(event, eventIsCheckout);
+        }
+
+        const pending = budgetedSnapshotQueued;
+        budgetedSnapshotQueued = null;
+        if (pending) {
+          takeFullSnapshotBudgeted(pending.isCheckout);
+        }
+      });
+  };
+
+  takeFullSnapshot = (isCheckout = false) => {
+    if (!recordDOM) {
+      return;
+    }
+    if (fullSnapshotYieldBudgetMs > 0) {
+      takeFullSnapshotBudgeted(isCheckout);
+      return;
+    }
+    emitMetaEvent(isCheckout);
 
     // When we take a full snapshot, old tracked StyleSheets need to be removed.
     stylesheetManager.reset();
@@ -435,47 +599,7 @@ function record<T = eventWithTime>(
     shadowDomManager.init();
 
     mutationBuffers.forEach((buf) => buf.lock()); // don't allow any mirror modifications during snapshotting
-    const node = snapshot(document, {
-      mirror,
-      blockClass,
-      blockSelector,
-      maskTextClass,
-      maskTextSelector,
-      inlineStylesheet,
-      maskAllInputs: maskInputOptions,
-      maskTextFn,
-      maskInputFn,
-      slimDOM: slimDOMOptions,
-      dataURLOptions,
-      recordCanvas,
-      inlineImages,
-      onSerialize: (n) => {
-        if (isSerializedIframe(n, mirror)) {
-          iframeManager.addIframe(n as HTMLIFrameElement);
-        }
-        if (isSerializedStylesheet(n, mirror)) {
-          stylesheetManager.trackLinkElement(n as HTMLLinkElement);
-        }
-        if (hasShadowRoot(n)) {
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-          shadowDomManager.addShadowRoot(dom.shadowRoot(n as Node)!, document);
-        }
-      },
-      onIframeLoad: (iframe, childSn) => {
-        iframeManager.attachIframe(iframe, childSn);
-        shadowDomManager.observeAttachShadow(iframe);
-      },
-      onIframeListenerRegistered: (
-        iframe: HTMLIFrameElement,
-        disposer: () => void,
-      ) => {
-        iframeManager.registerLoadListenerDisposer(iframe, disposer);
-      },
-      onStylesheetLoad: (linkEl, childSn) => {
-        stylesheetManager.attachLinkElement(linkEl, childSn);
-      },
-      keepIframeSrcFn,
-    });
+    const node = snapshot(document, buildFullSnapshotOptions());
 
     if (!node) {
       return console.warn('Failed to snapshot the document');
@@ -493,16 +617,7 @@ function record<T = eventWithTime>(
     );
     mutationBuffers.forEach((buf) => buf.unlock()); // generate & emit any mutations that happened during snapshotting, as can now apply against the newly built mirror
 
-    if (recordCrossOriginIframes) {
-      iframeManager.reattachIframes();
-    }
-
-    // Some old browsers don't support adoptedStyleSheets.
-    if (document.adoptedStyleSheets && document.adoptedStyleSheets.length > 0)
-      stylesheetManager.adoptStyleSheets(
-        document.adoptedStyleSheets,
-        mirror.getId(document),
-      );
+    finishFullSnapshot();
   };
 
   try {

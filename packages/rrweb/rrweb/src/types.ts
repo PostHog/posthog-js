@@ -45,6 +45,13 @@ export type recordOptions<T> = {
   emit?: (e: T, isCheckout?: boolean) => void;
   checkoutEveryNth?: number;
   checkoutEveryNms?: number;
+  /**
+   * Maximum milliseconds of continuous main-thread work while serializing a
+   * full snapshot before yielding to the event loop; large documents can
+   * otherwise block the page for seconds in a single long task.
+   * 0 (default) keeps the whole snapshot synchronous, exactly as before.
+   */
+  fullSnapshotYieldBudgetMs?: number;
   blockClass?: blockClass;
   blockSelector?: string;
   ignoreClass?: string;

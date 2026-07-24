@@ -71,6 +71,7 @@ export type recordOptions = {
     emit?: (e: eventWithTime, isCheckout?: boolean) => void
     checkoutEveryNth?: number
     checkoutEveryNms?: number
+    fullSnapshotYieldBudgetMs?: number
     blockClass?: blockClass
     blockSelector?: string
     ignoreClass?: string

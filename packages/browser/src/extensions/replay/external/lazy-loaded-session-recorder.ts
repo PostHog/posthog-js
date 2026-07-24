@@ -2085,6 +2085,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             inlineStylesheet: true,
             recordCrossOriginIframes: false,
             attributeFilter: undefined,
+            fullSnapshotYieldBudgetMs: undefined,
         }
 
         // only allows user to set our allowlisted options

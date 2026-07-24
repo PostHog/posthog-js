@@ -1432,6 +1432,35 @@ export function serializeNodeWithId(
   return serializedNode;
 }
 
+export function normalizeMaskInputOptions(
+  maskAllInputs: boolean | MaskInputOptions,
+): MaskInputOptions {
+  return maskAllInputs === true
+    ? {
+        color: true,
+        date: true,
+        'datetime-local': true,
+        email: true,
+        month: true,
+        number: true,
+        range: true,
+        search: true,
+        tel: true,
+        text: true,
+        time: true,
+        url: true,
+        week: true,
+        textarea: true,
+        select: true,
+        password: true,
+      }
+    : maskAllInputs === false
+    ? {
+        password: true,
+      }
+    : maskAllInputs;
+}
+
 export function slimDOMDefaults(
   slimDOM: 'all' | boolean | SlimDOMOptions,
 ): SlimDOMOptions {
@@ -1517,30 +1546,7 @@ function snapshot(
     maxDepth,
   } = options || {};
   const maskInputOptions: MaskInputOptions =
-    maskAllInputs === true
-      ? {
-          color: true,
-          date: true,
-          'datetime-local': true,
-          email: true,
-          month: true,
-          number: true,
-          range: true,
-          search: true,
-          tel: true,
-          text: true,
-          time: true,
-          url: true,
-          week: true,
-          textarea: true,
-          select: true,
-          password: true,
-        }
-      : maskAllInputs === false
-      ? {
-          password: true,
-        }
-      : maskAllInputs;
+    normalizeMaskInputOptions(maskAllInputs);
   const slimDOMOptions: SlimDOMOptions = slimDOMDefaults(slimDOM);
   return serializeNodeWithId(n, {
     doc: n,
@@ -1569,6 +1575,216 @@ function snapshot(
     newlyAddedElement: false,
     maxDepth,
   });
+}
+
+export type SnapshotWithBudgetOptions = NonNullable<
+  Parameters<typeof snapshot>[1]
+> & {
+  /**
+   * Maximum milliseconds of continuous main-thread work before yielding to
+   * the event loop. Must be > 0 — callers wanting a fully synchronous
+   * snapshot should use `snapshot()` instead.
+   */
+  yieldBudgetMs: number;
+  /** Overridable for tests; defaults to a macrotask (`setTimeout(0)`). */
+  yieldFn?: () => Promise<void>;
+};
+
+/**
+ * Async variant of {@link snapshot} that yields to the event loop whenever
+ * it has spent more than `yieldBudgetMs` of continuous main-thread time, so
+ * serializing a large document doesn't block the page in one long task.
+ *
+ * Output parity: nodes are visited in the same pre-order as the recursive
+ * path (light subtree first, then shadow subtree), and every node is
+ * serialized through the same `serializeNodeWithId` used everywhere else
+ * (with `skipChild: true` — the exact code path incremental mutation adds
+ * already use), so ids, structure and semantic flags are identical to a
+ * synchronous `snapshot()` of the same document state.
+ *
+ * The DOM may mutate between slices. The recorder is expected to hold its
+ * mutation buffers locked around the full snapshot (as it already does for
+ * the synchronous path): a node removed mid-snapshot is still serialized
+ * from its captured reference, and the buffered removal replays against the
+ * new mirror on unlock — the same convergence contract as today, where the
+ * comment on unlock reads "as can now apply against the newly built mirror".
+ */
+export async function snapshotWithBudget(
+  n: Document,
+  options: SnapshotWithBudgetOptions,
+): Promise<serializedNodeWithId | null> {
+  const {
+    mirror = new Mirror(),
+    blockClass = 'rr-block',
+    blockSelector = null,
+    maskTextClass = 'rr-mask',
+    maskTextSelector = null,
+    inlineStylesheet = true,
+    inlineImages = false,
+    recordCanvas = false,
+    maskAllInputs = false,
+    maskTextFn,
+    maskInputFn,
+    slimDOM = false,
+    dataURLOptions,
+    preserveWhiteSpace,
+    onSerialize,
+    onIframeLoad,
+    iframeLoadTimeout,
+    onIframeListenerRegistered,
+    onStylesheetLoad,
+    stylesheetLoadTimeout,
+    keepIframeSrcFn = () => false,
+    maxDepth = DEFAULT_MAX_DEPTH,
+    yieldBudgetMs,
+    yieldFn,
+  } = options;
+  const maskInputOptions: MaskInputOptions =
+    normalizeMaskInputOptions(maskAllInputs);
+  const slimDOMOptions: SlimDOMOptions = slimDOMDefaults(slimDOM);
+  const doYield =
+    yieldFn ?? (() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
+
+  const perNodeOptions = {
+    doc: n,
+    mirror,
+    blockClass,
+    blockSelector,
+    maskTextClass,
+    maskTextSelector,
+    skipChild: true,
+    inlineStylesheet,
+    maskInputOptions,
+    maskTextFn,
+    maskInputFn,
+    slimDOMOptions,
+    dataURLOptions,
+    inlineImages,
+    recordCanvas,
+    onSerialize,
+    onIframeLoad,
+    iframeLoadTimeout,
+    onIframeListenerRegistered,
+    onStylesheetLoad,
+    stylesheetLoadTimeout,
+    keepIframeSrcFn,
+    newlyAddedElement: false,
+    maxDepth,
+  };
+
+  type SerializedParent = serializedNodeWithId & {
+    childNodes: serializedNodeWithId[];
+  };
+  type WalkItem = {
+    node: Node;
+    parent: SerializedParent | null;
+    depth: number;
+    needsMask: boolean | undefined;
+    preserveWhiteSpace: boolean;
+  };
+
+  let root: serializedNodeWithId | null = null;
+  const stack: WalkItem[] = [
+    {
+      node: n,
+      parent: null,
+      depth: 0,
+      needsMask: undefined,
+      preserveWhiteSpace: preserveWhiteSpace ?? true,
+    },
+  ];
+  let sliceStart = performance.now();
+
+  while (stack.length > 0) {
+    if (performance.now() - sliceStart >= yieldBudgetMs) {
+      await doYield();
+      sliceStart = performance.now();
+    }
+    // LIFO pop with children pushed in reverse ⇒ same pre-order as recursion.
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const item = stack.pop()!;
+    const { node, parent, depth } = item;
+
+    const sn = serializeNodeWithId(node, {
+      ...perNodeOptions,
+      needsMask: item.needsMask,
+      preserveWhiteSpace: item.preserveWhiteSpace,
+      depth,
+    });
+    if (!sn) {
+      // slimDOM-excluded / ignorable whitespace / max depth — the recursive
+      // path skips these nodes' children too.
+      continue;
+    }
+    if (parent) {
+      parent.childNodes.push(sn);
+    } else {
+      root = sn;
+    }
+
+    // ---- descend decision: mirrors serializeNodeWithId's recursive section ----
+    if (sn.type !== NodeType.Document && sn.type !== NodeType.Element) {
+      continue;
+    }
+    if (
+      sn.type === NodeType.Element &&
+      _isBlockedElement(node as HTMLElement, blockClass, blockSelector)
+    ) {
+      // blocked elements record a placeholder only; children get no ids
+      continue;
+    }
+
+    // children inherit needsMask exactly as the recursive path computes it
+    let childNeedsMask = item.needsMask;
+    if (!childNeedsMask) {
+      const checkAncestors = childNeedsMask === undefined;
+      childNeedsMask = needMaskingText(
+        node as Element,
+        maskTextClass,
+        maskTextSelector,
+        checkAncestors,
+      );
+    }
+    let childPreserveWhiteSpace = item.preserveWhiteSpace;
+    if (
+      slimDOMOptions.headWhitespace &&
+      sn.type === NodeType.Element &&
+      (sn as elementNode).tagName === 'head'
+    ) {
+      childPreserveWhiteSpace = false;
+    }
+
+    const serializedParent = sn as SerializedParent;
+    const pushChildren = (children: Node[]) => {
+      for (let i = children.length - 1; i >= 0; i--) {
+        stack.push({
+          node: children[i],
+          parent: serializedParent,
+          depth: depth + 1,
+          needsMask: childNeedsMask,
+          preserveWhiteSpace: childPreserveWhiteSpace,
+        });
+      }
+    };
+
+    // Shadow children are pushed first and light children second: light pops
+    // first and its whole subtree drains before shadow surfaces, appending
+    // shadow-serialized children after the light ones — the recursive order.
+    // (`isShadow` is self-derived inside serializeNodeWithId from parentNode.)
+    let shadowRootEl: ShadowRoot | null = null;
+    if (isElement(node) && (shadowRootEl = dom.shadowRoot(node))) {
+      pushChildren(Array.from(dom.childNodes(shadowRootEl)));
+    }
+    const skipLightChildren =
+      sn.type === NodeType.Element &&
+      (sn as elementNode).tagName === 'textarea' &&
+      (sn as elementNode).attributes.value !== undefined;
+    if (!skipLightChildren) {
+      pushChildren(Array.from(dom.childNodes(node)));
+    }
+  }
+
+  return root;
 }
 
 export function visitSnapshot(
