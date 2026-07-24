@@ -26,7 +26,6 @@ describe('bot detection and pageview collection', () => {
                     uuidv7()
                 )!
         )
-        posthog.debug()
         return posthog
     }
 

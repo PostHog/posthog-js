@@ -2052,18 +2052,12 @@ describe('preview renders', () => {
             } as Survey
 
             useEffect(() => {
-                console.log('Render effect triggered with page index:', currentPageIndex)
                 if (surveyPreviewRef.current) {
                     renderSurveysPreview({
                         survey,
                         parentElement: surveyPreviewRef.current,
                         previewPageIndex: currentPageIndex,
-                        onPreviewSubmit: () => {
-                            setCurrentPageIndex((prev) => {
-                                console.log('Setting page index from', prev, 'to', prev + 1)
-                                return prev + 1
-                            })
-                        },
+                        onPreviewSubmit: () => setCurrentPageIndex((prev) => prev + 1),
                     })
                 }
             }, [currentPageIndex])
@@ -2080,7 +2074,6 @@ describe('preview renders', () => {
 
         // Find and fill the textarea
         const textarea = container.querySelector('textarea')
-        console.log('Found textarea:', !!textarea)
 
         await act(async () => {
             // Use fireEvent.input to trigger onInput handler (change event fires on blur)
@@ -2089,9 +2082,6 @@ describe('preview renders', () => {
 
         // Find and click the submit button (using button type="button" instead of form-submit class)
         const submitButton = container.querySelectorAll('button[type="button"]')[1]
-
-        console.log('Found submit button:', !!submitButton)
-        console.log('Submit button text:', submitButton?.textContent)
 
         await act(async () => {
             fireEvent.click(submitButton!)

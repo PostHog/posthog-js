@@ -17,6 +17,11 @@ import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 jest.useFakeTimers()
 jest.spyOn(global, 'setTimeout')
 
+beforeEach(() => {
+    window.POSTHOG_DEBUG = true
+    console.log = jest.fn()
+})
+
 describe('featureflags', () => {
     let instance
     let featureFlags

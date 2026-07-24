@@ -23,7 +23,6 @@ const initPostHogInAPromise = (
         return new PostHog().init(
             `test-token`,
             {
-                debug: true,
                 persistence: `localStorage`,
                 api_host: `https://test.com`,
                 segment: segment,

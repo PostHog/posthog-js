@@ -92,7 +92,6 @@ describe('posthog core', () => {
         const setup = (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
             const beforeSendMock = jest.fn().mockImplementation((e) => e)
             const posthog = defaultPostHog().init(token, { ...config, before_send: beforeSendMock }, token)!
-            posthog.debug()
             return { posthog, beforeSendMock }
         }
 
