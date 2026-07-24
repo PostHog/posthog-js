@@ -1,6 +1,5 @@
 import { CoreExtension as CoreExtensionToken, createDisposable } from '@posthog/browser-common'
 import type {
-    ApiRequestInit,
     ApiResponse,
     CaptureOptions as BrowserCommonCaptureOptions,
     CapturedEventInfo,
@@ -15,11 +14,12 @@ import type {
     NewSessionInfo,
     NewSessionReason,
     RemoteConfig,
+    SendRequestInit,
     SessionContext,
 } from '@posthog/browser-common'
 import { ExtensionRuntime } from '@posthog/browser-common/extension-runtime'
 import { logger } from '@posthog/browser-common/utils/logger'
-import { isArray, isUndefined, type Logger } from '@posthog/core'
+import type { Logger } from '@posthog/core'
 
 import { DEVICE_ID } from '../constants'
 import { extendURLParams } from '../request'
@@ -32,46 +32,6 @@ import type {
     QueuedRequestWithOptions,
     RemoteConfigResult,
 } from '../types'
-
-function stripQueryParameter(url: string, parameter: string): string {
-    const hashIndex = url.indexOf('#')
-    const withoutHash = hashIndex === -1 ? url : url.slice(0, hashIndex)
-    const queryIndex = withoutHash.indexOf('?')
-    if (queryIndex === -1) {
-        return withoutHash
-    }
-
-    const base = withoutHash.slice(0, queryIndex)
-    const query = withoutHash
-        .slice(queryIndex + 1)
-        .split('&')
-        .filter((pair) => {
-            const encodedKey = pair.split('=')[0].replace(/\+/g, ' ')
-            try {
-                return decodeURIComponent(encodedKey) !== parameter
-            } catch {
-                return encodedKey !== parameter
-            }
-        })
-        .join('&')
-    return `${base}${query ? `?${query}` : ''}`
-}
-
-function withoutQueryParameter(query: Record<string, string> | undefined, parameter: string): Record<string, string> {
-    const filtered: Record<string, string> = {}
-    Object.keys(query ?? {}).forEach((key) => {
-        let decodedKey = key
-        try {
-            decodedKey = decodeURIComponent(key.replace(/\+/g, ' '))
-        } catch {
-            // Preserve malformed, unrelated keys verbatim.
-        }
-        if (decodedKey !== parameter) {
-            filtered[key] = query![key]
-        }
-    })
-    return filtered
-}
 
 class BrowserExtensionKeyValueStore implements KeyValueStore {
     constructor(private readonly _instance: PostHog) {}
@@ -360,43 +320,23 @@ export class BrowserClientAdapter implements Client {
         this.logger = _host.logger.createLogger(`[${extensionName}]`)
     }
 
-    async apiRequest(path: string, init: ApiRequestInit = {}): Promise<ApiResponse> {
-        const instance = this._host.instance
-        const target = /^\/?flags(?:\/|\?|$)/.test(path) ? 'flags' : 'api'
-        let body = init.body as Record<string, unknown> | undefined
-        if (target === 'flags') {
-            if (isUndefined(body)) {
-                body = { token: instance.config.token }
-            } else if (!body || typeof body !== 'object' || isArray(body)) {
-                return {
-                    statusCode: 0,
-                    error: new TypeError('Browser extension flags requests require an object body'),
-                }
-            } else {
-                body = { ...body }
-                delete body.token
-                delete body.$token
-                delete body.api_key
-                body.token = instance.config.token
-            }
-        }
+    get projectToken(): string {
+        return this._host.instance.config.token
+    }
 
-        const endpoint = stripQueryParameter(instance.requestRouter.endpointFor(target, path), 'token')
-        const query = {
-            ...withoutQueryParameter(init.query, 'token'),
-            token: instance.config.token,
-        }
+    async sendRequest(path: string, init: SendRequestInit = {}): Promise<ApiResponse> {
+        const endpoint = this._host.instance.requestRouter.endpointFor(init.target ?? 'api', path)
         const requestOptions: QueuedRequestWithOptions = {
-            method: init.method ?? 'POST',
-            url: extendURLParams(endpoint, query, false),
-            data: body,
+            method: init.method,
+            url: init.query ? extendURLParams(endpoint, init.query) : endpoint,
+            data: init.body as QueuedRequestWithOptions['data'],
+            headers: init.headers,
             timeout: init.timeoutMs,
-            noRetries: true,
             fireCallbackOnDrop: true,
-            transport: init.unload ? 'sendBeacon' : undefined,
+            transport: init.transport,
         }
 
-        if (init.unload) {
+        if (init.transport === 'sendBeacon') {
             this._host.instance._send_request(requestOptions)
             return { statusCode: 202 }
         }

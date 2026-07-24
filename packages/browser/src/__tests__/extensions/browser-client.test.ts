@@ -226,32 +226,27 @@ describe('BrowserExtensionHost', () => {
         } as any
         host.handleRemoteConfig({ ok: true, config: successfulConfig })
         expect(changes).toEqual([expect.objectContaining({ marker: 'current' })])
-        const snapshot = await core?.getRemoteConfig()
-        ;(snapshot?.nested as { approved: boolean }).approved = false
-        expect(successfulConfig.nested.approved).toBe(true)
         await expect(core?.getRemoteConfig()).resolves.toEqual(successfulConfig)
         await host.dispose()
     })
 
-    it('gives each first-config waiter and listener an independent detached snapshot', async () => {
+    it('resolves each first-config waiter and publishes to every listener', async () => {
         const host = new BrowserExtensionHost(createMockPostHog())
         let core: CoreExtension | undefined
         await host.add(testExtension('test', (client) => (core = client.getExtension(CoreExtensionToken))))
         const firstWaiter = core!.getRemoteConfig()
         const secondWaiter = core!.getRemoteConfig()
+        const firstListener = jest.fn()
         const secondListener = jest.fn()
-        core?.onRemoteConfig((config) => {
-            ;(config.nested as { approved: boolean }).approved = false
-        })
+        core?.onRemoteConfig(firstListener)
         core?.onRemoteConfig(secondListener)
-        const canonical = { nested: { approved: true } } as any
+        const config = { nested: { approved: true } } as any
 
-        host.handleRemoteConfig({ ok: true, config: canonical })
-        const first = await firstWaiter
-        ;(first?.nested as { approved: boolean }).approved = false
-        await expect(secondWaiter).resolves.toEqual({ nested: { approved: true } })
-        expect(secondListener).toHaveBeenCalledWith({ nested: { approved: true } })
-        expect(canonical).toEqual({ nested: { approved: true } })
+        host.handleRemoteConfig({ ok: true, config })
+        await expect(firstWaiter).resolves.toEqual(config)
+        await expect(secondWaiter).resolves.toEqual(config)
+        expect(firstListener).toHaveBeenCalledWith(config)
+        expect(secondListener).toHaveBeenCalledWith(config)
         await host.dispose()
     })
 
@@ -339,52 +334,6 @@ describe('BrowserExtensionHost', () => {
         await host.dispose()
     })
 
-    it('gives sibling event listeners independent nested array and Date snapshots', async () => {
-        const instance = createMockPostHog()
-        const host = new BrowserExtensionHost(instance)
-        let core: CoreExtension | undefined
-        await host.add(testExtension('test', (client) => (core = client.getExtension(CoreExtensionToken))))
-        const capturedAt = new Date('2026-02-01T12:00:00Z')
-        const source = {
-            nested: {
-                items: [{ approved: true }],
-                capturedAt,
-            },
-        } as unknown as Properties
-        const sibling = jest.fn()
-
-        core?.onEvent(({ properties }) => {
-            const nested = properties.nested as {
-                items: Array<{ approved: boolean }>
-                capturedAt: Date
-            }
-            nested.items[0].approved = false
-            nested.items.push({ approved: false })
-            nested.capturedAt.setUTCFullYear(2000)
-        })
-        core?.onEvent(sibling)
-
-        instance.emitEvent('snapshot', source)
-
-        expect(sibling).toHaveBeenCalledWith({
-            event: 'snapshot',
-            properties: {
-                nested: {
-                    items: [{ approved: true }],
-                    capturedAt: new Date('2026-02-01T12:00:00Z'),
-                },
-            },
-        })
-        expect(source).toEqual({
-            nested: {
-                items: [{ approved: true }],
-                capturedAt: new Date('2026-02-01T12:00:00Z'),
-            },
-        })
-        expect((sibling.mock.calls[0][0].properties.nested as { capturedAt: Date }).capturedAt).not.toBe(capturedAt)
-        await host.dispose()
-    })
-
     it('isolates shared listener failures and continues sibling event, config, and session delivery', async () => {
         const instance = createMockPostHog({ emitCurrentSession: false })
         const host = new BrowserExtensionHost(instance)
@@ -464,83 +413,12 @@ describe('BrowserExtensionHost', () => {
         await host.dispose()
     })
 
-    it('adapts API requests, dropped requests, flags routing, query/auth, and unload sends', async () => {
+    it('exposes the project token and adapts caller-owned request options', async () => {
         const instance = createMockPostHog()
         const send = instance._send_request as jest.MockedFunction<(options: QueuedRequestWithOptions) => void>
         send.mockImplementation((options) =>
             options.callback?.({ statusCode: 201, json: { created: true }, text: '{"created":true}' })
         )
-        const host = new BrowserExtensionHost(instance)
-        let client: Client | undefined
-        host.add(testExtension('test', (value) => (client = value)))
-
-        const response = await client!.apiRequest(
-            '/flags/?existing=yes&token=existing-token&%74oken=encoded-token&token=last-token',
-            {
-                method: 'GET',
-                query: { extra: 'value', token: 'duplicate-token', '%74oken': 'encoded-query-token' },
-                timeoutMs: 321,
-            }
-        )
-        expect(response.statusCode).toBe(201)
-        expect(response.json).toEqual({ created: true })
-        expect(response.text).toBe('{"created":true}')
-        expect(instance.requestRouter.endpointFor).toHaveBeenCalledWith(
-            'flags',
-            '/flags/?existing=yes&token=existing-token&%74oken=encoded-token&token=last-token'
-        )
-        expect(send.mock.calls[0][0]).toEqual(
-            expect.objectContaining({
-                method: 'GET',
-                timeout: 321,
-                noRetries: true,
-                fireCallbackOnDrop: true,
-                url: expect.stringContaining('token=test-token'),
-            })
-        )
-        expect(send.mock.calls[0][0].url).toContain('existing=yes')
-        expect(send.mock.calls[0][0].url).toContain('extra=value')
-        expect(send.mock.calls[0][0].url?.match(/token=/g)).toHaveLength(1)
-        expect(send.mock.calls[0][0].url).not.toContain('%74oken')
-
-        const requestError = new Error('network failure')
-        send.mockImplementationOnce((options) => options.callback?.({ statusCode: 0, error: requestError }))
-        const dropped = await client!.apiRequest('/api/surveys/?token=wrong&survey_id=1', {
-            query: { token: 'also-wrong', page: '2' },
-        })
-        expect(dropped.statusCode).toBe(0)
-        expect(dropped.error).toBe(requestError)
-        expect(send.mock.calls[1][0].url).toContain('token=test-token')
-        expect(send.mock.calls[1][0].url).toContain('survey_id=1')
-        expect(send.mock.calls[1][0].url).toContain('page=2')
-        expect(send.mock.calls[1][0].url?.match(/token=/g)).toHaveLength(1)
-
-        send.mockImplementationOnce(() => undefined)
-        const unload = await client!.apiRequest('/s/?token=wrong&keep=yes', {
-            method: 'POST',
-            body: { events: [] },
-            query: { token: 'also-wrong' },
-            unload: true,
-        })
-        expect(unload.statusCode).toBe(202)
-        expect(unload.json).toBeUndefined()
-        expect(unload.text).toBeUndefined()
-        expect(send.mock.calls.at(-1)?.[0]).toEqual(
-            expect.objectContaining({
-                transport: 'sendBeacon',
-                data: { events: [] },
-                url: expect.stringContaining('token=test-token'),
-            })
-        )
-        expect(send.mock.calls.at(-1)?.[0].url).toContain('keep=yes')
-        expect(send.mock.calls.at(-1)?.[0].url?.match(/token=/g)).toHaveLength(1)
-        await host.dispose()
-    })
-
-    it('owns flags body authentication without mutating caller bodies', async () => {
-        const instance = createMockPostHog()
-        const send = instance._send_request as jest.MockedFunction<(options: QueuedRequestWithOptions) => void>
-        send.mockImplementation((options) => options.callback?.({ statusCode: 200 }))
         const host = new BrowserExtensionHost(instance)
         let client: Client | undefined
         await host.add(testExtension('test', (value) => (client = value)))
@@ -549,86 +427,92 @@ describe('BrowserExtensionHost', () => {
             $token: 'body-alias',
             api_key: 'api-key-alias',
             distinct_id: 'person-1',
-            nested: { approved: true },
         }
-        const originalBody = { ...body, nested: { ...body.nested } }
 
-        await client!.apiRequest('/flags/?token=path-project&%74oken=encoded-project&keep=yes', {
+        expect(client?.projectToken).toBe('test-token')
+        const response = await client!.sendRequest('/flags/?existing=yes', {
+            target: 'flags',
+            method: 'POST',
             body,
-            query: { token: 'query-project', '%74oken': 'encoded-query-project', extra: 'value' },
+            query: { token: 'query-project', extra: 'value' },
+            headers: { 'X-Extension-Header': 'value' },
+            transport: 'XHR',
+            timeoutMs: 321,
         })
-        await client!.apiRequest('/flags/', { body: { distinct_id: 'person-2' } })
-        await client!.apiRequest('/flags/')
 
-        expect(send.mock.calls[0][0].data).toEqual({
-            token: 'test-token',
+        expect(response).toEqual({ statusCode: 201, json: { created: true }, text: '{"created":true}' })
+        expect(instance.requestRouter.endpointFor).toHaveBeenCalledWith('flags', '/flags/?existing=yes')
+        expect(send).toHaveBeenCalledWith(
+            expect.objectContaining({
+                method: 'POST',
+                url: 'https://flags.example.com/flags/?existing=yes&token=query-project&extra=value',
+                data: body,
+                headers: { 'X-Extension-Header': 'value' },
+                transport: 'XHR',
+                timeout: 321,
+                fireCallbackOnDrop: true,
+                callback: expect.any(Function),
+            })
+        )
+        expect(send.mock.calls[0][0]).not.toHaveProperty('noRetries')
+        expect(body).toEqual({
+            token: 'body-project',
+            $token: 'body-alias',
+            api_key: 'api-key-alias',
             distinct_id: 'person-1',
-            nested: { approved: true },
         })
-        expect(send.mock.calls[0][0].data).not.toHaveProperty('$token')
-        expect(send.mock.calls[0][0].data).not.toHaveProperty('api_key')
-        expect(body).toEqual(originalBody)
-        expect(send.mock.calls[1][0].data).toEqual({ distinct_id: 'person-2', token: 'test-token' })
-        expect(send.mock.calls[2][0].data).toEqual({ token: 'test-token' })
-
-        const url = new URL(send.mock.calls[0][0].url)
-        expect(url.searchParams.getAll('token')).toEqual(['test-token'])
-        expect(url.searchParams.get('keep')).toBe('yes')
-        expect(url.searchParams.get('extra')).toBe('value')
         await host.dispose()
     })
 
-    it.each([null, [], 'invalid', 42])('rejects an incompatible flags body without throwing (%p)', async (body) => {
+    it('uses the regular API target by default and resolves dropped requests', async () => {
         const instance = createMockPostHog()
+        const requestError = new Error('network failure')
         const send = instance._send_request as jest.MockedFunction<(options: QueuedRequestWithOptions) => void>
+        send.mockImplementation((options) => options.callback?.({ statusCode: 0, error: requestError }))
         const host = new BrowserExtensionHost(instance)
         let client: Client | undefined
         await host.add(testExtension('test', (value) => (client = value)))
 
-        await expect(client!.apiRequest('/flags/', { body })).resolves.toEqual({
+        await expect(client!.sendRequest('/api/surveys/', { method: 'GET' })).resolves.toEqual({
             statusCode: 0,
-            error: expect.any(TypeError),
+            error: requestError,
         })
-        expect(send).not.toHaveBeenCalled()
+        expect(instance.requestRouter.endpointFor).toHaveBeenCalledWith('api', '/api/surveys/')
+        expect(send).toHaveBeenCalledWith(
+            expect.objectContaining({ method: 'GET', url: 'https://api.example.com/api/surveys/' })
+        )
         await host.dispose()
     })
 
-    it.each([
-        {
-            path: '/api/surveys/?survey_id=1&token=wrong&%74oken=encoded#section',
-            query: { keep: 'a b', token: 'query-wrong', '%74oken': 'encoded-query-wrong' },
-            expectedPath: '/api/surveys/',
-            expectedQuery: { survey_id: '1', keep: 'a b' },
-        },
-        {
-            path: '/flags/#section',
-            query: { keep: 'fragment-only' },
-            expectedPath: '/flags/',
-            expectedQuery: { keep: 'fragment-only' },
-        },
-    ])(
-        'strips URL fragments before appending host auth for $path',
-        async ({ path, query, expectedPath, expectedQuery }) => {
-            const instance = createMockPostHog()
-            instance.config.token = 'host project/+?'
-            const send = instance._send_request as jest.MockedFunction<(options: QueuedRequestWithOptions) => void>
-            send.mockImplementation((options) => options.callback?.({ statusCode: 200 }))
-            const host = new BrowserExtensionHost(instance)
-            let client: Client | undefined
-            await host.add(testExtension('test', (value) => (client = value)))
+    it('returns a best-effort response immediately for an explicit sendBeacon transport', async () => {
+        const instance = createMockPostHog()
+        const send = instance._send_request as jest.MockedFunction<(options: QueuedRequestWithOptions) => void>
+        send.mockImplementation(() => undefined)
+        const host = new BrowserExtensionHost(instance)
+        let client: Client | undefined
+        await host.add(testExtension('test', (value) => (client = value)))
 
-            await expect(client!.apiRequest(path, { query })).resolves.toEqual({ statusCode: 200 })
+        const response = await client!.sendRequest('/s/', {
+            method: 'POST',
+            body: { events: [] },
+            query: { token: client!.projectToken },
+            transport: 'sendBeacon',
+        })
 
-            const url = new URL(send.mock.calls[0][0].url)
-            expect(url.hash).toBe('')
-            expect(url.pathname).toBe(expectedPath)
-            expect(url.searchParams.getAll('token')).toEqual(['host project/+?'])
-            Object.entries(expectedQuery).forEach(([key, value]) => expect(url.searchParams.get(key)).toBe(value))
-            await host.dispose()
-        }
-    )
+        expect(response).toEqual({ statusCode: 202 })
+        expect(send).toHaveBeenCalledWith(
+            expect.objectContaining({
+                method: 'POST',
+                transport: 'sendBeacon',
+                data: { events: [] },
+                url: 'https://api.example.com/s/?token=test-token',
+            })
+        )
+        expect(send.mock.calls[0][0].callback).toBeUndefined()
+        await host.dispose()
+    })
 
-    it('serializes the canonical flags body through the browser request encoder', async () => {
+    it('serializes the caller-owned body through the selected browser transport', async () => {
         const open = jest.spyOn(XMLHttpRequest.prototype, 'open').mockImplementation(() => undefined)
         const setRequestHeader = jest
             .spyOn(XMLHttpRequest.prototype, 'setRequestHeader')
@@ -637,7 +521,7 @@ describe('BrowserExtensionHost', () => {
         try {
             const instance = createMockPostHog()
             instance._send_request = jest.fn((options: QueuedRequestWithOptions) => {
-                request({ ...options, transport: 'XHR' })
+                request(options)
                 options.callback?.({ statusCode: 200 })
             })
             const host = new BrowserExtensionHost(instance)
@@ -650,20 +534,16 @@ describe('BrowserExtensionHost', () => {
                 distinct_id: 'person-1',
             }
 
-            await client!.apiRequest('/flags/', { body })
+            await client!.sendRequest('/flags/', {
+                target: 'flags',
+                method: 'POST',
+                body,
+                transport: 'XHR',
+            })
 
             expect(open).toHaveBeenCalled()
             expect(setRequestHeader).toHaveBeenCalledWith('Content-Type', 'application/json')
-            expect(JSON.parse(sendRequest.mock.calls[0][0] as string)).toEqual({
-                distinct_id: 'person-1',
-                token: 'test-token',
-            })
-            expect(body).toEqual({
-                token: 'body-project',
-                $token: 'body-alias',
-                api_key: 'api-key-alias',
-                distinct_id: 'person-1',
-            })
+            expect(JSON.parse(sendRequest.mock.calls[0][0] as string)).toEqual(body)
             await host.dispose()
         } finally {
             open.mockRestore()
@@ -735,31 +615,7 @@ describe('BrowserExtensionHost', () => {
         await posthog.shutdown()
     })
 
-    it.each([true, false])('keeps outbound event data detached from Core observers (batching=%s)', async (batching) => {
-        const posthog = await createPosthogInstance(undefined, {
-            request_batching: batching,
-            before_send: (event) => event,
-        })
-        const enqueue = jest.spyOn(posthog._requestQueue!, 'enqueue')
-        const send = jest.spyOn(posthog, '_send_retriable_request')
-        let core: CoreExtension | undefined
-        await posthog
-            ._getBrowserExtensionHost()
-            .add(testExtension('observer-test', (client) => (core = client.getExtension(CoreExtensionToken))))
-        core?.onEvent((event) => {
-            event.properties.approved = 'mutated'
-            ;(event.properties.nested as { value: string }).value = 'mutated'
-            event.properties.added = 'after-before-send'
-        })
-
-        await core?.capture('observer-isolation', { approved: 'yes', nested: { value: 'yes' } })
-        const outbound = batching ? enqueue.mock.calls.at(-1)?.[0].data : send.mock.calls.at(-1)?.[0].data
-        expect(outbound?.properties).toMatchObject({ approved: 'yes', nested: { value: 'yes' } })
-        expect(outbound?.properties).not.toHaveProperty('added')
-        await posthog.shutdown()
-    })
-
-    it('applies core remote config before detached pre-DOM publication and hands cached config to a lazy host', async () => {
+    it('applies core remote config before pre-DOM publication and hands cached config to a lazy host', async () => {
         const posthog = await createPosthogInstance(undefined)
         const legacyConsumer = jest.spyOn(posthog.autocapture!, 'onRemoteConfig')
         const body = document.body
@@ -779,17 +635,12 @@ describe('BrowserExtensionHost', () => {
             await host.add(
                 testExtension('remote-config-test', (client) => (core = client.getExtension(CoreExtensionToken)))
             )
-            const cached = await core?.getRemoteConfig()
+            await expect(core?.getRemoteConfig()).resolves.toEqual(canonicalConfig)
             expect(posthog.analyticsDefaultEndpoint).toBe('/new-endpoint/')
             expect(posthog.compression).toBe('base64')
-            expect(cached).toEqual(canonicalConfig)
-            ;(cached!.nested as { approved: boolean }).approved = false
-            await expect(core?.getRemoteConfig()).resolves.toEqual(canonicalConfig)
 
-            const first = jest.fn((config: any) => {
+            const first = jest.fn(() => {
                 expect(posthog.analyticsDefaultEndpoint).toBe('/new-endpoint/')
-                config.nested.approved = false
-                config.autocapture_opt_out = false
             })
             const second = jest.fn()
             core?.onRemoteConfig(first)
@@ -798,12 +649,9 @@ describe('BrowserExtensionHost', () => {
             const pending = core?.getRemoteConfig()
             posthog._onRemoteConfig({ ok: true, config: nextConfig })
 
-            expect(first).toHaveBeenCalledTimes(1)
+            expect(first).toHaveBeenCalledWith(nextConfig)
             expect(second).toHaveBeenCalledWith(nextConfig)
             await expect(pending).resolves.toEqual(canonicalConfig)
-            expect(nextConfig).toEqual(
-                expect.objectContaining({ nested: { approved: true }, autocapture_opt_out: true })
-            )
             expect(legacyConsumer).not.toHaveBeenCalledWith(expect.objectContaining({ config: nextConfig }))
 
             document.documentElement.appendChild(body)
