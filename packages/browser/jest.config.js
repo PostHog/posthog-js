@@ -27,6 +27,7 @@ module.exports = {
         '^@testing-library/preact$': path.join(testingLibraryPreactCjs, 'index.js'),
         '^@posthog/browser-common/config$': '<rootDir>/../browser-common/src/config.ts',
         '^@posthog/browser-common/constants$': '<rootDir>/../browser-common/src/constants.ts',
+        '^@posthog/browser-common/extension-runtime$': '<rootDir>/../browser-common/src/extension-runtime.ts',
         '^@posthog/browser-common/utils/(.*)$': '<rootDir>/../browser-common/src/utils/$1.ts',
         '^@posthog/core/surveys$': '<rootDir>/../core/src/surveys/index.ts',
     },

@@ -74,6 +74,7 @@ export class RemoteConfigLoader {
             })
         } catch (error) {
             logger.error('Error loading remote config', error)
+            this._onRemoteConfig()
         }
     }
 
