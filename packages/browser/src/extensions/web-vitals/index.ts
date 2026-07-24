@@ -4,13 +4,15 @@ import { createLogger } from '@posthog/browser-common/utils/logger'
 import { isBoolean, isNullish, isNumber, isUndefined, isObject, stripUrlHash } from '@posthog/core'
 import { WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
 import { window, location } from '@posthog/browser-common/utils/globals'
-import { assignableWindow } from '../../utils/globals'
+import { assignableWindow, WebVitalsReportOpts } from '../../utils/globals'
 import { maskQueryParams } from '@posthog/browser-common/utils/request-utils'
 import { PERSONAL_DATA_CAMPAIGN_PARAMS, MASKED } from '@posthog/browser-common/utils/event-utils'
 
 const logger = createLogger('[Web Vitals]')
 
-type WebVitalsMetricCallback = (metric: any) => void
+// the metric observer registration function from the web-vitals library (onLCP, onCLS, ...).
+// it takes the report callback plus an optional ReportOpts (e.g. `reportSoftNavs`).
+type WebVitalsMetricCallback = (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
 
 export const DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS = 5000
 const ONE_MINUTE_IN_MILLIS = 60 * 1000
@@ -54,6 +56,13 @@ export class WebVitalsAutocapture {
     public get useAttribution(): boolean {
         const clientConfig: boolean | undefined = isObject(this._perfConfig)
             ? this._perfConfig.web_vitals_attribution
+            : undefined
+        return clientConfig ?? false
+    }
+
+    public get useSoftNavs(): boolean {
+        const clientConfig: boolean | undefined = isObject(this._perfConfig)
+            ? this._perfConfig.web_vitals_soft_navs
             : undefined
         return clientConfig ?? false
     }
@@ -131,7 +140,15 @@ export class WebVitalsAutocapture {
             return
         }
 
-        const kind = this.useAttribution ? 'web-vitals-with-attribution' : 'web-vitals'
+        // the soft-navs builds understand `reportSoftNavs`; the standard builds don't,
+        // so only load them when the user has opted into soft navigations
+        const kind = this.useSoftNavs
+            ? this.useAttribution
+                ? 'web-vitals-with-attribution-soft-navs'
+                : 'web-vitals-soft-navs'
+            : this.useAttribution
+              ? 'web-vitals-with-attribution'
+              : 'web-vitals'
 
         assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, kind, (err) => {
             if (err) {
@@ -277,18 +294,23 @@ export class WebVitalsAutocapture {
             return
         }
 
+        // scope metrics to the browser's Soft Navigation entries when opted in, so SPA
+        // route changes don't keep inflating the metric against the original hard navigation.
+        // only the soft-navs builds honour this; the standard builds ignore it.
+        const reportOpts: WebVitalsReportOpts = { reportSoftNavs: this.useSoftNavs }
+
         // register performance observers
         if (this.allowedMetrics.indexOf('LCP') > -1) {
-            onLCP(this._addToBuffer.bind(this))
+            onLCP(this._addToBuffer.bind(this), reportOpts)
         }
         if (this.allowedMetrics.indexOf('CLS') > -1) {
-            onCLS(this._addToBuffer.bind(this))
+            onCLS(this._addToBuffer.bind(this), reportOpts)
         }
         if (this.allowedMetrics.indexOf('FCP') > -1) {
-            onFCP(this._addToBuffer.bind(this))
+            onFCP(this._addToBuffer.bind(this), reportOpts)
         }
         if (this.allowedMetrics.indexOf('INP') > -1) {
-            onINP(this._addToBuffer.bind(this))
+            onINP(this._addToBuffer.bind(this), reportOpts)
         }
 
         this._initialized = true
