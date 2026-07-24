@@ -3,8 +3,10 @@ import type {
     ApiRequestInit,
     ApiResponse,
     CaptureOptions as BrowserCommonCaptureOptions,
+    CapturedEventInfo,
     Client,
     CoreExtension,
+    DeepReadonly,
     Disposable,
     Extension,
     ExtensionToken,
@@ -12,11 +14,10 @@ import type {
     Listener,
     NewSessionInfo,
     NewSessionReason,
-    RemoteConfig as BrowserCommonRemoteConfig,
+    RemoteConfig,
     SessionContext,
 } from '@posthog/browser-common'
 import { ExtensionRuntime } from '@posthog/browser-common/extension-runtime'
-import { detachedSnapshot } from '@posthog/browser-common/utils/detached-snapshot'
 import { logger } from '@posthog/browser-common/utils/logger'
 import { isArray, isUndefined, type Logger } from '@posthog/core'
 
@@ -96,7 +97,7 @@ const NEW_SESSION_EVENT = 'extensionsNewSession'
  * runtime with browser-v1 event streams and a Client adapter for each extension.
  */
 export class BrowserExtensionHost implements Disposable {
-    private readonly _remoteConfigWaiters: Array<(config: BrowserCommonRemoteConfig | undefined) => void> = []
+    private readonly _remoteConfigWaiters: Array<(config: RemoteConfig | undefined) => void> = []
     private readonly _logger: Logger
     private readonly _runtime: ExtensionRuntime
     private _latestRemoteConfigResult: RemoteConfigResult | undefined
@@ -120,11 +121,11 @@ export class BrowserExtensionHost implements Disposable {
         return this._logger
     }
 
-    get onRemoteConfig(): Listener<BrowserCommonRemoteConfig> {
+    get onRemoteConfig(): Listener<RemoteConfig> {
         return (handler) =>
             createDisposable(
                 this.instance._internalEventEmitter.on(REMOTE_CONFIG_EVENT, (config) => {
-                    this._invokeListener('remote config', handler, detachedSnapshot(config))
+                    this._invokeListener('remote config', handler, config)
                 })
             )
     }
@@ -133,7 +134,7 @@ export class BrowserExtensionHost implements Disposable {
         return (handler) =>
             createDisposable(
                 this.instance._internalEventEmitter.on(NEW_SESSION_EVENT, (session) => {
-                    this._invokeListener('new session', handler, detachedSnapshot(session))
+                    this._invokeListener('new session', handler, session)
                 })
             )
     }
@@ -152,18 +153,16 @@ export class BrowserExtensionHost implements Disposable {
         }
 
         this._latestRemoteConfigResult = result
-        const config = result.ok ? (result.config as unknown as BrowserCommonRemoteConfig) : undefined
-        this._remoteConfigWaiters.splice(0).forEach((resolve) => resolve(detachedSnapshot(config)))
+        const config = result.ok ? (result.config as unknown as RemoteConfig) : undefined
+        this._remoteConfigWaiters.splice(0).forEach((resolve) => resolve(config))
         if (config) {
             this.instance._internalEventEmitter.emit(REMOTE_CONFIG_EVENT, config)
         }
     }
 
-    async getRemoteConfig(): Promise<BrowserCommonRemoteConfig | undefined> {
+    async getRemoteConfig(): Promise<RemoteConfig | undefined> {
         if (this._latestRemoteConfigResult) {
-            return this._latestRemoteConfigResult.ok
-                ? detachedSnapshot(this._latestRemoteConfigResult.config as unknown as BrowserCommonRemoteConfig)
-                : undefined
+            return this._latestRemoteConfigResult.ok ? this._latestRemoteConfigResult.config : undefined
         }
         if (this.instance._shouldDisableFlags()) {
             return undefined
@@ -282,9 +281,9 @@ export class BrowserExtensionHost implements Disposable {
 class BrowserCoreExtension implements CoreExtension {
     readonly name = 'core'
     readonly provides = [CoreExtensionToken]
-    readonly onEvent: Listener<{ event: string; properties: Record<string, unknown> }>
+    readonly onEvent: Listener<CapturedEventInfo>
     readonly onNewSession: Listener<NewSessionInfo>
-    readonly onRemoteConfig: Listener<BrowserCommonRemoteConfig>
+    readonly onRemoteConfig: Listener<DeepReadonly<RemoteConfig>>
 
     constructor(private readonly _host: BrowserExtensionHost) {
         this.onEvent = (handler) => {
@@ -292,7 +291,7 @@ class BrowserCoreExtension implements CoreExtension {
                 try {
                     handler({
                         event: event.event,
-                        properties: detachedSnapshot(event.properties as Record<string, unknown>),
+                        properties: event.properties,
                     })
                 } catch (error) {
                     this._host.logger.error('Browser extension event listener failed', error)
@@ -341,7 +340,7 @@ class BrowserCoreExtension implements CoreExtension {
         return createDisposable(this._host.instance._registerExtensionEventProperties(producer))
     }
 
-    getRemoteConfig(): Promise<BrowserCommonRemoteConfig | undefined> {
+    getRemoteConfig(): Promise<DeepReadonly<RemoteConfig> | undefined> {
         return this._host.getRemoteConfig()
     }
 
