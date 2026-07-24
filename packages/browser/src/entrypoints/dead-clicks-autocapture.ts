@@ -383,10 +383,9 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                     ? this._lastMutation - click.timestamp
                     : undefined)
             click.absoluteDelayMs = Date.now() - click.timestamp
-            click.selectionChangedDelayMs =
-                this._lastSelectionChanged && click.timestamp <= this._lastSelectionChanged
-                    ? this._lastSelectionChanged - click.timestamp
-                    : undefined
+            click.selectionChangedDelayMs = this._lastSelectionChanged
+                ? Math.abs(click.timestamp - this._lastSelectionChanged)
+                : undefined
             click.visibilityChangedDelayMs = this._lastVisibilityChange
                 ? Math.abs(click.timestamp - this._lastVisibilityChange)
                 : undefined
