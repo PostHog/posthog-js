@@ -102,12 +102,15 @@ overrides:
   testcafe-browser-provider-browserstack>sharp: 0.34.5
   tough-cookie@4.0.0: 4.1.4
 
-packageExtensionsChecksum: sha256-bOWT71KTGqxkUBHWJFaQh7IjGIJ47D6gh3HNO6MIpvw=
+packageExtensionsChecksum: sha256-FDM2eyFeKAYxKlfwx8sdLe/1ir0uZn3Y18WoXYlPu7Y=
 
 patchedDependencies:
+  browserstack-local@1.5.1: 10b4cc20e1f3b1bba64fa40f8b7fbf7cad5995a72878445a6bf98c5dc6461071
   tr46@0.0.3: a8433f5b3cdbf65b86b8bd292f02633a33a80cb71acdf292c5fe496154156ce7
   tr46@2.1.0: 71c6a4831c1dccaf8fcdcf26beff5ff2f3c6a408a791c032d168df3b8d8a8210
   tr46@3.0.0: 8bdeeb11e4262212faac42804303d3b9f146e3bbeac48b62817c2d7b1c01c98d
+  whatwg-url@5.0.0: 8f494cbd66a0eee9e67af9b50fc38f85a71a8d172596f131aca5519e5a9c2a87
+  whatwg-url@8.7.0: 8a478ca6677e99526f8e70e28b1f5dc84495cc398d30e8015bd9cea51b90f360
 
 importers:
 
@@ -25477,7 +25480,7 @@ snapshots:
       node-releases: 2.0.50
       update-browserslist-db: 1.2.3(browserslist@4.28.4)
 
-  browserstack-local@1.5.1:
+  browserstack-local@1.5.1(patch_hash=10b4cc20e1f3b1bba64fa40f8b7fbf7cad5995a72878445a6bf98c5dc6461071):
     dependencies:
       agent-base: 6.0.2
       https-proxy-agent: 5.0.1
@@ -26545,7 +26548,7 @@ snapshots:
     dependencies:
       abab: 2.0.6
       whatwg-mimetype: 2.3.0
-      whatwg-url: 8.7.0
+      whatwg-url: 8.7.0(patch_hash=8a478ca6677e99526f8e70e28b1f5dc84495cc398d30e8015bd9cea51b90f360)
 
   data-urls@3.0.2:
     dependencies:
@@ -30929,7 +30932,7 @@ snapshots:
       webidl-conversions: 6.1.0
       whatwg-encoding: 1.0.5
       whatwg-mimetype: 2.3.0
-      whatwg-url: 8.7.0
+      whatwg-url: 8.7.0(patch_hash=8a478ca6677e99526f8e70e28b1f5dc84495cc398d30e8015bd9cea51b90f360)
       ws: 7.5.10
       xml-name-validator: 3.0.0
     transitivePeerDependencies:
@@ -32629,11 +32632,11 @@ snapshots:
 
   node-fetch@2.6.11:
     dependencies:
-      whatwg-url: 5.0.0
+      whatwg-url: 5.0.0(patch_hash=8f494cbd66a0eee9e67af9b50fc38f85a71a8d172596f131aca5519e5a9c2a87)
 
   node-fetch@2.7.0:
     dependencies:
-      whatwg-url: 5.0.0
+      whatwg-url: 5.0.0(patch_hash=8f494cbd66a0eee9e67af9b50fc38f85a71a8d172596f131aca5519e5a9c2a87)
 
   node-fetch@3.3.2:
     dependencies:
@@ -35857,7 +35860,7 @@ snapshots:
 
   testcafe-browser-provider-browserstack@1.15.2:
     dependencies:
-      browserstack-local: 1.5.1
+      browserstack-local: 1.5.1(patch_hash=10b4cc20e1f3b1bba64fa40f8b7fbf7cad5995a72878445a6bf98c5dc6461071)
       dedent: 0.7.0
       desired-capabilities: 0.1.0
       firefox-profile: 4.2.2
@@ -37554,14 +37557,16 @@ snapshots:
       tr46: 4.1.1
       webidl-conversions: 7.0.0
 
-  whatwg-url@5.0.0:
+  whatwg-url@5.0.0(patch_hash=8f494cbd66a0eee9e67af9b50fc38f85a71a8d172596f131aca5519e5a9c2a87):
     dependencies:
+      punycode: 2.3.1
       tr46: 0.0.3(patch_hash=a8433f5b3cdbf65b86b8bd292f02633a33a80cb71acdf292c5fe496154156ce7)
       webidl-conversions: 3.0.1
 
-  whatwg-url@8.7.0:
+  whatwg-url@8.7.0(patch_hash=8a478ca6677e99526f8e70e28b1f5dc84495cc398d30e8015bd9cea51b90f360):
     dependencies:
       lodash: 4.17.21
+      punycode: 2.3.1
       tr46: 2.1.0(patch_hash=71c6a4831c1dccaf8fcdcf26beff5ff2f3c6a408a791c032d168df3b8d8a8210)
       webidl-conversions: 6.1.0
 

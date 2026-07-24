@@ -67,6 +67,12 @@ packageExtensions:
   tr46@0.0.3:
     dependencies:
       punycode: 2.3.1
+  whatwg-url@5.0.0:
+    dependencies:
+      punycode: 2.3.1
+  whatwg-url@8.7.0:
+    dependencies:
+      punycode: 2.3.1
 
 minimumReleaseAgeExclude:
   - '@posthog/cli'
@@ -94,6 +100,9 @@ trustPolicyExclude:
 trustPolicy: no-downgrade
 
 patchedDependencies:
+  browserstack-local@1.5.1: patches/browserstack-local@1.5.1.patch
   tr46@0.0.3: patches/tr46@0.0.3.patch
   tr46@2.1.0: patches/tr46@2.1.0.patch
   tr46@3.0.0: patches/tr46@3.0.0.patch
+  whatwg-url@5.0.0: patches/whatwg-url@5.0.0.patch
+  whatwg-url@8.7.0: patches/whatwg-url@8.7.0.patch
