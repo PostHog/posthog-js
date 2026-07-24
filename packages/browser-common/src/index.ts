@@ -11,8 +11,8 @@ export type {
     NewSessionInfo,
     CapturedEventInfo,
     CaptureOptions,
-    RemoteConfig,
 } from './core-extension'
+export * from './types'
 export { createDisposable, type Disposable } from './disposable'
 export type { ExtensionToken } from './token'
 export type { Listener } from './pubsub'
