@@ -297,6 +297,9 @@ importers:
       web-vitals:
         specifier: ^5.3.0
         version: 5.3.0
+      web-vitals-soft-navs:
+        specifier: npm:web-vitals@5.3.0-soft-navs-5
+        version: web-vitals@5.3.0-soft-navs-5
     devDependencies:
       '@babel/core':
         specifier: 'catalog:'
@@ -16366,6 +16369,9 @@ packages:
 
   web-vitals@5.3.0:
     resolution: {integrity: sha512-q6LWsLatGYZp5VGBIOvbTj6JBV2nOmC8KvWztXBmwJcfFAzhwKwbOxhUH306XY3CcaZDUlSmSuNPBsCn0bFu+g==}
+
+  web-vitals@5.3.0-soft-navs-5:
+    resolution: {integrity: sha512-pecdC0MA681FHkTjYfhvV9BXQGohtWJJB8NwvE++uWaQuZ7NmLu905hpdDsL9K5NYnRLWa6AGnG12GusT6IrXg==}
 
   webidl-conversions@3.0.1:
     resolution: {integrity: sha512-2JAn3z8AR6rjK8Sm8orRC0h/bcl/DqL7tRPdGZ4I1CjdF+EaMLmYxBHyXuKL849eucPFhvBoxMsflfOb8kxaeQ==}
@@ -37864,6 +37870,8 @@ snapshots:
   web-streams-polyfill@3.3.3: {}
 
   web-vitals@5.3.0: {}
+
+  web-vitals@5.3.0-soft-navs-5: {}
 
   webidl-conversions@3.0.1: {}
 

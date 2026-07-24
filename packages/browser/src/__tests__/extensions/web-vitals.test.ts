@@ -473,6 +473,107 @@ describe('web vitals', () => {
         })
     })
 
+    describe('web_vitals_soft_navs config', () => {
+        it.each([
+            [undefined, false],
+            [true, true],
+            [false, false],
+        ])('when web_vitals_soft_navs is %p, useSoftNavs should be %p', async (softNavsConfig, expectedUseSoftNavs) => {
+            posthog = await createPosthogInstance(uuidv7(), {
+                capture_performance: { web_vitals: true, web_vitals_soft_navs: softNavsConfig },
+                capture_pageview: false,
+            })
+
+            expect(posthog.webVitalsAutocapture!.useSoftNavs).toBe(expectedUseSoftNavs)
+        })
+
+        it.each([
+            // [soft_navs, attribution, expected bundle]
+            [undefined, undefined, 'web-vitals'],
+            [false, false, 'web-vitals'],
+            [true, undefined, 'web-vitals-soft-navs'],
+            [true, false, 'web-vitals-soft-navs'],
+            [true, true, 'web-vitals-with-attribution-soft-navs'],
+            [false, true, 'web-vitals-with-attribution'],
+        ])(
+            'when web_vitals_soft_navs is %p and web_vitals_attribution is %p, should load %s bundle',
+            async (softNavsConfig, attributionConfig, expectedBundle) => {
+                const loadScriptMock = jest.fn().mockImplementation((_ph, _kind, callback) => {
+                    assignableWindow.__PosthogExtensions__ = {}
+                    assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
+                        onLCP: jest.fn(),
+                        onCLS: jest.fn(),
+                        onFCP: jest.fn(),
+                        onINP: jest.fn(),
+                    }
+                    callback()
+                })
+
+                assignableWindow.__PosthogExtensions__ = {}
+                assignableWindow.__PosthogExtensions__.loadExternalDependency = loadScriptMock
+
+                posthog = await createPosthogInstance(uuidv7(), {
+                    capture_performance: {
+                        web_vitals: true,
+                        web_vitals_soft_navs: softNavsConfig,
+                        web_vitals_attribution: attributionConfig,
+                    },
+                    capture_pageview: false,
+                })
+
+                posthog.webVitalsAutocapture!.onRemoteConfig({
+                    ok: true,
+                    config: {
+                        capturePerformance: { web_vitals: true },
+                    } as RemoteConfig,
+                })
+
+                expect(loadScriptMock).toHaveBeenCalledWith(expect.anything(), expectedBundle, expect.any(Function))
+            }
+        )
+
+        it.each([
+            [undefined, false],
+            [true, true],
+            [false, false],
+        ])(
+            'when web_vitals_soft_navs is %p, passes reportSoftNavs=%p to the observers',
+            async (softNavsConfig, expectedReportSoftNavs) => {
+                const onLCP = jest.fn()
+                const onCLS = jest.fn()
+                const onFCP = jest.fn()
+                const onINP = jest.fn()
+
+                const loadScriptMock = jest.fn().mockImplementation((_ph, _kind, callback) => {
+                    assignableWindow.__PosthogExtensions__ = {}
+                    assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = { onLCP, onCLS, onFCP, onINP }
+                    callback()
+                })
+
+                assignableWindow.__PosthogExtensions__ = {}
+                assignableWindow.__PosthogExtensions__.loadExternalDependency = loadScriptMock
+
+                posthog = await createPosthogInstance(uuidv7(), {
+                    capture_performance: { web_vitals: true, web_vitals_soft_navs: softNavsConfig },
+                    capture_pageview: false,
+                })
+
+                posthog.webVitalsAutocapture!.onRemoteConfig({
+                    ok: true,
+                    config: {
+                        capturePerformance: { web_vitals: true },
+                    } as RemoteConfig,
+                })
+
+                for (const observer of [onLCP, onCLS, onFCP, onINP]) {
+                    expect(observer).toHaveBeenCalledWith(expect.any(Function), {
+                        reportSoftNavs: expectedReportSoftNavs,
+                    })
+                }
+            }
+        )
+    })
+
     describe('onRemoteConfig empty config handling', () => {
         beforeEach(async () => {
             beforeSendMock = jest.fn()

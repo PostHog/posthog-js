@@ -242,6 +242,25 @@ export interface PerformanceCaptureConfig {
      * @default false
      */
     web_vitals_attribution?: boolean
+
+    /**
+     * Scope web vitals metrics to the browser's Soft Navigation entries, so that
+     * client-side route changes in single-page apps each start a fresh measurement
+     * window instead of accumulating against the original hard-navigation timestamp.
+     *
+     * Without this, an SPA's LCP observer keeps treating the "largest paint so far"
+     * as belonging to the initial page load across every subsequent route change,
+     * which inflates LCP (and the other metrics) by the time spent on the app.
+     *
+     * This is opt-in because it relies on Chrome's Soft Navigation Detection API,
+     * which is still experimental. When enabled, PostHog loads a soft-navs build of
+     * the web-vitals library (a slightly larger bundle) and passes `reportSoftNavs`
+     * to the observers; the standard build silently ignores the option. In browsers
+     * without soft-nav support the metrics behave as they do today.
+     *
+     * @default false
+     */
+    web_vitals_soft_navs?: boolean
 }
 
 export interface DeadClickCandidate {
