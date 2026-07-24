@@ -72,6 +72,7 @@ test.describe('event capture', () => {
 
             if (usesLegacyCapturePayload) {
                 expect(payload.event).toEqual('$pageview')
+                expect(payload.properties.token).toEqual('test token')
                 expect(Object.keys(payload.properties).length).toBeGreaterThan(0)
             } else {
                 expect(payload.api_key).toEqual('test token')
