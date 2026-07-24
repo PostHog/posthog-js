@@ -35,16 +35,13 @@ jobs:
           node_version: ${{ matrix.node-version }}
           build: true
 
-      # once its built we can see if we can use it on the forced version
-      - name: Override TypeScript version
+      # once it's built we can see if we can use it with the requested TypeScript version
+      - name: Test TypeScript Import
         env:
           TS_VERSION: ${{ matrix.typescript-version.version }}
-        run: yq -i '.catalog.typescript = strenv(TS_VERSION)' pnpm-workspace.yaml && pnpm install --no-frozen-lockfile
-
-      - name: Test TypeScript Import
         run: |
           rm ci-ts-file.js || true
-          pnpm exec tsc --version
-          pnpm exec tsc ci-ts-file.ts --strict --target es2017 --skipLibCheck ${{ matrix.typescript-version.extra-flags }}
+          pnpm --package="typescript@$TS_VERSION" dlx tsc --version
+          pnpm --package="typescript@$TS_VERSION" dlx tsc ci-ts-file.ts --strict --target es2017 --skipLibCheck ${{ matrix.typescript-version.extra-flags }}
           node ci-ts-file.js
         working-directory: packages/browser
