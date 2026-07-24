@@ -60,6 +60,13 @@ onlyBuiltDependencies:
 
 overrides:
   node-forge: 1.3.2
+  testcafe-browser-provider-browserstack>sharp: 0.34.5
+  tough-cookie@4.0.0: 4.1.4
+
+packageExtensions:
+  tr46@0.0.3:
+    dependencies:
+      punycode: 2.3.1
 
 minimumReleaseAgeExclude:
   - '@posthog/cli'
@@ -85,3 +92,8 @@ trustPolicyExclude:
   - vite@5.4.21
 
 trustPolicy: no-downgrade
+
+patchedDependencies:
+  tr46@0.0.3: patches/tr46@0.0.3.patch
+  tr46@2.1.0: patches/tr46@2.1.0.patch
+  tr46@3.0.0: patches/tr46@3.0.0.patch
