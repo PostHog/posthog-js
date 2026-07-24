@@ -63,8 +63,11 @@ jobs:
             [Download bundle size visualization](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts/${{ steps.viz-upload.outputs.artifact-id }})
           edit-mode: replace
 
-      - uses: preactjs/compressed-size-action@946a292cd35bd1088e0d7eb92b69d1a8d5b5d76a # pin v2.8.0
+      - uses: preactjs/compressed-size-action@f322c295dde06a1cb7ccaef105732dd8a726d1d9 # pin v2.10.0
         if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        # v2.10.0 targets Node 24 but still bundles a dependency that calls url.parse().
+        env:
+          NODE_OPTIONS: --disable-warning=DEP0169
         with:
           compression: "none"
           strip-hash: '-(\w{8})\.'
