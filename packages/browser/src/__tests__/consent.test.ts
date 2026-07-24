@@ -32,7 +32,6 @@ describe('consentManager', () => {
             (resolve) =>
                 defaultPostHog().init('testtoken', { ...config, loaded: (posthog) => resolve(posthog) }, uuidv7())!
         )
-        posthog.debug()
         return posthog
     }
 

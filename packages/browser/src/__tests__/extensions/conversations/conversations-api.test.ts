@@ -19,6 +19,7 @@ describe('Conversations API Methods', () => {
     let conversations: PostHogConversations
     let mockPostHog: PostHog
     let mockManager: ConversationsManager
+    let consoleLogSpy: jest.SpyInstance
     let consoleWarnSpy: jest.SpyInstance
 
     beforeEach(() => {
@@ -29,7 +30,8 @@ describe('Conversations API Methods', () => {
         // Enable debug mode so logger actually logs
         Config.DEBUG = true
 
-        // Spy on console.warn
+        // Debug mode is required to exercise warnings, so silence the expected informational logs.
+        consoleLogSpy = jest.spyOn(console, 'log').mockImplementation()
         consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation()
 
         // Setup mock manager with API methods
@@ -85,6 +87,7 @@ describe('Conversations API Methods', () => {
     })
 
     afterEach(() => {
+        consoleLogSpy.mockRestore()
         consoleWarnSpy.mockRestore()
         Config.DEBUG = false
     })
