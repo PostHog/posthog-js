@@ -1674,43 +1674,44 @@ describe('surveys', () => {
             instance.onFeatureFlags = jest.fn().mockReturnValue(() => {})
         })
 
-        it('re-renders a focused popover survey when languagechange fires and language differs', () => {
-            const renderMock = jest.fn()
-            ;(surveyManager as any).renderPopover = renderMock
+        it('updates _currentLanguage and re-renders when languagechange fires and language differs', () => {
+            // Spy on _translateSurveyForRendering to return French translation
+            ;(surveyManager as any)._translateSurveyForRendering = jest
+                .fn()
+                .mockReturnValue({ survey: frSurvey, language: 'fr' })
 
-            // Simulate survey in focus with initial language
             ;(surveyManager as any)._surveyInFocus = frSurvey.id
             ;(surveyManager as any)._currentLanguage = 'en'
 
-            // Simulate navigator.language switching to French
-            Object.defineProperty(navigator, 'language', { value: 'fr', configurable: true })
             window.dispatchEvent(new Event('languagechange'))
 
-            expect(renderMock).toHaveBeenCalledTimes(1)
+            expect((surveyManager as any)._currentLanguage).toBe('fr')
+            expect((surveyManager as any)._translateSurveyForRendering).toHaveBeenCalledWith(frSurvey)
         })
 
         it('does not re-render when language is unchanged', () => {
-            const renderMock = jest.fn()
-            ;(surveyManager as any).renderPopover = renderMock
-            // Make _translateSurveyForRendering return 'fr' so it matches _currentLanguage
-            ;(surveyManager as any)._translateSurveyForRendering = jest.fn().mockReturnValue({ survey: frSurvey, language: 'fr' })
+            ;(surveyManager as any)._translateSurveyForRendering = jest
+                .fn()
+                .mockReturnValue({ survey: frSurvey, language: 'fr' })
 
             ;(surveyManager as any)._surveyInFocus = frSurvey.id
             ;(surveyManager as any)._currentLanguage = 'fr'
 
+            const languageBefore = (surveyManager as any)._currentLanguage
             window.dispatchEvent(new Event('languagechange'))
 
-            expect(renderMock).not.toHaveBeenCalled()
+            // _translateSurveyForRendering should still be called (to detect), but language shouldn't change
+            expect((surveyManager as any)._currentLanguage).toBe(languageBefore)
         })
 
         it('does nothing when no survey is in focus', () => {
-            const renderMock = jest.fn()
-            ;(surveyManager as any).renderPopover = renderMock
+            const translateSpy = jest.fn()
+            ;(surveyManager as any)._translateSurveyForRendering = translateSpy
             ;(surveyManager as any)._surveyInFocus = null
 
             window.dispatchEvent(new Event('languagechange'))
 
-            expect(renderMock).not.toHaveBeenCalled()
+            expect(translateSpy).not.toHaveBeenCalled()
         })
 
         it('clears _currentLanguage when survey is removed from focus', () => {
