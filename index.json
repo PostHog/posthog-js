@@ -1,4 +1,18 @@
 {
+  "PostHog/posthog-js/issue/4267": {
+    "key": "PostHog/posthog-js/issue/4267",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4267",
+    "url": "https://github.com/PostHog/posthog-js/issues/4267",
+    "conclusion": "Valid feature request for Gemini Interactions API tracing support in @posthog/ai.",
+    "labels": [
+      "enhancement",
+      "feature",
+      "team/llm-analytics"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-26T15:23:32.195Z"
+  },
   "PostHog/posthog-js/issue/4268": {
     "key": "PostHog/posthog-js/issue/4268",
     "repo": "PostHog/posthog-js",
@@ -12,19 +26,6 @@
     ],
     "closed": false,
     "updatedAt": "2026-07-24T16:40:00.534Z"
-  },
-  "PostHog/posthog-js/issue/4267": {
-    "key": "PostHog/posthog-js/issue/4267",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 4267",
-    "url": "https://github.com/PostHog/posthog-js/issues/4267",
-    "conclusion": "Valid @posthog/ai tracing-parity feature request for Google Gemini's Interactions API.",
-    "labels": [
-      "enhancement",
-      "feature"
-    ],
-    "closed": false,
-    "updatedAt": "2026-07-24T14:44:56.101Z"
   },
   "PostHog/posthog-js/issue/4242": {
     "key": "PostHog/posthog-js/issue/4242",
