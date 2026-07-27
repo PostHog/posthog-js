@@ -231,6 +231,7 @@ describe('identify()', () => {
     describe('invalid id passed', () => {
         it('does not update user', () => {
             console.error = jest.fn()
+            console.log = jest.fn()
 
             instance.debug()
 
@@ -246,6 +247,7 @@ describe('identify()', () => {
 
         it('does not update user when distinct ID is $posthog_cookieless', () => {
             console.error = jest.fn()
+            console.log = jest.fn()
 
             instance.debug()
 

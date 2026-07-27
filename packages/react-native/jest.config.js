@@ -18,6 +18,7 @@ module.exports = {
   collectCoverage: true,
   clearMocks: true,
   coverageDirectory: 'coverage',
+  setupFilesAfterEnv: ['<rootDir>/test/setup.ts'],
   testPathIgnorePatterns: ['<rootDir>/lib/', 'node_modules', 'examples'],
   fakeTimers: { enableGlobally: true },
   transformIgnorePatterns: [],

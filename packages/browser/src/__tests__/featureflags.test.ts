@@ -17,6 +17,23 @@ import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 jest.useFakeTimers()
 jest.spyOn(global, 'setTimeout')
 
+const expectedFeatureFlagDebugMessages = new Set([
+    'All overrides cleared',
+    'Flag overrides cleared',
+    'Flag overrides set',
+    'Payload overrides cleared',
+    'Payload overrides set',
+])
+
+const mockExpectedFeatureFlagDebugLogs = (): void => {
+    const failOnUnexpectedLog = console.log
+    jest.spyOn(console, 'log').mockImplementation((...args) => {
+        if (args[0] !== '[PostHog.js] [FeatureFlags]' || !expectedFeatureFlagDebugMessages.has(args[1])) {
+            failOnUnexpectedLog(...args)
+        }
+    })
+}
+
 describe('featureflags', () => {
     let instance
     let featureFlags
@@ -30,6 +47,9 @@ describe('featureflags', () => {
     let mockWarn
 
     beforeEach(() => {
+        window.POSTHOG_DEBUG = true
+        mockExpectedFeatureFlagDebugLogs()
+
         const internalEventEmitter = new SimpleEventEmitter()
         instance = {
             config: { ...config },
@@ -2998,6 +3018,7 @@ describe('parseFlagsResponse', () => {
     let persistence
 
     beforeEach(() => {
+        window.POSTHOG_DEBUG = true
         persistence = { register: jest.fn(), unregister: jest.fn() }
     })
 
@@ -3471,6 +3492,7 @@ describe('getRemoteConfigPayload', () => {
     let featureFlags: PostHogFeatureFlags
 
     beforeEach(() => {
+        window.POSTHOG_DEBUG = true
         instance = createMockPostHog({
             config: {
                 token: 'test-token',
@@ -3681,6 +3703,7 @@ describe('updateFlags', () => {
     it('merge does not bake an active override into the stored flags', async () => {
         const posthog = await createPosthogInstance()
         posthog.updateFlags({ 'base-flag': 'control' })
+        mockExpectedFeatureFlagDebugLogs()
         posthog.featureFlags.overrideFeatureFlags({ flags: { 'base-flag': 'test' } })
         expect(posthog.getFeatureFlag('base-flag')).toBe('test')
 
@@ -4244,6 +4267,8 @@ describe('$feature_flag_error tracking', () => {
 
     describe('feature flag cache TTL', () => {
         beforeEach(() => {
+            window.POSTHOG_DEBUG = true
+
             // Set up flags in persistence for TTL tests
             instance.persistence.register({
                 $enabled_feature_flags: {

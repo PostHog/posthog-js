@@ -403,13 +403,16 @@ describe('addPostHogAndroidGradlePluginClasspath', () => {
   })
 
   it('leaves contents unchanged and reports not present when there is no buildscript dependencies block', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
     const contents = 'plugins {\n  id "com.android.application"\n}'
     const result = addPostHogAndroidGradlePluginClasspath(contents)
     expect(result.contents).toBe(contents)
     expect(result.classpathPresent).toBe(false)
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Could not find a buildscript dependencies block'))
   })
 
   it('does not place the classpath in a later block when buildscript has no dependencies block', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
     const contents = [
       'buildscript {',
       '    repositories { google() }',
@@ -423,6 +426,7 @@ describe('addPostHogAndroidGradlePluginClasspath', () => {
     // The only dependencies block is in allprojects, outside buildscript — must not be used.
     expect(result.classpathPresent).toBe(false)
     expect(result.contents).toBe(contents)
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Could not find a buildscript dependencies block'))
   })
 })
 
