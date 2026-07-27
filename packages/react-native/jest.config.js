@@ -17,6 +17,8 @@ module.exports = {
   },
   collectCoverage: true,
   clearMocks: true,
+  detectOpenHandles: true,
+  maxWorkers: 1,
   coverageDirectory: 'coverage',
   setupFilesAfterEnv: ['<rootDir>/test/setup.ts'],
   testPathIgnorePatterns: ['<rootDir>/lib/', 'node_modules', 'examples'],
