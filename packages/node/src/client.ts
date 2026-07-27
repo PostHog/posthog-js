@@ -260,8 +260,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     this.maxCacheSize = normalizedOptions.maxCacheSize || MAX_CACHE_SIZE
   }
 
-  protected override enqueue(type: string, message: any, options?: PostHogCaptureOptions): void {
-    super.enqueue(type, message, options)
+  protected override enqueue(
+    type: string,
+    message: any,
+    options?: PostHogCaptureOptions,
+    explicitRoute?: string
+  ): void {
+    super.enqueue(type, message, options, explicitRoute)
     this.scheduleDebouncedFlush()
   }
 

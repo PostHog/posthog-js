@@ -1064,6 +1064,7 @@ export abstract class PostHogCoreStateless {
    * and persisted together, independently of other routes. The default keeps every event on a
    * single route (byte-identical to the pre-partitioning behavior); override to segregate a
    * subset of events onto their own queue and transport (see posthog-node's `$ai_*` routing).
+   * Callers can bypass this via the explicit-route parameter on enqueue/sendImmediate.
    */
   protected getQueueRouteKey(_message: PostHogEventProperties): string {
     return DEFAULT_QUEUE_ROUTE
@@ -1090,7 +1091,7 @@ export abstract class PostHogCoreStateless {
     return this.getPersistedProperty<PostHogQueueItem[]>(this.persistedQueueKeyForRoute(route)) || []
   }
 
-  protected enqueue(type: string, _message: any, options?: PostHogCaptureOptions): void {
+  protected enqueue(type: string, _message: any, options?: PostHogCaptureOptions, explicitRoute?: string): void {
     this.wrap(() => {
       if (this.optedOut) {
         this._events.emit(type, `Library is disabled. Not sending event. To re-enable, call posthog.optIn()`)
@@ -1106,7 +1107,7 @@ export abstract class PostHogCoreStateless {
       }
       message = this.normalizeMessage(message)
 
-      const queueKey = this.persistedQueueKeyForRoute(this.getQueueRouteKey(message))
+      const queueKey = this.persistedQueueKeyForRoute(explicitRoute ?? this.getQueueRouteKey(message))
       const queue = this.getPersistedProperty<PostHogQueueItem[]>(queueKey) || []
 
       if (queue.length >= this.maxQueueSize) {
@@ -1130,7 +1131,12 @@ export abstract class PostHogCoreStateless {
     })
   }
 
-  protected async sendImmediate(type: string, _message: any, options?: PostHogCaptureOptions): Promise<void> {
+  protected async sendImmediate(
+    type: string,
+    _message: any,
+    options?: PostHogCaptureOptions,
+    explicitRoute?: string
+  ): Promise<void> {
     if (this.disabled) {
       this._logger.warn('The client is disabled')
       return
@@ -1155,7 +1161,7 @@ export abstract class PostHogCoreStateless {
     message = this.normalizeMessage(message)
 
     try {
-      await this.sendBatch([message], undefined, this.getQueueRouteKey(message))
+      await this.sendBatch([message], undefined, explicitRoute ?? this.getQueueRouteKey(message))
     } catch (err) {
       this._events.emit('error', err)
     }
