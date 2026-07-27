@@ -294,7 +294,13 @@ export function isBlocked(
 }
 
 export function isSerialized(n: Node, mirror: Mirror): boolean {
-  return mirror.getId(n) !== -1;
+  // Membership, not `getId(n) !== -1`: while a time-sliced full snapshot is
+  // in flight the mirror hands out *reserved* ids for connected nodes it has
+  // not serialized yet, so getId no longer answers -1 for those. Callers of
+  // isSerialized (processRemoves above all) genuinely mean "has this node
+  // been serialized", and treating a reserved id as serialized would buffer
+  // removals for ids the replayer may never learn.
+  return mirror.hasNode(n);
 }
 
 export function isIgnored(

@@ -1618,7 +1618,10 @@ function snapshot(
  * (~4% over MessageChannel), but a recorder is a guest in the host app;
  * starving the app's own timers to serialize faster is the wrong trade.
  */
-function createYielder(): () => Promise<void> {
+function createYielder(): {
+  doYield: () => Promise<void>;
+  dispose: () => void;
+} {
   if (typeof MessageChannel === 'function') {
     const channel = new MessageChannel();
     let pending: (() => void) | null = null;
@@ -1627,13 +1630,24 @@ function createYielder(): () => Promise<void> {
       pending = null;
       resolve?.();
     };
-    return () =>
-      new Promise<void>((resolve) => {
-        pending = resolve;
-        channel.port2.postMessage(null);
-      });
+    return {
+      doYield: () =>
+        new Promise<void>((resolve) => {
+          pending = resolve;
+          channel.port2.postMessage(null);
+        }),
+      // entangled ports pin scheduler resources until closed; a recording that
+      // snapshots on a checkout interval creates one channel per walk
+      dispose: () => {
+        channel.port1.close();
+        channel.port2.close();
+      },
+    };
   }
-  return () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+  return {
+    doYield: () => new Promise<void>((resolve) => setTimeout(resolve, 0)),
+    dispose: () => undefined,
+  };
 }
 
 /**
@@ -1697,10 +1711,14 @@ export type SnapshotWithBudgetOptions = NonNullable<
  *
  * The DOM may mutate between slices. The recorder is expected to hold its
  * mutation buffers locked around the full snapshot (as it already does for
- * the synchronous path): a node removed mid-snapshot is still serialized
- * from its captured reference, and the buffered removal replays against the
- * new mirror on unlock — the same convergence contract as today, where the
- * comment on unlock reads "as can now apply against the newly built mirror".
+ * the synchronous path). Captured-but-not-yet-serialized references are
+ * revalidated at pop time: a node that left the tree, or moved elsewhere, is
+ * skipped rather than serialized stale — its removal produced no buffered
+ * event (it was never in the mirror), so a stale serialization would be a
+ * ghost node nothing ever cleans up. Whatever the observers did buffer
+ * replays against the new mirror on unlock — the same convergence contract
+ * as today, where the comment on unlock reads "as can now apply against the
+ * newly built mirror".
  */
 export async function snapshotWithBudget(
   n: Document,
@@ -1736,7 +1754,10 @@ export async function snapshotWithBudget(
   const maskInputOptions: MaskInputOptions =
     normalizeMaskInputOptions(maskAllInputs);
   const slimDOMOptions: SlimDOMOptions = slimDOMDefaults(slimDOM);
-  const doYield = yieldFn ?? createYielder();
+  const yielder = yieldFn
+    ? { doYield: yieldFn, dispose: () => undefined }
+    : createYielder();
+  const doYield = yielder.doYield;
   // A custom yieldFn means a test harness that wants deterministic slicing;
   // input-driven early yields would make slice boundaries environmental.
   const inputPending = yieldFn ? () => false : createInputPendingCheck();
@@ -1774,6 +1795,13 @@ export async function snapshotWithBudget(
   type WalkItem = {
     node: Node;
     parent: SerializedParent | null;
+    /**
+     * The DOM container whose child list this node was read from (the parent
+     * element, or the shadow root for shadow children). Stale entries are
+     * detected by comparing against the node's *current* container at pop
+     * time — see below. Null only for the document root.
+     */
+    container: Node | null;
     depth: number;
     needsMask: boolean | undefined;
     preserveWhiteSpace: boolean;
@@ -1784,18 +1812,29 @@ export async function snapshotWithBudget(
     {
       node: n,
       parent: null,
+      container: null,
       depth: 0,
       needsMask: undefined,
       preserveWhiteSpace: preserveWhiteSpace ?? true,
     },
   ];
   let sliceStart = performance.now();
+  const serializedThisWalk = new WeakSet<Node>();
+  // Progress floor: input can arrive continuously (a 125Hz+ mouse reports
+  // several times per frame), and ending a slice after every single node
+  // would stretch the walk — and the queue and locked buffers behind it —
+  // without bound. Guaranteeing at least this much serialization per slice
+  // bounds the stretch to a small multiple of the ideal walk time while
+  // still bounding input latency to the floor.
+  const minSliceMs = Math.min(4, yieldBudgetMs);
 
+  try {
   while (stack.length > 0) {
-    // The budget is the ceiling (rendering needs a turn even on an idle page);
-    // pending input ends the slice early so a click never waits out the rest
-    // of a slice.
-    if (performance.now() - sliceStart >= yieldBudgetMs || inputPending()) {
+    // The budget is the ceiling (rendering needs a turn even on an idle
+    // page); pending input ends the slice early — once the progress floor is
+    // met — so a click doesn't wait out the rest of a slice.
+    const elapsed = performance.now() - sliceStart;
+    if (elapsed >= yieldBudgetMs || (elapsed >= minSliceMs && inputPending())) {
       await doYield();
       if (shouldAbort?.()) {
         return null;
@@ -1806,6 +1845,35 @@ export async function snapshotWithBudget(
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const item = stack.pop()!;
     const { node, parent, depth } = item;
+
+    // The stack holds *captured references*: a child list is read when its
+    // parent is visited, and served slices later. The page runs in between,
+    // so by pop time a captured node may be gone or live somewhere else, and
+    // in both cases the observer already reported it against the state it
+    // could see. A removed not-yet-serialized node produced no removal
+    // (nothing referenced it); a reparented one produced an add at its new
+    // home. Serializing the stale reference would put a node into the
+    // FullSnapshot that no event ever cleans up — so serialize a node only
+    // at its current place in the tree, or, if it left the tree, not at all
+    // (its subtree drops with it, since children are only pushed when the
+    // parent is serialized).
+    if (item.container) {
+      if (!node.isConnected) {
+        continue;
+      }
+      const currentContainer = dom.parentNode(node);
+      if (currentContainer !== item.container) {
+        continue;
+      }
+      // A node serialized earlier in this walk and then moved under a parent
+      // the walk hadn't reached yet would be encountered — and serialized —
+      // a second time, putting the same id in the snapshot twice. Its move
+      // was observed as remove+add and reconciles through the mutation
+      // buffer instead.
+      if (serializedThisWalk.has(node)) {
+        continue;
+      }
+    }
 
     const sn = serializeNodeWithId(node, {
       ...perNodeOptions,
@@ -1856,12 +1924,15 @@ export async function snapshotWithBudget(
       childPreserveWhiteSpace = false;
     }
 
+    serializedThisWalk.add(node);
+
     const serializedParent = sn as SerializedParent;
-    const pushChildren = (children: Node[]) => {
+    const pushChildren = (children: Node[], childContainer: Node) => {
       for (let i = children.length - 1; i >= 0; i--) {
         stack.push({
           node: children[i],
           parent: serializedParent,
+          container: childContainer,
           depth: depth + 1,
           needsMask: childNeedsMask,
           preserveWhiteSpace: childPreserveWhiteSpace,
@@ -1875,15 +1946,18 @@ export async function snapshotWithBudget(
     // (`isShadow` is self-derived inside serializeNodeWithId from parentNode.)
     let shadowRootEl: ShadowRoot | null = null;
     if (isElement(node) && (shadowRootEl = dom.shadowRoot(node))) {
-      pushChildren(Array.from(dom.childNodes(shadowRootEl)));
+      pushChildren(Array.from(dom.childNodes(shadowRootEl)), shadowRootEl);
     }
     const skipLightChildren =
       sn.type === NodeType.Element &&
       (sn as elementNode).tagName === 'textarea' &&
       (sn as elementNode).attributes.value !== undefined;
     if (!skipLightChildren) {
-      pushChildren(Array.from(dom.childNodes(node)));
+      pushChildren(Array.from(dom.childNodes(node)), node);
     }
+  }
+  } finally {
+    yielder.dispose();
   }
 
   return root;

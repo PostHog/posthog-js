@@ -250,6 +250,18 @@ export default class MutationBuffer {
     this.canvasManager.lock();
   }
 
+  /**
+   * A time-sliced full snapshot serializes the live tree, so a node that was
+   * added while the buffer was locked can end up *inside* the FullSnapshot —
+   * its pending add must then be forgotten, or the unlock would emit a
+   * duplicate add for a node the snapshot already delivered (and undo any
+   * removal that came after it). Called by the recorder's onSerialize hook
+   * for every node the sliced walk serializes.
+   */
+  public forgetAddedNode(n: Node) {
+    this.addedSet.delete(n);
+  }
+
   public unlock() {
     this.locked = false;
     this.canvasManager.unlock();

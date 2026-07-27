@@ -58,6 +58,14 @@ let wrappedEmit!: (e: eventWithoutTime, isCheckout?: boolean) => void;
 let takeFullSnapshot!: (isCheckout?: boolean) => void;
 let canvasManager!: CanvasManager;
 let recording = false;
+// Module-level on purpose, like the mirror it protects: `record()` can be
+// called again without stopping the previous session (the code below resets
+// the shared mirror for exactly that case), and a time-sliced snapshot from
+// the abandoned session may still be in flight at that point. Any new
+// session — via stop() or via a fresh record() — bumps this, and the stale
+// walk sees the bump and stands down instead of writing into the new
+// session's mirror and event stream.
+let recordingGeneration = 0;
 
 // Multiple tools (i.e. MooTools, Prototype.js) override Array.from and drop support for the 2nd parameter
 // Try to pull a clean implementation from a newly created iframe
@@ -88,6 +96,58 @@ const nonUserInitiatedSources = new Set<IncrementalSource>([
   IncrementalSource.StyleDeclaration,
   IncrementalSource.AdoptedStyleSheet,
 ]);
+
+/**
+ * Removes references to unclaimed reserved ids from an event held during a
+ * time-sliced full snapshot (see the flush in takeFullSnapshotBudgeted for why
+ * dropping these is lossless). Returns the event, a copy with the offending
+ * positions filtered out, or null when nothing referencing a known node is
+ * left. Covers every id-bearing incremental payload shape: a single `id`,
+ * pointer `positions`, and selection `ranges`.
+ */
+function scrubUnclaimedIds(
+  event: eventWithoutTime,
+  unclaimedIds: Set<number>,
+): eventWithoutTime | null {
+  if (unclaimedIds.size === 0) return event;
+  const e = event as { type: EventType; data?: Record<string, unknown> };
+  if (e.type !== EventType.IncrementalSnapshot || !e.data) return event;
+  const data = e.data;
+  if (typeof data.id === 'number' && unclaimedIds.has(data.id)) {
+    return null;
+  }
+  if (Array.isArray(data.positions)) {
+    const positions = (data.positions as Array<{ id: number }>).filter(
+      (p) => !unclaimedIds.has(p.id),
+    );
+    if (positions.length === 0) return null;
+    if (positions.length !== data.positions.length) {
+      return {
+        ...(e as object),
+        data: { ...data, positions },
+      } as eventWithoutTime;
+    }
+  }
+  if (Array.isArray(data.ranges)) {
+    const referencesUnclaimed = (
+      data.ranges as Array<{ start: number; end: number }>
+    ).some((r) => unclaimedIds.has(r.start) || unclaimedIds.has(r.end));
+    if (referencesUnclaimed) return null;
+  }
+  // The only mutation events that can be held are attach-iframe payloads
+  // (real mutations sit in locked buffers). One whose iframe was never
+  // reached is dropped whole: the iframe's buffered add re-serializes it on
+  // unlock, which re-fires onIframeLoad and re-attaches the content against
+  // an id the replayer does know.
+  if (Array.isArray(data.adds)) {
+    const referencesUnclaimed = (
+      data.adds as Array<{ parentId: number; node: { id: number } }>
+    ).some((a) => unclaimedIds.has(a.parentId) || unclaimedIds.has(a.node.id));
+    if (referencesUnclaimed) return null;
+  }
+  return event;
+}
+
 function record<T = eventWithTime>(
   options: recordOptions<T> = {},
 ): listenerHandler | undefined {
@@ -215,9 +275,13 @@ function record<T = eventWithTime>(
   const budgetedSnapshotEventQueue: Array<
     [eventWithoutTime, boolean | undefined]
   > = [];
-  // Bumped on teardown so a snapshot still in flight can tell that the
-  // recording it belongs to is gone and stop touching shared state.
-  let recordingGeneration = 0;
+  // True while the post-snapshot flush (held events + buffer unlock) runs:
+  // those deliveries bypass the queue gate, while a takeFullSnapshot they may
+  // trigger still coalesces instead of starting a walk mid-flush.
+  let budgetedSnapshotFlushing = false;
+  // A walk belongs to the generation record() was entered at; see the
+  // module-level declaration.
+  recordingGeneration++;
   // Set per id — one iframe id can collect several cleanups across loads.
   const iframeObserverCleanups = new Map<number, Set<listenerHandler>>();
 
@@ -252,9 +316,30 @@ function record<T = eventWithTime>(
     e.timestamp ??= nowTimestamp();
     if (
       budgetedSnapshotInFlight &&
+      !budgetedSnapshotFlushing &&
       e.type !== EventType.Meta &&
       e.type !== EventType.FullSnapshot
     ) {
+      // CSSOM-family deltas (StyleSheetRule/StyleDeclaration) and canvas
+      // commands describe a change to state the walk itself is about to
+      // capture: if their target hasn't been serialized yet, the FullSnapshot
+      // will already contain the post-change state, and delivering the delta
+      // afterwards would apply it twice — for index-based CSSOM payloads that
+      // also shifts every later rule index. Their post-snapshot deltas stay
+      // consistent precisely because the snapshot reflects the live CSSOM at
+      // serialization time.
+      if (e.type === EventType.IncrementalSnapshot) {
+        const data = e.data as { source?: number; id?: number };
+        if (
+          (data.source === IncrementalSource.StyleSheetRule ||
+            data.source === IncrementalSource.StyleDeclaration ||
+            data.source === IncrementalSource.CanvasMutation) &&
+          typeof data.id === 'number' &&
+          mirror.isPendingReservation(data.id)
+        ) {
+          return;
+        }
+      }
       // A sliced snapshot spans several tasks, so real events land while the
       // FullSnapshot is still being built. They cannot go out ahead of it — the
       // replayer needs the snapshot before anything that references it — so
@@ -481,6 +566,15 @@ function record<T = eventWithTime>(
     canvasMaskingConfigured,
     inlineImages,
     onSerialize: (n: Node) => {
+      if (budgetedSnapshotInFlight) {
+        // A node added mid-walk to a parent the walk hadn't reached yet gets
+        // serialized here, live — so its pending add in the locked buffers
+        // has been superseded and must be forgotten, or the unlock would
+        // emit a duplicate add (and resurrect the node past any later
+        // removal). Sync snapshots never hit this: nothing runs while they
+        // serialize, so nothing can be pending.
+        mutationBuffers.forEach((buf) => buf.forgetAddedNode(n));
+      }
       if (isSerializedIframe(n, mirror)) {
         iframeManager.addIframe(n as HTMLIFrameElement);
       }
@@ -514,16 +608,21 @@ function record<T = eventWithTime>(
     keepIframeSrcFn,
   });
 
-  const emitMetaEvent = (isCheckout: boolean) => {
+  const emitMetaEvent = (isCheckout: boolean, timestamp?: number) => {
     wrappedEmit(
       {
         type: EventType.Meta,
+        // The budgeted path passes the walk's start time so Meta and the
+        // FullSnapshot it announces carry the same timestamp — stamping Meta
+        // on emit could land it 1ms after the time the FullSnapshot is later
+        // given, and the wire must stay in timestamp order.
+        timestamp,
         data: {
           href: window.location.href,
           width: getWindowWidth(),
           height: getWindowHeight(),
         },
-      },
+      } as unknown as eventWithoutTime,
       isCheckout,
     );
   };
@@ -569,7 +668,7 @@ function record<T = eventWithTime>(
     // finish. It also keeps the FullSnapshot ahead of everything observed during
     // the walk, so the stream stays in timestamp order.
     const snapshotStartedAt = nowTimestamp();
-    emitMetaEvent(isCheckout);
+    emitMetaEvent(isCheckout, snapshotStartedAt);
 
     // When we take a full snapshot, old tracked StyleSheets need to be removed.
     stylesheetManager.reset();
@@ -609,22 +708,30 @@ function record<T = eventWithTime>(
         console.warn('Budgeted full snapshot failed', error);
       })
       .finally(() => {
-        // Reservation ends with the walk. It must not still be on during the
-        // unlock below: pushAdd relies on `parentId === -1` to know a parent
-        // isn't serialized yet and defer the add, and a reserved id would hide
-        // that, emitting an add against a parent the replayer never received.
-        mirror.endIdReservation();
         if (generation !== recordingGeneration) {
-          // Recording is gone. Leave the queue and the buffers alone — the
-          // teardown owns them now — and don't schedule a follow-up snapshot.
+          // This walk's recording is gone — torn down, or replaced by a newer
+          // record() call. Leave EVERYTHING alone: the queue and buffers
+          // belong to whoever owns the current generation now, and the id
+          // reservation may be the new session's, mid-walk. Just stand down.
           budgetedSnapshotInFlight = false;
           budgetedSnapshotQueued = null;
           budgetedSnapshotEventQueue.length = 0;
           return;
         }
-        // release the emit gate before flushing so held events, and then the
-        // buffered mutations, reach the wire
-        budgetedSnapshotInFlight = false;
+        // A reserved id whose node was never reached belongs to a node created
+        // during the walk inside already-visited territory. Its held events
+        // have to be weeded out — the replayer will never learn that id — and
+        // dropping them loses nothing: the node's add is sitting in the locked
+        // mutation buffer and will re-serialize its *final* state (value,
+        // attributes, text) on unlock. This matches the synchronous semantics
+        // too: under a blocking snapshot a node cannot be created and
+        // interacted with mid-snapshot at all.
+        const unclaimedIds = new Set(mirror.getUnclaimedReservedIds());
+        // Reservation ends with the walk. It must not still be on during the
+        // unlock below: pushAdd relies on `parentId === -1` to know a parent
+        // isn't serialized yet and defer the add, and a reserved id would hide
+        // that, emitting an add against a parent the replayer never received.
+        mirror.endIdReservation();
 
         // Held events go out first, each keeping the time it was observed —
         // all of which are inside the walk, and so before the mutations that
@@ -633,17 +740,29 @@ function record<T = eventWithTime>(
         // based payloads (StyleSheetRule) are applied by the replayer in the
         // order it receives them, and collapsing a whole window into one
         // millisecond leaves it no room to interleave them correctly.
-        // The tradeoff is an event that references a node created during the
-        // window: its add is still buffered at this point, so the replayer
-        // cannot resolve it. That is the one interleaving this does not
-        // recover, and it is far narrower than a non-monotonic stream.
-        const queuedEvents = budgetedSnapshotEventQueue.splice(0);
-        for (const [event, eventIsCheckout] of queuedEvents) {
-          wrappedEmit(event, eventIsCheckout);
-        }
+        //
+        // The gate stays armed while this runs (deliveries bypass it via the
+        // flushing flag): a held event can carry a timestamp old enough for
+        // checkoutEveryNms/Nth to request a checkout mid-flush, and that
+        // request must coalesce into the follow-up below — starting a new
+        // walk here would interleave its Meta with the flush and its unlock
+        // with the new walk's locks.
+        budgetedSnapshotFlushing = true;
+        try {
+          const queuedEvents = budgetedSnapshotEventQueue.splice(0);
+          for (const [event, eventIsCheckout] of queuedEvents) {
+            const scrubbed = scrubUnclaimedIds(event, unclaimedIds);
+            if (scrubbed) {
+              wrappedEmit(scrubbed, eventIsCheckout);
+            }
+          }
 
-        unlockMutationBuffers(); // generate & emit any mutations that happened during snapshotting, as can now apply against the newly built mirror
-        finishFullSnapshot();
+          unlockMutationBuffers(); // generate & emit any mutations that happened during snapshotting, as can now apply against the newly built mirror
+          finishFullSnapshot();
+        } finally {
+          budgetedSnapshotFlushing = false;
+          budgetedSnapshotInFlight = false;
+        }
 
         const pending = budgetedSnapshotQueued;
         budgetedSnapshotQueued = null;
@@ -980,6 +1099,9 @@ unlockMutationBuffers(); // generate & emit any mutations that happened during s
       unregisterErrorHandler();
     };
   } catch (error) {
+    // A walk started by init() before the failure would otherwise keep
+    // running against a recording that never finished setting up.
+    recordingGeneration++;
     // TODO: handle internal error
     console.warn(error);
   }

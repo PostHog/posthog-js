@@ -209,6 +209,11 @@ export class Mirror implements IMirror<Node> {
   // actually touch get one — so id numbering is untouched when nothing happens
   // during the snapshot.
   private reservedIds: Map<Node, number> | null = null;
+  // The subset of reserved ids whose node has not been serialized yet —
+  // an entry leaves this set the moment `add()` claims it. "Pending" is what
+  // callers usually need to ask about: an event that targets a pending id
+  // describes state the walk is still going to capture.
+  private pendingReservedIds: Set<number> | null = null;
   private reserveNextId: (() => number) | null = null;
 
   getId(n: Node | undefined | null): number {
@@ -226,6 +231,7 @@ export class Mirror implements IMirror<Node> {
       if (reserved === undefined) {
         reserved = this.reserveNextId();
         this.reservedIds.set(n, reserved);
+        this.pendingReservedIds?.add(reserved);
       }
       return reserved;
     }
@@ -237,15 +243,35 @@ export class Mirror implements IMirror<Node> {
   beginIdReservation(genId: () => number) {
     this.reserveNextId = genId;
     this.reservedIds = new Map();
+    this.pendingReservedIds = new Set();
   }
 
   endIdReservation() {
     this.reserveNextId = null;
     this.reservedIds = null;
+    this.pendingReservedIds = null;
   }
 
   getReservedId(n: Node): number | undefined {
     return this.reservedIds?.get(n);
+  }
+
+  /**
+   * True while a reservation is active and this id has been handed out to a
+   * node the walk has not serialized yet.
+   */
+  isPendingReservation(id: number): boolean {
+    return this.pendingReservedIds?.has(id) ?? false;
+  }
+
+  /**
+   * Reserved ids whose node never got serialized — it was created during the
+   * walk inside an already-visited part of the tree, so the traversal never
+   * reached it. Events carrying these ids reference a node the replayer will
+   * never receive; the caller uses this to weed them out before flushing.
+   */
+  getUnclaimedReservedIds(): number[] {
+    return this.pendingReservedIds ? Array.from(this.pendingReservedIds) : [];
   }
 
   getNode(id: number): Node | null {
@@ -297,6 +323,8 @@ export class Mirror implements IMirror<Node> {
     const id = meta.id;
     this.idNodeMap.set(id, n);
     this.nodeMetaMap.set(n, meta);
+    // serialization claims any reservation this node held
+    this.pendingReservedIds?.delete(id);
   }
 
   replace(id: number, n: Node) {
