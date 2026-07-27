@@ -45,6 +45,7 @@ enableGlobalVirtualStore: true
 minimumReleaseAge: 10080
 
 allowBuilds:
+  '@google/genai': false
   '@parcel/watcher': true
   '@posthog/cli': true
   core-js: true
