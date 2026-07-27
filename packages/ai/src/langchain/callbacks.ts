@@ -957,7 +957,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     }
 
     const isAnthropic = provider?.toLowerCase() === 'anthropic' || model?.toLowerCase().includes('anthropic') === true
-    if (isAnthropic && normalizedGenerationUsage) {
+    if (isAnthropic && isObject(normalizedGenerationUsage) && Object.keys(normalizedGenerationUsage).length > 0) {
       return this._parseUsageModel(normalizedGenerationUsage, provider, model, true, rawGenerationUsage)
     }
 

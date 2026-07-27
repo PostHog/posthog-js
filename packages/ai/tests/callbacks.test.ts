@@ -451,6 +451,45 @@ describe('LangChainCallbackHandler', () => {
     expect(captureCall[0].properties['$ai_output_tokens']).toBe(9)
   })
 
+  it('should ignore empty Anthropic generation usage and fall back to raw generation usage', async () => {
+    const serialized = {
+      lc: 1,
+      type: 'constructor' as const,
+      id: ['langchain', 'chat_models', 'anthropic', 'ChatAnthropic'],
+      kwargs: {},
+    }
+    const runId = 'run_empty_anthropic_generation_usage_test'
+    handler.handleLLMStart(serialized, ['Use raw generation usage'], runId, undefined, {}, undefined, {
+      ls_model_name: 'claude-sonnet-4-6',
+      ls_provider: 'anthropic',
+    })
+
+    const generation = {
+      text: 'Response with raw Anthropic usage.',
+      message: new AIMessage({
+        content: 'Response with raw Anthropic usage.',
+        usage_metadata: {} as NonNullable<AIMessage['usage_metadata']>,
+        response_metadata: {
+          usage: {
+            input_tokens: 21,
+            output_tokens: 9,
+          },
+        },
+      }),
+    } satisfies ChatGeneration
+
+    handler.handleLLMEnd(
+      {
+        generations: [[generation]],
+      },
+      runId
+    )
+
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    expect(captureCall[0].properties['$ai_input_tokens']).toBe(21)
+    expect(captureCall[0].properties['$ai_output_tokens']).toBe(9)
+  })
+
   it('should prefer top-level usage for non-Anthropic providers', async () => {
     const serialized = {
       lc: 1,
