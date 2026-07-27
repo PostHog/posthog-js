@@ -1535,6 +1535,10 @@ export function Questions({
             (index) => index >= 0 && index < survey.questions.length
         )
     })
+    const [questionSnapshots, setQuestionSnapshots] = useState<Record<string, string>>(() => {
+        const inProgressSurveyData = getInProgressSurveyState(survey)
+        return inProgressSurveyData?.questionSnapshots ?? {}
+    })
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
 
     // Sync preview state
@@ -1568,6 +1572,15 @@ export function Questions({
         const newResponses = { ...questionsResponses, [responseKey]: res }
         setQuestionsResponses(newResponses)
 
+        // Snapshot the question text as it appeared to the user right now, so that
+        // $survey_questions[].question in sent/dismissed events reflects the language
+        // the user saw when they answered, not the language active at event-fire time.
+        const currentQuestion = surveyQuestions[displayQuestionIndex]
+        const newSnapshots = currentQuestion?.id
+            ? { ...questionSnapshots, [currentQuestion.id]: currentQuestion.question }
+            : questionSnapshots
+        setQuestionSnapshots(newSnapshots)
+
         const nextStep = getNextSurveyStep(survey, displayQuestionIndex, res)
         const isSurveyCompleted = nextStep === SurveyQuestionBranchingType.End
         const newVisitedIndices = [...visitedIndices, displayQuestionIndex]
@@ -1581,6 +1594,7 @@ export function Questions({
                 lastQuestionIndex: nextStep,
                 visitedIndices: newVisitedIndices,
                 surveyLanguage,
+                questionSnapshots: newSnapshots,
             })
         }
 
@@ -1606,6 +1620,7 @@ export function Questions({
                 posthog,
                 properties,
                 surveyLanguage,
+                questionSnapshots: newSnapshots,
             })
         }
     }

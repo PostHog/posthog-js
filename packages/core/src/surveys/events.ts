@@ -28,7 +28,8 @@ export function getSurveyResponseValue(
 
 export function buildSurveyResponseProperties(
   responses: SurveyResponses = {},
-  survey: SurveyForResponses
+  survey: SurveyForResponses,
+  questionSnapshots?: Record<string, string>
 ): Record<string, unknown> {
   const oldFormatResponses: SurveyResponses = {}
   survey.questions.forEach((question: SurveyQuestionForResponses) => {
@@ -45,7 +46,7 @@ export function buildSurveyResponseProperties(
   return {
     $survey_questions: survey.questions.map((question: SurveyQuestionForResponses) => ({
       id: question.id,
-      question: question.question,
+      question: (question.id && questionSnapshots?.[question.id]) ?? question.question,
       response: getSurveyResponseValue(responses, question.id),
     })),
     ...responses,
