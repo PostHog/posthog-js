@@ -1,5 +1,12 @@
 # @posthog/browser-common
 
+## 0.2.3
+
+### Patch Changes
+
+- [#4272](https://github.com/PostHog/posthog-js/pull/4272) [`2551b08`](https://github.com/PostHog/posthog-js/commit/2551b0840a810d252e40e61eb529785a780020a2) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Replace the extension client `apiRequest` bridge with `sendRequest`, exposing the public project token and caller-directed request targets, headers, and browser transports.
+  (2026-07-27)
+
 ## 0.2.2
 
 ### Patch Changes
