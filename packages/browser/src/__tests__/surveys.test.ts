@@ -1884,6 +1884,7 @@ describe('surveys', () => {
 
             ;(surveyManager as any)._surveyInFocus = frSurvey.id
             ;(surveyManager as any)._currentLanguage = 'en'
+            ;(surveyManager as any)._surveyIsRendered = true
 
             window.dispatchEvent(new Event('languagechange'))
 
@@ -1898,6 +1899,7 @@ describe('surveys', () => {
 
             ;(surveyManager as any)._surveyInFocus = frSurvey.id
             ;(surveyManager as any)._currentLanguage = 'fr'
+            ;(surveyManager as any)._surveyIsRendered = true
 
             const languageBefore = (surveyManager as any)._currentLanguage
             window.dispatchEvent(new Event('languagechange'))
@@ -1914,6 +1916,21 @@ describe('surveys', () => {
             window.dispatchEvent(new Event('languagechange'))
 
             expect(translateSpy).not.toHaveBeenCalled()
+        })
+
+        it('does not re-render when survey is in focus but not yet rendered (pending delay)', () => {
+            const translateSpy = jest.fn().mockReturnValue({ survey: frSurvey, language: 'fr' })
+            ;(surveyManager as any)._translateSurveyForRendering = translateSpy
+
+            // Survey is queued (focus set) but the delay timer has not fired yet
+            ;(surveyManager as any)._surveyInFocus = frSurvey.id
+            ;(surveyManager as any)._currentLanguage = 'en'
+            ;(surveyManager as any)._surveyIsRendered = false
+
+            window.dispatchEvent(new Event('languagechange'))
+
+            expect(translateSpy).not.toHaveBeenCalled()
+            expect((surveyManager as any)._currentLanguage).toBe('en')
         })
 
         it('clears _currentLanguage when survey is removed from focus', () => {
