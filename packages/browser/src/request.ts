@@ -1,12 +1,7 @@
 import { each, find } from '@posthog/browser-common/utils/general-utils'
 import Config from './config'
 import { Compression, RequestWithOptions, RequestResponse } from './types'
-import {
-    convertToURL,
-    formDataToQuery,
-    getQueryParam,
-    jsonStringify,
-} from '@posthog/browser-common/utils/request-utils'
+import { formDataToQuery, getQueryParam, jsonStringify } from '@posthog/browser-common/utils/request-utils'
 
 import { logger } from '@posthog/browser-common/utils/logger'
 import {
@@ -458,43 +453,18 @@ const _sendBeacon = (options: RequestWithOptions) => {
     }
 }
 
-const VERSIONLESS_ENDPOINTS = ['/e/', '/s/']
-
-const getURLPath = (url: string): string => {
-    const parsedURL = convertToURL(url)
-    const path = parsedURL?.pathname || url.split(/[?#]/)[0]
-
-    return path ? (path[0] === '/' ? path : `/${path}`) : '/'
-}
-
-const hasEndpointSuffix = (path: string, endpoint: string): boolean => {
-    return path.slice(path.length - endpoint.length) === endpoint
-}
-
-const isVersionlessEndpoint = (url: string): boolean => {
-    const path = getURLPath(url)
-
-    return VERSIONLESS_ENDPOINTS.some((endpoint) => hasEndpointSuffix(path, endpoint))
-}
-
 const buildRequestURL = (
     url: string,
     method: RequestWithOptions['method'],
     compression?: RequestWithOptions['compression'],
     timestampMode?: RequestWithOptions['timestampMode']
 ): string => {
-    const versionlessEndpoint = isVersionlessEndpoint(url)
-    const requestURL = versionlessEndpoint ? removeURLParam(url, 'ver') : url
     const timestampParam = timestampMode === 'query' ? (method === 'POST' ? 'sent_at' : '_') : undefined
 
-    return extendURLParams(
-        compression === Compression.GZipJS ? removeURLParam(requestURL, 'compression') : requestURL,
-        {
-            ...(timestampParam ? { [timestampParam]: Date.now().toString() } : {}),
-            ...(versionlessEndpoint ? {} : { ver: Config.JS_SDK_VERSION }),
-            ...(compression === Compression.GZipJS ? {} : { compression }),
-        }
-    )
+    return extendURLParams(compression === Compression.GZipJS ? removeURLParam(url, 'compression') : url, {
+        ...(timestampParam ? { [timestampParam]: Date.now().toString() } : {}),
+        ...(compression === Compression.GZipJS ? {} : { compression }),
+    })
 }
 
 const addSentAtToCaptureBody = (data: NonNullable<RequestWithOptions['data']>): Record<string, any> => {
