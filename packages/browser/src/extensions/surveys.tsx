@@ -134,6 +134,7 @@ export class SurveyManager {
         new Map()
     private _prefillHandledSurveys: Set<string> = new Set()
     private _currentLanguage: string | null = null
+    private _surveyIsRendered: boolean = false
     private _languageChangeListener: (() => void) | null = null
     private _unsubscribeFeatureFlags: (() => void) | null = null
     private _surveyPopupProps: Pick<SurveyPopupProps, 'style' | 'properties' | 'isSurveyCompleted'> | null = null
@@ -163,7 +164,7 @@ export class SurveyManager {
     }
 
     private _onLanguageChange(): void {
-        if (isNull(this._surveyInFocus)) {
+        if (isNull(this._surveyInFocus) || !this._surveyIsRendered) {
             return
         }
         const surveys = this._posthog.get_property(SURVEYS) as Survey[] | undefined
@@ -306,11 +307,13 @@ export class SurveyManager {
         }
 
         if (delaySeconds <= 0) {
+            this._surveyIsRendered = true
             return render(<SurveyPopup {...surveyPopupProps} />, shadow)
         }
 
         // rendering with surveyPopupDelaySeconds = 0 because the delay is handled here, not in the popup
-        const renderAfterDelay = () =>
+        const renderAfterDelay = () => {
+            this._surveyIsRendered = true
             render(
                 <SurveyPopup
                     {...surveyPopupProps}
@@ -324,6 +327,7 @@ export class SurveyManager {
                 />,
                 shadow
             )
+        }
 
         // Re-check the full display predicate, not just the URL: eligibility can change
         // while the delay runs down (e.g. identify() reloads flags and the internal targeting flag
@@ -957,6 +961,7 @@ export class SurveyManager {
         this._clearSurveyTimeout(survey.id)
         this._surveyInFocus = null
         this._currentLanguage = null
+        this._surveyIsRendered = false
         this._surveyPopupProps = null
         this._removeSurveyFromDom(survey)
     }
@@ -976,6 +981,7 @@ export class SurveyManager {
             isSurveyFeatureFlagEnabled: this._isSurveyFeatureFlagEnabled.bind(this),
             onLanguageChange: this._onLanguageChange.bind(this),
             currentLanguage: this._currentLanguage,
+            surveyIsRendered: this._surveyIsRendered,
         }
     }
 }
