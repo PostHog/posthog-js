@@ -113,4 +113,48 @@ describe('PostHog Core explicit queue route', () => {
       { route: 'content-based', events: ['normal_event'] },
     ])
   })
+
+  it('sendBatch posts each route to its getBatchEndpointPath', async () => {
+    class EndpointRoutedClient extends ExplicitRouteTestClient {
+      protected getBatchEndpointPath(route: string): string {
+        return route === 'explicit' ? '/i/v0/test-lane/' : super.getBatchEndpointPath(route)
+      }
+    }
+    const storageCache: { [key: string]: string | JsonType } = {}
+    const mocks: PostHogCoreTestClientMocks = {
+      fetch: jest.fn(),
+      storage: {
+        getItem: jest.fn((key) => storageCache[key]),
+        setItem: jest.fn((key, val) => {
+          storageCache[key] = val == null ? undefined : val
+        }),
+      },
+    }
+    mocks.fetch.mockImplementation(() =>
+      Promise.resolve({
+        status: 200,
+        text: () => Promise.resolve('ok'),
+        json: () => Promise.resolve({ status: 'ok' }),
+      })
+    )
+    const posthog = new EndpointRoutedClient(mocks, 'TEST_API_KEY', {
+      flushAt: 100,
+      flushInterval: 0,
+      fetchRetryCount: 0,
+      disableCompression: true,
+    })
+
+    posthog.enqueueOnRoute('explicit', 'lane_event')
+    posthog.enqueueOnRoute(undefined, 'normal_event')
+    await posthog.flush()
+
+    const urls = mocks.fetch.mock.calls.map((call) => call[0])
+    expect(urls.some((url) => url.endsWith('/batch/'))).toBe(true)
+    expect(urls.some((url) => url.endsWith('/i/v0/test-lane/'))).toBe(true)
+
+    const laneCall = mocks.fetch.mock.calls.find((call) => call[0].endsWith('/i/v0/test-lane/'))
+    const body = JSON.parse(laneCall![1].body as string)
+    expect(Object.keys(body).sort()).toEqual(['api_key', 'batch', 'sent_at'])
+    expect(body.batch.map((event: any) => event.event)).toEqual(['lane_event'])
+  })
 })

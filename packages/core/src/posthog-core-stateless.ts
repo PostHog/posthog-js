@@ -1358,6 +1358,15 @@ export abstract class PostHogCoreStateless {
   }
 
   /**
+   * Endpoint path for the default V0 batch transport, per queue route. Overriding this (instead
+   * of all of `sendBatch`) keeps the wire format, compression, and retry behavior shared while
+   * pointing a route at a different ingestion path.
+   */
+  protected getBatchEndpointPath(_route: string): string {
+    return '/batch/'
+  }
+
+  /**
    * Builds and sends one `/batch/` request for the given already-normalized
    * messages, throwing on transport/HTTP error. Batch-size (413) shrinking,
    * queue persistence, and error recovery stay with the callers (`_flush` and
@@ -1372,7 +1381,7 @@ export abstract class PostHogCoreStateless {
   protected async sendBatch(
     batchMessages: (PostHogEventProperties | undefined)[],
     retryOptions?: Partial<RetriableOptions>,
-    _route: string = DEFAULT_QUEUE_ROUTE
+    route: string = DEFAULT_QUEUE_ROUTE
   ): Promise<void> {
     const data: Record<string, any> = {
       api_key: this.apiKey,
@@ -1386,7 +1395,7 @@ export abstract class PostHogCoreStateless {
 
     const payload = safeJsonStringify(data)
 
-    const url = `${this.host}/batch/`
+    const url = `${this.host}${this.getBatchEndpointPath(route)}`
 
     const gzippedPayload = !this.disableCompression ? await gzipCompress(payload, this.isDebug) : null
     const fetchOptions: PostHogFetchOptions = {
