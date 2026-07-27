@@ -1598,6 +1598,68 @@ function snapshot(
   });
 }
 
+/**
+ * The cheapest *fair* way to give the event loop a turn, feature-detected once
+ * per walk. `setTimeout(0)` is the wrong default here: Chrome clamps it to
+ * ~1ms, and to 4ms once timeouts nest five deep — which a sliced walk hits
+ * immediately, since every slice ends in another timeout. Across the hundreds
+ * of slices of a large document that clamp is pure dead time (~26% of the walk
+ * measured at a 10ms budget), and it holds the snapshot in flight longer,
+ * which widens the very window in which page events have to be queued.
+ *
+ * A `MessageChannel` message is a macrotask with no nesting clamp — the same
+ * trick React's scheduler uses. One channel per walk; a walk awaits each yield
+ * before requesting the next, so the single `pending` slot is safe.
+ *
+ * `scheduler.yield()` was measured and rejected, so nobody re-proposes it: its
+ * continuations resume ahead of other same-priority tasks, so while the walk
+ * ran, a `setTimeout` loop in the host page did not get a single turn — a
+ * 1.5s starvation window on a 152k-node document. It is faster for the walk
+ * (~4% over MessageChannel), but a recorder is a guest in the host app;
+ * starving the app's own timers to serialize faster is the wrong trade.
+ */
+function createYielder(): () => Promise<void> {
+  if (typeof MessageChannel === 'function') {
+    const channel = new MessageChannel();
+    let pending: (() => void) | null = null;
+    channel.port1.onmessage = () => {
+      const resolve = pending;
+      pending = null;
+      resolve?.();
+    };
+    return () =>
+      new Promise<void>((resolve) => {
+        pending = resolve;
+        channel.port2.postMessage(null);
+      });
+  }
+  return () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+
+/**
+ * `isInputPending` lets a slice end early the moment real input is waiting,
+ * instead of making the user wait out the rest of the budget. Chrome-only for
+ * now; everywhere else the budget alone decides. `includeContinuous` counts
+ * mousemove/wheel too — for a recorder those matter as much as clicks.
+ */
+function createInputPendingCheck(): () => boolean {
+  const scheduling = (
+    globalThis.navigator as
+      | (Navigator & {
+          scheduling?: {
+            isInputPending?: (options?: {
+              includeContinuous?: boolean;
+            }) => boolean;
+          };
+        })
+      | undefined
+  )?.scheduling;
+  if (scheduling && typeof scheduling.isInputPending === 'function') {
+    return () => scheduling.isInputPending!({ includeContinuous: true });
+  }
+  return () => false;
+}
+
 export type SnapshotWithBudgetOptions = NonNullable<
   Parameters<typeof snapshot>[1]
 > & {
@@ -1607,7 +1669,10 @@ export type SnapshotWithBudgetOptions = NonNullable<
    * snapshot should use `snapshot()` instead.
    */
   yieldBudgetMs: number;
-  /** Overridable for tests; defaults to a macrotask (`setTimeout(0)`). */
+  /**
+   * Overridable for tests. Defaults to a `MessageChannel` macrotask (no
+   * nesting clamp), falling back to `setTimeout(0)` — see `createYielder`.
+   */
   yieldFn?: () => Promise<void>;
   /**
    * Checked after every yield. Returning true abandons the walk and resolves
@@ -1671,8 +1736,10 @@ export async function snapshotWithBudget(
   const maskInputOptions: MaskInputOptions =
     normalizeMaskInputOptions(maskAllInputs);
   const slimDOMOptions: SlimDOMOptions = slimDOMDefaults(slimDOM);
-  const doYield =
-    yieldFn ?? (() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
+  const doYield = yieldFn ?? createYielder();
+  // A custom yieldFn means a test harness that wants deterministic slicing;
+  // input-driven early yields would make slice boundaries environmental.
+  const inputPending = yieldFn ? () => false : createInputPendingCheck();
 
   const perNodeOptions = {
     doc: n,
@@ -1725,7 +1792,10 @@ export async function snapshotWithBudget(
   let sliceStart = performance.now();
 
   while (stack.length > 0) {
-    if (performance.now() - sliceStart >= yieldBudgetMs) {
+    // The budget is the ceiling (rendering needs a turn even on an idle page);
+    // pending input ends the slice early so a click never waits out the rest
+    // of a slice.
+    if (performance.now() - sliceStart >= yieldBudgetMs || inputPending()) {
       await doYield();
       if (shouldAbort?.()) {
         return null;

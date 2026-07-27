@@ -140,7 +140,18 @@ function buildDocument(bodyExtra: string): string {
 
 function buildHtml(bodyExtra: string, budget: number): string {
   const doc = buildDocument(bodyExtra);
+  // The walk yields through a MessageChannel macrotask, which makes the real
+  // in-flight window a few tens of milliseconds — too narrow for the test
+  // runner to reliably land its ops inside. Remove MessageChannel so the
+  // cascade falls back to setTimeout(0), whose nesting clamp (~4ms per slice)
+  // stretches the window to hundreds of milliseconds. This only stretches the
+  // window; the serialization work per slice is unchanged.
+  const slowYield = `globalThis.MessageChannel = undefined;`;
+  // The sync page gets a same-shape no-op so both documents have identical
+  // node structure (any script content serializes as SCRIPT_PLACEHOLDER; an
+  // empty script would have no text child at all).
   const script = `
+    <script>${budget > 0 ? slowYield : ';'}</script>
     <script>${snapshotCode}</script>
     <script>${rrwebCode}</script>
     <script>${CANONICALIZER}</script>
