@@ -9,12 +9,9 @@ description:
 # Authoring a browser extension
 
 A browser extension is an opt-in feature (autocapture, replay, surveys, …) that plugs into a host SDK through one
-contract: it implements `Extension` and talks to the host only through the `Client` it is handed. The same extension
-runs on both posthog-js v1 (synchronous, statically registered) and v2 (asynchronous, dynamically loaded) — you write it
-once, against `Client`.
-
-The package is source-only: there is no emitted JS build to import. Consumers are responsible for bundling/transpiling
-the TypeScript sources they use.
+contract: it implements `Extension` and talks to the host through the `Client` it is handed and the capabilities in the
+client's extension registry. The contract is designed for shared extensions across browser generations. Concrete host
+adapters and loading integrations remain owned by their SDK packages.
 
 ## The shape
 
@@ -66,43 +63,59 @@ export class MyExtension implements Extension {
 - Once `setup()` runs, the extension will not be called again until `dispose()`. Use `setup()` to initialize listeners
   to react to changes.
 
-## `Client` — what you get, and when to use it
+## `Client` and `CoreExtension` — what you get, and when to use it
 
-| Need                                                        | Use                                                                               |
-| ----------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| current identity                                            | `client.distinctId`, `client.anonymousId`, `client.groups` (sync reads)           |
-| current session                                             | `client.session` (sync; `{ sessionId, windowId, sessionStartTimestamp }`)         |
-| record an event                                             | `await client.capture(event, properties?, options?)`                              |
-| add properties to **every** event                           | `client.registerDynamicEventProperties(() => ({ … }))`                            |
-| **react** to events others capture                          | `client.onEvent(({ event, properties }) => …)`                                    |
-| call a PostHog endpoint (`/s/`, `/flags/`, `/api/surveys/`) | `await client.apiRequest(path, init?)`                                            |
-| server config (decide/flags response)                       | `await client.getRemoteConfig()` (current) / `client.onRemoteConfig(…)` (changes) |
-| react to a new session / reset                              | `client.onNewSession(({ reason, … }) => …)`                                       |
-| use another extension                                       | `client.getExtension(SomeToken)`                                                  |
-| persist small state                                         | `client.kv` (async `get`/`set`/`remove`, namespaced to you)                       |
-| log                                                         | `client.logger`                                                                   |
+`Client` provides host services and resolves extension capabilities. A conforming host must register `CoreExtension`
+before product extensions are set up:
+
+```ts
+import { CoreExtension } from '@posthog/browser-common'
+
+const core = client.getExtension(CoreExtension)
+if (!core) {
+    throw new Error('CoreExtension is required')
+}
+```
+
+| Need                                                        | Use                                                                           |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| current identity                                            | `core.distinctId`, `core.anonymousId`, `core.groups` (sync reads)             |
+| current session                                             | `core.session` (sync; `{ sessionId, windowId, sessionStartTimestamp }`)       |
+| record an event                                             | `await core.capture(event, properties?, options?)`                            |
+| add properties to **every** event                           | `core.registerDynamicEventProperties(() => ({ … }))`                          |
+| **react** to events others capture                          | `core.onEvent(({ event, properties }) => …)`                                  |
+| call a PostHog endpoint (`/s/`, `/flags/`, `/api/surveys/`) | `await client.apiRequest(path, init?)`                                        |
+| server config (decide/flags response)                       | `await core.getRemoteConfig()` (current) / `core.onRemoteConfig(…)` (changes) |
+| react to a new session / reset                              | `core.onNewSession(({ reason, … }) => …)`                                     |
+| use another extension                                       | `client.getExtension(SomeToken)`                                              |
+| persist small state                                         | `client.kv` (`get`/`set`/`remove` are awaitable and use keys verbatim)        |
+| log                                                         | `client.logger`                                                               |
 
 ## Hard rules
 
-- **Enrichers are synchronous.** `registerDynamicEventProperties(producer)` runs inline while the host builds an event —
-  it must not `await`. If you need persisted/async data, read it in `setup` and close over the result.
+- **Enrichers are synchronous.** `core.registerDynamicEventProperties(producer)` runs inline while the host builds an
+  event — it must not `await`. If you need persisted/async data, read it in `setup` and close over the result.
 - **Enrich = add; observe = react.** `registerDynamicEventProperties` _contributes_ properties to events. `onEvent`
   _watches_ finalized events and reacts (it can't change them). Dropping/rewriting whole events is the host's
   `beforeSend`, not an extension's job.
-- **Do not drop disposables.** Anything returned from `onEvent`, `registerDynamicEventProperties`, `onNewSession`,
-  another `Listener`, or a timer wrapper must be stored and disposed in your `dispose()`.
-- **Reads are sync, I/O is async.** Identity and session are synchronous in-memory reads. `capture`, `apiRequest`, `kv`,
-  `getRemoteConfig` are async.
+- **Do not drop disposables.** Anything returned from `core.onEvent`, `core.registerDynamicEventProperties`,
+  `core.onNewSession`, another `Listener`, or a timer wrapper must be stored and disposed in your `dispose()`. Use
+  `createDisposable(teardown)` when adapting callback teardown into a reusable idempotent handle.
+- **Reads are sync, I/O is awaitable.** Core identity and session are synchronous in-memory reads. `capture`,
+  `apiRequest`, `kv`, and `getRemoteConfig` are awaitable.
 - **Design for async readiness.** Your extension may be set up _after_ events have already been captured (dynamic
   loading) or before flags/remote-config have loaded. Never assume you saw the first event or that data is present at
-  `setup`; `await client.getRemoteConfig()` / the providing extension's reads resolve once ready.
-- **Persist through `client.kv`, not globals.** It is namespaced to your extension; JSON-serializable values only;
-  `null`/`undefined` removes a key.
+  `setup`; `await core.getRemoteConfig()` / the providing extension's reads resolve once ready.
+- **Persist through `client.kv`, not globals.** Keys are passed verbatim to shared host persistence. In browser-v1,
+  unknown keys are normally sent as event properties, collisions overwrite host/core state, and reset clears them.
+  Use a stable extension-owned key, never store sensitive data without approved transmission, and call `remove`
+  explicitly when deleting it (`set(key, null | undefined)` is not deletion). Every new SDK-owned key needs an
+  explicit event/hidden/derived exposure policy in each host.
 - **browser-common owns shared extensions outright.** SDKs must not wrap, subclass, or re-export per-extension
   adapter classes. An SDK may construct the shared extension with SDK-derived constructor options, but the only
-  extension method the SDK calls directly is `setup(clientAdapter)`. After that, interaction goes through the generic
-  `Client` adapter. If an extension needs controls (`start`, `stop`, etc.), expose them on the shared extension itself,
-  not through SDK-specific wrappers.
+  extension methods the SDK calls directly are `setup(clientAdapter)` and `dispose()`. Ordinary feature interaction
+  goes through `Client` and registered capabilities such as `CoreExtension`. If an extension needs controls (`start`,
+  `stop`, etc.), expose them on the shared extension itself, not through SDK-specific wrappers.
 
 ## Providing a capability to other extensions
 
@@ -179,21 +192,21 @@ free of its code and keeps it lazily loadable.
 
 ## Porting from v1
 
-Map v1's reach-into-`this._instance` calls onto `Client`:
+Map v1's reach-into-`this._instance` calls onto `Client` and the resolved `CoreExtension`:
 
-| v1                                                            | Client                                                 |
+| v1                                                            | Shared extension                                       |
 | ------------------------------------------------------------- | ------------------------------------------------------ |
-| `instance.capture(e, p)`                                      | `client.capture(e, p)`                                 |
-| `instance.get_distinct_id()`                                  | `client.distinctId` (sync)                             |
-| `instance.get_property(k)` / `persistence`                    | `client.kv.get(k)` (async)                             |
+| `instance.capture(e, p)`                                      | `core.capture(e, p)`                                   |
+| `instance.get_distinct_id()`                                  | `core.distinctId` (sync)                               |
+| `instance.get_property(k)` / `persistence`                    | `client.kv.get(k)` (awaitable)                         |
 | `instance.config.X` (static)                                  | constructor                                            |
-| `instance.config.X` (server-driven)                           | `client.getRemoteConfig()` / `onRemoteConfig`          |
-| `instance.sessionManager.checkAndGetSessionAndWindowId(true)` | `client.session` (sync)                                |
-| `_addCaptureHook` / observing events                          | `client.onEvent(...)`                                  |
+| `instance.config.X` (server-driven)                           | `core.getRemoteConfig()` / `onRemoteConfig`            |
+| `instance.sessionManager.checkAndGetSessionAndWindowId(true)` | `core.session` (sync)                                  |
+| `_addCaptureHook` / observing events                          | `core.onEvent(...)`                                    |
 | returned unregister / subscription disposables                | store and dispose in `dispose()`                       |
 | `instance.onFeatureFlags(cb)`                                 | `client.getExtension(FeatureFlags)?.onChange(cb)`      |
 | `instance.featureFlags.getFeatureFlag(k)`                     | `client.getExtension(FeatureFlags)?.getFeatureFlag(k)` |
-| registering an enricher                                       | `client.registerDynamicEventProperties(fn)`            |
+| registering an enricher                                       | `core.registerDynamicEventProperties(fn)`              |
 | `requestRouter.endpointFor(...)` + `_send_request`            | `client.apiRequest(path, init?)`                       |
 | snapshot/keepalive send on unload                             | `client.apiRequest(path, { unload: true })`            |
 

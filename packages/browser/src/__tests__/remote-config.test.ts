@@ -45,7 +45,6 @@ describe('RemoteConfigLoader', () => {
 
         beforeEach(() => {
             assignableWindow._POSTHOG_REMOTE_CONFIG = undefined
-            assignableWindow.POSTHOG_DEBUG = true
 
             assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(
                 (_ph: PostHog, _name: string, cb: (err?: any) => void) => {

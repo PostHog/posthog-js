@@ -22,10 +22,12 @@ jobs:
             extra-flags: "--module commonjs --moduleResolution node"
           - version: "5.9.2"
             extra-flags: "--module commonjs --moduleResolution node"
+          - version: "6.0.3"
+            extra-flags: "--module commonjs --ignoreConfig"
           - version: "latest"
             extra-flags: "--module nodenext --moduleResolution nodenext --ignoreConfig"
-          - version: "6.0.0-dev.20251204"
-            extra-flags: "--module commonjs --ignoreConfig"
+          - version: "7.1.0-dev.20260715.1"
+            extra-flags: "--module nodenext --moduleResolution nodenext --ignoreConfig"
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

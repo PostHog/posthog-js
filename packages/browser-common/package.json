@@ -29,6 +29,9 @@
             "constants": [
                 "dist/constants.d.ts"
             ],
+            "extension-runtime": [
+                "dist/extension-runtime.d.ts"
+            ],
             "utils/*": [
                 "dist/utils/*.d.ts"
             ]
@@ -49,6 +52,11 @@
             "types": "./dist/constants.d.ts",
             "require": "./dist/constants.js",
             "import": "./dist/constants.mjs"
+        },
+        "./extension-runtime": {
+            "types": "./dist/extension-runtime.d.ts",
+            "require": "./dist/extension-runtime.js",
+            "import": "./dist/extension-runtime.mjs"
         },
         "./utils/*": {
             "types": "./dist/utils/*.d.ts",
