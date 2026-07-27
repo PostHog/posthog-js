@@ -1441,6 +1441,10 @@ describe('replayer', function () {
             state: replayer['service']['state']['value'],
             timerActive: replayer['timer'].isActive(),
             castsAfterLive,
+            rebuildFlagCleared: replayer['seekRebuildInFlight'] === false,
+            lastPlayedReset:
+              replayer['service']['state']['context']['lastPlayedEvent'] ===
+              null,
           };
         })()
       `);
@@ -1448,6 +1452,8 @@ describe('replayer', function () {
         state: 'live',
         timerActive: true,
         castsAfterLive: 0,
+        rebuildFlagCleared: true,
+        lastPlayedReset: true,
       });
     });
   });

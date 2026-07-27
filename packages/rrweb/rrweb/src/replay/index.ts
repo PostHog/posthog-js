@@ -667,6 +667,15 @@ export class Replayer {
     // cancel any chunked seek rebuild still in flight — its remaining
     // chunks would interleave stale seek-time events with live DOM writes
     this.applyGeneration++;
+    if (this.seekRebuildInFlight) {
+      // the cancelled rebuild left a partial history on the DOM, so
+      // lastPlayedEvent must not be trusted by any future seek; and with no
+      // rebuild applying anymore, the flag must not keep the finish poll
+      // re-arming. Live is currently a terminal machine state, so this is
+      // defensive — it keeps both invariants locally true either way.
+      this.service.send({ type: 'RESET_LAST_PLAYED' });
+      this.seekRebuildInFlight = false;
+    }
     this.service.send({ type: 'TO_LIVE', payload: { baselineTime } });
   }
 
