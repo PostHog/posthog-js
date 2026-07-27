@@ -111,6 +111,19 @@ describe('PostHogSpanProcessor', () => {
     warnSpy.mockRestore()
   })
 
+  it('rejects conflicting direct and AI gateway credentials', () => {
+    expect(
+      () =>
+        new PostHogSpanProcessor({
+          projectToken: 'phc_test',
+          aiGateway: { projectSecret: 'phs_test' },
+        } as any)
+    ).toThrow('[PostHogSpanProcessor] provide either projectToken or aiGateway, not both.')
+
+    expect(OTLPTraceExporter).not.toHaveBeenCalled()
+    expect(BatchSpanProcessor).not.toHaveBeenCalled()
+  })
+
   it('delegates onStart to the inner processor', () => {
     const inner = mockProcessor()
     const processor = new PostHogSpanProcessor({ projectToken: 'phc_test', _spanProcessor: inner })
