@@ -492,10 +492,14 @@ describe('time-sliced full snapshot converges on replay', () => {
   });
 
   it('reproduces the reported case: input, click and append during a yield', async () => {
-    // The exact interleaving reported against the first version of this change:
-    // wait until nodes have mirror ids, then change an input, dispatch
-    // input/click, and append a node — all while the snapshot is yielding.
-    await expectConvergence({
+    // The exact interleaving from the review that found the original bug:
+    // wait until the input and <body> are ALREADY SERIALIZED (they have
+    // mirror entries), then — while the snapshot is still yielding — change
+    // the input, dispatch input/click events, and append a node. The
+    // reported failure was a recording containing only Meta + FullSnapshot,
+    // with the FullSnapshot retaining the old input value and omitting the
+    // appended node while both changes existed in the live DOM.
+    const result = await expectConvergence({
       body: `
         <div id="host">
           <input id="field" type="text" value="original" />
@@ -505,6 +509,32 @@ describe('time-sliced full snapshot converges on replay', () => {
       ops: async () => {
         const field = document.getElementById('field') as HTMLInputElement;
         const btn = document.getElementById('btn') as HTMLButtonElement;
+        const recordMirror = (
+          window as unknown as {
+            rrweb: {
+              record: {
+                mirror: { hasNode: (n: Node) => boolean };
+              };
+            };
+          }
+        ).rrweb.record.mirror;
+        // The reviewer's precondition, verified rather than assumed. hasNode
+        // (mirror membership) instead of getId: with id reservation active,
+        // getId would answer a reserved id for a not-yet-serialized node —
+        // and reserve one as a side effect.
+        const deadline = Date.now() + 30_000;
+        while (
+          !(recordMirror.hasNode(field) && recordMirror.hasNode(document.body))
+        ) {
+          if (Date.now() > deadline) {
+            throw new Error('field/body were never serialized');
+          }
+          await new Promise((r) => setTimeout(r, 0));
+        }
+        const snapshotStillInFlight = !(
+          window as unknown as { snapshots: Array<{ type: number }> }
+        ).snapshots.some((e) => e.type === 2);
+
         field.value = 'typed while snapshotting';
         field.dispatchEvent(new Event('input', { bubbles: true }));
         field.dispatchEvent(new Event('change', { bubbles: true }));
@@ -517,11 +547,52 @@ describe('time-sliced full snapshot converges on replay', () => {
         document.getElementById('host')!.appendChild(appended);
         await new Promise((r) => setTimeout(r, 0));
         return {
+          snapshotStillInFlight,
           value: field.value,
           appended: !!document.getElementById('appended'),
         };
       },
     });
+
+    // The ops ran in the reported window: nodes serialized, snapshot in flight.
+    const ops = result.opsResult as {
+      snapshotStillInFlight: boolean;
+      value: string;
+      appended: boolean;
+    };
+    expect(ops.snapshotStillInFlight).toBe(true);
+
+    // The inverse of the reported failure, event by event: the recording must
+    // contain more than Meta + FullSnapshot —
+    const incremental = result.events.filter((e) => e.type === 3);
+    // the input change (source 5), carrying the new value;
+    expect(
+      incremental.some((e) => {
+        const d = e.data as { source?: number; text?: string };
+        return d.source === 5 && d.text === 'typed while snapshotting';
+      }),
+    ).toBe(true);
+    // the click (source 2, MouseInteraction);
+    expect(
+      incremental.some(
+        (e) => (e.data as { source?: number }).source === 2,
+      ),
+    ).toBe(true);
+    // and the appended node's mutation add.
+    expect(
+      incremental.some((e) => {
+        const d = e.data as {
+          source?: number;
+          adds?: Array<{ node: { attributes?: { id?: string } } }>;
+        };
+        return (
+          d.source === 0 &&
+          (d.adds ?? []).some((a) => a.node.attributes?.id === 'appended')
+        );
+      }),
+    ).toBe(true);
+    // (the DOM-level truth — new value present, node present — is what
+    // expectConvergence already proved by replaying against the live DOM)
   });
 
   it('captures DOM adds and removes made during the window', async () => {
