@@ -56,6 +56,8 @@ import { ContextData, ContextOptions, IPostHogContext } from './extensions/conte
 import { type CaptureMode, resolveCaptureMode } from './capture-v1/config'
 import { AI_ROUTE, ANALYTICS_ROUTE, isLegacyOnlyEvent } from './capture-v1/routing'
 import { V1CaptureSender } from './capture-v1/sender'
+import { partitionAiBatch } from './ai-capture/batching'
+import { AI_CAPTURE_ENDPOINT_PATH, AI_CAPTURE_ROUTE, AI_MAX_EVENT_BYTES } from './ai-capture/routing'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
 // so the fastest a poller should ever be set is 100ms.
@@ -141,6 +143,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
   private readonly captureMode: CaptureMode
   private _v1Sender?: V1CaptureSender
+  /** @internal Routes `@posthog/ai` events through the dedicated AI capture lane. Not a stable API. */
+  public readonly _useAiLane: boolean
+  /** @internal Skips media redaction/truncation in `@posthog/ai`; implies the AI lane. Not a stable API. */
+  public readonly _enableMultimodalCapture: boolean
+  private _aiCaptureRouteActive = false
 
   // Feature flag overrides for local testing/development
   private _flagOverrides?: Record<string, FeatureFlagValue>
@@ -207,6 +214,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     this.options = normalizedOptions
     this.captureMode = resolveCaptureMode()
+    this._useAiLane = normalizedOptions._useAiLane === true
+    this._enableMultimodalCapture = normalizedOptions._enableMultimodalCapture === true
     this.context = this.initializeContext()
 
     this.options.featureFlagsPollingInterval =
@@ -436,13 +445,23 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   protected persistedQueueKeyForRoute(route: string): PostHogPersistedProperty {
+    if (route === AI_CAPTURE_ROUTE) {
+      return PostHogPersistedProperty.AiCaptureQueue
+    }
     return route === AI_ROUTE ? PostHogPersistedProperty.AiQueue : PostHogPersistedProperty.Queue
   }
 
   protected getActiveQueueRoutes(): string[] {
-    // Only surface the AI route in v1 mode — v0 mode never enqueues onto it, so keeping it out
-    // keeps v0's flush/shutdown identical to before (a single queue on ANALYTICS_ROUTE).
-    return this.captureMode === 'v1' ? [ANALYTICS_ROUTE, AI_ROUTE] : [ANALYTICS_ROUTE]
+    const routes = this.captureMode === 'v1' ? [ANALYTICS_ROUTE, AI_ROUTE] : [ANALYTICS_ROUTE]
+    // Surfaced lazily so flush/shutdown stay byte-identical for clients that never use the lane.
+    if (this._aiCaptureRouteActive) {
+      routes.push(AI_CAPTURE_ROUTE)
+    }
+    return routes
+  }
+
+  protected getBatchEndpointPath(route: string): string {
+    return route === AI_CAPTURE_ROUTE ? AI_CAPTURE_ENDPOINT_PATH : super.getBatchEndpointPath(route)
   }
 
   /**
@@ -458,6 +477,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     retryOptions?: Partial<RetriableOptions>,
     route: string = ANALYTICS_ROUTE
   ): Promise<void> {
+    if (route === AI_CAPTURE_ROUTE) {
+      return this.sendAiCaptureBatch(batchMessages, retryOptions)
+    }
+
     if (this.captureMode !== 'v1' || route === AI_ROUTE) {
       return super.sendBatch(batchMessages, retryOptions, route)
     }
@@ -466,6 +489,26 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // undefined for a freshly-enqueued event; drop any legacy undefined queue artifacts.
     const v1Events = batchMessages.filter((message): message is PostHogEventProperties => message !== undefined)
     await this.getV1Sender().sendV1Batch(v1Events)
+  }
+
+  /**
+   * AI-lane pre-processing before delegating to the shared V0 transport: per-event size cap and
+   * byte-aware sub-batching. Oversize drops log name and byte size only — AI events may carry
+   * unredacted multimodal payloads that must not leak into logs.
+   */
+  private async sendAiCaptureBatch(
+    batchMessages: (PostHogEventProperties | undefined)[],
+    retryOptions?: Partial<RetriableOptions>
+  ): Promise<void> {
+    const { batches, dropped } = partitionAiBatch(batchMessages)
+    for (const { event, bytes } of dropped) {
+      this._logger.error(
+        `Event ${event} (${bytes} bytes) exceeds the ${AI_MAX_EVENT_BYTES / (1024 * 1024)}MiB limit for ${AI_CAPTURE_ENDPOINT_PATH}, dropping.`
+      )
+    }
+    for (const batch of batches) {
+      await super.sendBatch(batch, retryOptions, AI_CAPTURE_ROUTE)
+    }
   }
 
   private getV1Sender(): V1CaptureSender {
@@ -660,7 +703,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     type: string,
     props: EventMessage,
     immediate: boolean,
-    prepareOptions?: { includeContextProperties?: boolean }
+    prepareOptions?: { includeContextProperties?: boolean },
+    explicitRoute?: string
   ): Promise<void> {
     return this.addPendingPromise(
       this._prepareEventMessage(props, prepareOptions)
@@ -679,8 +723,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
             },
           }
           return immediate
-            ? this.sendImmediate(type, message, captureOptions)
-            : this.enqueue(type, message, captureOptions)
+            ? this.sendImmediate(type, message, captureOptions, explicitRoute)
+            : this.enqueue(type, message, captureOptions, explicitRoute)
         })
         .catch((err) => {
           if (err) {
@@ -771,6 +815,34 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       "Capturing a `$exception` event via `posthog.captureImmediate('$exception')` is unreliable because it does not attach required metadata. Use `posthog.captureExceptionImmediate(error)` instead, which attaches this metadata by default."
     )
     return this._capturePreparedEvent(props, true)
+  }
+
+  /**
+   * Capture an event on the dedicated AI lane (`/i/v0/ai/batch/`, 8MiB per-event ceiling).
+   * Shares the entire `capture()` preparation pipeline; only the queue route and endpoint differ.
+   * `capture()` is never rerouted here — this method is the only entry to the lane.
+   *
+   * @internal Underscore-private for internal testing — not a stable API.
+   */
+  _captureAi(props: EventMessage): void {
+    this._sendPreparedAiEvent(props, false)
+  }
+
+  /**
+   * Immediate-mode {@link _captureAi}: awaits delivery instead of enqueueing.
+   *
+   * @internal Underscore-private for internal testing — not a stable API.
+   */
+  _captureAiImmediate(props: EventMessage): Promise<void> {
+    return this._sendPreparedAiEvent(props, true)
+  }
+
+  private _sendPreparedAiEvent(props: EventMessage, immediate: boolean): Promise<void> {
+    if (typeof props?.event === 'string' && !props.event.startsWith('$ai_')) {
+      this._logger.info(`_captureAi called with non-AI event ${props.event}; routing it to the AI endpoint anyway.`)
+    }
+    this._aiCaptureRouteActive = true
+    return this._sendPreparedEvent('capture', props, immediate, undefined, AI_CAPTURE_ROUTE)
   }
 
   /**

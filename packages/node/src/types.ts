@@ -335,6 +335,20 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * new PostHog('key', { isServer: false })
    */
   isServer?: boolean
+  /**
+   * Routes `@posthog/ai` wrapper events through the dedicated AI capture lane
+   * (`/i/v0/ai/batch/`) instead of the analytics batch endpoint.
+   *
+   * @internal Underscore-private for internal testing — not a stable API.
+   */
+  _useAiLane?: boolean
+  /**
+   * Skips base64 media redaction and size truncation in `@posthog/ai` wrappers, and implies
+   * `_useAiLane` so unredacted media never lands on the analytics endpoint.
+   *
+   * @internal Underscore-private for internal testing — not a stable API.
+   */
+  _enableMultimodalCapture?: boolean
 } & ExceptionRateLimiterConfig
 
 export type PostHogFeatureFlag = {
