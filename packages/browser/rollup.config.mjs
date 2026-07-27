@@ -77,6 +77,14 @@ const plugins = (es5, noExternal) => [
     babel({
         extensions: ['.mjs', '.js', '.jsx', '.ts', '.tsx'],
         babelHelpers: 'bundled',
+        overrides: [
+            {
+                // This prebuilt rrweb module intentionally exceeds Babel's 500 KB compacting threshold.
+                // Make the existing behavior explicit without hiding warnings for other unexpectedly large modules.
+                test: /[\\/]packages[\\/]rrweb[\\/]rrweb[\\/]dist[\\/]rrweb\.js$/,
+                compact: true,
+            },
+        ],
         plugins: [
             '@babel/plugin-transform-nullish-coalescing-operator',
             // Explicitly included so we transform 1 ** 2 to Math.pow(1, 2) for ES6 compatibility
