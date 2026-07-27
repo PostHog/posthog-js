@@ -1,5 +1,12 @@
 # @posthog/browser-common
 
+## 0.2.2
+
+### Patch Changes
+
+- [#4240](https://github.com/PostHog/posthog-js/pull/4240) [`7210789`](https://github.com/PostHog/posthog-js/commit/7210789efa46a6e2a1aa51b2faba4f67187f6cf6) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add the shared extension runtime and `CoreExtension` capability contract, expose core observer and configuration payloads as deeply readonly views, allow key-value stores to return values synchronously or asynchronously, and expose host API response details. Nullish values passed to `set` follow host-native storage semantics; use `remove` to delete a key.
+  (2026-07-27)
+
 ## 0.2.1
 
 ### Patch Changes
