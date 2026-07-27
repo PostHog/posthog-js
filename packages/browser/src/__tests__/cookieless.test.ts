@@ -71,7 +71,6 @@ describe('cookieless', () => {
             ...config,
             before_send: beforeSendMock,
         })!
-        posthog.debug()
         return { posthog, beforeSendMock }
     }
 
@@ -101,8 +100,9 @@ describe('cookieless', () => {
             expect(document.cookie).toBe('')
             expect(posthog.sessionRecording).toBeFalsy()
 
-            // should ignore cookie consent, and throw in test code due to logging an error
-            expect(() => posthog.opt_in_capturing()).toThrow()
+            // should ignore cookie consent
+            posthog.opt_in_capturing()
+            expect(posthog.has_opted_in_capturing()).toBe(false)
         })
 
         it.each([[true], ['history_change']])(
@@ -127,8 +127,9 @@ describe('cookieless', () => {
                 expect(document.cookie).toBe('')
                 expect(posthog.sessionRecording).toBeFalsy()
 
-                // should ignore cookie consent, and throw in test code due to logging an error
-                expect(() => posthog.opt_in_capturing()).toThrow()
+                // should ignore cookie consent
+                posthog.opt_in_capturing()
+                expect(posthog.has_opted_in_capturing()).toBe(false)
             }
         )
     })

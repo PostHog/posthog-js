@@ -59,14 +59,7 @@ describe('group before identify bug', () => {
 
         // Find the events
         const calls = beforeSendMock.mock.calls
-        const groupIdentifyCall = calls.find((c: any) => c[0].event === '$groupidentify')
         const identifyCall = calls.find((c: any) => c[0].event === '$identify')
-
-        console.log(
-            '$groupidentify $set_once.$initial_utm_source:',
-            groupIdentifyCall?.[0]?.$set_once?.$initial_utm_source
-        )
-        console.log('$identify $set_once.$initial_utm_source:', identifyCall?.[0]?.$set_once?.$initial_utm_source)
 
         // THE BUG: $identify should have $set_once with initial UTM params
         // but because group() was called first, _personProcessingSetOncePropertiesSent is already true
@@ -90,8 +83,6 @@ describe('group before identify bug', () => {
 
         const calls = beforeSendMock.mock.calls
         const identifyCall = calls.find((c: any) => c[0].event === '$identify')
-
-        console.log('$identify $set_once (no group):', JSON.stringify(identifyCall?.[0]?.$set_once, null, 2))
 
         // This should work
         expect(identifyCall).toBeDefined()
