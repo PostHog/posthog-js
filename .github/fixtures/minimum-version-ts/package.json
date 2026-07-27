@@ -1,0 +1,11 @@
+{
+    "name": "posthog-js-minimum-ts-consumer",
+    "private": true,
+    "packageManager": "pnpm@11.7.0",
+    "engines": {
+        "node": "^20.20.0 || >=22.22.0"
+    },
+    "dependencies": {
+        "posthog-js": "file:posthog-js.tgz"
+    }
+}

@@ -888,8 +888,20 @@ function initNetworkObserver(
 
     const cb: networkCallback = (data) => {
         const requests: CapturedNetworkRequest[] = []
+        let parentRequestDropped = false
         data.requests.forEach((request) => {
+            const isServerTiming = request.entryType === 'serverTiming'
+
+            // Server timings are emitted immediately after their resource or navigation entry.
+            // If a parent is dropped (i.e. a PostHog ingestion request), derived timings must too or an endless capture loop ensues.
+            if (isServerTiming && parentRequestDropped) {
+                return
+            }
+
             const maskedRequest = networkOptions.maskRequestFn(request)
+            if (!isServerTiming) {
+                parentRequestDropped = !maskedRequest
+            }
             if (maskedRequest) {
                 requests.push(maskedRequest)
             }

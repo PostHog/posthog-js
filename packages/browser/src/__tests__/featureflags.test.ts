@@ -17,6 +17,23 @@ import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 jest.useFakeTimers()
 jest.spyOn(global, 'setTimeout')
 
+const expectedFeatureFlagDebugMessages = new Set([
+    'All overrides cleared',
+    'Flag overrides cleared',
+    'Flag overrides set',
+    'Payload overrides cleared',
+    'Payload overrides set',
+])
+
+const mockExpectedFeatureFlagDebugLogs = (): void => {
+    const failOnUnexpectedLog = console.log
+    jest.spyOn(console, 'log').mockImplementation((...args) => {
+        if (args[0] !== '[PostHog.js] [FeatureFlags]' || !expectedFeatureFlagDebugMessages.has(args[1])) {
+            failOnUnexpectedLog(...args)
+        }
+    })
+}
+
 describe('featureflags', () => {
     let instance
     let featureFlags
@@ -30,6 +47,9 @@ describe('featureflags', () => {
     let mockWarn
 
     beforeEach(() => {
+        window.POSTHOG_DEBUG = true
+        mockExpectedFeatureFlagDebugLogs()
+
         const internalEventEmitter = new SimpleEventEmitter()
         instance = {
             config: { ...config },
@@ -1803,6 +1823,8 @@ describe('featureflags', () => {
                 group_properties: undefined,
                 person_properties: {
                     '$feature_enrollment/x-flag': true,
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
                 },
                 timezone: expect.any(String),
             })
@@ -1852,7 +1874,10 @@ describe('featureflags', () => {
                 $device_id: 'test-device-uuid-123',
                 groups: undefined,
                 group_properties: undefined,
-                person_properties: {},
+                person_properties: {
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 timezone: expect.any(String),
             })
         })
@@ -1872,7 +1897,10 @@ describe('featureflags', () => {
                 $anon_distinct_id: undefined,
                 groups: undefined,
                 group_properties: undefined,
-                person_properties: {},
+                person_properties: {
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 timezone: expect.any(String),
             })
             expect(instance._send_request.mock.calls[0][0].data).not.toHaveProperty('$device_id')
@@ -1890,7 +1918,10 @@ describe('featureflags', () => {
                 $anon_distinct_id: undefined,
                 groups: undefined,
                 group_properties: undefined,
-                person_properties: {},
+                person_properties: {
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 timezone: expect.any(String),
             })
             expect(instance._send_request.mock.calls[0][0].data).not.toHaveProperty('$device_id')
@@ -1913,7 +1944,10 @@ describe('featureflags', () => {
                 $anon_distinct_id: 'anon_id_789',
                 groups: undefined,
                 group_properties: undefined,
-                person_properties: {},
+                person_properties: {
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 timezone: expect.any(String),
             })
         })
@@ -1934,7 +1968,12 @@ describe('featureflags', () => {
                 $device_id: 'device-uuid-999',
                 groups: undefined,
                 group_properties: undefined,
-                person_properties: { plan: 'pro', beta_tester: true },
+                person_properties: {
+                    plan: 'pro',
+                    beta_tester: true,
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 timezone: expect.any(String),
             })
         })
@@ -1954,7 +1993,10 @@ describe('featureflags', () => {
                 $anon_distinct_id: undefined,
                 $device_id: 'device-uuid-888',
                 groups: undefined,
-                person_properties: {},
+                person_properties: {
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 group_properties: { company: { name: 'Acme', seats: 50 } },
                 timezone: expect.any(String),
             })
@@ -1994,7 +2036,10 @@ describe('featureflags', () => {
                 $anon_distinct_id: 'rando_id',
                 groups: undefined,
                 group_properties: undefined,
-                person_properties: {},
+                person_properties: {
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 timezone: expect.any(String),
             })
         })
@@ -2018,7 +2063,10 @@ describe('featureflags', () => {
                 $anon_distinct_id: 'rando_id',
                 groups: undefined,
                 group_properties: undefined,
-                person_properties: {},
+                person_properties: {
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 timezone: expect.any(String),
             })
 
@@ -2033,7 +2081,10 @@ describe('featureflags', () => {
                 $anon_distinct_id: undefined,
                 groups: undefined,
                 group_properties: undefined,
-                person_properties: {},
+                person_properties: {
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 timezone: expect.any(String),
             })
 
@@ -2047,7 +2098,10 @@ describe('featureflags', () => {
                 $anon_distinct_id: undefined,
                 groups: undefined,
                 group_properties: undefined,
-                person_properties: {},
+                person_properties: {
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 timezone: expect.any(String),
             })
         })
@@ -2072,7 +2126,12 @@ describe('featureflags', () => {
                 $anon_distinct_id: undefined,
                 groups: undefined,
                 group_properties: undefined,
-                person_properties: { a: 'b', c: 'd' },
+                person_properties: {
+                    a: 'b',
+                    c: 'd',
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 timezone: expect.any(String),
             })
         })
@@ -2161,7 +2220,13 @@ describe('featureflags', () => {
                 $anon_distinct_id: undefined,
                 groups: undefined,
                 group_properties: undefined,
-                person_properties: { a: 'b', c: 'e', x: 'y' },
+                person_properties: {
+                    a: 'b',
+                    c: 'e',
+                    x: 'y',
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 timezone: expect.any(String),
             })
         })
@@ -2201,7 +2266,10 @@ describe('featureflags', () => {
                 $anon_distinct_id: undefined,
                 groups: undefined,
                 group_properties: undefined,
-                person_properties: {},
+                person_properties: {
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 timezone: expect.any(String),
             })
         })
@@ -2233,7 +2301,10 @@ describe('featureflags', () => {
             // resetPersonPropertiesForFlags followed by reloadFeatureFlags. we will still
             // guarantee a single /flags request.
             expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0].data.person_properties).toEqual({})
+            expect(instance._send_request.mock.calls[0][0].data.person_properties).toEqual({
+                $lib: 'web',
+                $lib_version: expect.any(String),
+            })
         })
 
         it('set_once properties skip keys that already exist in the cache', () => {
@@ -2298,7 +2369,12 @@ describe('featureflags', () => {
                 $anon_distinct_id: undefined,
                 groups: undefined,
                 group_properties: undefined,
-                person_properties: { plan: 'pro', first_date: '2025-01-01' },
+                person_properties: {
+                    plan: 'pro',
+                    first_date: '2025-01-01',
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 timezone: expect.any(String),
             })
 
@@ -2327,7 +2403,10 @@ describe('featureflags', () => {
                 distinct_id: 'blah id',
                 $anon_distinct_id: undefined,
                 groups: undefined,
-                person_properties: {},
+                person_properties: {
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 group_properties: { orgs: { a: 'b', c: 'd' }, projects: { x: 'y', c: 'e' } },
                 timezone: expect.any(String),
             })
@@ -2998,6 +3077,7 @@ describe('parseFlagsResponse', () => {
     let persistence
 
     beforeEach(() => {
+        window.POSTHOG_DEBUG = true
         persistence = { register: jest.fn(), unregister: jest.fn() }
     })
 
@@ -3471,6 +3551,7 @@ describe('getRemoteConfigPayload', () => {
     let featureFlags: PostHogFeatureFlags
 
     beforeEach(() => {
+        window.POSTHOG_DEBUG = true
         instance = createMockPostHog({
             config: {
                 token: 'test-token',
@@ -3492,6 +3573,13 @@ describe('getRemoteConfigPayload', () => {
         const callback = jest.fn()
         featureFlags.getRemoteConfigPayload('test-flag', callback)
 
+        const requestData = instance._send_request.mock.calls[0][0].data
+        expect(requestData.person_properties).toEqual({
+            $lib: 'web',
+            $lib_version: expect.any(String),
+        })
+        expect(requestData).not.toHaveProperty('$lib')
+        expect(requestData).not.toHaveProperty('$lib_version')
         expect(instance._send_request).toHaveBeenCalledWith(
             expect.objectContaining({
                 method: 'POST',
@@ -3681,6 +3769,7 @@ describe('updateFlags', () => {
     it('merge does not bake an active override into the stored flags', async () => {
         const posthog = await createPosthogInstance()
         posthog.updateFlags({ 'base-flag': 'control' })
+        mockExpectedFeatureFlagDebugLogs()
         posthog.featureFlags.overrideFeatureFlags({ flags: { 'base-flag': 'test' } })
         expect(posthog.getFeatureFlag('base-flag')).toBe('test')
 
@@ -4244,6 +4333,8 @@ describe('$feature_flag_error tracking', () => {
 
     describe('feature flag cache TTL', () => {
         beforeEach(() => {
+            window.POSTHOG_DEBUG = true
+
             // Set up flags in persistence for TTL tests
             instance.persistence.register({
                 $enabled_feature_flags: {

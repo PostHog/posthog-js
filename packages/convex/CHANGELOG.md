@@ -1,5 +1,12 @@
 # @posthog/convex
 
+## 2.0.33
+
+### Patch Changes
+
+- [#4247](https://github.com/PostHog/posthog-js/pull/4247) [`3b2e68d`](https://github.com/PostHog/posthog-js/commit/3b2e68dc17f13f1d6f0ef70c76b5e184d977b877) Thanks [@marandaneto](https://github.com/marandaneto)! - Flush feature flag access events before remote evaluation actions return.
+  (2026-07-27)
+
 ## 2.0.32
 
 ### Patch Changes

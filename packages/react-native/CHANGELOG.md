@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.61.0
+
+### Minor Changes
+
+- [#4265](https://github.com/PostHog/posthog-js/pull/4265) [`3bd6aed`](https://github.com/PostHog/posthog-js/commit/3bd6aed9e655da1b5487a1decd60ac9d4617a46f) Thanks [@ioannisj](https://github.com/ioannisj)! - Add an `autoPresentSurveys` prop to `PostHogSurveyProvider`. Set it to `false` to defer automatic presentation of popover surveys, for example while a native-stack `formSheet` or `modal` is on top. Deferral is display-only: the survey stays armed and presents once the prop becomes `true` again, and a survey already on screen is never interrupted.
+  (2026-07-27)
+
 ## 4.60.0
 
 ### Minor Changes
