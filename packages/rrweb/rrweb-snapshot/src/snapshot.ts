@@ -1819,6 +1819,7 @@ export async function snapshotWithBudget(
     },
   ];
   let sliceStart = performance.now();
+  let nodesSinceCheck = 0;
   const serializedThisWalk = new WeakSet<Node>();
   // Progress floor: input can arrive continuously (a 125Hz+ mouse reports
   // several times per frame), and ending a slice after every single node
@@ -1832,14 +1833,23 @@ export async function snapshotWithBudget(
   while (stack.length > 0) {
     // The budget is the ceiling (rendering needs a turn even on an idle
     // page); pending input ends the slice early — once the progress floor is
-    // met — so a click doesn't wait out the rest of a slice.
-    const elapsed = performance.now() - sliceStart;
-    if (elapsed >= yieldBudgetMs || (elapsed >= minSliceMs && inputPending())) {
-      await doYield();
-      if (shouldAbort?.()) {
-        return null;
+    // met — so a click doesn't wait out the rest of a slice. The clock and
+    // the input queue are probed every 16 nodes, not every node: both cost
+    // real time at 100k+ nodes, and a 16-node stride bounds the overshoot to
+    // well under a millisecond.
+    if (++nodesSinceCheck >= 16) {
+      nodesSinceCheck = 0;
+      const elapsed = performance.now() - sliceStart;
+      if (
+        elapsed >= yieldBudgetMs ||
+        (elapsed >= minSliceMs && inputPending())
+      ) {
+        await doYield();
+        if (shouldAbort?.()) {
+          return null;
+        }
+        sliceStart = performance.now();
       }
-      sliceStart = performance.now();
     }
     // LIFO pop with children pushed in reverse ⇒ same pre-order as recursion.
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
