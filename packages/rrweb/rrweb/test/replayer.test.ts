@@ -164,6 +164,31 @@ describe('replayer', function () {
     expect(currentState).toEqual('paused');
   });
 
+  it('applies the full snapshot when pausing exactly at its timestamp', async () => {
+    await page.evaluate(`events = ${JSON.stringify(styleSheetRuleEvents)}`);
+    const result = await page.evaluate(`
+      (() => {
+        const { Replayer } = rrweb;
+        const replayer = new Replayer(events);
+        const fullSnapshot = events.find((event) => event.type === 2);
+        const fullSnapshotOffset = fullSnapshot.timestamp - events[0].timestamp;
+
+        replayer.pause(1500);
+        const laterFrameHasJss = replayer.iframe.contentDocument.head.innerHTML.includes('data-jss');
+
+        replayer.pause(fullSnapshotOffset);
+        const snapshotFrameHasJss = replayer.iframe.contentDocument.head.innerHTML.includes('data-jss');
+
+        return { laterFrameHasJss, snapshotFrameHasJss };
+      })()
+    `);
+
+    expect(result).toEqual({
+      laterFrameHasJss: true,
+      snapshotFrameHasJss: false,
+    });
+  });
+
   it('can fast forward past StyleSheetRule changes on virtual elements', async () => {
     await page.evaluate(`events = ${JSON.stringify(styleSheetRuleEvents)}`);
     const actionLength = await page.evaluate(`

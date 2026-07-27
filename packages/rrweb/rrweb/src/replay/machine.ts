@@ -209,7 +209,14 @@ export function createPlayerService(
             ) {
               continue;
             }
-            if (event.timestamp < baselineTime) {
+            // A paused seek clears future timer actions before this event can run.
+            const isFullSnapshotAtSeekBoundary =
+              event.type === EventType.FullSnapshot &&
+              event.timestamp === baselineTime;
+            if (
+              event.timestamp < baselineTime ||
+              isFullSnapshotAtSeekBoundary
+            ) {
               syncEvents.push(event);
             } else {
               const castFn = getCastFn(event, false);
