@@ -4,7 +4,7 @@ import { withPostHogConfig } from '@posthog/nextjs-config'
 import packageJson from './package.json' with { type: 'json' }
 
 const nextConfig = {
-    /* config options here */
+    outputFileTracingRoot: process.cwd(),
 }
 
 export default withPostHogConfig(nextConfig, {

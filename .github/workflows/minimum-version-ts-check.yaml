@@ -40,7 +40,7 @@ jobs:
         env:
           TS_VERSION: ${{ matrix.typescript-version.version }}
         run: |
-          rm ci-ts-file.js || true
+          rm -f ci-ts-file.js
           pnpm --package="typescript@$TS_VERSION" dlx tsc --version
           pnpm --package="typescript@$TS_VERSION" dlx tsc ci-ts-file.ts --strict --target es2017 --skipLibCheck ${{ matrix.typescript-version.extra-flags }}
           node ci-ts-file.js

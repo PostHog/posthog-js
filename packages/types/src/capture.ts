@@ -71,16 +71,19 @@ export interface CaptureOptions {
 
     /**
      * Used to override the desired endpoint for the captured event
+     * @internal
      */
     _url?: string
 
     /**
      * key of queue, e.g. 'sessionRecording' vs 'event'
+     * @internal
      */
     _batchKey?: string
 
     /**
      * If set, overrides and disables config.properties_string_max_length
+     * @internal
      */
     _noTruncate?: boolean
 
@@ -117,6 +120,7 @@ export interface CaptureOptions {
      * Internal flag set by captureException() / sendExceptionEvent() to indicate this $exception
      * event originated from the proper exception capture path. Used to warn users who call
      * capture('$exception') directly.
+     * @internal
      */
     _originatedFromCaptureException?: boolean
 }
