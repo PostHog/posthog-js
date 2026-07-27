@@ -664,6 +664,9 @@ export class Replayer {
   }
 
   public startLive(baselineTime?: number) {
+    // cancel any chunked seek rebuild still in flight — its remaining
+    // chunks would interleave stale seek-time events with live DOM writes
+    this.applyGeneration++;
     this.service.send({ type: 'TO_LIVE', payload: { baselineTime } });
   }
 
@@ -826,7 +829,7 @@ export class Replayer {
           this.timer.clear();
           this.timer.timeOffset = 0;
         }
-        // live: TO_LIVE already runs its own timer; leave it alone
+        // live is unreachable here: startLive() cancels in-flight rebuilds
       },
     });
   };

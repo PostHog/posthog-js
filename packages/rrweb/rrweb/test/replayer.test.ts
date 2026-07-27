@@ -1424,21 +1424,31 @@ describe('replayer', function () {
       expect(order.indexOf('finish')).toBeGreaterThan(order.indexOf('flush'));
     });
 
-    it('going live during a chunked rebuild leaves the live timer alone', async () => {
+    it('going live during a chunked rebuild cancels it and leaves the live timer alone', async () => {
+      await page.evaluate(`events = ${JSON.stringify(styleSheetRuleEvents)}`);
       const result = await page.evaluate(`
         (async () => {
           const { Replayer } = rrweb;
           const replayer = new Replayer(events, { seekYieldBudgetMs: ${TINY_BUDGET}, liveMode: true });
-          replayer.pause(1500);
+          replayer.pause(2600);
+          // the rebuild's leftover chunks must stop once we're live — they
+          // would interleave stale seek-time events with live DOM writes
+          let castsAfterLive = 0;
+          replayer.on('event-cast', () => castsAfterLive++);
           replayer.startLive();
           await new Promise((resolve) => setTimeout(resolve, 300));
           return {
             state: replayer['service']['state']['value'],
             timerActive: replayer['timer'].isActive(),
+            castsAfterLive,
           };
         })()
       `);
-      expect(result).toEqual({ state: 'live', timerActive: true });
+      expect(result).toEqual({
+        state: 'live',
+        timerActive: true,
+        castsAfterLive: 0,
+      });
     });
   });
 });
