@@ -12,6 +12,7 @@ import { BaseMessage } from '@langchain/core/messages'
 import { sanitizeLangChain } from '../sanitization'
 import { stringifyError } from '../serializeError'
 import { warnIfPostHogAiGateway } from '../gatewayWarning'
+import { captureAiEvent } from '../captureAiEvent'
 
 interface SpanMetadata {
   /** Name of the trace/span (e.g. chain name) */
@@ -429,7 +430,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     } else if (outputs !== undefined) {
       eventProperties['$ai_output_state'] = withPrivacyMode(this.client, this.privacyMode, outputs)
     }
-    this.client.capture({
+    captureAiEvent(this.client, {
       distinctId: this.distinctId ? this.distinctId.toString() : runId,
       event: eventName,
       properties: eventProperties,
@@ -545,7 +546,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       eventProperties['$process_person_profile'] = false
     }
 
-    this.client.capture({
+    captureAiEvent(this.client, {
       distinctId: this.distinctId ? this.distinctId.toString() : traceId,
       event: '$ai_generation',
       properties: eventProperties,

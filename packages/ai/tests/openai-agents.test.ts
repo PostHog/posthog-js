@@ -118,6 +118,35 @@ describe('PostHogTracingProcessor', () => {
       expect(call.properties.$ai_latency).toBeDefined()
     })
 
+    it('routes trace events through _captureAi when the client opted into the AI lane', async () => {
+      const aiLaneClient = {
+        ...createMockClient(),
+        _useAiLane: true,
+        _captureAi: jest.fn(),
+      }
+      const aiLaneProcessor = new PostHogTracingProcessor({
+        client: aiLaneClient,
+        distinctId: 'test-user',
+        privacyMode: false,
+      })
+
+      const trace = createMockTrace()
+      await aiLaneProcessor.onTraceStart(trace as any)
+      await aiLaneProcessor.onTraceEnd(trace as any)
+
+      expect(aiLaneClient._captureAi).toHaveBeenCalledTimes(1)
+      expect(aiLaneClient.capture).not.toHaveBeenCalled()
+      const call = aiLaneClient._captureAi.mock.calls[0][0]
+
+      expect(call.event).toBe('$ai_trace')
+      expect(call.distinctId).toBe('test-user')
+      expect(call.properties.$ai_trace_id).toBe('trace_123456789')
+      expect(call.properties.$ai_trace_name).toBe('Test Workflow')
+      expect(call.properties.$ai_provider).toBe('openai')
+      expect(call.properties.$ai_framework).toBe('openai-agents')
+      expect(call.properties.$ai_latency).toBeDefined()
+    })
+
     it('includes group_id in trace events', async () => {
       const trace = createMockTrace({ groupId: 'group_abc' })
       await processor.onTraceStart(trace as any)

@@ -20,6 +20,7 @@ import type {
 import { MAX_OUTPUT_SIZE, toContentString, truncate, utf8ByteLength, withPrivacyMode } from '../utils'
 import { version } from '../../package.json'
 import { warnIfPostHogAiGateway } from '../gatewayWarning'
+import { captureAiEvent } from '../captureAiEvent'
 
 /**
  * Normalize OpenAI Responses API input items to include a `role` field.
@@ -230,7 +231,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
         groups: Object.keys(this._groups).length > 0 ? this._groups : undefined,
       }
 
-      this._client.capture(eventMessage)
+      captureAiEvent(this._client, eventMessage)
     } catch (error) {
       this._handleError(error, 'capture')
     }
