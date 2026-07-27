@@ -1,0 +1,59 @@
+name: Check affected package
+
+on:
+  workflow_call:
+    inputs:
+      package-name:
+        description: Package name to check with Turbo
+        required: true
+        type: string
+      additional-paths:
+        description: Newline-separated paths that should mark the package as affected
+        required: false
+        default: ''
+        type: string
+    outputs:
+      is-affected:
+        description: Whether the package or an additional path is affected
+        value: ${{ jobs.check.outputs.is-affected }}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-22.04
+    outputs:
+      is-affected: ${{ steps.is-affected.outputs.is-affected }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Fetch comparison history
+        env:
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref || github.ref_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          REFS=("+refs/heads/$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH")
+          if [[ -n "$PR_NUMBER" ]]; then
+            REFS+=("+refs/pull/$PR_NUMBER/merge:refs/remotes/pull/$PR_NUMBER/merge")
+          fi
+
+          git fetch --no-tags --unshallow origin "${REFS[@]}"
+
+      - name: Setup pnpm and Node.js
+        uses: pnpm/setup@5d160c5bc68a09337ad0d5654e237e03253b5879 # v1
+        with:
+          runtime: node@24
+          cache: false
+          install: false
+
+      - name: Check affected package
+        id: is-affected
+        uses: ./.github/actions/is-affected
+        with:
+          package-name: ${{ inputs.package-name }}
+          base-ref: ${{ github.event.pull_request.base.sha || github.event.before }}
+          head-ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          additional-paths: ${{ inputs.additional-paths }}

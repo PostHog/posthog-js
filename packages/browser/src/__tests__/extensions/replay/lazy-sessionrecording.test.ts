@@ -3740,15 +3740,18 @@ describe('Lazy SessionRecording', () => {
         })
 
         describe('warns when client-side masking shadows the project setting', () => {
+            let logSpy: jest.SpyInstance
             let warnSpy: jest.SpyInstance
 
             beforeEach(() => {
                 // the logger only emits to the console when debug mode is enabled
                 assignableWindow.POSTHOG_DEBUG = true
+                logSpy = jest.spyOn(window!.console, 'log').mockImplementation(() => {})
                 warnSpy = jest.spyOn(window!.console, 'warn').mockImplementation(() => {})
             })
 
             afterEach(() => {
+                logSpy.mockRestore()
                 warnSpy.mockRestore()
                 assignableWindow.POSTHOG_DEBUG = undefined
             })

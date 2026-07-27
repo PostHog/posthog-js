@@ -36,6 +36,10 @@ runs:
     - name: Install package.json dependencies with pnpm
       if: ${{ inputs.install == 'true' }}
       shell: bash
+      env:
+        # Puppeteer is only used by rrweb tests, which install Chrome explicitly
+        # after confirming that rrweb is affected.
+        PUPPETEER_SKIP_DOWNLOAD: "true"
       run: pnpm install --frozen-lockfile
 
     - name: Build project with pnpm
