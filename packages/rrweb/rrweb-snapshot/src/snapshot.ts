@@ -1241,7 +1241,11 @@ export function serializeNodeWithId(
   ) {
     id = IGNORED_NODE;
   } else {
-    id = genId();
+    // A sliced snapshot may already have handed this id out to an event that
+    // fired before the traversal reached this node. Claimed after the slimDOM
+    // branch above so exclusion still wins: an excluded node stays
+    // IGNORED_NODE and its reservation is simply never claimed.
+    id = mirror.getReservedId(n) ?? genId();
   }
 
   const serializedNode = Object.assign(_serializedNode, { id });
@@ -1605,6 +1609,13 @@ export type SnapshotWithBudgetOptions = NonNullable<
   yieldBudgetMs: number;
   /** Overridable for tests; defaults to a macrotask (`setTimeout(0)`). */
   yieldFn?: () => Promise<void>;
+  /**
+   * Checked after every yield. Returning true abandons the walk and resolves
+   * with null. The mirror is shared across recording sessions, so a walk whose
+   * recording has been torn down must stop writing to it rather than just have
+   * its result discarded.
+   */
+  shouldAbort?: () => boolean;
 };
 
 /**
@@ -1655,6 +1666,7 @@ export async function snapshotWithBudget(
     maxDepth = DEFAULT_MAX_DEPTH,
     yieldBudgetMs,
     yieldFn,
+    shouldAbort,
   } = options;
   const maskInputOptions: MaskInputOptions =
     normalizeMaskInputOptions(maskAllInputs);
@@ -1715,6 +1727,9 @@ export async function snapshotWithBudget(
   while (stack.length > 0) {
     if (performance.now() - sliceStart >= yieldBudgetMs) {
       await doYield();
+      if (shouldAbort?.()) {
+        return null;
+      }
       sliceStart = performance.now();
     }
     // LIFO pop with children pushed in reverse ⇒ same pre-order as recursion.

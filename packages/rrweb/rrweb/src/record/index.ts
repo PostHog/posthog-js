@@ -1,6 +1,7 @@
 import {
   snapshot,
   snapshotWithBudget,
+  genId,
   type MaskInputOptions,
   type serializedElementNodeWithId,
   slimDOMDefaults,
@@ -9,6 +10,8 @@ import {
 import {
   initObservers,
   mutationBuffers,
+  lockMutationBuffers,
+  unlockMutationBuffers,
   findAndRemoveIframeBuffer,
 } from './observer';
 import {
@@ -202,15 +205,19 @@ function record<T = eventWithTime>(
 
   let lastFullSnapshotEvent: eventWithTime;
   let incrementalSnapshotCount = 0;
-  // Budgeted (time-sliced) full snapshot state. While a budgeted snapshot is
-  // in flight the mirror is mid-rebuild, so id-bearing incremental events
-  // must not reach the wire (see wrappedEmit); non-id events are queued and
-  // flushed after the FullSnapshot lands.
+  // Budgeted (time-sliced) full snapshot state. The FullSnapshot has to reach
+  // the wire before anything that references the mirror it builds, so every
+  // other event observed while one is in flight is held here — timestamped at
+  // observation time — and delivered in order once the snapshot lands. See
+  // wrappedEmit for why holding rather than dropping is the only safe option.
   let budgetedSnapshotInFlight = false;
   let budgetedSnapshotQueued: { isCheckout: boolean } | null = null;
   const budgetedSnapshotEventQueue: Array<
     [eventWithoutTime, boolean | undefined]
   > = [];
+  // Bumped on teardown so a snapshot still in flight can tell that the
+  // recording it belongs to is gone and stop touching shared state.
+  let recordingGeneration = 0;
   // Set per id — one iframe id can collect several cleanups across loads.
   const iframeObserverCleanups = new Map<number, Set<listenerHandler>>();
 
@@ -238,25 +245,35 @@ function record<T = eventWithTime>(
   };
   wrappedEmit = (r: eventWithoutTime, isCheckout?: boolean) => {
     const e = r as eventWithTime;
-    if (budgetedSnapshotInFlight) {
-      if (e.type === EventType.IncrementalSnapshot) {
-        // Ids captured while the mirror is mid-rebuild reference a mixed
-        // epoch. The synchronous snapshot suppresses these by construction
-        // (nothing can run during one long task); we reproduce that
-        // semantic. All of these sources are self-healing — the next
-        // scroll/input/move re-emits current state against the new mirror.
-        // (Mutations are unaffected: their buffers are locked and resolve
-        // ids at emit time, after the new mirror is in place.)
-        return;
-      }
-      if (e.type !== EventType.Meta && e.type !== EventType.FullSnapshot) {
-        // custom/plugin/lifecycle events carry no node ids — keep them, in
-        // order, for after the snapshot lands
-        budgetedSnapshotEventQueue.push([r, isCheckout]);
-        return;
-      }
+    // Stamped once, when the event is observed. An event held back for a sliced
+    // full snapshot therefore keeps the time it actually happened rather than
+    // the time it was released, and a caller that already knows the time an
+    // event belongs to (the FullSnapshot below) can set it itself.
+    e.timestamp ??= nowTimestamp();
+    if (
+      budgetedSnapshotInFlight &&
+      e.type !== EventType.Meta &&
+      e.type !== EventType.FullSnapshot
+    ) {
+      // A sliced snapshot spans several tasks, so real events land while the
+      // FullSnapshot is still being built. They cannot go out ahead of it — the
+      // replayer needs the snapshot before anything that references it — so
+      // they wait here and are delivered, in order, once it lands.
+      //
+      // Dropping them instead would not be equivalent to the synchronous path.
+      // That path does not suppress these events, it *defers* them: the event
+      // loop is blocked, so the handlers only run once serialization is done,
+      // against the finished mirror. Dropping is also actively unsafe — a
+      // MutationBuffer clears itself and drains `mapRemoves` into the mirror
+      // before invoking its callback, so a dropped mutation event would leave
+      // the recorder's mirror permanently ahead of the replay. The other
+      // sources are not reliably self-healing either: input and scroll record
+      // their dedup state before emitting, so a dropped event is never re-sent,
+      // and StyleSheetRule deltas are index-based, so a dropped insertRule
+      // misaligns every later rule index.
+      budgetedSnapshotEventQueue.push([r, isCheckout]);
+      return;
     }
-    e.timestamp = nowTimestamp();
     if (
       mutationBuffers[0]?.isFrozen() &&
       e.type !== EventType.FullSnapshot &&
@@ -525,11 +542,18 @@ function record<T = eventWithTime>(
   };
 
   // Time-sliced variant: same phases as the synchronous path below, but the
-  // serialization yields to the event loop on the configured budget so a
-  // large document doesn't block the page in one long task. The mutation
-  // buffers stay locked across the whole (sliced) snapshot — buffered
-  // mutations then apply against the newly built mirror on unlock, exactly
-  // as in the synchronous path.
+  // serialization yields to the event loop on the configured budget so a large
+  // document doesn't block the page in one long task. Because the walk spans
+  // several tasks, the page keeps running during it, and three things have to
+  // hold for the recording to stay correct:
+  //  - every mutation buffer stays locked for the whole walk, including buffers
+  //    created *during* it (the document's own, plus shadow-root and iframe
+  //    buffers spawned by the traversal) — hence lockMutationBuffers rather
+  //    than a loop over the ones that happen to exist right now;
+  //  - ids are reserved on demand, so an event observed before its node has
+  //    been reached still resolves to the id that node is about to get;
+  //  - everything observed in the meantime is held and delivered after the
+  //    FullSnapshot, in order (see wrappedEmit).
   const takeFullSnapshotBudgeted = (isCheckout: boolean) => {
     if (budgetedSnapshotInFlight) {
       // coalesce concurrent requests into a single follow-up snapshot
@@ -539,47 +563,87 @@ function record<T = eventWithTime>(
       return;
     }
     budgetedSnapshotInFlight = true;
+    const generation = recordingGeneration;
+    // The tree the walk produces describes the document as it is now, so this is
+    // the time the FullSnapshot belongs at — not the time the walk happens to
+    // finish. It also keeps the FullSnapshot ahead of everything observed during
+    // the walk, so the stream stays in timestamp order.
+    const snapshotStartedAt = nowTimestamp();
     emitMetaEvent(isCheckout);
 
     // When we take a full snapshot, old tracked StyleSheets need to be removed.
     stylesheetManager.reset();
     shadowDomManager.init();
 
-    mutationBuffers.forEach((buf) => buf.lock()); // don't allow any mirror modifications during snapshotting
+    // Armed synchronously, before the first yield can happen, so that no buffer
+    // can be created unlocked while the walk is in flight.
+    lockMutationBuffers(); // don't allow any mirror modifications during snapshotting
+    mirror.beginIdReservation(genId);
     void snapshotWithBudget(document, {
       ...buildFullSnapshotOptions(),
       yieldBudgetMs: fullSnapshotYieldBudgetMs,
+      // `mirror` is shared across recording sessions, so a walk whose recording
+      // has been torn down has to stop writing to it, not just be ignored.
+      shouldAbort: () => generation !== recordingGeneration,
     })
       .then((node) => {
+        if (generation !== recordingGeneration) {
+          // recording was stopped (or restarted) while we were serializing
+          return;
+        }
         if (!node) {
           console.warn('Failed to snapshot the document');
           return;
         }
-        wrappedEmit(
-          {
-            type: EventType.FullSnapshot,
-            data: {
-              node,
-              initialOffset: getWindowScroll(window),
-            },
+        const fullSnapshotEvent = {
+          type: EventType.FullSnapshot,
+          timestamp: snapshotStartedAt,
+          data: {
+            node,
+            initialOffset: getWindowScroll(window),
           },
-          isCheckout,
-        );
+        };
+        wrappedEmit(fullSnapshotEvent as unknown as eventWithoutTime, isCheckout);
       })
       .catch((error: unknown) => {
         console.warn('Budgeted full snapshot failed', error);
       })
       .finally(() => {
-        // release the emit gate before unlocking so buffered mutations
-        // (which resolve ids against the new mirror) reach the wire
+        // Reservation ends with the walk. It must not still be on during the
+        // unlock below: pushAdd relies on `parentId === -1` to know a parent
+        // isn't serialized yet and defer the add, and a reserved id would hide
+        // that, emitting an add against a parent the replayer never received.
+        mirror.endIdReservation();
+        if (generation !== recordingGeneration) {
+          // Recording is gone. Leave the queue and the buffers alone — the
+          // teardown owns them now — and don't schedule a follow-up snapshot.
+          budgetedSnapshotInFlight = false;
+          budgetedSnapshotQueued = null;
+          budgetedSnapshotEventQueue.length = 0;
+          return;
+        }
+        // release the emit gate before flushing so held events, and then the
+        // buffered mutations, reach the wire
         budgetedSnapshotInFlight = false;
-        mutationBuffers.forEach((buf) => buf.unlock()); // generate & emit any mutations that happened during snapshotting, as can now apply against the newly built mirror
-        finishFullSnapshot();
 
+        // Held events go out first, each keeping the time it was observed —
+        // all of which are inside the walk, and so before the mutations that
+        // are about to be flushed. Ordering the stream by time rather than
+        // bunching everything onto the instant the walk ended matters: index
+        // based payloads (StyleSheetRule) are applied by the replayer in the
+        // order it receives them, and collapsing a whole window into one
+        // millisecond leaves it no room to interleave them correctly.
+        // The tradeoff is an event that references a node created during the
+        // window: its add is still buffered at this point, so the replayer
+        // cannot resolve it. That is the one interleaving this does not
+        // recover, and it is far narrower than a non-monotonic stream.
         const queuedEvents = budgetedSnapshotEventQueue.splice(0);
         for (const [event, eventIsCheckout] of queuedEvents) {
           wrappedEmit(event, eventIsCheckout);
         }
+
+        unlockMutationBuffers(); // generate & emit any mutations that happened during snapshotting, as can now apply against the newly built mirror
+        finishFullSnapshot();
 
         const pending = budgetedSnapshotQueued;
         budgetedSnapshotQueued = null;
@@ -604,7 +668,7 @@ function record<T = eventWithTime>(
 
     shadowDomManager.init();
 
-    mutationBuffers.forEach((buf) => buf.lock()); // don't allow any mirror modifications during snapshotting
+    lockMutationBuffers(); // don't allow any mirror modifications during snapshotting
     const node = snapshot(document, buildFullSnapshotOptions());
 
     if (!node) {
@@ -621,7 +685,7 @@ function record<T = eventWithTime>(
       },
       isCheckout,
     );
-    mutationBuffers.forEach((buf) => buf.unlock()); // generate & emit any mutations that happened during snapshotting, as can now apply against the newly built mirror
+unlockMutationBuffers(); // generate & emit any mutations that happened during snapshotting, as can now apply against the newly built mirror
     canvasManager.onFullSnapshot();
 
     finishFullSnapshot();
@@ -897,6 +961,13 @@ function record<T = eventWithTime>(
       );
     }
     return () => {
+      // Invalidate any time-sliced full snapshot still in flight before we tear
+      // the managers down, so its continuation can't emit a FullSnapshot for a
+      // recording that no longer exists, unlock buffers, or schedule a
+      // follow-up. The walk itself stops on its own once nothing references it.
+      recordingGeneration++;
+      budgetedSnapshotEventQueue.length = 0;
+      budgetedSnapshotQueued = null;
       handlers.forEach((h) => callSafely(h));
       processedNodeManager.destroy();
       iframeManager.removeLoadListener();

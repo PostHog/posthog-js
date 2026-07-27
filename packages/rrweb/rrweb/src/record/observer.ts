@@ -56,6 +56,28 @@ import dom, { mutationObserverCtor } from '@posthog/rrweb-utils';
 
 export const mutationBuffers: MutationBuffer[] = [];
 
+// A time-sliced full snapshot spans several tasks, so buffers can come into
+// existence while one is in flight: the document's own buffer is installed
+// right after `takeFullSnapshot()` returns, and shadow-root/iframe buffers are
+// created from the traversal itself. A buffer starts out unlocked, so without
+// this gate those buffers would emit mutations resolved against a half-built
+// mirror — and a MutationBuffer clears itself and drains `mapRemoves` into the
+// mirror *before* invoking its callback, so a dropped mutation event leaves the
+// recorder's mirror permanently ahead of the replay.
+// While the gate is armed a new buffer joins the snapshot already locked, and
+// is released together with all the others.
+let newBuffersStartLocked = false;
+
+export function lockMutationBuffers(): void {
+  newBuffersStartLocked = true;
+  mutationBuffers.forEach((buf) => buf.lock());
+}
+
+export function unlockMutationBuffers(): void {
+  newBuffersStartLocked = false;
+  mutationBuffers.forEach((buf) => buf.unlock());
+}
+
 // Event.path is non-standard and used in some older browsers
 type NonStandardEvent = Omit<Event, 'composedPath'> & {
   path: EventTarget[];
@@ -86,6 +108,10 @@ export function initMutationObserver(
   mutationBuffers.push(mutationBuffer);
   // see mutation.ts for details
   mutationBuffer.init(options);
+  if (newBuffersStartLocked) {
+    // a time-sliced full snapshot is mid-flight — see lockMutationBuffers
+    mutationBuffer.lock();
+  }
   const observer = new (mutationObserverCtor() as new (
     callback: MutationCallback,
   ) => MutationObserver)(

@@ -199,14 +199,53 @@ export function isCSSStyleRule(rule: CSSRule): rule is CSSStyleRule {
 export class Mirror implements IMirror<Node> {
   private idNodeMap: idNodeMap = new Map();
   private nodeMetaMap: nodeMetaMap = new WeakMap();
+  // Id reservation, used only while a time-sliced full snapshot is in flight.
+  // Handing out an id is cheap; serializing a node is not. A sliced snapshot
+  // spreads serialization over many tasks, so an observer can run against a
+  // node the traversal has not reached yet — `getId` would answer -1 and the
+  // event would be unusable. While reservation is on, such a node gets the id
+  // it is about to be serialized with, and `serializeNodeWithId` claims that
+  // same id when it gets there. Reservation is lazy — only nodes that events
+  // actually touch get one — so id numbering is untouched when nothing happens
+  // during the snapshot.
+  private reservedIds: Map<Node, number> | null = null;
+  private reserveNextId: (() => number) | null = null;
 
   getId(n: Node | undefined | null): number {
     if (!n) return -1;
 
     const id = this.getMeta(n)?.id;
+    if (id !== undefined) return id;
+
+    // Not serialized yet. Reserve the id this node is going to get, but only
+    // while it is still connected: a detached node will never be serialized,
+    // and callers such as `processRemoves` rely on -1 meaning "this never made
+    // it into the mirror".
+    if (this.reserveNextId && this.reservedIds && n.isConnected) {
+      let reserved = this.reservedIds.get(n);
+      if (reserved === undefined) {
+        reserved = this.reserveNextId();
+        this.reservedIds.set(n, reserved);
+      }
+      return reserved;
+    }
 
     // if n is not a serialized Node, use -1 as its id.
-    return id ?? -1;
+    return -1;
+  }
+
+  beginIdReservation(genId: () => number) {
+    this.reserveNextId = genId;
+    this.reservedIds = new Map();
+  }
+
+  endIdReservation() {
+    this.reserveNextId = null;
+    this.reservedIds = null;
+  }
+
+  getReservedId(n: Node): number | undefined {
+    return this.reservedIds?.get(n);
   }
 
   getNode(id: number): Node | null {
@@ -272,6 +311,7 @@ export class Mirror implements IMirror<Node> {
   reset() {
     this.idNodeMap = new Map();
     this.nodeMetaMap = new WeakMap();
+    this.endIdReservation();
   }
 }
 

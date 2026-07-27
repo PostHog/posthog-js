@@ -745,15 +745,23 @@ export default class MutationBuffer {
             : this.mirror.getId(m.target);
           if (
             isBlocked(m.target, this.blockClass, this.blockSelector, false) ||
-            isIgnored(n, this.mirror, this.slimDOMOptions) ||
-            !isSerialized(n, this.mirror)
+            isIgnored(n, this.mirror, this.slimDOMOptions)
           ) {
             return;
           }
           // removed node has not been serialized yet, just remove it from the Set
+          //
+          // Checked before bailing out on an unserialized node: a node added
+          // and removed before it was ever serialized still has to cancel its
+          // own pending add, or the add goes out alone and the replay keeps a
+          // node the page no longer has. A time-sliced full snapshot makes this
+          // reachable far more often, because the buffer stays locked — and so
+          // nothing gets serialized — for the whole length of the walk.
           if (this.addedSet.has(n)) {
             deepDelete(this.addedSet, n);
             this.droppedSet.add(n);
+          } else if (!isSerialized(n, this.mirror)) {
+            return;
           } else if (this.addedSet.has(m.target) && nodeId === -1) {
             /**
              * If target was newly added and removed child node was
