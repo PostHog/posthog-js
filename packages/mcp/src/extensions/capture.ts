@@ -48,8 +48,11 @@ export function captureEvent(server: MCPServerLike, eventInput: McpEvent): Promi
     sdkVersion: sessionInfo.sdkVersion,
     serverName: sessionInfo.serverName,
     serverVersion: sessionInfo.serverVersion,
-    clientName: sessionInfo.clientName,
-    clientVersion: sessionInfo.clientVersion,
+    // Prefer identity the event captured for *this* request (from `_meta`, see
+    // stampMetaClientInfo) over the server-wide sessionInfo, so a concurrent
+    // request from another client can't misattribute this one.
+    clientName: eventInput.clientName ?? sessionInfo.clientName,
+    clientVersion: eventInput.clientVersion ?? sessionInfo.clientVersion,
     identifyActorGivenId: sessionInfo.identifyActorGivenId,
     identifyActorData: sessionInfo.identifyActorData,
     groups: sessionInfo.identifyActorGroups,

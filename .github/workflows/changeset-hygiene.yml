@@ -15,3 +15,5 @@ concurrency:
 jobs:
   check:
     uses: PostHog/.github/.github/workflows/changeset-hygiene.yml@99fddf69d1191099028fcb33a328d7eb61272341
+    with:
+      script-ref: 99fddf69d1191099028fcb33a328d7eb61272341
