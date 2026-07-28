@@ -1,7 +1,5 @@
 ---
 'posthog-js': minor
-'@posthog/rrweb': minor
-'@posthog/rrweb-types': minor
 '@posthog/types': minor
 ---
 
