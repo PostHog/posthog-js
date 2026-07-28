@@ -147,7 +147,6 @@
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
 				15D5BF81B29F1ADC40A535B9 /* [CP] Embed Pods Frameworks */,
-				A1570BF79F4847D980409CD6 /* Upload PostHog Debug Symbols */,
 			);
 			buildRules = (
 			);
@@ -324,32 +323,6 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-exampleexpo53/Pods-exampleexpo53-resources.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
-		A1570BF79F4847D980409CD6 /* Upload PostHog Debug Symbols */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			name = "Upload PostHog Debug Symbols";
-			inputPaths = (
-			);
-			outputPaths = (
-			);
-			shellPath = /bin/sh;
-			shellScript = "# Upload iOS dSYMs to PostHog so native crashes can be symbolicated.
-# upload-symbols.sh ships inside the posthog-ios dependency.
-# Also upload native source files for source-code context around crashes.
-export POSTHOG_INCLUDE_SOURCE=1
-PODS_SCRIPT=\"${PODS_ROOT}/PostHog/build-tools/upload-symbols.sh\"
-SPM_SCRIPT=\"${BUILD_DIR%/Build/*}/SourcePackages/checkouts/posthog-ios/build-tools/upload-symbols.sh\"
-if [ -f \"$PODS_SCRIPT\" ]; then
-  /bin/sh \"$PODS_SCRIPT\"
-elif [ -f \"$SPM_SCRIPT\" ]; then
-  /bin/sh \"$SPM_SCRIPT\"
-else
-  echo \"warning: PostHog upload-symbols.sh not found in Pods or SwiftPM checkouts; skipping dSYM upload.\"
-fi";
-		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -392,13 +365,12 @@ fi";
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
 				PRODUCT_BUNDLE_IDENTIFIER = com.marandaneto.exampleexpo53;
-				PRODUCT_NAME = "exampleexpo53";
+				PRODUCT_NAME = exampleexpo53;
 				SWIFT_OBJC_BRIDGING_HEADER = "exampleexpo53/exampleexpo53-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
-				ENABLE_USER_SCRIPT_SANDBOXING = "NO";
 			};
 			name = Debug;
 		};
@@ -424,12 +396,11 @@ fi";
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
 				PRODUCT_BUNDLE_IDENTIFIER = com.marandaneto.exampleexpo53;
-				PRODUCT_NAME = "exampleexpo53";
+				PRODUCT_NAME = exampleexpo53;
 				SWIFT_OBJC_BRIDGING_HEADER = "exampleexpo53/exampleexpo53-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
-				ENABLE_USER_SCRIPT_SANDBOXING = "NO";
 			};
 			name = Release;
 		};
@@ -496,7 +467,6 @@ fi";
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
 				USE_HERMES = true;
-				ENABLE_USER_SCRIPT_SANDBOXING = "NO";
 			};
 			name = Debug;
 		};
@@ -555,7 +525,6 @@ fi";
 				SDKROOT = iphoneos;
 				USE_HERMES = true;
 				VALIDATE_PRODUCT = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = "NO";
 			};
 			name = Release;
 		};
