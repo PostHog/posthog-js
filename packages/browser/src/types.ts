@@ -239,7 +239,7 @@ export interface RequestWithOptions {
     compression?: Compression | 'best-available'
     /**
      * Controls where the request dispatch time is sent.
-     * - `body` adds ISO `sent_at` to the existing request object (for example, flags).
+     * - `body` adds ISO `sent_at` to the request object, or every object in an array (for example, flags and recordings).
      * - `capture-body` wraps events in `{ api_key, batch, sent_at }` with an ISO timestamp.
      * - `query` adds numeric `sent_at` to POST requests or cache-busting `_` to GET requests.
      */
