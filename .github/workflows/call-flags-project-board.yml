@@ -10,7 +10,7 @@ on:
 jobs:
     call-flags-project:
         if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
-        uses: PostHog/.github/.github/workflows/flags-project-board.yml@69336b569d22687f8982eea6ff7d450a885cda05
+        uses: PostHog/.github/.github/workflows/flags-project-board.yml@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1
         with:
             pr_number: ${{ github.event.pull_request.number }}
             pr_node_id: ${{ github.event.pull_request.node_id }}
