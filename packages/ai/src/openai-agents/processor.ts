@@ -20,7 +20,7 @@ import type {
 import { MAX_OUTPUT_SIZE, toContentString, truncate, utf8ByteLength, withPrivacyMode } from '../utils'
 import { version } from '../../package.json'
 import { warnIfPostHogAiGateway } from '../gatewayWarning'
-import { captureAiEvent } from '../captureAiEvent'
+import { captureAiEvent, isMultimodalCaptureEnabled } from '../captureAiEvent'
 
 /**
  * Normalize OpenAI Responses API input items to include a `role` field.
@@ -182,9 +182,12 @@ export class PostHogTracingProcessor implements TracingProcessor {
   private _prepareCapturedValue(value: unknown): unknown {
     const serializableValue = ensureSerializable(value)
     const serializedValue = stringifyForSizeCheck(serializableValue)
-    const boundedValue = exceedsMaxOutputSize(serializedValue)
-      ? truncate(serializedValue, this._client)
-      : serializableValue
+    // Passthrough keeps the structured value even when oversize: truncate() would otherwise
+    // collapse it to a JSON string, which defeats passthrough's whole purpose.
+    const boundedValue =
+      isMultimodalCaptureEnabled(this._client) || !exceedsMaxOutputSize(serializedValue)
+        ? serializableValue
+        : truncate(serializedValue, this._client)
     return this._withPrivacyMode(boundedValue)
   }
 

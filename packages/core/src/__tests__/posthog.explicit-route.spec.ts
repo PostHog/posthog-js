@@ -40,7 +40,21 @@ class ExplicitRouteTestClient extends PostHogCoreTestClient {
   }
 }
 
-const createClient = (options?: PostHogCoreOptions): [ExplicitRouteTestClient, PostHogCoreTestClientMocks] => {
+type ExplicitRouteTestClientClass<T extends ExplicitRouteTestClient> = new (
+  mocks: PostHogCoreTestClientMocks,
+  apiKey: string,
+  options: PostHogCoreOptions
+) => T
+
+function createClient(options?: PostHogCoreOptions): [ExplicitRouteTestClient, PostHogCoreTestClientMocks]
+function createClient<T extends ExplicitRouteTestClient>(
+  options: PostHogCoreOptions | undefined,
+  ClientClass: ExplicitRouteTestClientClass<T>
+): [T, PostHogCoreTestClientMocks]
+function createClient(
+  options?: PostHogCoreOptions,
+  ClientClass: ExplicitRouteTestClientClass<ExplicitRouteTestClient> = ExplicitRouteTestClient
+): [ExplicitRouteTestClient, PostHogCoreTestClientMocks] {
   const storageCache: { [key: string]: string | JsonType } = {}
   const mocks: PostHogCoreTestClientMocks = {
     fetch: jest.fn(),
@@ -58,7 +72,7 @@ const createClient = (options?: PostHogCoreOptions): [ExplicitRouteTestClient, P
       json: () => Promise.resolve({ status: 'ok' }),
     })
   )
-  const client = new ExplicitRouteTestClient(mocks, 'TEST_API_KEY', {
+  const client = new ClientClass(mocks, 'TEST_API_KEY', {
     flushAt: 100,
     flushInterval: 0,
     fetchRetryCount: 0,
@@ -120,29 +134,7 @@ describe('PostHog Core explicit queue route', () => {
         return route === 'explicit' ? '/i/v0/test-lane/' : super.getBatchEndpointPath(route)
       }
     }
-    const storageCache: { [key: string]: string | JsonType } = {}
-    const mocks: PostHogCoreTestClientMocks = {
-      fetch: jest.fn(),
-      storage: {
-        getItem: jest.fn((key) => storageCache[key]),
-        setItem: jest.fn((key, val) => {
-          storageCache[key] = val == null ? undefined : val
-        }),
-      },
-    }
-    mocks.fetch.mockImplementation(() =>
-      Promise.resolve({
-        status: 200,
-        text: () => Promise.resolve('ok'),
-        json: () => Promise.resolve({ status: 'ok' }),
-      })
-    )
-    const posthog = new EndpointRoutedClient(mocks, 'TEST_API_KEY', {
-      flushAt: 100,
-      flushInterval: 0,
-      fetchRetryCount: 0,
-      disableCompression: true,
-    })
+    const [posthog, mocks] = createClient(undefined, EndpointRoutedClient)
 
     posthog.enqueueOnRoute('explicit', 'lane_event')
     posthog.enqueueOnRoute(undefined, 'normal_event')

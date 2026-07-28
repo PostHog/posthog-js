@@ -405,6 +405,34 @@ describe('PostHogTracingProcessor', () => {
       expect(typeof call.properties.$ai_output_choices).toBe('string')
       expect(call.properties.$ai_output_choices).toContain('[truncated]')
     })
+
+    it('keeps oversized structured payloads intact when multimodal passthrough is enabled', async () => {
+      const largeContent = 'x'.repeat(220000)
+      const multimodalClient = { ...createMockClient(), _enableMultimodalCapture: true }
+      const multimodalProcessor = new PostHogTracingProcessor({
+        client: multimodalClient,
+        distinctId: 'test-user',
+        privacyMode: false,
+      })
+      const span = createMockSpan({
+        spanData: {
+          type: 'generation',
+          input: [{ role: 'user', content: largeContent }],
+          output: [{ role: 'assistant', content: largeContent }],
+          model: 'gpt-4o',
+        },
+      })
+
+      await multimodalProcessor.onSpanStart(span as any)
+      await multimodalProcessor.onSpanEnd(span as any)
+
+      const call = multimodalClient.capture.mock.calls[0][0]
+
+      expect(Array.isArray(call.properties.$ai_input)).toBe(true)
+      expect(call.properties.$ai_input).toEqual([{ role: 'user', content: largeContent }])
+      expect(Array.isArray(call.properties.$ai_output_choices)).toBe(true)
+      expect(call.properties.$ai_output_choices).toEqual([{ role: 'assistant', content: largeContent }])
+    })
   })
 
   describe('input role normalization', () => {
