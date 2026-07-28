@@ -4582,6 +4582,10 @@ describe('minimal $feature_flag_called events', () => {
                 '$groups',
                 '$current_url',
                 '$pathname',
+                // session-level attribution props survive minimization so a flag-called
+                // event firing first doesn't null out the session's UTM/channel
+                '$referrer',
+                '$referring_domain',
                 '$session_id',
                 '$window_id',
                 '$lib',
@@ -4600,6 +4604,41 @@ describe('minimal $feature_flag_called events', () => {
             $groups: { organization: 'org-1' },
         })
         expect(event.$set_once).toBeUndefined()
+    })
+
+    it('keeps session-attribution campaign params so a first-in-session flag event does not null out UTM', async () => {
+        const { posthog, events } = await createInstanceWithCapturedEvents()
+        // Campaign params are stored as bare-named super properties (see posthog-persistence
+        // update_campaign_params -> register). They feed the server session table's
+        // session-initial UTM, so they must survive minimization.
+        posthog.register({
+            utm_source: 'newsletter',
+            utm_medium: 'email',
+            utm_campaign: 'summer_sale',
+            utm_content: 'cta_button',
+            utm_term: 'analytics',
+            gclid: 'abc123',
+            // a non-attribution super property that must still be stripped
+            super_prop: 'super_value',
+        })
+        posthog.featureFlags.receivedFeatureFlags(
+            gatedFlagsResponse({ minimalFlagCalledEvents: true, hasExperiment: false })
+        )
+
+        expect(posthog.getFeatureFlag('test-flag')).toBe(true)
+
+        const event = findFlagCalledEvent(events)
+        expect(event).toBeDefined()
+        expect(event.properties).toMatchObject({
+            utm_source: 'newsletter',
+            utm_medium: 'email',
+            utm_campaign: 'summer_sale',
+            utm_content: 'cta_button',
+            utm_term: 'analytics',
+            gclid: 'abc123',
+        })
+        // non-attribution super properties are still structurally excluded
+        expect(event.properties).not.toHaveProperty('super_prop')
     })
 
     it('strips the timestamp-override props when captured with an explicit timestamp', async () => {
@@ -4629,6 +4668,8 @@ describe('minimal $feature_flag_called events', () => {
                 '$feature_flag_request_id',
                 '$current_url',
                 '$pathname',
+                '$referrer',
+                '$referring_domain',
                 '$session_id',
                 '$window_id',
                 '$lib',
