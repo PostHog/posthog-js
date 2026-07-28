@@ -192,6 +192,29 @@ export function modifyExistingXcodeBuildScript(script: BuildPhase | undefined, s
   }
 
   const code = JSON.parse(script.shellScript)
+
+  // Another config plugin (e.g. @sentry/react-native/expo) may already wrap the
+  // react-native-xcode.sh invocation with its own script. Nesting a second wrapper
+  // produces a command like:
+  //   /bin/sh sentry-xcode.sh /bin/sh posthog-xcode.sh react-native-xcode.sh
+  // where the outer wrapper resolves its script argument to `/bin/sh`, exits
+  // successfully without ever bundling, and the Release app silently ships
+  // without main.jsbundle (issue #4285). Leave the phase untouched instead.
+  const foreignWrapper = findForeignBundleScriptWrapper(code)
+  if (foreignWrapper) {
+    console.warn(
+      `[posthog-react-native] Another tool's script ('${foreignWrapper}') already wraps the ` +
+        "'Bundle React Native code and images' build phase. Nesting a second wrapper can " +
+        'silently produce an iOS app without main.jsbundle ' +
+        '(https://github.com/PostHog/posthog-js/issues/4285), so the PostHog iOS sourcemap ' +
+        'upload wrapper was not installed. React Native bundling and the existing wrapper are ' +
+        'left untouched; PostHog analytics and session replay are unaffected. To upload iOS ' +
+        "sourcemaps to PostHog instead, remove the other plugin's bundle-phase integration " +
+        'and re-run prebuild.'
+    )
+    return
+  }
+
   script.shellScript = JSON.stringify(addPostHogWithBundledScriptsToBundleShellScript(code, skipOnConflict))
 }
 
@@ -200,6 +223,35 @@ const POSTHOG_REACT_NATIVE_XCODE_PATH =
 
 const REACT_NATIVE_XCODE_LINE =
   /^([ \t]*)(?![A-Za-z_][A-Za-z0-9_]*=)(?:\/bin\/sh\s+)?([^\n]*(?:packager|scripts)\/react-native-xcode\.sh\b[^\n]*)$/m
+
+const REACT_NATIVE_XCODE_SCRIPT = /(?:packager|scripts)\/react-native-xcode\.sh\b/
+
+// A shell-script token (path or bare name) ending in .sh, e.g. Sentry's sentry-xcode.sh.
+const SHELL_SCRIPT_TOKEN = /[\w@$./-]*\b[\w-]+\.sh\b/
+
+// Detects a bundle phase whose react-native-xcode.sh invocation is already wrapped by
+// another tool's script (anything invoking a different *.sh ahead of react-native-xcode.sh
+// on the same line, e.g. @sentry/react-native's sentry-xcode.sh). Kept deliberately
+// generic rather than matching Sentry by name. Returns the foreign wrapper's script
+// name, or null when PostHog can safely wrap the phase.
+export function findForeignBundleScriptWrapper(script: string): string | null {
+  const lineMatch = script.match(REACT_NATIVE_XCODE_LINE)
+  if (!lineMatch) {
+    return null
+  }
+  // Group 2 is the command with any direct `/bin/sh ` prefix already stripped.
+  const command = lineMatch[2]
+  const rnIndex = command.search(REACT_NATIVE_XCODE_SCRIPT)
+  if (rnIndex < 0) {
+    return null
+  }
+  const beforeReactNativeXcode = command.slice(0, rnIndex)
+  const wrapper = beforeReactNativeXcode.match(SHELL_SCRIPT_TOKEN)
+  if (!wrapper) {
+    return null
+  }
+  return wrapper[0].split('/').pop() ?? wrapper[0]
+}
 
 function updatePostHogSkipOnConflictArg(script: string, skipOnConflict: boolean): string {
   const skipArg = '--posthog-skip-on-conflict --'
@@ -541,6 +593,7 @@ const postHogPlugin = (config: any, props: PostHogPluginProps = {}): any => {
 // named exports above callable from tests.
 module.exports = postHogPlugin
 module.exports.modifyExistingXcodeBuildScript = modifyExistingXcodeBuildScript
+module.exports.findForeignBundleScriptWrapper = findForeignBundleScriptWrapper
 module.exports.addPostHogWithBundledScriptsToBundleShellScript = addPostHogWithBundledScriptsToBundleShellScript
 module.exports.disableUserScriptSandboxing = disableUserScriptSandboxing
 module.exports.buildDsymUploadShellScript = buildDsymUploadShellScript
