@@ -182,8 +182,6 @@ export class PostHogTracingProcessor implements TracingProcessor {
   private _prepareCapturedValue(value: unknown): unknown {
     const serializableValue = ensureSerializable(value)
     const serializedValue = stringifyForSizeCheck(serializableValue)
-    // Passthrough keeps the structured value even when oversize: truncate() would otherwise
-    // collapse it to a JSON string, which defeats passthrough's whole purpose.
     const boundedValue =
       isMultimodalCaptureEnabled(this._client) || !exceedsMaxOutputSize(serializedValue)
         ? serializableValue

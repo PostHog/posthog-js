@@ -27,7 +27,6 @@ export function v0Response(): any {
   }
 }
 
-/** A legacy `/batch/` 413 (content-too-large) response; `fetchWithRetry` throws on this status. */
 export function v413Response(): any {
   return {
     status: 413,

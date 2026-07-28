@@ -12,11 +12,6 @@ describe('AI capture lane wiring (Node SDK)', () => {
   const aiCaptureQueueEvents = (posthog: PostHog): string[] =>
     (posthog.getPersistedProperty(PostHogPersistedProperty.AiCaptureQueue) || []).map((item: any) => item.message.event)
 
-  /**
-   * Event names from calls to `fragment` whose mocked response actually resolved with a 2xx
-   * status — `harness.eventsIn` parses every matching call's request body regardless of the
-   * (possibly 413) response, which conflates "attempted" with "delivered" for bisection tests.
-   */
   const deliveredEventsIn = async (fragment: string): Promise<string[]> => {
     const events: string[] = []
     for (const [call, result] of harness.fetch.mock.calls.map(

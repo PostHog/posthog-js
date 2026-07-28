@@ -9,7 +9,6 @@ export function redactBase64DataUrl(str: unknown): unknown {
   return redactor.redact(str)
 }
 
-// Passthrough must return the input before any processing: media survives only if untouched.
 const sanitize = (data: unknown, client?: MultimodalCaptureGate): unknown =>
   isMultimodalCaptureEnabled(client) ? data : redactor.redact(data)
 

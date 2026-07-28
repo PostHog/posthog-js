@@ -144,12 +144,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
   private readonly captureMode: CaptureMode
   private _v1Sender?: V1CaptureSender
-  /**
-   * @internal Routes `@posthog/ai` events through the dedicated AI capture lane. Not a stable API.
-   * Also `true` when `_enableMultimodalCapture` is set, since multimodal capture implies the lane.
-   */
+  /** @internal */
   public readonly _useAiLane: boolean
-  /** @internal Skips media redaction/truncation in `@posthog/ai`; implies the AI lane. Not a stable API. */
+  /** @internal */
   public readonly _enableMultimodalCapture: boolean
   private _aiCaptureRouteActive = false
 
@@ -457,7 +454,6 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
   protected getActiveQueueRoutes(): string[] {
     const routes = this.captureMode === 'v1' ? [ANALYTICS_ROUTE, AI_ROUTE] : [ANALYTICS_ROUTE]
-    // Surfaced lazily so flush/shutdown stay byte-identical for clients that never use the lane.
     if (this._aiCaptureRouteActive) {
       routes.push(AI_CAPTURE_ROUTE)
     }
@@ -495,16 +491,6 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     await this.getV1Sender().sendV1Batch(v1Events)
   }
 
-  /**
-   * AI-lane pre-processing before delegating to the shared V0 transport: per-event size cap and
-   * byte-aware sub-batching. Oversize drops log name and byte size only — AI events may carry
-   * unredacted multimodal payloads that must not leak into logs.
-   *
-   * At-least-once delivery: sub-batches are sent sequentially under one atomically-retried queue
-   * batch, so a non-413 failure partway through can re-deliver already-accepted sub-batches on
-   * retry. Accepted for the internal-testing phase (deferred: per-sub-batch persistence or
-   * auto-UUIDs for server-side dedupe).
-   */
   private async sendAiCaptureBatch(
     batchMessages: (PostHogEventProperties | undefined)[],
     retryOptions?: Partial<RetriableOptions>
@@ -520,13 +506,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
   }
 
-  /**
-   * Bisects a sub-batch on 413 instead of letting it propagate to core's `_flushRoute`, which
-   * reacts to 413 by halving `maxBatchSize` client-wide — shared with the analytics route, and
-   * permanent for the life of the client. Keeping the split in-lane and stateless means only the
-   * offending request shrinks; every other route is unaffected. A single-event 413 means the
-   * server's cap is below that event's size, so no split can save it.
-   */
+  // A single-event 413 means the server's cap is below that event's size, so no split can save it.
   private async sendAiSubBatch(
     batch: PostHogEventProperties[],
     retryOptions?: Partial<RetriableOptions>
@@ -857,22 +837,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     return this._capturePreparedEvent(props, true)
   }
 
-  /**
-   * Capture an event on the dedicated AI lane (`/i/v0/ai/batch/`, 8MiB per-event ceiling).
-   * Shares the entire `capture()` preparation pipeline; only the queue route and endpoint differ.
-   * `capture()` is never rerouted here — this method is the only entry to the lane.
-   *
-   * @internal Underscore-private for internal testing — not a stable API.
-   */
+  /** @internal */
   _captureAi(props: EventMessage): void {
     this._sendPreparedAiEvent(props, false)
   }
 
-  /**
-   * Immediate-mode {@link _captureAi}: awaits delivery instead of enqueueing.
-   *
-   * @internal Underscore-private for internal testing — not a stable API.
-   */
+  /** @internal */
   _captureAiImmediate(props: EventMessage): Promise<void> {
     return this._sendPreparedAiEvent(props, true)
   }

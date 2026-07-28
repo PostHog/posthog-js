@@ -1,7 +1,6 @@
 import { partitionAiBatch } from '@/ai-capture/batching'
 
 const eventOfBytes = (name: string, bytes: number): any => {
-  // The padding dominates the serialized size; exact overhead doesn't matter for these tests.
   return { event: name, properties: { pad: 'x'.repeat(bytes) } }
 }
 

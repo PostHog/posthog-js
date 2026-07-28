@@ -396,7 +396,6 @@ export const truncate = (input: unknown, client?: MultimodalCaptureGate): string
     return ''
   }
 
-  // Passthrough skips truncation too: a byte-cut through base64 corrupts it as surely as redaction.
   if (isMultimodalCaptureEnabled(client)) {
     return str
   }

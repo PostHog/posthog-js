@@ -3,10 +3,7 @@ import type { ReadableSpan, TimedEvent } from '@opentelemetry/sdk-trace-base'
 
 import { BinaryContentRedactor } from '../sanitization/binary_content_redactor'
 
-// The OTLP export path has no per-client passthrough gate (unlike the capture-lane wrapper
-// helpers), so it always redacts media here regardless of `_enableMultimodalCapture`.
-// Exporter-level passthrough — an option on the exporter/processor — is a planned follow-up
-// for the AI-ingestion-via-OTel path.
+// Deliberately always redacts here — the OTLP export path has no per-client passthrough gate.
 const redactor = new BinaryContentRedactor()
 
 export function redactSpan(span: ReadableSpan): ReadableSpan {

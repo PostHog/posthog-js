@@ -1,9 +1,6 @@
 import { JsonType, PostHogCoreOptions, PostHogEventProperties, PostHogPersistedProperty } from '@/types'
 import { PostHogCoreTestClient, PostHogCoreTestClientMocks } from '@/testing'
 
-// Exercises the caller-chosen route override on enqueue/sendImmediate: an explicit route
-// must win over content-based getQueueRouteKey routing, and omitting it must be identical
-// to before the parameter existed.
 class ExplicitRouteTestClient extends PostHogCoreTestClient {
   public sendBatchCalls: { route: string; events: (string | undefined)[] }[] = []
 

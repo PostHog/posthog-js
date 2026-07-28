@@ -1064,7 +1064,6 @@ export abstract class PostHogCoreStateless {
    * and persisted together, independently of other routes. The default keeps every event on a
    * single route (byte-identical to the pre-partitioning behavior); override to segregate a
    * subset of events onto their own queue and transport (see posthog-node's `$ai_*` routing).
-   * Callers can bypass this via the explicit-route parameter on enqueue/sendImmediate.
    */
   protected getQueueRouteKey(_message: PostHogEventProperties): string {
     return DEFAULT_QUEUE_ROUTE
@@ -1357,11 +1356,6 @@ export abstract class PostHogCoreStateless {
     return headers
   }
 
-  /**
-   * Endpoint path for the default V0 batch transport, per queue route. Overriding this (instead
-   * of all of `sendBatch`) keeps the wire format, compression, and retry behavior shared while
-   * pointing a route at a different ingestion path.
-   */
   protected getBatchEndpointPath(_route: string): string {
     return '/batch/'
   }
