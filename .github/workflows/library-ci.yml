@@ -61,33 +61,28 @@ jobs:
   integration:
     name: Playwright E2E tests
     needs: affected
+    if: needs.affected.outputs.is-affected == 'true'
     runs-on: depot-ubuntu-latest-8
+    container:
+      # Keep this version in sync with packages/browser's @playwright/test dependency.
+      image: mcr.microsoft.com/playwright:v1.52.0-noble
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: needs.affected.outputs.is-affected == 'true'
 
       - name: Setup environment
-        if: needs.affected.outputs.is-affected == 'true'
         uses: ./.github/actions/setup
         with:
           build: false
 
       - name: Build package
         run: pnpm build
-        if: needs.affected.outputs.is-affected == 'true'
-
-      - name: Install Playwright Browsers
-        if: needs.affected.outputs.is-affected == 'true'
-        run: pnpm exec playwright install --with-deps
-        working-directory: packages/browser
 
       - name: Run Playwright tests
-        if: needs.affected.outputs.is-affected == 'true'
         run: pnpm exec playwright test --workers=5
         working-directory: packages/browser
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: ${{ !cancelled() && needs.affected.outputs.is-affected == 'true' }}
+        if: ${{ !cancelled() }}
         with:
           name: playwright-report
           path: packages/browser/playwright-report/
@@ -97,39 +92,32 @@ jobs:
     name: Backward compatibility tests
     needs: affected
     runs-on: depot-ubuntu-latest-8
-    if: github.event_name == 'pull_request'
+    container:
+      # Keep this version in sync with packages/browser's @playwright/test dependency.
+      image: mcr.microsoft.com/playwright:v1.52.0-noble
+    if: github.event_name == 'pull_request' && needs.affected.outputs.is-affected == 'true'
     permissions:
       contents: read
       pull-requests: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: needs.affected.outputs.is-affected == 'true'
 
       - name: Setup environment
-        if: needs.affected.outputs.is-affected == 'true'
         uses: ./.github/actions/setup
         with:
           build: false
 
       - name: Build package
         run: pnpm build
-        if: needs.affected.outputs.is-affected == 'true'
-
-      - name: Install Playwright Browsers
-        if: needs.affected.outputs.is-affected == 'true'
-        run: pnpm exec playwright install --with-deps chromium
-        working-directory: packages/browser
 
       - name: Run backward compatibility tests
         id: compat-tests
-        if: needs.affected.outputs.is-affected == 'true'
         continue-on-error: true
         run: |
           PLAYWRIGHT_JSON_OUTPUT_FILE=compat-results.json pnpm exec playwright test --config playwright.config.compat.ts --project chromium-compat --workers=5 --reporter=json
         working-directory: packages/browser
 
       - name: Process compat test results
-        if: needs.affected.outputs.is-affected == 'true'
         id: process-results
         working-directory: packages/browser
         env:
@@ -245,7 +233,7 @@ jobs:
             </details>
 
       - name: Delete compat comment if tests pass
-        if: ${{ steps.process-results.outputs.has_failures == 'false' && needs.affected.outputs.is-affected == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ steps.process-results.outputs.has_failures == 'false' && github.event.pull_request.head.repo.full_name == github.repository }}
         uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4.0.0
         id: find-passing-comment
         with:
@@ -267,7 +255,7 @@ jobs:
             })
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: ${{ !cancelled() && needs.affected.outputs.is-affected == 'true' }}
+        if: ${{ !cancelled() }}
         with:
           name: playwright-compat-report
           path: packages/browser/playwright-report/

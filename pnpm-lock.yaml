@@ -342,7 +342,7 @@ importers:
         specifier: ^1.5.5
         version: 1.5.5
       '@playwright/test':
-        specifier: ^1.52.0
+        specifier: 1.52.0
         version: 1.52.0
       '@posthog-tooling/rollup-utils':
         specifier: workspace:*
