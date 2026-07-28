@@ -131,7 +131,11 @@ fi
 # lets patch the script to comment out this part if not yet
 if grep -q '^[[:space:]]*rm.*PACKAGER_SOURCEMAP_FILE' "$REACT_NATIVE_XCODE"; then
   echo "Patching React Native script to preserve sourcemap file..."
-  sed -i '' 's/^[[:space:]]*rm.*PACKAGER_SOURCEMAP_FILE/#&/' "$REACT_NATIVE_XCODE"
+  if sed --version >/dev/null 2>&1; then
+    sed -i 's/^[[:space:]]*rm.*PACKAGER_SOURCEMAP_FILE/#&/' "$REACT_NATIVE_XCODE"
+  else
+    sed -i '' 's/^[[:space:]]*rm.*PACKAGER_SOURCEMAP_FILE/#&/' "$REACT_NATIVE_XCODE"
+  fi
   echo "Patched: commented out rm PACKAGER_SOURCEMAP_FILE line"
 fi
 
