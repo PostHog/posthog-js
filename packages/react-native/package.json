@@ -5,6 +5,9 @@
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
   "license": "MIT",
+  "bin": {
+    "posthog-react-native-xcode": "tooling/posthog-xcode.sh"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {

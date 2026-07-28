@@ -195,32 +195,43 @@ export function modifyExistingXcodeBuildScript(script: BuildPhase | undefined, s
   script.shellScript = JSON.stringify(addPostHogWithBundledScriptsToBundleShellScript(code, skipOnConflict))
 }
 
+// Invoked directly so another wrapper receives this script—not /bin/sh—as $1.
+// package.json declares it as a bin target so package managers preserve its executable bit.
 const POSTHOG_REACT_NATIVE_XCODE_PATH =
   "`\"$NODE_BINARY\" --print \"require('path').join(require('path').dirname(require.resolve('posthog-react-native')), '..', 'tooling', 'posthog-xcode.sh')\"`"
 
+const POSTHOG_SKIP_ON_CONFLICT_EXPORT = 'export POSTHOG_SKIP_ON_CONFLICT=1'
+
 const REACT_NATIVE_XCODE_LINE =
-  /^([ \t]*)(?![A-Za-z_][A-Za-z0-9_]*=)(?:\/bin\/sh\s+)?([^\n]*(?:packager|scripts)\/react-native-xcode\.sh\b[^\n]*)$/m
+  /^([ \t]*)(?![A-Za-z_][A-Za-z0-9_]*=)([^\n]*(?:packager|scripts)\/react-native-xcode\.sh\b[^\n]*)$/m
 
 function updatePostHogSkipOnConflictArg(script: string, skipOnConflict: boolean): string {
   const skipArg = '--posthog-skip-on-conflict --'
-  const withoutSkipArg = script.replace(new RegExp(`\\s*${skipArg}\\s*`, 'g'), ' ')
-  if (!skipOnConflict) {
-    return withoutSkipArg
+  const lines = script
+    .replace(`/bin/sh ${POSTHOG_REACT_NATIVE_XCODE_PATH}`, POSTHOG_REACT_NATIVE_XCODE_PATH)
+    .replace(new RegExp(`\\s*${skipArg}\\s*`, 'g'), ' ')
+    .split('\n')
+    .filter((line) => line.trim() !== POSTHOG_SKIP_ON_CONFLICT_EXPORT)
+
+  if (skipOnConflict) {
+    const commandIndex = lines.findIndex((line) => line.includes(POSTHOG_REACT_NATIVE_XCODE_PATH))
+    if (commandIndex !== -1) {
+      const indent = lines[commandIndex].match(/^[ \t]*/)?.[0] ?? ''
+      lines.splice(commandIndex, 0, `${indent}${POSTHOG_SKIP_ON_CONFLICT_EXPORT}`)
+    }
   }
-  return withoutSkipArg.replace(`${POSTHOG_REACT_NATIVE_XCODE_PATH} `, `${POSTHOG_REACT_NATIVE_XCODE_PATH} ${skipArg} `)
+
+  return lines.join('\n')
 }
 
 export function addPostHogWithBundledScriptsToBundleShellScript(script: string, skipOnConflict = false): string {
-  const postHogArgs = skipOnConflict ? '--posthog-skip-on-conflict -- ' : ''
-
   // Capture the full RN script invocation. Expo uses a backtick-wrapped
   // node --print command, so matching only up to react-native-xcode.sh cuts the
   // command substitution in half and leaves the generated shell invalid.
-  return script.replace(
-    REACT_NATIVE_XCODE_LINE,
-    (_match: string, indent: string, rnCommand: string) =>
-      `${indent}/bin/sh ${POSTHOG_REACT_NATIVE_XCODE_PATH} ${postHogArgs}${rnCommand}`
-  )
+  return script.replace(REACT_NATIVE_XCODE_LINE, (_match: string, indent: string, rnCommand: string) => {
+    const skipOnConflictExport = skipOnConflict ? `${indent}${POSTHOG_SKIP_ON_CONFLICT_EXPORT}\n` : ''
+    return `${skipOnConflictExport}${indent}${POSTHOG_REACT_NATIVE_XCODE_PATH} ${rnCommand}`
+  })
 }
 
 const POSTHOG_DSYM_BUILD_PHASE_NAME = 'Upload PostHog Debug Symbols'

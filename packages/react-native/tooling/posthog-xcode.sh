@@ -32,11 +32,11 @@ print_command_error() {
 
 # WITH_ENVIRONMENT is executed by React Native
 
-POSTHOG_UPLOAD_ARGS=""
+POSTHOG_SKIP_ON_CONFLICT_ENABLED="${POSTHOG_SKIP_ON_CONFLICT:-}"
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --posthog-skip-on-conflict)
-      POSTHOG_UPLOAD_ARGS="$POSTHOG_UPLOAD_ARGS --skip-on-conflict"
+      POSTHOG_SKIP_ON_CONFLICT_ENABLED=1
       shift
       ;;
     --)
@@ -49,14 +49,24 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-REACT_NATIVE_XCODE_DEFAULT="../node_modules/react-native/scripts/react-native-xcode.sh"
-# Accept $1 only when it actually points at a shell script; guard against the
-# Expo plugin previously passing "/bin/sh" as $1 (issue #3682).
-if [[ "${1:-}" == *.sh ]]; then
-  REACT_NATIVE_XCODE="$1"
-else
-  REACT_NATIVE_XCODE="$REACT_NATIVE_XCODE_DEFAULT"
+POSTHOG_UPLOAD_ARGS=""
+if [ "$POSTHOG_SKIP_ON_CONFLICT_ENABLED" = "1" ] || [ "$POSTHOG_SKIP_ON_CONFLICT_ENABLED" = "true" ]; then
+  POSTHOG_UPLOAD_ARGS="$POSTHOG_UPLOAD_ARGS --skip-on-conflict"
 fi
+
+REACT_NATIVE_XCODE_DEFAULT="../node_modules/react-native/scripts/react-native-xcode.sh"
+REACT_NATIVE_XCODE="$REACT_NATIVE_XCODE_DEFAULT"
+# A config plugin may already wrap the React Native script. Keep the complete
+# command for execution, but locate the RN script within it so its intermediate
+# Hermes source map can be preserved before any wrapper runs.
+for command_arg in "$@"; do
+  case "$command_arg" in
+    *packager/react-native-xcode.sh|*scripts/react-native-xcode.sh)
+      REACT_NATIVE_XCODE="$command_arg"
+      break
+      ;;
+  esac
+done
 
 # Check if DERIVED_FILE_DIR exists, defined by Xcode
 if [ ! -d "$DERIVED_FILE_DIR" ]; then
@@ -125,9 +135,15 @@ if grep -q '^[[:space:]]*rm.*PACKAGER_SOURCEMAP_FILE' "$REACT_NATIVE_XCODE"; the
   echo "Patched: commented out rm PACKAGER_SOURCEMAP_FILE line"
 fi
 
-# Execute React Native Xcode script and check exit code
+# Execute the complete bundle command so other source-map wrappers keep their
+# script path and arguments. Fall back to the standard RN script when an outer
+# wrapper invokes posthog-xcode.sh without forwarding its remaining arguments.
 set +x +e # disable printing commands and allow continuing on error
-RN_XCODE_OUTPUT=$(/bin/sh -c "$REACT_NATIVE_XCODE" 2>&1)
+if [ "$#" -gt 0 ]; then
+  RN_XCODE_OUTPUT=$("$@" 2>&1)
+else
+  RN_XCODE_OUTPUT=$(/bin/sh "$REACT_NATIVE_XCODE_DEFAULT" 2>&1)
+fi
 RN_XCODE_EXIT_CODE=$?
 if [ $RN_XCODE_EXIT_CODE -eq 0 ]; then
   echo "$RN_XCODE_OUTPUT" | awk '{print "output: react-native-xcode - " $0}'
