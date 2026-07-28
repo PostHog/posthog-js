@@ -32,7 +32,11 @@ import adoptedStyleSheetModification from './events/adopted-style-sheet-modifica
 import documentReplacementEvents from './events/document-replacement';
 import hoverInIframeShadowDom from './events/iframe-shadowdom-hover';
 import customElementDefineClass from './events/custom-element-define-class';
-import { ReplayerEvents } from '@posthog/rrweb-types';
+import {
+  EventType,
+  IncrementalSource,
+  ReplayerEvents,
+} from '@posthog/rrweb-types';
 
 interface ISuite {
   code: string;
@@ -162,6 +166,51 @@ describe('replayer', function () {
     expect(actionLength).toEqual(0);
     expect(currentTime).toEqual(2500);
     expect(currentState).toEqual('paused');
+  });
+
+  it('applies the full snapshot when pausing exactly at its timestamp', async () => {
+    const eventsWithLaterResize = [
+      ...styleSheetRuleEvents,
+      {
+        type: EventType.IncrementalSnapshot,
+        data: {
+          source: IncrementalSource.ViewportResize,
+          width: 1200,
+          height: 900,
+        },
+        timestamp: styleSheetRuleEvents[0].timestamp + 1400,
+      },
+    ].sort((a, b) => a.timestamp - b.timestamp);
+    await page.evaluate(`events = ${JSON.stringify(eventsWithLaterResize)}`);
+    const result = await page.evaluate(`
+      (() => {
+        const { Replayer } = rrweb;
+        const replayer = new Replayer(events);
+        const fullSnapshot = events.find((event) => event.type === 2);
+        const fullSnapshotOffset = fullSnapshot.timestamp - events[0].timestamp;
+        const frameSize = () => ({
+          width: replayer.iframe.getAttribute('width'),
+          height: replayer.iframe.getAttribute('height'),
+        });
+
+        replayer.pause(1500);
+        const laterFrameHasJss = replayer.iframe.contentDocument.head.innerHTML.includes('data-jss');
+        const laterFrameSize = frameSize();
+
+        replayer.pause(fullSnapshotOffset);
+        const snapshotFrameHasJss = replayer.iframe.contentDocument.head.innerHTML.includes('data-jss');
+        const snapshotFrameSize = frameSize();
+
+        return { laterFrameHasJss, laterFrameSize, snapshotFrameHasJss, snapshotFrameSize };
+      })()
+    `);
+
+    expect(result).toEqual({
+      laterFrameHasJss: true,
+      laterFrameSize: { width: '1200', height: '900' },
+      snapshotFrameHasJss: false,
+      snapshotFrameSize: { width: '1000', height: '800' },
+    });
   });
 
   it('can fast forward past StyleSheetRule changes on virtual elements', async () => {
