@@ -2017,7 +2017,7 @@
         {
           "category": "Lifecycle",
           "description": "Flushes any queued events and resolves once teardown is complete.",
-          "details": "This exists primarily for parity with the server-side [Node.js SDK](/docs/libraries/node), whose `shutdown()` you call once before a process exits. In the browser there is no process to exit — the SDK already flushes pending events on `pagehide`/`unload` — so this method is mostly a graceful no-op that best-effort flushes the request queues and always resolves.\nIt is safe to call in isomorphic teardown code (for example a Nuxt/Next module that calls `shutdown()` on both the server and the client) so the same symmetric cleanup works in either environment without throwing.",
+          "details": "This exists primarily for parity with the server-side [Node.js SDK](/docs/libraries/node), whose `shutdown()` you call once before a process exits. In the browser there is no process to exit, so this method performs synchronous best-effort extension cleanup, flushes the request queues, and always resolves.\nIt is safe to call in isomorphic teardown code (for example a Nuxt/Next module that calls `shutdown()` on both the server and the client) so the same symmetric cleanup works in either environment without throwing.",
           "id": "shutdown",
           "showDocs": true,
           "title": "shutdown",
@@ -2031,7 +2031,7 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "Accepted for call-site parity with the Node.js SDK. The browser flush is synchronous, so this is ignored.",
+              "description": "Retained for parity with the Node.js SDK; ignored in browsers.",
               "isOptional": true,
               "type": "number",
               "name": "_shutdownTimeoutMs"
