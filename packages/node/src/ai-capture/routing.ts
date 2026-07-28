@@ -11,7 +11,8 @@ export const AI_CAPTURE_ENDPOINT_PATH = '/i/v0/ai/batch/'
 export const AI_MAX_EVENT_BYTES = 8 * 1024 * 1024
 
 /**
- * Target body size per sub-batch. A single event may exceed it alone, so the worst-case body is
- * AI_BATCH_TARGET_BYTES + AI_MAX_EVENT_BYTES (~13MiB), under the 20MiB server cap.
+ * Target body size per sub-batch. `partitionAiBatch` flushes the current batch before adding an
+ * event that would overflow it, so the worst case is either a body at or under this target, or a
+ * single oversized event sent alone (up to AI_MAX_EVENT_BYTES) — never both added together.
  */
 export const AI_BATCH_TARGET_BYTES = 5 * 1024 * 1024

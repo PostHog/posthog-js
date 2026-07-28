@@ -4,6 +4,7 @@ import {
   FeatureFlagValue,
   isBlockedUA,
   isPlainObject,
+  isPostHogFetchContentTooLargeError,
   JsonType,
   minimizeFlagCalledEventProperties,
   PostHogCaptureOptions,
@@ -56,7 +57,7 @@ import { ContextData, ContextOptions, IPostHogContext } from './extensions/conte
 import { type CaptureMode, resolveCaptureMode } from './capture-v1/config'
 import { AI_ROUTE, ANALYTICS_ROUTE, isLegacyOnlyEvent } from './capture-v1/routing'
 import { V1CaptureSender } from './capture-v1/sender'
-import { partitionAiBatch } from './ai-capture/batching'
+import { eventByteSize, partitionAiBatch } from './ai-capture/batching'
 import { AI_CAPTURE_ENDPOINT_PATH, AI_CAPTURE_ROUTE, AI_MAX_EVENT_BYTES } from './ai-capture/routing'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
@@ -143,7 +144,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
   private readonly captureMode: CaptureMode
   private _v1Sender?: V1CaptureSender
-  /** @internal Routes `@posthog/ai` events through the dedicated AI capture lane. Not a stable API. */
+  /**
+   * @internal Routes `@posthog/ai` events through the dedicated AI capture lane. Not a stable API.
+   * Also `true` when `_enableMultimodalCapture` is set, since multimodal capture implies the lane.
+   */
   public readonly _useAiLane: boolean
   /** @internal Skips media redaction/truncation in `@posthog/ai`; implies the AI lane. Not a stable API. */
   public readonly _enableMultimodalCapture: boolean
@@ -214,8 +218,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     this.options = normalizedOptions
     this.captureMode = resolveCaptureMode()
-    this._useAiLane = normalizedOptions._useAiLane === true
     this._enableMultimodalCapture = normalizedOptions._enableMultimodalCapture === true
+    this._useAiLane = normalizedOptions._useAiLane === true || this._enableMultimodalCapture
     this.context = this.initializeContext()
 
     this.options.featureFlagsPollingInterval =
@@ -495,6 +499,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * AI-lane pre-processing before delegating to the shared V0 transport: per-event size cap and
    * byte-aware sub-batching. Oversize drops log name and byte size only — AI events may carry
    * unredacted multimodal payloads that must not leak into logs.
+   *
+   * At-least-once delivery: sub-batches are sent sequentially under one atomically-retried queue
+   * batch, so a non-413 failure partway through can re-deliver already-accepted sub-batches on
+   * retry. Accepted for the internal-testing phase (deferred: per-sub-batch persistence or
+   * auto-UUIDs for server-side dedupe).
    */
   private async sendAiCaptureBatch(
     batchMessages: (PostHogEventProperties | undefined)[],
@@ -507,7 +516,38 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       )
     }
     for (const batch of batches) {
+      await this.sendAiSubBatch(batch, retryOptions)
+    }
+  }
+
+  /**
+   * Bisects a sub-batch on 413 instead of letting it propagate to core's `_flushRoute`, which
+   * reacts to 413 by halving `maxBatchSize` client-wide — shared with the analytics route, and
+   * permanent for the life of the client. Keeping the split in-lane and stateless means only the
+   * offending request shrinks; every other route is unaffected. A single-event 413 means the
+   * server's cap is below that event's size, so no split can save it.
+   */
+  private async sendAiSubBatch(
+    batch: PostHogEventProperties[],
+    retryOptions?: Partial<RetriableOptions>
+  ): Promise<void> {
+    try {
       await super.sendBatch(batch, retryOptions, AI_CAPTURE_ROUTE)
+    } catch (err) {
+      if (!isPostHogFetchContentTooLargeError(err)) {
+        throw err
+      }
+      if (batch.length === 1) {
+        const [event] = batch
+        const eventName = typeof event.event === 'string' ? event.event : 'unknown'
+        this._logger.error(
+          `Event ${eventName} (${eventByteSize(event)} bytes) was rejected with 413 by ${AI_CAPTURE_ENDPOINT_PATH} on its own, dropping.`
+        )
+        return
+      }
+      const mid = Math.ceil(batch.length / 2)
+      await this.sendAiSubBatch(batch.slice(0, mid), retryOptions)
+      await this.sendAiSubBatch(batch.slice(mid), retryOptions)
     }
   }
 
@@ -839,7 +879,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
   private _sendPreparedAiEvent(props: EventMessage, immediate: boolean): Promise<void> {
     if (typeof props?.event === 'string' && !props.event.startsWith('$ai_')) {
-      this._logger.info(`_captureAi called with non-AI event ${props.event}; routing it to the AI endpoint anyway.`)
+      this._logger.debug(`_captureAi called with non-AI event ${props.event}; routing it to the AI endpoint anyway.`)
     }
     this._aiCaptureRouteActive = true
     return this._sendPreparedEvent('capture', props, immediate, undefined, AI_CAPTURE_ROUTE)

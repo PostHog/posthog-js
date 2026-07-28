@@ -9,6 +9,11 @@ export type AiBatchPartition = {
   dropped: { event: string; bytes: number }[]
 }
 
+/** Byte size of an event's V0 wire representation, the same measure used to cap and sub-batch. */
+export function eventByteSize(message: PostHogEventProperties): number {
+  return encoder.encode(safeJsonStringify(message)).length
+}
+
 /**
  * Splits an AI batch into byte-bounded sub-batches: events over the per-event cap are dropped
  * (reported by name and size only — they may carry unredacted media), the rest greedily packed
@@ -29,7 +34,7 @@ export function partitionAiBatch(
     if (message === undefined) {
       continue
     }
-    const bytes = encoder.encode(safeJsonStringify(message)).length
+    const bytes = eventByteSize(message)
     if (bytes > maxEventBytes) {
       dropped.push({ event: typeof message.event === 'string' ? message.event : 'unknown', bytes })
       continue

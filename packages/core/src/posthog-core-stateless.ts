@@ -141,7 +141,7 @@ function isRetryableFlagsFetchError(
   return code !== 'ECONNREFUSED'
 }
 
-function isPostHogFetchContentTooLargeError(err: unknown): err is PostHogFetchHttpError & { status: 413 } {
+export function isPostHogFetchContentTooLargeError(err: unknown): err is PostHogFetchHttpError & { status: 413 } {
   return typeof err === 'object' && err instanceof PostHogFetchHttpError && err.status === 413
 }
 

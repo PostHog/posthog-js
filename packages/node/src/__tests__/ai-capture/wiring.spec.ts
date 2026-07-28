@@ -2,7 +2,7 @@ import { PostHogPersistedProperty } from '@posthog/core'
 
 import { PostHog } from '@/entrypoints/index.node'
 
-import { V1WiringHarness, waitForFlushTimer } from '../utils/v1-wiring'
+import { V1WiringHarness, v413Response, v0Response, waitForFlushTimer } from '../utils/v1-wiring'
 
 jest.mock('../../version', () => ({ version: '1.2.3' }))
 
@@ -12,10 +12,33 @@ describe('AI capture lane wiring (Node SDK)', () => {
   const aiCaptureQueueEvents = (posthog: PostHog): string[] =>
     (posthog.getPersistedProperty(PostHogPersistedProperty.AiCaptureQueue) || []).map((item: any) => item.message.event)
 
+  /**
+   * Event names from calls to `fragment` whose mocked response actually resolved with a 2xx
+   * status — `harness.eventsIn` parses every matching call's request body regardless of the
+   * (possibly 413) response, which conflates "attempted" with "delivered" for bisection tests.
+   */
+  const deliveredEventsIn = async (fragment: string): Promise<string[]> => {
+    const events: string[] = []
+    for (const [call, result] of harness.fetch.mock.calls.map(
+      (call, i) => [call, harness.fetch.mock.results[i]] as const
+    )) {
+      if (!(call[0] as string).includes(fragment)) {
+        continue
+      }
+      const response = await result.value
+      if (response.status >= 200 && response.status < 300) {
+        events.push(...JSON.parse(call[1].body).batch.map((event: any) => event.event))
+      }
+    }
+    return events
+  }
+
   beforeEach(() => {
     jest.spyOn(console, 'warn').mockImplementation(() => {})
     jest.spyOn(console, 'error').mockImplementation(() => {})
     jest.spyOn(console, 'info').mockImplementation(() => {})
+    jest.spyOn(console, 'log').mockImplementation(() => {})
+    jest.spyOn(console, 'debug').mockImplementation(() => {})
     harness.useDefaultRouting()
   })
 
@@ -94,6 +117,55 @@ describe('AI capture lane wiring (Node SDK)', () => {
     expect(harness.eventsIn('/i/v0/ai/batch/')).toEqual(['$ai_a', '$ai_b', '$ai_c'])
   })
 
+  it('bisects a sub-batch in-lane on 413 without tripping the shared batch-size halving', async () => {
+    const posthog = harness.makeClient()
+    harness.fetch.mockImplementationOnce(() => Promise.resolve(v413Response()))
+    harness.fetch.mockImplementation(() => Promise.resolve(v0Response()))
+
+    for (const event of ['$ai_a', '$ai_b', '$ai_c'] as const) {
+      posthog._captureAi({ distinctId: 'u', event, properties: {} })
+    }
+    await expect(posthog.flush()).resolves.not.toThrow()
+
+    expect((await deliveredEventsIn('/i/v0/ai/batch/')).sort()).toEqual(['$ai_a', '$ai_b', '$ai_c'])
+    expect(harness.callsTo('/i/v0/ai/batch/').length).toBeGreaterThan(1)
+
+    harness.useDefaultRouting()
+    for (const event of ['custom_1', 'custom_2', 'custom_3'] as const) {
+      posthog.capture({ distinctId: 'u', event, properties: {} })
+    }
+    await posthog.flush()
+
+    const analyticsCalls = harness.callsTo('example.com/batch/')
+    expect(analyticsCalls).toHaveLength(1)
+    expect(JSON.parse(analyticsCalls[0][1].body).batch.map((e: any) => e.event)).toEqual([
+      'custom_1',
+      'custom_2',
+      'custom_3',
+    ])
+  })
+
+  it('drops a single event that still 413s alone, without throwing, and keeps the lane usable', async () => {
+    const posthog = harness.makeClient()
+    posthog.debug(true)
+    harness.fetch.mockImplementation((url: any) =>
+      Promise.resolve(url.includes('/i/v0/ai/batch/') ? v413Response() : v0Response())
+    )
+
+    posthog._captureAi({ distinctId: 'u', event: '$ai_undeliverable', properties: {} })
+    await expect(posthog.flush()).resolves.not.toThrow()
+
+    expect(await deliveredEventsIn('/i/v0/ai/batch/')).toEqual([])
+    const errorLog = (console.error as jest.Mock).mock.calls.flat().join(' ')
+    expect(errorLog).toContain('$ai_undeliverable')
+    expect(errorLog).toMatch(/\d+ bytes/)
+
+    harness.useDefaultRouting()
+    posthog._captureAi({ distinctId: 'u', event: '$ai_next', properties: {} })
+    await posthog.flush()
+    expect(await deliveredEventsIn('/i/v0/ai/batch/')).toEqual(['$ai_next'])
+  })
+
   it('keeps the AI route inactive (and flush silent) until first use', async () => {
     const posthog = harness.makeClient()
     posthog.capture({ distinctId: 'u', event: 'custom', properties: {} })
@@ -106,11 +178,14 @@ describe('AI capture lane wiring (Node SDK)', () => {
     expect(aiCaptureQueueEvents(posthog)).toEqual([])
   })
 
-  it('routes non-$ai_ events through the lane anyway, with an info log', async () => {
+  it('routes non-$ai_ events through the lane anyway, with a debug log', async () => {
     const posthog = harness.makeClient()
+    posthog.debug(true)
     posthog._captureAi({ distinctId: 'u', event: 'custom_event', properties: {} })
     await posthog.flush()
     expect(harness.eventsIn('/i/v0/ai/batch/')).toEqual(['custom_event'])
+    const debugLog = (console.debug as jest.Mock).mock.calls.flat().join(' ')
+    expect(debugLog).toContain('custom_event')
   })
 
   it('exposes the internal option flags as readonly fields', () => {
@@ -123,5 +198,6 @@ describe('AI capture lane wiring (Node SDK)', () => {
 
     const multimodal = harness.makeClient({ _enableMultimodalCapture: true })
     expect(multimodal._enableMultimodalCapture).toBe(true)
+    expect(multimodal._useAiLane).toBe(true)
   })
 })

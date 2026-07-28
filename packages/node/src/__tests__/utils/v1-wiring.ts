@@ -27,6 +27,17 @@ export function v0Response(): any {
   }
 }
 
+/** A legacy `/batch/` 413 (content-too-large) response; `fetchWithRetry` throws on this status. */
+export function v413Response(): any {
+  return {
+    status: 413,
+    text: () => Promise.resolve('Content Too Large'),
+    json: () => Promise.resolve({ status: 'Content Too Large' }),
+    headers: { get: () => null },
+    body: null,
+  }
+}
+
 /** Default fetch behavior: the v1 endpoint returns all-accepted, everything else a v0 200. */
 export function routeByUrl(url: string): any {
   return url.includes('/i/v1/analytics/events') ? v1Response() : v0Response()
