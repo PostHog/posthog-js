@@ -113,15 +113,16 @@ describe('posthog-xcode.sh bundle command composition', () => {
     expect(resolveReactNativeXcode([])).toBe('../node_modules/react-native/scripts/react-native-xcode.sh')
   })
 
-  it('forwards the complete nested command and preserves the intermediate Hermes map', () => {
+  it('forwards nested commands, preserves the Hermes map, and resolves a hoisted fallback', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-xcode-composition-'))
     const derivedDir = path.join(tempDir, 'derived')
     const configurationDir = path.join(tempDir, 'configuration')
     const homeDir = path.join(tempDir, 'home')
-    const iosDir = path.join(tempDir, 'ios')
+    const iosDir = path.join(tempDir, 'packages', 'example', 'ios')
     const tracePath = path.join(tempDir, 'trace.log')
     const wrapperPath = path.join(tempDir, 'sentry-xcode.sh')
-    const reactNativePath = path.join(tempDir, 'node_modules', 'react-native', 'scripts', 'react-native-xcode.sh')
+    const reactNativeRoot = path.join(tempDir, 'node_modules', 'react-native')
+    const reactNativePath = path.join(reactNativeRoot, 'scripts', 'react-native-xcode.sh')
     const cliPath = path.join(homeDir, '.posthog', 'posthog-cli')
 
     try {
@@ -135,6 +136,7 @@ describe('posthog-xcode.sh bundle command composition', () => {
         fs.mkdirSync(directory, { recursive: true })
       }
       fs.writeFileSync(wrapperPath, '#!/bin/sh\necho wrapper >> "$TRACE_PATH"\n"$@"\n', { mode: 0o755 })
+      fs.writeFileSync(path.join(reactNativeRoot, 'package.json'), '{}')
       fs.writeFileSync(
         reactNativePath,
         '#!/bin/sh\necho react-native >> "$TRACE_PATH"\nrm "$PACKAGER_SOURCEMAP_FILE"\n',
@@ -147,6 +149,7 @@ describe('posthog-xcode.sh bundle command composition', () => {
         CONFIGURATION_BUILD_DIR: configurationDir,
         DERIVED_FILE_DIR: derivedDir,
         HOME: homeDir,
+        NODE_BINARY: process.execPath,
         SKIP_BUNDLING: '1',
         TRACE_PATH: tracePath,
       }

@@ -182,8 +182,8 @@ export function modifyExistingXcodeBuildScript(script: BuildPhase | undefined, s
   }
 
   if (script.shellScript.includes('posthog-xcode.sh')) {
-    const code = JSON.parse(script.shellScript)
-    script.shellScript = JSON.stringify(updatePostHogSkipOnConflictArg(code, skipOnConflict))
+    const code = migrateLegacyPostHogWrapperInvocation(JSON.parse(script.shellScript))
+    script.shellScript = JSON.stringify(updatePostHogSkipOnConflict(code, skipOnConflict))
     return
   }
 
@@ -205,10 +205,13 @@ const POSTHOG_SKIP_ON_CONFLICT_EXPORT = 'export POSTHOG_SKIP_ON_CONFLICT=1'
 const REACT_NATIVE_XCODE_LINE =
   /^([ \t]*)(?![A-Za-z_][A-Za-z0-9_]*=)([^\n]*(?:packager|scripts)\/react-native-xcode\.sh\b[^\n]*)$/m
 
-function updatePostHogSkipOnConflictArg(script: string, skipOnConflict: boolean): string {
+function migrateLegacyPostHogWrapperInvocation(script: string): string {
+  return script.replace(`/bin/sh ${POSTHOG_REACT_NATIVE_XCODE_PATH}`, POSTHOG_REACT_NATIVE_XCODE_PATH)
+}
+
+function updatePostHogSkipOnConflict(script: string, skipOnConflict: boolean): string {
   const skipArg = '--posthog-skip-on-conflict --'
   const lines = script
-    .replace(`/bin/sh ${POSTHOG_REACT_NATIVE_XCODE_PATH}`, POSTHOG_REACT_NATIVE_XCODE_PATH)
     .replace(new RegExp(`\\s*${skipArg}\\s*`, 'g'), ' ')
     .split('\n')
     .filter((line) => line.trim() !== POSTHOG_SKIP_ON_CONFLICT_EXPORT)

@@ -68,6 +68,18 @@ for command_arg in "$@"; do
   esac
 done
 
+# Some outer wrappers only forward posthog-xcode.sh, without the original RN
+# script argument. Resolve hoisted installs when the standard relative path is
+# unavailable instead of assuming node_modules lives directly above ios/.
+if [ "$#" -eq 0 ] && [ ! -f "$REACT_NATIVE_XCODE_DEFAULT" ]; then
+  REACT_NATIVE_PACKAGE_JSON=$("${NODE_BINARY:-node}" --print "require.resolve('react-native/package.json')" 2>/dev/null || true)
+  RESOLVED_REACT_NATIVE_XCODE="$(dirname "$REACT_NATIVE_PACKAGE_JSON")/scripts/react-native-xcode.sh"
+  if [ -n "$REACT_NATIVE_PACKAGE_JSON" ] && [ -f "$RESOLVED_REACT_NATIVE_XCODE" ]; then
+    REACT_NATIVE_XCODE_DEFAULT="$RESOLVED_REACT_NATIVE_XCODE"
+    REACT_NATIVE_XCODE="$RESOLVED_REACT_NATIVE_XCODE"
+  fi
+fi
+
 # Check if DERIVED_FILE_DIR exists, defined by Xcode
 if [ ! -d "$DERIVED_FILE_DIR" ]; then
   echo "error: DERIVED_FILE_DIR does not exist: $DERIVED_FILE_DIR"

@@ -190,6 +190,24 @@ describe('modifyExistingXcodeBuildScript', () => {
     expect(parsed).toContain('posthog-xcode.sh')
   })
 
+  it('migrates a shell-prefixed wrapper and legacy skip argument together', () => {
+    const reactNativeCommand = '../node_modules/react-native/scripts/react-native-xcode.sh'
+    const currentWrapped = addPostHogWithBundledScriptsToBundleShellScript(reactNativeCommand)
+    const legacyWrapped = `/bin/sh ${currentWrapped.replace(
+      ` ${reactNativeCommand}`,
+      ` --posthog-skip-on-conflict -- ${reactNativeCommand}`
+    )}`
+    const script = { shellScript: JSON.stringify(legacyWrapped) }
+
+    modifyExistingXcodeBuildScript(script, true)
+
+    const parsed = JSON.parse(script.shellScript)
+    expect(parsed.startsWith('/bin/sh ')).toBe(false)
+    expect(parsed).not.toContain('--posthog-skip-on-conflict --')
+    expect(parsed).toContain('export POSTHOG_SKIP_ON_CONFLICT=1')
+    expect(parsed).toContain(` ${reactNativeCommand}`)
+  })
+
   it('wraps Expo backtick bundle phase shellScript without creating invalid shell syntax', () => {
     const expoBundleScript = [
       'if [[ -z "$CLI_PATH" ]]; then',
