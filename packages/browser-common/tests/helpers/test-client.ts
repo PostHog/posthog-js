@@ -12,7 +12,7 @@ import type {
 import { createDisposable, type Disposable } from '../../src/disposable'
 import type { KeyValueStore } from '../../src/persistence'
 import { Publisher } from '../../src/pubsub'
-import type { RemoteConfig } from '../../src/types/remote-config'
+import type { RemoteConfig, RemoteConfigResult } from '../../src/types/remote-config'
 
 export interface TestCapturedEvent {
     event: string
@@ -79,14 +79,27 @@ export class TestClient implements Client {
     groups: Record<string, string>
     session: SessionContext
 
-    private _remoteConfig: RemoteConfig | undefined
+    private _remoteConfigResult: RemoteConfigResult | undefined
     private _requestResponse: ApiResponse
     private _dynamicEventPropertyProducers: Array<() => Record<string, unknown>> = []
     private _eventPublisher = new Publisher<CapturedEventInfo>()
-    private _remoteConfigPublisher = new Publisher<RemoteConfig>()
+    private _remoteConfigPublisher = new Publisher<RemoteConfigResult>()
 
     readonly onEvent = this._eventPublisher.listener
-    readonly onRemoteConfig = this._remoteConfigPublisher.listener
+    readonly onRemoteConfig: Client['onRemoteConfig'] = (handler) => {
+        const invoke = (result: RemoteConfigResult): void => {
+            try {
+                handler(result)
+            } catch (error) {
+                this.logger.error('Remote config listener failed', error)
+            }
+        }
+        const subscription = this._remoteConfigPublisher.listener(invoke)
+        if (this._remoteConfigResult) {
+            invoke(this._remoteConfigResult)
+        }
+        return subscription
+    }
 
     constructor(options: TestClientOptions = {}) {
         this.projectToken = options.projectToken ?? 'test-project-token'
@@ -98,7 +111,7 @@ export class TestClient implements Client {
             windowId: 'test-window-id',
             sessionStartTimestamp: 0,
         }
-        this._remoteConfig = options.remoteConfig
+        this._remoteConfigResult = options.remoteConfig ? { ok: true, config: options.remoteConfig } : undefined
         this.logger = options.logger ?? noopLogger
         this._requestResponse = options.requestResponse ?? createDefaultApiResponse()
     }
@@ -125,18 +138,18 @@ export class TestClient implements Client {
         })
     }
 
-    async getRemoteConfig(): Promise<RemoteConfig | undefined> {
-        return this._remoteConfig
-    }
-
     async sendRequest(path: string, init?: SendRequestInit): Promise<ApiResponse> {
         this.sentRequests.push({ path, init })
         return this._requestResponse
     }
 
     setRemoteConfig(remoteConfig: RemoteConfig): void {
-        this._remoteConfig = remoteConfig
-        this._remoteConfigPublisher.publish(remoteConfig)
+        this.setRemoteConfigResult({ ok: true, config: remoteConfig })
+    }
+
+    setRemoteConfigResult(result: RemoteConfigResult): void {
+        this._remoteConfigResult = result
+        this._remoteConfigPublisher.publish(result)
     }
 
     publishEvent(event: string, properties: Record<string, unknown> = {}): void {
