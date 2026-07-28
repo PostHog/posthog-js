@@ -465,5 +465,72 @@ describe('config', () => {
                 responseBody: '[SessionRecording] Response body redacted',
             })
         })
+
+        it('does not let a user mask fn drop isInitial metadata entries', () => {
+            const posthogConfig = defaultConfig()
+            // a mask fn keyed on method drops the initial navigation/perf entries which have method === undefined
+            posthogConfig.session_recording.maskCapturedNetworkRequestFn = (data) =>
+                data.method === 'GET' ? data : undefined
+            const networkOptions = buildNetworkRequestOptions(posthogConfig, {})
+
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'https://example.com/page',
+                method: undefined,
+                isInitial: true,
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+
+            // the entry survives untouched by the user fn (enforced cleaning still runs) so playback can render
+            expect(cleaned).toEqual({
+                name: 'https://example.com/page',
+                method: undefined,
+                isInitial: true,
+            })
+        })
+
+        it('still applies the user mask fn to non-initial requests', () => {
+            const posthogConfig = defaultConfig()
+            posthogConfig.session_recording.maskCapturedNetworkRequestFn = (data) =>
+                data.method === 'GET' ? data : undefined
+            const networkOptions = buildNetworkRequestOptions(posthogConfig, {})
+
+            const dropped = networkOptions.maskRequestFn!({
+                name: 'https://example.com/api',
+                method: 'POST',
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+            expect(dropped).toBeUndefined()
+
+            const kept = networkOptions.maskRequestFn!({
+                name: 'https://example.com/api',
+                method: 'GET',
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+            expect(kept).toEqual({
+                name: 'https://example.com/api',
+                method: 'GET',
+            })
+        })
+
+        it('still runs enforced cleaning on isInitial entries', () => {
+            const posthogConfig = defaultConfig()
+            posthogConfig.session_recording.maskCapturedNetworkRequestFn = (data) => data
+            const networkOptions = buildNetworkRequestOptions(posthogConfig, {})
+
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'something',
+                isInitial: true,
+                requestHeaders: {
+                    Authorization: 'Bearer 123',
+                    'content-type': 'application/json',
+                },
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+
+            expect(cleaned).toEqual({
+                name: 'something',
+                isInitial: true,
+                requestHeaders: {
+                    Authorization: 'redacted',
+                    'content-type': 'application/json',
+                },
+            })
+        })
     })
 })

@@ -308,9 +308,20 @@ export const buildNetworkRequestOptions = (
     config.maskRequestFn = isFunction(instanceConfig.session_recording.maskCapturedNetworkRequestFn)
         ? (data) => {
               const cleanedRequest = enforcedCleaningFn(data)
-              return cleanedRequest
-                  ? (instanceConfig.session_recording.maskCapturedNetworkRequestFn?.(cleanedRequest) ?? undefined)
-                  : undefined
+              if (!cleanedRequest) {
+                  return undefined
+              }
+              // `isInitial` entries are the navigation and performance-timing "metadata" events that
+              // carry the page URLs playback needs to render. They are captured before fetch/XHR
+              // wrapping so they never have a method/status/headers/body. A user mask function keyed
+              // on one of those (e.g. `data => data.method === 'GET' ? data : undefined`) would drop
+              // them entirely, silently producing an unrecoverable black-screen recording. Since these
+              // entries carry no request headers or bodies, there is nothing for a user mask to redact,
+              // so we exempt them from it while still applying the enforced cleaning above.
+              if (cleanedRequest.isInitial) {
+                  return cleanedRequest
+              }
+              return instanceConfig.session_recording.maskCapturedNetworkRequestFn?.(cleanedRequest) ?? undefined
           }
         : (data) => scrubPayloads(enforcedCleaningFn(data))
 
