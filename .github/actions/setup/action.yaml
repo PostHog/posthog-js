@@ -28,11 +28,6 @@ runs:
         cache: false
         install: false
 
-    # Ensure latest npm with OIDC support (npm 11.5.1+)
-    - name: Ensure modern npm (OIDC support)
-      shell: bash
-      run: npm install -g npm@11.6.4
-
     - name: Install package.json dependencies with pnpm
       if: ${{ inputs.install == 'true' }}
       shell: bash

@@ -306,6 +306,10 @@ jobs:
               with:
                   path: ${{ steps.get-package-path.outputs.path }}
 
+            - name: Ensure modern npm (OIDC support)
+              if: steps.check-package-version.outputs.is-new-version == 'true'
+              run: npm install -g npm@11.6.4
+
             - name: Install and build dependencies
               if: steps.check-package-version.outputs.is-new-version == 'true'
               run: pnpm install --frozen-lockfile && pnpm build
