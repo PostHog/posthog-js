@@ -123,6 +123,7 @@ export type observerParam = {
   sampling: SamplingStrategy;
   recordDOM: boolean;
   recordCanvas: boolean;
+  canvasMaskingConfigured: boolean;
   inlineImages: boolean;
   userTriggeredOnInput: boolean;
   collectFonts: boolean;
@@ -161,6 +162,7 @@ export type MutationBufferParam = Pick<
   | 'maskInputFn'
   | 'keepIframeSrcFn'
   | 'recordCanvas'
+  | 'canvasMaskingConfigured'
   | 'inlineImages'
   | 'slimDOMOptions'
   | 'dataURLOptions'

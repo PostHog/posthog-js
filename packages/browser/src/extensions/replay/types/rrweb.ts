@@ -47,6 +47,7 @@ type CanvasMasking = {
     regionsFn?: (
         canvas: HTMLCanvasElement
     ) => Array<{ x: number; y: number; width: number; height: number }> | null | undefined
+    configured?: boolean
 }
 
 // Replication of `SlimDOMOptions` from inside `@posthog/rrweb-record`/`@posthog/rrweb-snapshot`

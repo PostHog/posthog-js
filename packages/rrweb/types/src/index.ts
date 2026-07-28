@@ -541,6 +541,11 @@ export type CanvasMasking = {
   regionsFn?: (
     canvas: HTMLCanvasElement,
   ) => CanvasMaskRegion[] | null | undefined;
+  // evaluated once at record() start. When true, DOM snapshots skip canvas
+  // pixel serialization (`rr_dataURL`) entirely — that path never sees the
+  // mask regions, so serializing there would leak unmasked pixels. The
+  // masked frame stream repaints the canvas instead
+  configured?: boolean;
 };
 
 export type ImageBitmapDataURLWorkerParams = {

@@ -375,6 +375,8 @@ function record<T = eventWithTime>(
 
   const processedNodeManager = new ProcessedNodeManager();
 
+  const canvasMaskingConfigured = canvasMasking?.configured === true;
+
   canvasManager = new CanvasManager({
     recordCanvas,
     mutationCb: wrappedCanvasMutationEmit,
@@ -402,6 +404,7 @@ function record<T = eventWithTime>(
       maskTextFn,
       maskInputFn,
       recordCanvas,
+      canvasMaskingConfigured,
       inlineImages,
       sampling,
       slimDOMOptions,
@@ -450,6 +453,7 @@ function record<T = eventWithTime>(
       slimDOM: slimDOMOptions,
       dataURLOptions,
       recordCanvas,
+      canvasMaskingConfigured,
       inlineImages,
       onSerialize: (n) => {
         if (isSerializedIframe(n, mirror)) {
@@ -637,6 +641,7 @@ function record<T = eventWithTime>(
           sampling,
           recordDOM,
           recordCanvas,
+          canvasMaskingConfigured,
           inlineImages,
           userTriggeredOnInput,
           collectFonts,

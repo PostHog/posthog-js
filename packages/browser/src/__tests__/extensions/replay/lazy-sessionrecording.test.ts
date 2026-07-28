@@ -4477,6 +4477,33 @@ describe('Lazy SessionRecording', () => {
             expect(regionsFn).toHaveBeenCalledWith(canvas)
         })
 
+        it('marks canvasMasking configured when maskRegionsFn is set at record start', () => {
+            config.session_recording.canvasCapture = { maskRegionsFn: jest.fn(() => []) }
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', canvasQuality: '0.2', canvasFps: 6, recordCanvas: true },
+                })
+            )
+
+            sessionRecording['_onScriptLoaded']()
+
+            const mockParams = assignableWindow.__PosthogExtensions__.rrweb.record.mock.calls[0][0]
+            expect(mockParams.canvasMasking.configured).toBe(true)
+        })
+
+        it('does not mark canvasMasking configured when only recordCanvas is on', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', canvasQuality: '0.2', canvasFps: 6, recordCanvas: true },
+                })
+            )
+
+            sessionRecording['_onScriptLoaded']()
+
+            const mockParams = assignableWindow.__PosthogExtensions__.rrweb.record.mock.calls[0][0]
+            expect(mockParams.canvasMasking.configured).toBe(false)
+        })
+
         it.each([
             ['null', null],
             ['undefined', undefined],
