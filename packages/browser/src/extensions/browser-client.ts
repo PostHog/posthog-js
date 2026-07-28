@@ -31,16 +31,16 @@ import type {
 class BrowserExtensionKeyValueStore implements KeyValueStore {
     constructor(private readonly _instance: PostHog) {}
 
-    get<T = unknown>(prop: string): T | undefined {
-        return this._instance.persistence?.get_property(prop) as T | undefined
+    get<T = unknown>(key: string): T | undefined {
+        return this._instance.persistence?.get_property(key) as T | undefined
     }
 
-    set(prop: string, value: unknown): void {
-        this._instance.persistence?.set_property(prop, value as Property)
+    set(key: string, value: unknown): void {
+        this._instance.persistence?.set_property(key, value as Property)
     }
 
-    remove(prop: string): void {
-        this._instance.persistence?.unregister(prop)
+    remove(key: string): void {
+        this._instance.persistence?.unregister(key)
     }
 }
 
