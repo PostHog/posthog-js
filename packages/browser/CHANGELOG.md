@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.407.4
+
+### Patch Changes
+
+- [#4290](https://github.com/PostHog/posthog-js/pull/4290) [`a08c226`](https://github.com/PostHog/posthog-js/commit/a08c22659d52c0c58b9713e67ef0e0741e427c4e) Thanks [@marandaneto](https://github.com/marandaneto)! - Send session recording request timestamps in request bodies instead of query strings.
+  (2026-07-28)
+
 ## 1.407.3
 
 ### Patch Changes
