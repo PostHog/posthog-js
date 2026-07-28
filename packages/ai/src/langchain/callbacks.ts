@@ -916,6 +916,11 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
   }
 
   private parseUsage(response: LLMResult, provider?: string, model?: string): [number, number, Record<string, any>] {
+    const isNonEmptyUsage = (usage: unknown): usage is Record<string, any> =>
+      isObject(usage) && Object.keys(usage).length > 0
+    const firstNonEmptyUsage = (...candidates: unknown[]): Record<string, any> | undefined =>
+      candidates.find(isNonEmptyUsage)
+
     let normalizedGenerationUsage: any
     let rawGenerationUsage: any
     let fallbackGenerationUsage: any
@@ -926,7 +931,11 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
         const message = 'message' in genChunk ? genChunk.message : undefined
         const messageUsage =
           message && typeof message === 'object' && 'usage_metadata' in message ? message.usage_metadata : undefined
-        normalizedGenerationUsage ??= messageUsage ?? generationInfo.usage_metadata
+        normalizedGenerationUsage = firstNonEmptyUsage(
+          normalizedGenerationUsage,
+          messageUsage,
+          generationInfo.usage_metadata
+        )
 
         const messageResponseMetadata =
           message &&
@@ -944,20 +953,24 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
         const generationStreamMetadata = isObject(generationResponseMetadata?.metadata)
           ? generationResponseMetadata.metadata
           : undefined
-        rawGenerationUsage ??=
-          messageResponseMetadata?.usage ??
-          messageStreamMetadata?.usage ??
-          generationResponseMetadata?.usage ??
+        rawGenerationUsage = firstNonEmptyUsage(
+          rawGenerationUsage,
+          messageResponseMetadata?.usage,
+          messageStreamMetadata?.usage,
+          generationResponseMetadata?.usage,
           generationStreamMetadata?.usage
-        fallbackGenerationUsage ??=
-          messageResponseMetadata?.['amazon-bedrock-invocationMetrics'] ??
-          generationResponseMetadata?.['amazon-bedrock-invocationMetrics'] ??
+        )
+        fallbackGenerationUsage = firstNonEmptyUsage(
+          fallbackGenerationUsage,
+          messageResponseMetadata?.['amazon-bedrock-invocationMetrics'],
+          generationResponseMetadata?.['amazon-bedrock-invocationMetrics'],
           generationInfo.usage_metadata
+        )
       }
     }
 
     const isAnthropic = provider?.toLowerCase() === 'anthropic' || model?.toLowerCase().includes('anthropic') === true
-    if (isAnthropic && isObject(normalizedGenerationUsage) && Object.keys(normalizedGenerationUsage).length > 0) {
+    if (isAnthropic && isNonEmptyUsage(normalizedGenerationUsage)) {
       return this._parseUsageModel(normalizedGenerationUsage, provider, model, true, rawGenerationUsage)
     }
 
@@ -966,17 +979,17 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     if (response.llmOutput != null) {
       for (const key of llmUsageKeys) {
         const llmUsage = response.llmOutput[key]
-        if (!isObject(llmUsage) || Object.keys(llmUsage).length === 0) {
+        if (!isNonEmptyUsage(llmUsage)) {
           continue
         }
         return this._parseUsageModel(llmUsage, provider, model, key !== 'usage', llmUsage)
       }
     }
 
-    if (rawGenerationUsage) {
+    if (isNonEmptyUsage(rawGenerationUsage)) {
       return this._parseUsageModel(rawGenerationUsage, provider, model, false, rawGenerationUsage)
     }
-    if (fallbackGenerationUsage) {
+    if (isNonEmptyUsage(fallbackGenerationUsage)) {
       return this._parseUsageModel(fallbackGenerationUsage, provider, model)
     }
 

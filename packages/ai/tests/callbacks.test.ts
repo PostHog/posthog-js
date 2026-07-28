@@ -1102,6 +1102,229 @@ describe('LangChainCallbackHandler', () => {
     expect(captureCall[0].properties['$ai_cache_creation_1h_input_tokens']).toBe(200)
   })
 
+  describe('Bedrock usage source selection', () => {
+    const captureBedrockUsage = (generations: ChatGeneration[][], runId: string): Record<string, unknown> => {
+      handler.handleLLMStart(
+        {
+          lc: 1,
+          type: 'constructor' as const,
+          id: ['langchain', 'chat_models', 'bedrock', 'ChatBedrockConverse'],
+          kwargs: {},
+        },
+        ['Test Bedrock usage'],
+        runId,
+        undefined,
+        {},
+        undefined,
+        {
+          ls_model_name: 'us.anthropic.claude-sonnet-4-6-v1:0',
+          ls_provider: 'amazon_bedrock',
+        }
+      )
+
+      handler.handleLLMEnd({ generations }, runId)
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      return (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+    }
+
+    it('falls back to Bedrock invocation metrics when raw usage is empty', () => {
+      const properties = captureBedrockUsage(
+        [
+          [
+            {
+              text: 'Response from Bedrock.',
+              message: new AIMessage({
+                content: 'Response from Bedrock.',
+                response_metadata: {
+                  usage: {},
+                  'amazon-bedrock-invocationMetrics': {
+                    inputTokenCount: 21,
+                    outputTokenCount: 9,
+                  },
+                },
+              }),
+            },
+          ],
+        ],
+        'run_bedrock_empty_raw_usage'
+      )
+
+      expect(properties['$ai_input_tokens']).toBe(21)
+      expect(properties['$ai_output_tokens']).toBe(9)
+    })
+
+    it('uses later valid metadata when an earlier source in the same generation is empty', () => {
+      const properties = captureBedrockUsage(
+        [
+          [
+            {
+              text: 'Response from Bedrock.',
+              message: new AIMessage({
+                content: 'Response from Bedrock.',
+                response_metadata: {
+                  usage: {},
+                  metadata: {
+                    usage: {
+                      inputTokenCount: 34,
+                      outputTokenCount: 12,
+                    },
+                  },
+                },
+              }),
+            },
+          ],
+        ],
+        'run_bedrock_later_metadata_usage'
+      )
+
+      expect(properties['$ai_input_tokens']).toBe(34)
+      expect(properties['$ai_output_tokens']).toBe(12)
+    })
+
+    it('uses generation metadata when message usage metadata is empty', () => {
+      const properties = captureBedrockUsage(
+        [
+          [
+            {
+              text: 'Response from Bedrock.',
+              generationInfo: {
+                usage_metadata: {
+                  input_tokens: 321,
+                  output_tokens: 8,
+                  total_tokens: 329,
+                  input_token_details: {
+                    cache_creation: 300,
+                    cache_read: 0,
+                  },
+                },
+                response_metadata: {
+                  usage: {
+                    cache_creation_input_tokens: 300,
+                    cache_creation: {
+                      ephemeral_5m_input_tokens: 100,
+                      ephemeral_1h_input_tokens: 200,
+                    },
+                  },
+                },
+              },
+              message: new AIMessage({
+                content: 'Response from Bedrock.',
+                usage_metadata: {} as NonNullable<AIMessage['usage_metadata']>,
+              }),
+            },
+          ],
+        ],
+        'run_bedrock_generation_usage_metadata'
+      )
+
+      expect(properties['$ai_input_tokens']).toBe(21)
+      expect(properties['$ai_output_tokens']).toBe(8)
+      expect(properties['$ai_cache_creation_input_tokens']).toBe(300)
+      expect(properties['$ai_cache_creation_5m_input_tokens']).toBe(100)
+      expect(properties['$ai_cache_creation_1h_input_tokens']).toBe(200)
+    })
+
+    it('uses valid usage from a later generation when an earlier generation is empty', () => {
+      const properties = captureBedrockUsage(
+        [
+          [
+            {
+              text: 'Partial response from Bedrock.',
+              message: new AIMessage({
+                content: 'Partial response from Bedrock.',
+                response_metadata: { usage: {} },
+              }),
+            },
+          ],
+          [
+            {
+              text: 'Final response from Bedrock.',
+              message: new AIMessage({
+                content: 'Final response from Bedrock.',
+                response_metadata: {
+                  usage: {
+                    inputTokenCount: 55,
+                    outputTokenCount: 17,
+                  },
+                },
+              }),
+            },
+          ],
+        ],
+        'run_bedrock_later_generation_usage'
+      )
+
+      expect(properties['$ai_input_tokens']).toBe(55)
+      expect(properties['$ai_output_tokens']).toBe(17)
+    })
+
+    it('uses valid Bedrock invocation metrics after an empty earlier fallback', () => {
+      const properties = captureBedrockUsage(
+        [
+          [
+            {
+              text: 'Partial response from Bedrock.',
+              message: new AIMessage({
+                content: 'Partial response from Bedrock.',
+                response_metadata: {
+                  'amazon-bedrock-invocationMetrics': {},
+                },
+              }),
+            },
+          ],
+          [
+            {
+              text: 'Final response from Bedrock.',
+              message: new AIMessage({
+                content: 'Final response from Bedrock.',
+                response_metadata: {
+                  'amazon-bedrock-invocationMetrics': {
+                    inputTokenCount: 89,
+                    outputTokenCount: 23,
+                  },
+                },
+              }),
+            },
+          ],
+        ],
+        'run_bedrock_later_invocation_metrics'
+      )
+
+      expect(properties['$ai_input_tokens']).toBe(89)
+      expect(properties['$ai_output_tokens']).toBe(23)
+    })
+
+    it('keeps explicit zero-valued usage ahead of lower-priority fallback metrics', () => {
+      const properties = captureBedrockUsage(
+        [
+          [
+            {
+              text: 'Response from Bedrock.',
+              message: new AIMessage({
+                content: 'Response from Bedrock.',
+                response_metadata: {
+                  usage: {
+                    inputTokenCount: 0,
+                    outputTokenCount: 0,
+                  },
+                  'amazon-bedrock-invocationMetrics': {
+                    inputTokenCount: 21,
+                    outputTokenCount: 9,
+                  },
+                },
+              }),
+            },
+          ],
+        ],
+        'run_bedrock_explicit_zero_usage'
+      )
+
+      expect(properties['$ai_input_tokens']).toBe(0)
+      expect(properties['$ai_output_tokens']).toBe(0)
+    })
+  })
+
   it.each([
     {
       name: 'sums repeated buckets and accepts AWS SDK enum values',
