@@ -499,14 +499,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
     ],
     "captureCanvas": [
       "undefined",
-      [
-        "SessionRecordingCanvasOptions",
-        "{ canvasMaskRegionsFn?: ((canvas: HTMLCanvasElement) => CanvasMaskRegion[] | null) | null | undefined; }"
-      ]
+      "SessionRecordingCanvasOptions"
     ],
     "canvasCapture": [
       "undefined",
-      "{ resolutionScale?: number | undefined; }"
+      "{ resolutionScale?: number | undefined; maskRegionsFn?: ((canvas: HTMLCanvasElement) => CanvasMaskRegion[] | null) | null | undefined; }"
     ],
     "maskCapturedNetworkRequestFn": [
       "undefined",

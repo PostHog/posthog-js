@@ -4472,7 +4472,7 @@ describe('Lazy SessionRecording', () => {
 
             const regions = [{ x: 1, y: 2, width: 3, height: 4 }]
             const regionsFn = jest.fn(() => regions)
-            config.session_recording.captureCanvas = { canvasMaskRegionsFn: regionsFn }
+            config.session_recording.canvasCapture = { maskRegionsFn: regionsFn }
             expect(mockParams.canvasMasking.regionsFn(canvas)).toBe(regions)
             expect(regionsFn).toHaveBeenCalledWith(canvas)
         })
@@ -4481,7 +4481,7 @@ describe('Lazy SessionRecording', () => {
             ['null', null],
             ['undefined', undefined],
         ])('reports null when a configured provider returns %s', (_name, returned) => {
-            config.session_recording.captureCanvas = { canvasMaskRegionsFn: jest.fn(() => returned) }
+            config.session_recording.canvasCapture = { maskRegionsFn: jest.fn(() => returned) }
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
                     sessionRecording: { endpoint: '/s/', canvasQuality: '0.2', canvasFps: 6, recordCanvas: true },
@@ -4501,7 +4501,7 @@ describe('Lazy SessionRecording', () => {
             const regionsFn = jest.fn(() => {
                 throw new Error('boom')
             })
-            config.session_recording.captureCanvas = { canvasMaskRegionsFn: regionsFn }
+            config.session_recording.canvasCapture = { maskRegionsFn: regionsFn }
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
                     sessionRecording: { endpoint: '/s/', canvasQuality: '0.2', canvasFps: 6, recordCanvas: true },
@@ -4517,7 +4517,7 @@ describe('Lazy SessionRecording', () => {
             expect(regionsFn).toHaveBeenCalledTimes(2)
             expect(
                 warnSpy.mock.calls.filter(
-                    (call) => typeof call[1] === 'string' && call[1].includes('canvasMaskRegionsFn threw')
+                    (call) => typeof call[1] === 'string' && call[1].includes('maskRegionsFn threw')
                 )
             ).toHaveLength(1)
 

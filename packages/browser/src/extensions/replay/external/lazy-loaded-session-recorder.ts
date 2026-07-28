@@ -480,7 +480,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _maxDepthExceeded = false
     // only warn once per recorder instance that client-side masking is shadowing the project setting
     private _hasWarnedClientMaskingOverride = false
-    private _canvasMaskRegionsFnFailed = false
+    private _maskRegionsFnFailed = false
 
     private _linkedFlagMatching: LinkedFlagMatching
     private _urlTriggerMatching: URLTriggerMatching
@@ -2114,16 +2114,16 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 // undefined must stay distinct from null, or every canvas without a
                 // provider would fail closed
                 regionsFn: (canvas) => {
-                    const fn = this._instance.config.session_recording?.captureCanvas?.canvasMaskRegionsFn
+                    const fn = this._instance.config.session_recording?.canvasCapture?.maskRegionsFn
                     if (!isFunction(fn)) {
                         return undefined
                     }
                     try {
                         return fn(canvas) ?? null
                     } catch (e) {
-                        if (!this._canvasMaskRegionsFnFailed) {
-                            this._canvasMaskRegionsFnFailed = true
-                            logger.warn('canvasMaskRegionsFn threw, canvas frames will be skipped', e)
+                        if (!this._maskRegionsFnFailed) {
+                            this._maskRegionsFnFailed = true
+                            logger.warn('canvasCapture.maskRegionsFn threw, canvas frames will be skipped', e)
                         }
                         return null
                     }

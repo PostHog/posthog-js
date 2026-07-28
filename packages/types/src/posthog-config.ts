@@ -656,9 +656,26 @@ export interface SessionRecordingOptions {
     streamNetworkBody?: boolean
 
     /**
-     * Allows local config to override remote canvas recording settings from the flags response
+     * Allows local config to override remote canvas recording settings from the flags response.
+     * To mask content inside a recorded canvas, see `canvasCapture.maskRegionsFn`.
      */
-    captureCanvas?: SessionRecordingCanvasOptions & {
+    captureCanvas?: SessionRecordingCanvasOptions
+
+    /**
+     * Tune how canvas frames are captured for replay. Only has any effect when canvas recording
+     * is enabled.
+     *
+     * - `resolutionScale`: capture canvas frames at a fraction of their display resolution. A
+     *   number in `(0, 1]`; `1` is full-resolution capture (the default) and, e.g., `0.6` captures
+     *   at 60%. Out-of-range or non-finite values are clamped into `(0, 1]`. Aspect ratio is
+     *   preserved and replay upscales the frame back to the original display size, so playback
+     *   dimensions are unchanged, just softer. Resolution is the highest-leverage lever for canvas
+     *   byte size, since bytes scale with pixel area.
+     * - `maskRegionsFn`: mask regions of a recorded canvas — see its doc comment.
+     */
+    canvasCapture?: {
+        resolutionScale?: number
+
         /**
          * If set, called once per canvas per captured frame; the returned regions
          * (CSS pixels, relative to the canvas element) are painted black before the
@@ -697,22 +714,7 @@ export interface SessionRecordingOptions {
          *
          * @default undefined
          */
-        canvasMaskRegionsFn?: ((canvas: HTMLCanvasElement) => CanvasMaskRegion[] | null) | null
-    }
-
-    /**
-     * Tune how canvas frames are captured for replay. Only has any effect when canvas recording
-     * is enabled.
-     *
-     * - `resolutionScale`: capture canvas frames at a fraction of their display resolution. A
-     *   number in `(0, 1]`; `1` is full-resolution capture (the default) and, e.g., `0.6` captures
-     *   at 60%. Out-of-range or non-finite values are clamped into `(0, 1]`. Aspect ratio is
-     *   preserved and replay upscales the frame back to the original display size, so playback
-     *   dimensions are unchanged, just softer. Resolution is the highest-leverage lever for canvas
-     *   byte size, since bytes scale with pixel area.
-     */
-    canvasCapture?: {
-        resolutionScale?: number
+        maskRegionsFn?: ((canvas: HTMLCanvasElement) => CanvasMaskRegion[] | null) | null
     }
 
     /**
