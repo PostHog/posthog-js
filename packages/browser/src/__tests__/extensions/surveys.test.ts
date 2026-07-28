@@ -465,6 +465,72 @@ describe('SurveyManager', () => {
         })
     })
 
+    describe('resumes the popup delay across navigations', () => {
+        const makeDelayedSurvey = (id: string, delaySeconds: number): Survey => ({
+            ...mockSurveys[0],
+            id,
+            conditions: { events: { values: [{ name: 'trigger_event' }] } },
+            appearance: { surveyPopupDelaySeconds: delaySeconds },
+        })
+
+        // The trigger records when it fired; handlePopoverSurvey reads that through the event
+        // receiver to compute the remaining wait instead of restarting a fresh countdown.
+        const stubEventReceiver = (surveyId: string, activatedAt: number | undefined): void => {
+            ;(mockPostHog.surveys as any)._surveyEventReceiver = {
+                getSurveys: () => [surveyId],
+                getActivationTimestamp: () => activatedAt,
+            }
+        }
+
+        afterEach(() => {
+            jest.useRealTimers()
+        })
+
+        it('waits only the remaining delay when the survey was triggered on an earlier page', () => {
+            jest.useFakeTimers()
+            const survey = makeDelayedSurvey('resume-survey', 60)
+            mockPostHog.surveys.getSurveys = jest.fn((cb) => cb([survey]))
+            // triggered 40s ago, so only 20s of the 60s delay should remain
+            stubEventReceiver(survey.id, Date.now() - 40_000)
+
+            surveyManager.callSurveysAndEvaluateDisplayLogic(true)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(true)
+
+            // the full 60s has not elapsed, but the remaining 20s has → shown
+            jest.advanceTimersByTime(19_000)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(true)
+            jest.advanceTimersByTime(1_000)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
+        })
+
+        it('shows immediately when the delay already elapsed on an earlier page', () => {
+            jest.useFakeTimers()
+            const survey = makeDelayedSurvey('elapsed-survey', 60)
+            mockPostHog.surveys.getSurveys = jest.fn((cb) => cb([survey]))
+            stubEventReceiver(survey.id, Date.now() - 90_000) // 90s ago > 60s delay
+
+            surveyManager.callSurveysAndEvaluateDisplayLogic(true)
+            // no pending timer: rendered right away
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
+        })
+
+        it('waits the full delay when no activation time is recorded', () => {
+            jest.useFakeTimers()
+            const survey = makeDelayedSurvey('no-timestamp-survey', 60)
+            mockPostHog.surveys.getSurveys = jest.fn((cb) => cb([survey]))
+            stubEventReceiver(survey.id, undefined)
+
+            surveyManager.callSurveysAndEvaluateDisplayLogic(true)
+            jest.advanceTimersByTime(59_000)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(true)
+            jest.advanceTimersByTime(1_000)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
+        })
+    })
+
     describe('waits for feature flags to load before trusting the internal targeting flag', () => {
         // Regression guard: a recurring survey re-showed and recorded a duplicate response because
         // the display loop read a stale-but-eligible cached internal targeting flag on a quick
