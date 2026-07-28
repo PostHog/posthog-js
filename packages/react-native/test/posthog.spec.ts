@@ -340,10 +340,10 @@ describe('PostHog React Native', () => {
       })
 
       onCapture.mockClear()
-      // The first instance's app-version write is debounced; drain it so the
-      // second instance reads it on preload and detects an update (not a fresh
-      // install).
-      await (posthog as any)._eventsStorage.waitForPersist()
+      // Shut down the first instance so its app-version write is persisted
+      // before the second instance checks for an update.
+      await posthog.shutdown()
+
       // act
       posthog = new PostHog('1', {
         customStorage: mockStorage,
@@ -398,10 +398,9 @@ describe('PostHog React Native', () => {
 
       onCapture.mockClear()
 
-      // The first instance's app-version write is debounced; drain it so the
-      // second instance reads it on preload and fires only "Opened" (not a
-      // fresh-install pair).
-      await (posthog as any)._eventsStorage.waitForPersist()
+      // Shut down the first instance so its app-version write is persisted
+      // before the second instance checks the stored version.
+      await posthog.shutdown()
 
       posthog = new PostHog('1', {
         customStorage: mockStorage,
@@ -547,6 +546,7 @@ describe('PostHog React Native', () => {
     it('should allow immediate calls without delay for stored values', async () => {
       posthog = new PostHog('1', {
         customStorage: storage,
+        captureAppLifecycleEvents: false,
       })
 
       // Sync-storage init: feature flags should be readable immediately without
@@ -558,14 +558,15 @@ describe('PostHog React Native', () => {
       })
       expect(posthog.getFeatureFlag('flag')).toEqual(true)
 
-      // The override write is debounced; drain it so the second instance reads
-      // it from `storage` without preload.
-      await (posthog as any)._eventsStorage.waitForPersist()
+      // Shut down the first instance to persist the override and clear its
+      // timers before replacing it.
+      await posthog.shutdown()
 
       // New instance but same sync storage — the override persisted via
       // the first instance is visible to the second without preload.
       posthog = new PostHog('1', {
         customStorage: storage,
+        captureAppLifecycleEvents: false,
       })
 
       expect(posthog.getFeatureFlag('flag')).toEqual(true)
