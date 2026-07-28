@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.61.1
+
+### Patch Changes
+
+- [#4291](https://github.com/PostHog/posthog-js/pull/4291) [`da71872`](https://github.com/PostHog/posthog-js/commit/da7187245e9624309162946f4647e5698e742281) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix iOS Expo source map uploads when another config plugin wraps the React Native bundle phase. After upgrading, projects with a checked-in `ios/` directory should run `npx expo prebuild --platform ios` to migrate the existing bundle phase.
+  (2026-07-28)
+
 ## 4.61.0
 
 ### Minor Changes
