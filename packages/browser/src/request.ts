@@ -414,6 +414,17 @@ const _fetch = (options: RequestWithOptions & { _keepaliveDisabled?: boolean }) 
 // below this size a rejection means the shared quota is exhausted, not that the payload is too big
 const BEACON_SPLIT_FLOOR_BYTES = 16 * 1024
 
+const addSentAtToBody = (
+    data: NonNullable<RequestWithOptions['data']>,
+    sentAt = new Date().toISOString()
+): NonNullable<RequestWithOptions['data']> => {
+    if (!isArray(data)) {
+        return { ...data, sent_at: sentAt }
+    }
+
+    return data.length > 0 ? [{ ...data[0], sent_at: sentAt }, ...data.slice(1)] : data
+}
+
 const _sendBeacon = (options: RequestWithOptions) => {
     // beacon documentation https://w3c.github.io/beacon/
     // beacons format the message and use the type property
@@ -438,7 +449,11 @@ const _sendBeacon = (options: RequestWithOptions) => {
         if (isArray(batch) && batch.length > 1 && (estimatedSize ?? 0) > BEACON_SPLIT_FLOOR_BYTES) {
             const mid = Math.ceil(batch.length / 2)
             const splitData = (events: Record<string, any>[]): RequestWithOptions['data'] =>
-                isArray(options.data) ? events : { ...options.data, batch: events }
+                isArray(options.data)
+                    ? options.timestampMode === 'body'
+                        ? addSentAtToBody(events, options.data[0]?.sent_at)
+                        : events
+                    : { ...options.data, batch: events }
             _sendBeacon({ ...options, data: splitData(batch.slice(0, mid)) })
             _sendBeacon({ ...options, data: splitData(batch.slice(mid)) })
             return
@@ -522,8 +537,8 @@ export const request = (_options: RequestWithOptions) => {
     if (options.method === 'POST' && options.data) {
         if (options.timestampMode === 'capture-body') {
             options.data = addSentAtToCaptureBody(options.data)
-        } else if (options.timestampMode === 'body' && !isArray(options.data)) {
-            options.data = { ...options.data, sent_at: new Date().toISOString() }
+        } else if (options.timestampMode === 'body') {
+            options.data = addSentAtToBody(options.data)
         }
     }
 
