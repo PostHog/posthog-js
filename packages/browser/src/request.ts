@@ -1,12 +1,7 @@
 import { each, find } from '@posthog/browser-common/utils/general-utils'
 import Config from './config'
 import { Compression, RequestWithOptions, RequestResponse } from './types'
-import {
-    convertToURL,
-    formDataToQuery,
-    getQueryParam,
-    jsonStringify,
-} from '@posthog/browser-common/utils/request-utils'
+import { formDataToQuery, getQueryParam, jsonStringify } from '@posthog/browser-common/utils/request-utils'
 
 import { logger } from '@posthog/browser-common/utils/logger'
 import {
@@ -100,7 +95,7 @@ export const extendURLParams = (url: string, params: Record<string, any>, replac
         updatedSearch.push(remaining)
     }
 
-    return `${baseUrl}?${updatedSearch.join('&')}`
+    return updatedSearch.length > 0 ? `${baseUrl}?${updatedSearch.join('&')}` : baseUrl
 }
 
 const encodeToDataString = (data: string | Record<string, any>): string => {
@@ -419,6 +414,17 @@ const _fetch = (options: RequestWithOptions & { _keepaliveDisabled?: boolean }) 
 // below this size a rejection means the shared quota is exhausted, not that the payload is too big
 const BEACON_SPLIT_FLOOR_BYTES = 16 * 1024
 
+const addSentAtToBody = (
+    data: NonNullable<RequestWithOptions['data']>,
+    sentAt = new Date().toISOString()
+): NonNullable<RequestWithOptions['data']> => {
+    if (!isArray(data)) {
+        return { ...data, sent_at: sentAt }
+    }
+
+    return data.map((item) => ({ ...item, sent_at: sentAt }))
+}
+
 const _sendBeacon = (options: RequestWithOptions) => {
     // beacon documentation https://w3c.github.io/beacon/
     // beacons format the message and use the type property
@@ -439,10 +445,13 @@ const _sendBeacon = (options: RequestWithOptions) => {
 
         // rejected: over the page's shared ~64KiB in-flight keepalive quota
         // (https://fetch.spec.whatwg.org/#http-network-or-cache-fetch) — halve so what fits still delivers
-        if (isArray(options.data) && options.data.length > 1 && (estimatedSize ?? 0) > BEACON_SPLIT_FLOOR_BYTES) {
-            const mid = Math.ceil(options.data.length / 2)
-            _sendBeacon({ ...options, data: options.data.slice(0, mid) })
-            _sendBeacon({ ...options, data: options.data.slice(mid) })
+        const batch = isArray(options.data) ? options.data : options.data?.batch
+        if (isArray(batch) && batch.length > 1 && (estimatedSize ?? 0) > BEACON_SPLIT_FLOOR_BYTES) {
+            const mid = Math.ceil(batch.length / 2)
+            const splitData = (events: Record<string, any>[]): RequestWithOptions['data'] =>
+                isArray(options.data) ? events : { ...options.data, batch: events }
+            _sendBeacon({ ...options, data: splitData(batch.slice(0, mid)) })
+            _sendBeacon({ ...options, data: splitData(batch.slice(mid)) })
             return
         }
 
@@ -455,37 +464,29 @@ const _sendBeacon = (options: RequestWithOptions) => {
     }
 }
 
-const VERSIONLESS_ENDPOINTS = ['/e/', '/s/']
+const buildRequestURL = (
+    url: string,
+    method: RequestWithOptions['method'],
+    compression?: RequestWithOptions['compression'],
+    timestampMode?: RequestWithOptions['timestampMode']
+): string => {
+    const timestampParam = timestampMode === 'query' ? (method === 'POST' ? 'sent_at' : '_') : undefined
 
-const getURLPath = (url: string): string => {
-    const parsedURL = convertToURL(url)
-    const path = parsedURL?.pathname || url.split(/[?#]/)[0]
-
-    return path ? (path[0] === '/' ? path : `/${path}`) : '/'
+    return extendURLParams(compression === Compression.GZipJS ? removeURLParam(url, 'compression') : url, {
+        ...(timestampParam ? { [timestampParam]: Date.now().toString() } : {}),
+        ...(compression === Compression.GZipJS ? {} : { compression }),
+    })
 }
 
-const hasEndpointSuffix = (path: string, endpoint: string): boolean => {
-    return path.slice(path.length - endpoint.length) === endpoint
-}
+const addSentAtToCaptureBody = (data: NonNullable<RequestWithOptions['data']>): Record<string, any> => {
+    const batch = isArray(data) ? data : [data]
+    const firstEvent = batch[0]
 
-const isVersionlessEndpoint = (url: string): boolean => {
-    const path = getURLPath(url)
-
-    return VERSIONLESS_ENDPOINTS.some((endpoint) => hasEndpointSuffix(path, endpoint))
-}
-
-const buildRequestURL = (url: string, compression?: RequestWithOptions['compression']): string => {
-    const versionlessEndpoint = isVersionlessEndpoint(url)
-    const requestURL = versionlessEndpoint ? removeURLParam(url, 'ver') : url
-
-    return extendURLParams(
-        compression === Compression.GZipJS ? removeURLParam(requestURL, 'compression') : requestURL,
-        {
-            _: new Date().getTime().toString(),
-            ...(versionlessEndpoint ? {} : { ver: Config.JS_SDK_VERSION }),
-            ...(compression === Compression.GZipJS ? {} : { compression }),
-        }
-    )
+    return {
+        api_key: firstEvent?.properties?.token ?? firstEvent?.token,
+        batch,
+        sent_at: new Date().toISOString(),
+    }
 }
 
 const AVAILABLE_TRANSPORTS: {
@@ -529,7 +530,15 @@ export const request = (_options: RequestWithOptions) => {
         options.compression = Compression.Base64
     }
 
-    options.url = buildRequestURL(options.url, options.compression)
+    if (options.method === 'POST' && options.data) {
+        if (options.timestampMode === 'capture-body') {
+            options.data = addSentAtToCaptureBody(options.data)
+        } else if (options.timestampMode === 'body') {
+            options.data = addSentAtToBody(options.data)
+        }
+    }
+
+    options.url = buildRequestURL(options.url, options.method, options.compression, options.timestampMode)
 
     const availableTransports = AVAILABLE_TRANSPORTS.filter(
         (t) => !options.disableTransport || !t.transport || !options.disableTransport.includes(t.transport)
@@ -563,7 +572,7 @@ export const request = (_options: RequestWithOptions) => {
                     transportMethod({
                         ...options,
                         compression: undefined,
-                        url: buildRequestURL(_options.url, undefined),
+                        url: buildRequestURL(_options.url, _options.method, undefined, _options.timestampMode),
                     })
                     return
                 }

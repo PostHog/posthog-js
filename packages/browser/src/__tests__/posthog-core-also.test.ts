@@ -338,6 +338,7 @@ describe('posthog core', () => {
             expect(posthog._send_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: 'https://us.i.posthog.com/e/',
+                    timestampMode: 'capture-body',
                 })
             )
         })
@@ -355,14 +356,22 @@ describe('posthog core', () => {
             )
         })
 
-        it('sends payloads to overriden endpoint if given', () => {
+        it('sends session recordings with sent_at in the body', () => {
             const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
 
-            posthog.capture('event-name', { foo: 'bar', length: 0 }, { _url: 'https://app.posthog.com/s/' })
+            posthog.capture(
+                'event-name',
+                { foo: 'bar', length: 0 },
+                {
+                    _url: 'https://app.posthog.com/s/',
+                    _batchKey: 'recordings',
+                }
+            )
 
             expect(posthog._send_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: 'https://app.posthog.com/s/',
+                    timestampMode: 'body',
                 })
             )
         })
@@ -376,6 +385,7 @@ describe('posthog core', () => {
             expect(posthog._send_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: 'https://app.posthog.com/s/',
+                    timestampMode: 'body',
                 })
             )
         })

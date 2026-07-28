@@ -140,6 +140,7 @@ export default defineNuxtModule<ModuleOptions>({
     })
 
     let isBuildProcess = false
+    let publicSourcemapsDeleted = false
 
     const posthogCliRunner = () => {
       const cliBinaryPath =
@@ -175,6 +176,11 @@ export default defineNuxtModule<ModuleOptions>({
         // Inject public sourcemaps
         // This cannot be done in the close hook. https://github.com/PostHog/posthog/issues/30957#issuecomment-2824545454
         await cliRunner(getInjectArgs(publicDir, sourcemapsConfig))
+        if (sourcemapsConfig.deleteAfterUpload ?? true) {
+          // Delete public sourcemaps before Nitro generates its asset manifest.
+          await cliRunner(getUploadArgs(publicDir, sourcemapsConfig))
+          publicSourcemapsDeleted = true
+        }
       } catch (error) {
         console.error('Failed to process public sourcemaps:', error)
       }
@@ -190,8 +196,13 @@ export default defineNuxtModule<ModuleOptions>({
         if (nuxt.options.ssr !== false) {
           await cliRunner(getInjectArgs(serverDir, sourcemapsConfig))
         }
-        // Upload all assets (public + any server output that exists)
-        await cliRunner(getUploadArgs(outputDir, sourcemapsConfig))
+        // Upload all assets (public + any server output that exists). If the early public upload failed,
+        // keep its sourcemaps so Nitro's manifest does not point to files deleted after it was generated.
+        const outputSourcemapsConfig =
+          (sourcemapsConfig.deleteAfterUpload ?? true) && !publicSourcemapsDeleted
+            ? { ...sourcemapsConfig, deleteAfterUpload: false }
+            : sourcemapsConfig
+        await cliRunner(getUploadArgs(outputDir, outputSourcemapsConfig))
       } catch (error) {
         console.error('Failed to process or upload sourcemaps:', error)
       }

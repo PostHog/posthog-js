@@ -206,6 +206,11 @@ export function createPlayerService(
             addDelay(event, baselineTime);
           }
           const neededEvents = discardPriorSnapshots(events, baselineTime);
+          const hasFullSnapshotAtSeekBoundary = neededEvents.some(
+            (event) =>
+              event.type === EventType.FullSnapshot &&
+              event.timestamp === baselineTime,
+          );
 
           let lastPlayedTimestamp = lastPlayedEvent?.timestamp;
           if (
@@ -230,7 +235,13 @@ export function createPlayerService(
             ) {
               continue;
             }
-            if (event.timestamp < baselineTime) {
+            // A paused seek clears timer actions; apply the snapshot and its metadata now.
+            const isSnapshotBoundaryEvent =
+              hasFullSnapshotAtSeekBoundary &&
+              event.timestamp === baselineTime &&
+              (event.type === EventType.Meta ||
+                event.type === EventType.FullSnapshot);
+            if (event.timestamp < baselineTime || isSnapshotBoundaryEvent) {
               syncEvents.push(event);
             }
           }

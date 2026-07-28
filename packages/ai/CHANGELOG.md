@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.4.1
+
+### Patch Changes
+
+- [#4196](https://github.com/PostHog/posthog-js/pull/4196) [`b96a066`](https://github.com/PostHog/posthog-js/commit/b96a0664ad7bf237653f2fcca152739a63253f2c) Thanks [@reclaim-admin](https://github.com/reclaim-admin)! - Redact base64 content from LangChain trace and span input and output state.
+  (2026-07-28)
+
 ## 8.4.0
 
 ### Minor Changes

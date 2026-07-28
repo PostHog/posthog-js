@@ -70,7 +70,10 @@ test.describe('flags', () => {
             distinct_id: 'new-id',
             $device_id: flagsPayload.$device_id,
             timezone: flagsPayload.timezone,
+            sent_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
             person_properties: {
+                $lib: 'web',
+                $lib_version: expect.any(String),
                 $initial__kx: null,
                 $initial_current_url: 'http://localhost:2345/playground/cypress/index.html',
                 $initial_dclid: null,

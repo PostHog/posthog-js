@@ -1,5 +1,51 @@
 # posthog-js
 
+## 1.407.5
+
+### Patch Changes
+
+- [#4278](https://github.com/PostHog/posthog-js/pull/4278) [`a19ba65`](https://github.com/PostHog/posthog-js/commit/a19ba65da8f2c121d54db72ab4bc42f4a027fddb) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix paused replay seeks at an exact full snapshot timestamp so the snapshot frame is rebuilt before playback pauses.
+  (2026-07-28)
+
+## 1.407.4
+
+### Patch Changes
+
+- [#4290](https://github.com/PostHog/posthog-js/pull/4290) [`a08c226`](https://github.com/PostHog/posthog-js/commit/a08c22659d52c0c58b9713e67ef0e0741e427c4e) Thanks [@marandaneto](https://github.com/marandaneto)! - Send session recording request timestamps in request bodies instead of query strings.
+  (2026-07-28)
+
+## 1.407.3
+
+### Patch Changes
+
+- [#4214](https://github.com/PostHog/posthog-js/pull/4214) [`f7399a0`](https://github.com/PostHog/posthog-js/commit/f7399a0b3ec27ea3337143b714fceaba3420371f) Thanks [@felipeatom](https://github.com/felipeatom)! - Fix `canRenderSurvey` / `canRenderSurveyAsync` reporting a survey as renderable before its event/action activation trigger has fired. Surveys gated on a "User sends events" filter are now only eligible once the trigger event is received.
+  (2026-07-27)
+
+- [#4231](https://github.com/PostHog/posthog-js/pull/4231) [`eabe2ef`](https://github.com/PostHog/posthog-js/commit/eabe2efd5efb90924dde7afe54e328d929931851) Thanks [@marandaneto](https://github.com/marandaneto)! - Send analytics request timestamps in capture bodies while retaining query timestamps for session recordings.
+  (2026-07-27)
+
+- [#4102](https://github.com/PostHog/posthog-js/pull/4102) [`fa4844b`](https://github.com/PostHog/posthog-js/commit/fa4844b5fbd2311b7bfc99e0841dffcfb0406b84) Thanks [@marandaneto](https://github.com/marandaneto)! - Send SDK library identity in feature flag person properties instead of URL query parameters.
+  (2026-07-27)
+
+- [#4220](https://github.com/PostHog/posthog-js/pull/4220) [`11330b3`](https://github.com/PostHog/posthog-js/commit/11330b3526c8193b76fc5bf47970f82ee5f40971) Thanks [@SegFaultZero](https://github.com/SegFaultZero)! - fix(replay): prevent server timings from dropped ingestion requests causing an endless capture loop
+  (2026-07-27)
+- Updated dependencies [[`7210789`](https://github.com/PostHog/posthog-js/commit/7210789efa46a6e2a1aa51b2faba4f67187f6cf6)]:
+    - @posthog/browser-common@0.2.2
+
+## 1.407.2
+
+### Patch Changes
+
+- [#4224](https://github.com/PostHog/posthog-js/pull/4224) [`ba7042b`](https://github.com/PostHog/posthog-js/commit/ba7042bd38051e1d1190341fb7071ec2ed13e639) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix session replay recordings being unplayable after the session rotated in a tab with no user interaction. When a session expired and rotated (for example in a long-lived background tab), a recorder that had not yet seen user interaction kept attributing snapshots — including full snapshots — to the previous session, so the new session never received a playable full snapshot. The recorder now restarts on rotation in this state, re-syncs its session id from the session manager if they ever diverge, and flushes its buffer on the normal cadence before the first user interaction instead of holding data until the next rotation or page unload.
+  (2026-07-23)
+
+## 1.407.1
+
+### Patch Changes
+
+- [#4218](https://github.com/PostHog/posthog-js/pull/4218) [`33f0bd7`](https://github.com/PostHog/posthog-js/commit/33f0bd7b7510ee05ea7927580a24f68936f77b9a) Thanks [@marandaneto](https://github.com/marandaneto)! - Send ISO feature flag timestamps in request bodies, use numeric `sent_at` query timestamps for capture POSTs, and preserve `_` cache busting for dynamic GET requests.
+  (2026-07-23)
+
 ## 1.407.0
 
 ### Minor Changes

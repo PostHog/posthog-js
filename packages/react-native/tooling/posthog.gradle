@@ -97,6 +97,20 @@ plugins.withId('com.android.application') {
                             posthogUploadArgs.add("--skip-on-conflict")
                         }
 
+                        // posthog.dotenvFile (gradle.properties): dotenv file with POSTHOG_CLI_*
+                        // credentials, relative paths resolved against the android root project.
+                        // Exported to the CLI as POSTHOG_CLI_DOTENV_FILE (posthog-cli >= 0.8.4;
+                        // older CLIs ignore it). Process env still wins inside the CLI.
+                        def posthogDotenvFilePath = null
+                        def posthogDotenvFileProperty = project.findProperty("posthog.dotenvFile")
+                        if (posthogDotenvFileProperty != null && !posthogDotenvFileProperty.toString().trim().isEmpty()) {
+                            def posthogDotenvFile = new File(posthogDotenvFileProperty.toString())
+                            if (!posthogDotenvFile.isAbsolute()) {
+                                posthogDotenvFile = new File(rootDir, posthogDotenvFileProperty.toString())
+                            }
+                            posthogDotenvFilePath = posthogDotenvFile.absolutePath
+                        }
+
                         def injected = project.objects.newInstance(InjectedExecOps)
 
                         // Resolve the posthog-cli path at execution time, not during
@@ -124,6 +138,9 @@ plugins.withId('com.android.application') {
 
                             injected.execOps.exec {
                                 workingDir reactRoot
+                                if (posthogDotenvFilePath != null) {
+                                    environment "POSTHOG_CLI_DOTENV_FILE", posthogDotenvFilePath
+                                }
                                 commandLine(*osCompatibility, *args)
                             }
                         }
@@ -140,6 +157,9 @@ plugins.withId('com.android.application') {
 
                             injected.execOps.exec {
                                 workingDir reactRoot
+                                if (posthogDotenvFilePath != null) {
+                                    environment "POSTHOG_CLI_DOTENV_FILE", posthogDotenvFilePath
+                                }
                                 commandLine(*osCompatibility, *args)
                             }
                         }

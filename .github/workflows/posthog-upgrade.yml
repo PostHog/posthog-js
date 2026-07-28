@@ -25,24 +25,24 @@ jobs:
         steps:
             - name: Get upgrader token
               id: upgrader
-              uses: getsentry/action-github-app-token@97c9e23528286821f97fba885c1b1123284b29cc # v2.0.0
+              uses: getsentry/action-github-app-token@5c1e90706fe007857338ac1bfbd7a4177db2f789 # v4.0.0
               with:
                   app_id: ${{ secrets.GH_APP_POSTHOG_JS_UPGRADER_APP_ID }}
                   private_key: ${{ secrets.GH_APP_POSTHOG_JS_UPGRADER_PRIVATE_KEY }}
 
             - name: Check out main repo
-              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   repository: 'PostHog/posthog'
                   token: ${{ steps.upgrader.outputs.token }}
 
             - name: Setup Node.js
-              uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
               with:
                 node-version: 24
 
             - name: Setup pnpm
-              uses: pnpm/setup@f7d0e5f4b1b3089d2799ef9722859e7ba314c4c8 # v1
+              uses: pnpm/setup@5d160c5bc68a09337ad0d5654e237e03253b5879 # v1
               with:
                 cache: false
                 install: false
@@ -95,11 +95,14 @@ jobs:
 
             - name: Create main repo pull request
               id: main-repo-pr
-              uses: peter-evans/create-pull-request@98357b18bf14b5342f975ff684046ec3b2a07725 # v8.0.0
+              uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
               env:
                   HUSKY: '0'
               with:
                   token: ${{ steps.upgrader.outputs.token }}
+                  # Commit through the GitHub API so the bump is GPG-verified by GitHub and
+                  # attributed to the upgrader app, instead of an unsigned github-actions[bot] commit.
+                  sign-commits: true
                   commit-message: ${{ steps.generate-pr-details.outputs.title }}
                   branch: ${{ steps.generate-pr-details.outputs.branch_name }}
                   delete-branch: true

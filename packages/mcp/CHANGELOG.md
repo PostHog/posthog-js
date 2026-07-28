@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.10.1
+
+### Patch Changes
+
+- [#4237](https://github.com/PostHog/posthog-js/pull/4237) [`23ce761`](https://github.com/PostHog/posthog-js/commit/23ce761b44f51d1bb46aa07b0e1becbf31ae878c) Thanks [@gesh](https://github.com/gesh)! - Read the MCP client name/version and protocol version from each request's `_meta` (`io.modelcontextprotocol/clientInfo` and `io.modelcontextprotocol/protocolVersion`), so `$mcp_client_name`, `$mcp_client_version`, and `$mcp_protocol_version` keep populating under the MCP 2026-07-28 stateless revision, which removes the `initialize` handshake. Existing clients are unaffected — when `_meta` is absent, the values from the session token / `initialize` still apply.
+  (2026-07-27)
+
 ## 0.10.0
 
 ### Minor Changes

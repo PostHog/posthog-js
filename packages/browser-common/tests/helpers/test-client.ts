@@ -1,19 +1,18 @@
-import { isNull, isUndefined, type Logger } from '@posthog/core'
+import type { Logger } from '@posthog/core'
+import type { Properties } from '@posthog/types'
 
 import type {
-    ApiRequestInit,
     ApiResponse,
     CaptureOptions,
     CapturedEventInfo,
     Client,
-    NewSessionInfo,
-    RemoteConfig,
+    SendRequestInit,
     SessionContext,
 } from '../../src/client'
-import type { Disposable } from '../../src/disposable'
+import { createDisposable, type Disposable } from '../../src/disposable'
 import type { KeyValueStore } from '../../src/persistence'
 import { Publisher } from '../../src/pubsub'
-import type { ExtensionToken } from '../../src/token'
+import type { RemoteConfig } from '../../src/types/remote-config'
 
 export interface TestCapturedEvent {
     event: string
@@ -21,19 +20,20 @@ export interface TestCapturedEvent {
     options: CaptureOptions | undefined
 }
 
-export interface TestApiRequest {
+export interface TestSentRequest {
     path: string
-    init: ApiRequestInit | undefined
+    init: SendRequestInit | undefined
 }
 
 export interface TestClientOptions {
+    projectToken?: string
     distinctId?: string
     anonymousId?: string
     groups?: Record<string, string>
     session?: SessionContext
     remoteConfig?: RemoteConfig
     logger?: Logger
-    apiResponse?: ApiResponse
+    requestResponse?: ApiResponse
 }
 
 export class InMemoryKeyValueStore implements KeyValueStore {
@@ -44,11 +44,6 @@ export class InMemoryKeyValueStore implements KeyValueStore {
     }
 
     async set(key: string, value: unknown): Promise<void> {
-        if (isNull(value) || isUndefined(value)) {
-            this._values.delete(key)
-            return
-        }
-
         this._values.set(key, value)
     }
 
@@ -69,21 +64,13 @@ const noopLogger: Logger = {
 }
 
 function createDefaultApiResponse(): ApiResponse {
-    return {
-        ok: true,
-        status: 200,
-        async json() {
-            return undefined
-        },
-        async text() {
-            return ''
-        },
-    }
+    return { statusCode: 200 }
 }
 
 export class TestClient implements Client {
+    readonly projectToken: string
     readonly capturedEvents: TestCapturedEvent[] = []
-    readonly apiRequests: TestApiRequest[] = []
+    readonly sentRequests: TestSentRequest[] = []
     readonly kv: KeyValueStore = new InMemoryKeyValueStore()
     readonly logger: Logger
 
@@ -93,18 +80,16 @@ export class TestClient implements Client {
     session: SessionContext
 
     private _remoteConfig: RemoteConfig | undefined
-    private _apiResponse: ApiResponse
+    private _requestResponse: ApiResponse
     private _dynamicEventPropertyProducers: Array<() => Record<string, unknown>> = []
-    private _extensions = new Map<ExtensionToken<unknown>, unknown>()
-    private _remoteConfigPublisher = new Publisher<RemoteConfig>()
     private _eventPublisher = new Publisher<CapturedEventInfo>()
-    private _newSessionPublisher = new Publisher<NewSessionInfo>()
+    private _remoteConfigPublisher = new Publisher<RemoteConfig>()
 
-    readonly onRemoteConfig = this._remoteConfigPublisher.listener
     readonly onEvent = this._eventPublisher.listener
-    readonly onNewSession = this._newSessionPublisher.listener
+    readonly onRemoteConfig = this._remoteConfigPublisher.listener
 
     constructor(options: TestClientOptions = {}) {
+        this.projectToken = options.projectToken ?? 'test-project-token'
         this.distinctId = options.distinctId ?? 'test-distinct-id'
         this.anonymousId = options.anonymousId ?? 'test-anonymous-id'
         this.groups = options.groups ?? {}
@@ -115,10 +100,10 @@ export class TestClient implements Client {
         }
         this._remoteConfig = options.remoteConfig
         this.logger = options.logger ?? noopLogger
-        this._apiResponse = options.apiResponse ?? createDefaultApiResponse()
+        this._requestResponse = options.requestResponse ?? createDefaultApiResponse()
     }
 
-    async capture(event: string, properties?: Record<string, unknown> | null, options?: CaptureOptions): Promise<void> {
+    async capture(event: string, properties?: Properties | null, options?: CaptureOptions): Promise<void> {
         const dynamicProperties = this._dynamicEventPropertyProducers.reduce(
             (acc, producer) => ({ ...acc, ...producer() }),
             {} as Record<string, unknown>
@@ -132,48 +117,21 @@ export class TestClient implements Client {
     registerDynamicEventProperties(producer: () => Record<string, unknown>): Disposable {
         this._dynamicEventPropertyProducers.push(producer)
 
-        let isActive = true
-        return {
-            dispose: () => {
-                if (!isActive) {
-                    return
-                }
-                isActive = false
-
-                const index = this._dynamicEventPropertyProducers.indexOf(producer)
-                if (index !== -1) {
-                    this._dynamicEventPropertyProducers.splice(index, 1)
-                }
-            },
-        }
-    }
-
-    async apiRequest(path: string, init?: ApiRequestInit): Promise<ApiResponse> {
-        this.apiRequests.push({ path, init })
-        return this._apiResponse
+        return createDisposable(() => {
+            const index = this._dynamicEventPropertyProducers.indexOf(producer)
+            if (index !== -1) {
+                this._dynamicEventPropertyProducers.splice(index, 1)
+            }
+        })
     }
 
     async getRemoteConfig(): Promise<RemoteConfig | undefined> {
         return this._remoteConfig
     }
 
-    getExtension<T>(token: ExtensionToken<T>): T | undefined {
-        return this._extensions.get(token as ExtensionToken<unknown>) as T | undefined
-    }
-
-    registerExtension<T>(token: ExtensionToken<T>, extension: T): Disposable {
-        this._extensions.set(token as ExtensionToken<unknown>, extension)
-
-        let isActive = true
-        return {
-            dispose: () => {
-                if (!isActive) {
-                    return
-                }
-                isActive = false
-                this._extensions.delete(token as ExtensionToken<unknown>)
-            },
-        }
+    async sendRequest(path: string, init?: SendRequestInit): Promise<ApiResponse> {
+        this.sentRequests.push({ path, init })
+        return this._requestResponse
     }
 
     setRemoteConfig(remoteConfig: RemoteConfig): void {
@@ -185,20 +143,9 @@ export class TestClient implements Client {
         this._eventPublisher.publish({ event, properties })
     }
 
-    startNewSession(session: NewSessionInfo): void {
-        this.session = {
-            sessionId: session.sessionId,
-            windowId: session.windowId,
-            sessionStartTimestamp: session.sessionStartTimestamp,
-        }
-        this._newSessionPublisher.publish(session)
-    }
-
     dispose(): void {
-        this._remoteConfigPublisher.dispose()
         this._eventPublisher.dispose()
-        this._newSessionPublisher.dispose()
-        this._extensions.clear()
+        this._remoteConfigPublisher.dispose()
         this._dynamicEventPropertyProducers = []
     }
 }
