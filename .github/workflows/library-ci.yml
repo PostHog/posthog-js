@@ -65,7 +65,7 @@ jobs:
     runs-on: depot-ubuntu-latest-8
     container:
       # Keep this version in sync with packages/browser's @playwright/test dependency.
-      image: mcr.microsoft.com/playwright:v1.52.0-noble
+      image: mcr.microsoft.com/playwright:v1.52.0-noble@sha256:a021500a801bab0611049217ffad6b9697d827205c15babb86a53bc1a61c02d5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -94,7 +94,7 @@ jobs:
     runs-on: depot-ubuntu-latest-8
     container:
       # Keep this version in sync with packages/browser's @playwright/test dependency.
-      image: mcr.microsoft.com/playwright:v1.52.0-noble
+      image: mcr.microsoft.com/playwright:v1.52.0-noble@sha256:a021500a801bab0611049217ffad6b9697d827205c15babb86a53bc1a61c02d5
     if: github.event_name == 'pull_request' && needs.affected.outputs.is-affected == 'true'
     permissions:
       contents: read
