@@ -140,7 +140,7 @@ export const getModelParams = (
 /**
  * Helper to format responses (non-streaming) for consumption
  */
-export const formatResponse = (response: any, provider: string): FormattedMessage[] => {
+export const formatResponse = (response: any, provider: string, client?: MultimodalCaptureGate): FormattedMessage[] => {
   if (!response) {
     return []
   }
@@ -149,7 +149,7 @@ export const formatResponse = (response: any, provider: string): FormattedMessag
   } else if (provider === 'openai') {
     return formatResponseOpenAI(response)
   } else if (provider === 'gemini') {
-    return formatResponseGemini(response)
+    return formatResponseGemini(response, client)
   }
   return []
 }
@@ -292,7 +292,7 @@ export const buildInlineDataBlock = (
   return { type: 'document', inline_data: { mime_type: mimeType, data } }
 }
 
-export const formatResponseGemini = (response: any): FormattedMessage[] => {
+export const formatResponseGemini = (response: any, client?: MultimodalCaptureGate): FormattedMessage[] => {
   const output: FormattedMessage[] = []
 
   if (response.candidates && Array.isArray(response.candidates)) {
@@ -330,7 +330,7 @@ export const formatResponseGemini = (response: any): FormattedMessage[] => {
             }
 
             // Sanitize base64 data for images and other large inline data
-            data = redactBase64DataUrl(data)
+            data = isMultimodalCaptureEnabled(client) ? data : redactBase64DataUrl(data)
 
             content.push(buildInlineDataBlock(mimeType, data))
           }

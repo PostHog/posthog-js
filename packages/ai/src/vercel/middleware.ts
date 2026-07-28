@@ -25,7 +25,7 @@ import {
 import { captureAiGeneration } from '../captureAiGeneration'
 import { redactBase64DataUrl } from '../sanitization'
 import { isObject, isString } from '../typeGuards'
-import type { MultimodalCaptureGate } from '../captureAiEvent'
+import { isMultimodalCaptureEnabled, type MultimodalCaptureGate } from '../captureAiEvent'
 
 // Union types for dual version support
 type LanguageModel = LanguageModelV2 | LanguageModelV3
@@ -117,7 +117,7 @@ const mapVercelPrompt = (messages: LanguageModelPrompt, client?: MultimodalCaptu
               fileData = contentData.toString()
             } else if (isString(contentData)) {
               // Redact base64 data URLs and raw base64 to prevent oversized events
-              fileData = redactBase64DataUrl(contentData)
+              fileData = isMultimodalCaptureEnabled(client) ? contentData : redactBase64DataUrl(contentData)
             } else {
               fileData = 'raw files not supported'
             }
@@ -230,11 +230,15 @@ const mapVercelOutput = (result: LanguageModelContent[], client?: MultimodalCapt
       if (item.data instanceof URL) {
         fileData = item.data.toString()
       } else if (typeof item.data === 'string') {
-        fileData = redactBase64DataUrl(item.data)
+        if (isMultimodalCaptureEnabled(client)) {
+          fileData = item.data
+        } else {
+          fileData = redactBase64DataUrl(item.data)
 
-        // If not redacted and still large, replace with size indicator
-        if (fileData === item.data && item.data.length > 1000) {
-          fileData = `[${item.mediaType} file - ${item.data.length} bytes]`
+          // If not redacted and still large, replace with size indicator
+          if (fileData === item.data && item.data.length > 1000) {
+            fileData = `[${item.mediaType} file - ${item.data.length} bytes]`
+          }
         }
       } else {
         fileData = `[binary ${item.mediaType} file]`

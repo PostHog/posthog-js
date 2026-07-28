@@ -68,7 +68,7 @@ export class WrappedModels {
         model: geminiParams.model,
         provider: 'gemini',
         input: this.formatInputForPostHog(geminiParams),
-        output: formatResponseGemini(response),
+        output: formatResponseGemini(response, this.phClient),
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
         modelParameters: getModelParams(params as GenerateContentParameters & MonitoringParams),
