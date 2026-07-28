@@ -716,7 +716,7 @@ export interface SessionRecordingOptions {
          *
          * @default undefined
          */
-        maskRegionsFn?: ((canvas: HTMLCanvasElement) => CanvasMaskRegion[] | null) | null
+        maskRegionsFn?: ((canvas: HTMLCanvasElement) => CanvasMaskRegion[] | null | undefined) | null
     }
 
     /**
