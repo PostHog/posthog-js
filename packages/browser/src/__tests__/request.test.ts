@@ -288,22 +288,32 @@ describe('request', () => {
             })
         })
 
-        it('adds sent_at only to the first recording in a batched session recording body', () => {
-            request(
-                createRequest({
-                    url: 'https://any.posthog-instance.com/ingest/s/',
-                    method: 'POST',
-                    data: [{ event: '$snapshot' }, { event: '$snapshot' }],
-                    timestampMode: 'body',
-                })
-            )
+        it('adds the same sent_at to every recording in a batched session recording body', () => {
+            const toISOString = jest
+                .spyOn(Date.prototype, 'toISOString')
+                .mockReturnValueOnce('2023-11-14T22:13:20.000Z')
+                .mockReturnValue('2023-11-14T22:13:21.000Z')
 
-            const [requestedUrl, requestOptions] = mockedFetch.mock.calls[0]
-            expect(requestedUrl).toBe('https://any.posthog-instance.com/ingest/s/')
-            expect(JSON.parse(requestOptions.body)).toEqual([
-                { event: '$snapshot', sent_at: '2023-11-14T22:13:20.000Z' },
-                { event: '$snapshot' },
-            ])
+            try {
+                request(
+                    createRequest({
+                        url: 'https://any.posthog-instance.com/ingest/s/',
+                        method: 'POST',
+                        data: [{ event: '$snapshot' }, { event: '$snapshot' }],
+                        timestampMode: 'body',
+                    })
+                )
+
+                const [requestedUrl, requestOptions] = mockedFetch.mock.calls[0]
+                expect(requestedUrl).toBe('https://any.posthog-instance.com/ingest/s/')
+                expect(JSON.parse(requestOptions.body)).toEqual([
+                    { event: '$snapshot', sent_at: '2023-11-14T22:13:20.000Z' },
+                    { event: '$snapshot', sent_at: '2023-11-14T22:13:20.000Z' },
+                ])
+                expect(toISOString).toHaveBeenCalledTimes(1)
+            } finally {
+                toISOString.mockRestore()
+            }
         })
 
         it('preserves caller-provided query parameters', () => {
@@ -1147,8 +1157,14 @@ describe('request', () => {
                         })
                     )
                     expect(splitBodies).toEqual([
-                        [{ ...bigEvent(1), sent_at: '2023-11-14T22:13:20.000Z' }, bigEvent(2)],
-                        [{ ...bigEvent(3), sent_at: '2023-11-14T22:13:20.000Z' }, bigEvent(4)],
+                        [
+                            { ...bigEvent(1), sent_at: '2023-11-14T22:13:20.000Z' },
+                            { ...bigEvent(2), sent_at: '2023-11-14T22:13:20.000Z' },
+                        ],
+                        [
+                            { ...bigEvent(3), sent_at: '2023-11-14T22:13:20.000Z' },
+                            { ...bigEvent(4), sent_at: '2023-11-14T22:13:20.000Z' },
+                        ],
                     ])
                     expect(mockedFetch).not.toHaveBeenCalled()
                 })

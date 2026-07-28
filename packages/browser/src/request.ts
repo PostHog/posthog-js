@@ -422,7 +422,7 @@ const addSentAtToBody = (
         return { ...data, sent_at: sentAt }
     }
 
-    return data.length > 0 ? [{ ...data[0], sent_at: sentAt }, ...data.slice(1)] : data
+    return data.map((item) => ({ ...item, sent_at: sentAt }))
 }
 
 const _sendBeacon = (options: RequestWithOptions) => {
@@ -449,11 +449,7 @@ const _sendBeacon = (options: RequestWithOptions) => {
         if (isArray(batch) && batch.length > 1 && (estimatedSize ?? 0) > BEACON_SPLIT_FLOOR_BYTES) {
             const mid = Math.ceil(batch.length / 2)
             const splitData = (events: Record<string, any>[]): RequestWithOptions['data'] =>
-                isArray(options.data)
-                    ? options.timestampMode === 'body'
-                        ? addSentAtToBody(events, options.data[0]?.sent_at)
-                        : events
-                    : { ...options.data, batch: events }
+                isArray(options.data) ? events : { ...options.data, batch: events }
             _sendBeacon({ ...options, data: splitData(batch.slice(0, mid)) })
             _sendBeacon({ ...options, data: splitData(batch.slice(mid)) })
             return
