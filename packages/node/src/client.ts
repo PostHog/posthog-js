@@ -2639,10 +2639,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     return { allPersonProperties, allGroupProperties }
   }
 
-  private personPropertiesForLocalEvaluation(
-    distinctId: string,
-    personProperties?: Properties
-  ): Record<string, any> {
+  private personPropertiesForLocalEvaluation(distinctId: string, personProperties?: Properties): Record<string, any> {
     return { distinct_id: distinctId, ...(personProperties || {}) }
   }
 
