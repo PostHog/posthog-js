@@ -8,7 +8,7 @@
  * instead of accumulating against the original hard-navigation timestamp.
  *
  * This is loaded lazily only when both `web_vitals_attribution` and
- * `web_vitals_soft_navs` are enabled. The feature relies on Chrome's experimental
+ * `__preview_web_vitals_soft_navs` are enabled. The feature relies on Chrome's experimental
  * Soft Navigation Detection API.
  *
  * Note: as with the non-soft-navs attribution build, attribution can cause memory

@@ -8,7 +8,7 @@
  * of accumulating against the original hard-navigation timestamp (which otherwise
  * inflates LCP and friends).
  *
- * This is loaded lazily only when `capture_performance: { web_vitals_soft_navs: true }`
+ * This is loaded lazily only when `capture_performance: { __preview_web_vitals_soft_navs: true }`
  * is set, so the standard bundle and its consumers are unaffected. The feature relies
  * on Chrome's experimental Soft Navigation Detection API.
  *

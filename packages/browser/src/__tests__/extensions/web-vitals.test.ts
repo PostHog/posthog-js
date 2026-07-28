@@ -473,14 +473,14 @@ describe('web vitals', () => {
         })
     })
 
-    describe('web_vitals_soft_navs config', () => {
+    describe('__preview_web_vitals_soft_navs config', () => {
         it.each([
             [undefined, false],
             [true, true],
             [false, false],
-        ])('when web_vitals_soft_navs is %p, useSoftNavs should be %p', async (softNavsConfig, expectedUseSoftNavs) => {
+        ])('when __preview_web_vitals_soft_navs is %p, useSoftNavs should be %p', async (softNavsConfig, expectedUseSoftNavs) => {
             posthog = await createPosthogInstance(uuidv7(), {
-                capture_performance: { web_vitals: true, web_vitals_soft_navs: softNavsConfig },
+                capture_performance: { web_vitals: true, __preview_web_vitals_soft_navs: softNavsConfig },
                 capture_pageview: false,
             })
 
@@ -496,7 +496,7 @@ describe('web vitals', () => {
             [true, true, 'web-vitals-with-attribution-soft-navs'],
             [false, true, 'web-vitals-with-attribution'],
         ])(
-            'when web_vitals_soft_navs is %p and web_vitals_attribution is %p, should load %s bundle',
+            'when __preview_web_vitals_soft_navs is %p and web_vitals_attribution is %p, should load %s bundle',
             async (softNavsConfig, attributionConfig, expectedBundle) => {
                 const loadScriptMock = jest.fn().mockImplementation((_ph, _kind, callback) => {
                     assignableWindow.__PosthogExtensions__ = {}
@@ -515,7 +515,7 @@ describe('web vitals', () => {
                 posthog = await createPosthogInstance(uuidv7(), {
                     capture_performance: {
                         web_vitals: true,
-                        web_vitals_soft_navs: softNavsConfig,
+                        __preview_web_vitals_soft_navs: softNavsConfig,
                         web_vitals_attribution: attributionConfig,
                     },
                     capture_pageview: false,
@@ -537,7 +537,7 @@ describe('web vitals', () => {
             [true, true],
             [false, false],
         ])(
-            'when web_vitals_soft_navs is %p, passes reportSoftNavs=%p to the observers',
+            'when __preview_web_vitals_soft_navs is %p, passes reportSoftNavs=%p to the observers',
             async (softNavsConfig, expectedReportSoftNavs) => {
                 const onLCP = jest.fn()
                 const onCLS = jest.fn()
@@ -554,7 +554,7 @@ describe('web vitals', () => {
                 assignableWindow.__PosthogExtensions__.loadExternalDependency = loadScriptMock
 
                 posthog = await createPosthogInstance(uuidv7(), {
-                    capture_performance: { web_vitals: true, web_vitals_soft_navs: softNavsConfig },
+                    capture_performance: { web_vitals: true, __preview_web_vitals_soft_navs: softNavsConfig },
                     capture_pageview: false,
                 })
 

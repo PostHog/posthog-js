@@ -62,7 +62,7 @@ export class WebVitalsAutocapture {
 
     public get useSoftNavs(): boolean {
         const clientConfig: boolean | undefined = isObject(this._perfConfig)
-            ? this._perfConfig.web_vitals_soft_navs
+            ? this._perfConfig.__preview_web_vitals_soft_navs
             : undefined
         return clientConfig ?? false
     }

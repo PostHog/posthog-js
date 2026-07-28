@@ -252,7 +252,7 @@ export interface PerformanceCaptureConfig {
      * as belonging to the initial page load across every subsequent route change,
      * which inflates LCP (and the other metrics) by the time spent on the app.
      *
-     * This is opt-in because it relies on Chrome's Soft Navigation Detection API,
+     * This is a preview option (opt-in) because it relies on Chrome's Soft Navigation Detection API,
      * which is still experimental. When enabled, PostHog loads a soft-navs build of
      * the web-vitals library (a slightly larger bundle) and passes `reportSoftNavs`
      * to the observers; the standard build silently ignores the option. In browsers
@@ -260,7 +260,7 @@ export interface PerformanceCaptureConfig {
      *
      * @default false
      */
-    web_vitals_soft_navs?: boolean
+    __preview_web_vitals_soft_navs?: boolean
 }
 
 export interface DeadClickCandidate {
