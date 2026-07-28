@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 3046](https://github.com/PostHog/posthog-js/issues/3046) | Valid Nuxt enhancement, but the disabled-mode behavior for `usePostHog()` needs an explicit API decision. | enhancement, feature, nuxt |  | no | 2026-07-28T00:27:00.515Z |
 | PostHog/posthog-js | [issue 4275](https://github.com/PostHog/posthog-js/issues/4275) | Confirmed @posthog/nuxt sourcemap-cleanup bug: deleting maps in the Nuxt close hook can leave Nitro's already-generated public-asset manifest pointing at missing files, producing runtime 500s. | nuxt, feature/error-tracking, team/error-tracking |  | no | 2026-07-26T16:46:23.338Z |
 | PostHog/posthog-js | [issue 4267](https://github.com/PostHog/posthog-js/issues/4267) | Valid feature request for Gemini Interactions API tracing support in @posthog/ai. | enhancement, feature, team/llm-analytics |  | no | 2026-07-26T15:23:32.195Z |
 | PostHog/posthog-js | [issue 4268](https://github.com/PostHog/posthog-js/issues/4268) | Valid AI observability enhancement: the SDK currently forwards OTLP spans without implementing per-span identity or group semantics, while its examples configure identity on the process-level Resource. | enhancement, feature, team/llm-analytics |  | no | 2026-07-24T16:40:00.534Z |
