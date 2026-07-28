@@ -125,7 +125,7 @@ jobs:
         if: needs.affected.outputs.is-affected == 'true'
         continue-on-error: true
         run: |
-          PLAYWRIGHT_JSON_OUTPUT_FILE=compat-results.json pnpm exec playwright test --config playwright.config.compat.ts --project chromium-compat --workers=5 --reporter=json
+          PLAYWRIGHT_JSON_OUTPUT_FILE=compat-results.json pnpm exec playwright test --config playwright.config.compat.ts --project chromium-compat --workers=5 --reporter=json,html
         working-directory: packages/browser
 
       - name: Process compat test results
