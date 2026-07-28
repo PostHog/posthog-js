@@ -158,11 +158,33 @@ export interface RageclickConfig {
 export interface BootstrapConfig {
     /**
      * Distinct ID to use before the SDK has loaded persisted identity.
+     *
+     * @remarks
+     * If this is an ID that belongs to a logged-in account (a user ID, an account-scoped token,
+     * a session token tied to an account, etc.) you must also set `isIdentifiedID: true`. See
+     * {@link BootstrapConfig.isIdentifiedID}.
      */
     distinctID?: string
 
     /**
      * Whether `distinctID` already identifies a known person profile.
+     *
+     * @remarks
+     * Set this to `true` whenever `distinctID` is tied to a logged-in account, and leave it unset
+     * only when `distinctID` is a random, per-device anonymous ID.
+     *
+     * Bootstrapping an account ID without `isIdentifiedID: true` marks that account as an
+     * *anonymous* ID locally. The next `identify()` call then sends the account ID as
+     * `$anon_distinct_id`, and because the server already knows that ID as an identified person it
+     * refuses the merge (the `cannot_merge_already_identified` ingestion warning), leaving the user
+     * split across two person records.
+     *
+     * Bootstrapping is only for the *first* identity of a page load - it never switches identities.
+     * If the person changes (log out and log in as someone else, or a shared machine), call
+     * `reset()` before re-initializing, otherwise the stored identity is preserved and a warning
+     * is logged.
+     *
+     * @default false
      */
     isIdentifiedID?: boolean
 

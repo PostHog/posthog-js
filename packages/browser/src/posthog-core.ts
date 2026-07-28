@@ -759,11 +759,27 @@ export class PostHog implements PostHogInterface {
             const bootstrapDistinctId = config.bootstrap.distinctID
             const existingDistinctId = this.get_distinct_id()
             const existingUserState = this.persistence.get_property(USER_STATE)
+            const existingIsIdentified = existingUserState === USER_STATE_IDENTIFIED
+            const bootstrapIdIsNew = existingDistinctId != null && existingDistinctId !== bootstrapDistinctId
 
-            if (
+            if (existingIsIdentified && (bootstrapIdIsNew || !config.bootstrap.isIdentifiedID)) {
+                // Persistence already holds an identified person, so we must not touch it here.
+                // Overwriting distinct_id would switch identities without an $identify event, and
+                // writing USER_STATE back to anonymous (which is what happens when isIdentifiedID
+                // is not set) would make the next identify() send the identified ID as
+                // $anon_distinct_id - a merge the server refuses with cannot_merge_already_identified.
+                // Either way the person record ends up split or cross-contaminated, so preserve
+                // what is already stored.
+                if (bootstrapIdIsNew) {
+                    logger.warn(
+                        'Bootstrap distinctID differs from an already-identified user. ' +
+                            'The existing identity is preserved. Call reset() before reinitializing ' +
+                            'if you intend to switch users.'
+                    )
+                }
+            } else if (
                 config.bootstrap.isIdentifiedID &&
-                existingDistinctId != null &&
-                existingDistinctId !== bootstrapDistinctId &&
+                bootstrapIdIsNew &&
                 existingUserState === USER_STATE_ANONYMOUS
             ) {
                 // The server bootstrapped identity for an identified user, but local persistence
@@ -776,20 +792,6 @@ export class PostHog implements PostHogInterface {
                 // reloadFeatureFlags() call inside identify() sets _reloadDebouncer, so the
                 // subsequent ensureFlagsLoaded() from _onRemoteConfig is a no-op (no double request).
                 this.identify(bootstrapDistinctId)
-            } else if (
-                config.bootstrap.isIdentifiedID &&
-                existingDistinctId != null &&
-                existingDistinctId !== bootstrapDistinctId &&
-                existingUserState === USER_STATE_IDENTIFIED
-            ) {
-                // The existing user is already identified with a different ID. Silently
-                // switching identities without an $identify event would corrupt analytics.
-                // Preserve the existing identity and log a warning.
-                logger.warn(
-                    'Bootstrap distinctID differs from an already-identified user. ' +
-                        'The existing identity is preserved. Call reset() before reinitializing ' +
-                        'if you intend to switch users.'
-                )
             } else {
                 const uuid = this.config.get_device_id(uuidv7())
                 const deviceID = config.bootstrap.isIdentifiedID ? uuid : bootstrapDistinctId
@@ -2639,11 +2641,23 @@ export class PostHog implements PostHogInterface {
             // let the reload feature flag request know to send this previous distinct id
             // for flag consistency
             this.featureFlags?.setAnonymousDistinctId(previous_distinct_id)
-        } else if (userPropertiesToSet || userPropertiesToSetOnce) {
-            // If the distinct_id is not changing, but we have user properties to set, we can check if they have changed
-            // and if so, send a $set event
+        } else {
+            if (new_distinct_id !== previous_distinct_id) {
+                // The distinct_id changed but the previous one was already identified, so there is
+                // no $identify event to send - the server cannot merge two identified people. This
+                // is a silent identity switch, which is almost always a bug in the calling app.
+                logger.warn(
+                    'posthog.identify was called with a different distinct_id while the current user is ' +
+                        'already identified. No $identify event was sent, so the two people will not be ' +
+                        'merged. Call reset() before identifying a different user.'
+                )
+            }
+            if (userPropertiesToSet || userPropertiesToSetOnce) {
+                // If the distinct_id is not changing, but we have user properties to set, we can check if they have changed
+                // and if so, send a $set event
 
-            this.setPersonProperties(userPropertiesToSet, userPropertiesToSetOnce)
+                this.setPersonProperties(userPropertiesToSet, userPropertiesToSetOnce)
+            }
         }
 
         // Reload active feature flags if the user identity changes.

@@ -1,4 +1,4 @@
-import { mockLogger } from './helpers/mock-logger'
+import { clearLoggerMocks, mockLogger } from './helpers/mock-logger'
 
 import * as globals from '@posthog/browser-common/utils/globals'
 import { document, window } from '@posthog/browser-common/utils/globals'
@@ -1245,6 +1245,81 @@ describe('posthog core', () => {
                 // Existing identity should be preserved (bootstrap should NOT silently switch identities)
                 expect(second.get_distinct_id()).toBe('existing-user')
                 expect(second.persistence.get_property(USER_STATE)).toBe('identified')
+            })
+
+            it.each([
+                { isIdentifiedID: false, description: 'false' },
+                { isIdentifiedID: undefined, description: 'omitted' },
+            ])(
+                'preserves an already-identified user when a different bootstrap distinctID has isIdentifiedID $description',
+                ({ isIdentifiedID }) => {
+                    const token = 'bootstrap-not-identified-differs-' + uuidv7()
+
+                    // First instance: create and identify a user
+                    const first = posthogWith({ token }, { capture: jest.fn() })
+                    first.identify('account-a')
+                    expect(first.persistence.get_property(USER_STATE)).toBe('identified')
+
+                    clearLoggerMocks()
+
+                    // Second instance bootstraps a different account ID without marking it identified
+                    const second = posthogWith({
+                        token,
+                        bootstrap: {
+                            distinctID: 'account-b',
+                            ...(!isUndefined(isIdentifiedID) && { isIdentifiedID }),
+                        },
+                    })
+
+                    // The identified person must not be clobbered or downgraded to anonymous,
+                    // otherwise the next identify() sends an $anon_distinct_id the server has
+                    // already merged into another person
+                    expect(second.get_distinct_id()).toBe('account-a')
+                    expect(second.persistence.get_property(USER_STATE)).toBe('identified')
+                    expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('Call reset()'))
+                }
+            )
+
+            it.each([
+                { isIdentifiedID: false, description: 'false' },
+                { isIdentifiedID: undefined, description: 'omitted' },
+            ])(
+                'does not downgrade an identified user to anonymous when the bootstrap distinctID matches and isIdentifiedID is $description',
+                ({ isIdentifiedID }) => {
+                    const token = 'bootstrap-not-identified-same-' + uuidv7()
+
+                    const first = posthogWith({ token }, { capture: jest.fn() })
+                    first.identify('account-a')
+                    expect(first.persistence.get_property(USER_STATE)).toBe('identified')
+
+                    clearLoggerMocks()
+
+                    const second = posthogWith({
+                        token,
+                        bootstrap: {
+                            distinctID: 'account-a',
+                            ...(!isUndefined(isIdentifiedID) && { isIdentifiedID }),
+                        },
+                    })
+
+                    expect(second.get_distinct_id()).toBe('account-a')
+                    expect(second.persistence.get_property(USER_STATE)).toBe('identified')
+                    // nothing changed, so there is nothing to warn about
+                    expect(mockLogger.warn).not.toHaveBeenCalledWith(expect.stringContaining('Call reset()'))
+                }
+            )
+
+            it('warns when identify() switches away from an already-identified user', () => {
+                const token = 'identify-silent-switch-' + uuidv7()
+
+                const posthog = posthogWith({ token }, { capture: jest.fn() })
+                posthog.identify('account-a')
+
+                clearLoggerMocks()
+
+                posthog.identify('account-b')
+
+                expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('Call reset()'))
             })
         })
     })
