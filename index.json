@@ -1,4 +1,17 @@
 {
+  "PostHog/posthog-js/issue/4285": {
+    "key": "PostHog/posthog-js/issue/4285",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4285",
+    "url": "https://github.com/PostHog/posthog-js/issues/4285",
+    "conclusion": "Confirmed React Native iOS build-plugin composition bug: independent PostHog and Sentry wrappers can replace the same Expo bundle phase and produce a successful build without running the React Native bundler.",
+    "labels": [
+      "react-native",
+      "iOS"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-28T02:34:29.340Z"
+  },
   "PostHog/posthog-js/issue/3046": {
     "key": "PostHog/posthog-js/issue/3046",
     "repo": "PostHog/posthog-js",
