@@ -1,7 +1,47 @@
 import type { Logger } from '@posthog/core'
+import type { Properties } from '@posthog/types'
 
+import type { Disposable } from './disposable'
 import type { KeyValueStore } from './persistence'
-import type { ExtensionToken } from './token'
+import type { Listener } from './pubsub'
+import type { RemoteConfig } from './types/remote-config'
+
+/** Recursively marks object properties as readonly while preserving callable values. */
+export type DeepReadonly<T> = T extends (...args: never[]) => unknown
+    ? T
+    : T extends object
+      ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
+      : T
+
+/** The current session, stamped on events to tie them to a session and a browser tab. */
+export interface SessionContext {
+    /** The stable session identifier attached to events captured during this session. */
+    readonly sessionId: string
+    /** The logical browser tab/window identifier attached alongside the session id. */
+    readonly windowId: string
+    /** When the session started, as a Unix timestamp in milliseconds. */
+    readonly sessionStartTimestamp: number
+}
+
+/** A captured event, as observed by `onEvent`. */
+export interface CapturedEventInfo {
+    /** The finalized captured event name. */
+    readonly event: string
+    /** The final event properties after client defaults and dynamic properties are applied. */
+    readonly properties: DeepReadonly<Record<string, unknown>>
+}
+
+/** Per-call capture overrides, mirroring the client's public capture options. */
+export interface CaptureOptions {
+    /** Override the event timestamp sent to PostHog. */
+    timestamp?: Date
+    /** Override the event UUID used for de-duplication. */
+    uuid?: string
+    /** Person properties to set, emitted as `$set`. */
+    set?: Record<string, unknown>
+    /** Person properties to set if unset, emitted as `$set_once`. */
+    setOnce?: Record<string, unknown>
+}
 
 /** A minimal response from {@link Client.sendRequest}. */
 export interface ApiResponse {
@@ -40,30 +80,39 @@ export interface SendRequestInit {
 }
 
 /**
- * The host SDK's capability surface as seen by an extension — the client an
- * extension is handed in `setup`. A conforming host provides it as an adapter
- * over its own internals.
- *
- * Host services that may do I/O are awaitable; a host can complete them
- * synchronously when its underlying implementation supports that. Core
- * analytics behavior is provided separately by the core extension.
+ * The host SDK surface handed to an extension in `setup`. A conforming host
+ * provides it as an adapter over its own analytics, transport, persistence,
+ * event, and remote-config internals.
  */
 export interface Client {
+    /** The id events are currently attributed to. */
+    readonly distinctId: string
+    /** The anonymous device id carried across identify calls. */
+    readonly anonymousId: string
+    /** Active group memberships attached to events as `$groups`. */
+    readonly groups: DeepReadonly<Record<string, string>>
+    /** The current session, created on first read if needed. */
+    readonly session: SessionContext
+
+    /** Records an analytics event through the client's normal pipeline. */
+    capture(event: string, properties?: Properties | null, options?: CaptureOptions): Promise<void>
+
+    /** Registers a synchronous producer of properties merged into every captured event. */
+    registerDynamicEventProperties(producer: () => Record<string, unknown>): Disposable
+
+    /** Fires for every captured event through a deeply readonly view. */
+    readonly onEvent: Listener<CapturedEventInfo>
+
+    /** Resolves with the current remote config, awaiting the first outcome when necessary. */
+    getRemoteConfig(): Promise<DeepReadonly<RemoteConfig> | undefined>
+    /** Fires when server-provided config arrives or changes successfully. */
+    readonly onRemoteConfig: Listener<DeepReadonly<RemoteConfig>>
+
     /** Public project token used to authenticate endpoint-specific requests. */
     readonly projectToken: string
 
-    /**
-     * Sends a request through the host SDK's transport. The extension owns the
-     * endpoint-specific path, method, authentication shape, body, and headers.
-     */
+    /** Sends a request through the host SDK's transport. */
     sendRequest(path: string, init?: SendRequestInit): Promise<ApiResponse>
-
-    /**
-     * Resolves another registered extension by a capability token it provides, or
-     * `undefined` if nothing registered provides it (not installed, or not loaded
-     * yet). Lets one extension use another without importing its implementation.
-     */
-    getExtension<T>(token: ExtensionToken<T>): T | undefined
 
     /** Awaitable key-value storage backed by the host client's persistence. */
     readonly kv: KeyValueStore

@@ -2,26 +2,25 @@
 import { createDisposable } from '../src/disposable'
 
 describe('createDisposable', () => {
-    it('invokes synchronous teardown at most once', () => {
-        const teardown = jest.fn()
+    it('invokes teardown at most once and discards its result', () => {
+        const teardown = jest.fn(() => 'ignored')
         const disposable = createDisposable(teardown)
 
-        disposable.dispose()
-        disposable.dispose()
-
+        expect(disposable.dispose()).toBeUndefined()
+        expect(disposable.dispose()).toBeUndefined()
         expect(teardown).toHaveBeenCalledTimes(1)
     })
 
-    it('returns the asynchronous teardown result', async () => {
-        const result = Promise.resolve()
-        const disposable = createDisposable(() => result)
+    it('contains rejected asynchronous teardown without awaiting it', async () => {
+        const teardown = jest.fn(async () => {
+            throw new Error('async teardown failed')
+        })
+        const disposable = createDisposable(teardown)
 
-        const firstDisposal = disposable.dispose()
-        const secondDisposal = disposable.dispose()
+        expect(disposable.dispose()).toBeUndefined()
+        await Promise.resolve()
 
-        expect(firstDisposal).toBe(result)
-        expect(secondDisposal).toBe(firstDisposal)
-        await secondDisposal
+        expect(teardown).toHaveBeenCalledTimes(1)
     })
 
     it('does not retry teardown after it throws', () => {
