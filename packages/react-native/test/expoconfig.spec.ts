@@ -11,6 +11,7 @@ import {
   buildDsymUploadShellScript,
   buildIosDotenvFileBuildSetting,
   disableUserScriptSandboxing,
+  findForeignBundleScriptWrapper,
   modifyExistingXcodeBuildScript,
   resolveDotenvFileProp,
   resolveNativeSymbolUpload,
@@ -216,6 +217,124 @@ describe('modifyExistingXcodeBuildScript', () => {
     expect(() => modifyExistingXcodeBuildScript(undefined)).not.toThrow()
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('Bundle React Native code and images'))
     warn.mockRestore()
+  })
+})
+
+// Fixtures for issue #4285: composing with another config plugin (Sentry) that
+// also wraps the React Native bundle phase.
+const EXPO_RN_XCODE_LINE =
+  "`\"$NODE_BINARY\" --print \"require('path').dirname(require.resolve('react-native/package.json')) + '/scripts/react-native-xcode.sh'\"`"
+const SENTRY_XCODE_PATH =
+  "`\"$NODE_BINARY\" --print \"require('path').dirname(require.resolve('@sentry/react-native/package.json')) + '/scripts/sentry-xcode.sh'\"`"
+
+const expoBundlePhase = (rnLine: string): string =>
+  [
+    'if [[ -z "$CLI_PATH" ]]; then',
+    '  export CLI_PATH="$("$NODE_BINARY" --print "require.resolve(\'@expo/cli\')")"',
+    'fi',
+    '',
+    rnLine,
+    '',
+  ].join('\n')
+
+// Mirrors @sentry/react-native's addSentryWithBundledScriptsToBundleShellScript:
+// it prepends its wrapper to the whole matched react-native-xcode.sh line, keeping
+// the previous command as positional arguments.
+const simulateSentryWrap = (script: string): string =>
+  script.replace(
+    /^.*(?:packager|scripts)\/react-native-xcode\.sh.*$/m,
+    (match) => `/bin/sh ${SENTRY_XCODE_PATH} ${match}`
+  )
+
+describe('findForeignBundleScriptWrapper', () => {
+  it('returns null for an unwrapped simple react-native-xcode.sh path', () => {
+    expect(findForeignBundleScriptWrapper('"../node_modules/react-native/scripts/react-native-xcode.sh"')).toBeNull()
+  })
+
+  it('returns null for the plain Expo backtick invocation', () => {
+    expect(findForeignBundleScriptWrapper(expoBundlePhase(EXPO_RN_XCODE_LINE))).toBeNull()
+  })
+
+  it('returns null for a /bin/sh-prefixed react-native-xcode.sh command (issue #3682 shape)', () => {
+    expect(
+      findForeignBundleScriptWrapper(
+        '/bin/sh "$PODS_ROOT/../.."/node_modules/react-native/scripts/react-native-xcode.sh'
+      )
+    ).toBeNull()
+  })
+
+  it('returns null when there is no react-native-xcode.sh invocation at all', () => {
+    expect(findForeignBundleScriptWrapper('echo "hello"')).toBeNull()
+  })
+
+  it('detects the Sentry Expo backtick wrapper', () => {
+    const script = expoBundlePhase(simulateSentryWrap(EXPO_RN_XCODE_LINE))
+    expect(findForeignBundleScriptWrapper(script)).toBe('sentry-xcode.sh')
+  })
+
+  it('detects a plain-path foreign wrapper', () => {
+    expect(
+      findForeignBundleScriptWrapper(
+        '/bin/sh ../node_modules/@sentry/react-native/scripts/sentry-xcode.sh ../node_modules/react-native/scripts/react-native-xcode.sh'
+      )
+    ).toBe('sentry-xcode.sh')
+  })
+})
+
+describe('modifyExistingXcodeBuildScript with a foreign bundle-phase wrapper (issue #4285)', () => {
+  const countOccurrences = (haystack: string, needle: string): number => haystack.split(needle).length - 1
+
+  it('does not nest inside a Sentry-wrapped bundle phase (Sentry plugin applied first)', () => {
+    const sentryWrapped = expoBundlePhase(simulateSentryWrap(EXPO_RN_XCODE_LINE))
+    const script = { shellScript: JSON.stringify(sentryWrapped) }
+    const original = script.shellScript
+
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    modifyExistingXcodeBuildScript(script)
+    warn.mockRestore()
+
+    expect(script.shellScript).toBe(original)
+    expect(script.shellScript).not.toContain('posthog-xcode.sh')
+    expectValidShellSyntax(JSON.parse(script.shellScript))
+  })
+
+  it('warns with the foreign wrapper name and the incompatibility explanation', () => {
+    const sentryWrapped = expoBundlePhase(simulateSentryWrap(EXPO_RN_XCODE_LINE))
+    const script = { shellScript: JSON.stringify(sentryWrapped) }
+
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    modifyExistingXcodeBuildScript(script)
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('sentry-xcode.sh'))
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('main.jsbundle'))
+    warn.mockRestore()
+  })
+
+  it('still honors skipOnConflict updates for phases PostHog already owns', () => {
+    // The foreign-wrapper guard must not shadow the existing posthog-xcode.sh
+    // maintenance path.
+    const script = { shellScript: JSON.stringify(expoBundlePhase(EXPO_RN_XCODE_LINE)) }
+    modifyExistingXcodeBuildScript(script)
+    modifyExistingXcodeBuildScript(script, true)
+    expect(JSON.parse(script.shellScript)).toContain('--posthog-skip-on-conflict --')
+  })
+
+  it('does not wrap again after Sentry wrapped a PostHog-wrapped phase (PostHog plugin applied first)', () => {
+    // This is the plugin order from the issue report: PostHog's mod runs first,
+    // then Sentry nests around it. PostHog cannot repair Sentry's outer wrapper,
+    // but re-running prebuild must not nest a second PostHog wrapper on top.
+    const script = { shellScript: JSON.stringify(expoBundlePhase(EXPO_RN_XCODE_LINE)) }
+    modifyExistingXcodeBuildScript(script)
+    expect(JSON.parse(script.shellScript)).toContain('posthog-xcode.sh')
+
+    script.shellScript = JSON.stringify(simulateSentryWrap(JSON.parse(script.shellScript)))
+    const afterSentry = script.shellScript
+
+    modifyExistingXcodeBuildScript(script)
+
+    expect(script.shellScript).toBe(afterSentry)
+    expect(countOccurrences(script.shellScript, 'posthog-xcode.sh')).toBe(1)
+    expect(countOccurrences(script.shellScript, 'sentry-xcode.sh')).toBe(1)
   })
 })
 
