@@ -416,7 +416,7 @@ export class WrappedModels {
   }
 
   private formatInputForPostHog(params: GenerateContentParameters): FormattedMessage[] {
-    const sanitized = sanitizeGemini(params.contents)
+    const sanitized = sanitizeGemini(params.contents, this.phClient)
     const messages = this.formatInput(sanitized)
 
     const systemInstruction = this.extractSystemInstruction(params)

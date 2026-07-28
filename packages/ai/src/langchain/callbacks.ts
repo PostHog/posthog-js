@@ -330,7 +330,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     const runNameFound = this._getLangchainRunName(serialized, { extraParams, runName }) || 'generation'
     const generation: GenerationMetadata = {
       name: runNameFound,
-      input: sanitizeLangChain(messages),
+      input: sanitizeLangChain(messages, this.client),
       startTime: Date.now(),
     }
     if (extraParams) {
@@ -641,7 +641,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     }
 
     // Sanitize the message content to redact base64 images
-    return sanitizeLangChain(messageDict) as Record<string, any>
+    return sanitizeLangChain(messageDict, this.client) as Record<string, any>
   }
 
   private _extractStopReason(output: LLMResult): string | undefined {

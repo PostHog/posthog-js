@@ -324,7 +324,7 @@ export class WrappedCompletions extends Completions {
                 ...posthogParams,
                 model: openAIParams.model ?? modelFromResponse,
                 provider: 'openai',
-                input: sanitizeOpenAI(openAIParams.messages),
+                input: sanitizeOpenAI(openAIParams.messages, this.phClient),
                 output: formattedOutput,
                 latency,
                 timeToFirstToken,
@@ -349,7 +349,7 @@ export class WrappedCompletions extends Completions {
                 ...posthogParams,
                 model: openAIParams.model,
                 provider: 'openai',
-                input: sanitizeOpenAI(openAIParams.messages),
+                input: sanitizeOpenAI(openAIParams.messages, this.phClient),
                 output: [],
                 latency: 0,
                 baseURL: this.baseURL,
@@ -387,7 +387,7 @@ export class WrappedCompletions extends Completions {
               ...posthogParams,
               model: openAIParams.model ?? result.model,
               provider: 'openai',
-              input: sanitizeOpenAI(openAIParams.messages),
+              input: sanitizeOpenAI(openAIParams.messages, this.phClient),
               output: formattedOutput,
               latency,
               baseURL: this.baseURL,
@@ -422,7 +422,7 @@ export class WrappedCompletions extends Completions {
             ...posthogParams,
             model: openAIParams.model,
             provider: 'openai',
-            input: sanitizeOpenAI(openAIParams.messages),
+            input: sanitizeOpenAI(openAIParams.messages, this.phClient),
             output: [],
             latency: 0,
             baseURL: this.baseURL,
@@ -559,7 +559,7 @@ export class WrappedResponses extends Responses {
                 model: openAIParams.model ?? modelFromResponse,
                 provider: 'openai',
                 input: formatOpenAIResponsesInput(
-                  sanitizeOpenAIResponse(openAIParams.input),
+                  sanitizeOpenAIResponse(openAIParams.input, this.phClient),
                   openAIParams.instructions
                 ),
                 output: finalContent,
@@ -586,7 +586,7 @@ export class WrappedResponses extends Responses {
                 model: openAIParams.model,
                 provider: 'openai',
                 input: formatOpenAIResponsesInput(
-                  sanitizeOpenAIResponse(openAIParams.input),
+                  sanitizeOpenAIResponse(openAIParams.input, this.phClient),
                   openAIParams.instructions
                 ),
                 output: [],
@@ -627,7 +627,10 @@ export class WrappedResponses extends Responses {
               ...posthogParams,
               model: openAIParams.model ?? result.model,
               provider: 'openai',
-              input: formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions),
+              input: formatOpenAIResponsesInput(
+                sanitizeOpenAIResponse(openAIParams.input, this.phClient),
+                openAIParams.instructions
+              ),
               output: formattedOutput,
               latency,
               baseURL: this.baseURL,
@@ -659,7 +662,10 @@ export class WrappedResponses extends Responses {
             ...posthogParams,
             model: openAIParams.model,
             provider: 'openai',
-            input: formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions),
+            input: formatOpenAIResponsesInput(
+              sanitizeOpenAIResponse(openAIParams.input, this.phClient),
+              openAIParams.instructions
+            ),
             output: [],
             latency: 0,
             baseURL: this.baseURL,
@@ -705,7 +711,10 @@ export class WrappedResponses extends Responses {
             ...posthogParams,
             model: openAIParams.model ?? result.model,
             provider: 'openai',
-            input: formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions),
+            input: formatOpenAIResponsesInput(
+              sanitizeOpenAIResponse(openAIParams.input, this.phClient),
+              openAIParams.instructions
+            ),
             output: result.output,
             latency,
             baseURL: this.baseURL,
@@ -729,7 +738,10 @@ export class WrappedResponses extends Responses {
             ...posthogParams,
             model: openAIParams.model,
             provider: 'openai',
-            input: formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions),
+            input: formatOpenAIResponsesInput(
+              sanitizeOpenAIResponse(openAIParams.input, this.phClient),
+              openAIParams.instructions
+            ),
             output: [],
             latency: 0,
             baseURL: this.baseURL,

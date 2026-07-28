@@ -12,6 +12,7 @@ import type {
 import { v4 as uuidv4 } from 'uuid'
 import { isString } from './typeGuards'
 import { redactBase64DataUrl } from './sanitization'
+import { isMultimodalCaptureEnabled, type MultimodalCaptureGate } from './captureAiEvent'
 
 type ChatCompletionCreateParamsBase = OpenAIOrignal.Chat.Completions.ChatCompletionCreateParams
 type MessageCreateParams = AnthropicOriginal.Messages.MessageCreateParams
@@ -389,10 +390,15 @@ function toSafeString(input: unknown): string {
   }
 }
 
-export const truncate = (input: unknown): string => {
+export const truncate = (input: unknown, client?: MultimodalCaptureGate): string => {
   const str = toSafeString(input)
   if (str === '') {
     return ''
+  }
+
+  // Passthrough skips truncation too: a byte-cut through base64 corrupts it as surely as redaction.
+  if (isMultimodalCaptureEnabled(client)) {
+    return str
   }
 
   // Check if we need to truncate and ensure STRING_FORMAT is respected

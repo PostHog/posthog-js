@@ -182,7 +182,9 @@ export class PostHogTracingProcessor implements TracingProcessor {
   private _prepareCapturedValue(value: unknown): unknown {
     const serializableValue = ensureSerializable(value)
     const serializedValue = stringifyForSizeCheck(serializableValue)
-    const boundedValue = exceedsMaxOutputSize(serializedValue) ? truncate(serializedValue) : serializableValue
+    const boundedValue = exceedsMaxOutputSize(serializedValue)
+      ? truncate(serializedValue, this._client)
+      : serializableValue
     return this._withPrivacyMode(boundedValue)
   }
 
