@@ -343,4 +343,20 @@ describe('image-bitmap-data-url-worker', () => {
       vi.useRealTimers();
     }
   });
+
+  it('does not keyframe unchanged frames with an empty mask region list', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const onmessage = await loadWorker();
+
+      await onmessage(frame(1, CONTENT_A, WIDTH, HEIGHT, []));
+      vi.advanceTimersByTime(60_000);
+      await onmessage(frame(1, CONTENT_A, WIDTH, HEIGHT, []));
+
+      expect(postMessage).toHaveBeenLastCalledWith({ id: 1 });
+      expect(convertToBlob).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

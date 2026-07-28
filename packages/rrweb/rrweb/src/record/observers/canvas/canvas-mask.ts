@@ -37,7 +37,9 @@ export function computeFrameMaskRegions(
 
   const sx = captureWidth / displayWidth;
   const sy = captureHeight / displayHeight;
-  return regions.map((r) => {
+  // zero-area regions mask nothing, but outward rounding would inflate one at
+  // a fractional offset into a 1px stripe — drop them before scaling
+  return regions.filter((r) => r.width > 0 && r.height > 0).map((r) => {
     const left = Math.floor(r.x * sx);
     const top = Math.floor(r.y * sy);
     return {

@@ -58,6 +58,36 @@ describe('computeFrameMaskRegions', () => {
     expect(result).toEqual([{ x: 3, y: 6, width: 11, height: 14 }]);
   });
 
+  it('drops zero-area regions, keeping the rest', () => {
+    const result = computeFrameMaskRegions(
+      { regionsFn: () => [{ x: 5.5, y: 0, width: 0, height: 40 }, REGION] },
+      CANVAS,
+      50,
+      25,
+      100,
+      50,
+    );
+    expect(result).toEqual([{ x: 5, y: 10, width: 15, height: 20 }]);
+  });
+
+  it('treats a list of only zero-area regions as nothing to mask', () => {
+    expect(
+      computeFrameMaskRegions(
+        {
+          regionsFn: () => [
+            { x: 5.5, y: 0, width: 0, height: 40 },
+            { x: 0, y: 5.5, width: 40, height: 0 },
+          ],
+        },
+        CANVAS,
+        50,
+        25,
+        100,
+        50,
+      ),
+    ).toEqual([]);
+  });
+
   it('passes the canvas through to the provider', () => {
     let seen: HTMLCanvasElement | null = null;
     computeFrameMaskRegions(

@@ -673,6 +673,11 @@ export interface SessionRecordingOptions {
          * or an implicit `undefined` from an untyped caller — skips that frame.
          * Not setting this at all records the canvas unmasked.
          *
+         * The provider is called for every canvas on the page, including
+         * canvases inside shadow DOM. For a canvas it does not manage, return
+         * `[]` ("nothing to mask") — returning `null` skips that canvas's
+         * frames entirely.
+         *
          * Called synchronously on the main thread for every captured frame (canvas
          * FPS is 4 by default, 12 max), so keep it cheap — avoid forcing layout,
          * and return few regions.
