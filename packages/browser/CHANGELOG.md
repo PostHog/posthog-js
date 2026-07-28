@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.407.5
+
+### Patch Changes
+
+- [#4278](https://github.com/PostHog/posthog-js/pull/4278) [`a19ba65`](https://github.com/PostHog/posthog-js/commit/a19ba65da8f2c121d54db72ab4bc42f4a027fddb) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix paused replay seeks at an exact full snapshot timestamp so the snapshot frame is rebuilt before playback pauses.
+  (2026-07-28)
+
 ## 1.407.4
 
 ### Patch Changes
