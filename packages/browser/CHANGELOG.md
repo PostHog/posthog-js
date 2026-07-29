@@ -1,5 +1,24 @@
 # posthog-js
 
+## 1.407.7
+
+### Patch Changes
+
+- [#4304](https://github.com/PostHog/posthog-js/pull/4304) [`c7099e9`](https://github.com/PostHog/posthog-js/commit/c7099e9dbe58455efb0bfb47e1f211effb914a61) Thanks [@lucasheriques](https://github.com/lucasheriques)! - fix(surveys): only wait for feature flags on surveys that repeat
+
+    Surveys stopped being shown while feature flags were still loading, even when a cached
+    enabled value for their internal targeting flag was already available. Popover and widget
+    surveys recovered on the next evaluation, but a survey your own code renders (type `api`)
+    is evaluated once, so it was dropped for that page load and never reappeared.
+
+    That wait is only needed for surveys that repeat, where stored per-survey state is keyed by
+    iteration and cannot be relied on to record that someone already answered. Other surveys
+    keep one stable key that already prevents a repeat display, so they are now evaluated
+    against the cached flag right away. (2026-07-29)
+
+- Updated dependencies [[`c7099e9`](https://github.com/PostHog/posthog-js/commit/c7099e9dbe58455efb0bfb47e1f211effb914a61)]:
+    - @posthog/core@1.45.2
+
 ## 1.407.6
 
 ### Patch Changes

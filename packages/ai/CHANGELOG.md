@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.4.2
+
+### Patch Changes
+
+- [#4072](https://github.com/PostHog/posthog-js/pull/4072) [`0369b09`](https://github.com/PostHog/posthog-js/commit/0369b09f1f8004ed6161c4bd24d05e2565f88900) Thanks [@nandinitiw](https://github.com/nandinitiw)! - fix(ai): capture OpenAI `service_tier` in `$ai_model_parameters` so PostHog can correctly attribute costs for flex and priority tier requests
+  (2026-07-29)
+
 ## 8.4.1
 
 ### Patch Changes
