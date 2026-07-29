@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.4.3
+
+### Patch Changes
+
+- [#4306](https://github.com/PostHog/posthog-js/pull/4306) [`05088ff`](https://github.com/PostHog/posthog-js/commit/05088fffbaaaf47b1d777c27c4cec641ff509351) Thanks [@marandaneto](https://github.com/marandaneto)! - fix(ai): prefer the OpenAI `service_tier` reported by the response for accurate cost attribution
+  (2026-07-29)
+
 ## 8.4.2
 
 ### Patch Changes
