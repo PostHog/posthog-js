@@ -1141,6 +1141,7 @@ describe('PostHog React Native', () => {
       })
 
       it('should reload flags once when identify() is called with same distinctId and new properties', async () => {
+        await posthog.shutdown()
         ;(globalThis as any).window.fetch = jest.fn().mockResolvedValue({ status: 200 })
         posthog = new PostHog('test-api-key', {
           setDefaultPersonProperties: false,
@@ -1163,6 +1164,7 @@ describe('PostHog React Native', () => {
       })
 
       it('should reload flags once when identify() is called with different distinctId', async () => {
+        await posthog.shutdown()
         ;(globalThis as any).window.fetch = jest.fn().mockResolvedValue({ status: 200 })
         posthog = new PostHog('test-api-key', {
           setDefaultPersonProperties: false,
