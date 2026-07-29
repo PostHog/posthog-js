@@ -384,6 +384,7 @@
         "_manageWidgetSelectorListener",
         "_markGroupDirty",
         "_markMessagesAsRead",
+        "_maskRegionsFnFailed",
         "_maskReplayUrl",
         "_maskUrl",
         "_masking",
