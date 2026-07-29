@@ -11,8 +11,8 @@ jest.mock('posthog-js', () => ({
 }))
 
 describe('UMD bundle', () => {
-    it('unwraps the posthog-js CommonJS namespace for the default instance', async () => {
-        const { usePostHog } = await import('../../dist/umd/index.js')
+    it('unwraps the posthog-js CommonJS namespace for the default instance', () => {
+        const { usePostHog } = jest.requireActual('../../dist/umd/index.js')
 
         const { result } = renderHook(() => usePostHog())
 
