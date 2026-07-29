@@ -36,6 +36,14 @@ describe('shutdown()', () => {
         expect(retryQueueUnload).toHaveBeenCalledTimes(1)
     })
 
+    it('stops periodic remote config refreshes', async () => {
+        const remoteConfigStop = jest.spyOn(instance._remoteConfigLoader!, 'stop')
+
+        await instance.shutdown()
+
+        expect(remoteConfigStop).toHaveBeenCalledTimes(1)
+    })
+
     it('destroys feature flags listeners', async () => {
         const featureFlagsDestroy = jest.spyOn(instance.featureFlags!, 'destroy')
 
