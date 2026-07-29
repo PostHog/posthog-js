@@ -11,17 +11,17 @@
  * JSON-serializable.
  */
 export interface KeyValueStore {
-    /**
-     * Read a value by key.
-     *
-     * @returns The stored value, or `undefined` when the key is missing.
-     */
+    /** Read several values in one storage operation. Missing keys are omitted. */
+    get<T extends object>(keys: readonly (keyof T & string)[]): Partial<T> | Promise<Partial<T>>
+    /** Read one value by key, returning `undefined` when it is missing. */
     get<T = unknown>(key: string): T | undefined | Promise<T | undefined>
     /**
      * Forward a JSON-serializable value, including nullish values, to the host's
      * native persistence. `undefined` is not portable or durable storage.
      */
     set(key: string, value: unknown): void | Promise<void>
-    /** Remove a value by key. This is the portable deletion operation. */
-    remove(key: string): void | Promise<void>
+    /** Coherently forward several related values to the host's native persistence. */
+    set(values: Record<string, unknown>): void | Promise<void>
+    /** Remove one or several values in one storage operation. */
+    remove(keyOrKeys: string | readonly string[]): void | Promise<void>
 }

@@ -39,16 +39,41 @@ export interface TestClientOptions {
 export class InMemoryKeyValueStore implements KeyValueStore {
     private _values = new Map<string, unknown>()
 
-    async get<T = unknown>(key: string): Promise<T | undefined> {
-        return this._values.get(key) as T | undefined
+    get<T = unknown>(key: string): Promise<T | undefined>
+    get<T extends object>(keys: readonly (keyof T & string)[]): Promise<Partial<T>>
+    async get(keyOrKeys: string | readonly string[]): Promise<unknown> {
+        if (typeof keyOrKeys === 'string') {
+            return this._values.get(keyOrKeys)
+        }
+        const values: Record<string, unknown> = {}
+        for (const key of keyOrKeys) {
+            if (this._values.has(key)) {
+                values[key] = this._values.get(key)
+            }
+        }
+        return values
     }
 
-    async set(key: string, value: unknown): Promise<void> {
-        this._values.set(key, value)
+    async set(key: string, value: unknown): Promise<void>
+    async set(values: Record<string, unknown>): Promise<void>
+    async set(keyOrValues: string | Record<string, unknown>, value?: unknown): Promise<void> {
+        if (typeof keyOrValues === 'string') {
+            this._values.set(keyOrValues, value)
+        } else {
+            for (const [key, entry] of Object.entries(keyOrValues)) {
+                this._values.set(key, entry)
+            }
+        }
     }
 
-    async remove(key: string): Promise<void> {
-        this._values.delete(key)
+    async remove(keyOrKeys: string | readonly string[]): Promise<void> {
+        if (typeof keyOrKeys === 'string') {
+            this._values.delete(keyOrKeys)
+        } else {
+            for (const key of keyOrKeys) {
+                this._values.delete(key)
+            }
+        }
     }
 }
 

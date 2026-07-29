@@ -33,6 +33,7 @@ function createMockPostHog(
         props,
         get_property: jest.fn((prop: string) => props[prop]),
         set_property: jest.fn((prop: string, value: Property) => (props[prop] = value)),
+        register: jest.fn((values: Properties) => Object.assign(props, values)),
         unregister: jest.fn((prop: string) => delete props[prop]),
         get_initial_props: jest.fn(() => ({ initial: 'person-property' })),
     } as unknown as PostHogPersistence
@@ -145,14 +146,18 @@ describe('BrowserClientAdapter', () => {
         expect(client?.kv.get(key)).toEqual({ prepopulated: true })
 
         expect(client?.kv.set(key, { enabled: true })).toBeUndefined()
-        expect(instance.persistence?.set_property).toHaveBeenCalledWith(key, { enabled: true })
+        expect(instance.persistence?.register).toHaveBeenCalledWith({ [key]: { enabled: true } })
         expect(instance.persistence?.props[key]).toEqual({ enabled: true })
 
         client?.kv.set(key, null)
         client?.kv.set(key, undefined)
-        expect(instance.persistence?.set_property).toHaveBeenNthCalledWith(2, key, null)
-        expect(instance.persistence?.set_property).toHaveBeenNthCalledWith(3, key, undefined)
+        expect(instance.persistence?.register).toHaveBeenNthCalledWith(2, { [key]: null })
+        expect(instance.persistence?.register).toHaveBeenNthCalledWith(3, { [key]: undefined })
         expect(instance.persistence?.unregister).not.toHaveBeenCalled()
+
+        client?.kv.set({ first: true, second: 'value' })
+        expect(instance.persistence?.register).toHaveBeenCalledTimes(4)
+        expect(instance.persistence?.register).toHaveBeenLastCalledWith({ first: true, second: 'value' })
 
         instance.persistence!.props[key] = { externallyUpdated: true }
         expect(await client?.kv.get(key)).toEqual({ externallyUpdated: true })
