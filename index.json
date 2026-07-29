@@ -1,4 +1,17 @@
 {
+  "PostHog/posthog-js/issue/4317": {
+    "key": "PostHog/posthog-js/issue/4317",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4317",
+    "url": "https://github.com/PostHog/posthog-js/issues/4317",
+    "conclusion": "Confirmed multi-part AI observability bug and documentation gap; the checked-in Vercel AI examples reproduce two reported problems.",
+    "labels": [
+      "documentation",
+      "team/llm-analytics"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-29T22:23:42.977Z"
+  },
   "PostHog/posthog-js/issue/4315": {
     "key": "PostHog/posthog-js/issue/4315",
     "repo": "PostHog/posthog-js",
