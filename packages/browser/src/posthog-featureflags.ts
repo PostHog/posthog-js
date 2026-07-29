@@ -1,5 +1,5 @@
 import { addEventListener, entries, extend } from '@posthog/browser-common/utils/general-utils'
-import type { Client, Extension } from '@posthog/browser-common'
+import type { Client, Disposable, Extension } from '@posthog/browser-common'
 import {
     FlagsResponse,
     FeatureFlagsCallback,
@@ -281,6 +281,9 @@ export class PostHogFeatureFlags implements Extension {
     private _client?: Client
     private _logger: Client['logger'] = logger
     private _state: FeatureFlagsState = {}
+    private _dynamicProperties?: Disposable
+    private _freshEventProperties: Record<string, unknown> = {}
+    private _staleEventProperties: Record<string, unknown> = {}
     private _reloadingHandlers: Array<() => void> = []
     private _hasLoadedFlags: boolean = false
     private _requestInFlight: boolean = false
@@ -309,6 +312,10 @@ export class PostHogFeatureFlags implements Extension {
         if (window) {
             addEventListener(window, 'online', this._onOnline)
         }
+        this._dynamicProperties = client.registerDynamicEventProperties(() =>
+            this._isCacheStale() ? this._staleEventProperties : this._freshEventProperties
+        )
+        this._rebuildEventProperties()
         return this._initialize()
     }
 
@@ -325,6 +332,8 @@ export class PostHogFeatureFlags implements Extension {
             return
         }
         this._clearDebouncer()
+        this._dynamicProperties?.dispose()
+        this._dynamicProperties = undefined
         this._reloadingHandlers = []
         window?.removeEventListener('online', this._onOnline)
         this._client = undefined
@@ -365,6 +374,28 @@ export class PostHogFeatureFlags implements Extension {
         }
     }
 
+    private _rebuildEventProperties(): void {
+        const common: Record<string, unknown> = {}
+        for (const key of [
+            PERSISTENCE_ACTIVE_FEATURE_FLAGS,
+            PERSISTENCE_FEATURE_FLAG_PAYLOADS,
+            PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+            PERSISTENCE_OVERRIDE_FEATURE_FLAGS,
+        ] as const) {
+            if (!isUndefined(this._state[key])) {
+                common[key] = this._state[key]
+            }
+        }
+        this._staleEventProperties = common
+        const fresh = { ...common }
+        const flags = this._state[ENABLED_FEATURE_FLAGS]
+        if (flags) {
+            for (const [key, value] of Object.entries(flags)) {
+                fresh[`$feature/${key}`] = value
+            }
+        }
+        this._freshEventProperties = fresh
+    }
 
     /**
      * Check if the feature flag cache is stale based on the configured TTL.
@@ -1473,6 +1504,7 @@ export class PostHogFeatureFlags implements Extension {
     }
 
     _fireFeatureFlagsCallbacks(errorsLoading?: boolean): void {
+        this._rebuildEventProperties()
         const { flags, flagVariants } = this._prepareFeatureFlagsForCallbacks()
         this.featureFlagEventHandlers.forEach((handler) => {
             // Isolate each handler: a user-provided onFeatureFlags callback that throws must not
@@ -1609,6 +1641,7 @@ export class PostHogFeatureFlags implements Extension {
 
     reset(): void {
         this._state = {}
+        this._rebuildEventProperties()
         this._hasLoadedFlags = false
         this._requestInFlight = false
         this._reloadingDisabled = false

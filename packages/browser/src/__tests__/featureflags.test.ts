@@ -152,6 +152,7 @@ const createFeatureFlags = (instance: any): PostHogFeatureFlags => {
         instance.persistence.register = (properties: Record<string, unknown>) => {
             register(properties)
             Object.assign((featureFlags as any)._state, properties)
+            ;(featureFlags as any)._rebuildEventProperties()
         }
     }
     if (instance.persistence) {
@@ -162,7 +163,8 @@ const createFeatureFlags = (instance: any): PostHogFeatureFlags => {
             set: (properties: Record<string, unknown>) => {
                 persistenceProps = properties
                 ;(featureFlags as any)._state = { ...properties }
-                },
+                ;(featureFlags as any)._rebuildEventProperties()
+            },
         })
     }
     const unregister = instance.persistence?.unregister?.bind(instance.persistence)
@@ -170,6 +172,7 @@ const createFeatureFlags = (instance: any): PostHogFeatureFlags => {
         instance.persistence.unregister = (key: string) => {
             unregister(key)
             delete (featureFlags as any)._state[key]
+            ;(featureFlags as any)._rebuildEventProperties()
         }
     }
     return featureFlags
