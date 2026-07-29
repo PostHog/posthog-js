@@ -1029,6 +1029,12 @@ export interface PostHogConfig {
     /**
      * A function to be called once the PostHog scripts have loaded successfully.
      *
+     * @remarks
+     * It is called synchronously, with the live instance, before the initial `$pageview` is
+     * captured, so it is the right place to inspect or fix up the identity restored from
+     * persistence — e.g. `if (posthog.isIdentified() && ...) posthog.reset()` — without
+     * mis-attributing that first event.
+     *
      * @param posthog_instance - The PostHog instance that has been loaded.
      */
     loaded: (posthog_instance: PostHog) => void

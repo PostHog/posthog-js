@@ -2973,6 +2973,11 @@ export class PostHog implements PostHogInterface {
      * - User identification (sets new random distinct_id)
      * - Cached data and consent settings
      *
+     * ⚠️ **Warning**: because consent is cleared, `reset()` returns the instance to the default
+     * consent state. With `opt_out_capturing_by_default` that default is opted out,
+     * so calling `reset()` *after* `opt_in_capturing()` silently stops capturing.
+     * Always `reset()` first, then opt in.
+     *
      * {@label Identification}
      * @example
      * ```js
@@ -2987,6 +2992,13 @@ export class PostHog implements PostHogInterface {
      * ```js
      * // reset and generate new device ID
      * posthog.reset(true)  // also resets device_id
+     * ```
+     *
+     * @example
+     * ```js
+     * // with opt_out_capturing_by_default, reset() before opting in, never after
+     * posthog.reset()
+     * posthog.opt_in_capturing()
      * ```
      *
      * @public
@@ -3010,7 +3022,20 @@ export class PostHog implements PostHogInterface {
         // checkout (~5 min later).
         const recordingRemoteConfig = this.get_property(SESSION_RECORDING_REMOTE_CONFIG)
 
+        // Consent is user state, so reset() clears it along with the rest. But when capturing is
+        // opted out by default that flips capturing back off, and nothing else surfaces it: events
+        // are dropped with no error. Warn instead of failing silently.
+        const wasCapturing = this.is_capturing()
+
         this.consent.reset()
+
+        if (wasCapturing && !this.is_capturing()) {
+            logger.warn(
+                'reset() cleared the stored consent, and capturing is now off because of `opt_out_capturing_by_default`. ' +
+                    'Call opt_in_capturing() again, and prefer calling reset() before opting in rather than after.'
+            )
+        }
+
         this.persistence?.clear()
         this.sessionPersistence?.clear()
 
@@ -3183,6 +3208,38 @@ export class PostHog implements PostHogInterface {
      */
     get_distinct_id(): string {
         return this.get_property('distinct_id')
+    }
+
+    /**
+     * Whether the current user has been identified, i.e. whether `identify()` has been called
+     * for the distinct ID currently stored in persistence.
+     *
+     * @remarks
+     * Useful when a page is reached with an identity already restored from persistence, and you
+     * need to decide whether to keep it or `reset()` first — e.g. on a shared machine where a
+     * different user may be about to log in. This can be done in the `loaded` callback, which
+     * runs before the initial `$pageview` is captured.
+     *
+     * {@label Identification}
+     *
+     * @example
+     * ```js
+     * // on a shared machine, drop any identity restored from a previous user
+     * posthog.init('token', {
+     *     loaded: (posthog) => {
+     *         if (posthog.isIdentified() && posthog.get_distinct_id() !== currentUserId) {
+     *             posthog.reset()
+     *         }
+     *     }
+     * })
+     * ```
+     *
+     * @public
+     *
+     * @returns Whether the current user is identified
+     */
+    isIdentified(): boolean {
+        return this._isIdentified()
     }
 
     /**

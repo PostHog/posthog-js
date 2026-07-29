@@ -44,6 +44,15 @@ describe('reset()', () => {
         expect(instance.persistence!.get_property(USER_STATE)).toEqual('anonymous')
     })
 
+    it('reports the user as no longer identified', () => {
+        instance.persistence!.set_property(USER_STATE, 'identified')
+        expect(instance.isIdentified()).toBe(true)
+
+        instance.reset()
+
+        expect(instance.isIdentified()).toBe(false)
+    })
+
     it('resets the logs extension so buffered logs are dropped', () => {
         const logsReset = jest.spyOn(instance.logs, 'reset')
 
