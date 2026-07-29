@@ -118,6 +118,7 @@ import {
     isBoolean,
     getEventUuid,
     minimizeFlagCalledEventProperties,
+    ErrorTracking as CoreErrorTracking,
 } from '@posthog/core'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { ExternalIntegrations } from './extensions/external-integration'
@@ -1561,6 +1562,14 @@ export class PostHog implements PostHogInterface {
         let properties = { ...eventProperties }
         properties['token'] = this.config.token
         properties['$config_defaults'] = this.config.defaults
+
+        // Surface the release id injected into the bundle by posthog-cli (`globalThis._posthogRelease`)
+        // on every event, so the server resolves the release for exceptions with a plain foreign-key
+        // lookup and any metric can be broken down by release.
+        const releaseId = CoreErrorTracking.getInjectedReleaseId()
+        if (releaseId) {
+            properties['$release_id'] = releaseId
+        }
 
         if (this._inCookielessMode()) {
             // Set a flag to tell the plugin server to use cookieless server hash mode

@@ -51,6 +51,7 @@ import {
   RequiresServerEvaluation,
 } from './extensions/feature-flags/feature-flags'
 import ErrorTracking from './extensions/error-tracking'
+import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 import { PostHogMemoryStorage } from './storage-memory'
 import { ContextData, ContextOptions, IPostHogContext } from './extensions/context/types'
 import { type CaptureMode, resolveCaptureMode } from './capture-v1/config'
@@ -573,6 +574,14 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     if (this.options.isServer ?? true) {
       commonProperties.$is_server = true
+    }
+
+    // Surface the release id injected into the bundle by posthog-cli (`globalThis._posthogRelease`)
+    // on every event, so any metric can be broken down by release and the server resolves the
+    // release for exceptions with a plain foreign-key lookup.
+    const releaseId = CoreErrorTracking.getInjectedReleaseId()
+    if (releaseId) {
+      commonProperties.$release_id = releaseId
     }
 
     return commonProperties
