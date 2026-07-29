@@ -7,7 +7,7 @@ import {
     useHideSurveyOnURLChange,
     usePopupVisibility,
 } from '../../extensions/surveys'
-import { retrieveSurveyShadow } from '../../extensions/surveys/surveys-extension-utils'
+import { getInProgressSurveyState, retrieveSurveyShadow } from '../../extensions/surveys/surveys-extension-utils'
 import {
     Survey,
     SurveyQuestionBranchingType,
@@ -1160,6 +1160,91 @@ describe('SurveyManager', () => {
                     $survey_completed: false,
                 })
             )
+        })
+
+        it('should include caller-provided properties in the auto-submitted prefill event', () => {
+            const survey: Survey = {
+                id: 'prefill-survey-props',
+                name: 'Prefill Survey Props',
+                type: SurveyType.Popover,
+                enable_partial_responses: true,
+                questions: [
+                    {
+                        id: 'q1',
+                        type: SurveyQuestionType.Rating,
+                        question: 'Rate us',
+                        scale: 10,
+                        skipSubmitButton: true,
+                    },
+                    {
+                        id: 'q2',
+                        type: SurveyQuestionType.Open,
+                        question: 'Any feedback?',
+                    },
+                ],
+                appearance: {},
+                conditions: null,
+                start_date: '2021-01-01T00:00:00.000Z',
+                end_date: null,
+                current_iteration: null,
+                current_iteration_start_date: null,
+                feature_flag_keys: [],
+                linked_flag_key: null,
+                targeting_flag_key: null,
+                internal_targeting_flag_key: null,
+            }
+
+            window.location.search = '?q0=8'
+            ;(surveyManager as any)._handleUrlPrefill(survey, null, { account_number: 'A12345', month: 'January' })
+
+            expect(mockPostHog.capture).toHaveBeenCalledWith(
+                'survey sent',
+                expect.objectContaining({
+                    $survey_id: 'prefill-survey-props',
+                    $survey_response_q1: 8,
+                    account_number: 'A12345',
+                    month: 'January',
+                })
+            )
+        })
+
+        it('should persist auto-advanced questions as visited so a later manual submit keeps prefilled answers', () => {
+            const survey: Survey = {
+                id: 'prefill-survey-visited',
+                name: 'Prefill Survey Visited',
+                type: SurveyType.Popover,
+                enable_partial_responses: true,
+                questions: [
+                    {
+                        id: 'q1',
+                        type: SurveyQuestionType.Rating,
+                        question: 'Rate us',
+                        scale: 10,
+                        skipSubmitButton: true,
+                    },
+                    {
+                        id: 'q2',
+                        type: SurveyQuestionType.Open,
+                        question: 'Any feedback?',
+                    },
+                ],
+                appearance: {},
+                conditions: null,
+                start_date: '2021-01-01T00:00:00.000Z',
+                end_date: null,
+                current_iteration: null,
+                current_iteration_start_date: null,
+                feature_flag_keys: [],
+                linked_flag_key: null,
+                targeting_flag_key: null,
+                internal_targeting_flag_key: null,
+            }
+
+            window.location.search = '?q0=8'
+            ;(surveyManager as any)._handleUrlPrefill(survey)
+
+            const state = getInProgressSurveyState(survey)
+            expect(state?.visitedIndices).toEqual([0])
         })
 
         it('should NOT auto-submit when skipSubmitButton is false, even with enable_partial_responses true', () => {
