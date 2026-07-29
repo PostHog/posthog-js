@@ -146,15 +146,19 @@ export function convertPrefillToResponses(survey: Survey, prefillParams: Prefill
  * @param survey - The full survey object (needed for branching logic)
  * @param prefilledIndices - Array of question indices that have been prefilled
  * @param responses - Map of response keys to response values
- * @returns Object with startQuestionIndex and map of questions which have been skipped
+ * @returns Object with startQuestionIndex, map of questions which have been skipped, and the
+ *          indices of those skipped questions
  */
 export function calculatePrefillStartIndex(
     survey: Survey,
     prefilledIndices: number[],
     responses: Record<string, any>
-): { startQuestionIndex: number; skippedResponses: Record<string, any> } {
+): { startQuestionIndex: number; skippedResponses: Record<string, any>; visitedIndices: number[] } {
     let currentIndex = 0
     const skippedResponses: Record<string, any> = {}
+    // Auto-submitted questions count as visited: the survey-sent event only carries responses for
+    // questions on the visited path, so without this their answers get pruned on the next submit.
+    const visitedIndices: number[] = []
 
     const MAX_ITERATIONS = survey.questions.length + 1
     const iterations = 0
@@ -172,6 +176,8 @@ export function calculatePrefillStartIndex(
             break
         }
 
+        visitedIndices.push(currentIndex)
+
         // Record the skipped response
         if (question.id) {
             const responseKey = getSurveyResponseKey(question.id)
@@ -186,12 +192,12 @@ export function calculatePrefillStartIndex(
 
         if (nextStep === SurveyQuestionBranchingType.End) {
             // Survey is complete - return questions.length to indicate completion
-            return { startQuestionIndex: survey.questions.length, skippedResponses }
+            return { startQuestionIndex: survey.questions.length, skippedResponses, visitedIndices }
         }
 
         // Move to the next question (respecting branching)
         currentIndex = nextStep
     }
 
-    return { startQuestionIndex: currentIndex, skippedResponses }
+    return { startQuestionIndex: currentIndex, skippedResponses, visitedIndices }
 }

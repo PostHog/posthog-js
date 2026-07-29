@@ -891,6 +891,107 @@ describe('SurveyManager', () => {
         })
     })
 
+    describe('renderSurvey with URL prefill followed by a manual submission', () => {
+        let originalLocation: Location
+
+        const prefillSurvey = {
+            id: 'prefill-then-submit',
+            name: 'Prefill Then Submit',
+            type: SurveyType.Popover,
+            enable_partial_responses: true,
+            questions: [
+                {
+                    id: 'q1',
+                    type: SurveyQuestionType.Rating,
+                    question: 'Was this helpful?',
+                    scale: 2,
+                    display: 'emoji',
+                    skipSubmitButton: true,
+                },
+                {
+                    id: 'q2',
+                    type: SurveyQuestionType.Open,
+                    question: 'Tell us more',
+                    optional: true,
+                },
+            ],
+            appearance: {},
+            conditions: null,
+            start_date: '2021-01-01T00:00:00.000Z',
+            end_date: null,
+            current_iteration: null,
+            current_iteration_start_date: null,
+            feature_flag_keys: [],
+            linked_flag_key: null,
+            targeting_flag_key: null,
+            internal_targeting_flag_key: null,
+        } as unknown as Survey
+
+        beforeEach(() => {
+            localStorage.clear()
+            originalLocation = window.location
+            delete (window as any).location
+            window.location = { ...originalLocation, search: '?q0=1' } as Location
+        })
+
+        afterEach(() => {
+            window.location = originalLocation
+        })
+
+        it('keeps the auto-submitted answer and the caller properties on the final submission', async () => {
+            const capture = jest.fn()
+            const mockPH = createMockPostHog({
+                config: {
+                    token: 'test-token',
+                    api_host: 'https://test.com',
+                    surveys: { prefillFromUrl: true },
+                },
+                getActiveMatchingSurveys: jest.fn(),
+                get_session_replay_url: jest.fn(),
+                capture,
+                featureFlags: { isFeatureEnabled: jest.fn().mockReturnValue(true) },
+            })
+            const surveyManager = new SurveyManager(mockPH)
+
+            const surveyDiv = document.createElement('div')
+            document.body.appendChild(surveyDiv)
+            surveyManager.renderSurvey(prefillSurvey, surveyDiv, { account_number: '12345' })
+
+            const sentEvents = () => capture.mock.calls.filter(([event]) => event === 'survey sent')
+
+            expect(sentEvents()).toHaveLength(1)
+            expect(sentEvents()[0][1]).toEqual(
+                expect.objectContaining({
+                    $survey_response_q1: 1,
+                    $survey_completed: false,
+                    account_number: '12345',
+                })
+            )
+            const autoSubmissionId = sentEvents()[0][1].$survey_submission_id
+
+            const textarea = surveyDiv.querySelector<HTMLTextAreaElement>('textarea')
+            await act(async () => {
+                fireEvent.input(textarea!, { target: { value: 'it was great' } })
+            })
+            await act(async () => {
+                fireEvent.click(surveyDiv.querySelector<HTMLButtonElement>('.form-submit')!)
+            })
+
+            expect(sentEvents()).toHaveLength(2)
+            expect(sentEvents()[1][1]).toEqual(
+                expect.objectContaining({
+                    $survey_submission_id: autoSubmissionId,
+                    $survey_response_q1: 1,
+                    $survey_response_q2: 'it was great',
+                    $survey_completed: true,
+                    account_number: '12345',
+                })
+            )
+
+            document.body.removeChild(surveyDiv)
+        })
+    })
+
     describe('timeout management', () => {
         let mockPostHog: PostHog
         let surveyManager: SurveyManager

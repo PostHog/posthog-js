@@ -752,6 +752,7 @@ describe('calculatePrefillStartIndex', () => {
             const result = calculatePrefillStartIndex(createSurvey(questions), prefilledIndices, responses)
             expect(result.startQuestionIndex).toBe(1)
             expect(result.skippedResponses).toEqual({ '$survey_response_q-rating': 7 })
+            expect(result.visitedIndices).toEqual([0])
         })
 
         it('should return 2 when q0 and q1 are prefilled with skipSubmitButton', () => {
@@ -768,6 +769,7 @@ describe('calculatePrefillStartIndex', () => {
                 '$survey_response_q-rating': 8,
                 '$survey_response_q-single': 'B',
             })
+            expect(result.visitedIndices).toEqual([0, 1])
         })
 
         it('should return 3 (questions.length) when all questions are prefilled with skipSubmitButton', () => {
@@ -787,6 +789,7 @@ describe('calculatePrefillStartIndex', () => {
                 '$survey_response_q-single': 'A',
                 '$survey_response_q-rating-2': 10,
             })
+            expect(result.visitedIndices).toEqual([0, 1, 2])
         })
     })
 
@@ -812,6 +815,7 @@ describe('calculatePrefillStartIndex', () => {
             const result = calculatePrefillStartIndex(createSurvey(questions), prefilledIndices, responses)
             expect(result.startQuestionIndex).toBe(1)
             expect(result.skippedResponses).toEqual({ '$survey_response_q-rating': 9 })
+            expect(result.visitedIndices).toEqual([0])
         })
     })
 
