@@ -8,7 +8,7 @@ const lastFingerprintMap: Map<number, string> = new Map();
 const transparentFingerprintMap: Map<number, string> = new Map();
 const lastSentAtMap: Map<number, number> = new Map();
 
-const MASKED_KEYFRAME_INTERVAL_MS = 30_000;
+const PROVIDER_KEYFRAME_INTERVAL_MS = 30_000;
 
 // two independent hashes over 32-bit words rather than bytes: RGBA pixel
 // buffers are multi-megabyte, always word-aligned, and this runs on every frame
@@ -132,15 +132,14 @@ worker.onmessage = async function (e) {
         lastFingerprintMap.get(id) ?? transparentFingerprint(width, height);
 
       if (fingerprint === lastFingerprint) {
-        // masked canvases can dedup for minutes at a stretch (changes hidden
-        // under the mask don't alter the pixels), which leaves the player
-        // nothing to repaint from after a scrub — send a keyframe anyway
+        // canvases recorded under a mask provider lose their snapshot still
+        // (rr_dataURL), so the player needs a frame to repaint from after a
+        // snapshot rebuild or seek — send a keyframe anyway
         const lastSentAt = lastSentAtMap.get(id);
         const keyframeDue =
-          maskRegions &&
-          maskRegions.length > 0 &&
+          maskRegions !== undefined &&
           lastSentAt !== undefined &&
-          Date.now() - lastSentAt >= MASKED_KEYFRAME_INTERVAL_MS;
+          Date.now() - lastSentAt >= PROVIDER_KEYFRAME_INTERVAL_MS;
         if (!keyframeDue) {
           return worker.postMessage({ id }); // unchanged, or still blank
         }

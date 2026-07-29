@@ -706,9 +706,11 @@ export interface SessionRecordingOptions {
          * to skip is re-evaluated at each snapshot, so a provider installed via
          * `set_config` after recording started is honored at the next snapshot
          * without a recorder restart. A canvas appears blank in a snapshot until
-         * the next masked frame paints it — at most ~250ms at the default 4 fps —
-         * and the 30s masked keyframe bounds any gap when seeking. Without this
-         * option, snapshot behavior is unchanged.
+         * the next canvas frame paints it — ~250ms at the default 4 fps while its
+         * pixels are changing, and at most 30s otherwise, because every canvas
+         * the provider answers (with regions or `[]`) re-sends an unchanged frame
+         * as a keyframe every 30s; a canvas whose frames are skipped (`null`)
+         * stays blank. Without this option, snapshot behavior is unchanged.
          *
          * An app whose real provider only exists once its runtime has booted picks
          * what happens in between by what it declares in `posthog.init`: a function

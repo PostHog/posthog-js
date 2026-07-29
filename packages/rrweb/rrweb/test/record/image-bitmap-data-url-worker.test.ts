@@ -344,17 +344,23 @@ describe('image-bitmap-data-url-worker', () => {
     }
   });
 
-  it('does not keyframe unchanged frames with an empty mask region list', async () => {
+  it('sends a keyframe for an unchanged canvas with an empty mask region list after the interval', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     try {
       const onmessage = await loadWorker();
 
       await onmessage(frame(1, CONTENT_A, WIDTH, HEIGHT, []));
-      vi.advanceTimersByTime(60_000);
       await onmessage(frame(1, CONTENT_A, WIDTH, HEIGHT, []));
-
       expect(postMessage).toHaveBeenLastCalledWith({ id: 1 });
       expect(convertToBlob).toHaveBeenCalledTimes(1);
+
+      vi.advanceTimersByTime(30_000);
+      await onmessage(frame(1, CONTENT_A, WIDTH, HEIGHT, []));
+
+      expect(postMessage).toHaveBeenLastCalledWith(
+        expect.objectContaining({ id: 1, base64: expect.any(String) }),
+      );
+      expect(convertToBlob).toHaveBeenCalledTimes(2);
     } finally {
       vi.useRealTimers();
     }
