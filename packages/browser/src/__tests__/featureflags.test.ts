@@ -1223,7 +1223,7 @@ describe('featureflags', () => {
             errorSpy.mockRestore()
         })
 
-        it('should replace existing flags with the flag_keys response', () => {
+        it('should replace existing flags with the flag_keys response', async () => {
             const requestedFlagDetail = {
                 key: 'checkout-redesign',
                 enabled: true,
@@ -1288,7 +1288,7 @@ describe('featureflags', () => {
         it('should support deprecated evaluation_environments field', () => {
             instance.config.evaluation_environments = ['production', 'web']
             featureFlags.reloadFeatureFlags()
-            jest.runOnlyPendingTimers()
+            await jest.runOnlyPendingTimersAsync()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toEqual(['production', 'web'])
@@ -1299,64 +1299,64 @@ describe('featureflags', () => {
                 Object.defineProperty(window.navigator, 'onLine', { value, configurable: true })
             }
 
-            const reloadWith = (statusCode: number) => {
+            const reloadWith = async (statusCode: number) => {
                 instance._send_request.mockImplementationOnce(({ callback }) =>
                     callback({ statusCode, json: statusCode === 200 ? {} : null })
                 )
 
                 featureFlags.reloadFeatureFlags()
-                jest.advanceTimersByTime(10)
+                await jest.advanceTimersByTimeAsync(10)
             }
 
             afterEach(() => {
                 delete (window.navigator as any).onLine
             })
 
-            it('stops refreshing feature flags after 3 consecutive online status-0 failures', () => {
+            it('stops refreshing feature flags after 3 consecutive online status-0 failures', async () => {
                 for (let i = 0; i < 3; i++) {
-                    reloadWith(0)
+                    await reloadWith(0)
                 }
                 expect(instance._send_request).toHaveBeenCalledTimes(3)
 
-                reloadWith(0)
+                await reloadWith(0)
 
                 expect(instance._send_request).toHaveBeenCalledTimes(3)
             })
 
-            it('resets the status-0 budget after any HTTP response', () => {
-                reloadWith(0)
-                reloadWith(0)
-                reloadWith(500)
-                reloadWith(0)
-                reloadWith(0)
+            it('resets the status-0 budget after any HTTP response', async () => {
+                await reloadWith(0)
+                await reloadWith(0)
+                await reloadWith(500)
+                await reloadWith(0)
+                await reloadWith(0)
 
-                reloadWith(0)
+                await reloadWith(0)
 
                 expect(instance._send_request).toHaveBeenCalledTimes(6)
             })
 
-            it('does not count status-0 failures while the browser reports itself offline', () => {
+            it('does not count status-0 failures while the browser reports itself offline', async () => {
                 setOnline(false)
                 for (let i = 0; i < 3; i++) {
-                    reloadWith(0)
+                    await reloadWith(0)
                 }
                 setOnline(true)
 
-                reloadWith(0)
+                await reloadWith(0)
 
                 expect(instance._send_request).toHaveBeenCalledTimes(4)
             })
 
-            it('retries on the online event', () => {
+            it('retries on the online event', async () => {
                 for (let i = 0; i < 3; i++) {
-                    reloadWith(0)
+                    await reloadWith(0)
                 }
-                reloadWith(0)
+                await reloadWith(0)
                 expect(instance._send_request).toHaveBeenCalledTimes(3)
 
                 instance._send_request.mockImplementationOnce(({ callback }) => callback({ statusCode: 0, json: null }))
                 window.dispatchEvent(new Event('online'))
-                jest.advanceTimersByTime(10)
+                await jest.advanceTimersByTimeAsync(10)
 
                 expect(instance._send_request).toHaveBeenCalledTimes(4)
             })
@@ -1388,7 +1388,7 @@ describe('featureflags', () => {
             )
         })
 
-        it('onFeatureFlags should not be called immediately if feature flags not loaded', () => {
+        it('onFeatureFlags should not be called immediately if feature flags not loaded', async () => {
             let called = false
             let _flags = []
             let _variants = {}
@@ -1405,7 +1405,7 @@ describe('featureflags', () => {
             featureFlags.setAnonymousDistinctId('rando_id')
             featureFlags.reloadFeatureFlags()
 
-            jest.runAllTimers()
+            await jest.runAllTimersAsync()
             expect(called).toEqual(true)
             expect(_error).toEqual(false)
             expect(_flags).toEqual(['first', 'second'])
@@ -1441,7 +1441,7 @@ describe('featureflags', () => {
             })
         })
 
-        it('onFeatureFlags should return function to unsubscribe the function from onFeatureFlags', () => {
+        it('onFeatureFlags should return function to unsubscribe the function from onFeatureFlags', async () => {
             let called = false
 
             const unsubscribe = featureFlags.onFeatureFlags(() => {
@@ -1450,7 +1450,7 @@ describe('featureflags', () => {
 
             featureFlags.setAnonymousDistinctId('rando_id')
             featureFlags.reloadFeatureFlags()
-            jest.runAllTimers()
+            await jest.runAllTimersAsync()
 
             expect(called).toEqual(true)
 
@@ -1460,7 +1460,7 @@ describe('featureflags', () => {
 
             featureFlags.setAnonymousDistinctId('rando_id')
             featureFlags.reloadFeatureFlags()
-            jest.runAllTimers()
+            await jest.runAllTimersAsync()
 
             expect(called).toEqual(false)
         })
@@ -1529,7 +1529,7 @@ describe('featureflags', () => {
             expect(loadingCallback).toHaveBeenCalledTimes(1)
         })
 
-        it('should emit featureFlagsReloading before onFeatureFlags callback', () => {
+        it('should emit featureFlagsReloading before onFeatureFlags callback', async () => {
             const callOrder: string[] = []
 
             instance.on('featureFlagsReloading', () => {
@@ -1541,7 +1541,7 @@ describe('featureflags', () => {
             })
 
             featureFlags.reloadFeatureFlags()
-            jest.runAllTimers()
+            await jest.runAllTimersAsync()
 
             expect(callOrder).toEqual(['loading', 'loaded'])
         })
@@ -1601,10 +1601,11 @@ describe('featureflags', () => {
             )
         })
 
-        it('getEarlyAccessFeatures requests early access features if not present', () => {
+        it('getEarlyAccessFeatures requests early access features if not present', async () => {
             featureFlags.getEarlyAccessFeatures((data) => {
                 expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
             })
+            await jest.runAllTimersAsync()
 
             expect(instance._send_request).toHaveBeenCalledWith({
                 url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
@@ -1629,13 +1630,15 @@ describe('featureflags', () => {
             featureFlags.getEarlyAccessFeatures((data) => {
                 expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
             })
+            await jest.runAllTimersAsync()
             expect(instance._send_request).toHaveBeenCalledTimes(0)
         })
 
-        it('getEarlyAccessFeatures force reloads early access features when asked to', () => {
+        it('getEarlyAccessFeatures force reloads early access features when asked to', async () => {
             featureFlags.getEarlyAccessFeatures((data) => {
                 expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
             })
+            await jest.runAllTimersAsync()
 
             expect(instance._send_request).toHaveBeenCalledWith({
                 url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
@@ -1660,6 +1663,7 @@ describe('featureflags', () => {
             featureFlags.getEarlyAccessFeatures((data) => {
                 expect(data).toEqual([EARLY_ACCESS_FEATURE_SECOND])
             }, true)
+            await jest.runAllTimersAsync()
             expect(instance._send_request).toHaveBeenCalledTimes(1)
         })
 
@@ -1680,7 +1684,7 @@ describe('featureflags', () => {
             })
         })
 
-        it('getEarlyAccessFeatures replaces existing features completely instead of merging', () => {
+        it('getEarlyAccessFeatures replaces existing features completely instead of merging', async () => {
             // Set up initial features in persistence
             instance.persistence.props.$early_access_features = [
                 EARLY_ACCESS_FEATURE_FIRST,
@@ -1695,6 +1699,7 @@ describe('featureflags', () => {
             featureFlags.getEarlyAccessFeatures((data) => {
                 expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
             }, true)
+            await jest.runAllTimersAsync()
 
             // Verify unregister was called first to clear old data
             expect(unregisterSpy).toHaveBeenCalledWith('$early_access_features')
@@ -2062,7 +2067,7 @@ describe('featureflags', () => {
             )
         })
 
-        it('on providing anonDistinctId', () => {
+        it('on providing anonDistinctId', async () => {
             featureFlags.setAnonymousDistinctId('rando_id')
             featureFlags.reloadFeatureFlags()
 
@@ -2088,7 +2093,7 @@ describe('featureflags', () => {
             })
         })
 
-        it('on providing anonDistinctId and calling reload multiple times', () => {
+        it('on providing anonDistinctId and calling reload multiple times', async () => {
             featureFlags.setAnonymousDistinctId('rando_id')
             featureFlags.reloadFeatureFlags()
             featureFlags.reloadFeatureFlags()
@@ -2150,10 +2155,10 @@ describe('featureflags', () => {
             })
         })
 
-        it('on providing personProperties runs reload automatically', () => {
+        it('on providing personProperties runs reload automatically', async () => {
             featureFlags.setPersonPropertiesForFlags({ a: 'b', c: 'd' })
 
-            jest.runAllTimers()
+            await jest.runAllTimersAsync()
 
             expect(featureFlags.getFlagVariants()).toEqual({
                 first: 'variant-1',
@@ -2193,7 +2198,7 @@ describe('featureflags', () => {
             })
 
             featureFlags.reloadFeatureFlags()
-            jest.runAllTimers()
+            await jest.runAllTimersAsync()
 
             expect(featureFlags.getFlagVariants()).toEqual({
                 'beta-feature': true,
@@ -2207,7 +2212,7 @@ describe('featureflags', () => {
 
             featureFlags.setPersonPropertiesForFlags({ a: 'b', c: 'd' })
 
-            jest.runAllTimers()
+            await jest.runAllTimersAsync()
 
             expect(featureFlags.getFlagVariants()).toEqual({
                 'beta-feature': true,
@@ -2225,7 +2230,7 @@ describe('featureflags', () => {
             }
 
             featureFlags.reloadFeatureFlags()
-            jest.runAllTimers()
+            await jest.runAllTimersAsync()
 
             expect(instance._send_request.mock.calls[0][0].compression).toEqual(undefined)
         })
@@ -2246,11 +2251,11 @@ describe('featureflags', () => {
             )
         })
 
-        it('on providing personProperties updates properties successively', () => {
+        it('on providing personProperties updates properties successively', async () => {
             featureFlags.setPersonPropertiesForFlags({ a: 'b', c: 'd' })
             featureFlags.setPersonPropertiesForFlags({ x: 'y', c: 'e' })
 
-            jest.runAllTimers()
+            await jest.runAllTimersAsync()
 
             expect(featureFlags.getFlagVariants()).toEqual({
                 first: 'variant-1',
@@ -2426,7 +2431,7 @@ describe('featureflags', () => {
             featureFlags.resetPersonPropertiesForFlags(false)
         })
 
-        it('on providing groupProperties updates properties successively', () => {
+        it('on providing groupProperties updates properties successively', async () => {
             featureFlags.setGroupPropertiesForFlags({ orgs: { a: 'b', c: 'd' }, projects: { x: 'y', c: 'e' } })
 
             expect(instance.persistence.props.$stored_group_properties).toEqual({
@@ -2434,7 +2439,7 @@ describe('featureflags', () => {
                 projects: { x: 'y', c: 'e' },
             })
 
-            jest.runAllTimers()
+            await jest.runAllTimersAsync()
 
             expect(featureFlags.getFlagVariants()).toEqual({
                 first: 'variant-1',
@@ -2517,10 +2522,10 @@ describe('featureflags', () => {
             )
         })
 
-        it('should return combined results', () => {
+        it('should return combined results', async () => {
             featureFlags.reloadFeatureFlags()
 
-            jest.runAllTimers()
+            await jest.runAllTimersAsync()
 
             expect(featureFlags.getFlagVariants()).toEqual({
                 'alpha-feature-2': true,
@@ -2595,7 +2600,7 @@ describe('featureflags', () => {
         it('should return combined results', () => {
             featureFlags.reloadFeatureFlags()
 
-            jest.runAllTimers()
+            await jest.runAllTimersAsync()
 
             expect(featureFlags.getFlagVariants()).toEqual({
                 'alpha-feature-2': true,
@@ -2680,10 +2685,10 @@ describe('featureflags', () => {
             )
         })
 
-        it('should filter out failed flags and preserve their cached values', () => {
+        it('should filter out failed flags and preserve their cached values', async () => {
             featureFlags.reloadFeatureFlags()
 
-            jest.runAllTimers()
+            await jest.runAllTimersAsync()
 
             expect(featureFlags.getFlagVariants()).toEqual({
                 'alpha-feature-2': true,
@@ -2708,10 +2713,10 @@ describe('featureflags', () => {
             )
         })
 
-        it('should return combined results', () => {
+        it('should return combined results', async () => {
             featureFlags.reloadFeatureFlags()
 
-            jest.runAllTimers()
+            await jest.runAllTimersAsync()
 
             expect(featureFlags.getFlagVariants()).toEqual({
                 'x-flag': 'x-value',
@@ -2747,7 +2752,7 @@ describe('featureflags', () => {
             })
         })
 
-        it('should call onFeatureFlags even when /flags errors out', () => {
+        it('should call onFeatureFlags even when /flags errors out', async () => {
             let called = false
             let _flags = []
             let _variants = {}
@@ -2767,14 +2772,14 @@ describe('featureflags', () => {
 
             featureFlags.reloadFeatureFlags()
 
-            jest.runAllTimers()
+            await jest.runAllTimersAsync()
             expect(called).toEqual(true)
             expect(_errors).toEqual(true)
             expect(_flags).toEqual([])
             expect(_variants).toEqual({})
         })
 
-        it('should call onFeatureFlags with existing flags', () => {
+        it('should call onFeatureFlags with existing flags', async () => {
             let called = false
             let _flags = []
             let _variants = {}
@@ -2790,7 +2795,7 @@ describe('featureflags', () => {
 
             featureFlags.reloadFeatureFlags()
 
-            jest.runAllTimers()
+            await jest.runAllTimersAsync()
             expect(called).toEqual(true)
             expect(_errors).toEqual(true)
             expect(_flags).toEqual(['beta-feature', 'alpha-feature-2', 'multivariate-flag'])
@@ -2801,7 +2806,7 @@ describe('featureflags', () => {
             })
         })
 
-        it('should call onFeatureFlags with existing flags on timeouts', () => {
+        it('should call onFeatureFlags with existing flags on timeouts', async () => {
             instance._send_request = jest.fn().mockImplementation(({ callback }) =>
                 callback({
                     statusCode: 0,
@@ -2824,7 +2829,7 @@ describe('featureflags', () => {
 
             featureFlags.reloadFeatureFlags()
 
-            jest.runAllTimers()
+            await jest.runAllTimersAsync()
             expect(called).toEqual(true)
             expect(_errors).toEqual(true)
             expect(_flags).toEqual(['beta-feature', 'alpha-feature-2', 'multivariate-flag'])
@@ -4074,7 +4079,7 @@ describe('$feature_flag_error tracking', () => {
         jest.clearAllMocks()
     })
 
-    it('should set $feature_flag_error to api_error_{status} on server error', () => {
+    it('should set $feature_flag_error to api_error_{status} on server error', async () => {
         instance._send_request = jest.fn().mockImplementation(({ callback }) =>
             callback({
                 statusCode: 500,
@@ -4088,7 +4093,7 @@ describe('$feature_flag_error tracking', () => {
         expect(instance.persistence.props.$feature_flag_errors).toEqual(['api_error_500'])
     })
 
-    it('should set $feature_flag_error to connection_error on network failure', () => {
+    it('should set $feature_flag_error to connection_error on network failure', async () => {
         const networkError = new Error('Network request failed')
         networkError.name = 'TypeError'
 
@@ -4101,12 +4106,12 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        jest.advanceTimersByTime(10)
+        await jest.advanceTimersByTimeAsync(10)
 
         expect(instance.persistence.props.$feature_flag_errors).toEqual([FeatureFlagError.CONNECTION_ERROR])
     })
 
-    it('should set $feature_flag_error to timeout when request times out (AbortError)', () => {
+    it('should set $feature_flag_error to timeout when request times out (AbortError)', async () => {
         const abortError = new Error('Aborted')
         abortError.name = 'AbortError'
 
@@ -4119,12 +4124,12 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        jest.advanceTimersByTime(10)
+        await jest.advanceTimersByTimeAsync(10)
 
         expect(instance.persistence.props.$feature_flag_errors).toEqual([FeatureFlagError.TIMEOUT])
     })
 
-    it('should set $feature_flag_error to errors_while_computing_flags when errorsWhileComputingFlags is true', () => {
+    it('should set $feature_flag_error to errors_while_computing_flags when errorsWhileComputingFlags is true', async () => {
         instance._send_request = jest.fn().mockImplementation(({ callback }) =>
             callback({
                 statusCode: 200,
@@ -4138,12 +4143,12 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        jest.advanceTimersByTime(10)
+        await jest.advanceTimersByTimeAsync(10)
 
         expect(instance.persistence.props.$feature_flag_errors).toEqual([FeatureFlagError.ERRORS_WHILE_COMPUTING])
     })
 
-    it('should set $feature_flag_error to quota_limited when quota limited', () => {
+    it('should set $feature_flag_error to quota_limited when quota limited', async () => {
         instance._send_request = jest.fn().mockImplementation(({ callback }) =>
             callback({
                 statusCode: 200,
@@ -4155,12 +4160,12 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        jest.advanceTimersByTime(10)
+        await jest.advanceTimersByTimeAsync(10)
 
         expect(instance.persistence.props.$feature_flag_errors).toEqual([FeatureFlagError.QUOTA_LIMITED])
     })
 
-    it('should set $feature_flag_error to unknown_error when error is not an Error instance', () => {
+    it('should set $feature_flag_error to unknown_error when error is not an Error instance', async () => {
         instance._send_request = jest.fn().mockImplementation(({ callback }) =>
             callback({
                 statusCode: 0,
@@ -4170,23 +4175,26 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        jest.advanceTimersByTime(10)
+        await jest.advanceTimersByTimeAsync(10)
 
         expect(instance.persistence.props.$feature_flag_errors).toEqual([FeatureFlagError.UNKNOWN_ERROR])
     })
 
-    it.each([401, 403, 404, 502, 503])('should set $feature_flag_error to api_error_%i for status %i', (status) => {
-        instance._send_request = jest
-            .fn()
-            .mockImplementation(({ callback }) => callback({ statusCode: status, json: {} }))
+    it.each([401, 403, 404, 502, 503])(
+        'should set $feature_flag_error to api_error_%i for status %i',
+        async (status) => {
+            instance._send_request = jest
+                .fn()
+                .mockImplementation(({ callback }) => callback({ statusCode: status, json: {} }))
 
-        featureFlags.reloadFeatureFlags()
-        jest.advanceTimersByTime(10)
+            featureFlags.reloadFeatureFlags()
+            await jest.advanceTimersByTimeAsync(10)
 
-        expect(instance.persistence.props.$feature_flag_errors).toEqual([`api_error_${status}`])
-    })
+            expect(instance.persistence.props.$feature_flag_errors).toEqual([`api_error_${status}`])
+        }
+    )
 
-    it('should include $feature_flag_error in $feature_flag_called event capture', () => {
+    it('should include $feature_flag_error in $feature_flag_called event capture', async () => {
         instance._send_request = jest.fn().mockImplementation(({ callback }) =>
             callback({
                 statusCode: 200,
@@ -4200,7 +4208,7 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        jest.advanceTimersByTime(10)
+        await jest.advanceTimersByTimeAsync(10)
 
         featureFlags.getFeatureFlag('test-flag')
 
@@ -4214,7 +4222,7 @@ describe('$feature_flag_error tracking', () => {
         )
     })
 
-    it('should set $feature_flag_error to flag_missing when flag is not in response', () => {
+    it('should set $feature_flag_error to flag_missing when flag is not in response', async () => {
         instance._send_request = jest.fn().mockImplementation(({ callback }) =>
             callback({
                 statusCode: 200,
@@ -4227,7 +4235,7 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        jest.advanceTimersByTime(10)
+        await jest.advanceTimersByTimeAsync(10)
 
         featureFlags.getFeatureFlag('non-existent-flag')
 
@@ -4241,7 +4249,7 @@ describe('$feature_flag_error tracking', () => {
         )
     })
 
-    it('should join multiple errors with commas', () => {
+    it('should join multiple errors with commas', async () => {
         instance._send_request = jest.fn().mockImplementation(({ callback }) =>
             callback({
                 statusCode: 200,
@@ -4253,7 +4261,7 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        jest.advanceTimersByTime(10)
+        await jest.advanceTimersByTimeAsync(10)
 
         // Flag is not in response, and errorsWhileComputingFlags is true
         featureFlags.getFeatureFlag('missing-flag')
@@ -4268,7 +4276,7 @@ describe('$feature_flag_error tracking', () => {
         )
     })
 
-    it('should not include $feature_flag_error when there are no errors', () => {
+    it('should not include $feature_flag_error when there are no errors', async () => {
         instance._send_request = jest.fn().mockImplementation(({ callback }) =>
             callback({
                 statusCode: 200,
@@ -4282,7 +4290,7 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        jest.advanceTimersByTime(10)
+        await jest.advanceTimersByTimeAsync(10)
 
         featureFlags.getFeatureFlag('success-flag')
 
@@ -4294,7 +4302,7 @@ describe('$feature_flag_error tracking', () => {
         )
     })
 
-    it('should clear errors on successful subsequent request', () => {
+    it('should clear errors on successful subsequent request', async () => {
         // First request with error
         instance._send_request = jest.fn().mockImplementation(({ callback }) =>
             callback({
@@ -4304,7 +4312,7 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        jest.advanceTimersByTime(10)
+        await jest.advanceTimersByTimeAsync(10)
 
         expect(instance.persistence.props.$feature_flag_errors).toEqual(['api_error_500'])
 
@@ -4321,12 +4329,12 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        jest.advanceTimersByTime(10)
+        await jest.advanceTimersByTimeAsync(10)
 
         expect(instance.persistence.props.$feature_flag_errors).toEqual([])
     })
 
-    it('should track quota_limited and flag_missing together', () => {
+    it('should track quota_limited and flag_missing together', async () => {
         instance._send_request = jest.fn().mockImplementation(({ callback }) =>
             callback({
                 statusCode: 200,
@@ -4338,7 +4346,7 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        jest.advanceTimersByTime(10)
+        await jest.advanceTimersByTimeAsync(10)
 
         featureFlags.getFeatureFlag('some-flag')
 
@@ -4352,7 +4360,7 @@ describe('$feature_flag_error tracking', () => {
         )
     })
 
-    it('should include persisted errors in $feature_flag_called event after reload', () => {
+    it('should include persisted errors in $feature_flag_called event after reload', async () => {
         // Setup: flags loaded with errors_while_computing
         instance._send_request = jest.fn().mockImplementation(({ callback }) =>
             callback({
@@ -4364,7 +4372,7 @@ describe('$feature_flag_error tracking', () => {
             })
         )
         featureFlags.reloadFeatureFlags()
-        jest.advanceTimersByTime(10)
+        await jest.advanceTimersByTimeAsync(10)
 
         // Simulate reload - new FeatureFlags instance with same persistence
         const newFeatureFlags = new PostHogFeatureFlags(instance)
