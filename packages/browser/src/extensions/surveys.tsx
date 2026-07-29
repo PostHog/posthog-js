@@ -546,11 +546,7 @@ export class SurveyManager {
                 surveySubmissionId: submissionId,
                 responses: responses,
                 lastQuestionIndex: startQuestionIndex,
-                // Persist the auto-advanced questions as visited so a later manual submit keeps their
-                // prefilled answers instead of pruning them from the partial-response merge.
-                // skippedIndices are raw `survey.questions` indices; the manual-submit prune maps them
-                // via getDisplayOrderQuestions. These line up because prefill auto-submit only runs when
-                // enable_partial_responses is true, under which display order equals raw order (no shuffle).
+                // Mark auto-advanced questions visited so a manual submit doesn't prune their answers.
                 visitedIndices: skippedIndices,
                 surveyLanguage,
             })

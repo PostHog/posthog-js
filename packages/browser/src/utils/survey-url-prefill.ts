@@ -155,8 +155,7 @@ export function calculatePrefillStartIndex(
 ): { startQuestionIndex: number; skippedResponses: Record<string, any>; skippedIndices: number[] } {
     let currentIndex = 0
     const skippedResponses: Record<string, any> = {}
-    // Question indices the user auto-advanced past via prefill. These count as "visited" so a
-    // later manual submit doesn't prune their answers when pruning to responses-on-path.
+    // Auto-advanced questions, persisted as visitedIndices so a manual submit keeps their answers.
     const skippedIndices: number[] = []
 
     const MAX_ITERATIONS = survey.questions.length + 1

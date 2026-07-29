@@ -433,6 +433,8 @@ export const sendSurveyEvent = ({
     }
     setSurveySeenOnLocalStorage(survey)
     posthog.capture(SurveyEventName.SENT, {
+        // Caller properties first so reserved survey fields and responses below always win on key collision.
+        ...properties,
         [SurveyEventProperties.SURVEY_NAME]: survey.name,
         [SurveyEventProperties.SURVEY_ID]: survey.id,
         [SurveyEventProperties.SURVEY_ITERATION]: survey.current_iteration,
@@ -442,7 +444,6 @@ export const sendSurveyEvent = ({
         ...(surveyLanguage && { [SurveyEventProperties.SURVEY_LANGUAGE]: surveyLanguage }),
         sessionRecordingUrl: posthog.get_session_replay_url?.(),
         ...buildSurveyResponseProperties(responses, survey),
-        ...properties,
         $set: {
             [getSurveyInteractionProperty(survey, 'responded')]: true,
         },
