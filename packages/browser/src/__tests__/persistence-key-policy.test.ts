@@ -775,11 +775,18 @@ const collectPostHogPersistenceMutationBoundaryIssues = (): string[] => {
 
 describe('persistence key policy', () => {
     it('matches legacy exact-key event visibility from before the policy migration', () => {
+        const extensionOwnedFeatureFlagKeys = new Set([
+            constants.ENABLED_FEATURE_FLAGS,
+            constants.PERSISTENCE_ACTIVE_FEATURE_FLAGS,
+            constants.PERSISTENCE_FEATURE_FLAG_PAYLOADS,
+            constants.PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+            constants.PERSISTENCE_OVERRIDE_FEATURE_FLAGS,
+        ])
         const compatibilitySnapshot = Object.entries(PERSISTENCE_KEY_POLICY)
             .map(([key, policy]) => [
                 key,
-                key === constants.ENABLED_FEATURE_FLAGS
-                    ? 'derived'
+                extensionOwnedFeatureFlagKeys.has(key)
+                    ? 'hidden'
                     : LEGACY_RESERVED_PERSISTENCE_KEYS.has(key)
                       ? 'hidden'
                       : 'event',

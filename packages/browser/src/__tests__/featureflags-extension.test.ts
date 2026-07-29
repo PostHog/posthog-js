@@ -45,6 +45,25 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         featureFlags.dispose()
     })
 
+    it('reuses cached dynamic event property snapshots until flag state changes', async () => {
+        const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
+        const registerProperties = jest.spyOn(posthog, '_registerExtensionEventProperties')
+        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+        featureFlags.setup(posthog._getBrowserClientAdapter())
+        const producer = registerProperties.mock.calls[0][0]
+
+        const first = producer()
+        expect(producer()).toBe(first)
+        featureFlags.updateFlags({ changed: true })
+        const updated = producer()
+
+        expect(updated).not.toBe(first)
+        expect(updated).toMatchObject({ '$feature/changed': true, $active_feature_flags: ['changed'] })
+
+        featureFlags.getFeatureFlag('changed')
+        expect(producer()).toBe(updated)
+        featureFlags.dispose()
+    })
 
     it('uses flags transport semantics and semantic request configuration', async () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
