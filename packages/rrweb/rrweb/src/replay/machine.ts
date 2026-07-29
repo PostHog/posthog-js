@@ -253,7 +253,14 @@ export function createPlayerService(
               ctx.events,
               baselineTime,
             )) {
-              if (event.timestamp < baselineTime) {
+              // a boundary snapshot/meta was already applied in syncEvents;
+              // scheduling it again would tear down and rebuild the frame
+              const isSnapshotBoundaryEvent =
+                hasFullSnapshotAtSeekBoundary &&
+                event.timestamp === baselineTime &&
+                (event.type === EventType.Meta ||
+                  event.type === EventType.FullSnapshot);
+              if (event.timestamp < baselineTime || isSnapshotBoundaryEvent) {
                 continue;
               }
               const castFn = getCastFn(event, false);

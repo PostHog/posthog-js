@@ -31,6 +31,12 @@ const makeMutationEvent = (timestamp: number): eventWithTime => ({
   timestamp,
 });
 
+const makeFullSnapshotEvent = (timestamp: number): eventWithTime => ({
+  type: EventType.FullSnapshot,
+  data: { node: { type: 0, childNodes: [], id: 1 } as any, initialOffset: { top: 0, left: 0 } },
+  timestamp,
+});
+
 describe('get last session', () => {
   it('will return all the events when there is only one session', () => {
     expect(discardPriorSnapshots(events, events[0].timestamp)).toEqual(events);
@@ -232,6 +238,24 @@ describe('play scheduling', () => {
 
     service.send({ type: 'PLAY', payload: { timeOffset: 2500 } }); // baseline 3500
     expect(applyEvents.mock.calls[1][0]).toEqual([e3]);
+  });
+
+  it('applies a boundary FullSnapshot synchronously without also scheduling it on the timer', () => {
+    // seeking to a checkout FullSnapshot's exact timestamp: the snapshot is a
+    // sync event, so scheduling it again would tear down and rebuild the frame
+    const snapshot = makeFullSnapshotEvent(2000);
+    const later = makeMutationEvent(3000);
+    // baselineTime = events[0].timestamp + timeOffset = 1000 + 1000 = 2000
+    const { service, applyEvents, timer, completeRebuild } =
+      createPlayingService([makeMutationEvent(1000), snapshot, later]);
+
+    service.send({ type: 'PLAY', payload: { timeOffset: 1000 } }); // baseline 2000
+
+    expect(applyEvents.mock.calls[0][0]).toContain(snapshot);
+    completeRebuild();
+
+    // only `later` is scheduled — the boundary snapshot is not re-cast
+    expect(actionCount(timer)).toBe(1);
   });
 
   it('RESET_LAST_PLAYED forces the next seek to fast-forward the full history', () => {
