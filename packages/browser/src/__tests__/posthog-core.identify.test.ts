@@ -36,6 +36,7 @@ describe('identify()', () => {
                 setPersonPropertiesForFlags: jest.fn(),
                 unsetPersonPropertiesForFlags: jest.fn(),
                 reloadFeatureFlags: jest.fn(),
+                resetFlagCallReported: jest.fn(),
             },
             unregister: jest.fn(),
         })
@@ -375,7 +376,7 @@ describe('identify()', () => {
         it('clears flag calls reported when identity changes', () => {
             instance.identify('a-new-id')
 
-            expect(instance.unregister).toHaveBeenCalledWith('$flag_call_reported')
+            expect(instance.featureFlags.resetFlagCallReported).toHaveBeenCalled()
         })
     })
 

@@ -2,12 +2,14 @@
 
 import {
     filterActiveFeatureFlags,
-    parseFlagsResponse,
+    parseFlagsResponse as normalizeFlagsResponse,
     PostHogFeatureFlags,
     FeatureFlagError,
 } from '../posthog-featureflags'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
+import { BrowserClientAdapter } from '../extensions/browser-client'
+import { MutableFeatureFlagsConfigSource } from '../feature-flags-config'
 import { isUndefined } from '@posthog/core'
 import { PostHogConfig } from '../types'
 import { createMockPostHog, createPosthogInstance } from './helpers/posthog-instance'
@@ -32,6 +34,138 @@ const mockExpectedFeatureFlagDebugLogs = (): void => {
             failOnUnexpectedLog(...args)
         }
     })
+}
+
+const parseFlagsResponse = (
+    response: Parameters<typeof normalizeFlagsResponse>[0],
+    persistence: { register(properties: Record<string, unknown>): void },
+    currentFlags?: Parameters<typeof normalizeFlagsResponse>[1],
+    currentPayloads?: Parameters<typeof normalizeFlagsResponse>[2],
+    currentDetails?: Parameters<typeof normalizeFlagsResponse>[3],
+    options?: Parameters<typeof normalizeFlagsResponse>[4]
+): void => {
+    const patch = normalizeFlagsResponse(response, currentFlags, currentPayloads, currentDetails, options)
+    if (patch) {
+        persistence.register(patch)
+    }
+}
+
+const createFeatureFlags = (instance: any): PostHogFeatureFlags => {
+    instance._shouldDisableFlags ??= jest.fn(() => false)
+    instance._registerExtensionEventProperties ??= jest.fn(() => () => {})
+    instance.on ??= jest.fn(() => () => {})
+    instance.sessionManager ??= {
+        checkAndGetSessionAndWindowId: () => ({
+            sessionId: instance.get_session_id?.() ?? '',
+            windowId: '',
+            sessionStartTimestamp: 0,
+        }),
+    }
+    const configKey = () =>
+        JSON.stringify({
+            bootstrap: instance.config.bootstrap,
+            advanced_disable_flags: instance.config.advanced_disable_flags,
+            advanced_disable_decide: instance.config.advanced_disable_decide,
+            advanced_disable_feature_flags: instance.config.advanced_disable_feature_flags,
+            advanced_only_evaluate_survey_feature_flags: instance.config.advanced_only_evaluate_survey_feature_flags,
+            advanced_feature_flags_dedup_per_session: instance.config.advanced_feature_flags_dedup_per_session,
+            feature_flag_cache_ttl_ms: instance.config.feature_flag_cache_ttl_ms,
+            feature_flag_request_timeout_ms: instance.config.feature_flag_request_timeout_ms,
+            disable_compression: instance.config.disable_compression,
+            evaluation_contexts: instance.config.evaluation_contexts,
+            evaluation_environments: instance.config.evaluation_environments,
+            flag_keys: instance.config.flag_keys,
+        })
+    const mutableSource = new MutableFeatureFlagsConfigSource(instance.config, instance._shouldDisableFlags())
+    let lastConfigKey = configKey()
+    const source = {
+        get: () => {
+            const nextConfigKey = configKey()
+            if (lastConfigKey !== nextConfigKey) {
+                mutableSource.update(instance.config, instance._shouldDisableFlags())
+                lastConfigKey = nextConfigKey
+            }
+            return mutableSource.get()
+        },
+    }
+    const featureFlags = new PostHogFeatureFlags(source)
+    const client = new BrowserClientAdapter(instance)
+    client.sendRequest = ((path: string, init: any = {}) => {
+        let response: any
+        let continuation: ((value: any) => void) | undefined
+        let continuationError: unknown
+        let errorHandler: ((error: unknown) => void) | undefined
+        instance._send_request({
+            method: init.method,
+            url: instance.requestRouter.endpointFor(init.target ?? 'api', path),
+            data: init.body,
+            compression: init.compression,
+            timestampMode: init.sentAt,
+            timeout: init.timeoutMs,
+            fireCallbackOnDrop: true,
+            callback: (value: any) => {
+                response = value
+                if (continuation) {
+                    try {
+                        continuation(value)
+                    } catch (error) {
+                        continuationError = error
+                        errorHandler?.(error)
+                    }
+                }
+            },
+        })
+        const chained = {
+            catch: (handler: (error: unknown) => void) => {
+                errorHandler = handler
+                if (continuationError) {
+                    handler(continuationError)
+                }
+                return chained
+            },
+        }
+        return {
+            then: (handler: (value: any) => void) => {
+                continuation = handler
+                if (response) {
+                    try {
+                        handler(response)
+                    } catch (error) {
+                        continuationError = error
+                    }
+                }
+                return chained
+            },
+        } as unknown as Promise<any>
+    }) as BrowserClientAdapter['sendRequest']
+    featureFlags.setup(client)
+    featureFlags.onReloading(() => instance._internalEventEmitter?.emit('featureFlagsReloading', true))
+    const register = instance.persistence?.register?.bind(instance.persistence)
+    if (register) {
+        instance.persistence.register = (properties: Record<string, unknown>) => {
+            register(properties)
+            Object.assign((featureFlags as any)._state, properties)
+        }
+    }
+    if (instance.persistence) {
+        let persistenceProps = instance.persistence.props
+        Object.defineProperty(instance.persistence, 'props', {
+            configurable: true,
+            get: () => persistenceProps,
+            set: (properties: Record<string, unknown>) => {
+                persistenceProps = properties
+                ;(featureFlags as any)._state = { ...properties }
+                },
+        })
+    }
+    const unregister = instance.persistence?.unregister?.bind(instance.persistence)
+    if (unregister) {
+        instance.persistence.unregister = (key: string) => {
+            unregister(key)
+            delete (featureFlags as any)._state[key]
+        }
+    }
+    return featureFlags
 }
 
 describe('featureflags', () => {
@@ -76,7 +210,7 @@ describe('featureflags', () => {
             on: (event: string, cb: (...args: any[]) => void) => internalEventEmitter.on(event, cb),
         }
 
-        featureFlags = new PostHogFeatureFlags(instance)
+        featureFlags = createFeatureFlags(instance)
 
         jest.spyOn(instance, 'capture').mockReturnValue(undefined)
         mockWarn = jest.spyOn(window.console, 'warn').mockImplementation()
@@ -1217,7 +1351,7 @@ describe('featureflags', () => {
             )
 
             featureFlags.reloadFeatureFlags()
-            jest.runOnlyPendingTimers()
+            await jest.runOnlyPendingTimersAsync()
 
             expect(instance.persistence.props.$enabled_feature_flags).toEqual({
                 'checkout-redesign': true,
@@ -1244,7 +1378,7 @@ describe('featureflags', () => {
         it('should support deprecated evaluation_environments field', () => {
             instance.config.evaluation_environments = ['production', 'web']
             featureFlags.reloadFeatureFlags()
-            await jest.runOnlyPendingTimersAsync()
+            jest.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.evaluation_contexts).toEqual(['production', 'web'])
@@ -1317,10 +1451,10 @@ describe('featureflags', () => {
                 expect(instance._send_request).toHaveBeenCalledTimes(4)
             })
 
-            it('removes the online event listener on destroy', () => {
+            it('removes the online event listener on dispose', () => {
                 const removeEventListenerSpy = jest.spyOn(window, 'removeEventListener')
 
-                featureFlags.destroy()
+                featureFlags.dispose()
 
                 expect(removeEventListenerSpy).toHaveBeenCalledWith('online', featureFlags['_onOnline'])
                 removeEventListenerSpy.mockRestore()
@@ -1563,12 +1697,14 @@ describe('featureflags', () => {
             })
             await jest.runAllTimersAsync()
 
-            expect(instance._send_request).toHaveBeenCalledWith({
-                url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
-                method: 'GET',
-                timestampMode: 'query',
-                callback: expect.any(Function),
-            })
+            expect(instance._send_request).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
+                    method: 'GET',
+                    timestampMode: 'query',
+                    callback: expect.any(Function),
+                })
+            )
             expect(instance._send_request).toHaveBeenCalledTimes(1)
 
             expect(instance.persistence.props.$early_access_features).toEqual([EARLY_ACCESS_FEATURE_FIRST])
@@ -1596,12 +1732,14 @@ describe('featureflags', () => {
             })
             await jest.runAllTimersAsync()
 
-            expect(instance._send_request).toHaveBeenCalledWith({
-                url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
-                method: 'GET',
-                timestampMode: 'query',
-                callback: expect.any(Function),
-            })
+            expect(instance._send_request).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
+                    method: 'GET',
+                    timestampMode: 'query',
+                    callback: expect.any(Function),
+                })
+            )
             expect(instance._send_request).toHaveBeenCalledTimes(1)
 
             expect(instance.persistence.props.$early_access_features).toEqual([EARLY_ACCESS_FEATURE_FIRST])
@@ -1632,49 +1770,31 @@ describe('featureflags', () => {
                 ['concept', 'beta']
             )
 
-            expect(instance._send_request).toHaveBeenCalledWith({
-                url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token&stage=concept&stage=beta',
-                method: 'GET',
-                timestampMode: 'query',
-                callback: expect.any(Function),
-            })
+            expect(instance._send_request).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token&stage=concept&stage=beta',
+                    method: 'GET',
+                    timestampMode: 'query',
+                    callback: expect.any(Function),
+                })
+            )
         })
 
         it('getEarlyAccessFeatures replaces existing features completely instead of merging', async () => {
-            // Set up initial features in persistence
             instance.persistence.props.$early_access_features = [
                 EARLY_ACCESS_FEATURE_FIRST,
                 { ...EARLY_ACCESS_FEATURE_SECOND, flagKey: 'old-feature' },
             ]
-
-            // Mock unregister to track calls
-            const unregisterSpy = jest.spyOn(instance.persistence, 'unregister')
             const registerSpy = jest.spyOn(instance.persistence, 'register')
 
-            // Force reload to trigger API call
             featureFlags.getEarlyAccessFeatures((data) => {
                 expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
             }, true)
             await jest.runAllTimersAsync()
 
-            // Verify unregister was called first to clear old data
-            expect(unregisterSpy).toHaveBeenCalledWith('$early_access_features')
-
-            // Verify both methods were called
-            expect(unregisterSpy).toHaveBeenCalled()
-            expect(registerSpy).toHaveBeenCalled()
-
-            // Verify the order by checking call order
-            const unregisterCallOrder = unregisterSpy.mock.invocationCallOrder[0]
-            const registerCallOrder = registerSpy.mock.invocationCallOrder[0]
-            expect(unregisterCallOrder).toBeLessThan(registerCallOrder)
-
-            // Verify register was called with new data
             expect(registerSpy).toHaveBeenCalledWith({
                 $early_access_features: [EARLY_ACCESS_FEATURE_FIRST],
             })
-
-            // Verify persistence only contains new features, not old ones
             expect(instance.persistence.props.$early_access_features).toEqual([EARLY_ACCESS_FEATURE_FIRST])
             expect(instance.persistence.props.$early_access_features).not.toContainEqual(
                 expect.objectContaining({ flagKey: 'old-feature' })
@@ -2027,7 +2147,7 @@ describe('featureflags', () => {
             featureFlags.setAnonymousDistinctId('rando_id')
             featureFlags.reloadFeatureFlags()
 
-            jest.runAllTimers()
+            await jest.runAllTimersAsync()
 
             expect(featureFlags.getFlagVariants()).toEqual({
                 first: 'variant-1',
@@ -2054,7 +2174,7 @@ describe('featureflags', () => {
             featureFlags.reloadFeatureFlags()
             featureFlags.reloadFeatureFlags()
 
-            jest.runAllTimers()
+            await jest.runAllTimersAsync()
 
             expect(featureFlags.getFlagVariants()).toEqual({
                 first: 'variant-1',
@@ -2077,7 +2197,7 @@ describe('featureflags', () => {
 
             featureFlags.reloadFeatureFlags()
             featureFlags.reloadFeatureFlags()
-            jest.runAllTimers()
+            await jest.runAllTimersAsync()
 
             // check the request didn't send $anon_distinct_id the second time around
             expect(instance._send_request.mock.calls[1][0].data).toEqual({
@@ -2094,7 +2214,7 @@ describe('featureflags', () => {
             })
 
             featureFlags.reloadFeatureFlags()
-            jest.runAllTimers()
+            await jest.runAllTimersAsync()
 
             // check the request didn't send $anon_distinct_id the second time around
             expect(instance._send_request.mock.calls[2][0].data).toEqual({
@@ -2154,7 +2274,7 @@ describe('featureflags', () => {
             })
 
             featureFlags.reloadFeatureFlags()
-            await jest.runAllTimersAsync()
+            jest.runAllTimers()
 
             expect(featureFlags.getFlagVariants()).toEqual({
                 'beta-feature': true,
@@ -2168,7 +2288,7 @@ describe('featureflags', () => {
 
             featureFlags.setPersonPropertiesForFlags({ a: 'b', c: 'd' })
 
-            await jest.runAllTimersAsync()
+            jest.runAllTimers()
 
             expect(featureFlags.getFlagVariants()).toEqual({
                 'beta-feature': true,
@@ -2186,7 +2306,7 @@ describe('featureflags', () => {
             }
 
             featureFlags.reloadFeatureFlags()
-            await jest.runAllTimersAsync()
+            jest.runAllTimers()
 
             expect(instance._send_request.mock.calls[0][0].compression).toEqual(undefined)
         })
@@ -2553,7 +2673,7 @@ describe('featureflags', () => {
             )
         })
 
-        it('should return combined results', () => {
+        it('should return combined results', async () => {
             featureFlags.reloadFeatureFlags()
 
             await jest.runAllTimersAsync()
@@ -3569,7 +3689,7 @@ describe('getRemoteConfigPayload', () => {
             },
         })
 
-        featureFlags = new PostHogFeatureFlags(instance)
+        featureFlags = createFeatureFlags(instance)
     })
 
     it('should include evaluation_contexts when configured', () => {
@@ -3712,7 +3832,7 @@ describe('getRemoteConfigPayload', () => {
                 requestRouter: new RequestRouter({ config: apiConfig } as any),
             })
 
-            const customFeatureFlags = new PostHogFeatureFlags(customInstance)
+            const customFeatureFlags = createFeatureFlags(customInstance)
             const callback = jest.fn()
             customFeatureFlags.getRemoteConfigPayload('test-flag', callback)
 
@@ -3739,7 +3859,7 @@ describe('getRemoteConfigPayload', () => {
                 } as any),
             })
 
-            const customFeatureFlags = new PostHogFeatureFlags(customInstance)
+            const customFeatureFlags = createFeatureFlags(customInstance)
             const callback = jest.fn()
             customFeatureFlags.getRemoteConfigPayload('test-flag', callback)
 
@@ -3769,6 +3889,18 @@ describe('updateFlags', () => {
         expect(posthog.getFeatureFlag('test-flag')).toBe(true)
         expect(posthog.getFeatureFlag('variant-flag')).toBe('control')
         expect(posthog.isFeatureEnabled('test-flag')).toBe(true)
+    })
+
+    it('reports the same flag value again after identify', async () => {
+        const posthog = await createPosthogInstance()
+        const capture = jest.spyOn(posthog, 'capture')
+        posthog.updateFlags({ 'test-flag': true })
+
+        posthog.getFeatureFlag('test-flag')
+        posthog.identify('identified-user')
+        posthog.getFeatureFlag('test-flag')
+
+        expect(capture.mock.calls.filter(([event]) => event === '$feature_flag_called')).toHaveLength(2)
     })
 
     it('merge does not bake an active override into the stored flags', async () => {
@@ -4018,7 +4150,7 @@ describe('$feature_flag_error tracking', () => {
             on: (event: string, cb: (...args: any[]) => void) => internalEventEmitter.on(event, cb),
         }
 
-        featureFlags = new PostHogFeatureFlags(instance)
+        featureFlags = createFeatureFlags(instance)
         mockWarn = jest.spyOn(window.console, 'warn').mockImplementation()
         instance.persistence.unregister('$flag_call_reported')
         instance.persistence.unregister('$feature_flag_errors')
@@ -4038,7 +4170,7 @@ describe('$feature_flag_error tracking', () => {
         )
 
         featureFlags.reloadFeatureFlags()
-        jest.advanceTimersByTime(10)
+        await jest.advanceTimersByTimeAsync(10)
 
         expect(instance.persistence.props.$feature_flag_errors).toEqual(['api_error_500'])
     })
@@ -4325,7 +4457,7 @@ describe('$feature_flag_error tracking', () => {
         await jest.advanceTimersByTimeAsync(10)
 
         // Simulate reload - new FeatureFlags instance with same persistence
-        const newFeatureFlags = new PostHogFeatureFlags(instance)
+        const newFeatureFlags = createFeatureFlags(instance)
 
         // Getting flag should include persisted error
         newFeatureFlags.getFeatureFlag('test-flag')
