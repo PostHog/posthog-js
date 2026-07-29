@@ -3,7 +3,7 @@
 import '@testing-library/jest-dom'
 
 import { PostHogPersistence } from '../../../posthog-persistence'
-import { SESSION_RECORDING_REMOTE_CONFIG } from '../../../constants'
+import { SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED, SESSION_RECORDING_REMOTE_CONFIG } from '../../../constants'
 import { SessionIdManager } from '../../../sessionid'
 import { FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE } from '../../../extensions/replay/external/sessionrecording-utils'
 import { PostHog } from '../../../posthog-core'
@@ -61,6 +61,7 @@ const originalLocation = window!.location
 describe('SessionRecording', () => {
     const _addCustomEvent = jest.fn()
     const loadScriptMock = jest.fn()
+    const registerForSessionMock = jest.fn()
     let _emit: any
     let posthog: PostHog
     let sessionRecording: SessionRecording
@@ -146,7 +147,7 @@ describe('SessionRecording', () => {
                     return false
                 },
             } as unknown as ConsentManager,
-            register_for_session() {},
+            register_for_session: registerForSessionMock,
             _internalEventEmitter: simpleEventEmitter,
             on: jest.fn().mockImplementation((event, cb) => {
                 const unsubscribe = simpleEventEmitter.on(event, cb)
@@ -185,6 +186,37 @@ describe('SessionRecording', () => {
                 })
             )
             expect(loadScriptMock).toHaveBeenCalledWith(posthog, 'experimental-recorder', expect.any(Function))
+        })
+
+        it('does not load the script when the recorder is already bundled in', () => {
+            // this is what the `.full` bundles do at import time
+            addRRwebToWindow()
+            assignableWindow.__PosthogExtensions__.initSessionRecording = () => new LazyLoadedSessionRecording(posthog)
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            expect(loadScriptMock).not.toHaveBeenCalled()
+            expect(sessionRecording.started).toBe(true)
+        })
+
+        it('still loads the script when only rrweb is bundled in', () => {
+            // `posthog-js/dist/recorder` defines rrweb but not initSessionRecording
+            addRRwebToWindow()
+            assignableWindow.__PosthogExtensions__.initSessionRecording = undefined
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            expect(loadScriptMock).toHaveBeenCalledWith(posthog, 'lazy-recorder', expect.any(Function))
+        })
+
+        it('flags the session when the recorder script cannot be loaded', () => {
+            loadScriptMock.mockImplementation((_ph, _path, callback) => callback('blocked'))
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            expect(registerForSessionMock).toHaveBeenCalledWith({
+                [SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED]: true,
+            })
         })
 
         it('uses anyMatchSessionRecordingStatus when triggerMatching is "any"', () => {

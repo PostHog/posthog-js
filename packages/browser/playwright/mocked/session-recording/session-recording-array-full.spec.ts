@@ -20,8 +20,19 @@ const startOptions = {
 
 test.describe('session recording in array.full.js', () => {
     test('captures session events', async ({ page, context }) => {
+        // array.full.js exists so that ad blockers - which match on the `/static/<script>.js` path
+        // regardless of the host - can't stop replay by blocking a second script request
+        const recorderScriptRequests: string[] = []
+        page.on('request', (request) => {
+            if (/\/static\/(lazy-)?(posthog-)?recorder(-v2)?\.js/.test(request.url())) {
+                recorderScriptRequests.push(request.url())
+            }
+        })
+
         await start(startOptions, page, context)
         await waitForSessionRecordingToStart(page)
+
+        expect(recorderScriptRequests).toEqual([])
 
         await page.waitingForNetworkCausedBy({
             urlPatternsToWaitFor: ['**/ses/*'],
