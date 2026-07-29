@@ -12,6 +12,9 @@
                 ".babelrc",
                 "babel.config.js",
                 "rollup.config.mjs",
+                "scripts/check-mangled-property-consistency.js",
+                "terser-cross-bundle-properties.cjs",
+                "terser-mangled-names.json",
                 "rslib.config.mjs",
                 "vite.config.ts",
                 "vite.config.js"
