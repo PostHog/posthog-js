@@ -82,9 +82,7 @@ describe('loaded() with flags', () => {
             })
 
             // Advance past the 5ms debounce timer
-            jest.advanceTimersByTime(10)
-            await Promise.resolve()
-            await Promise.resolve()
+            await jest.advanceTimersByTimeAsync(10)
 
             expect(instance.featureFlags._callFlagsEndpoint).toHaveBeenCalledTimes(1)
             expect(instance._send_request).toHaveBeenCalledTimes(1)
@@ -96,12 +94,10 @@ describe('loaded() with flags', () => {
                 },
             })
 
-            jest.advanceTimersByTime(100) // Fire the setTimeout for group change
-            jest.advanceTimersByTime(10) // Fire the debounce for the second group call
-            await Promise.resolve()
-            await Promise.resolve()
+            await jest.advanceTimersByTimeAsync(100) // Fire the setTimeout for group change
+            await jest.advanceTimersByTimeAsync(10) // Fire the debounce for the second group call
 
-            expect(instance.featureFlags._callFlagsEndpoint).toHaveBeenCalledTimes(3)
+            expect(instance.featureFlags._callFlagsEndpoint).toHaveBeenCalledTimes(2)
             expect(instance._send_request).toHaveBeenCalledTimes(2)
 
             expect(instance._send_request.mock.calls[1][0]).toMatchObject({
@@ -198,10 +194,11 @@ describe('loaded() with flags', () => {
             )
 
             instance.featureFlags.reset()
-            const receivedFeatureFlagsSpy = jest.spyOn(instance.featureFlags, 'receivedFeatureFlags')
+            const receivedFeatureFlagsSpy = jest.spyOn(instance.featureFlags as any, '_receivedFeatureFlags')
 
-            instance.featureFlags._callFlagsEndpoint()
+            const request = instance.featureFlags._callFlagsEndpoint()
             await jest.advanceTimersByTimeAsync(10)
+            await request
 
             if (expectedCall) {
                 expect(receivedFeatureFlagsSpy).toHaveBeenCalledWith(expectedArgs, false, {
