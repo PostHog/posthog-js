@@ -34,6 +34,7 @@ function createMockPostHog(
         get_property: jest.fn((prop: string) => props[prop]),
         set_property: jest.fn((prop: string, value: Property) => (props[prop] = value)),
         unregister: jest.fn((prop: string) => delete props[prop]),
+        get_initial_props: jest.fn(() => ({ initial: 'person-property' })),
     } as unknown as PostHogPersistence
 
     const instance = {
@@ -87,6 +88,11 @@ describe('BrowserClientAdapter', () => {
         expect(secondClient).toBe(client)
         expect(client?.distinctId).toBe('distinct-id')
         expect(client?.anonymousId).toBe('anonymous-id')
+        expect(client?.deviceId).toBe('anonymous-id')
+        expect(client?.library).toEqual(
+            expect.objectContaining({ name: expect.any(String), version: expect.any(String) })
+        )
+        expect(client?.initialPersonProperties).toEqual({ initial: 'person-property' })
         expect(client?.groups).toEqual({ organization: 'org-id' })
         expect(client?.session).toEqual({
             sessionId: 'session-id',
@@ -123,6 +129,7 @@ describe('BrowserClientAdapter', () => {
         host.add(testExtension('test', (value) => (client = value)))
 
         expect(client?.anonymousId).toBe('distinct-id')
+        expect(client?.deviceId).toBeUndefined()
         expect(client?.session).toEqual({ sessionId: '', windowId: '', sessionStartTimestamp: 0 })
         await host.dispose()
     })
@@ -319,6 +326,8 @@ describe('BrowserClientAdapter', () => {
             headers: { 'X-Extension-Header': 'value' },
             transport: 'XHR',
             timeoutMs: 321,
+            compression: 'base64',
+            sentAt: 'body',
         })
 
         expect(response).toEqual({ statusCode: 201, json: { created: true }, text: '{"created":true}' })
@@ -331,6 +340,8 @@ describe('BrowserClientAdapter', () => {
                 headers: { 'X-Extension-Header': 'value' },
                 transport: 'XHR',
                 timeout: 321,
+                compression: 'base64',
+                timestampMode: 'body',
                 fireCallbackOnDrop: true,
                 callback: expect.any(Function),
             })

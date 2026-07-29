@@ -76,6 +76,9 @@ export class TestClient implements Client {
 
     distinctId: string
     anonymousId: string
+    deviceId: string | undefined
+    library = { name: 'posthog-test', version: '0.0.0' }
+    initialPersonProperties: Record<string, unknown> = {}
     groups: Record<string, string>
     session: SessionContext
 
@@ -98,6 +101,7 @@ export class TestClient implements Client {
         this.projectToken = options.projectToken ?? 'test-project-token'
         this.distinctId = options.distinctId ?? 'test-distinct-id'
         this.anonymousId = options.anonymousId ?? 'test-anonymous-id'
+        this.deviceId = this.anonymousId
         this.groups = options.groups ?? {}
         this.session = options.session ?? {
             sessionId: 'test-session-id',

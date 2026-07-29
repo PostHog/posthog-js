@@ -1,6 +1,7 @@
 import type { Logger } from '@posthog/core'
 import type { Properties } from '@posthog/types'
 
+import type { Compression } from './types/compression'
 import type { Disposable } from './disposable'
 import type { KeyValueStore } from './persistence'
 import type { Listener } from './pubsub'
@@ -77,6 +78,10 @@ export interface SendRequestInit {
     transport?: RequestTransport
     /** Abort the request if it does not complete within this many milliseconds. */
     timeoutMs?: number
+    /** Compression used by the browser transport. */
+    compression?: Compression | 'best-available'
+    /** Where the transport adds its sent-at timestamp. */
+    sentAt?: 'body' | 'query'
 }
 
 /**
@@ -89,6 +94,12 @@ export interface Client {
     readonly distinctId: string
     /** The anonymous device id carried across identify calls. */
     readonly anonymousId: string
+    /** The actual persisted device id, absent in cookieless contexts. */
+    readonly deviceId: string | undefined
+    /** Live host SDK metadata. */
+    readonly library: { readonly name: string; readonly version: string }
+    /** Initial person properties used for feature evaluation. */
+    readonly initialPersonProperties: DeepReadonly<Record<string, unknown>>
     /** Active group memberships attached to events as `$groups`. */
     readonly groups: DeepReadonly<Record<string, string>>
     /** The current session, created on first read if needed. */
