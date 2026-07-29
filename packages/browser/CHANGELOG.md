@@ -1,5 +1,13 @@
 # posthog-js
 
+## 1.407.8
+
+### Patch Changes
+
+- [#4311](https://github.com/PostHog/posthog-js/pull/4311) [`c1818e2`](https://github.com/PostHog/posthog-js/commit/c1818e2e54a3dafcdacf0c93fa20bc1b20958972) Thanks [@marandaneto](https://github.com/marandaneto)! - fix(react): restore CommonJS default import interop in UMD bundles
+
+    React hooks used without a `PostHogProvider` now receive the default PostHog instance again when the UMD build is loaded through CommonJS. (2026-07-29)
+
 ## 1.407.7
 
 ### Patch Changes
