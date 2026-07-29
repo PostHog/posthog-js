@@ -375,7 +375,7 @@ function record<T = eventWithTime>(
 
   const processedNodeManager = new ProcessedNodeManager();
 
-  const canvasMaskingConfigured = canvasMasking?.configured === true;
+  const canvasMaskingConfigured = canvasMasking?.configured;
 
   canvasManager = new CanvasManager({
     recordCanvas,

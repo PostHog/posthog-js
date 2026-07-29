@@ -2109,11 +2109,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             sessionRecordingOptions.dataURLOptions = { type: 'image/webp', quality: this._canvasRecording.quality }
             sessionRecordingOptions.canvasResolutionScale = this._canvasResolutionScale
             sessionRecordingOptions.canvasMasking = {
-                // evaluated once at record() start, unlike regionsFn below: when true,
-                // rrweb skips canvas pixels in DOM full snapshots, and that must hold
-                // for the whole recording. An SDK that registers a provider later
-                // restarts recording, which re-evaluates this
-                configured: isFunction(this._instance.config.session_recording?.canvasCapture?.maskRegionsFn),
+                // read live like regionsFn below: when true, rrweb skips canvas pixels
+                // in DOM full snapshots, and it is re-evaluated at each snapshot so a
+                // provider registered after recording started (via set_config) is
+                // honored without a recorder restart
+                configured: () => isFunction(this._instance.config.session_recording?.canvasCapture?.maskRegionsFn),
                 // read live so a provider registered after recording started (e.g. by
                 // a plugin that boots later than posthog-js) takes effect immediately.
                 // undefined must stay distinct from null, or every canvas without a

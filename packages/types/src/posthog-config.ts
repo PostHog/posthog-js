@@ -702,10 +702,13 @@ export interface SessionRecordingOptions {
          * Setting this also changes DOM full snapshots (taken at recording start and
          * at each `full_snapshot_interval_millis`): they normally serialize canvas
          * pixels on a separate path (`rr_dataURL`) that never sees these regions, so
-         * when this option is set that serialization is skipped entirely. A canvas
-         * appears blank in a snapshot until the next masked frame paints it — at
-         * most ~250ms at the default 4 fps — and the 30s masked keyframe bounds any
-         * gap when seeking. Without this option, snapshot behavior is unchanged.
+         * when this option is set that serialization is skipped entirely. Whether
+         * to skip is re-evaluated at each snapshot, so a provider installed via
+         * `set_config` after recording started is honored at the next snapshot
+         * without a recorder restart. A canvas appears blank in a snapshot until
+         * the next masked frame paints it — at most ~250ms at the default 4 fps —
+         * and the 30s masked keyframe bounds any gap when seeking. Without this
+         * option, snapshot behavior is unchanged.
          *
          * An app whose real provider only exists once its runtime has booted picks
          * what happens in between by what it declares in `posthog.init`: a function

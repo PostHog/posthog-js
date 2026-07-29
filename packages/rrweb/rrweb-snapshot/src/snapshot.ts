@@ -516,7 +516,7 @@ function serializeNode(
     dataURLOptions?: DataURLOptions;
     inlineImages: boolean;
     recordCanvas: boolean;
-    canvasMaskingConfigured: boolean;
+    canvasMaskingConfigured: (() => boolean) | undefined;
     keepIframeSrcFn: KeepIframeSrcFn;
     /**
      * `newlyAddedElement: true` skips scrollTop and scrollLeft check
@@ -700,7 +700,7 @@ function serializeElementNode(
     dataURLOptions?: DataURLOptions;
     inlineImages: boolean;
     recordCanvas: boolean;
-    canvasMaskingConfigured: boolean;
+    canvasMaskingConfigured: (() => boolean) | undefined;
     keepIframeSrcFn: KeepIframeSrcFn;
     /**
      * `newlyAddedElement: true` skips scrollTop and scrollLeft check
@@ -836,7 +836,7 @@ function serializeElementNode(
   // when a canvas mask provider is configured, canvas pixels only ever reach
   // the payload through the masked frame stream — serializing them here would
   // bypass the masking
-  if (tagName === 'canvas' && recordCanvas && !canvasMaskingConfigured) {
+  if (tagName === 'canvas' && recordCanvas && !canvasMaskingConfigured?.()) {
     if ((n as ICanvas).__context === '2d') {
       // only record this on 2d canvas
       if (!is2DCanvasBlank(n as HTMLCanvasElement)) {
@@ -1127,7 +1127,7 @@ export function serializeNodeWithId(
     keepIframeSrcFn?: KeepIframeSrcFn;
     inlineImages?: boolean;
     recordCanvas?: boolean;
-    canvasMaskingConfigured?: boolean;
+    canvasMaskingConfigured?: () => boolean;
     preserveWhiteSpace?: boolean;
     onSerialize?: (n: Node) => unknown;
     onIframeLoad?: (
@@ -1165,7 +1165,7 @@ export function serializeNodeWithId(
     dataURLOptions = {},
     inlineImages = false,
     recordCanvas = false,
-    canvasMaskingConfigured = false,
+    canvasMaskingConfigured,
     onSerialize,
     onIframeLoad,
     iframeLoadTimeout = 5000,
@@ -1486,7 +1486,7 @@ function snapshot(
     dataURLOptions?: DataURLOptions;
     inlineImages?: boolean;
     recordCanvas?: boolean;
-    canvasMaskingConfigured?: boolean;
+    canvasMaskingConfigured?: () => boolean;
     preserveWhiteSpace?: boolean;
     onSerialize?: (n: Node) => unknown;
     onIframeLoad?: (
@@ -1516,7 +1516,7 @@ function snapshot(
     inlineStylesheet = true,
     inlineImages = false,
     recordCanvas = false,
-    canvasMaskingConfigured = false,
+    canvasMaskingConfigured,
     maskAllInputs = false,
     maskTextFn,
     maskInputFn,

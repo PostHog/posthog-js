@@ -42,6 +42,7 @@ vi.mock(
 );
 
 import record from '../../src/record';
+import { EventType } from '@posthog/rrweb-types';
 
 describe('full snapshot canvas masking flag', () => {
   let stop: (() => void) | undefined;
@@ -52,17 +53,18 @@ describe('full snapshot canvas masking flag', () => {
     vi.clearAllMocks();
   });
 
-  it('passes canvasMaskingConfigured to the full snapshot when canvasMasking is configured', () => {
+  it('passes the configured thunk itself to the full snapshot', () => {
+    const configured = () => true;
     stop = record({
       emit: vi.fn(),
       recordCanvas: true,
-      canvasMasking: { configured: true, regionsFn: () => [] },
+      canvasMasking: { configured, regionsFn: () => [] },
     });
 
     expect(snapshotSpy).toHaveBeenCalledTimes(1);
     const options = snapshotSpy.mock.calls[0][1] as Record<string, unknown>;
     expect(options.recordCanvas).toBe(true);
-    expect(options.canvasMaskingConfigured).toBe(true);
+    expect(options.canvasMaskingConfigured).toBe(configured);
   });
 
   it('does not set canvasMaskingConfigured when only recordCanvas is on', () => {
@@ -75,6 +77,42 @@ describe('full snapshot canvas masking flag', () => {
     expect(snapshotSpy).toHaveBeenCalledTimes(1);
     const options = snapshotSpy.mock.calls[0][1] as Record<string, unknown>;
     expect(options.recordCanvas).toBe(true);
-    expect(options.canvasMaskingConfigured).toBe(false);
+    expect(options.canvasMaskingConfigured).toBeUndefined();
+  });
+
+  it('stops serializing canvas pixels once the thunk flips true, without a restart', () => {
+    const canvas = document.createElement('canvas');
+    (canvas as { __context?: string }).__context = '2d';
+    const getImageData = vi.fn(() => ({
+      data: new Uint8ClampedArray([255, 0, 0, 255]),
+    }));
+    canvas.getContext = vi.fn(() => ({
+      getImageData,
+    })) as unknown as typeof canvas.getContext;
+    canvas.toDataURL = vi.fn(() => 'data:image/webp;base64,pixels');
+    document.body.appendChild(canvas);
+
+    let providerInstalled = false;
+    const events: unknown[] = [];
+    stop = record({
+      emit: (e) => events.push(e),
+      recordCanvas: true,
+      canvasMasking: {
+        configured: () => providerInstalled,
+        regionsFn: () => undefined,
+      },
+    });
+
+    providerInstalled = true;
+    record.takeFullSnapshot(true);
+
+    const fullSnapshots = events.filter(
+      (e) => (e as { type: number }).type === EventType.FullSnapshot,
+    );
+    expect(fullSnapshots).toHaveLength(2);
+    expect(JSON.stringify(fullSnapshots[0])).toContain('rr_dataURL');
+    expect(JSON.stringify(fullSnapshots[1])).not.toContain('rr_dataURL');
+
+    canvas.remove();
   });
 });

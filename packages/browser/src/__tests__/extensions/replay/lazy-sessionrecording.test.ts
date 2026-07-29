@@ -4488,7 +4488,7 @@ describe('Lazy SessionRecording', () => {
             sessionRecording['_onScriptLoaded']()
 
             const mockParams = assignableWindow.__PosthogExtensions__.rrweb.record.mock.calls[0][0]
-            expect(mockParams.canvasMasking.configured).toBe(true)
+            expect(mockParams.canvasMasking.configured()).toBe(true)
         })
 
         it('does not mark canvasMasking configured when only recordCanvas is on', () => {
@@ -4501,7 +4501,23 @@ describe('Lazy SessionRecording', () => {
             sessionRecording['_onScriptLoaded']()
 
             const mockParams = assignableWindow.__PosthogExtensions__.rrweb.record.mock.calls[0][0]
-            expect(mockParams.canvasMasking.configured).toBe(false)
+            expect(mockParams.canvasMasking.configured()).toBe(false)
+        })
+
+        it('reads canvasMasking configured from the live config', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', canvasQuality: '0.2', canvasFps: 6, recordCanvas: true },
+                })
+            )
+
+            sessionRecording['_onScriptLoaded']()
+
+            const mockParams = assignableWindow.__PosthogExtensions__.rrweb.record.mock.calls[0][0]
+            expect(mockParams.canvasMasking.configured()).toBe(false)
+
+            config.session_recording.canvasCapture = { maskRegionsFn: jest.fn(() => []) }
+            expect(mockParams.canvasMasking.configured()).toBe(true)
         })
 
         it.each([

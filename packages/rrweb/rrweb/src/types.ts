@@ -123,7 +123,7 @@ export type observerParam = {
   sampling: SamplingStrategy;
   recordDOM: boolean;
   recordCanvas: boolean;
-  canvasMaskingConfigured: boolean;
+  canvasMaskingConfigured: (() => boolean) | undefined;
   inlineImages: boolean;
   userTriggeredOnInput: boolean;
   collectFonts: boolean;
