@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4317](https://github.com/PostHog/posthog-js/issues/4317) | Confirmed multi-part AI observability bug and documentation gap; the checked-in Vercel AI examples reproduce two reported problems. | documentation, team/llm-analytics |  | no | 2026-07-29T22:23:42.977Z |
 | PostHog/posthog-js | [issue 4315](https://github.com/PostHog/posthog-js/issues/4315) | Confirmed likely dead-click false-positive bug: the dead-click observer uses the same detached-iframe MutationObserver fallback that rrweb has already identified as unsafe on WebKit. | feature/dead-clicks |  | no | 2026-07-29T20:31:21.761Z |
 | PostHog/posthog-js | [issue 4310](https://github.com/PostHog/posthog-js/issues/4310) | Confirmed likely UMD/CJS interop regression in the React bindings' default-instance fallback. | web |  | no | 2026-07-29T13:18:25.413Z |
 | PostHog/posthog-js | [issue 4285](https://github.com/PostHog/posthog-js/issues/4285) | Confirmed React Native iOS build-plugin composition bug: independent PostHog and Sentry wrappers can replace the same Expo bundle phase and produce a successful build without running the React Native bundler. | react-native, iOS |  | no | 2026-07-28T02:34:29.340Z |
