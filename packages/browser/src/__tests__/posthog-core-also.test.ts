@@ -1375,7 +1375,8 @@ describe('posthog core', () => {
                 uuidv7()
             )!
             posthog.persistence!.clear()
-            posthog.reloadFeatureFlags = jest.fn()
+            posthog.featureFlags.reset()
+            posthog.featureFlags.reloadFeatureFlags = jest.fn()
         })
 
         it.each([
@@ -1391,7 +1392,7 @@ describe('posthog core', () => {
                 posthog.resetPersonPropertiesForFlags(reloadFeatureFlags)
 
                 expect(posthog.persistence!.props['$stored_person_properties']).toEqual(undefined)
-                expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(expectedCalls)
+                expect(posthog.featureFlags.reloadFeatureFlags).toHaveBeenCalledTimes(expectedCalls)
             }
         )
     })
@@ -1408,7 +1409,9 @@ describe('posthog core', () => {
                 uuidv7()
             )!
             posthog.persistence!.clear()
+            posthog.featureFlags.reset()
             posthog.reloadFeatureFlags = jest.fn()
+            posthog.featureFlags.reloadFeatureFlags = jest.fn()
             posthog.capture = jest.fn()
         })
 
@@ -1481,7 +1484,10 @@ describe('posthog core', () => {
             posthog.group('instance', 'app.posthog.com')
             posthog.group('organization', 'org::5')
 
-            expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(2)
+            expect(
+                jest.mocked(posthog.reloadFeatureFlags).mock.calls.length +
+                    jest.mocked(posthog.featureFlags.reloadFeatureFlags).mock.calls.length
+            ).toBe(2)
         })
 
         it('results in a reloadFeatureFlags call if group properties change', () => {
@@ -1490,7 +1496,10 @@ describe('posthog core', () => {
             posthog.group('organization', 'org::5', { name: 'PostHog' })
             posthog.group('instance', 'app.posthog.com')
 
-            expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(3)
+            expect(
+                jest.mocked(posthog.reloadFeatureFlags).mock.calls.length +
+                    jest.mocked(posthog.featureFlags.reloadFeatureFlags).mock.calls.length
+            ).toBe(3)
         })
 
         it('captures $groupidentify event with $group_set when properties provided', () => {
@@ -1598,7 +1607,10 @@ describe('posthog core', () => {
                 expect(posthog.persistence!.props['$groups']).toEqual({})
                 expect(posthog.persistence!.props['$stored_group_properties']).toEqual(undefined)
 
-                expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(3)
+                expect(
+                    jest.mocked(posthog.reloadFeatureFlags).mock.calls.length +
+                        jest.mocked(posthog.featureFlags.reloadFeatureFlags).mock.calls.length
+                ).toBe(3)
             })
         })
     })

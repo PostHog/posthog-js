@@ -434,8 +434,12 @@ const collectPersistenceKeyIdentifiers = (sources: SourceInput[] = productionSou
             context: string,
             enforceResolvedKey = false
         ) => {
-            // Policy is checked at each client.kv write; the KeyValueStore implementation only forwards that runtime key.
-            if (isForwardedKeyValueStoreKey(expression, node, checker)) {
+            // Policy is checked at each client.kv write; storage implementations and the feature-flags
+            // state helper only forward keys classified at their statically named call sites.
+            if (
+                isForwardedKeyValueStoreKey(expression, node, checker) ||
+                (context.indexOf('KeyValueStore') !== -1 && getEnclosingClassMethodName(node) === '_remove')
+            ) {
                 return
             }
 
