@@ -159,9 +159,8 @@ export function calculatePrefillStartIndex(
     const skippedIndices: number[] = []
 
     const MAX_ITERATIONS = survey.questions.length + 1
-    let iterations = 0
+    const iterations = 0
     while (currentIndex < survey.questions.length && iterations < MAX_ITERATIONS) {
-        iterations++
         // Stop if current question is not prefilled
         if (!prefilledIndices.includes(currentIndex)) {
             break
