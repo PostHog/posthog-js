@@ -106,7 +106,8 @@ export const getModelParams = (
         | TranscriptionCreateParams
       ) &
         MonitoringParams)
-    | null
+    | null,
+  responseServiceTier?: string | null
 ): Record<string, any> => {
   if (!params) {
     return {}
@@ -133,6 +134,9 @@ export const getModelParams = (
     if (key in params && (params as any)[key] !== undefined) {
       modelParams[key] = (params as any)[key]
     }
+  }
+  if (responseServiceTier != null) {
+    modelParams.service_tier = responseServiceTier
   }
   return modelParams
 }

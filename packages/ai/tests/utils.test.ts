@@ -220,6 +220,16 @@ describe('getModelParams', () => {
     }
   })
 
+  it('prefers the response service_tier over the requested service_tier', () => {
+    const params = { model: 'gpt-4o', service_tier: 'auto' } as any
+    expect(getModelParams(params, 'flex')).toEqual({ service_tier: 'flex' })
+  })
+
+  it.each([null, undefined])('keeps the requested service_tier when the response tier is %s', (responseTier) => {
+    const params = { model: 'gpt-4o', service_tier: 'auto' } as any
+    expect(getModelParams(params, responseTier)).toEqual({ service_tier: 'auto' })
+  })
+
   it('omits service_tier when not provided', () => {
     const params = { model: 'gpt-4o', temperature: 0.5 } as any
     const result = getModelParams(params)
