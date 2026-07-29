@@ -1,6 +1,5 @@
 ---
 'posthog-js': patch
-'@posthog/react': patch
 ---
 
 fix(react): restore CommonJS default import interop in UMD bundles
