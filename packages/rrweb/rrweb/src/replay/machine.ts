@@ -200,6 +200,11 @@ export function createPlayerService(
         play(ctx) {
           const { timer, events, baselineTime, lastPlayedEvent } = ctx;
           timer.clear();
+          // clear() keeps the accumulated offset (plain pause relies on it);
+          // a seek must reset it, or getCurrentTime() reads the previous
+          // play's offset on top of the new target until the timer restarts —
+          // observable while a chunked rebuild is yielding
+          timer.timeOffset = 0;
 
           for (const event of events) {
             // TODO: improve this API
@@ -261,6 +266,16 @@ export function createPlayerService(
                 (event.type === EventType.Meta ||
                   event.type === EventType.FullSnapshot);
               if (event.timestamp < baselineTime || isSnapshotBoundaryEvent) {
+                continue;
+              }
+              // an already-played MouseMove batch can span the baseline (its
+              // positions carry negative offsets); replaying it would repeat
+              // pointer movement the delta optimization treats as done
+              if (
+                lastPlayedTimestamp &&
+                lastPlayedTimestamp < baselineTime &&
+                event === lastPlayedEvent
+              ) {
                 continue;
               }
               const castFn = getCastFn(event, false);

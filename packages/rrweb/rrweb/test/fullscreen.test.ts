@@ -223,11 +223,10 @@ describe('record/replay native fullscreen', () => {
     };
 
     const activeOffset = Math.floor((enterOffset + exitOffset) / 2);
-    // strictly after the snapshot: seeking to exactly the snapshot's
-    // timestamp classifies it as "future" and skips the rebuild entirely
-    // (known boundary bug, https://github.com/PostHog/posthog-js/issues/4239
-    // — see 'pausing exactly at its timestamp' in replayer.test.ts), which
-    // would leak the marker across this scrub
+    // strictly after the snapshot, so recording timing jitter can't land this
+    // checkpoint on the snapshot-boundary path — that path has its own test
+    // ('pausing exactly at its timestamp' in replayer.test.ts); this one is
+    // about the marker surviving scrubs
     const beforeOffset = Math.max(enterOffset - 1, snapshotOffset + 1);
     const off = { hasMarker: false, isPinned: false };
     const on = { hasMarker: true, isPinned: true };

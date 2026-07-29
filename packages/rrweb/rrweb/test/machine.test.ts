@@ -31,6 +31,18 @@ const makeMutationEvent = (timestamp: number): eventWithTime => ({
   timestamp,
 });
 
+const makeMouseMoveEvent = (
+  timestamp: number,
+  firstPositionOffset: number,
+): eventWithTime => ({
+  type: EventType.IncrementalSnapshot,
+  data: {
+    source: IncrementalSource.MouseMove,
+    positions: [{ x: 0, y: 0, id: 1, timeOffset: firstPositionOffset }],
+  },
+  timestamp,
+});
+
 const makeFullSnapshotEvent = (timestamp: number): eventWithTime => ({
   type: EventType.FullSnapshot,
   data: { node: { type: 0, childNodes: [], id: 1 } as any, initialOffset: { top: 0, left: 0 } },
@@ -256,6 +268,46 @@ describe('play scheduling', () => {
 
     // only `later` is scheduled — the boundary snapshot is not re-cast
     expect(actionCount(timer)).toBe(1);
+  });
+
+  it('does not reschedule an already-played MouseMove batch spanning the baseline', () => {
+    // the batch's own timestamp is past the baseline, but its first position
+    // (negative offset) is before it — the delta optimization already played it
+    const mouseMove = makeMouseMoveEvent(2100, -200); // lastPlayedTimestamp 1900
+    const later = makeMutationEvent(3000);
+    // baselineTime = events[0].timestamp + timeOffset = 1000 + 1000 = 2000
+    const { service, timer, completeRebuild } = createPlayingService([
+      makeMutationEvent(1000),
+      mouseMove,
+      later,
+    ]);
+
+    service.send({ type: 'PLAY', payload: { timeOffset: 0 } });
+    completeRebuild();
+    service.send({ type: 'CAST_EVENT', payload: { event: mouseMove } });
+    service.send({ type: 'PAUSE' });
+
+    service.send({ type: 'PLAY', payload: { timeOffset: 1000 } }); // baseline 2000
+    completeRebuild();
+
+    // only `later` is scheduled — the MouseMove batch is not replayed
+    expect(actionCount(timer)).toBe(1);
+  });
+
+  it('zeroes the timer offset at seek time, not only when the rebuild completes', () => {
+    // getCurrentTime() reads timer.timeOffset while a chunked rebuild is
+    // yielding; a leftover offset from the previous play would be added to
+    // the new seek target
+    const { service, timer } = createPlayingService([
+      makeMutationEvent(1000),
+      makeMutationEvent(3000),
+    ]);
+    timer.timeOffset = 1234;
+
+    service.send({ type: 'PLAY', payload: { timeOffset: 1000 } });
+
+    // rebuild still in flight — offset already reset
+    expect(timer.timeOffset).toBe(0);
   });
 
   it('RESET_LAST_PLAYED forces the next seek to fast-forward the full history', () => {
