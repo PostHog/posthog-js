@@ -16,6 +16,7 @@ import { ExtensionRuntime } from '@posthog/browser-common/extension-runtime'
 import { logger } from '@posthog/browser-common/utils/logger'
 import type { Logger } from '@posthog/core'
 
+import Config from '../config'
 import { DEVICE_ID } from '../constants'
 import { extendURLParams } from '../request'
 import type { PostHog } from '../posthog-core'
@@ -107,6 +108,19 @@ export class BrowserClientAdapter implements Client, Disposable {
         return (this.instance.get_property(DEVICE_ID) as string | undefined) ?? this.distinctId
     }
 
+    get deviceId(): string | undefined {
+        const value = this.instance.get_property(DEVICE_ID)
+        return typeof value === 'string' ? value : undefined
+    }
+
+    get library(): { name: string; version: string } {
+        return { name: Config.LIB_NAME, version: Config.LIB_VERSION }
+    }
+
+    get initialPersonProperties(): Record<string, unknown> {
+        return (this.instance.persistence?.get_initial_props() ?? {}) as Record<string, unknown>
+    }
+
     get groups(): Record<string, string> {
         return this.instance.getGroups() as Record<string, string>
     }
@@ -170,6 +184,8 @@ export class BrowserClientAdapter implements Client, Disposable {
             timeout: init.timeoutMs,
             fireCallbackOnDrop: true,
             transport: init.transport,
+            compression: init.compression,
+            timestampMode: init.sentAt,
         }
 
         if (init.transport === 'sendBeacon') {
