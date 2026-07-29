@@ -410,7 +410,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       $ai_lib: 'posthog-ai',
       $ai_lib_version: version,
       $ai_trace_id: traceId,
-      $ai_input_state: withPrivacyMode(this.client, this.privacyMode, run.input),
+      $ai_input_state: withPrivacyMode(this.client, this.privacyMode, sanitizeLangChain(run.input)),
       $ai_latency: latency,
       $ai_span_name: run.name,
       $ai_span_id: runId,
@@ -428,7 +428,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       eventProperties['$ai_error'] = stringifyError(outputs)
       eventProperties['$ai_is_error'] = true
     } else if (outputs !== undefined) {
-      eventProperties['$ai_output_state'] = withPrivacyMode(this.client, this.privacyMode, outputs)
+      eventProperties['$ai_output_state'] = withPrivacyMode(this.client, this.privacyMode, sanitizeLangChain(outputs))
     }
     this.client.capture({
       distinctId: this.distinctId ? this.distinctId.toString() : runId,

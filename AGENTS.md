@@ -186,6 +186,8 @@ This repository uses [Changesets](https://github.com/changesets/changesets) for 
 
 ### Creating a Changeset
 
+Never add changesets for modules under `packages/rrweb/`; they are built with `posthog-js`. For rrweb changes that require a release, add only a `posthog-js` changeset.
+
 Before submitting a PR with changes that should be released:
 
 ```bash

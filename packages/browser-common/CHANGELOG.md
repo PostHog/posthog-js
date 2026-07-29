@@ -1,5 +1,20 @@
 # @posthog/browser-common
 
+## 0.2.4
+
+### Patch Changes
+
+- [#4284](https://github.com/PostHog/posthog-js/pull/4284) [`fbd457f`](https://github.com/PostHog/posthog-js/commit/fbd457fbba704e9b42ff02728eae42ea844c7fd7) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Reduce extension runtime and contract overhead by replacing the `CoreExtension` and capability-token registry with one host-provided `Client`. Extensions now access analytics, identity, session, events, remote config, transport, persistence, and logging directly from that client.
+
+    Cross-extension `getExtension`/`provides` lookup and session lifecycle observation are no longer part of the shared contract. Extension cleanup is synchronous and best-effort: resources are released in reverse registration order, and Promise-returning legacy cleanup is not awaited but rejected Promises are contained. (2026-07-28)
+
+## 0.2.3
+
+### Patch Changes
+
+- [#4272](https://github.com/PostHog/posthog-js/pull/4272) [`2551b08`](https://github.com/PostHog/posthog-js/commit/2551b0840a810d252e40e61eb529785a780020a2) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Replace the extension client `apiRequest` bridge with `sendRequest`, exposing the public project token and caller-directed request targets, headers, and browser transports.
+  (2026-07-27)
+
 ## 0.2.2
 
 ### Patch Changes

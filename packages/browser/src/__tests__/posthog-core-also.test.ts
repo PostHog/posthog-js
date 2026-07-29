@@ -356,7 +356,7 @@ describe('posthog core', () => {
             )
         })
 
-        it('sends session recordings with sent_at in the query', () => {
+        it('sends session recordings with sent_at in the body', () => {
             const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
 
             posthog.capture(
@@ -371,7 +371,7 @@ describe('posthog core', () => {
             expect(posthog._send_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: 'https://app.posthog.com/s/',
-                    timestampMode: 'query',
+                    timestampMode: 'body',
                 })
             )
         })
@@ -385,7 +385,7 @@ describe('posthog core', () => {
             expect(posthog._send_request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     url: 'https://app.posthog.com/s/',
-                    timestampMode: 'query',
+                    timestampMode: 'body',
                 })
             )
         })

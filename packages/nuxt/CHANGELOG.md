@@ -1,5 +1,12 @@
 # @posthog/nuxt
 
+## 1.7.81
+
+### Patch Changes
+
+- [#4277](https://github.com/PostHog/posthog-js/pull/4277) [`060f03a`](https://github.com/PostHog/posthog-js/commit/060f03a0a065e99b11d1e3aaae13362ceb3ea54f) Thanks [@marandaneto](https://github.com/marandaneto)! - Delete uploaded public sourcemaps before Nitro generates its asset manifest to prevent stale entries from causing runtime 500 errors.
+  (2026-07-27)
+
 ## 1.7.80
 
 ### Patch Changes
