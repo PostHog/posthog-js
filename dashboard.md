@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4310](https://github.com/PostHog/posthog-js/issues/4310) | Confirmed likely UMD/CJS interop regression in the React bindings' default-instance fallback. | web |  | no | 2026-07-29T13:18:25.413Z |
 | PostHog/posthog-js | [issue 4285](https://github.com/PostHog/posthog-js/issues/4285) | Confirmed React Native iOS build-plugin composition bug: independent PostHog and Sentry wrappers can replace the same Expo bundle phase and produce a successful build without running the React Native bundler. | react-native, iOS |  | no | 2026-07-28T02:34:29.340Z |
 | PostHog/posthog-js | [issue 3046](https://github.com/PostHog/posthog-js/issues/3046) | Valid Nuxt enhancement; disabled-mode semantics need an explicit API decision before implementation. | enhancement, feature, nuxt |  | no | 2026-07-28T00:29:15.800Z |
 | PostHog/posthog-js | [issue 4275](https://github.com/PostHog/posthog-js/issues/4275) | Confirmed @posthog/nuxt sourcemap-cleanup bug: deleting maps in the Nuxt close hook can leave Nitro's already-generated public-asset manifest pointing at missing files, producing runtime 500s. | nuxt, feature/error-tracking, team/error-tracking |  | no | 2026-07-26T16:46:23.338Z |
