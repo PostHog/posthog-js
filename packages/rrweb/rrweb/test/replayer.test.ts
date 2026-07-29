@@ -1442,6 +1442,73 @@ describe('replayer', function () {
       expect(order.indexOf('finish')).toBeGreaterThan(order.indexOf('flush'));
     });
 
+    it('going live after a mutation chunk commits the frame and live mutations reach the iframe', async () => {
+      await page.evaluate(`events = ${JSON.stringify(styleSheetRuleEvents)}`);
+      const result = await page.evaluate(`
+        (async () => {
+          const { Replayer } = rrweb;
+          const replayer = new Replayer(events, { seekYieldBudgetMs: ${TINY_BUDGET}, liveMode: true });
+          replayer.pause(2600);
+          // wait for a mutation chunk to move the rebuild onto the virtual dom
+          await new Promise((resolve, reject) => {
+            const startedAt = Date.now();
+            const poll = () => {
+              if (replayer.usingVirtualDom) return resolve();
+              if (Date.now() - startedAt > 2000)
+                return reject(new Error('virtual dom never engaged'));
+              setTimeout(poll, 1);
+            };
+            poll();
+          });
+          const baseline = Date.now();
+          replayer.startLive(baseline);
+          // cancelling the rebuild must commit and drain the virtual dom —
+          // otherwise every live mutation writes to a detached tree
+          const virtualDomDrained = replayer.usingVirtualDom === false;
+          const bodyId = replayer.getMirror().getId(replayer.iframe.contentDocument.body);
+          replayer.addEvent({
+            type: 3, // IncrementalSnapshot
+            data: {
+              source: 0, // Mutation
+              texts: [],
+              attributes: [{ id: bodyId, attributes: { 'data-live': 'yes' } }],
+              removes: [],
+              adds: [],
+            },
+            timestamp: baseline + 20,
+          });
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          return {
+            virtualDomDrained,
+            liveMutationApplied:
+              replayer.iframe.contentDocument.body.getAttribute('data-live') === 'yes',
+          };
+        })()
+      `);
+      expect(result).toEqual({
+        virtualDomDrained: true,
+        liveMutationApplied: true,
+      });
+    });
+
+    it('going live during a chunked play(t) rebuild reaches live with a working timer', async () => {
+      await page.evaluate(`events = ${JSON.stringify(styleSheetRuleEvents)}`);
+      const result = await page.evaluate(`
+        (async () => {
+          const { Replayer } = rrweb;
+          const replayer = new Replayer(events, { seekYieldBudgetMs: ${TINY_BUDGET}, liveMode: true });
+          replayer.play(1500);
+          replayer.startLive();
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          return {
+            state: replayer['service']['state']['value'],
+            timerActive: replayer['timer'].isActive(),
+          };
+        })()
+      `);
+      expect(result).toEqual({ state: 'live', timerActive: true });
+    });
+
     it('going live during a chunked rebuild cancels it and leaves the live timer alone', async () => {
       await page.evaluate(`events = ${JSON.stringify(styleSheetRuleEvents)}`);
       const result = await page.evaluate(`

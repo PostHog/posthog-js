@@ -40,6 +40,12 @@ export function applyEventsWithYield(
     while (index < events.length) {
       castEvent(events[index]);
       index++;
+      // a cast runs plugins and event-cast listeners, which can
+      // synchronously start a newer seek or go live — stop mid-chunk
+      // rather than keep casting a superseded pass
+      if (isCancelled()) {
+        return false;
+      }
       if (now() >= deadline) {
         break;
       }
@@ -47,19 +53,21 @@ export function applyEventsWithYield(
     return index >= events.length;
   };
 
-  if (applyChunk()) {
-    onComplete(true);
-    return;
-  }
-  const continueApplying = () => {
+  const step = (isFirstChunk: boolean) => {
+    if (!isFirstChunk && isCancelled()) {
+      return;
+    }
+    const done = applyChunk();
+    // re-check: the final cast of a chunk can be what cancelled it, and a
+    // superseded pass must never complete or reschedule
     if (isCancelled()) {
       return;
     }
-    if (applyChunk()) {
-      onComplete(false);
+    if (done) {
+      onComplete(isFirstChunk);
       return;
     }
-    schedule(continueApplying);
+    schedule(() => step(false));
   };
-  schedule(continueApplying);
+  step(true);
 }

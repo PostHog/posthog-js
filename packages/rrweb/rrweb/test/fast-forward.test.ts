@@ -119,6 +119,55 @@ describe('applyEventsWithYield', () => {
     expect(onComplete).toHaveBeenCalledWith(false);
   });
 
+  it('stops mid-chunk when a cast itself triggers the cancellation', () => {
+    // event-cast listeners and plugins can synchronously start a newer seek
+    const events = makeEvents(10);
+    let cancelled = false;
+    const applied: eventWithTime[] = [];
+    const scheduled: Array<() => void> = [];
+    const onComplete = vi.fn();
+    applyEventsWithYield({
+      events,
+      castEvent: (event) => {
+        applied.push(event);
+        if (applied.length === 4) {
+          cancelled = true; // reentrant supersession from inside the cast
+        }
+      },
+      yieldBudgetMs: 1000, // never yields on its own
+      schedule: (fn) => scheduled.push(fn),
+      isCancelled: () => cancelled,
+      onComplete,
+      now: () => 0,
+    });
+
+    expect(applied).toHaveLength(4);
+    expect(scheduled).toHaveLength(0);
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  it('does not complete when the final cast triggers the cancellation', () => {
+    const events = makeEvents(3);
+    let cancelled = false;
+    const onComplete = vi.fn();
+    applyEventsWithYield({
+      events,
+      castEvent: (event) => {
+        if (event === events[2]) {
+          cancelled = true;
+        }
+      },
+      yieldBudgetMs: 0,
+      schedule: () => {
+        throw new Error('must not schedule');
+      },
+      isCancelled: () => cancelled,
+      onComplete,
+    });
+
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+
   it('stops without completing when cancelled between chunks', () => {
     const events = makeEvents(10);
     let cancelled = false;

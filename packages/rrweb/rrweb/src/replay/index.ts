@@ -668,13 +668,21 @@ export class Replayer {
     // chunks would interleave stale seek-time events with live DOM writes
     this.applyGeneration++;
     if (this.seekRebuildInFlight) {
-      // the cancelled rebuild left a partial history on the DOM, so
-      // lastPlayedEvent must not be trusted by any future seek; and with no
-      // rebuild applying anymore, the flag must not keep the finish poll
-      // re-arming. Live is currently a terminal machine state, so this is
-      // defensive — it keeps both invariants locally true either way.
-      this.service.send({ type: 'RESET_LAST_PLAYED' });
       this.seekRebuildInFlight = false;
+      // commit the partially applied frame: the cancelled rebuild will never
+      // emit its own Flush, and an undrained virtual DOM would silently
+      // swallow every live mutation from here on
+      this.emitter.emit(ReplayerEvents.Flush);
+      // the committed frame holds only part of lastPlayedEvent's history, so
+      // no future seek may trust it as a delta base; and with no rebuild
+      // applying anymore, the flag must not keep the finish poll re-arming
+      this.service.send({ type: 'RESET_LAST_PLAYED' });
+      if (this.service.state.matches('playing')) {
+        // the machine only accepts TO_LIVE from paused; a play(t) whose
+        // rebuild we just cancelled would otherwise stay 'playing' forever
+        // with a timer that never started
+        this.service.send({ type: 'PAUSE' });
+      }
     }
     this.service.send({ type: 'TO_LIVE', payload: { baselineTime } });
   }
@@ -809,6 +817,20 @@ export class Replayer {
     }
   };
 
+  // discard buffers a superseded fast-forward accumulated for its Flush that
+  // never fired. This pass must repopulate them itself: when it rebuilds from
+  // a newer snapshot it never touches the abandoned pass's nodes, so leftover
+  // entries (e.g. a stale scroll position) would apply on this pass's Flush.
+  private discardStaleFlushBuffers() {
+    this.lastScrollMap.clear();
+    this.mousePos = null;
+    this.touchActive = null;
+    this.lastMouseDownEvent = null;
+    this.lastSelectionData = null;
+    this.constructedStyleMutations = [];
+    this.adoptedStyleSheets = [];
+  }
+
   private applyEvents = (
     events: Array<eventWithTime>,
     onApplied: () => void,
@@ -816,6 +838,7 @@ export class Replayer {
     // a later seek/play supersedes any rebuild still in flight
     const generation = ++this.applyGeneration;
     this.seekRebuildInFlight = true;
+    this.discardStaleFlushBuffers();
     applyEventsWithYield({
       events: events.filter(this.shouldCastInSyncMode),
       castEvent: (event) => this.getCastFn(event, true)(),
