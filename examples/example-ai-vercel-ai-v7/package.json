@@ -1,0 +1,26 @@
+{
+    "name": "example-ai-vercel-ai-v7",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "packageManager": "pnpm@11.7.0",
+    "scripts": {
+        "build": "tsc --noEmit",
+        "start": "tsx index.ts",
+        "test": "tsx --test integration.test.ts"
+    },
+    "dependencies": {
+        "@ai-sdk/openai": "4.0.24",
+        "@ai-sdk/otel": "1.0.41",
+        "@opentelemetry/resources": "2.7.0",
+        "@opentelemetry/sdk-node": "0.218.0",
+        "@opentelemetry/sdk-trace-base": "2.7.0",
+        "@posthog/ai": "*",
+        "ai": "7.0.41"
+    },
+    "devDependencies": {
+        "@types/node": "^24.0.0",
+        "tsx": "^4.0.0",
+        "typescript": "^5.8.2"
+    }
+}

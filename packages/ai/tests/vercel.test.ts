@@ -200,6 +200,18 @@ describe('Vercel AI SDK - Dual Version Support', () => {
     jest.restoreAllMocks()
   })
 
+  it('rejects AI SDK v7 models and points callers to the OpenTelemetry integration', () => {
+    const v4Model = {
+      specificationVersion: 'v4',
+      provider: 'openai',
+      modelId: 'gpt-test',
+    }
+
+    expect(() => Reflect.apply(withTracing, undefined, [v4Model, mockPostHogClient, {}])).toThrow(
+      'withTracing supports Vercel AI SDK v5 and v6 models only. Use @ai-sdk/otel with @posthog/ai/otel for AI SDK v7 models.'
+    )
+  })
+
   describe('V3 Model (AI SDK 6)', () => {
     it('should wrap a V3 model and track generation', async () => {
       const baseModel = createMockV3Model('gpt-4')

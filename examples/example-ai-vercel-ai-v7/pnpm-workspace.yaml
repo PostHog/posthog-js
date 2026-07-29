@@ -1,0 +1,5 @@
+pnpmfile: ../.pnpmfile.cjs
+minimumReleaseAge: 10080
+allowBuilds:
+  esbuild: set this to true or false
+  protobufjs: set this to true or false
