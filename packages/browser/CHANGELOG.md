@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.407.6
+
+### Patch Changes
+
+- [#4305](https://github.com/PostHog/posthog-js/pull/4305) [`b4250a7`](https://github.com/PostHog/posthog-js/commit/b4250a7bacbb8494df0f383dcd6dda7f3cdb39fc) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix extension bundles when used with the slim no-external browser build.
+  (2026-07-29)
+
 ## 1.407.5
 
 ### Patch Changes
