@@ -1725,6 +1725,12 @@ export async function snapshotWithBudget(
   options: SnapshotWithBudgetOptions,
 ): Promise<serializedNodeWithId | null> {
   const {
+    yieldBudgetMs,
+    yieldFn,
+    shouldAbort,
+    ...snapshotOptions
+  } = options;
+  const {
     mirror = new Mirror(),
     blockClass = 'rr-block',
     blockSelector = null,
@@ -1747,10 +1753,7 @@ export async function snapshotWithBudget(
     stylesheetLoadTimeout,
     keepIframeSrcFn = () => false,
     maxDepth = DEFAULT_MAX_DEPTH,
-    yieldBudgetMs,
-    yieldFn,
-    shouldAbort,
-  } = options;
+  } = snapshotOptions;
   const maskInputOptions: MaskInputOptions =
     normalizeMaskInputOptions(maskAllInputs);
   const slimDOMOptions: SlimDOMOptions = slimDOMDefaults(slimDOM);
@@ -1763,6 +1766,12 @@ export async function snapshotWithBudget(
   const inputPending = yieldFn ? () => false : createInputPendingCheck();
 
   const perNodeOptions = {
+    // Keep the public snapshot option bag intact. Scheduler controls were
+    // removed above, and the normalized/internal forms below deliberately
+    // override their public counterparts. Spreading the canonical bag here
+    // prevents a newly-added serializer option from silently working in
+    // snapshot() while being dropped by snapshotWithBudget().
+    ...snapshotOptions,
     doc: n,
     mirror,
     blockClass,

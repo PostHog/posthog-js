@@ -1089,6 +1089,61 @@ describe('time-sliced full snapshot converges on replay', () => {
     }
   });
 
+  it('stops after a synchronous full snapshot failure', async () => {
+    const page = await browser.newPage();
+    try {
+      await fakeGoto(page, `${serverURL}/html/convergence.html`);
+      await page.setContent(
+        buildHtml(
+          '<p class="rr-mask">force the masking callback</p>',
+          0,
+          `
+            maskTextFn: function () {
+              throw new Error('injected synchronous snapshot failure');
+            },
+          `,
+        ),
+      );
+      await new Promise((r) => setTimeout(r, 200));
+
+      const result = (await page.evaluate(`
+        (async function () {
+          var countAfterFailure = window.snapshots.length;
+          var customEventRejected = false;
+          try {
+            rrweb.record.addCustomEvent('must-not-emit', {});
+          } catch (error) {
+            customEventRejected = true;
+          }
+          var marker = document.createElement('button');
+          marker.id = 'after-sync-failure';
+          document.body.appendChild(marker);
+          marker.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+          await new Promise(function (resolve) { setTimeout(resolve, 100); });
+          return {
+            countAfterFailure: countAfterFailure,
+            finalCount: window.snapshots.length,
+            customEventRejected: customEventRejected,
+            hasFullSnapshot: window.snapshots.some(function (e) {
+              return e.type === 2;
+            }),
+          };
+        })()
+      `)) as {
+        countAfterFailure: number;
+        finalCount: number;
+        customEventRejected: boolean;
+        hasFullSnapshot: boolean;
+      };
+
+      expect(result.hasFullSnapshot).toBe(false);
+      expect(result.customEventRejected).toBe(true);
+      expect(result.finalCount).toBe(result.countAfterFailure);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('bounds held events and recovers instead of flushing a partial queue', async () => {
     const page = await browser.newPage();
     const errors: string[] = [];

@@ -56,9 +56,13 @@ import {
 } from './error-handler';
 import dom from '@posthog/rrweb-utils';
 
-let wrappedEmit!: (e: eventWithoutTime, isCheckout?: boolean) => void;
+let wrappedEmit!: (
+  e: eventWithoutTime,
+  isCheckout?: boolean,
+  preserveTimestamp?: boolean,
+) => void;
 
-let takeFullSnapshot!: (isCheckout?: boolean) => void;
+let takeFullSnapshot!: (isCheckout?: boolean) => boolean;
 let canvasManager!: CanvasManager;
 let recording = false;
 // Module-level on purpose, like the mirror it protects: `record()` can be
@@ -370,13 +374,21 @@ function record<T = eventWithTime>(
     }
     return e as unknown as T;
   };
-  wrappedEmit = (r: eventWithoutTime, isCheckout?: boolean) => {
+  wrappedEmit = (
+    r: eventWithoutTime,
+    isCheckout?: boolean,
+    preserveTimestamp = false,
+  ) => {
     const e = r as eventWithTime;
-    // Stamped once, when the event is observed. An event held back for a sliced
-    // full snapshot therefore keeps the time it actually happened rather than
-    // the time it was released, and a caller that already knows the time an
-    // event belongs to (the FullSnapshot below) can set it itself.
-    e.timestamp ??= nowTimestamp();
+    // Preserve the historical parent-clock contract for ordinary events,
+    // including transformed cross-origin iframe events whose child clock may
+    // be skewed. Only recorder-owned budgeted snapshot events and events being
+    // released from the held queue opt into keeping an explicit timestamp.
+    if (preserveTimestamp) {
+      e.timestamp ??= nowTimestamp();
+    } else {
+      e.timestamp = nowTimestamp();
+    }
     if (
       budgetedSnapshotInFlight &&
       !budgetedSnapshotFlushing &&
@@ -708,6 +720,7 @@ function record<T = eventWithTime>(
         },
       } as unknown as eventWithoutTime,
       isCheckout,
+      timestamp !== undefined,
     );
   };
 
@@ -846,6 +859,7 @@ function record<T = eventWithTime>(
         wrappedEmit(
           fullSnapshotEvent as unknown as eventWithoutTime,
           isCheckout,
+          true,
         );
         transaction.didEmitFullSnapshot = true;
       })
@@ -918,7 +932,7 @@ function record<T = eventWithTime>(
           for (const [event, eventIsCheckout] of queuedEvents) {
             const scrubbed = scrubUnclaimedIds(event, unclaimedIds);
             if (scrubbed) {
-              wrappedEmit(scrubbed, eventIsCheckout);
+              wrappedEmit(scrubbed, eventIsCheckout, true);
             }
           }
 
@@ -940,13 +954,17 @@ function record<T = eventWithTime>(
 
   takeFullSnapshot = (isCheckout = false) => {
     if (!recordDOM) {
-      return;
+      return true;
     }
     if (fullSnapshotYieldBudgetMs > 0) {
       takeFullSnapshotBudgeted(isCheckout);
-      return;
+      return true;
     }
-    takeFullSnapshotSynchronous(isCheckout);
+    const succeeded = takeFullSnapshotSynchronous(isCheckout);
+    if (!succeeded) {
+      stopRecording?.();
+    }
+    return succeeded;
   };
 
   try {
@@ -1183,8 +1201,40 @@ function record<T = eventWithTime>(
       }
     };
 
+    stopRecording = () => {
+      if (didStopRecording) {
+        return;
+      }
+      didStopRecording = true;
+      // Invalidate any time-sliced full snapshot still in flight before we tear
+      // the managers down, so its continuation can't emit a FullSnapshot for a
+      // recording that no longer exists, unlock buffers, or schedule a
+      // follow-up. The walk itself stops on its own once nothing references it.
+      recordingGeneration++;
+      activeBudgetedSnapshot?.eventQueue.splice(0);
+      budgetedSnapshotQueued = null;
+      if (activeBudgetedSnapshot) {
+        discardMutationBuffers(activeBudgetedSnapshot.bufferToken);
+        activeBudgetedSnapshot = null;
+      } else {
+        discardActiveMutationBufferTransaction();
+      }
+      handlers.forEach((h) => callSafely(h));
+      processedNodeManager.destroy();
+      iframeManager.removeLoadListener();
+      iframeManager.destroy();
+      iframeObserverCleanups.clear();
+      // Global shadow teardown belongs to the recording lifecycle, not per-buffer reset() which would fire on every iframe teardown.
+      shadowDomManager.reset();
+      mirror.reset();
+      recording = false;
+      unregisterErrorHandler();
+    };
+
     const init = () => {
-      takeFullSnapshot();
+      if (!takeFullSnapshot()) {
+        return;
+      }
       handlers.push(observe(document));
       handlers.push(on('fullscreenchange', emitFullscreenChange));
       handlers.push(on('webkitfullscreenchange', emitFullscreenChange));
@@ -1218,35 +1268,6 @@ function record<T = eventWithTime>(
         ),
       );
     }
-    stopRecording = () => {
-      if (didStopRecording) {
-        return;
-      }
-      didStopRecording = true;
-      // Invalidate any time-sliced full snapshot still in flight before we tear
-      // the managers down, so its continuation can't emit a FullSnapshot for a
-      // recording that no longer exists, unlock buffers, or schedule a
-      // follow-up. The walk itself stops on its own once nothing references it.
-      recordingGeneration++;
-      activeBudgetedSnapshot?.eventQueue.splice(0);
-      budgetedSnapshotQueued = null;
-      if (activeBudgetedSnapshot) {
-        discardMutationBuffers(activeBudgetedSnapshot.bufferToken);
-        activeBudgetedSnapshot = null;
-      } else {
-        discardActiveMutationBufferTransaction();
-      }
-      handlers.forEach((h) => callSafely(h));
-      processedNodeManager.destroy();
-      iframeManager.removeLoadListener();
-      iframeManager.destroy();
-      iframeObserverCleanups.clear();
-      // Global shadow teardown belongs to the recording lifecycle, not per-buffer reset() which would fire on every iframe teardown.
-      shadowDomManager.reset();
-      mirror.reset();
-      recording = false;
-      unregisterErrorHandler();
-    };
     return stopRecording;
   } catch (error) {
     // A walk started by init() before the failure would otherwise keep

@@ -174,6 +174,37 @@ describe('snapshotWithBudget', () => {
     );
   });
 
+  it('preserves canvas masking configuration in budgeted snapshots', async () => {
+    const doc = buildRichDocument();
+    const canvas = doc.createElement('canvas');
+    canvas.toDataURL = () => 'data:image/webp;base64,unmasked-pixels';
+    doc.body.appendChild(canvas);
+    const options = {
+      ...SNAPSHOT_OPTIONS,
+      recordCanvas: true,
+      canvasMaskingConfigured: () => true,
+    };
+
+    cleanupSnapshot();
+    const syncNode = snapshot(doc, {
+      ...options,
+      mirror: new Mirror(),
+    });
+
+    cleanupSnapshot();
+    const budgetedNode = await snapshotWithBudget(doc, {
+      ...options,
+      mirror: new Mirror(),
+      yieldBudgetMs: 0.0001,
+      yieldFn: async () => undefined,
+    });
+
+    expect(JSON.stringify(syncNode)).not.toContain('rr_dataURL');
+    expect(JSON.parse(JSON.stringify(budgetedNode))).toEqual(
+      JSON.parse(JSON.stringify(syncNode)),
+    );
+  });
+
   it('registers the same nodes in the mirror (blocked children excluded)', async () => {
     const doc = buildRichDocument();
 
