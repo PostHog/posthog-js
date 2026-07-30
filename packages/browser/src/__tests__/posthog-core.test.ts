@@ -383,6 +383,27 @@ describe('posthog core', () => {
                 expect(beforeSendMock.mock.calls[0][0].properties.utm_source).toBe('source')
                 expect(beforeSendMock.mock.calls[0][0].properties.utm_medium).toBe(null)
             })
+
+            it('should refresh campaign params after an SPA URL change', () => {
+                // arrange
+                const token = uuidv7()
+                const { posthog, beforeSendMock } = setup({
+                    token,
+                    persistence_name: token,
+                })
+
+                // act
+                posthog.capture('$pageview')
+                const registerSpy = jest.spyOn(posthog.sessionPersistence!, 'register')
+                mockURL.mockReturnValue('https://www.example.com/some/path?gclid=abc')
+                posthog.capture('$pageview')
+                posthog.capture('$pageview')
+
+                // assert
+                expect(beforeSendMock.mock.calls[1][0].properties.gclid).toBe('abc')
+                expect(beforeSendMock.mock.calls[2][0].properties.gclid).toBe('abc')
+                expect(registerSpy.mock.calls.filter(([props]) => props.gclid === 'abc')).toHaveLength(1)
+            })
         })
 
         describe('survey events', () => {
