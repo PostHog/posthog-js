@@ -335,6 +335,10 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * new PostHog('key', { isServer: false })
    */
   isServer?: boolean
+  /** @internal */
+  _useAiLane?: boolean
+  /** @internal */
+  _enableMultimodalCapture?: boolean
 } & ExceptionRateLimiterConfig
 
 export type PostHogFeatureFlag = {

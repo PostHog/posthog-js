@@ -79,6 +79,68 @@ describe('LangChainCallbackHandler', () => {
     expect(captureCall[0].properties.$ai_provider).toBe('openai')
   })
 
+  it('routes generation events through _captureAi when the client opted into the AI lane', async () => {
+    const aiLaneClient = {
+      capture: jest.fn(),
+      _useAiLane: true,
+      _captureAi: jest.fn(),
+    } as unknown as PostHog
+    const aiLaneHandler = new LangChainCallbackHandler({
+      client: aiLaneClient,
+    })
+
+    const serialized = {
+      lc: 1,
+      type: 'constructor' as const,
+      id: ['langchain', 'llms', 'openai', 'OpenAI'],
+      kwargs: { openai_api_base: 'https://api.openai.com/v1' },
+    }
+
+    const prompts = ['Test prompt for library version']
+    const runId = 'run_lib_test'
+    const parentRunId = 'parent_lib'
+    const metadata = { ls_model_name: 'gpt-4', ls_provider: 'openai' }
+    const extraParams = {
+      invocation_params: {
+        temperature: 0.7,
+        max_tokens: 100,
+      },
+    }
+
+    aiLaneHandler.handleLLMStart(serialized, prompts, runId, parentRunId, extraParams, undefined, metadata)
+
+    const llmResult = {
+      generations: [
+        [
+          {
+            text: 'Test response',
+            message: new AIMessage('Test response'),
+          },
+        ],
+      ],
+      llmOutput: {
+        tokenUsage: {
+          promptTokens: 10,
+          completionTokens: 3,
+          totalTokens: 13,
+        },
+      },
+    }
+
+    aiLaneHandler.handleLLMEnd(llmResult, runId)
+
+    expect((aiLaneClient as any)._captureAi).toHaveBeenCalledTimes(1)
+    expect(aiLaneClient.capture).not.toHaveBeenCalled()
+    const [captureCall] = (aiLaneClient as any)._captureAi.mock.calls
+
+    expect(captureCall[0].properties['$ai_lib']).toBe('posthog-ai')
+    expect(captureCall[0].properties['$ai_lib_version']).toBe(version)
+    expect(captureCall[0].properties['$ai_framework']).toBe('langchain')
+    expect(captureCall[0].event).toBe('$ai_generation')
+    expect(captureCall[0].properties.$ai_model).toBe('gpt-4')
+    expect(captureCall[0].properties.$ai_provider).toBe('openai')
+  })
+
   it('should convert AIMessage with tool calls to dict format', () => {
     const toolCalls = [
       {

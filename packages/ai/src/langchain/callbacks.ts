@@ -12,6 +12,7 @@ import { BaseMessage } from '@langchain/core/messages'
 import { sanitizeLangChain } from '../sanitization'
 import { stringifyError } from '../serializeError'
 import { warnIfPostHogAiGateway } from '../gatewayWarning'
+import { captureAiEvent } from '../captureAiEvent'
 
 interface SpanMetadata {
   /** Name of the trace/span (e.g. chain name) */
@@ -329,7 +330,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     const runNameFound = this._getLangchainRunName(serialized, { extraParams, runName }) || 'generation'
     const generation: GenerationMetadata = {
       name: runNameFound,
-      input: sanitizeLangChain(messages),
+      input: sanitizeLangChain(messages, this.client),
       startTime: Date.now(),
     }
     if (extraParams) {
@@ -429,7 +430,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     } else if (outputs !== undefined) {
       eventProperties['$ai_output_state'] = withPrivacyMode(this.client, this.privacyMode, sanitizeLangChain(outputs))
     }
-    this.client.capture({
+    captureAiEvent(this.client, {
       distinctId: this.distinctId ? this.distinctId.toString() : runId,
       event: eventName,
       properties: eventProperties,
@@ -545,7 +546,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       eventProperties['$process_person_profile'] = false
     }
 
-    this.client.capture({
+    captureAiEvent(this.client, {
       distinctId: this.distinctId ? this.distinctId.toString() : traceId,
       event: '$ai_generation',
       properties: eventProperties,
@@ -640,7 +641,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     }
 
     // Sanitize the message content to redact base64 images
-    return sanitizeLangChain(messageDict) as Record<string, any>
+    return sanitizeLangChain(messageDict, this.client) as Record<string, any>
   }
 
   private _extractStopReason(output: LLMResult): string | undefined {

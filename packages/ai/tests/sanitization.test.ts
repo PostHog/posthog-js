@@ -6,19 +6,20 @@ import {
   sanitizeGemini,
   sanitizeLangChain,
 } from '../src/sanitization'
+import type { MultimodalCaptureGate } from '../src/captureAiEvent'
 
-const sanitize = (data: unknown, provider: string): unknown => {
+const sanitize = (data: unknown, provider: string, client?: MultimodalCaptureGate): unknown => {
   switch (provider) {
     case 'openai-chat-completions':
-      return sanitizeOpenAI(data)
+      return sanitizeOpenAI(data, client)
     case 'openai-response':
-      return sanitizeOpenAIResponse(data)
+      return sanitizeOpenAIResponse(data, client)
     case 'anthropic':
-      return sanitizeAnthropic(data)
+      return sanitizeAnthropic(data, client)
     case 'gemini':
-      return sanitizeGemini(data)
+      return sanitizeGemini(data, client)
     case 'langchain':
-      return sanitizeLangChain(data)
+      return sanitizeLangChain(data, client)
   }
 }
 
@@ -607,45 +608,9 @@ describe('Base64 image redaction', () => {
     })
   })
 
-  describe('Multimodal environment variable control', () => {
-    beforeEach(() => {
-      delete process.env._INTERNAL_LLMA_MULTIMODAL
-    })
-
-    afterEach(() => {
-      delete process.env._INTERNAL_LLMA_MULTIMODAL
-    })
-
+  describe('Per-client multimodal capture gate', () => {
     describe('Flag value handling', () => {
-      it('should redact images when _INTERNAL_LLMA_MULTIMODAL is not set', () => {
-        const base64Image = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...'
-        const result = redactBase64DataUrl(base64Image)
-        expect(result).toBe('[base64 image/jpeg redacted]')
-      })
-
-      it('should preserve images when _INTERNAL_LLMA_MULTIMODAL is "true"', () => {
-        process.env._INTERNAL_LLMA_MULTIMODAL = 'true'
-        const base64Image = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...'
-        const result = redactBase64DataUrl(base64Image)
-        expect(result).toBe(base64Image)
-      })
-
-      it('should preserve images when _INTERNAL_LLMA_MULTIMODAL is "1"', () => {
-        process.env._INTERNAL_LLMA_MULTIMODAL = '1'
-        const base64Image = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...'
-        const result = redactBase64DataUrl(base64Image)
-        expect(result).toBe(base64Image)
-      })
-
-      it('should preserve images when _INTERNAL_LLMA_MULTIMODAL is "yes"', () => {
-        process.env._INTERNAL_LLMA_MULTIMODAL = 'yes'
-        const base64Image = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...'
-        const result = redactBase64DataUrl(base64Image)
-        expect(result).toBe(base64Image)
-      })
-
-      it('should redact images when _INTERNAL_LLMA_MULTIMODAL is "false"', () => {
-        process.env._INTERNAL_LLMA_MULTIMODAL = 'false'
+      it('redacts images when the client is absent', () => {
         const base64Image = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...'
         const result = redactBase64DataUrl(base64Image)
         expect(result).toBe('[base64 image/jpeg redacted]')
@@ -653,8 +618,8 @@ describe('Base64 image redaction', () => {
     })
 
     describe('OpenAI provider', () => {
-      it('should preserve images when flag is enabled', () => {
-        process.env._INTERNAL_LLMA_MULTIMODAL = 'true'
+      it('preserves images when the client enables multimodal capture', () => {
+        const gate = { _enableMultimodalCapture: true }
         const input = [
           {
             role: 'user',
@@ -667,12 +632,12 @@ describe('Base64 image redaction', () => {
           },
         ]
 
-        const result = sanitize(input, 'openai-chat-completions') as any
+        const result = sanitize(input, 'openai-chat-completions', gate) as any
         expect(result[0].content[0].image_url.url).toBe('data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...')
       })
 
-      it('should preserve videos when flag is enabled', () => {
-        process.env._INTERNAL_LLMA_MULTIMODAL = 'true'
+      it('preserves videos when the client enables multimodal capture', () => {
+        const gate = { _enableMultimodalCapture: true }
         const input = [
           {
             role: 'user',
@@ -685,12 +650,11 @@ describe('Base64 image redaction', () => {
           },
         ]
 
-        const result = sanitize(input, 'openai-chat-completions') as any
+        const result = sanitize(input, 'openai-chat-completions', gate) as any
         expect(result[0].content[0].video_url.url).toBe('data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28y...')
       })
 
-      it('should redact audio when flag is disabled', () => {
-        delete process.env._INTERNAL_LLMA_MULTIMODAL
+      it('redacts audio when the client flag is not strictly true', () => {
         const input = [
           {
             role: 'assistant',
@@ -703,8 +667,8 @@ describe('Base64 image redaction', () => {
         expect(result[0].content[0].id).toBe('audio_123')
       })
 
-      it('should preserve audio when flag is enabled', () => {
-        process.env._INTERNAL_LLMA_MULTIMODAL = 'true'
+      it('preserves audio when the client enables multimodal capture', () => {
+        const gate = { _enableMultimodalCapture: true }
         const input = [
           {
             role: 'assistant',
@@ -712,14 +676,14 @@ describe('Base64 image redaction', () => {
           },
         ]
 
-        const result = sanitize(input, 'openai-chat-completions') as any
+        const result = sanitize(input, 'openai-chat-completions', gate) as any
         expect(result[0].content[0].data).toBe('base64audiodata')
       })
     })
 
     describe('Anthropic provider', () => {
-      it('should preserve images when flag is enabled', () => {
-        process.env._INTERNAL_LLMA_MULTIMODAL = 'true'
+      it('preserves images when the client enables multimodal capture', () => {
+        const gate = { _enableMultimodalCapture: true }
         const input = [
           {
             role: 'user',
@@ -736,12 +700,12 @@ describe('Base64 image redaction', () => {
           },
         ]
 
-        const result = sanitize(input, 'anthropic') as any
+        const result = sanitize(input, 'anthropic', gate) as any
         expect(result[0].content[0].source.data).toBe('base64data')
       })
 
-      it('should preserve PDFs/documents when flag is enabled', () => {
-        process.env._INTERNAL_LLMA_MULTIMODAL = 'true'
+      it('preserves PDFs/documents when the client enables multimodal capture', () => {
+        const gate = { _enableMultimodalCapture: true }
         const input = [
           {
             role: 'user',
@@ -758,12 +722,11 @@ describe('Base64 image redaction', () => {
           },
         ]
 
-        const result = sanitize(input, 'anthropic') as any
+        const result = sanitize(input, 'anthropic', gate) as any
         expect(result[0].content[0].source.data).toBe('base64pdfdata')
       })
 
-      it('should redact documents when flag is disabled', () => {
-        delete process.env._INTERNAL_LLMA_MULTIMODAL
+      it('redacts documents when the client flag is not strictly true', () => {
         const input = [
           {
             role: 'user',
@@ -786,16 +749,15 @@ describe('Base64 image redaction', () => {
     })
 
     describe('Gemini provider', () => {
-      it('should preserve images when flag is enabled', () => {
-        process.env._INTERNAL_LLMA_MULTIMODAL = 'true'
+      it('preserves images when the client enables multimodal capture', () => {
+        const gate = { _enableMultimodalCapture: true }
         const input = [{ parts: [{ inlineData: { mimeType: 'image/jpeg', data: 'base64data' } }] }]
 
-        const result = sanitize(input, 'gemini') as any
+        const result = sanitize(input, 'gemini', gate) as any
         expect(result[0].parts[0].inlineData.data).toBe('base64data')
       })
 
-      it('should redact audio when flag is disabled', () => {
-        delete process.env._INTERNAL_LLMA_MULTIMODAL
+      it('redacts audio when the client flag is not strictly true', () => {
         const input = [
           {
             parts: [
@@ -813,8 +775,8 @@ describe('Base64 image redaction', () => {
         expect(result[0].parts[0].inlineData.data).toBe('[base64 audio/L16;codec=pcm;rate=24000 redacted]')
       })
 
-      it('should preserve audio when flag is enabled', () => {
-        process.env._INTERNAL_LLMA_MULTIMODAL = 'true'
+      it('preserves audio when the client enables multimodal capture', () => {
+        const gate = { _enableMultimodalCapture: true }
         const input = [
           {
             parts: [
@@ -828,14 +790,14 @@ describe('Base64 image redaction', () => {
           },
         ]
 
-        const result = sanitize(input, 'gemini') as any
+        const result = sanitize(input, 'gemini', gate) as any
         expect(result[0].parts[0].inlineData.data).toBe('base64audiodata')
       })
     })
 
     describe('LangChain provider', () => {
-      it('should preserve Anthropic-style images when flag is enabled', () => {
-        process.env._INTERNAL_LLMA_MULTIMODAL = 'true'
+      it('preserves Anthropic-style images when the client enables multimodal capture', () => {
+        const gate = { _enableMultimodalCapture: true }
         const input = [
           {
             role: 'user',
@@ -848,12 +810,11 @@ describe('Base64 image redaction', () => {
           },
         ]
 
-        const result = sanitize(input, 'langchain') as any
+        const result = sanitize(input, 'langchain', gate) as any
         expect(result[0].content[0].source.data).toBe('base64data')
       })
 
-      it('should redact Anthropic-style images when flag is disabled', () => {
-        delete process.env._INTERNAL_LLMA_MULTIMODAL
+      it('redacts Anthropic-style images when the client flag is not strictly true', () => {
         const input = [
           {
             role: 'user',
@@ -866,8 +827,11 @@ describe('Base64 image redaction', () => {
           },
         ]
 
-        const result = sanitize(input, 'langchain') as any
+        const result = sanitize(input, 'langchain', { _enableMultimodalCapture: 'true' } as any) as any
         expect(result[0].content[0].source.data).toBe('[base64 image/jpeg redacted]')
+
+        const resultNoClient = sanitize(input, 'langchain') as any
+        expect(resultNoClient[0].content[0].source.data).toBe('[base64 image/jpeg redacted]')
       })
     })
   })
