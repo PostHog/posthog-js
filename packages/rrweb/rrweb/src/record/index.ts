@@ -10,8 +10,11 @@ import {
 import {
   initObservers,
   mutationBuffers,
+  createMutationBufferLockToken,
   lockMutationBuffers,
-  unlockMutationBuffers,
+  commitMutationBuffers,
+  discardMutationBuffers,
+  discardActiveMutationBufferTransaction,
   findAndRemoveIframeBuffer,
 } from './observer';
 import {
@@ -96,6 +99,63 @@ const nonUserInitiatedSources = new Set<IncrementalSource>([
   IncrementalSource.StyleDeclaration,
   IncrementalSource.AdoptedStyleSheet,
 ]);
+
+interface BudgetedSnapshotTransaction {
+  bufferToken: number;
+  generation: number;
+  startedAt: number;
+  isCheckout: boolean;
+  didEmitFullSnapshot: boolean;
+  error: unknown | null;
+  abortRequested: boolean;
+  heldEventBytes: number;
+  eventQueue: Array<[eventWithoutTime, boolean | undefined]>;
+}
+
+const MAX_HELD_EVENT_COUNT = 4_096;
+const MAX_HELD_EVENT_BYTES = 16 * 1024 * 1024;
+
+function estimateRetainedSize(value: unknown, ceiling: number): number {
+  const seen = new WeakSet<object>();
+  const stack: unknown[] = [value];
+  let bytes = 0;
+  while (stack.length && bytes <= ceiling) {
+    const current = stack.pop();
+    if (
+      current === null ||
+      current === undefined ||
+      typeof current === 'boolean'
+    ) {
+      bytes += 8;
+    } else if (typeof current === 'number' || typeof current === 'bigint') {
+      bytes += 8;
+    } else if (typeof current === 'string') {
+      bytes += current.length * 2;
+    } else if (typeof current === 'object') {
+      if (seen.has(current)) continue;
+      seen.add(current);
+      if (ArrayBuffer.isView(current)) {
+        bytes += current.byteLength;
+      } else if (current instanceof ArrayBuffer) {
+        bytes += current.byteLength;
+      } else if (Array.isArray(current)) {
+        bytes += current.length * 8;
+        stack.push(...current);
+      } else {
+        const record = current as Record<string, unknown>;
+        const keys = Object.keys(record);
+        bytes += keys.length * 16;
+        for (const key of keys) {
+          bytes += key.length * 2;
+          stack.push(record[key]);
+        }
+      }
+    } else {
+      bytes += 8;
+    }
+  }
+  return bytes;
+}
 
 /**
  * Removes references to unclaimed reserved ids from an event held during a
@@ -230,7 +290,11 @@ function record<T = eventWithTime>(
     sampling.mousemove = mousemoveWait;
   }
 
-  // reset mirror in case `record` this was called earlier
+  // A fresh record() supersedes any previous session, even when its stop
+  // closure was not called. Invalidate its async walk and release any buffer
+  // transaction before resetting the shared mirror.
+  recordingGeneration++;
+  discardActiveMutationBufferTransaction();
   mirror.reset();
 
   const maskInputOptions: MaskInputOptions =
@@ -254,8 +318,8 @@ function record<T = eventWithTime>(
           password: true,
         }
       : _maskInputOptions !== undefined
-      ? _maskInputOptions
-      : { password: true };
+        ? _maskInputOptions
+        : { password: true };
 
   const slimDOMOptions = slimDOMDefaults(
     _slimDOMOptions !== undefined ? _slimDOMOptions : false,
@@ -272,16 +336,11 @@ function record<T = eventWithTime>(
   // wrappedEmit for why holding rather than dropping is the only safe option.
   let budgetedSnapshotInFlight = false;
   let budgetedSnapshotQueued: { isCheckout: boolean } | null = null;
-  const budgetedSnapshotEventQueue: Array<
-    [eventWithoutTime, boolean | undefined]
-  > = [];
   // True while the post-snapshot flush (held events + buffer unlock) runs:
   // those deliveries bypass the queue gate, while a takeFullSnapshot they may
   // trigger still coalesces instead of starting a walk mid-flush.
   let budgetedSnapshotFlushing = false;
-  // A walk belongs to the generation record() was entered at; see the
-  // module-level declaration.
-  recordingGeneration++;
+  let activeBudgetedSnapshot: BudgetedSnapshotTransaction | null = null;
   // Set per id — one iframe id can collect several cleanups across loads.
   const iframeObserverCleanups = new Map<number, Set<listenerHandler>>();
 
@@ -291,6 +350,8 @@ function record<T = eventWithTime>(
   // managers are constructed, but the types make that invariant explicit.
   let runAndDetachIframeCleanup: ((iframeId: number) => void) | undefined;
   let cleanupDetachedIframeObservers: (() => void) | undefined;
+  let stopRecording: listenerHandler | undefined;
+  let didStopRecording = false;
 
   const eventProcessor = (e: eventWithTime): T => {
     for (const plugin of plugins || []) {
@@ -356,7 +417,28 @@ function record<T = eventWithTime>(
       // their dedup state before emitting, so a dropped event is never re-sent,
       // and StyleSheetRule deltas are index-based, so a dropped insertRule
       // misaligns every later rule index.
-      budgetedSnapshotEventQueue.push([r, isCheckout]);
+      const transaction = activeBudgetedSnapshot;
+      if (!transaction || transaction.abortRequested) {
+        return;
+      }
+      const retainedBytes = estimateRetainedSize(
+        r,
+        MAX_HELD_EVENT_BYTES - transaction.heldEventBytes,
+      );
+      if (
+        transaction.eventQueue.length >= MAX_HELD_EVENT_COUNT ||
+        transaction.heldEventBytes + retainedBytes > MAX_HELD_EVENT_BYTES
+      ) {
+        transaction.abortRequested = true;
+        transaction.error = new Error(
+          'Budgeted full snapshot held-event queue exceeded its safety limit',
+        );
+        transaction.eventQueue.length = 0;
+        transaction.heldEventBytes = 0;
+        return;
+      }
+      transaction.eventQueue.push([r, isCheckout]);
+      transaction.heldEventBytes += retainedBytes;
       return;
     }
     if (
@@ -640,6 +722,47 @@ function record<T = eventWithTime>(
       );
   };
 
+  const takeFullSnapshotSynchronous = (isCheckout: boolean): boolean => {
+    stylesheetManager.reset();
+    shadowDomManager.init();
+
+    const bufferToken = createMutationBufferLockToken();
+    if (!lockMutationBuffers(bufferToken)) {
+      console.warn('A different full snapshot owns the mutation buffers');
+      return false;
+    }
+    emitMetaEvent(isCheckout);
+
+    try {
+      const node = snapshot(document, buildFullSnapshotOptions());
+      if (!node) {
+        discardMutationBuffers(bufferToken);
+        mirror.reset();
+        console.warn('Failed to snapshot the document');
+        return false;
+      }
+
+      wrappedEmit(
+        {
+          type: EventType.FullSnapshot,
+          data: {
+            node,
+            initialOffset: getWindowScroll(window),
+          },
+        },
+        isCheckout,
+      );
+      commitMutationBuffers(bufferToken);
+      finishFullSnapshot();
+      return true;
+    } catch (error) {
+      discardMutationBuffers(bufferToken);
+      mirror.reset();
+      console.warn('Synchronous full snapshot failed', error);
+      return false;
+    }
+  };
+
   // Time-sliced variant: same phases as the synchronous path below, but the
   // serialization yields to the event loop on the configured budget so a large
   // document doesn't block the page in one long task. Because the walk spans
@@ -662,13 +785,23 @@ function record<T = eventWithTime>(
       return;
     }
     budgetedSnapshotInFlight = true;
-    const generation = recordingGeneration;
+    const transaction: BudgetedSnapshotTransaction = {
+      bufferToken: createMutationBufferLockToken(),
+      generation: recordingGeneration,
+      startedAt: nowTimestamp(),
+      isCheckout,
+      didEmitFullSnapshot: false,
+      error: null,
+      abortRequested: false,
+      heldEventBytes: 0,
+      eventQueue: [],
+    };
+    activeBudgetedSnapshot = transaction;
     // The tree the walk produces describes the document as it is now, so this is
     // the time the FullSnapshot belongs at — not the time the walk happens to
     // finish. It also keeps the FullSnapshot ahead of everything observed during
     // the walk, so the stream stays in timestamp order.
-    const snapshotStartedAt = nowTimestamp();
-    emitMetaEvent(isCheckout, snapshotStartedAt);
+    emitMetaEvent(isCheckout, transaction.startedAt);
 
     // When we take a full snapshot, old tracked StyleSheets need to be removed.
     stylesheetManager.reset();
@@ -676,46 +809,76 @@ function record<T = eventWithTime>(
 
     // Armed synchronously, before the first yield can happen, so that no buffer
     // can be created unlocked while the walk is in flight.
-    lockMutationBuffers(); // don't allow any mirror modifications during snapshotting
+    if (!lockMutationBuffers(transaction.bufferToken)) {
+      budgetedSnapshotInFlight = false;
+      activeBudgetedSnapshot = null;
+      throw new Error('A different full snapshot owns the mutation buffers');
+    }
     mirror.beginIdReservation(genId);
     void snapshotWithBudget(document, {
       ...buildFullSnapshotOptions(),
       yieldBudgetMs: fullSnapshotYieldBudgetMs,
       // `mirror` is shared across recording sessions, so a walk whose recording
       // has been torn down has to stop writing to it, not just be ignored.
-      shouldAbort: () => generation !== recordingGeneration,
+      shouldAbort: () =>
+        transaction.generation !== recordingGeneration ||
+        transaction.abortRequested,
     })
       .then((node) => {
-        if (generation !== recordingGeneration) {
+        if (transaction.generation !== recordingGeneration) {
           // recording was stopped (or restarted) while we were serializing
           return;
         }
         if (!node) {
-          console.warn('Failed to snapshot the document');
+          transaction.error = new Error('Failed to snapshot the document');
           return;
         }
         const fullSnapshotEvent = {
           type: EventType.FullSnapshot,
-          timestamp: snapshotStartedAt,
+          timestamp: transaction.startedAt,
           data: {
             node,
             initialOffset: getWindowScroll(window),
           },
         };
-        wrappedEmit(fullSnapshotEvent as unknown as eventWithoutTime, isCheckout);
+        wrappedEmit(
+          fullSnapshotEvent as unknown as eventWithoutTime,
+          isCheckout,
+        );
+        transaction.didEmitFullSnapshot = true;
       })
       .catch((error: unknown) => {
+        transaction.error = error;
         console.warn('Budgeted full snapshot failed', error);
       })
       .finally(() => {
-        if (generation !== recordingGeneration) {
+        if (transaction.generation !== recordingGeneration) {
           // This walk's recording is gone — torn down, or replaced by a newer
           // record() call. Leave EVERYTHING alone: the queue and buffers
           // belong to whoever owns the current generation now, and the id
           // reservation may be the new session's, mid-walk. Just stand down.
           budgetedSnapshotInFlight = false;
           budgetedSnapshotQueued = null;
-          budgetedSnapshotEventQueue.length = 0;
+          transaction.eventQueue.length = 0;
+          discardMutationBuffers(transaction.bufferToken);
+          if (activeBudgetedSnapshot === transaction) {
+            activeBudgetedSnapshot = null;
+          }
+          return;
+        }
+        if (!transaction.didEmitFullSnapshot || transaction.error) {
+          transaction.eventQueue.length = 0;
+          budgetedSnapshotQueued = null;
+          mirror.endIdReservation();
+          discardMutationBuffers(transaction.bufferToken);
+          mirror.reset();
+          budgetedSnapshotInFlight = false;
+          activeBudgetedSnapshot = null;
+
+          if (!takeFullSnapshotSynchronous(transaction.isCheckout)) {
+            recordingGeneration++;
+            stopRecording?.();
+          }
           return;
         }
         // A reserved id whose node was never reached belongs to a node created
@@ -749,7 +912,7 @@ function record<T = eventWithTime>(
         // with the new walk's locks.
         budgetedSnapshotFlushing = true;
         try {
-          const queuedEvents = budgetedSnapshotEventQueue.splice(0);
+          const queuedEvents = transaction.eventQueue.splice(0);
           for (const [event, eventIsCheckout] of queuedEvents) {
             const scrubbed = scrubUnclaimedIds(event, unclaimedIds);
             if (scrubbed) {
@@ -757,11 +920,12 @@ function record<T = eventWithTime>(
             }
           }
 
-          unlockMutationBuffers(); // generate & emit any mutations that happened during snapshotting, as can now apply against the newly built mirror
+          commitMutationBuffers(transaction.bufferToken); // generate & emit any mutations that happened during snapshotting, as can now apply against the newly built mirror
           finishFullSnapshot();
         } finally {
           budgetedSnapshotFlushing = false;
           budgetedSnapshotInFlight = false;
+          activeBudgetedSnapshot = null;
         }
 
         const pending = budgetedSnapshotQueued;
@@ -780,34 +944,7 @@ function record<T = eventWithTime>(
       takeFullSnapshotBudgeted(isCheckout);
       return;
     }
-    emitMetaEvent(isCheckout);
-
-    // When we take a full snapshot, old tracked StyleSheets need to be removed.
-    stylesheetManager.reset();
-
-    shadowDomManager.init();
-
-    lockMutationBuffers(); // don't allow any mirror modifications during snapshotting
-    const node = snapshot(document, buildFullSnapshotOptions());
-
-    if (!node) {
-      return console.warn('Failed to snapshot the document');
-    }
-
-    wrappedEmit(
-      {
-        type: EventType.FullSnapshot,
-        data: {
-          node,
-          initialOffset: getWindowScroll(window),
-        },
-      },
-      isCheckout,
-    );
-unlockMutationBuffers(); // generate & emit any mutations that happened during snapshotting, as can now apply against the newly built mirror
-    canvasManager.onFullSnapshot();
-
-    finishFullSnapshot();
+    takeFullSnapshotSynchronous(isCheckout);
   };
 
   try {
@@ -1079,14 +1216,24 @@ unlockMutationBuffers(); // generate & emit any mutations that happened during s
         ),
       );
     }
-    return () => {
+    stopRecording = () => {
+      if (didStopRecording) {
+        return;
+      }
+      didStopRecording = true;
       // Invalidate any time-sliced full snapshot still in flight before we tear
       // the managers down, so its continuation can't emit a FullSnapshot for a
       // recording that no longer exists, unlock buffers, or schedule a
       // follow-up. The walk itself stops on its own once nothing references it.
       recordingGeneration++;
-      budgetedSnapshotEventQueue.length = 0;
+      activeBudgetedSnapshot?.eventQueue.splice(0);
       budgetedSnapshotQueued = null;
+      if (activeBudgetedSnapshot) {
+        discardMutationBuffers(activeBudgetedSnapshot.bufferToken);
+        activeBudgetedSnapshot = null;
+      } else {
+        discardActiveMutationBufferTransaction();
+      }
       handlers.forEach((h) => callSafely(h));
       processedNodeManager.destroy();
       iframeManager.removeLoadListener();
@@ -1098,6 +1245,7 @@ unlockMutationBuffers(); // generate & emit any mutations that happened during s
       recording = false;
       unregisterErrorHandler();
     };
+    return stopRecording;
   } catch (error) {
     // A walk started by init() before the failure would otherwise keep
     // running against a recording that never finished setting up.

@@ -139,7 +139,7 @@ const moveKey = (id: number, parentId: number) => `${id}@${parentId}`;
  */
 export default class MutationBuffer {
   private frozen = false;
-  private locked = false;
+  private lockToken: number | null = null;
 
   private texts: textCursor[] = [];
   private attributes: attributeCursor[] = [];
@@ -245,9 +245,16 @@ export default class MutationBuffer {
     return this.frozen;
   }
 
-  public lock() {
-    this.locked = true;
+  public lock(token: number): boolean {
+    if (this.lockToken !== null && this.lockToken !== token) {
+      return false;
+    }
+    if (this.lockToken === token) {
+      return true;
+    }
+    this.lockToken = token;
     this.canvasManager.lock();
+    return true;
   }
 
   /**
@@ -262,10 +269,33 @@ export default class MutationBuffer {
     this.addedSet.delete(n);
   }
 
-  public unlock() {
-    this.locked = false;
+  public commit(token: number): boolean {
+    if (this.lockToken !== token) {
+      return false;
+    }
+    this.lockToken = null;
     this.canvasManager.unlock();
     this.emit();
+    return true;
+  }
+
+  public discard(token: number): boolean {
+    if (this.lockToken !== token) {
+      return false;
+    }
+    this.lockToken = null;
+    this.texts = [];
+    this.attributes = [];
+    this.attributeMap = new WeakMap<Node, attributeCursor>();
+    this.removes = [];
+    this.mapRemoves = [];
+    this.addedSet = new Set<Node>();
+    this.movedSet = new Set<Node>();
+    this.droppedSet = new Set<Node>();
+    this.removesSubTreeCache = new Set<Node>();
+    this.movedMap = {};
+    this.canvasManager.discardPending();
+    return true;
   }
 
   public reset() {
@@ -303,7 +333,7 @@ export default class MutationBuffer {
   };
 
   public emit = () => {
-    if (this.frozen || this.locked) {
+    if (this.frozen || this.lockToken !== null) {
       return;
     }
 
@@ -769,7 +799,7 @@ export default class MutationBuffer {
           // node the page no longer has. A time-sliced full snapshot makes this
           // reachable far more often, because the buffer stays locked — and so
           // nothing gets serialized — for the whole length of the walk.
-          if (this.addedSet.has(n)) {
+          if (this.lockToken !== null && this.addedSet.has(n)) {
             deepDelete(this.addedSet, n);
             this.droppedSet.add(n);
           } else if (!isSerialized(n, this.mirror)) {

@@ -103,6 +103,11 @@ export class CanvasManager {
     this.locked = false;
   }
 
+  public discardPending() {
+    this.pendingCanvasMutations.clear();
+    this.locked = false;
+  }
+
   constructor(options: {
     recordCanvas: boolean;
     mutationCb: canvasMutationCallback;

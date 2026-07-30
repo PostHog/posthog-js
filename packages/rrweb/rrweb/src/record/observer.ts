@@ -66,16 +66,69 @@ export const mutationBuffers: MutationBuffer[] = [];
 // recorder's mirror permanently ahead of the replay.
 // While the gate is armed a new buffer joins the snapshot already locked, and
 // is released together with all the others.
-let newBuffersStartLocked = false;
+let activeMutationBufferLockToken: number | null = null;
+let nextMutationBufferLockToken = 1;
 
-export function lockMutationBuffers(): void {
-  newBuffersStartLocked = true;
-  mutationBuffers.forEach((buf) => buf.lock());
+export function createMutationBufferLockToken(): number {
+  return nextMutationBufferLockToken++;
 }
 
-export function unlockMutationBuffers(): void {
-  newBuffersStartLocked = false;
-  mutationBuffers.forEach((buf) => buf.unlock());
+export function lockMutationBuffers(token: number): boolean {
+  if (
+    activeMutationBufferLockToken !== null &&
+    activeMutationBufferLockToken !== token
+  ) {
+    return false;
+  }
+  activeMutationBufferLockToken = token;
+  let locked = true;
+  for (const buffer of mutationBuffers) {
+    if (!buffer.lock(token)) {
+      locked = false;
+    }
+  }
+  if (!locked) {
+    for (const buffer of mutationBuffers) {
+      buffer.discard(token);
+    }
+    activeMutationBufferLockToken = null;
+  }
+  return locked;
+}
+
+export function commitMutationBuffers(token: number): boolean {
+  if (activeMutationBufferLockToken !== token) {
+    return false;
+  }
+  activeMutationBufferLockToken = null;
+  let committed = true;
+  for (const buffer of mutationBuffers) {
+    if (!buffer.commit(token)) {
+      committed = false;
+    }
+  }
+  return committed;
+}
+
+export function discardMutationBuffers(token: number): boolean {
+  if (activeMutationBufferLockToken !== token) {
+    return false;
+  }
+  activeMutationBufferLockToken = null;
+  let discarded = true;
+  for (const buffer of mutationBuffers) {
+    if (!buffer.discard(token)) {
+      discarded = false;
+    }
+  }
+  return discarded;
+}
+
+export function discardActiveMutationBufferTransaction(): void {
+  const token = activeMutationBufferLockToken;
+  if (token !== null) {
+    discardMutationBuffers(token);
+  }
 }
 
 // Event.path is non-standard and used in some older browsers
@@ -108,9 +161,9 @@ export function initMutationObserver(
   mutationBuffers.push(mutationBuffer);
   // see mutation.ts for details
   mutationBuffer.init(options);
-  if (newBuffersStartLocked) {
+  if (activeMutationBufferLockToken !== null) {
     // a time-sliced full snapshot is mid-flight — see lockMutationBuffers
-    mutationBuffer.lock();
+    mutationBuffer.lock(activeMutationBufferLockToken);
   }
   const observer = new (mutationObserverCtor() as new (
     callback: MutationCallback,

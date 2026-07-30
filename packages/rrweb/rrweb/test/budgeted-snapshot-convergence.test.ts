@@ -971,8 +971,11 @@ describe('time-sliced full snapshot converges on replay', () => {
           window.snapshots2 = [];
           window.__stop2 = rrweb.record({
             emit: function (e) { window.snapshots2.push(e); },
-            fullSnapshotYieldBudgetMs: ${YIELD_BUDGET_MS},
+            fullSnapshotYieldBudgetMs: 0,
           });
+          var marker = document.createElement('div');
+          marker.id = 'second-session-mutation';
+          document.body.appendChild(marker);
           return { firstStillInFlight: firstStillInFlight };
         })()
       `)) as { firstStillInFlight: boolean };
@@ -990,17 +993,173 @@ describe('time-sliced full snapshot converges on replay', () => {
           secondHasFullSnapshot: window.snapshots2.some(function (e) {
             return e.type === 2;
           }),
+          secondHasMutation: window.snapshots2.some(function (e) {
+            return e.type === 3 && e.data && e.data.source === 0 &&
+              e.data.adds && e.data.adds.some(function (add) {
+                return add.node && add.node.attributes &&
+                  add.node.attributes.id === 'second-session-mutation';
+              });
+          }),
           secondCount: window.snapshots2.length,
         })
       `)) as {
         firstStream: number[];
         secondHasFullSnapshot: boolean;
+        secondHasMutation: boolean;
         secondCount: number;
       };
       // the dead session must not have received a FullSnapshot, and the new
       // session must have produced its own, without errors
       expect(after.firstStream).not.toContain(2);
       expect(after.secondHasFullSnapshot).toBe(true);
+      expect(after.secondHasMutation).toBe(true);
+      expect(errors).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('rolls a failed sliced walk back to a synchronous checkpoint', async () => {
+    const page = await browser.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', (err) => errors.push(err.message));
+    try {
+      await fakeGoto(page, `${serverURL}/html/convergence.html`);
+      await page.setContent(
+        buildHtml(
+          '<p class="rr-mask">force the masking callback</p>',
+          YIELD_BUDGET_MS,
+          `
+            maskTextFn: function (text) {
+              if (!window.__snapshotFailureInjected) {
+                window.__snapshotFailureInjected = true;
+                throw new Error('injected budgeted snapshot failure');
+              }
+              return text.replace(/\\S/g, '*');
+            },
+          `,
+        ),
+      );
+
+      await page.waitForFunction('window.snapshots.some((e) => e.type === 2)', {
+        timeout: 120_000,
+      });
+      await page.evaluate(`
+        (function () {
+          var marker = document.createElement('div');
+          marker.id = 'after-recovery';
+          document.body.appendChild(marker);
+        })()
+      `);
+      await new Promise((r) => setTimeout(r, 500));
+
+      const result = (await page.evaluate(`
+        (function () {
+          var fullIndex = window.snapshots.findIndex(function (e) {
+            return e.type === 2;
+          });
+          return {
+            fullIndex: fullIndex,
+            incrementalsBeforeFull: window.snapshots
+              .slice(0, fullIndex)
+              .filter(function (e) { return e.type === 3; }).length,
+            mutationAfterRecovery: window.snapshots
+              .slice(fullIndex + 1)
+              .some(function (e) {
+                return e.type === 3 && e.data && e.data.source === 0 &&
+                  e.data.adds && e.data.adds.some(function (add) {
+                    return add.node && add.node.attributes &&
+                      add.node.attributes.id === 'after-recovery';
+                  });
+              }),
+          };
+        })()
+      `)) as {
+        fullIndex: number;
+        incrementalsBeforeFull: number;
+        mutationAfterRecovery: boolean;
+      };
+
+      expect(result.fullIndex).toBeGreaterThanOrEqual(0);
+      expect(result.incrementalsBeforeFull).toBe(0);
+      expect(result.mutationAfterRecovery).toBe(true);
+      expect(errors).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('bounds held events and recovers instead of flushing a partial queue', async () => {
+    const page = await browser.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', (err) => errors.push(err.message));
+    try {
+      await fakeGoto(page, `${serverURL}/html/convergence.html`);
+      await page.setContent(buildHtml('', YIELD_BUDGET_MS));
+      const beforeRecovery = (await page.evaluate(`
+        (function () {
+          for (var i = 0; i < 4100; i++) {
+            rrweb.record.addCustomEvent('queue-pressure', { index: i });
+          }
+          return {
+            hasFullSnapshot: window.snapshots.some(function (e) {
+              return e.type === 2;
+            }),
+            customEvents: window.snapshots.filter(function (e) {
+              return e.type === 5;
+            }).length,
+          };
+        })()
+      `)) as { hasFullSnapshot: boolean; customEvents: number };
+
+      // DOMContentLoaded/Load may precede the transaction, but held events
+      // cannot escape before a FullSnapshot.
+      expect(beforeRecovery.hasFullSnapshot).toBe(false);
+      expect(beforeRecovery.customEvents).toBe(0);
+      await page.waitForFunction('window.snapshots.some((e) => e.type === 2)', {
+        timeout: 120_000,
+      });
+      await page.evaluate(`
+        (function () {
+          var marker = document.createElement('div');
+          marker.id = 'after-queue-recovery';
+          document.body.appendChild(marker);
+        })()
+      `);
+      await new Promise((r) => setTimeout(r, 500));
+
+      const result = (await page.evaluate(`
+        (function () {
+          var fullIndex = window.snapshots.findIndex(function (e) {
+            return e.type === 2;
+          });
+          return {
+            customEvents: window.snapshots.filter(function (e) {
+              return e.type === 5 && e.data && e.data.tag === 'queue-pressure';
+            }).length,
+            incrementalsBeforeFull: window.snapshots
+              .slice(0, fullIndex)
+              .filter(function (e) { return e.type === 3; }).length,
+            mutationAfterRecovery: window.snapshots
+              .slice(fullIndex + 1)
+              .some(function (e) {
+                return e.type === 3 && e.data && e.data.source === 0 &&
+                  e.data.adds && e.data.adds.some(function (add) {
+                    return add.node && add.node.attributes &&
+                      add.node.attributes.id === 'after-queue-recovery';
+                  });
+              }),
+          };
+        })()
+      `)) as {
+        customEvents: number;
+        incrementalsBeforeFull: number;
+        mutationAfterRecovery: boolean;
+      };
+
+      expect(result.customEvents).toBe(0);
+      expect(result.incrementalsBeforeFull).toBe(0);
+      expect(result.mutationAfterRecovery).toBe(true);
       expect(errors).toEqual([]);
     } finally {
       await page.close();
