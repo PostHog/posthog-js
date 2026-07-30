@@ -619,6 +619,7 @@ describe('Prompts', () => {
         prompt: mockPromptResponse.prompt,
         name: 'test-prompt',
         version: 1,
+        config: null,
       })
     })
 
@@ -643,6 +644,7 @@ describe('Prompts', () => {
         prompt: mockPromptResponse.prompt,
         name: 'test-prompt',
         version: 1,
+        config: null,
       })
       expect(mockFetch).toHaveBeenCalledTimes(1)
     })
@@ -673,6 +675,7 @@ describe('Prompts', () => {
         prompt: mockPromptResponse.prompt,
         name: 'test-prompt',
         version: 1,
+        config: null,
       })
       expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('using stale cache'), expect.any(Error))
     })
@@ -721,7 +724,86 @@ describe('Prompts', () => {
         prompt: 'Version 3 prompt',
         name: 'test-prompt',
         version: 3,
+        config: null,
       })
+    })
+  })
+
+  describe('get() config', () => {
+    const mockConfig = { model: 'gpt-4o', temperature: 0.2 }
+
+    it('should carry config through api and cache-hit results', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ ...mockPromptResponse, config: mockConfig }),
+      })
+
+      const prompts = new Prompts({ posthog: createMockPostHog() })
+
+      const apiResult = await prompts.get('test-prompt')
+      const cachedResult = await prompts.get('test-prompt')
+
+      expect(apiResult.source).toBe('api')
+      expect(apiResult.config).toEqual(mockConfig)
+      expect(cachedResult.source).toBe('cache')
+      expect(cachedResult.config).toEqual(mockConfig)
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+    })
+
+    it('should keep config on stale-cache results', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ ...mockPromptResponse, config: mockConfig }),
+        })
+        .mockRejectedValueOnce(new Error('Network error'))
+
+      const prompts = new Prompts({ posthog: createMockPostHog() })
+
+      await prompts.get('test-prompt', { cacheTtlSeconds: 60 })
+      jest.advanceTimersByTime(61 * 1000)
+      const result = await prompts.get('test-prompt', { cacheTtlSeconds: 60 })
+
+      expect(result.source).toBe('stale_cache')
+      expect(result.config).toEqual(mockConfig)
+    })
+
+    it('should not let a caller mutating result.config pollute later cache hits', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ ...mockPromptResponse, config: mockConfig }),
+      })
+
+      const prompts = new Prompts({ posthog: createMockPostHog() })
+
+      const first = await prompts.get('test-prompt')
+      first.config!.temperature = 0.9
+      delete first.config!.model
+
+      const second = await prompts.get('test-prompt')
+
+      expect(second.source).toBe('cache')
+      expect(second.config).toEqual(mockConfig)
+    })
+
+    it.each([
+      ['absent', {}],
+      ['null', { config: null }],
+      ['non-object', { config: 'gpt-4o' }],
+    ])('should read %s config as null', async (_scenario, extra) => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ ...mockPromptResponse, ...extra }),
+      })
+
+      const prompts = new Prompts({ posthog: createMockPostHog() })
+      const result = await prompts.get('test-prompt')
+
+      expect(result.config).toBeNull()
     })
   })
 
