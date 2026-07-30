@@ -138,20 +138,24 @@ export function createEventProcessor(
       $exception_type: any
       $exception_list: any
       $exception_level: CoreErrorTracking.SeverityLevel
-      $release_id: string | null
+      $release_id?: string
     } = {
       // PostHog Exception Properties,
       $exception_message: exceptions[0]?.value || event.message,
       $exception_type: exceptions[0]?.type,
       $exception_level: event.level,
       $exception_list: exceptionList,
-      $release_id: CoreErrorTracking.getInjectedReleaseId() ?? null,
       // Sentry Exception Properties
       $sentry_event_id: event.event_id,
       $sentry_exception: event.exception,
       $sentry_exception_message: exceptions[0]?.value || event.message,
       $sentry_exception_type: exceptions[0]?.type,
       $sentry_tags: event.tags,
+    }
+
+    const injectedReleaseId = CoreErrorTracking.getInjectedReleaseId()
+    if (injectedReleaseId) {
+      properties.$release_id = injectedReleaseId
     }
 
     if (organization && projectId) {

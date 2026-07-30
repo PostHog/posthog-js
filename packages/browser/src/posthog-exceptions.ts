@@ -146,7 +146,10 @@ export class PostHogExceptions implements Extension {
                     ? this._addBufferedExceptionSteps(properties)
                     : properties
 
-            propertiesForExceptionCapture.$release_id = ErrorTracking.getInjectedReleaseId() ?? null
+            const injectedReleaseId = ErrorTracking.getInjectedReleaseId()
+            if (injectedReleaseId) {
+                propertiesForExceptionCapture.$release_id = injectedReleaseId
+            }
 
             try {
                 const result = this._instance.capture('$exception', propertiesForExceptionCapture, {
