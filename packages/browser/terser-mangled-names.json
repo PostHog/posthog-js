@@ -42,7 +42,7 @@
         "_calculate_set_once_properties",
         "_callFlagsEndpoint",
         "_callLoadToolbar",
-        "_campaign_params_saved",
+        "_campaign_params_url",
         "_canUseSessionStorage",
         "_cancelAllPendingTours",
         "_cancelEventToItems",
