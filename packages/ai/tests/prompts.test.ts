@@ -771,10 +771,13 @@ describe('Prompts', () => {
     })
 
     it('should not let a caller mutating result.config pollute later cache hits', async () => {
+      // Nested values included: a shallow copy would pass the top-level mutations
+      // below but leak the nested one into the cache.
+      const nestedConfig = { model: 'gpt-4o', tools: [{ name: 'search', parameters: { depth: 1 } }] }
       mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
-        json: () => Promise.resolve({ ...mockPromptResponse, config: mockConfig }),
+        json: () => Promise.resolve({ ...mockPromptResponse, config: nestedConfig }),
       })
 
       const prompts = new Prompts({ posthog: createMockPostHog() })
@@ -782,11 +785,12 @@ describe('Prompts', () => {
       const first = await prompts.get('test-prompt')
       first.config!.temperature = 0.9
       delete first.config!.model
+      ;(first.config!.tools as { parameters: { depth: number } }[])[0].parameters.depth = 99
 
       const second = await prompts.get('test-prompt')
 
       expect(second.source).toBe('cache')
-      expect(second.config).toEqual(mockConfig)
+      expect(second.config).toEqual({ model: 'gpt-4o', tools: [{ name: 'search', parameters: { depth: 1 } }] })
     })
 
     it.each([
