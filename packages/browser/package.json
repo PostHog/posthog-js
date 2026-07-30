@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.407.3",
+    "version": "1.408.2",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
@@ -83,7 +83,7 @@
         "@babel/preset-typescript": "catalog:",
         "@jest/globals": "^29.7.0",
         "@jridgewell/sourcemap-codec": "^1.5.5",
-        "@playwright/test": "^1.52.0",
+        "@playwright/test": "1.52.0",
         "@posthog-tooling/rollup-utils": "workspace:*",
         "@posthog/rrweb": "workspace:*",
         "@posthog/rrweb-plugin-console-record": "workspace:*",

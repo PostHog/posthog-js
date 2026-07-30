@@ -6,7 +6,7 @@
 // same-origin iframe when the page's globals have been monkey-patched. On
 // WebKit/Safari a detached iframe's ScriptExecutionContext is torn down and
 // MutationObserver.deliver() silently drops callbacks (webkit.org/b/179224),
-// so on Safari the iframe must stay attached for the lifetime of the page.
+// so on WebKit the iframe must stay attached for the lifetime of the page.
 // Ported from upstream rrweb #1854.
 //
 // In jsdom no prototype method has a native-code toString, so every call takes
@@ -14,6 +14,8 @@
 
 const SAFARI_UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15';
+const WKWEBVIEW_UA =
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 18_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148';
 const CHROME_UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 
@@ -46,7 +48,7 @@ describe('getUntaintedPrototype iframe fallback', () => {
     vi.restoreAllMocks();
   });
 
-  it('removes the fallback iframe on non-Safari browsers', async () => {
+  it('removes the fallback iframe on non-WebKit browsers', async () => {
     setUserAgent(CHROME_UA);
     const getUntaintedPrototype = await freshGetUntaintedPrototype();
 
@@ -68,6 +70,16 @@ describe('getUntaintedPrototype iframe fallback', () => {
     expect(iframes[0].getAttribute('__rrwebUntaintedPrototype')).toBe(
       'MutationObserver',
     );
+  });
+
+  it('keeps the fallback iframe attached in WKWebView', async () => {
+    setUserAgent(WKWEBVIEW_UA);
+    const getUntaintedPrototype = await freshGetUntaintedPrototype();
+
+    const prototype = getUntaintedPrototype('MutationObserver');
+
+    expect(prototype).toBeDefined();
+    expect(keepaliveIframes().length).toBe(1);
   });
 
   it('hides the kept iframe and blocks it from being recorded', async () => {

@@ -1514,7 +1514,7 @@ export class PostHog implements PostHogInterface {
             url,
             data,
             compression: 'best-available',
-            timestampMode: isSessionRecording ? 'query' : 'capture-body',
+            timestampMode: isSessionRecording ? 'body' : 'capture-body',
             batchKey: options?._batchKey,
             transport: options?.transport,
         }

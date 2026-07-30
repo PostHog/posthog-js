@@ -505,6 +505,110 @@ describe('jsdom snapshot', () => {
   });
 });
 
+describe('canvas rr_dataURL with a configured canvas mask provider', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const serializeCanvas = (
+    canvas: HTMLCanvasElement,
+    canvasMaskingConfigured: (() => boolean) | undefined,
+  ): elementNode =>
+    serializeNodeWithId(canvas, {
+      doc: document,
+      mirror: new Mirror(),
+      blockClass: 'blockblock',
+      blockSelector: null,
+      maskTextClass: 'maskmask',
+      maskTextSelector: null,
+      skipChild: false,
+      inlineStylesheet: true,
+      maskTextFn: undefined,
+      maskInputFn: undefined,
+      slimDOMOptions: {},
+      recordCanvas: true,
+      canvasMaskingConfigured,
+    }) as elementNode;
+
+  const make2dCanvas = () => {
+    const canvas = document.createElement('canvas');
+    (canvas as { __context?: string }).__context = '2d';
+    // a non-transparent pixel so is2DCanvasBlank sees a painted canvas
+    const getImageData = vi.fn(() => ({
+      data: new Uint8ClampedArray([255, 0, 0, 255]),
+    }));
+    const getContext = vi.fn(() => ({ getImageData }));
+    canvas.getContext = getContext as unknown as typeof canvas.getContext;
+    const toDataURL = vi.fn(() => 'data:image/webp;base64,pixels');
+    canvas.toDataURL = toDataURL;
+    return { canvas, getContext, toDataURL };
+  };
+
+  it('serializes an observed 2d canvas when no provider is configured', () => {
+    const { canvas, toDataURL } = make2dCanvas();
+
+    const sn = serializeCanvas(canvas, () => false);
+
+    expect(sn.attributes.rr_dataURL).toBe('data:image/webp;base64,pixels');
+    expect(toDataURL).toHaveBeenCalled();
+  });
+
+  it('never reads pixels from an observed 2d canvas when a provider is configured', () => {
+    const { canvas, getContext, toDataURL } = make2dCanvas();
+
+    const sn = serializeCanvas(canvas, () => true);
+
+    expect(sn.attributes.rr_dataURL).toBeUndefined();
+    expect(getContext).not.toHaveBeenCalled();
+    expect(toDataURL).not.toHaveBeenCalled();
+  });
+
+  it('honors a provider that appears between two serializations', () => {
+    let configured = false;
+    const thunk = () => configured;
+
+    const first = make2dCanvas();
+    const firstSn = serializeCanvas(first.canvas, thunk);
+    expect(firstSn.attributes.rr_dataURL).toBe('data:image/webp;base64,pixels');
+
+    configured = true;
+    const second = make2dCanvas();
+    const secondSn = serializeCanvas(second.canvas, thunk);
+    expect(secondSn.attributes.rr_dataURL).toBeUndefined();
+    expect(second.toDataURL).not.toHaveBeenCalled();
+  });
+
+  it('serializes an unobserved-context canvas when no provider is configured', () => {
+    // the blank comparison canvas created inside the serializer falls back to
+    // this prototype stub (jsdom has no real toDataURL)
+    const prototypeToDataURL = vi
+      .spyOn(HTMLCanvasElement.prototype, 'toDataURL')
+      .mockReturnValue('data:image/webp;base64,blank');
+    const canvas = document.createElement('canvas');
+    canvas.toDataURL = vi.fn(() => 'data:image/webp;base64,pixels');
+
+    const sn = serializeCanvas(canvas, () => false);
+
+    expect(sn.attributes.rr_dataURL).toBe('data:image/webp;base64,pixels');
+    expect(prototypeToDataURL).toHaveBeenCalled();
+  });
+
+  it('never reads pixels from an unobserved-context canvas when a provider is configured', () => {
+    const prototypeToDataURL = vi
+      .spyOn(HTMLCanvasElement.prototype, 'toDataURL')
+      .mockReturnValue('data:image/webp;base64,blank');
+    const canvas = document.createElement('canvas');
+    const toDataURL = vi.fn(() => 'data:image/webp;base64,pixels');
+    canvas.toDataURL = toDataURL;
+
+    const sn = serializeCanvas(canvas, () => true);
+
+    expect(sn.attributes.rr_dataURL).toBeUndefined();
+    expect(toDataURL).not.toHaveBeenCalled();
+    expect(prototypeToDataURL).not.toHaveBeenCalled();
+  });
+});
+
 describe('maxDepth', () => {
   let warnSpy: ReturnType<typeof vi.spyOn>;
 
