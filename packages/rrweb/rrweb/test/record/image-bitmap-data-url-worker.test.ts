@@ -400,6 +400,39 @@ describe('image-bitmap-data-url-worker', () => {
     expect(convertToBlob).not.toHaveBeenCalled();
   });
 
+  it('keeps an in-flight frame as the new epoch repaint source when a reset interleaves mid-encode', async () => {
+    const onmessage = await loadWorker();
+    let release!: () => void;
+    convertToBlob.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () =>
+            resolve({
+              type: 'image/webp',
+              arrayBuffer: () => Promise.resolve(new ArrayBuffer(4)),
+            });
+        }),
+    );
+
+    // the handler yields at convertToBlob, so the reset runs mid-encode and
+    // the continuation restores the pre-reset fingerprint afterwards
+    const inflight = onmessage(frame(1, CONTENT_A));
+    await onmessage({
+      data: { resetFrameDedup: true } as ImageBitmapDataURLWorkerMessage,
+    });
+    release();
+    await inflight;
+    expect(postMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 1, base64: expect.any(String) }),
+    );
+
+    // the restored fingerprint dedupes the next tick — correct, because the
+    // in-flight reply above is already the new epoch's frame for this canvas
+    await onmessage(frame(1, CONTENT_A));
+    expect(postMessage).toHaveBeenLastCalledWith({ id: 1 });
+    expect(convertToBlob).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps the keyframe clock across a dedup reset for a canvas that went blank', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     try {
