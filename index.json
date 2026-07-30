@@ -1,4 +1,17 @@
 {
+  "PostHog/posthog-js/issue/4326": {
+    "key": "PostHog/posthog-js/issue/4326",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4326",
+    "url": "https://github.com/PostHog/posthog-js/issues/4326",
+    "conclusion": "Confirmed browser SDK bug: campaign parameters are cached for the entire persistence instance rather than per URL.",
+    "labels": [
+      "web"
+    ],
+    "prUrl": "https://github.com/PostHog/posthog-js/pull/4327",
+    "closed": false,
+    "updatedAt": "2026-07-30T07:06:34.032Z"
+  },
   "PostHog/posthog-js/issue/4321": {
     "key": "PostHog/posthog-js/issue/4321",
     "repo": "PostHog/posthog-js",
