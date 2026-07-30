@@ -576,10 +576,6 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       commonProperties.$is_server = true
     }
 
-    // Surface the release id injected into the bundle by posthog-cli (`globalThis._posthogReleaseId`)
-    // on every event, so any metric can be broken down by release and the server resolves the
-    // release for exceptions with a plain foreign-key lookup. Always set (null when nothing was
-    // injected) so the property is consistently present on every event.
     commonProperties.$release_id = CoreErrorTracking.getInjectedReleaseId() ?? null
 
     return commonProperties
