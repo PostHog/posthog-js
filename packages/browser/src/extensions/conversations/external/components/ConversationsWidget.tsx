@@ -382,7 +382,9 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
             // Success - message will be updated via addMessage()
             this.setState({ isLoading: false })
         } catch (error) {
-            logger.error('Failed to send message', error)
+            // Handled: the failure is rendered as an error state below, so log at `warn` to keep
+            // benign network failures (ad blocker, offline, page teardown) out of error tracking.
+            logger.warn('Failed to send message', error)
             this.setState((prevState) => ({
                 isLoading: false,
                 error: error instanceof Error ? error.message : 'Failed to send message',

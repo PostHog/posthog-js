@@ -547,6 +547,16 @@ describe('ConversationsManager', () => {
             )
         })
 
+        it('should reject with a transient error when the request never reaches the API', async () => {
+            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+                options.callback({ statusCode: 0, error: new TypeError('Failed to fetch') })
+            })
+
+            await expect(manager.sendMessage('Hello!')).rejects.toThrow(
+                'Unable to reach the server. Please check your connection and try again.'
+            )
+        })
+
         it('should track message sent event', async () => {
             await act(async () => {
                 await manager.sendMessage('Hello!')
