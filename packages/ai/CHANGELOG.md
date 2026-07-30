@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.5.0
+
+### Minor Changes
+
+- [#4329](https://github.com/PostHog/posthog-js/pull/4329) [`5baf90a`](https://github.com/PostHog/posthog-js/commit/5baf90a6cacf8a3a31c2702dbdf3c32510b20b2e) Thanks [@jurajmajerik](https://github.com/jurajmajerik)! - `Prompts.get()` results now include `config`, the JSON object of model parameters or agent configuration stored with the prompt version in PostHog prompt management (`null` when the version has none). Config is carried through the client-side cache and the stale-cache fallback, and each result gets its own copy so mutating `result.config` cannot pollute later cache hits. The hardcoded `fallback` string has no config, so use defensive access like `(result.config ?? {}).temperature`.
+  (2026-07-30)
+
 ## 8.4.3
 
 ### Patch Changes

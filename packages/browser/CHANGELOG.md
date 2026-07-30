@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.408.3
+
+### Patch Changes
+
+- [#4327](https://github.com/PostHog/posthog-js/pull/4327) [`232b06a`](https://github.com/PostHog/posthog-js/commit/232b06ab1287dd8d4f1f5b650b9a74568d7bc81a) Thanks [@github-actions](https://github.com/apps/github-actions)! - Refresh campaign parameters after SPA URL changes.
+  (2026-07-30)
+
+- [#4328](https://github.com/PostHog/posthog-js/pull/4328) [`95a3d02`](https://github.com/PostHog/posthog-js/commit/95a3d0262712731d154ad86d792a3e05df027264) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix `identify()` creating a person profile when the supplied ID already matches an anonymously persisted distinct ID.
+  (2026-07-30)
+
 ## 1.408.2
 
 ### Patch Changes
