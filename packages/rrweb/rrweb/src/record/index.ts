@@ -3,6 +3,7 @@ import {
   type MaskInputOptions,
   slimDOMDefaults,
   createMirror,
+  takeDeferredStylesheetLinks,
 } from '@posthog/rrweb-snapshot';
 import {
   initObservers,
@@ -51,6 +52,7 @@ import dom from '@posthog/rrweb-utils';
 let wrappedEmit!: (e: eventWithoutTime, isCheckout?: boolean) => void;
 
 let takeFullSnapshot!: (isCheckout?: boolean) => void;
+let cancelDeferredStylesheetInlining: (() => void) | undefined;
 let canvasManager!: CanvasManager;
 let recording = false;
 
@@ -83,6 +85,80 @@ const nonUserInitiatedSources = new Set<IncrementalSource>([
   IncrementalSource.StyleDeclaration,
   IncrementalSource.AdoptedStyleSheet,
 ]);
+/**
+ * Stylesheet stringification is the dominant, and least bounded, cost of a full
+ * snapshot on CSS-heavy pages: `stringifyStylesheet` reads `cssText` for every
+ * CSSRule of every sheet, all inside one uninterruptible task.
+ *
+ * The cap is in rules rather than elapsed time on purpose. A time cap can only stop
+ * the *next* sheet, so a single enormous sheet slips straight through it, and it
+ * makes the split depend on how contended the machine happens to be - the same page
+ * would defer different sheets from load to load. ~10k rules costs a couple of
+ * hundred ms in Chrome and sits well above what an ordinary page carries (Bootstrap
+ * is around 2-3k rules), so this is inert for most sites.
+ */
+export const DEFAULT_INLINE_STYLESHEET_BUDGET_RULES = 10_000;
+
+type IdleTask = { cancel: () => void };
+
+function whenIdle(cb: () => void): IdleTask {
+  const win = window as Window &
+    typeof globalThis & {
+      requestIdleCallback?: (
+        cb: () => void,
+        opts?: { timeout: number },
+      ) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+  if (typeof win.requestIdleCallback === 'function') {
+    // the timeout keeps a permanently busy main thread from starving the CSS
+    const handle = win.requestIdleCallback(cb, { timeout: 2000 });
+    return { cancel: () => win.cancelIdleCallback?.(handle) };
+  }
+  const handle = setTimeout(cb, 0);
+  return { cancel: () => clearTimeout(handle) };
+}
+
+/**
+ * Inline the `<link rel=stylesheet>` elements the snapshot skipped once it ran out
+ * of stylesheet budget, one per idle callback, emitting each as an attribute
+ * mutation. Splitting the work this way keeps every task short - the total CPU is
+ * unchanged, but the page stays responsive between chunks.
+ */
+function inlineDeferredStylesheets(
+  links: HTMLLinkElement[],
+  stylesheetManager: StylesheetManager,
+): () => void {
+  let cancelled = false;
+  let pending: IdleTask | null = null;
+  let index = 0;
+
+  const step = () => {
+    pending = null;
+    if (cancelled) {
+      return;
+    }
+    const link = links[index];
+    index += 1;
+    if (link) {
+      callSafely(() =>
+        stylesheetManager.inlineDeferredLinkElement(link, mirror.getId(link)),
+      );
+    }
+    if (index < links.length) {
+      pending = whenIdle(step);
+    }
+  };
+
+  pending = whenIdle(step);
+
+  return () => {
+    cancelled = true;
+    pending?.cancel();
+    pending = null;
+  };
+}
+
 function record<T = eventWithTime>(
   options: recordOptions<T> = {},
 ): listenerHandler | undefined {
@@ -97,6 +173,7 @@ function record<T = eventWithTime>(
     maskTextClass = 'rr-mask',
     maskTextSelector = null,
     inlineStylesheet = true,
+    inlineStylesheetBudgetRules = DEFAULT_INLINE_STYLESHEET_BUDGET_RULES,
     maskAllInputs,
     maskInputOptions: _maskInputOptions,
     slimDOMOptions: _slimDOMOptions,
@@ -434,6 +511,11 @@ function record<T = eventWithTime>(
       isCheckout,
     );
 
+    // Any deferred inlining from the previous snapshot targets mirror ids that this
+    // snapshot is about to replace, so drop it rather than emitting stale mutations.
+    cancelDeferredStylesheetInlining?.();
+    cancelDeferredStylesheetInlining = undefined;
+
     // When we take a full snapshot, old tracked StyleSheets need to be removed.
     stylesheetManager.reset();
 
@@ -448,6 +530,7 @@ function record<T = eventWithTime>(
       maskTextSelector,
       inlineStylesheet,
       maskAllInputs: maskInputOptions,
+      inlineStylesheetBudgetRules,
       maskTextFn,
       maskInputFn,
       slimDOM: slimDOMOptions,
@@ -483,6 +566,10 @@ function record<T = eventWithTime>(
       keepIframeSrcFn,
     });
 
+    // Drain these whether or not the snapshot succeeded, so a failed snapshot
+    // doesn't leave links queued for the next one.
+    const deferredStylesheetLinks = takeDeferredStylesheetLinks();
+
     if (!node) {
       return console.warn('Failed to snapshot the document');
     }
@@ -498,6 +585,13 @@ function record<T = eventWithTime>(
       isCheckout,
     );
     mutationBuffers.forEach((buf) => buf.unlock()); // generate & emit any mutations that happened during snapshotting, as can now apply against the newly built mirror
+
+    if (deferredStylesheetLinks.length) {
+      cancelDeferredStylesheetInlining = inlineDeferredStylesheets(
+        deferredStylesheetLinks,
+        stylesheetManager,
+      );
+    }
 
     if (recordCrossOriginIframes) {
       iframeManager.reattachIframes();
@@ -781,6 +875,8 @@ function record<T = eventWithTime>(
       );
     }
     return () => {
+      cancelDeferredStylesheetInlining?.();
+      cancelDeferredStylesheetInlining = undefined;
       handlers.forEach((h) => callSafely(h));
       processedNodeManager.destroy();
       iframeManager.removeLoadListener();

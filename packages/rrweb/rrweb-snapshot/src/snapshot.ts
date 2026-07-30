@@ -34,6 +34,14 @@ import {
   absolutifyURLs,
 } from './utils';
 import dom from '@posthog/rrweb-utils';
+import {
+  beginSnapshotCostTracking,
+  countSerializedNode,
+  deferStylesheetLink,
+  endSnapshotCostTracking,
+  safeCssRuleCount,
+  shouldDeferStylesheetInlining,
+} from './snapshot-cost';
 
 let _id = 1;
 const tagNameRegex = new RegExp('[^a-z0-9-_:]');
@@ -636,6 +644,14 @@ function serializeTextNode(
         // We can't read all of the sheet's .cssRules and expect them
         // to _only_ include the current rule(s) added by the text node.
         // So we'll be conservative and keep textContent as-is.
+      } else if (
+        shouldDeferStylesheetInlining(
+          safeCssRuleCount((parent as HTMLStyleElement).sheet),
+        )
+      ) {
+        // Budget spent - keep the raw textContent, which is what we already fall
+        // back to for sheets we can't read. Costs us `@import` expansion and the
+        // browser's rule normalisation, not the CSS itself.
       } else if ((parent as HTMLStyleElement).sheet?.cssRules) {
         const stringified = stringifyStylesheet(
           (parent as HTMLStyleElement).sheet!,
@@ -760,7 +776,14 @@ function serializeElementNode(
     }
     let cssText: string | null = null;
     if (stylesheet) {
-      cssText = stringifyStylesheet(stylesheet);
+      if (shouldDeferStylesheetInlining(safeCssRuleCount(stylesheet))) {
+        // This snapshot has already spent its stylesheet budget. Leave `rel`/`href`
+        // in place so the replayer can still load the sheet remotely, and hand the
+        // element to the caller to inline off the critical path.
+        deferStylesheetLink(n as HTMLLinkElement);
+      } else {
+        cssText = stringifyStylesheet(stylesheet);
+      }
     }
     if (cssText) {
       delete attributes.rel;
@@ -1204,6 +1227,8 @@ export function serializeNodeWithId(
     );
   }
 
+  countSerializedNode();
+
   const _serializedNode = serializeNode(n, {
     doc,
     mirror,
@@ -1505,6 +1530,13 @@ function snapshot(
     stylesheetLoadTimeout?: number;
     keepIframeSrcFn?: KeepIframeSrcFn;
     maxDepth?: number;
+    /**
+     * Cap on the number of CSSRules this snapshot may stringify. Sheets past the
+     * cap are left un-inlined and reported by `takeDeferredStylesheetLinks()` so
+     * the caller can inline them off the critical path. Omit or pass 0 for the
+     * previous unbounded behaviour.
+     */
+    inlineStylesheetBudgetRules?: number;
   },
 ): serializedNodeWithId | null {
   const {
@@ -1531,6 +1563,7 @@ function snapshot(
     stylesheetLoadTimeout,
     keepIframeSrcFn = () => false,
     maxDepth,
+    inlineStylesheetBudgetRules,
   } = options || {};
   const maskInputOptions: MaskInputOptions =
     maskAllInputs === true
@@ -1558,34 +1591,39 @@ function snapshot(
         }
       : maskAllInputs;
   const slimDOMOptions: SlimDOMOptions = slimDOMDefaults(slimDOM);
-  return serializeNodeWithId(n, {
-    doc: n,
-    mirror,
-    blockClass,
-    blockSelector,
-    maskTextClass,
-    maskTextSelector,
-    skipChild: false,
-    inlineStylesheet,
-    maskInputOptions,
-    maskTextFn,
-    maskInputFn,
-    slimDOMOptions,
-    dataURLOptions,
-    inlineImages,
-    recordCanvas,
-    canvasMaskingConfigured,
-    preserveWhiteSpace,
-    onSerialize,
-    onIframeLoad,
-    iframeLoadTimeout,
-    onIframeListenerRegistered,
-    onStylesheetLoad,
-    stylesheetLoadTimeout,
-    keepIframeSrcFn,
-    newlyAddedElement: false,
-    maxDepth,
-  });
+  beginSnapshotCostTracking(inlineStylesheetBudgetRules);
+  try {
+    return serializeNodeWithId(n, {
+      doc: n,
+      mirror,
+      blockClass,
+      blockSelector,
+      maskTextClass,
+      maskTextSelector,
+      skipChild: false,
+      inlineStylesheet,
+      maskInputOptions,
+      maskTextFn,
+      maskInputFn,
+      slimDOMOptions,
+      dataURLOptions,
+      inlineImages,
+      recordCanvas,
+      canvasMaskingConfigured,
+      preserveWhiteSpace,
+      onSerialize,
+      onIframeLoad,
+      iframeLoadTimeout,
+      onIframeListenerRegistered,
+      onStylesheetLoad,
+      stylesheetLoadTimeout,
+      keepIframeSrcFn,
+      newlyAddedElement: false,
+      maxDepth,
+    });
+  } finally {
+    endSnapshotCostTracking();
+  }
 }
 
 export function visitSnapshot(

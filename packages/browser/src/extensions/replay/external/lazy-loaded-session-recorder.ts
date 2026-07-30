@@ -1,4 +1,5 @@
 import type { recordOptions, rrwebRecord as rrwebRecordType } from '../types/rrweb'
+import type { SnapshotCost } from '@posthog/rrweb-record'
 import {
     type customEvent,
     EventType,
@@ -105,6 +106,14 @@ const FIVE_MINUTES = ONE_MINUTE * 5
 const ONE_HOUR = ONE_MINUTE * 60
 const MIN_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS = 1000
 const MAX_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS = ONE_HOUR
+
+// A full snapshot runs as one uninterruptible task, so anything at this scale is a
+// visible freeze - no rendering, scrolling, or cursor movement - and worth a warning.
+const SLOW_FULL_SNAPSHOT_THRESHOLD_MS = 500
+
+function roundOrUndefined(value: number | undefined): number | undefined {
+    return isUndefined(value) ? undefined : Math.round(value)
+}
 
 /**
  * Extracts the network_timing value from a capturePerformance config.
@@ -478,6 +487,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _rrwebError = false
     private _rrwebStartAttempted = false
     private _maxDepthExceeded = false
+    /**
+     * Cost of the most expensive full snapshot this recorder has taken. A full snapshot
+     * is one uninterruptible task, so this doubles as "the longest freeze we caused".
+     * Reported on captured events so slow snapshots are visible in our own data rather
+     * than only via customer-supplied Chrome traces.
+     */
+    private _slowestFullSnapshot: SnapshotCost | undefined
     // only warn once per recorder instance that client-side masking is shadowing the project setting
     private _hasWarnedClientMaskingOverride = false
     private _maskRegionsFnFailed = false
@@ -1205,6 +1221,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._maxDepthExceeded = false
         getRRWeb()?.resetMaxDepthState?.()
 
+        // cost metrics are per-session, so the next session isn't tarred with this one's
+        this._slowestFullSnapshot = undefined
+        getRRWeb()?.resetSnapshotCostState?.()
+
         this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
 
         this._clearConditionalRecordingPersistence()
@@ -1358,8 +1378,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $window_id: targetWindowId,
         }
 
-        if (event.type === EventType.FullSnapshot && getRRWeb()?.wasMaxDepthReached?.()) {
-            this._maxDepthExceeded = true
+        if (event.type === EventType.FullSnapshot) {
+            if (getRRWeb()?.wasMaxDepthReached?.()) {
+                this._maxDepthExceeded = true
+            }
+            this._trackFullSnapshotCost()
         }
 
         if (this.status === DISABLED) {
@@ -1370,6 +1393,25 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._ensureFullSnapshotForSession(event, targetSessionId)
 
         this._captureSnapshotBuffered(properties)
+    }
+
+    private _trackFullSnapshotCost() {
+        const cost = getRRWeb()?.getLastSnapshotCost?.()
+        if (!cost) {
+            return
+        }
+        if (!this._slowestFullSnapshot || cost.durationMs > this._slowestFullSnapshot.durationMs) {
+            this._slowestFullSnapshot = cost
+        }
+        if (cost.durationMs >= SLOW_FULL_SNAPSHOT_THRESHOLD_MS) {
+            logger.warn('full snapshot was slow, the page may have been unresponsive while it ran', {
+                durationMs: Math.round(cost.durationMs),
+                stylesheetMs: Math.round(cost.stylesheetMs),
+                nodeCount: cost.nodeCount,
+                cssRuleCount: cost.cssRuleCount,
+                deferredStylesheetCount: cost.deferredStylesheetCount,
+            })
+        }
     }
 
     // A session whose incrementals ship before any FullSnapshot is unplayable until the next periodic snapshot, so request one from rrweb (once per session id, to avoid loops if taking one keeps failing).
@@ -2056,6 +2098,18 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $sdk_debug_replay_flushed_size: this._flushedSizeTracker?.currentTrackedSize(this.sessionId),
             $sdk_debug_replay_full_snapshots: this._fullSnapshotTimestamps,
             $snapshot_max_depth_exceeded: this._maxDepthExceeded,
+            // slowest, not most recent: a full snapshot is one uninterruptible task, so
+            // the worst one is the freeze a user would actually have noticed
+            $sdk_debug_replay_slowest_full_snapshot_ms: roundOrUndefined(this._slowestFullSnapshot?.durationMs),
+            $sdk_debug_replay_slowest_full_snapshot_stylesheet_ms: roundOrUndefined(
+                this._slowestFullSnapshot?.stylesheetMs
+            ),
+            $sdk_debug_replay_slowest_full_snapshot_nodes: this._slowestFullSnapshot?.nodeCount,
+            $sdk_debug_replay_slowest_full_snapshot_css_rules: this._slowestFullSnapshot?.cssRuleCount,
+            $sdk_debug_replay_deferred_stylesheets: this._slowestFullSnapshot?.deferredStylesheetCount,
+            $sdk_debug_replay_slowest_mutation_batch_ms: roundOrUndefined(
+                getRRWeb()?.getMutationCost?.()?.slowestBatchMs
+            ),
             $sdk_debug_replay_rrweb_error: this._rrwebError,
             [SDK_DEBUG_REPLAY_RRWEB_ATTACHED]: !!this._stopRrweb,
             [SDK_DEBUG_REPLAY_RRWEB_START_ATTEMPTED]: this._rrwebStartAttempted,
@@ -2084,6 +2138,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             slimDOMOptions: {},
             collectFonts: false,
             inlineStylesheet: true,
+            // inlining every CSSRule of every sheet is the dominant cost of a full
+            // snapshot on CSS-heavy pages, and it runs as one uninterruptible task.
+            // rrweb caps it by default and inlines the overflow across idle callbacks;
+            // listed here so users can raise the cap, or set 0 to do it all up front.
+            inlineStylesheetBudgetRules: undefined,
             recordCrossOriginIframes: false,
             attributeFilter: undefined,
         }

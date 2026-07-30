@@ -1,4 +1,5 @@
 import { window as commonWindow } from '@posthog/browser-common/utils/globals'
+import type { MutationCost, SnapshotCost } from '@posthog/rrweb-record'
 import type { ErrorTracking } from '@posthog/core'
 
 import type { PostHog } from '../posthog-core'
@@ -233,7 +234,16 @@ interface PostHogExtensions {
         wrapUnhandledRejection: (captureFn: (props: ErrorTracking.ErrorProperties) => void) => () => void
         wrapConsoleError: (captureFn: (props: ErrorTracking.ErrorProperties) => void) => () => void
     }
-    rrweb?: { record: any; version: string; wasMaxDepthReached?: () => boolean; resetMaxDepthState?: () => void }
+    rrweb?: {
+        record: any
+        version: string
+        wasMaxDepthReached?: () => boolean
+        resetMaxDepthState?: () => void
+        // see rrweb-snapshot/src/snapshot-cost.ts
+        getLastSnapshotCost?: () => SnapshotCost | null
+        getMutationCost?: () => MutationCost
+        resetSnapshotCostState?: () => void
+    }
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }
     generateSurveys?: (posthog: PostHog, isSurveysEnabled: boolean) => any | undefined
     generateProductTours?: (posthog: PostHog, isEnabled: boolean) => any | undefined

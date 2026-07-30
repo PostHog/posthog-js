@@ -214,6 +214,9 @@ describe('Lazy SessionRecording', () => {
             version: 'fake',
             wasMaxDepthReached: jest.fn(() => false),
             resetMaxDepthState: jest.fn(),
+            getLastSnapshotCost: jest.fn(() => null),
+            getMutationCost: jest.fn(() => ({ totalMs: 0, slowestBatchMs: 0 })),
+            resetSnapshotCostState: jest.fn(),
         }
         assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot = jest.fn(() => {
             // we pretend to be rrweb and call emit
@@ -2259,6 +2262,56 @@ describe('Lazy SessionRecording', () => {
             expect(sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties).toMatchObject({
                 $snapshot_max_depth_exceeded: true,
             })
+        })
+
+        it('reports the slowest full snapshot cost in sdkDebugProperties', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            const rrweb = assignableWindow.__PosthogExtensions__.rrweb
+            const cost = (durationMs: number) => ({
+                durationMs,
+                stylesheetMs: durationMs / 2,
+                nodeCount: 1234,
+                cssRuleCount: 42_000,
+                deferredStylesheetCount: 3,
+            })
+
+            rrweb.getLastSnapshotCost.mockReturnValue(cost(3918.4))
+            _emit(createFullSnapshot())
+            // a later, cheaper snapshot must not displace the expensive one - the worst
+            // snapshot is the freeze a user would actually have noticed
+            rrweb.getLastSnapshotCost.mockReturnValue(cost(12))
+            _emit(createFullSnapshot())
+
+            rrweb.getMutationCost.mockReturnValue({ totalMs: 900, slowestBatchMs: 240.6 })
+
+            expect(sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties).toMatchObject({
+                $sdk_debug_replay_slowest_full_snapshot_ms: 3918,
+                $sdk_debug_replay_slowest_full_snapshot_stylesheet_ms: 1959,
+                $sdk_debug_replay_slowest_full_snapshot_nodes: 1234,
+                $sdk_debug_replay_slowest_full_snapshot_css_rules: 42_000,
+                $sdk_debug_replay_deferred_stylesheets: 3,
+                $sdk_debug_replay_slowest_mutation_batch_ms: 241,
+            })
+        })
+
+        it('resets snapshot cost tracking on session change', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            sessionRecording['_lazyLoadedSessionRecording']['_slowestFullSnapshot'] = {
+                durationMs: 3918,
+                stylesheetMs: 3000,
+                nodeCount: 1,
+                cssRuleCount: 1,
+                deferredStylesheetCount: 0,
+            }
+
+            sessionRecording['_lazyLoadedSessionRecording']['_onSessionIdCallback']('new-session-id', 'new-window-id', {
+                activityTimeout: true,
+            })
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_slowestFullSnapshot']).toBeUndefined()
+            expect(assignableWindow.__PosthogExtensions__.rrweb.resetSnapshotCostState).toHaveBeenCalled()
         })
 
         it('resets $snapshot_max_depth_exceeded on session change', () => {
