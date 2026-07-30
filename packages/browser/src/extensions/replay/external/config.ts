@@ -2,7 +2,7 @@ import { CapturedNetworkRequest, NetworkRecordOptions, PostHogConfig } from '../
 import { isFunction, isNullish, isString, isUndefined } from '@posthog/core'
 import { convertToURL } from '@posthog/browser-common/utils/request-utils'
 import { logger } from '@posthog/browser-common/utils/logger'
-import { shouldCaptureValue } from '@posthog/browser-common/utils/autocapture-utils'
+import { sensitiveValueReason } from '@posthog/browser-common/utils/autocapture-utils'
 import { each } from '@posthog/browser-common/utils/general-utils'
 
 const LOGGER_PREFIX = '[SessionRecording]'
@@ -228,8 +228,12 @@ function scrubPayload(payload: string | null | undefined, label: 'Request' | 'Re
     }
     let scrubbed = payload
 
-    if (!shouldCaptureValue(scrubbed, false)) {
-        scrubbed = LOGGER_PREFIX + ' ' + label + ' body ' + REDACTED
+    // the CC/SSN heuristics run unanchored here, so they match anywhere in the body.
+    // name the heuristic that fired, so that an over-eager redaction is self-diagnosable
+    // in the inspector the way deny list hits already are
+    const sensitiveReason = sensitiveValueReason(scrubbed, false)
+    if (sensitiveReason) {
+        scrubbed = LOGGER_PREFIX + ' ' + label + ' body ' + REDACTED + ' as might contain: ' + sensitiveReason
     }
     each(PAYLOAD_CONTENT_DENY_LIST, (text) => {
         if (scrubbed?.length && scrubbed?.indexOf(text) !== -1) {

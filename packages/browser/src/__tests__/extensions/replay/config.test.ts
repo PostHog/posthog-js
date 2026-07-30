@@ -461,8 +461,22 @@ describe('config', () => {
                     Authorization: 'redacted',
                     'content-type': 'application/json',
                 },
-                requestBody: '[SessionRecording] Request body redacted',
-                responseBody: '[SessionRecording] Response body redacted',
+                requestBody: '[SessionRecording] Request body redacted as might contain: a credit card number',
+                responseBody: '[SessionRecording] Response body redacted as might contain: a credit card number',
+            })
+        })
+
+        it('names the SSN heuristic when it redacts a body', () => {
+            const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'something',
+                requestBody: '{"orderId": "123456789"}',
+                responseBody: '{"orderId": "123456789"}',
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+            expect(cleaned).toEqual({
+                name: 'something',
+                requestBody: '[SessionRecording] Request body redacted as might contain: a social security number',
+                responseBody: '[SessionRecording] Response body redacted as might contain: a social security number',
             })
         })
     })

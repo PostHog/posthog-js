@@ -529,6 +529,41 @@ const anchoredSSNRegex = new RegExp(`^(${coreSSNPattern})$`)
 // The Unanchored version is essentially the core pattern itself, usable for partial matches
 const unanchoredSSNRegex = new RegExp(`(${coreSSNPattern})`)
 
+export const CREDIT_CARD_REASON = 'a credit card number'
+export const SOCIAL_SECURITY_NUMBER_REASON = 'a social security number'
+
+/*
+ * Check whether a string value may contain sensitive data using a variety of heuristics,
+ * and if so which heuristic matched, so that callers can explain themselves.
+ * @param {string} value - string value to check
+ * @param {boolean} anchorRegexes - whether to anchor the regexes to the start and end of the string
+ * @returns {string | null} a description of the matched heuristic, or null if nothing matched
+ */
+export function sensitiveValueReason(value: string, anchorRegexes = true): string | null {
+    if (isNullish(value)) {
+        return null
+    }
+
+    if (isString(value)) {
+        value = trim(value)
+
+        // check to see if input value looks like a credit card number
+        // see: https://www.safaribooksonline.com/library/view/regular-expressions-cookbook/9781449327453/ch04s20.html
+        const ccRegex = anchorRegexes ? anchoredCCRegex : unanchoredCCRegex
+        if (ccRegex.test((value || '').replace(/[- ]/g, ''))) {
+            return CREDIT_CARD_REASON
+        }
+
+        // check to see if input value looks like a social security number
+        const ssnRegex = anchorRegexes ? anchoredSSNRegex : unanchoredSSNRegex
+        if (ssnRegex.test(value)) {
+            return SOCIAL_SECURITY_NUMBER_REASON
+        }
+    }
+
+    return null
+}
+
 /*
  * Check whether a string value should be "captured" or if it may contain sensitive data
  * using a variety of heuristics.
@@ -541,24 +576,7 @@ export function shouldCaptureValue(value: string, anchorRegexes = true): boolean
         return false
     }
 
-    if (isString(value)) {
-        value = trim(value)
-
-        // check to see if input value looks like a credit card number
-        // see: https://www.safaribooksonline.com/library/view/regular-expressions-cookbook/9781449327453/ch04s20.html
-        const ccRegex = anchorRegexes ? anchoredCCRegex : unanchoredCCRegex
-        if (ccRegex.test((value || '').replace(/[- ]/g, ''))) {
-            return false
-        }
-
-        // check to see if input value looks like a social security number
-        const ssnRegex = anchorRegexes ? anchoredSSNRegex : unanchoredSSNRegex
-        if (ssnRegex.test(value)) {
-            return false
-        }
-    }
-
-    return true
+    return !sensitiveValueReason(value, anchorRegexes)
 }
 
 /*
