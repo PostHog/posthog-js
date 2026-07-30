@@ -2,16 +2,7 @@
 
 ...<older entries truncated>
 
-elegating it to an OTLP `BatchSpanProcessor`; it does not apply identity precedence or translate group attributes.; The checked-in OpenAI and LangChain OTel examples configure `posthog.distinct_id` in `resourceFromAttributes(...)`, demonstrating the currently documented process/Resource-level setup.; The OTel unit tests cover exporter configuration, AI-span filtering, and binary-content redaction, but do not cover identity, group, session, or Resource-versus-span precedence.; No `posthog.distinct_id` or `$ai_session_id` mapping exists under `packages/ai/src`; whether span-level values are currently interpreted by the ingestion service cannot be verified from this repository.
-- Fix assessment: The requested behavior is primarily a server-side OTLP-to-`$ai_generation` ingestion contract. A client-only change that rewrites per-span attributes into Resource data would be speculative, may affect OTel resource grouping, and would not safely establish group/session semantics. The backend must first define and test the supported span attribute keys, value encoding, and precedence.
-
-## 2026-07-26T15:23:35.163Z
-- Item: issue #4267 — @posthog/ai : Support the new Google Gemini Interactions API
-- Conclusion: Valid feature request for Gemini Interactions API tracing support in @posthog/ai.
-- Labels: enhancement, feature, team/llm-analytics
-- URL: https://github.com/PostHog/posthog-js/issues/4267
-- Relevant files: `packages/ai/src/gemini/index.ts`, `packages/ai/tests/gemini.test.ts`, `packages/ai/package.json`, `pnpm-lock.yaml`
-- Findings: `PostHogGoogleGenAI` constructs a `GoogleGenAI` client and exposes only a wrapped `models` client.; `WrappedModels` instruments only `client.models.generateContent`, `client.models.generateContentStream`, and `client.models.embedContent`.; No `interactions` references exist under `packages/ai`.; The Gemini test mock and test suite cover only the three `models` methods, with no Interactions API coverage.; `packages/ai/package.json` declares `@google/genai` as an optional peer and development dependency at `^1.43.0`, and the lockfile resolves version `1.43.0`; the reporter uses 2.13.0, which is outside that declared peer range.
+nd test suite cover only the three `models` methods, with no Interactions API coverage.; `packages/ai/package.json` declares `@google/genai` as an optional peer and development dependency at `^1.43.0`, and the lockfile resolves version `1.43.0`; the reporter uses 2.13.0, which is outside that declared peer range.
 - Fix assessment: The missing public API surface is clear, but a safe implementation depends on the actual Interactions API types and response lifecycle in the supported 2.x Google SDK. Mapping inputs, outputs, usage metadata, tool activity, streaming behavior, and errors from the legacy generateContent assumptions without verification would be speculative.
 
 ## 2026-07-26T16:46:27.007Z
@@ -86,3 +77,13 @@ elegating it to an OTLP `BatchSpanProcessor`; it does not apply identity precede
 - Findings: Version 4.61.1 explicitly changed Expo iOS source-map upload handling to support another config plugin wrapping the React Native bundle phase; the reported Sentry/PostHog setup matches that release change.; The Xcode script restricts PATH to fixed system/Homebrew locations and does not include nvm's versioned Node bin directory.; The script uses `npm prefix -g` and `npm root` to find globally and locally installed CLIs, then falls back to `command -v posthog-cli`; all three depend on npm or the CLI being available on Xcode's PATH.; The script already uses `NODE_BINARY` for React Native script resolution, but not for posthog-cli/npm discovery. The reporter's npm path is under `~/.nvm/versions/node/v24.13.0/bin`, which is outside the script's explicitly added PATH entries.; There is no automated test covering CLI discovery when Node and a globally installed posthog-cli are available only through the `NODE_BINARY` directory.
 - Fix assessment: The failure is localized to iOS shell-script CLI discovery. A minimal change can make the directory containing Expo's existing NODE_BINARY available before resolving npm/posthog-cli, with a regression test simulating an nvm-style bin location.
 - PR: https://github.com/PostHog/posthog-js/pull/4322
+
+## 2026-07-30T07:06:37.056Z
+- Item: issue #4326 — fix(browser): refresh campaign parameters after SPA URL changes
+- Conclusion: Confirmed browser SDK bug: campaign parameters are cached for the entire persistence instance rather than per URL.
+- Labels: web
+- URL: https://github.com/PostHog/posthog-js/issues/4326
+- Relevant files: `packages/browser/src/posthog-persistence.ts`, `packages/browser/src/posthog-core.ts`, `packages/browser/src/__tests__/posthog-core.test.ts`, `packages/browser-common/src/utils/event-utils.ts`, `packages/browser-common/src/utils/globals.ts`
+- Findings: `PostHogPersistence` initializes `_campaign_params_saved` to `false`; `update_campaign_params()` calls `getCampaignParams()` only while that boolean is false, then permanently sets it to `true`.; `PostHog.capture()` invokes `sessionPersistence.update_campaign_params()` on each capture when `save_campaign_params` is enabled, so the missing refresh is localized to persistence caching rather than capture not being called.; `getCampaignParams()` derives URL campaign values from `document.URL`, confirming that the current gate prevents detection after an SPA navigation.; Campaign vectors containing only null values are stripped and not registered. Therefore, after campaign attribution has been stored, navigating to a direct URL does not clear it under the current registration behavior.; The existing core tests cover first-capture behavior for direct URLs and a URL with `utm_source`, but do not change the mocked URL between captures.
+- Fix assessment: The defect is isolated to a single cache guard and the requested semantics match the existing persistence behavior. A narrowly scoped replacement of the boolean with the last processed URL, plus focused regressions, avoids changing campaign parsing or attribution rules.
+- PR: https://github.com/PostHog/posthog-js/pull/4327
