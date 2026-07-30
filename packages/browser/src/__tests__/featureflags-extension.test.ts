@@ -97,7 +97,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         featureFlags.dispose()
     })
 
-    it('lets the latest request supersede a response awaiting persistence', async () => {
+    it('lets the latest request supersede an older response', async () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
         const client = posthog._getBrowserClientAdapter()
         let distinctId = 'anonymous-id'
@@ -109,21 +109,10 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
                     resolveRequests.push(resolve)
                 })
         )
-        let resolvePersistence: (() => void) | undefined
-        const setPersistence = jest.spyOn(client.kv, 'set').mockImplementationOnce(
-            () =>
-                new Promise<void>((resolve) => {
-                    resolvePersistence = resolve
-                })
-        )
         const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(client)
 
         const firstRequest = featureFlags._callFlagsEndpoint()
-        resolveRequests[0]({ statusCode: 200, json: { featureFlags: { stale: true } } })
-        await Promise.resolve()
-        expect(setPersistence).toHaveBeenCalledTimes(1)
-
         distinctId = 'identified-id'
         featureFlags.setAnonymousDistinctId('anonymous-id')
         featureFlags.reloadFeatureFlags()
@@ -136,12 +125,10 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         })
 
         resolveRequests[1]({ statusCode: 200, json: { featureFlags: { current: true } } })
-        for (let i = 0; i < 5; i++) {
-            await Promise.resolve()
-        }
+        await Promise.resolve()
         expect(featureFlags.getFlagVariants()).toEqual({ current: true })
 
-        resolvePersistence?.()
+        resolveRequests[0]({ statusCode: 200, json: { featureFlags: { stale: true } } })
         await firstRequest
         expect(featureFlags.getFlagVariants()).toEqual({ current: true })
         featureFlags.dispose()
@@ -223,12 +210,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         const callback = jest.fn()
         featureFlags.addFeatureFlagsHandler(callback)
         const capture = jest.spyOn(posthog, 'capture').mockImplementation()
-        let resolvePersistence: (() => void) | undefined
-        const setPersistence = jest.spyOn(client.kv, 'set').mockReturnValue(
-            new Promise<void>((resolve) => {
-                resolvePersistence = resolve
-            })
-        )
+        const setPersistence = jest.spyOn(client.kv, 'set')
 
         featureFlags.updateEarlyAccessFeatureEnrollment('test-flag', true)
 
@@ -239,44 +221,54 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
             [ENABLED_FEATURE_FLAGS]: { 'test-flag': true },
             [STORED_PERSON_PROPERTIES_KEY]: { '$feature_enrollment/test-flag': true },
         })
-        expect(callback).not.toHaveBeenCalled()
-        expect(capture).not.toHaveBeenCalled()
-
-        resolvePersistence?.()
-        for (let i = 0; i < 5; i++) {
-            await Promise.resolve()
-        }
-
         expect(callback).toHaveBeenCalledTimes(1)
         expect(capture).toHaveBeenCalledWith('$feature_enrollment_update', expect.any(Object))
         featureFlags.dispose()
     })
 
-    it('waits for asynchronous persistence before running continuations', async () => {
+    it('waits for asynchronous persistence initialization before hydrating state', async () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
+        posthog.persistence?.register({ [ENABLED_FEATURE_FLAGS]: { initialized: true } })
         const client = posthog._getBrowserClientAdapter()
-        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
-        featureFlags.setup(client)
-        featureFlags.receivedFeatureFlags({ featureFlags: { 'test-flag': true } })
-        const callback = jest.fn()
-        featureFlags.addFeatureFlagsHandler(callback)
-        jest.spyOn(console, 'log').mockImplementation()
-        let resolvePersistence: (() => void) | undefined
-        jest.spyOn(client.kv, 'set').mockReturnValue(
+        let resolveInitialization: (() => void) | undefined
+        jest.spyOn(client.kv, 'initialize').mockReturnValue(
             new Promise<void>((resolve) => {
-                resolvePersistence = resolve
+                resolveInitialization = resolve
             })
         )
+        const getPersistence = jest.spyOn(client.kv, 'get')
+        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
 
-        featureFlags.overrideFeatureFlags({ flags: { 'test-flag': false }, suppressWarning: true })
+        const setup = featureFlags.setup(client)
 
-        expect(featureFlags.getFeatureFlag('test-flag', { send_event: false })).toBe(false)
-        expect(callback).not.toHaveBeenCalled()
-        resolvePersistence?.()
-        for (let i = 0; i < 5; i++) {
-            await Promise.resolve()
-        }
-        expect(callback).toHaveBeenCalledTimes(1)
+        expect(getPersistence).not.toHaveBeenCalled()
+        expect(featureFlags.getFlagVariants()).toEqual({})
+        resolveInitialization?.()
+        await setup
+
+        expect(getPersistence).toHaveBeenCalledWith(ENABLED_FEATURE_FLAGS)
+        expect(featureFlags.getFlagVariants()).toEqual({ initialized: true })
         featureFlags.dispose()
+    })
+
+    it('does not finish setup after disposal during persistence initialization', async () => {
+        const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
+        const client = posthog._getBrowserClientAdapter()
+        let resolveInitialization: (() => void) | undefined
+        jest.spyOn(client.kv, 'initialize').mockReturnValue(
+            new Promise<void>((resolve) => {
+                resolveInitialization = resolve
+            })
+        )
+        const registerProperties = jest.spyOn(posthog, '_registerExtensionEventProperties')
+        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+
+        const setup = featureFlags.setup(client)
+        featureFlags.dispose()
+        resolveInitialization?.()
+        await setup
+
+        expect(registerProperties).not.toHaveBeenCalled()
+        expect(featureFlags.getFlagVariants()).toEqual({})
     })
 })
