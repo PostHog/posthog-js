@@ -687,6 +687,29 @@ describe('LangChainCallbackHandler', () => {
   })
 })
 
+describe('LangChainCallbackHandler span naming', () => {
+  it('names a tool span from runName rather than the serialized class', () => {
+    const handler = new LangChainCallbackHandler({ client: mockPostHogClient })
+    jest.clearAllMocks()
+
+    const serialized = {
+      lc: 1,
+      type: 'constructor' as const,
+      id: ['langchain', 'tools', 'DynamicStructuredTool'],
+      kwargs: {},
+    }
+    const runId = 'run_tool_name'
+
+    // LangChain calls this with (tool, input, runId, parentRunId, tags, metadata, runName)
+    handler.handleToolStart(serialized, '{"city":"Paris"}', runId, 'parent_run', [], {}, 'get_weather')
+    handler.handleToolEnd('sunny', runId, 'parent_run')
+
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    expect(captureCall[0].event).toBe('$ai_span')
+    expect(captureCall[0].properties['$ai_span_name']).toBe('get_weather')
+  })
+})
+
 describe('LangChainCallbackHandler trace/span state sanitization', () => {
   it('redacts base64 data URLs from $ai_input_state and $ai_output_state', () => {
     const handler = new LangChainCallbackHandler({ client: mockPostHogClient })
