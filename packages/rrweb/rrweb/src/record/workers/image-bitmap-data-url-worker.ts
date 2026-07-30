@@ -1,6 +1,6 @@
 import { encode } from 'base64-arraybuffer';
 import type {
-  ImageBitmapDataURLWorkerParams,
+  ImageBitmapDataURLWorkerMessage,
   ImageBitmapDataURLWorkerResponse,
 } from '@posthog/rrweb-types';
 
@@ -56,7 +56,7 @@ function transparentFingerprint(width: number, height: number): string {
 
 export interface ImageBitmapDataURLRequestWorker {
   postMessage: (
-    message: ImageBitmapDataURLWorkerParams,
+    message: ImageBitmapDataURLWorkerMessage,
     transfer?: [ImageBitmap],
   ) => void;
   onmessage: (message: MessageEvent<ImageBitmapDataURLWorkerResponse>) => void;
@@ -70,7 +70,7 @@ export interface ImageBitmapDataURLRequestWorker {
 interface ImageBitmapDataURLResponseWorker {
   onmessage:
     | null
-    | ((message: MessageEvent<ImageBitmapDataURLWorkerParams>) => void);
+    | ((message: MessageEvent<ImageBitmapDataURLWorkerMessage>) => void);
   postMessage(e: ImageBitmapDataURLWorkerResponse): void;
 }
 
@@ -82,6 +82,13 @@ let reusableCtx: OffscreenCanvasRenderingContext2D | null = null;
 
 // eslint-disable-next-line @typescript-eslint/no-misused-promises
 worker.onmessage = async function (e) {
+  if ('resetFrameDedup' in e.data) {
+    // a full snapshot starts a new epoch: forget fingerprints so each canvas
+    // re-emits one frame the player can repaint from after a seek lands here.
+    // lastSentAtMap is kept — the provider keyframe cadence is independent
+    lastFingerprintMap.clear();
+    return;
+  }
   if ('OffscreenCanvas' in globalThis) {
     const {
       id,

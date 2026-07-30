@@ -564,6 +564,18 @@ export type ImageBitmapDataURLWorkerParams = {
   maskRegions?: CanvasMaskRegion[];
 };
 
+export type ImageBitmapDataURLWorkerResetParams = {
+  // sent when the recorder takes a full snapshot: node ids survive full
+  // snapshots, so without dropping the remembered fingerprints an idle canvas
+  // would never re-emit a frame and a seek rebuilt from that snapshot would
+  // find nothing to repaint it from
+  resetFrameDedup: true;
+};
+
+export type ImageBitmapDataURLWorkerMessage =
+  | ImageBitmapDataURLWorkerParams
+  | ImageBitmapDataURLWorkerResetParams;
+
 export type ImageBitmapDataURLWorkerResponse =
   | {
       id: number;

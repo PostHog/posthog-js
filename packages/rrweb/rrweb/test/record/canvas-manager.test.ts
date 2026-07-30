@@ -361,6 +361,45 @@ describe('CanvasManager FPS observer', () => {
     expect(workerControl.instances[0].postMessage).toHaveBeenCalledTimes(1);
   });
 
+  it('posts a frame-dedup reset to the worker on a full snapshot', () => {
+    const win = {
+      document: { querySelectorAll: vi.fn(() => []) },
+      OffscreenCanvas: class {},
+    };
+
+    const manager = createCanvasManager(win);
+    manager.onFullSnapshot();
+
+    expect(workerControl.instances[0].postMessage).toHaveBeenCalledWith({
+      resetFrameDedup: true,
+    });
+  });
+
+  it('onFullSnapshot is a no-op without an FPS worker', () => {
+    const win = { document: { querySelectorAll: vi.fn(() => []) } };
+
+    const manager = createCanvasManager(win);
+
+    expect(workerControl.instances).toHaveLength(0);
+    expect(() => manager.onFullSnapshot()).not.toThrow();
+  });
+
+  it('stops posting dedup resets after teardown', () => {
+    const win = {
+      document: { querySelectorAll: vi.fn(() => []) },
+      OffscreenCanvas: class {},
+    };
+
+    const manager = createCanvasManager(win);
+    manager.acquire();
+    manager.reset();
+
+    manager.onFullSnapshot();
+
+    // the worker is terminated; a post-teardown snapshot must not message it
+    expect(workerControl.instances[0].postMessage).not.toHaveBeenCalled();
+  });
+
   it('should keep the rAF loop alive when getCanvas throws', async () => {
     const fakeCanvas = {
       width: 300,

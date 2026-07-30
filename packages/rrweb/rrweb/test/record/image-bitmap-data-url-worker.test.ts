@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   CanvasMaskRegion,
-  ImageBitmapDataURLWorkerParams,
+  ImageBitmapDataURLWorkerMessage,
 } from '@posthog/rrweb-types';
 
 type MessageHandler = (e: {
-  data: ImageBitmapDataURLWorkerParams;
+  data: ImageBitmapDataURLWorkerMessage;
 }) => Promise<void>;
 
 const convertToBlob = vi.fn(
@@ -74,7 +74,7 @@ function frame(
   width = WIDTH,
   height = HEIGHT,
   maskRegions?: CanvasMaskRegion[],
-): { data: ImageBitmapDataURLWorkerParams } {
+): { data: ImageBitmapDataURLWorkerMessage } {
   const bitmap: FakeBitmap = { pixels, close: () => {} };
   return {
     data: {
@@ -86,7 +86,7 @@ function frame(
       displayHeight: 4,
       dataURLOptions: { type: 'image/webp', quality: 0.4 },
       maskRegions,
-    } as unknown as ImageBitmapDataURLWorkerParams,
+    } as unknown as ImageBitmapDataURLWorkerMessage,
   };
 }
 
@@ -342,6 +342,62 @@ describe('image-bitmap-data-url-worker', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('re-encodes an unchanged canvas after a dedup reset', async () => {
+    const onmessage = await loadWorker();
+
+    await onmessage(frame(1, CONTENT_A));
+    await onmessage(frame(1, CONTENT_A));
+    expect(postMessage).toHaveBeenLastCalledWith({ id: 1 });
+    expect(convertToBlob).toHaveBeenCalledTimes(1);
+
+    postMessage.mockClear();
+    await onmessage({
+      data: { resetFrameDedup: true } as ImageBitmapDataURLWorkerMessage,
+    });
+    // a reset has no in-flight snapshot to clear, so no reply
+    expect(postMessage).not.toHaveBeenCalled();
+
+    await onmessage(frame(1, CONTENT_A));
+    expect(postMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 1, base64: expect.any(String) }),
+    );
+    expect(convertToBlob).toHaveBeenCalledTimes(2);
+  });
+
+  it('resets dedup for every canvas, not just one', async () => {
+    const onmessage = await loadWorker();
+
+    await onmessage(frame(1, CONTENT_A));
+    await onmessage(frame(2, CONTENT_B));
+    await onmessage({
+      data: { resetFrameDedup: true } as ImageBitmapDataURLWorkerMessage,
+    });
+    postMessage.mockClear();
+
+    await onmessage(frame(1, CONTENT_A));
+    await onmessage(frame(2, CONTENT_B));
+
+    expect(postMessage.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ id: 1, base64: expect.any(String) }),
+    );
+    expect(postMessage.mock.calls[1][0]).toEqual(
+      expect.objectContaining({ id: 2, base64: expect.any(String) }),
+    );
+  });
+
+  it('still skips a blank canvas after a dedup reset', async () => {
+    const onmessage = await loadWorker();
+
+    await onmessage(frame(1, BLANK));
+    await onmessage({
+      data: { resetFrameDedup: true } as ImageBitmapDataURLWorkerMessage,
+    });
+    await onmessage(frame(1, BLANK));
+
+    expect(postMessage).toHaveBeenLastCalledWith({ id: 1 });
+    expect(convertToBlob).not.toHaveBeenCalled();
   });
 
   it('sends a keyframe for an unchanged canvas with an empty mask region list after the interval', async () => {
