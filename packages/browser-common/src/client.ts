@@ -123,7 +123,7 @@ export interface Client {
     /** Sends a request through the host SDK's transport. */
     sendRequest(path: string, init?: SendRequestInit): Promise<ApiResponse>
 
-    /** Awaitable key-value storage backed by the host client's persistence. */
+    /** Initializable, synchronously buffered key-value storage backed by the host client's persistence. */
     readonly kv: KeyValueStore
 
     /** Logger that follows the host client's debug/noise policy. */
