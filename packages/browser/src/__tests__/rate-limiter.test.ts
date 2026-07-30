@@ -39,6 +39,7 @@ describe('Rate Limiter', () => {
                 }),
             },
             capture: jest.fn(),
+            get_session_id: jest.fn(() => 'session-id'),
         }
 
         rateLimiter = new RateLimiter(mockPostHog as any)
@@ -125,11 +126,45 @@ describe('Rate Limiter', () => {
                 '$$client_ingestion_warning',
                 {
                     $$client_ingestion_warning_message:
-                        'posthog-js client rate limited. Config is set to 10 events per second and 100 events burst limit.',
+                        'posthog-js client rate limited: 1 event(s) dropped since the last warning, triggered on http://localhost/, session session-id. Config is set to 10 events per second and 100 events burst limit.',
+                    $$client_ingestion_warning_dropped_events: 1,
+                    $$client_ingestion_warning_page: 'http://localhost/',
+                    $$client_ingestion_warning_session_id: 'session-id',
+                    $$client_ingestion_warning_events_per_second: 10,
+                    $$client_ingestion_warning_events_burst_limit: 100,
                 },
                 {
                     skip_client_rate_limiting: true,
                 }
+            )
+        })
+
+        it('counts events dropped while limited and reports them on the next warning', () => {
+            range(200).forEach(() => rateLimiter.clientRateLimitContext())
+
+            // 100 tokens spent, then 100 drops - the first of which triggered the warning and reset the tally
+            expect(persistedBucket['$capture_rate_limit_dropped']).toEqual(99)
+
+            mockPostHog.capture.mockClear()
+
+            // recover, then trip the limiter again
+            moveTimeForward(1000000)
+            range(200).forEach(() => rateLimiter.clientRateLimitContext())
+
+            expect(mockPostHog.capture).toBeCalledTimes(1)
+            expect(mockPostHog.capture.mock.calls[0][1]).toMatchObject({
+                $$client_ingestion_warning_dropped_events: 100,
+            })
+            expect(persistedBucket['$capture_rate_limit_dropped']).toEqual(99)
+        })
+
+        it('omits the page and session when they are unavailable', () => {
+            mockPostHog.get_session_id = jest.fn(() => '')
+
+            range(200).forEach(() => rateLimiter.clientRateLimitContext())
+
+            expect(mockPostHog.capture.mock.calls[0][1].$$client_ingestion_warning_message).toEqual(
+                'posthog-js client rate limited: 1 event(s) dropped since the last warning, triggered on http://localhost/. Config is set to 10 events per second and 100 events burst limit.'
             )
         })
 

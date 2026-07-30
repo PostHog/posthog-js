@@ -83,6 +83,7 @@ export const PERSISTENCE_FEATURE_FLAG_EVALUATED_AT = '$feature_flag_evaluated_at
 export const USER_STATE = '$user_state'
 export const CLIENT_SESSION_PROPS = '$client_session_props'
 export const CAPTURE_RATE_LIMIT = '$capture_rate_limit'
+export const CAPTURE_RATE_LIMIT_DROPPED = '$capture_rate_limit_dropped'
 
 /** @deprecated Delete this when INITIAL_PERSON_INFO has been around for long enough to ignore backwards compat */
 export const INITIAL_CAMPAIGN_PARAMS = '$initial_campaign_params'
