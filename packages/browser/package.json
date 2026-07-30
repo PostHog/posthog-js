@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.407.7",
+    "version": "1.408.2",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },

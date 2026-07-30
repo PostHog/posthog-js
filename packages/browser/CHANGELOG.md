@@ -1,5 +1,50 @@
 # posthog-js
 
+## 1.408.2
+
+### Patch Changes
+
+- [#4325](https://github.com/PostHog/posthog-js/pull/4325) [`3bd8a2d`](https://github.com/PostHog/posthog-js/commit/3bd8a2d7599c0ee089594e27be39f3af171e5371) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix dead-click false positives on WebKit when the SDK uses an iframe-sourced MutationObserver fallback.
+  (2026-07-30)
+- Updated dependencies [[`3bd8a2d`](https://github.com/PostHog/posthog-js/commit/3bd8a2d7599c0ee089594e27be39f3af171e5371)]:
+    - @posthog/browser-common@0.2.5
+    - @posthog/core@1.45.3
+
+## 1.408.1
+
+### Patch Changes
+
+- [#4226](https://github.com/PostHog/posthog-js/pull/4226) [`3b02a78`](https://github.com/PostHog/posthog-js/commit/3b02a78418685afe6c160dbc7cb5a880e1720f38) Thanks [@ksvat](https://github.com/ksvat)! - The replayer can now yield to the event loop while fast-forwarding to a seek target, via the new opt-in `seekYieldBudgetMs` player config. Seeking in a long, event-dense recording rebuilds the target frame by re-applying every event since the last full snapshot in one uninterrupted main-thread pass, which can block the page for many seconds and trigger the browser's "Page Unresponsive" dialog; when a yield budget is set, the rebuild runs in time-budgeted chunks instead, and a newer seek cancels any rebuild still in flight so rapid scrubbing only pays for the last seek. A superseded rebuild also resets the machine's `lastPlayedEvent` so the next seek performs a full rebuild rather than trusting a partially-applied history. The default (0) keeps the previous fully-synchronous behavior.
+  (2026-07-30)
+
+## 1.408.0
+
+### Minor Changes
+
+- [#4270](https://github.com/PostHog/posthog-js/pull/4270) [`92427a1`](https://github.com/PostHog/posthog-js/commit/92427a12ace70dd6ab2a1e62c88d84465edbc856) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add canvas mask regions to session replay canvas capture: `session_recording.canvasCapture.maskRegionsFn` is called once per canvas per captured frame, and the returned regions (CSS pixels, relative to the canvas) are painted black in the captured frame before it is encoded — letting apps that render into canvas (e.g. Flutter web via CanvasKit) mask content that DOM-based masking cannot see.
+
+    The return value decides what happens to that canvas's frame:
+    - `[]` — nothing to mask; the frame is recorded as is.
+    - `null` — regions could not be computed; the frame is skipped rather than recorded unmasked.
+    - `maskRegionsFn` not set — canvases are recorded unmasked and canvas capture behavior is unchanged.
+
+    Configuring `maskRegionsFn` also disables canvas pixel serialization in DOM full snapshots (`rr_dataURL`) — that path never sees the mask regions, so skipping it closes the route that could otherwise embed unmasked canvas stills in a snapshot; the canvas repaints from the masked frame stream instead. Every canvas the provider answers — with regions or `[]` — re-sends an unchanged frame as a keyframe every 30s, so after a full snapshot or a seek an idle canvas repaints within at most 30s.
+
+    An app whose real provider only exists once its runtime has booted chooses what happens in between by what it declares in `posthog.init`: a function covering the whole canvas blacks those frames out, `() => null` skips them, and declaring nothing records them. Client-side only, cannot be set via remote configuration. (2026-07-29)
+
+### Patch Changes
+
+- Updated dependencies [[`92427a1`](https://github.com/PostHog/posthog-js/commit/92427a12ace70dd6ab2a1e62c88d84465edbc856)]:
+    - @posthog/types@1.399.0
+
+## 1.407.8
+
+### Patch Changes
+
+- [#4311](https://github.com/PostHog/posthog-js/pull/4311) [`c1818e2`](https://github.com/PostHog/posthog-js/commit/c1818e2e54a3dafcdacf0c93fa20bc1b20958972) Thanks [@marandaneto](https://github.com/marandaneto)! - fix(react): restore CommonJS default import interop in UMD bundles
+
+    React hooks used without a `PostHogProvider` now receive the default PostHog instance again when the UMD build is loaded through CommonJS. (2026-07-29)
+
 ## 1.407.7
 
 ### Patch Changes

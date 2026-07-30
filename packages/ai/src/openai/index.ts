@@ -176,6 +176,7 @@ export class WrappedCompletions extends Completions {
               const contentBlocks: FormattedContent = []
               let accumulatedContent = ''
               let modelFromResponse: string | undefined
+              let serviceTierFromResponse: string | undefined
               let firstTokenTime: number | undefined
               let stopReason: string | undefined
               let usage: {
@@ -211,6 +212,9 @@ export class WrappedCompletions extends Completions {
                 }
                 if (!systemFingerprintFromResponse && chunk.system_fingerprint) {
                   systemFingerprintFromResponse = chunk.system_fingerprint
+                }
+                if (chunk.service_tier != null) {
+                  serviceTierFromResponse = chunk.service_tier
                 }
 
                 const choice = chunk?.choices?.[0]
@@ -329,7 +333,7 @@ export class WrappedCompletions extends Completions {
                 latency,
                 timeToFirstToken,
                 baseURL: this.baseURL,
-                modelParameters: getModelParams(body),
+                modelParameters: getModelParams(body, serviceTierFromResponse),
                 httpStatus: 200,
                 usage: {
                   inputTokens: usage.inputTokens,
@@ -391,7 +395,7 @@ export class WrappedCompletions extends Completions {
               output: formattedOutput,
               latency,
               baseURL: this.baseURL,
-              modelParameters: getModelParams(body),
+              modelParameters: getModelParams(body, result.service_tier),
               httpStatus: 200,
               usage: {
                 inputTokens: result.usage?.prompt_tokens ?? 0,
@@ -492,6 +496,7 @@ export class WrappedResponses extends Responses {
             try {
               let finalContent: unknown[] = []
               let modelFromResponse: string | undefined
+              let serviceTierFromResponse: string | undefined
               let firstTokenTime: number | undefined
               let stopReason: string | undefined
               let usage: {
@@ -520,6 +525,9 @@ export class WrappedResponses extends Responses {
                   }
                   if (!completionIdFromResponse && chunk.response.id) {
                     completionIdFromResponse = chunk.response.id
+                  }
+                  if (chunk.response.service_tier != null) {
+                    serviceTierFromResponse = chunk.response.service_tier
                   }
 
                   const chunkWebSearchCount = calculateWebSearchCount(chunk.response)
@@ -566,7 +574,7 @@ export class WrappedResponses extends Responses {
                 latency,
                 timeToFirstToken,
                 baseURL: this.baseURL,
-                modelParameters: getModelParams(body),
+                modelParameters: getModelParams(body, serviceTierFromResponse),
                 httpStatus: 200,
                 usage: {
                   inputTokens: usage.inputTokens,
@@ -631,7 +639,7 @@ export class WrappedResponses extends Responses {
               output: formattedOutput,
               latency,
               baseURL: this.baseURL,
-              modelParameters: getModelParams(body),
+              modelParameters: getModelParams(body, result.service_tier),
               httpStatus: 200,
               usage: {
                 inputTokens: result.usage?.input_tokens ?? 0,
@@ -709,7 +717,7 @@ export class WrappedResponses extends Responses {
             output: result.output,
             latency,
             baseURL: this.baseURL,
-            modelParameters: getModelParams(body),
+            modelParameters: getModelParams(body, result.service_tier),
             httpStatus: 200,
             usage: {
               inputTokens: result.usage?.input_tokens ?? 0,

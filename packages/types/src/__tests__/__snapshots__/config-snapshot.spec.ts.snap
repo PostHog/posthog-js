@@ -503,7 +503,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
     ],
     "canvasCapture": [
       "undefined",
-      "{ resolutionScale?: number | undefined; }"
+      "{ resolutionScale?: number | undefined; maskRegionsFn?: ((canvas: HTMLCanvasElement) => CanvasMaskRegion[] | null | undefined) | null | undefined; }"
     ],
     "maskCapturedNetworkRequestFn": [
       "undefined",

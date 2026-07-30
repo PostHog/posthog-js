@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.45.3
+
+### Patch Changes
+
+- [#4325](https://github.com/PostHog/posthog-js/pull/4325) [`3bd8a2d`](https://github.com/PostHog/posthog-js/commit/3bd8a2d7599c0ee089594e27be39f3af171e5371) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix dead-click false positives on WebKit when the SDK uses an iframe-sourced MutationObserver fallback.
+  (2026-07-30)
+
 ## 1.45.2
 
 ### Patch Changes

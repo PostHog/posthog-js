@@ -18,6 +18,7 @@ jobs:
       package-name: posthog-js
       additional-paths: |
         packages/browser/
+        packages/react/
         .github/workflows/integration.yml
         .github/workflows/check-affected.yml
         .github/actions/is-affected/action.yaml
@@ -26,7 +27,6 @@ jobs:
   browsers:
     name: Test on ${{ matrix.tests.name }}
     needs: affected
-    if: github.event.pull_request.head.repo.full_name == github.repository && needs.affected.outputs.is-affected == 'true'
     runs-on: ubuntu-22.04
     container:
       # Keep this version in sync with packages/browser's @playwright/test dependency.
@@ -53,16 +53,24 @@ jobs:
             browser: "webkit"
 
     steps:
+      - name: Skip integration tests
+        if: ${{ github.event.pull_request.head.repo.full_name != github.repository || needs.affected.outputs.is-affected != 'true' }}
+        run: echo "Skipping ${{ matrix.tests.name }} integration tests because the browser package is unaffected or required secrets are unavailable for fork PRs."
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && needs.affected.outputs.is-affected == 'true' }}
 
       - uses: ./.github/actions/setup
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && needs.affected.outputs.is-affected == 'true' }}
         with:
           build: false
 
       - name: Build packages
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && needs.affected.outputs.is-affected == 'true' }}
         run: pnpm build
 
       - name: Run ${{ matrix.tests.name }} test
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && needs.affected.outputs.is-affected == 'true' }}
         timeout-minutes: 30
         env:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
