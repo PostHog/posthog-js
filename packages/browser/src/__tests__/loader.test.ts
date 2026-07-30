@@ -101,4 +101,30 @@ describe(`Module-based loader in Node env`, () => {
             'You have already initialized PostHog! Re-initializing is a no-op'
         )
     })
+
+    it(`names the token mismatch when re-initializing with a different token`, () => {
+        console.warn = jest.fn()
+
+        const instance = posthog.init(
+            `phc_first`,
+            { disable_surveys: true, disable_conversations: true },
+            'sdk-multi-project'
+        )
+        expect(instance.config.token).toBe('phc_first')
+
+        // second GTM tag pastes the snippet again and calls init() with no name - lands on the same instance
+        const second = posthog.init(
+            `phc_second`,
+            { disable_surveys: true, disable_conversations: true },
+            'sdk-multi-project'
+        )
+        expect(second).toBe(instance)
+        // still bound to the first project's token
+        expect(second.config.token).toBe('phc_first')
+
+        expect(console.warn).toHaveBeenCalledWith(
+            '[PostHog.js]',
+            "You have already initialized PostHog with a different project token! Re-initializing is a no-op, so events will keep going to the project this instance was initialized with. To capture into a second project, give the second init a distinct instance name, e.g. posthog.init('phc_second', { ... }, 'project2')"
+        )
+    })
 })

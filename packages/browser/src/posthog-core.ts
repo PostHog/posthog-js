@@ -642,8 +642,19 @@ export class PostHog implements PostHogInterface {
 
         if (this.__loaded) {
             // need to be able to log before having processed debug config
-            // eslint-disable-next-line no-console
-            console.warn('[PostHog.js]', 'You have already initialized PostHog! Re-initializing is a no-op')
+            if (normalizedToken !== this.config?.token) {
+                // a second init() with a *different* project token is almost always someone trying to send
+                // events to a second project (e.g. two PostHog tags in one GTM container) without giving the
+                // second instance a name, which silently drops every event into the first project
+                // eslint-disable-next-line no-console
+                console.warn(
+                    '[PostHog.js]',
+                    `You have already initialized PostHog with a different project token! Re-initializing is a no-op, so events will keep going to the project this instance was initialized with. To capture into a second project, give the second init a distinct instance name, e.g. posthog.init('${normalizedToken}', { ... }, 'project2')`
+                )
+            } else {
+                // eslint-disable-next-line no-console
+                console.warn('[PostHog.js]', 'You have already initialized PostHog! Re-initializing is a no-op')
+            }
             return this
         }
 
