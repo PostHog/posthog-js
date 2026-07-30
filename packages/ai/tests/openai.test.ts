@@ -71,6 +71,13 @@ jest.mock('openai', () => {
     parse() {
       return Promise.resolve({})
     }
+    // Simulates SDK's stream(): calls create({ stream: true }) and yields the result
+    async *stream(params: any) {
+      const result = await this.create({ ...params, stream: true })
+      for await (const chunk of result as any) {
+        yield chunk
+      }
+    }
   }
 
   // Mock Embeddings class
@@ -1599,6 +1606,68 @@ describe('PostHogOpenAI - Jest test suite', () => {
         },
       ])
       expect(properties['$ai_output_tokens']).toBe(0)
+    })
+  })
+
+  describe('responses.stream()', () => {
+    test('captures exactly one $ai_generation event with correct distinctId via responses.stream()', async () => {
+      // Mock at the network level (Responses.prototype.create) so the real
+      // ResponseStream machinery runs, catching any double-capture regression
+      // where stream() re-enters the wrapped create().
+      const chunks = [
+        {
+          type: 'response.output_text.delta',
+          delta: 'Hello!',
+        },
+        {
+          type: 'response.completed',
+          response: {
+            id: 'resp-stream-test',
+            model: 'gpt-4o',
+            status: 'completed',
+            output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Hello!' }] }],
+            usage: {
+              input_tokens: 10,
+              output_tokens: 5,
+              output_tokens_details: { reasoning_tokens: 0 },
+              input_tokens_details: { cached_tokens: 0 },
+            },
+          },
+        },
+      ]
+
+      const streamChunks = chunks
+      ;(openaiModule.Responses as any).prototype.create = jest.fn().mockImplementation((params: any) => {
+        if (params.stream) {
+          const mockStream = {
+            tee: jest
+              .fn()
+              .mockReturnValue([createMockAsyncIterator(streamChunks), createMockAsyncIterator(streamChunks)]),
+          }
+          return createMockAPIPromise(mockStream)
+        }
+        return createMockAPIPromise(mockOpenAiParsedResponse)
+      })
+
+      const runner = client.responses.stream({
+        model: 'gpt-4o',
+        input: 'Hello',
+        posthogDistinctId: 'test-stream-user',
+      } as any)
+
+      for await (const _ of runner) { /* consume */ }
+      await flushPromises()
+
+      // Must be exactly one capture — no double-fire from re-entrancy
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const { distinctId, event, properties } = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
+      expect(distinctId).toBe('test-stream-user')
+      expect(event).toBe('$ai_generation')
+      expect(properties['$ai_provider']).toBe('openai')
+      expect(properties['$ai_model']).toBe('gpt-4o')
+      expect(properties['$ai_input_tokens']).toBe(10)
+      expect(properties['$ai_output_tokens']).toBe(5)
+      expect(properties['$ai_completion_id']).toBe('resp-stream-test')
     })
   })
 
