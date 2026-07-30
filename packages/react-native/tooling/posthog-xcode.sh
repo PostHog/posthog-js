@@ -12,6 +12,11 @@ set -x -e
 # (Xcode runs build phases with a minimal PATH)
 export PATH="/usr/bin:/usr/local/bin:/opt/homebrew/bin:$HOME/.cargo/bin:$HOME/.local/bin:$HOME/.posthog:$PATH"
 
+# Expo provides NODE_BINARY to Xcode, including when Node is installed through nvm.
+case "${NODE_BINARY:-}" in
+  /*) export PATH="$(dirname "$NODE_BINARY"):$PATH" ;;
+esac
+
 print_prefixed_output() {
   local prefix="$1"
   local output="$2"

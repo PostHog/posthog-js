@@ -175,6 +175,55 @@ describe('posthog-xcode.sh bundle command composition', () => {
   })
 })
 
+describe('posthog-xcode.sh CLI discovery', () => {
+  it('uses the directory of an absolute NODE_BINARY to find a globally installed CLI', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-xcode-cli-'))
+    const derivedDir = path.join(tempDir, 'derived')
+    const configurationDir = path.join(tempDir, 'configuration')
+    const homeDir = path.join(tempDir, 'home')
+    const iosDir = path.join(tempDir, 'ios')
+    const nodePrefix = path.join(tempDir, 'nvm', 'versions', 'node', 'v24.13.0')
+    const nodeBinDir = path.join(nodePrefix, 'bin')
+    const nodeBinary = path.join(nodeBinDir, 'node')
+    const reactNativeXcode = path.join(tempDir, 'react-native-xcode.sh')
+    const tracePath = path.join(tempDir, 'trace.log')
+
+    try {
+      for (const directory of [derivedDir, configurationDir, homeDir, iosDir, nodeBinDir]) {
+        fs.mkdirSync(directory, { recursive: true })
+      }
+      fs.writeFileSync(nodeBinary, '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+      fs.writeFileSync(
+        path.join(nodeBinDir, 'npm'),
+        '#!/bin/sh\necho "$@" >> "$TRACE_PATH"\n[ "$1" = "prefix" ] && echo "$NODE_PREFIX"\n',
+        { mode: 0o755 }
+      )
+      fs.writeFileSync(path.join(nodeBinDir, 'posthog-cli'), '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+      fs.writeFileSync(reactNativeXcode, '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+
+      execFileSync(SCRIPT_PATH, [reactNativeXcode], {
+        cwd: iosDir,
+        env: {
+          ...process.env,
+          CONFIGURATION_BUILD_DIR: configurationDir,
+          DERIVED_FILE_DIR: derivedDir,
+          HOME: homeDir,
+          NODE_BINARY: nodeBinary,
+          NODE_PREFIX: nodePrefix,
+          PATH: '/nonexistent',
+          SKIP_BUNDLING: '1',
+          TRACE_PATH: tracePath,
+        },
+        stdio: 'pipe',
+      })
+
+      expect(fs.readFileSync(tracePath, 'utf8')).toBe('prefix -g\n')
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('posthog-xcode.sh skipOnConflict upload flag', () => {
   it('passes --skip-on-conflict only to hermes upload', () => {
     const contents = fs.readFileSync(SCRIPT_PATH, 'utf8')
