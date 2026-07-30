@@ -37,6 +37,7 @@ const LEGACY_RESERVED_PERSISTENCE_KEYS = new Set([
     '__timers',
     '$session_recording_enabled_server_side',
     '$heatmaps_enabled_server_side',
+    '$logs_capture_enabled_server_side',
     '$sesid',
     '$enabled_feature_flags',
     '$error_tracking_suppression_rules',

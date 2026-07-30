@@ -223,7 +223,7 @@ describe('posthog-logs', () => {
             })
         })
 
-        describe('constructor', () => {
+        describe('initialize', () => {
             it('should enable logs from the persisted remote-enabled bit and load them on initialize', () => {
                 const instanceWithPersistedBit = {
                     ...mockPostHog,
@@ -234,9 +234,10 @@ describe('posthog-logs', () => {
                 } as unknown as PostHog
 
                 const logsFromPersisted = new PostHogLogs(instanceWithPersistedBit)
-                expect((logsFromPersisted as any)._isLogsEnabled).toBe(true)
+                expect((logsFromPersisted as any)._isLogsEnabled).toBe(false)
 
                 logsFromPersisted.initialize()
+                expect((logsFromPersisted as any)._isLogsEnabled).toBe(true)
 
                 expect(mockLoadExternalDependency).toHaveBeenCalledWith(
                     instanceWithPersistedBit,

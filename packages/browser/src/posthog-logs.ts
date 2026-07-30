@@ -29,14 +29,15 @@ export class PostHogLogs implements Extension {
     private _droppedWarned: boolean = false
 
     constructor(private readonly _instance: PostHog) {
-        const localEnabled = !!this._instance?.config.logs?.captureConsoleLogs
-        const remoteEnabled = !!this._instance?.persistence?.props?.[LOGS_CAPTURE_ENABLED_SERVER_SIDE]
-        if (localEnabled || remoteEnabled) {
+        if (this._instance?.config.logs?.captureConsoleLogs) {
             this._isLogsEnabled = true
         }
     }
 
     initialize() {
+        if (this._instance?.persistence?.props?.[LOGS_CAPTURE_ENABLED_SERVER_SIDE]) {
+            this._isLogsEnabled = true
+        }
         this.loadIfEnabled()
     }
 
