@@ -1,5 +1,8 @@
 ---
 'posthog-js': minor
+'@posthog/rrweb-snapshot': patch
+'@posthog/rrweb': patch
+'@posthog/rrweb-record': patch
 ---
 
 Bound the main-thread cost of the recorder's initial full snapshot, and start measuring it.
