@@ -1896,6 +1896,10 @@ export async function snapshotWithBudget(
       // path skips these nodes' children too.
       continue;
     }
+    // Every node that made it into the FullSnapshot must participate in the
+    // duplicate guard, including leaves (text/comments) and blocked-element
+    // placeholders that return before the descend section below.
+    serializedThisWalk.add(node);
     if (parent) {
       parent.childNodes.push(sn);
     } else {
@@ -1933,8 +1937,6 @@ export async function snapshotWithBudget(
     ) {
       childPreserveWhiteSpace = false;
     }
-
-    serializedThisWalk.add(node);
 
     const serializedParent = sn as SerializedParent;
     const pushChildren = (children: Node[], childContainer: Node) => {

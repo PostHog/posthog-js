@@ -106,6 +106,15 @@ function countNodes(node: serializedNodeWithId | null): number {
   return count;
 }
 
+function collectIds(node: serializedNodeWithId | null): number[] {
+  if (!node) return [];
+  const ids = [node.id];
+  if ('childNodes' in node) {
+    for (const child of node.childNodes) ids.push(...collectIds(child));
+  }
+  return ids;
+}
+
 describe('snapshotWithBudget', () => {
   it('produces output deep-equal to the synchronous snapshot, while yielding', async () => {
     const doc = buildRichDocument();
@@ -202,4 +211,63 @@ describe('snapshotWithBudget', () => {
       expect(budgetedMirror.getId(child)).toBeGreaterThan(0);
     }
   });
+
+  it.each([
+    {
+      kind: 'text',
+      createNode: (doc: Document) => doc.createTextNode('move me'),
+    },
+    {
+      kind: 'comment',
+      createNode: (doc: Document) => doc.createComment('move me'),
+    },
+    {
+      kind: 'blocked element',
+      createNode: (doc: Document) => {
+        const node = doc.createElement('div');
+        node.className = 'blockblock';
+        node.textContent = 'secret';
+        return node;
+      },
+    },
+  ])(
+    'does not serialize a reparented $kind twice',
+    async ({ createNode }) => {
+      const dom = new JSDOM(
+        '<!DOCTYPE html><html><head></head><body><div id="visited"></div><div id="filler"></div><div id="unvisited"></div></body></html>',
+        { url: 'https://example.com/page' },
+      );
+      const doc = dom.window.document;
+      const visited = doc.getElementById('visited')!;
+      const filler = doc.getElementById('filler')!;
+      const unvisited = doc.getElementById('unvisited')!;
+      const moved = createNode(doc);
+      visited.appendChild(moved);
+      for (let index = 0; index < 64; index++) {
+        filler.appendChild(doc.createElement('span')).textContent =
+          `filler-${index}`;
+      }
+
+      cleanupSnapshot();
+      const mirror = new Mirror();
+      let movedDuringYield = false;
+      const node = await snapshotWithBudget(doc, {
+        ...SNAPSHOT_OPTIONS,
+        slimDOM: false,
+        mirror,
+        yieldBudgetMs: 0.0001,
+        yieldFn: async () => {
+          if (!movedDuringYield && mirror.hasNode(moved)) {
+            movedDuringYield = true;
+            unvisited.appendChild(moved);
+          }
+        },
+      });
+
+      expect(movedDuringYield).toBe(true);
+      const movedId = mirror.getId(moved);
+      expect(movedId).toBeGreaterThan(0);
+      expect(collectIds(node).filter((id) => id === movedId)).toHaveLength(1);
+    },
+  );
 });
