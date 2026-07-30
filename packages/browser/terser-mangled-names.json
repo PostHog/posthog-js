@@ -350,6 +350,7 @@
         "_lastCheckedUrl",
         "_lastFullSnapshotSessionId",
         "_lastHref",
+        "_lastLoadError",
         "_lastMessageTimestamp",
         "_lastMutation",
         "_lastPathname",
