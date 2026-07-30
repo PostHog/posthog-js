@@ -400,6 +400,35 @@ describe('image-bitmap-data-url-worker', () => {
     expect(convertToBlob).not.toHaveBeenCalled();
   });
 
+  it('keeps the keyframe clock across a dedup reset for a canvas that went blank', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const onmessage = await loadWorker();
+
+      await onmessage(frame(1, CONTENT_A, WIDTH, HEIGHT, []));
+      await onmessage(frame(1, BLANK, WIDTH, HEIGHT, []));
+      expect(convertToBlob).toHaveBeenCalledTimes(2);
+
+      await onmessage({
+        data: { resetFrameDedup: true } as ImageBitmapDataURLWorkerMessage,
+      });
+      await onmessage(frame(1, BLANK, WIDTH, HEIGHT, []));
+      expect(postMessage).toHaveBeenLastCalledWith({ id: 1 });
+      expect(convertToBlob).toHaveBeenCalledTimes(2);
+
+      // fires only because lastSentAtMap survived the reset — a reset that
+      // cleared it would leave keyframeDue permanently false for this canvas
+      vi.advanceTimersByTime(30_000);
+      await onmessage(frame(1, BLANK, WIDTH, HEIGHT, []));
+      expect(postMessage).toHaveBeenLastCalledWith(
+        expect.objectContaining({ id: 1, base64: expect.any(String) }),
+      );
+      expect(convertToBlob).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('sends a keyframe for an unchanged canvas with an empty mask region list after the interval', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     try {
