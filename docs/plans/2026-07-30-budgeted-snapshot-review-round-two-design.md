@@ -64,4 +64,3 @@ before implementation. After the fix:
 - TypeScript and rrweb builds pass;
 - the 19-scenario budgeted convergence matrix passes;
 - the full rrweb and relevant rrweb-snapshot suites pass.
-
