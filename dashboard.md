@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4326](https://github.com/PostHog/posthog-js/issues/4326) | Confirmed browser SDK bug: campaign parameters are cached for the entire persistence instance rather than per URL. | web | https://github.com/PostHog/posthog-js/pull/4327 | no | 2026-07-30T07:06:34.032Z |
 | PostHog/posthog-js | [issue 4321](https://github.com/PostHog/posthog-js/issues/4321) | Likely React Native iOS source-map upload regression: the Xcode wrapper cannot discover a CLI installed through nvm, despite Expo providing the Node binary. | react-native, iOS, feature/error-tracking, team/error-tracking | https://github.com/PostHog/posthog-js/pull/4322 | no | 2026-07-30T00:35:51.497Z |
 | PostHog/posthog-js | [issue 4317](https://github.com/PostHog/posthog-js/issues/4317) | Confirmed multi-part AI observability bug and documentation gap; the checked-in Vercel AI examples reproduce two reported problems. | documentation, team/llm-analytics |  | no | 2026-07-29T22:23:42.977Z |
 | PostHog/posthog-js | [issue 4315](https://github.com/PostHog/posthog-js/issues/4315) | Confirmed likely dead-click false-positive bug: the dead-click observer uses the same detached-iframe MutationObserver fallback that rrweb has already identified as unsafe on WebKit. | feature/dead-clicks |  | no | 2026-07-29T20:31:21.761Z |
