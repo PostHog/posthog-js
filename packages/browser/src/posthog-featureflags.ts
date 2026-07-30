@@ -92,23 +92,6 @@ type FeatureFlagsState = {
     [PERSISTENCE_EARLY_ACCESS_FEATURES]?: EarlyAccessFeature[]
 }
 
-const FEATURE_FLAG_PERSISTENCE_KEYS = [
-    PERSISTENCE_ACTIVE_FEATURE_FLAGS,
-    ENABLED_FEATURE_FLAGS,
-    PERSISTENCE_FEATURE_FLAG_DETAILS,
-    PERSISTENCE_FEATURE_FLAG_PAYLOADS,
-    PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
-    PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
-    PERSISTENCE_FEATURE_FLAG_ERRORS,
-    PERSISTENCE_OVERRIDE_FEATURE_FLAGS,
-    PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS,
-    FLAG_CALL_REPORTED,
-    FLAG_CALL_REPORTED_SESSION_ID,
-    STORED_PERSON_PROPERTIES_KEY,
-    STORED_GROUP_PROPERTIES_KEY,
-    PERSISTENCE_EARLY_ACCESS_FEATURES,
-] as const satisfies readonly (keyof FeatureFlagsState)[]
-
 /**
  * Error type constants for the $feature_flag_error property.
  *
@@ -279,8 +262,8 @@ export class PostHogFeatureFlags implements Extension {
     featureFlagEventHandlers: FeatureFlagsCallback[] = []
     $anon_distinct_id: string | undefined
     private _client?: Client
+    private _initializingClient?: Client
     private _logger: Client['logger'] = logger
-    private _state: FeatureFlagsState = {}
     private _dynamicProperties?: Disposable
     private _freshEventProperties: Record<string, unknown> = {}
     private _staleEventProperties: Record<string, unknown> = {}
@@ -297,18 +280,22 @@ export class PostHogFeatureFlags implements Extension {
     constructor(private readonly _configSource: FeatureFlagsConfigSource) {}
 
     setup(client: Client): void | Promise<void> {
-        this._client = client
+        this._initializingClient = client
         this._logger = client.logger.createLogger('[FeatureFlags]')
-        return continueWith(client.kv.get<FeatureFlagsState>(FEATURE_FLAG_PERSISTENCE_KEYS), (state) =>
-            this._finishSetup(client, state)
-        )
+        return continueWith(client.kv.initialize(), () => {
+            if (this._initializingClient !== client) {
+                return
+            }
+            this._initializingClient = undefined
+            this._client = client
+            this._finishSetup(client)
+        })
     }
 
-    private _finishSetup(client: Client, persistedState: FeatureFlagsState): void | Promise<void> {
+    private _finishSetup(client: Client): void {
         if (this._client !== client) {
             return
         }
-        Object.assign(this._state, persistedState)
         if (window) {
             addEventListener(window, 'online', this._onOnline)
         }
@@ -328,6 +315,7 @@ export class PostHogFeatureFlags implements Extension {
     }
 
     dispose(): void {
+        this._initializingClient = undefined
         if (!this._client) {
             return
         }
@@ -345,31 +333,20 @@ export class PostHogFeatureFlags implements Extension {
     }
 
     private _prop<Key extends keyof FeatureFlagsState>(key: Key): FeatureFlagsState[Key] {
-        return this._state[key]
+        return this._client?.kv.get<FeatureFlagsState[Key]>(key)
     }
 
-    private _set(properties: FeatureFlagsState): MaybePromise<void> {
-        Object.assign(this._state, properties)
-        return this._persist(() => this._client?.kv.set(properties))
+    private _set(properties: FeatureFlagsState): void {
+        this._persist(() => this._client?.kv.set(properties))
     }
 
-    private _remove(keys: keyof FeatureFlagsState | readonly (keyof FeatureFlagsState)[]): MaybePromise<void> {
-        if (typeof keys === 'string') {
-            delete this._state[keys]
-            return this._persist(() => this._client?.kv.remove(keys))
-        }
-        for (const key of keys) {
-            delete this._state[key]
-        }
-        return this._persist(() => this._client?.kv.remove(keys))
+    private _remove(keys: keyof FeatureFlagsState | readonly (keyof FeatureFlagsState)[]): void {
+        this._persist(() => this._client?.kv.remove(keys))
     }
 
-    private _persist(operation: () => MaybePromise<void>): MaybePromise<void> {
+    private _persist(operation: () => void): void {
         try {
-            const persistence = operation()
-            return persistence?.catch((error) => {
-                this._logger.error('Failed to update feature flag persistence', error)
-            })
+            operation()
         } catch (error) {
             this._logger.error('Failed to update feature flag persistence', error)
         }
@@ -383,13 +360,14 @@ export class PostHogFeatureFlags implements Extension {
             PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
             PERSISTENCE_OVERRIDE_FEATURE_FLAGS,
         ] as const) {
-            if (!isUndefined(this._state[key])) {
-                common[key] = this._state[key]
+            const value = this._prop(key)
+            if (!isUndefined(value)) {
+                common[key] = value
             }
         }
         this._staleEventProperties = common
         const fresh = { ...common }
-        const flags = this._state[ENABLED_FEATURE_FLAGS]
+        const flags = this._prop(ENABLED_FEATURE_FLAGS)
         if (flags) {
             for (const [key, value] of Object.entries(flags)) {
                 fresh[`$feature/${key}`] = value
@@ -459,7 +437,7 @@ export class PostHogFeatureFlags implements Extension {
         })
     }
 
-    private _initialize(): MaybePromise<void> {
+    private _initialize(): void {
         const config = this._config
         const bootstrapFlags = config.bootstrap?.featureFlags ?? {}
         const hasBootstrappedFlags = Object.keys(bootstrapFlags).length
@@ -724,7 +702,7 @@ export class PostHogFeatureFlags implements Extension {
     }
 
     resetFlagCallReported(): void {
-        void this._remove(FLAG_CALL_REPORTED)
+        this._remove(FLAG_CALL_REPORTED)
     }
 
     async _callFlagsEndpoint(options?: { disableFlags?: boolean }): Promise<void> {
@@ -813,10 +791,7 @@ export class PostHogFeatureFlags implements Extension {
             if (isQuotaLimited) {
                 flagErrors.push(FeatureFlagError.QUOTA_LIMITED)
             }
-            await this._set({ [PERSISTENCE_FEATURE_FLAG_ERRORS]: flagErrors })
-            if (this._requestInFlight !== request) {
-                return
-            }
+            this._set({ [PERSISTENCE_FEATURE_FLAG_ERRORS]: flagErrors })
 
             if (isQuotaLimited) {
                 client.logger.warn(
@@ -824,12 +799,12 @@ export class PostHogFeatureFlags implements Extension {
                 )
                 return
             }
-            await this._receivedFeatureFlags(json, errorsLoading, { partialResponse: isPartialFlagsResponse })
+            this._receivedFeatureFlags(json, errorsLoading, { partialResponse: isPartialFlagsResponse })
         } catch (error) {
             if (request && this._requestInFlight !== request) {
                 return
             }
-            await this._set({ [PERSISTENCE_FEATURE_FLAG_ERRORS]: [FeatureFlagError.CONNECTION_ERROR] })
+            this._set({ [PERSISTENCE_FEATURE_FLAG_ERRORS]: [FeatureFlagError.CONNECTION_ERROR] })
             if (!request || this._requestInFlight === request) {
                 client.logger.error('Feature flag request failed', error)
             }
@@ -996,7 +971,7 @@ export class PostHogFeatureFlags implements Extension {
                 } else {
                     flagCallReported[key] = [flagReportValue]
                 }
-                const persistence = this._set({
+                this._set({
                     [FLAG_CALL_REPORTED]: flagCallReported,
                     ...(sessionIdToPersist ? { [FLAG_CALL_REPORTED_SESSION_ID]: sessionIdToPersist } : {}),
                 })
@@ -1053,15 +1028,15 @@ export class PostHogFeatureFlags implements Extension {
                     properties.$feature_flag_error = errors.join(',')
                 }
 
-                void this._captureFeatureFlagCalled(persistence, properties)
+                this._captureFeatureFlagCalled(properties)
             } else if (sessionIdToPersist) {
-                void this._set({
+                this._set({
                     [FLAG_CALL_REPORTED]: flagCallReported,
                     [FLAG_CALL_REPORTED_SESSION_ID]: sessionIdToPersist,
                 })
             }
         } else if (sessionIdToPersist) {
-            void this._set({
+            this._set({
                 [FLAG_CALL_REPORTED]: flagCallReported,
                 [FLAG_CALL_REPORTED_SESSION_ID]: sessionIdToPersist,
             })
@@ -1079,20 +1054,14 @@ export class PostHogFeatureFlags implements Extension {
         }
     }
 
-    private _captureFeatureFlagCalled(
-        persistence: MaybePromise<void>,
-        properties: Record<string, any | undefined>
-    ): MaybePromise<void> {
-        return continueWith(persistence, () => {
-            try {
-                return this._client?.capture('$feature_flag_called', properties).catch((error) => {
-                    this._logger.error('Failed to capture feature flag call', error)
-                })
-            } catch (error) {
+    private _captureFeatureFlagCalled(properties: Record<string, any | undefined>): void {
+        try {
+            void this._client?.capture('$feature_flag_called', properties).catch((error) => {
                 this._logger.error('Failed to capture feature flag call', error)
-                return undefined
-            }
-        })
+            })
+        } catch (error) {
+            this._logger.error('Failed to capture feature flag call', error)
+        }
     }
 
     /*
@@ -1204,7 +1173,7 @@ export class PostHogFeatureFlags implements Extension {
         response: Partial<FlagsResponse>,
         errorsLoading?: boolean,
         options?: { partialResponse?: boolean }
-    ): MaybePromise<void> {
+    ): void {
         if (!this._client) {
             return
         }
@@ -1221,14 +1190,14 @@ export class PostHogFeatureFlags implements Extension {
             options,
             this._logger
         )
-        const persistence = statePatch ? this._set(statePatch) : undefined
-        return continueWith(persistence, () => {
-            // Reset stale refresh flag when we successfully receive fresh flags
-            if (!errorsLoading) {
-                this._staleCacheRefreshTriggered = false
-            }
-            this._fireFeatureFlagsCallbacks(errorsLoading)
-        })
+        if (statePatch) {
+            this._set(statePatch)
+        }
+        // Reset stale refresh flag when we successfully receive fresh flags
+        if (!errorsLoading) {
+            this._staleCacheRefreshTriggered = false
+        }
+        this._fireFeatureFlagsCallbacks(errorsLoading)
     }
 
     /**
@@ -1262,10 +1231,10 @@ export class PostHogFeatureFlags implements Extension {
      *       })
      */
     overrideFeatureFlags(overrideOptions: OverrideFeatureFlagsOptions): void {
-        void this._overrideFeatureFlags(overrideOptions)
+        this._overrideFeatureFlags(overrideOptions)
     }
 
-    private _overrideFeatureFlags(overrideOptions: OverrideFeatureFlagsOptions): MaybePromise<void> {
+    private _overrideFeatureFlags(overrideOptions: OverrideFeatureFlagsOptions): void {
         if (!this._client) {
             this._logger.warn('posthog.featureFlags.overrideFeatureFlags called before feature flags were ready')
             return
@@ -1273,22 +1242,18 @@ export class PostHogFeatureFlags implements Extension {
 
         // Clear all overrides if false, lets you do something like posthog.featureFlags.overrideFeatureFlags(false)
         if (overrideOptions === false) {
-            return continueWith(
-                this._remove([PERSISTENCE_OVERRIDE_FEATURE_FLAGS, PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS]),
-                () => {
-                    this._fireFeatureFlagsCallbacks()
-                    forceDebugLogger.info('All overrides cleared')
-                }
-            )
+            this._remove([PERSISTENCE_OVERRIDE_FEATURE_FLAGS, PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS])
+            this._fireFeatureFlagsCallbacks()
+            forceDebugLogger.info('All overrides cleared')
+            return
         }
 
         // Array syntax: ['flag-a', 'flag-b'] -> { 'flag-a': true, 'flag-b': true }
         if (isArray(overrideOptions)) {
-            const flagsObj = arrayToFlagsRecord(overrideOptions)
-            return continueWith(this._set({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: flagsObj }), () => {
-                this._fireFeatureFlagsCallbacks()
-                forceDebugLogger.info('Flag overrides set', { flags: overrideOptions })
-            })
+            this._set({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: arrayToFlagsRecord(overrideOptions) })
+            this._fireFeatureFlagsCallbacks()
+            forceDebugLogger.info('Flag overrides set', { flags: overrideOptions })
+            return
         }
 
         if (
@@ -1298,7 +1263,6 @@ export class PostHogFeatureFlags implements Extension {
         ) {
             const options = overrideOptions as FeatureFlagOverrideOptions
             this._override_warning = Boolean(options.suppressWarning ?? false)
-            const persistence: Promise<void>[] = []
             const statePatch: FeatureFlagsState = {}
             const keysToRemove: (keyof FeatureFlagsState)[] = []
             const flags = options.flags as false | string[] | Record<string, string | boolean> | undefined
@@ -1323,43 +1287,33 @@ export class PostHogFeatureFlags implements Extension {
             }
 
             if (Object.keys(statePatch).length) {
-                const statePersistence = this._set(statePatch)
-                if (statePersistence) {
-                    persistence.push(statePersistence)
-                }
+                this._set(statePatch)
             }
             if (keysToRemove.length) {
-                const removal = this._remove(keysToRemove)
-                if (removal) {
-                    persistence.push(removal)
-                }
+                this._remove(keysToRemove)
             }
-            return continueWith(persistence.length ? Promise.all(persistence) : undefined, () => {
-                this._fireFeatureFlagsCallbacks()
-                if (flags === false) {
-                    forceDebugLogger.info('Flag overrides cleared')
-                } else if (flags) {
-                    forceDebugLogger.info('Flag overrides set', { flags })
-                }
-                if (payloads === false) {
-                    forceDebugLogger.info('Payload overrides cleared')
-                } else if (payloads) {
-                    forceDebugLogger.info('Payload overrides set', { payloads })
-                }
-            })
+            this._fireFeatureFlagsCallbacks()
+            if (flags === false) {
+                forceDebugLogger.info('Flag overrides cleared')
+            } else if (flags) {
+                forceDebugLogger.info('Flag overrides set', { flags })
+            }
+            if (payloads === false) {
+                forceDebugLogger.info('Payload overrides cleared')
+            } else if (payloads) {
+                forceDebugLogger.info('Payload overrides set', { payloads })
+            }
+            return
         }
 
         // Fallback: treat as Record<string, string | boolean>, e.g. {'beta-feature': 'variant'}
         if (overrideOptions && typeof overrideOptions === 'object') {
-            return continueWith(
-                this._set({
-                    [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: overrideOptions as Record<string, string | boolean>,
-                }),
-                () => {
-                    this._fireFeatureFlagsCallbacks()
-                    forceDebugLogger.info('Flag overrides set', { flags: overrideOptions })
-                }
-            )
+            this._set({
+                [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: overrideOptions as Record<string, string | boolean>,
+            })
+            this._fireFeatureFlagsCallbacks()
+            forceDebugLogger.info('Flag overrides set', { flags: overrideOptions })
+            return
         }
 
         this._logger.warn('Invalid overrideOptions provided to overrideFeatureFlags', { overrideOptions })
@@ -1416,7 +1370,7 @@ export class PostHogFeatureFlags implements Extension {
         }
 
         const newFlags = { ...this.getFlagVariants(), [key]: isEnrolled }
-        const persistence = this._set({
+        this._set({
             [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(filterActiveFeatureFlags(newFlags)),
             [ENABLED_FEATURE_FLAGS]: newFlags,
             [STORED_PERSON_PROPERTIES_KEY]: {
@@ -1424,25 +1378,14 @@ export class PostHogFeatureFlags implements Extension {
                 ...enrollmentPersonProp,
             },
         })
-
-        void this._completeEarlyAccessFeatureEnrollment(persistence, properties)
-    }
-
-    private _completeEarlyAccessFeatureEnrollment(
-        persistence: MaybePromise<void>,
-        properties: Properties
-    ): MaybePromise<void> {
-        return continueWith(persistence, () => {
-            this._fireFeatureFlagsCallbacks()
-            try {
-                return this._client?.capture('$feature_enrollment_update', properties).catch((error) => {
-                    this._logger.error('Failed to capture early access feature enrollment', error)
-                })
-            } catch (error) {
+        this._fireFeatureFlagsCallbacks()
+        try {
+            void this._client?.capture('$feature_enrollment_update', properties).catch((error) => {
                 this._logger.error('Failed to capture early access feature enrollment', error)
-                return undefined
-            }
-        })
+            })
+        } catch (error) {
+            this._logger.error('Failed to capture early access feature enrollment', error)
+        }
     }
 
     getEarlyAccessFeatures(
@@ -1480,7 +1423,7 @@ export class PostHogFeatureFlags implements Extension {
                 return
             }
             const earlyAccessFeatures = (response.json as EarlyAccessFeatureResponse).earlyAccessFeatures
-            await this._set({ [PERSISTENCE_EARLY_ACCESS_FEATURES]: earlyAccessFeatures })
+            this._set({ [PERSISTENCE_EARLY_ACCESS_FEATURES]: earlyAccessFeatures })
             callback(earlyAccessFeatures)
         } catch (error) {
             this._logger.error('Early access feature request failed', error)
@@ -1527,10 +1470,10 @@ export class PostHogFeatureFlags implements Extension {
      * to update user properties.
      */
     setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): void {
-        void this._setPersonPropertiesForFlags(properties, reloadFeatureFlags)
+        this._setPersonPropertiesForFlags(properties, reloadFeatureFlags)
     }
 
-    private _setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): MaybePromise<void> {
+    private _setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): void {
         const existingProperties = this._prop(STORED_PERSON_PROPERTIES_KEY) || {}
 
         // If the caller passes { $set, $set_once }, split them apart so we can apply $set_once
@@ -1550,20 +1493,16 @@ export class PostHogFeatureFlags implements Extension {
             }
         }
 
-        return continueWith(
-            this._set({
-                [STORED_PERSON_PROPERTIES_KEY]: {
-                    ...existingProperties,
-                    ...setOnceProps,
-                    ...propsToSet,
-                },
-            }),
-            () => {
-                if (reloadFeatureFlags) {
-                    this.reloadFeatureFlags()
-                }
-            }
-        )
+        this._set({
+            [STORED_PERSON_PROPERTIES_KEY]: {
+                ...existingProperties,
+                ...setOnceProps,
+                ...propsToSet,
+            },
+        })
+        if (reloadFeatureFlags) {
+            this.reloadFeatureFlags()
+        }
     }
 
     /**
@@ -1572,10 +1511,10 @@ export class PostHogFeatureFlags implements Extension {
      * are unset so flags re-evaluate without the removed values.
      */
     unsetPersonPropertiesForFlags(propertyNames: string[], reloadFeatureFlags = true): void {
-        void this._unsetPersonPropertiesForFlags(propertyNames, reloadFeatureFlags)
+        this._unsetPersonPropertiesForFlags(propertyNames, reloadFeatureFlags)
     }
 
-    private _unsetPersonPropertiesForFlags(propertyNames: string[], reloadFeatureFlags = true): MaybePromise<void> {
+    private _unsetPersonPropertiesForFlags(propertyNames: string[], reloadFeatureFlags = true): void {
         const existingProperties = this._prop(STORED_PERSON_PROPERTIES_KEY) || {}
 
         const nextProperties: Properties = { ...existingProperties }
@@ -1583,23 +1522,17 @@ export class PostHogFeatureFlags implements Extension {
             delete nextProperties[name]
         })
 
-        return continueWith(this._set({ [STORED_PERSON_PROPERTIES_KEY]: nextProperties }), () => {
-            if (reloadFeatureFlags) {
-                this.reloadFeatureFlags()
-            }
-        })
+        this._set({ [STORED_PERSON_PROPERTIES_KEY]: nextProperties })
+        if (reloadFeatureFlags) {
+            this.reloadFeatureFlags()
+        }
     }
 
     resetPersonPropertiesForFlags(reloadFeatureFlags = true): void {
-        void this._resetPersonPropertiesForFlags(reloadFeatureFlags)
-    }
-
-    private _resetPersonPropertiesForFlags(reloadFeatureFlags = true): MaybePromise<void> {
-        return continueWith(this._remove(STORED_PERSON_PROPERTIES_KEY), () => {
-            if (reloadFeatureFlags) {
-                this.reloadFeatureFlags()
-            }
-        })
+        this._remove(STORED_PERSON_PROPERTIES_KEY)
+        if (reloadFeatureFlags) {
+            this.reloadFeatureFlags()
+        }
     }
 
     /**
@@ -1611,39 +1544,34 @@ export class PostHogFeatureFlags implements Extension {
      *     setGroupPropertiesForFlags({'organization': { name: 'CYZ', employees: '11' } })
      */
     setGroupPropertiesForFlags(properties: { [type: string]: Properties }, reloadFeatureFlags = true): void {
-        void this._setGroupPropertiesForFlags(properties, reloadFeatureFlags)
+        this._setGroupPropertiesForFlags(properties, reloadFeatureFlags)
     }
 
-    private _setGroupPropertiesForFlags(
-        properties: { [type: string]: Properties },
-        reloadFeatureFlags = true
-    ): MaybePromise<void> {
+    private _setGroupPropertiesForFlags(properties: { [type: string]: Properties }, reloadFeatureFlags = true): void {
         const existingProperties = (this._prop(STORED_GROUP_PROPERTIES_KEY) || {}) as Record<string, Properties>
         const nextProperties: Record<string, Properties> = { ...existingProperties }
         for (const groupType of Object.keys(properties)) {
             nextProperties[groupType] = { ...existingProperties[groupType], ...properties[groupType] }
         }
 
-        return continueWith(this._set({ [STORED_GROUP_PROPERTIES_KEY]: nextProperties }), () => {
-            if (reloadFeatureFlags) {
-                this.reloadFeatureFlags()
-            }
-        })
+        this._set({ [STORED_GROUP_PROPERTIES_KEY]: nextProperties })
+        if (reloadFeatureFlags) {
+            this.reloadFeatureFlags()
+        }
     }
 
     resetGroupPropertiesForFlags(group_type?: string): void {
         if (group_type) {
             const existingProperties = this._prop(STORED_GROUP_PROPERTIES_KEY) || {}
-            void this._set({
+            this._set({
                 [STORED_GROUP_PROPERTIES_KEY]: { ...existingProperties, [group_type]: {} },
             })
         } else {
-            void this._remove(STORED_GROUP_PROPERTIES_KEY)
+            this._remove(STORED_GROUP_PROPERTIES_KEY)
         }
     }
 
     reset(): void {
-        this._state = {}
         this._rebuildEventProperties()
         this._hasLoadedFlags = false
         this._requestInFlight = undefined
