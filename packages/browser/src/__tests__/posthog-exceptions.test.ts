@@ -114,7 +114,25 @@ describe('PostHogExceptions', () => {
     describe('sendExceptionEvent', () => {
         it('captures the event when no suppression rules are provided', () => {
             exceptions.sendExceptionEvent({ custom_property: true })
-            expect(captureMock).toBeCalledWith('$exception', { custom_property: true }, expect.anything())
+            expect(captureMock).toBeCalledWith(
+                '$exception',
+                { custom_property: true, $release_id: null },
+                expect.anything()
+            )
+        })
+
+        it('attaches the injected release id', () => {
+            ;(globalThis as any)._posthogReleaseId = 'release-row-id'
+            try {
+                exceptions.sendExceptionEvent({ custom_property: true })
+                expect(captureMock).toBeCalledWith(
+                    '$exception',
+                    { custom_property: true, $release_id: 'release-row-id' },
+                    expect.anything()
+                )
+            } finally {
+                delete (globalThis as any)._posthogReleaseId
+            }
         })
 
         it('fails gracefully with a warning when capture throws', () => {
@@ -195,7 +213,11 @@ describe('PostHogExceptions', () => {
                 const frame = { filename: 'chrome-extension://', platform: 'javascript:web' }
                 const exception = { stacktrace: { frames: [frame], type: 'raw' } }
                 exceptions.sendExceptionEvent({ $exception_list: [exception] })
-                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+                expect(captureMock).toBeCalledWith(
+                    '$exception',
+                    { $exception_list: [exception], $release_id: null },
+                    expect.anything()
+                )
             })
         })
 
@@ -222,14 +244,22 @@ describe('PostHogExceptions', () => {
             it('captures the exception if a frame from the PostHog SDK is not the kaboom frame', () => {
                 const exception = { stacktrace: { frames: [posthogFrame, inAppFrame], type: 'raw' } }
                 exceptions.sendExceptionEvent({ $exception_list: [exception] })
-                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+                expect(captureMock).toBeCalledWith(
+                    '$exception',
+                    { $exception_list: [exception], $release_id: null },
+                    expect.anything()
+                )
             })
 
             it('captures exceptions thrown within the PostHog SDK when enabled', () => {
                 config.error_tracking.__capturePostHogExceptions = true
                 const exception = { stacktrace: { frames: [inAppFrame, posthogFrame], type: 'raw' } }
                 exceptions.sendExceptionEvent({ $exception_list: [exception] })
-                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+                expect(captureMock).toBeCalledWith(
+                    '$exception',
+                    { $exception_list: [exception], $release_id: null },
+                    expect.anything()
+                )
             })
         })
     })
@@ -251,7 +281,7 @@ describe('PostHogExceptions', () => {
                     },
                 ],
             })
-            expect(captureMock.mock.calls[1][1]).toEqual({ custom_property: true })
+            expect(captureMock.mock.calls[1][1]).toEqual({ custom_property: true, $release_id: null })
         })
 
         it('fails gracefully with a warning when buffering a step throws', () => {
@@ -273,7 +303,11 @@ describe('PostHogExceptions', () => {
             } as any
 
             expect(() => exceptions.sendExceptionEvent({ custom_property: true })).not.toThrow()
-            expect(captureMock).toHaveBeenCalledWith('$exception', { custom_property: true }, expect.anything())
+            expect(captureMock).toHaveBeenCalledWith(
+                '$exception',
+                { custom_property: true, $release_id: null },
+                expect.anything()
+            )
         })
 
         it('lets manually provided $exception_steps override buffered steps', () => {
@@ -284,7 +318,7 @@ describe('PostHogExceptions', () => {
 
             expect(captureMock).toHaveBeenCalledWith(
                 '$exception',
-                { custom_property: true, $exception_steps: manualSteps },
+                { custom_property: true, $exception_steps: manualSteps, $release_id: null },
                 expect.anything()
             )
         })
@@ -310,6 +344,7 @@ describe('PostHogExceptions', () => {
                 '$exception',
                 {
                     custom_property: true,
+                    $release_id: null,
                     $exception_steps: [
                         {
                             $message: 'kept step',
@@ -355,7 +390,11 @@ describe('PostHogExceptions', () => {
             exceptions.addExceptionStep('ignored')
             exceptions.sendExceptionEvent({ custom_property: true })
 
-            expect(captureMock).toHaveBeenCalledWith('$exception', { custom_property: true }, expect.anything())
+            expect(captureMock).toHaveBeenCalledWith(
+                '$exception',
+                { custom_property: true, $release_id: null },
+                expect.anything()
+            )
         })
 
         it('drops reserved keys from addExceptionStep properties', () => {

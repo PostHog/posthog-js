@@ -62,6 +62,7 @@ export default class ErrorTracking {
       properties: {
         ...exceptionProperties,
         ...properties,
+        $release_id: CoreErrorTracking.getInjectedReleaseId() ?? null,
       },
       _originatedFromCaptureException: true,
     }

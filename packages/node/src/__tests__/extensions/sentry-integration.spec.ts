@@ -150,6 +150,7 @@ describe('PostHogSentryIntegration', () => {
           $lib_version: '1.2.3',
           $geoip_disable: true,
           $is_server: true,
+          $release_id: null,
         },
         timestamp: expect.any(String),
         uuid: expect.any(String),
