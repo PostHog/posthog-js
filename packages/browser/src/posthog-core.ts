@@ -2610,9 +2610,12 @@ export class PostHog implements PostHogInterface {
         const isKnownAnonymous =
             (this.persistence.get_property(USER_STATE) || USER_STATE_ANONYMOUS) === USER_STATE_ANONYMOUS
 
+        const identityDidChange = new_distinct_id !== previous_distinct_id
+        const shouldTransitionToIdentified = !identityDidChange && isKnownAnonymous
+
         // send an $identify event any time the distinct_id is changing and the old ID is an anonymous ID
         // - logic on the server will determine whether or not to do anything with it.
-        if (new_distinct_id !== previous_distinct_id && isKnownAnonymous) {
+        if (identityDidChange && isKnownAnonymous) {
             this.persistence.set_property(USER_STATE, USER_STATE_IDENTIFIED)
 
             // Update current user properties
@@ -2639,6 +2642,21 @@ export class PostHog implements PostHogInterface {
             // let the reload feature flag request know to send this previous distinct id
             // for flag consistency
             this.featureFlags?.setAnonymousDistinctId(previous_distinct_id)
+        } else if (shouldTransitionToIdentified) {
+            this.persistence.set_property(USER_STATE, USER_STATE_IDENTIFIED)
+
+            const setProperties = userPropertiesToSet || {}
+            const setOnceProperties = userPropertiesToSetOnce || {}
+            this.setPersonPropertiesForFlags({ $set: setProperties, $set_once: setOnceProperties }, false)
+            this.capture('$set', { $set: setProperties, $set_once: setOnceProperties })
+
+            // This transition must create/update the person even when an identical property call was cached earlier.
+            // Cache only after capture so deduplication cannot suppress the transition event.
+            this._cachedPersonProperties = getPersonPropertiesHash(
+                new_distinct_id,
+                userPropertiesToSet,
+                userPropertiesToSetOnce
+            )
         } else if (userPropertiesToSet || userPropertiesToSetOnce) {
             // If the distinct_id is not changing, but we have user properties to set, we can check if they have changed
             // and if so, send a $set event
@@ -2646,12 +2664,14 @@ export class PostHog implements PostHogInterface {
             this.setPersonProperties(userPropertiesToSet, userPropertiesToSetOnce)
         }
 
-        // Reload active feature flags if the user identity changes.
-        // Note we don't reload this on property changes as these get processed async
-        if (new_distinct_id !== previous_distinct_id) {
+        // Reload active feature flags if the distinct ID changes. Clear stored flag calls because they belong to the
+        // previous identity. A same-ID transition only needs a reload when the caller supplied properties that can
+        // affect flag evaluation; the anonymous/identified state itself is not part of the /flags request.
+        if (identityDidChange) {
             this.reloadFeatureFlags()
-            // also clear any stored flag calls
             this.unregister(FLAG_CALL_REPORTED)
+        } else if (shouldTransitionToIdentified && (userPropertiesToSet || userPropertiesToSetOnce)) {
+            this.reloadFeatureFlags()
         }
     }
 

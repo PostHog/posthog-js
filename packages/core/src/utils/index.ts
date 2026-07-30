@@ -1,6 +1,7 @@
 import { FetchLike } from '../types'
 
 export * from './bot-detection'
+export * from './browser-utils'
 export * from './bucketed-rate-limiter'
 export * from './number-utils'
 export * from './string-utils'

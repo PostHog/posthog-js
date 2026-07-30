@@ -3,7 +3,7 @@
 import { each, extend, stripEmptyProperties, addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { cookieStore, createLocalPlusCookieStore, localStore, memoryStore, sessionStore } from './storage'
 import { PersistentStore, PostHogConfig, Properties } from './types'
-import { window } from '@posthog/browser-common/utils/globals'
+import { document, window } from '@posthog/browser-common/utils/globals'
 import {
     ENABLED_FEATURE_FLAGS,
     EVENT_TIMERS_KEY,
@@ -104,7 +104,7 @@ export class PostHogPersistence {
     private _config: PostHogConfig
     props: Properties
     private _storage: PersistentStore
-    private _campaign_params_saved: boolean
+    private _campaign_params_url: string | undefined
     private readonly _name: string
     _disabled: boolean | undefined
     private _secure: boolean | undefined
@@ -145,7 +145,7 @@ export class PostHogPersistence {
         this._config = config
         this._ownsSplitStorage = ownsSplitStorage
         this.props = {}
-        this._campaign_params_saved = false
+        this._campaign_params_url = undefined
         this._name = parseName(config)
         this._storage = this._buildStorage(config)
         this._splitStorage = this._resolveSplitStorage(config)
@@ -711,18 +711,21 @@ export class PostHogPersistence {
     }
 
     update_campaign_params(): void {
-        if (!this._campaign_params_saved) {
-            const campaignParams = getCampaignParams(
-                this._config.custom_campaign_params,
-                this._config.mask_personal_data_properties,
-                this._config.custom_personal_data_properties
-            )
-            // only save campaign params if there were any
-            if (!isEmptyObject(stripEmptyProperties(campaignParams))) {
-                this.register(campaignParams)
-            }
-            this._campaign_params_saved = true
+        const currentUrl = document?.URL
+        if (currentUrl === this._campaign_params_url) {
+            return
         }
+
+        const campaignParams = getCampaignParams(
+            this._config.custom_campaign_params,
+            this._config.mask_personal_data_properties,
+            this._config.custom_personal_data_properties
+        )
+        // only save campaign params if there were any
+        if (!isEmptyObject(stripEmptyProperties(campaignParams))) {
+            this.register(campaignParams)
+        }
+        this._campaign_params_url = currentUrl
     }
     update_search_keyword(): void {
         this.register(getSearchInfo())

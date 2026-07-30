@@ -1,5 +1,26 @@
 # posthog-ai
 
+## 8.5.0
+
+### Minor Changes
+
+- [#4329](https://github.com/PostHog/posthog-js/pull/4329) [`5baf90a`](https://github.com/PostHog/posthog-js/commit/5baf90a6cacf8a3a31c2702dbdf3c32510b20b2e) Thanks [@jurajmajerik](https://github.com/jurajmajerik)! - `Prompts.get()` results now include `config`, the JSON object of model parameters or agent configuration stored with the prompt version in PostHog prompt management (`null` when the version has none). Config is carried through the client-side cache and the stale-cache fallback, and each result gets its own copy so mutating `result.config` cannot pollute later cache hits. The hardcoded `fallback` string has no config, so use defensive access like `(result.config ?? {}).temperature`.
+  (2026-07-30)
+
+## 8.4.3
+
+### Patch Changes
+
+- [#4306](https://github.com/PostHog/posthog-js/pull/4306) [`05088ff`](https://github.com/PostHog/posthog-js/commit/05088fffbaaaf47b1d777c27c4cec641ff509351) Thanks [@marandaneto](https://github.com/marandaneto)! - fix(ai): prefer the OpenAI `service_tier` reported by the response for accurate cost attribution
+  (2026-07-29)
+
+## 8.4.2
+
+### Patch Changes
+
+- [#4072](https://github.com/PostHog/posthog-js/pull/4072) [`0369b09`](https://github.com/PostHog/posthog-js/commit/0369b09f1f8004ed6161c4bd24d05e2565f88900) Thanks [@nandinitiw](https://github.com/nandinitiw)! - fix(ai): capture OpenAI `service_tier` in `$ai_model_parameters` so PostHog can correctly attribute costs for flex and priority tier requests
+  (2026-07-29)
+
 ## 8.4.1
 
 ### Patch Changes

@@ -6,6 +6,9 @@ import type {
 
 const lastFingerprintMap: Map<number, string> = new Map();
 const transparentFingerprintMap: Map<number, string> = new Map();
+const lastSentAtMap: Map<number, number> = new Map();
+
+const PROVIDER_KEYFRAME_INTERVAL_MS = 30_000;
 
 // two independent hashes over 32-bit words rather than bytes: RGBA pixel
 // buffers are multi-megabyte, always word-aligned, and this runs on every frame
@@ -88,6 +91,7 @@ worker.onmessage = async function (e) {
       displayWidth,
       displayHeight,
       dataURLOptions,
+      maskRegions,
     } = e.data;
 
     try {
@@ -107,6 +111,14 @@ worker.onmessage = async function (e) {
       ctx.drawImage(bitmap, 0, 0);
       bitmap.close();
 
+      // mask before fingerprinting so dedup sees the same pixels that get encoded
+      if (maskRegions) {
+        ctx.fillStyle = 'black';
+        for (const region of maskRegions) {
+          ctx.fillRect(region.x, region.y, region.width, region.height);
+        }
+      }
+
       // fingerprint the raw pixels so unchanged frames skip the expensive
       // encode below entirely, instead of encoding first and deduping after.
       // an unseen canvas is compared against the transparent fingerprint, so
@@ -120,7 +132,17 @@ worker.onmessage = async function (e) {
         lastFingerprintMap.get(id) ?? transparentFingerprint(width, height);
 
       if (fingerprint === lastFingerprint) {
-        return worker.postMessage({ id }); // unchanged, or still blank
+        // canvases recorded under a mask provider lose their snapshot still
+        // (rr_dataURL), so the player needs a frame to repaint from after a
+        // snapshot rebuild or seek — send a keyframe anyway
+        const lastSentAt = lastSentAtMap.get(id);
+        const keyframeDue =
+          maskRegions !== undefined &&
+          lastSentAt !== undefined &&
+          Date.now() - lastSentAt >= PROVIDER_KEYFRAME_INTERVAL_MS;
+        if (!keyframeDue) {
+          return worker.postMessage({ id }); // unchanged, or still blank
+        }
       }
 
       const blob = await reusableCanvas.convertToBlob(dataURLOptions); // takes a while
@@ -136,6 +158,7 @@ worker.onmessage = async function (e) {
       // transient encode failure must retry on the next frame, not be
       // remembered as "unchanged" and suppressed forever
       lastFingerprintMap.set(id, fingerprint);
+      lastSentAtMap.set(id, Date.now());
     } catch {
       // Always respond so the main thread clears snapshotInProgressMap
       worker.postMessage({ id });
