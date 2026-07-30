@@ -118,13 +118,24 @@ describe('PostHogTracingProcessor', () => {
       expect(call.properties.$ai_latency).toBeDefined()
     })
 
-    it('includes group_id in trace events', async () => {
+    it('includes group_id in trace and span events as both session and group id', async () => {
       const trace = createMockTrace({ groupId: 'group_abc' })
-      await processor.onTraceStart(trace as any)
-      await processor.onTraceEnd(trace as any)
+      const span = createMockSpan({ spanData: { type: 'generation', model: 'gpt-4o' } })
 
-      const call = mockClient.capture.mock.calls[0][0]
-      expect(call.properties.$ai_group_id).toBe('group_abc')
+      await processor.onTraceStart(trace as any)
+      mockClient.capture.mockClear()
+
+      await processor.onSpanStart(span as any)
+      await processor.onSpanEnd(span as any)
+      const spanCall = mockClient.capture.mock.calls[0][0]
+
+      await processor.onTraceEnd(trace as any)
+      const traceCall = mockClient.capture.mock.calls[1][0]
+
+      expect(spanCall.properties.$ai_session_id).toBe('group_abc')
+      expect(spanCall.properties.$ai_group_id).toBe('group_abc')
+      expect(traceCall.properties.$ai_session_id).toBe('group_abc')
+      expect(traceCall.properties.$ai_group_id).toBe('group_abc')
     })
 
     it('includes trace metadata in trace events', async () => {
