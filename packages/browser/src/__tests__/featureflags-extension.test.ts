@@ -1,5 +1,5 @@
 import type { ApiResponse } from '@posthog/browser-common'
-import { ENABLED_FEATURE_FLAGS, PERSISTENCE_ACTIVE_FEATURE_FLAGS } from '../constants'
+import { ENABLED_FEATURE_FLAGS, PERSISTENCE_ACTIVE_FEATURE_FLAGS, STORED_PERSON_PROPERTIES_KEY } from '../constants'
 import { MutableFeatureFlagsConfigSource } from '../feature-flags-config'
 import { defaultConfig } from '../posthog-core'
 import { PostHogFeatureFlags } from '../posthog-featureflags'
@@ -211,6 +211,43 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
         capture.mockClear()
         featureFlags.updateEarlyAccessFeatureEnrollment('test-flag', true)
+        expect(capture).toHaveBeenCalledWith('$feature_enrollment_update', expect.any(Object))
+        featureFlags.dispose()
+    })
+
+    it('persists early access enrollment coherently before callbacks and capture', async () => {
+        const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
+        const client = posthog._getBrowserClientAdapter()
+        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+        featureFlags.setup(client)
+        const callback = jest.fn()
+        featureFlags.addFeatureFlagsHandler(callback)
+        const capture = jest.spyOn(posthog, 'capture').mockImplementation()
+        let resolvePersistence: (() => void) | undefined
+        const setPersistence = jest.spyOn(client.kv, 'set').mockReturnValue(
+            new Promise<void>((resolve) => {
+                resolvePersistence = resolve
+            })
+        )
+
+        featureFlags.updateEarlyAccessFeatureEnrollment('test-flag', true)
+
+        expect(featureFlags.getFlagVariants()).toEqual({ 'test-flag': true })
+        expect(setPersistence).toHaveBeenCalledTimes(1)
+        expect(setPersistence).toHaveBeenCalledWith({
+            [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: ['test-flag'],
+            [ENABLED_FEATURE_FLAGS]: { 'test-flag': true },
+            [STORED_PERSON_PROPERTIES_KEY]: { '$feature_enrollment/test-flag': true },
+        })
+        expect(callback).not.toHaveBeenCalled()
+        expect(capture).not.toHaveBeenCalled()
+
+        resolvePersistence?.()
+        for (let i = 0; i < 5; i++) {
+            await Promise.resolve()
+        }
+
+        expect(callback).toHaveBeenCalledTimes(1)
         expect(capture).toHaveBeenCalledWith('$feature_enrollment_update', expect.any(Object))
         featureFlags.dispose()
     })
