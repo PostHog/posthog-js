@@ -23,6 +23,19 @@ const NOT_AVAILABLE = 'Conversations not available yet.'
 
 export type ConversationsManager = LazyLoadedConversationsInterface
 
+// Discrete causes behind isAvailable() being false, so callers that fall back to another
+// channel can record the specific cause instead of collapsing every case into "unavailable".
+export type ConversationsUnavailableReason =
+    | 'disabled_by_config'
+    | 'consent_opted_out'
+    | 'remote_config_pending'
+    | 'disabled_in_project'
+    | 'missing_token'
+    | 'extensions_unavailable'
+    | 'load_failed'
+    | 'initializing'
+    | 'not_loaded'
+
 export class PostHogConversations implements Extension {
     // This is set to undefined until the remote config is loaded
     // then it's set to true if conversations are enabled
@@ -31,6 +44,9 @@ export class PostHogConversations implements Extension {
     private _conversationsManager: LazyLoadedConversationsInterface | null = null
     private _isInitializing: boolean = false
     private _remoteConfig: ConversationsRemoteConfig | null = null
+    // Set when the lazy bundle fails to load or init (blocked, network, CSP, init throw); cleared on
+    // successful load. Distinguishes a load failure from "still initializing" in getUnavailableReason().
+    private _lastLoadError: string | null = null
 
     constructor(private _instance: PostHog) {}
 
@@ -75,6 +91,7 @@ export class PostHogConversations implements Extension {
         // Reset local state
         this._isConversationsEnabled = undefined
         this._remoteConfig = null
+        this._lastLoadError = null
     }
 
     loadIfEnabled() {
@@ -166,6 +183,7 @@ export class PostHogConversations implements Extension {
         try {
             // Pass config and PostHog instance to the extension
             this._conversationsManager = initConversationsFn(this._remoteConfig, this._instance)
+            this._lastLoadError = null
             logger.info('Conversations loaded successfully')
         } catch (e) {
             this._handleLoadError('Error completing conversations initialization', e)
@@ -177,6 +195,7 @@ export class PostHogConversations implements Extension {
         logger.error(message, error)
         this._conversationsManager = null
         this._isInitializing = false
+        this._lastLoadError = message
     }
 
     /**
@@ -206,6 +225,43 @@ export class PostHogConversations implements Extension {
      */
     isAvailable(): boolean {
         return this._isConversationsEnabled === true && !isNull(this._conversationsManager)
+    }
+
+    /**
+     * Explain why {@link isAvailable} is currently false, or null when conversations are available.
+     * Lets a caller that falls back to another channel record the specific cause (bundle blocked,
+     * disabled in the project, remote config not loaded yet, still initializing, …) rather than
+     * collapsing every case into a single "unavailable" signal.
+     */
+    getUnavailableReason(): ConversationsUnavailableReason | null {
+        if (this.isAvailable()) {
+            return null
+        }
+        if (this._instance.config.disable_conversations) {
+            return 'disabled_by_config'
+        }
+        if (this._instance.config.cookieless_mode && this._instance.consent.isOptedOut()) {
+            return 'consent_opted_out'
+        }
+        if (isUndefined(this._isConversationsEnabled)) {
+            return 'remote_config_pending'
+        }
+        if (!this._isConversationsEnabled) {
+            return 'disabled_in_project'
+        }
+        if (isNullish(this._remoteConfig) || !this._remoteConfig.token) {
+            return 'missing_token'
+        }
+        if (!assignableWindow?.__PosthogExtensions__) {
+            return 'extensions_unavailable'
+        }
+        if (this._lastLoadError) {
+            return 'load_failed'
+        }
+        if (this._isInitializing) {
+            return 'initializing'
+        }
+        return 'not_loaded'
     }
 
     /**
