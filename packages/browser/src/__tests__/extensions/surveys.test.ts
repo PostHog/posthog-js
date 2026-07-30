@@ -734,6 +734,47 @@ describe('SurveyManager', () => {
             localStorage.clear()
         })
 
+        it('does not navigate Back to a stale out-of-range visited index (issue #3575)', async () => {
+            // A corrupt/stale persisted blob can carry a valid current index but a visitedIndices
+            // array that points past the end of the questions array. Popping such an entry on Back
+            // would send the renderer to a non-existent question and re-empty the container. The
+            // restored visited indices must be filtered so Back always lands on a real question.
+            const backSurvey = {
+                ...mockSurvey,
+                id: 'stale-visited-indices-survey',
+                appearance: { ...(mockSurvey.appearance ?? {}), allowGoBack: true },
+                questions: [
+                    { id: 'q1', question: 'Question 1', type: SurveyQuestionType.Open, optional: true },
+                    { id: 'q2', question: 'Question 2', type: SurveyQuestionType.Open, optional: true },
+                ],
+            } as unknown as Survey
+            setInProgressSurveyState(backSurvey, {
+                surveySubmissionId: 'stale',
+                responses: {},
+                lastQuestionIndex: 1, // in range, so the whole blob is kept
+                visitedIndices: [0, backSurvey.questions.length], // trailing entry is out of range
+            } as any)
+
+            const surveyDiv = document.createElement('div')
+            document.body.appendChild(surveyDiv)
+            surveyManager.renderSurvey(backSurvey, surveyDiv)
+
+            expect(surveyDiv.querySelector('.survey-box')?.getAttribute('data-question-index')).toBe('1')
+
+            const backButton = surveyDiv.querySelector<HTMLButtonElement>('.form-back')
+            expect(backButton).not.toBeNull()
+            await act(async () => {
+                fireEvent.click(backButton!)
+            })
+
+            // Back must land on the real first question, not the stale out-of-range index.
+            expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
+            expect(surveyDiv.querySelector('.survey-box')?.getAttribute('data-question-index')).toBe('0')
+
+            document.body.removeChild(surveyDiv)
+            localStorage.clear()
+        })
+
         it('exposes the current question index on .survey-box for embedders', () => {
             // Embedders rendering surveys via the API (e.g. the standalone hosted survey page)
             // need a reliable way to know which question is currently displayed so they can drive

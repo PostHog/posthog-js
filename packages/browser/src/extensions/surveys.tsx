@@ -45,6 +45,7 @@ import {
     retrieveSurveyShadow,
     defaultSurveyAppearance,
     dismissedSurveyEvent,
+    clearInProgressSurveyState,
     doesSurveyDeviceTypesMatch,
     doesSurveyMatchSelector,
     doesSurveyUrlMatch,
@@ -1306,13 +1307,31 @@ export function Questions({
     forceDisableHtml: boolean
     posthog?: PostHog
 }) {
+    // Read the persisted in-progress state once and sanitize it. A stale persisted index (e.g.
+    // left over from a prior completion) can point past the end of the questions array, which
+    // makes the question renderer bail and leaves the survey container empty. When that happens
+    // the whole record is stale, so we discard it and start fresh rather than clamping the index
+    // while keeping the equally-stale responses and visited indices around.
+    const initialInProgressState = useMemo(() => {
+        const state = getInProgressSurveyState(survey)
+        if (!state) {
+            return null
+        }
+        const isIndexInRange = state.lastQuestionIndex >= 0 && state.lastQuestionIndex < survey.questions.length
+        if (!isIndexInRange) {
+            clearInProgressSurveyState(survey)
+            return null
+        }
+        return state
+        // Only recompute when the survey identity changes; we intentionally read localStorage once.
+    }, [survey])
+
     // Initialize responses from localStorage or empty object
     const [questionsResponses, setQuestionsResponses] = useState(() => {
-        const inProgressSurveyData = getInProgressSurveyState(survey)
-        if (inProgressSurveyData?.responses) {
+        if (initialInProgressState?.responses) {
             logger.info('Survey is already in progress, filling in initial responses')
         }
-        return inProgressSurveyData?.responses || {}
+        return initialInProgressState?.responses || {}
     })
     const {
         previewPageIndex,
@@ -1326,17 +1345,14 @@ export function Questions({
         surveyLanguage,
     } = useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(() => {
-        const inProgressSurveyData = getInProgressSurveyState(survey)
-        // A stale persisted index (e.g. left over from a prior completion) can point past the
-        // end of the questions array, which would make the question renderer bail and leave the
-        // survey container empty. Clamp it back into range so an inline re-display still renders.
-        const savedIndex = inProgressSurveyData?.lastQuestionIndex ?? 0
-        const validSavedIndex = savedIndex >= 0 && savedIndex < survey.questions.length ? savedIndex : 0
-        return previewPageIndex || validSavedIndex
+        return previewPageIndex || (initialInProgressState?.lastQuestionIndex ?? 0)
     })
     const [visitedIndices, setVisitedIndices] = useState<number[]>(() => {
-        const inProgressSurveyData = getInProgressSurveyState(survey)
-        return inProgressSurveyData?.visitedIndices ?? []
+        // Drop any out-of-range visited indices so the Back button can never navigate to a
+        // non-existent question (which would re-empty the container).
+        return (initialInProgressState?.visitedIndices ?? []).filter(
+            (index) => index >= 0 && index < survey.questions.length
+        )
     })
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
 
