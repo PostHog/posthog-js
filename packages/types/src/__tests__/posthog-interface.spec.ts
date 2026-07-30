@@ -60,11 +60,6 @@ function extractClassPublicMethods(filePath: string, className: string): string[
                 if (ts.isMethodDeclaration(member) && member.name) {
                     const methodName = member.name.getText(sourceFile)
 
-                    // Skip private methods (starting with _)
-                    if (methodName.startsWith('_')) {
-                        return
-                    }
-
                     // Get the full text including leading comments
                     const fullStart = member.getFullStart()
                     const start = member.getStart(sourceFile)

@@ -185,6 +185,17 @@ export interface PostHog {
     get_distinct_id(): string
 
     /**
+     * Returns whether the current user is identified, based on the persisted user state.
+     *
+     * A user becomes identified via `identify()`, `alias()`, or identified bootstrap data.
+     * Useful for gating `identify()` so it's only called once per session, as recommended in
+     * https://posthog.com/docs/product-analytics/cutting-costs#only-call-identify-once-per-session
+     *
+     * @returns Whether the current user is identified
+     */
+    _isIdentified(): boolean
+
+    /**
      * Reset the user's identity and start a new session.
      *
      * @param {boolean} [reset_device_id] Whether to generate a new device ID as well as a new distinct ID.

@@ -3759,6 +3759,27 @@ export class PostHog implements PostHogInterface {
         return name
     }
 
+    /**
+     * Returns whether the current user is identified, based on the persisted user state.
+     *
+     * @remarks
+     * A user becomes identified via `identify()`, `alias()`, or identified bootstrap data.
+     * Useful for gating `identify()` so it's only called once per session, as recommended in
+     * https://posthog.com/docs/product-analytics/cutting-costs#only-call-identify-once-per-session
+     *
+     * {@label Identification}
+     *
+     * @example
+     * ```js
+     * if (!posthog._isIdentified()) {
+     *     posthog.identify('distinct_id')
+     * }
+     * ```
+     *
+     * @public
+     *
+     * @returns Whether the current user is identified
+     */
     _isIdentified(): boolean {
         return (
             this.persistence?.get_property(USER_STATE) === USER_STATE_IDENTIFIED ||
