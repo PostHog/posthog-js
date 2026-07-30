@@ -117,6 +117,20 @@ describe('PostHogExceptions', () => {
             expect(captureMock).toBeCalledWith('$exception', { custom_property: true }, expect.anything())
         })
 
+        it('attaches the injected release id when present', () => {
+            ;(globalThis as any)._posthogReleaseId = 'release-row-id'
+            try {
+                exceptions.sendExceptionEvent({ custom_property: true })
+                expect(captureMock).toBeCalledWith(
+                    '$exception',
+                    { custom_property: true, $release_id: 'release-row-id' },
+                    expect.anything()
+                )
+            } finally {
+                delete (globalThis as any)._posthogReleaseId
+            }
+        })
+
         it('fails gracefully with a warning when capture throws', () => {
             captureMock.mockImplementationOnce(() => {
                 throw new Error('capture failed')
