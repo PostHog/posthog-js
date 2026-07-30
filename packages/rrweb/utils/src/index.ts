@@ -2,6 +2,8 @@
 // Copyright (c) 2012 Functional Software, Inc. dba Sentry
 // Licensed under the MIT License: https://github.com/getsentry/sentry-javascript/blob/develop/LICENSE
 
+import { isWebKit } from '@posthog/core';
+
 type PrototypeOwner = Node | ShadowRoot | MutationObserver | Element;
 type TypeofPrototypeOwner =
   | typeof Node
@@ -123,14 +125,14 @@ export function getUntaintedPrototype<T extends keyof BasePrototypeCache>(
     // WebKit tears down an iframe's ScriptExecutionContext when it is detached
     // from the DOM, and MutationObserver.deliver() silently drops callbacks when
     // its scriptExecutionContext() is null (webkit.org/b/179224), so prototypes
-    // taken from a detached iframe stop working on Safari.
+    // taken from a detached iframe stop working on WebKit.
     // Adapted from upstream rrweb #1854, with one difference: the iframe stays
     // attached for the lifetime of the page instead of being removed on recorder
     // teardown. Observers are torn down per-document here (e.g. a same-origin
     // iframe being removed), and the cached prototype must outlive any one of
     // them; removing the shared iframe on the first teardown - or reusing the
     // cache after a stop/restart cycle - would silently break the survivors.
-    if (isSafari()) {
+    if (isWebKit(navigator.userAgent)) {
       // both the upstream default block class and the PostHog one, so the
       // recorder never serializes this iframe whichever config is in use
       iframeEl.classList.add('rr-block', 'ph-no-capture');
@@ -146,11 +148,6 @@ export function getUntaintedPrototype<T extends keyof BasePrototypeCache>(
       document.body.removeChild(iframeEl);
     }
   }
-}
-
-function isSafari(): boolean {
-  const ua = navigator.userAgent;
-  return ua.includes('Safari') && !ua.includes('Chrome');
 }
 
 const untaintedAccessorCache: Record<
