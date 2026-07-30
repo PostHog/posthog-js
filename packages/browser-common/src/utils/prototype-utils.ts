@@ -7,7 +7,7 @@
  * after a number of performance reports from Angular users
  */
 
-import { isFunction, isNativeFunction } from '@posthog/core'
+import { isFunction, isNativeFunction, isWebKit } from '@posthog/core'
 
 import { logger } from './logger'
 import { isAngularZonePresent } from './type-utils'
@@ -51,7 +51,7 @@ export function getNativeImplementation<T extends keyof NativeImplementationsCac
                 // MutationObserver callbacks from its realm to be silently dropped.
                 // Keep the iframe alive for the lifetime of the cached constructor.
                 // See https://webkit.org/b/179224 and the equivalent rrweb fallback.
-                if (name === 'MutationObserver' && isWebKit(assignableWindow)) {
+                if (name === 'MutationObserver' && isWebKit(assignableWindow.navigator?.userAgent ?? '')) {
                     sandbox.classList.add('rr-block', 'ph-no-capture')
                     keepSandboxAttached = true
                 }
@@ -73,11 +73,6 @@ export function getNativeImplementation<T extends keyof NativeImplementationsCac
     }
 
     return (cachedImplementations[name] = impl.bind(assignableWindow) as NativeImplementationsCache[T])
-}
-
-function isWebKit(assignableWindow: BrowserWindow): boolean {
-    const userAgent = assignableWindow.navigator?.userAgent ?? ''
-    return userAgent.includes('AppleWebKit') && !userAgent.includes('Chrome')
 }
 
 export function getNativeMutationObserverImplementation(assignableWindow: BrowserWindow): typeof MutationObserver {

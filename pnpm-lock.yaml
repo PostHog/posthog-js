@@ -1609,6 +1609,10 @@ importers:
         version: 4.5.4(@types/node@26.1.1)(rollup@4.53.3)(typescript@5.8.2)(vite@6.4.2(@types/node@24.10.13)(jiti@2.6.1)(lightningcss@1.27.0)(terser@5.48.0)(yaml@2.8.0))
 
   packages/rrweb/utils:
+    dependencies:
+      '@posthog/core':
+        specifier: workspace:^
+        version: link:../../core
     devDependencies:
       vite:
         specifier: 'catalog:'

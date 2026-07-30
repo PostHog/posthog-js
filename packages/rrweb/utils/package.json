@@ -38,5 +38,7 @@
         "vite": "catalog:",
         "vite-plugin-dts": "catalog:"
     },
-    "dependencies": {}
+    "dependencies": {
+        "@posthog/core": "workspace:^"
+    }
 }
