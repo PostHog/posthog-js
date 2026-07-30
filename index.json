@@ -1,4 +1,20 @@
 {
+  "PostHog/posthog-js/issue/4321": {
+    "key": "PostHog/posthog-js/issue/4321",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4321",
+    "url": "https://github.com/PostHog/posthog-js/issues/4321",
+    "conclusion": "Likely React Native iOS source-map upload regression: the Xcode wrapper cannot discover a CLI installed through nvm, despite Expo providing the Node binary.",
+    "labels": [
+      "react-native",
+      "iOS",
+      "feature/error-tracking",
+      "team/error-tracking"
+    ],
+    "prUrl": "https://github.com/PostHog/posthog-js/pull/4322",
+    "closed": false,
+    "updatedAt": "2026-07-30T00:35:51.497Z"
+  },
   "PostHog/posthog-js/issue/4317": {
     "key": "PostHog/posthog-js/issue/4317",
     "repo": "PostHog/posthog-js",
