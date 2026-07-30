@@ -1416,33 +1416,33 @@ export class PostHogFeatureFlags implements Extension {
         }
 
         const newFlags = { ...this.getFlagVariants(), [key]: isEnrolled }
-        const flagPersistence = this._set({
+        const persistence = this._set({
             [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(filterActiveFeatureFlags(newFlags)),
             [ENABLED_FEATURE_FLAGS]: newFlags,
+            [STORED_PERSON_PROPERTIES_KEY]: {
+                ...(this._prop(STORED_PERSON_PROPERTIES_KEY) || {}),
+                ...enrollmentPersonProp,
+            },
         })
-        this._fireFeatureFlagsCallbacks()
 
-        void this._completeEarlyAccessFeatureEnrollment(flagPersistence, enrollmentPersonProp, properties)
+        void this._completeEarlyAccessFeatureEnrollment(persistence, properties)
     }
 
     private _completeEarlyAccessFeatureEnrollment(
-        flagPersistence: MaybePromise<void>,
-        enrollmentPersonProp: Properties,
+        persistence: MaybePromise<void>,
         properties: Properties
     ): MaybePromise<void> {
-        const personPersistence = this._setPersonPropertiesForFlags(enrollmentPersonProp, false)
-        return continueWith(flagPersistence, () =>
-            continueWith(personPersistence, () => {
-                try {
-                    return this._client?.capture('$feature_enrollment_update', properties).catch((error) => {
-                        this._logger.error('Failed to capture early access feature enrollment', error)
-                    })
-                } catch (error) {
+        return continueWith(persistence, () => {
+            this._fireFeatureFlagsCallbacks()
+            try {
+                return this._client?.capture('$feature_enrollment_update', properties).catch((error) => {
                     this._logger.error('Failed to capture early access feature enrollment', error)
-                    return undefined
-                }
-            })
-        )
+                })
+            } catch (error) {
+                this._logger.error('Failed to capture early access feature enrollment', error)
+                return undefined
+            }
+        })
     }
 
     getEarlyAccessFeatures(
