@@ -1,8 +1,9 @@
-import { CAPTURE_RATE_LIMIT, CAPTURE_RATE_LIMIT_DROPPED } from './constants'
+import { CAPTURE_RATE_LIMIT } from './constants'
 import type { PostHog } from './posthog-core'
 import { RequestResponse } from './types'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { location } from '@posthog/browser-common/utils/globals'
+import { isNumber } from '@posthog/core'
 
 const logger = createLogger('[RateLimiter]')
 
@@ -65,13 +66,13 @@ export class RateLimiter {
 
         if (isRateLimited && !checkOnly) {
             // Count every drop, not just the ones in this page's lifetime: a runaway loop that reloads
-            // the page loses the in-memory state, so the counter is persisted and reported (then reset)
-            // by the next warning. It is a rolling "dropped since the last warning" tally.
-            const droppedSinceLastWarning = this._droppedWhileLimited() + 1
-            this.instance.persistence?.set_property(CAPTURE_RATE_LIMIT_DROPPED, droppedSinceLastWarning)
+            // the page loses the in-memory state, so the tally lives on the persisted bucket and is
+            // reported (then reset) by the next warning - "dropped since the last warning".
+            const droppedSinceLastWarning = (isNumber(bucket.dropped) ? bucket.dropped : 0) + 1
+            bucket.dropped = droppedSinceLastWarning
 
             if (!this.lastEventRateLimited) {
-                this.instance.persistence?.set_property(CAPTURE_RATE_LIMIT_DROPPED, 0)
+                bucket.dropped = 0
                 this._captureWarning(droppedSinceLastWarning)
             }
         }
@@ -83,11 +84,6 @@ export class RateLimiter {
             isRateLimited,
             remainingTokens: bucket.tokens,
         }
-    }
-
-    private _droppedWhileLimited(): number {
-        const dropped = this.instance.persistence?.get_property(CAPTURE_RATE_LIMIT_DROPPED)
-        return typeof dropped === 'number' && dropped > 0 ? dropped : 0
     }
 
     /**

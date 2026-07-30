@@ -3175,7 +3175,7 @@
           "releaseTag": "deprecated"
         },
         {
-          "description": "Client side rate limiting",
+          "description": "Client side rate limiting.\n\nA token bucket, per browser, that stops a runaway loop on your site from flooding capture.\nWhen it drains, further `capture` calls are dropped and a one-off `$$client_ingestion_warning`\nis sent reporting how many events were dropped and the page and session that tripped it -\nusually the fastest way to find the loop. Raise these limits if you legitimately capture in\nbursts; a warning under the defaults is more often a bug on the page than a limit set too low.",
           "type": "{ events_per_second?: number; events_burst_limit?: number; }",
           "name": "rate_limiting"
         },

@@ -94,6 +94,7 @@ describe('Rate Limiter', () => {
             expect(persistedBucket['$capture_rate_limit']).toEqual({
                 tokens: 0,
                 last: systemTime,
+                dropped: 199, // the first drop emitted the warning and reset the tally
             })
 
             moveTimeForward(2000) // 2 seconds = 20 tokens
@@ -101,6 +102,7 @@ describe('Rate Limiter', () => {
             expect(persistedBucket['$capture_rate_limit']).toEqual({
                 tokens: 19, // 20 - 1
                 last: systemTime,
+                dropped: 199,
             })
         })
 
@@ -143,7 +145,7 @@ describe('Rate Limiter', () => {
             range(200).forEach(() => rateLimiter.clientRateLimitContext())
 
             // 100 tokens spent, then 100 drops - the first of which triggered the warning and reset the tally
-            expect(persistedBucket['$capture_rate_limit_dropped']).toEqual(99)
+            expect(persistedBucket['$capture_rate_limit'].dropped).toEqual(99)
 
             mockPostHog.capture.mockClear()
 
@@ -155,7 +157,7 @@ describe('Rate Limiter', () => {
             expect(mockPostHog.capture.mock.calls[0][1]).toMatchObject({
                 $$client_ingestion_warning_dropped_events: 100,
             })
-            expect(persistedBucket['$capture_rate_limit_dropped']).toEqual(99)
+            expect(persistedBucket['$capture_rate_limit'].dropped).toEqual(99)
         })
 
         it('omits the page and session when they are unavailable', () => {
