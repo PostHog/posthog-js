@@ -87,16 +87,9 @@ export class TestClient implements Client {
 
     readonly onEvent = this._eventPublisher.listener
     readonly onRemoteConfig: Client['onRemoteConfig'] = (handler) => {
-        const invoke = (result: RemoteConfigResult): void => {
-            try {
-                handler(result)
-            } catch (error) {
-                this.logger.error('Remote config listener failed', error)
-            }
-        }
-        const subscription = this._remoteConfigPublisher.listener(invoke)
+        const subscription = this._remoteConfigPublisher.listener(handler)
         if (this._remoteConfigResult) {
-            invoke(this._remoteConfigResult)
+            handler(this._remoteConfigResult)
         }
         return subscription
     }
