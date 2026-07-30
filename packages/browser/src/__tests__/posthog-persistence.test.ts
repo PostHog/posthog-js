@@ -181,6 +181,18 @@ describe('persistence', () => {
             expect(reloaded.props.value).toEqual(['initial', 'updated'])
         })
 
+        it('should save once when unregistering multiple properties', () => {
+            const lib = new PostHogPersistence(makePostHogConfig('test', persistenceMode))
+            lib.register({ first: true, second: 'value', retained: 3 })
+            const saveMock: Mock = jest.fn()
+            lib.save = saveMock
+
+            lib.unregister(['first', 'second', 'missing'])
+
+            expect(lib.props).toEqual({ retained: 3 })
+            expect(lib.save).toHaveBeenCalledTimes(1)
+        })
+
         it('should rebuild storage when cookie_persisted_properties changes via update_config', () => {
             const encode = (props: any) => encodeURIComponent(JSON.stringify(props))
             const expectedProps = () => ({

@@ -25,6 +25,8 @@ import type { CaptureOptions, EventName, Properties, QueuedRequestWithOptions, R
 class BrowserClientKeyValueStore implements KeyValueStore {
     constructor(private readonly _instance: PostHog) {}
 
+    initialize(): void {}
+
     get<T = unknown>(key: string): T | undefined
     get<T extends object>(keys: readonly (keyof T & string)[]): Partial<T>
     get(keyOrKeys: string | readonly string[]): unknown {

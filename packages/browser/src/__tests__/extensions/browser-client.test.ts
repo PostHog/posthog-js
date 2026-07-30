@@ -34,7 +34,11 @@ function createMockPostHog(
         get_property: jest.fn((prop: string) => props[prop]),
         set_property: jest.fn((prop: string, value: Property) => (props[prop] = value)),
         register: jest.fn((values: Properties) => Object.assign(props, values)),
-        unregister: jest.fn((prop: string) => delete props[prop]),
+        unregister: jest.fn((keyOrKeys: string | readonly string[]) => {
+            for (const key of typeof keyOrKeys === 'string' ? [keyOrKeys] : keyOrKeys) {
+                delete props[key]
+            }
+        }),
         get_initial_props: jest.fn(() => ({ initial: 'person-property' })),
     } as unknown as PostHogPersistence
 
@@ -142,6 +146,7 @@ describe('BrowserClientAdapter', () => {
         host.add(testExtension('test', (value) => (client = value)))
 
         const key = '$extension_state'
+        expect(client?.kv.initialize()).toBeUndefined()
         instance.persistence!.props[key] = { prepopulated: true }
         expect(client?.kv.get(key)).toEqual({ prepopulated: true })
 
@@ -158,12 +163,19 @@ describe('BrowserClientAdapter', () => {
         client?.kv.set({ first: true, second: 'value' })
         expect(instance.persistence?.register).toHaveBeenCalledTimes(4)
         expect(instance.persistence?.register).toHaveBeenLastCalledWith({ first: true, second: 'value' })
+        expect(
+            client?.kv.get<{ first: boolean; second: string; missing: unknown }>(['first', 'missing', 'second'])
+        ).toEqual({ first: true, second: 'value' })
+
+        client?.kv.remove(['first', 'second'])
+        expect(instance.persistence?.unregister).toHaveBeenCalledWith(['first', 'second'])
+        expect(client?.kv.get<{ first: boolean; second: string }>(['first', 'second'])).toEqual({})
 
         instance.persistence!.props[key] = { externallyUpdated: true }
-        expect(await client?.kv.get(key)).toEqual({ externallyUpdated: true })
+        expect(client?.kv.get(key)).toEqual({ externallyUpdated: true })
 
-        await client?.kv.remove(key)
-        expect(instance.persistence?.unregister).toHaveBeenCalledWith(key)
+        client?.kv.remove(key)
+        expect(instance.persistence?.unregister).toHaveBeenLastCalledWith(key)
         expect(instance.persistence?.props[key]).toBeUndefined()
         await host.dispose()
     })

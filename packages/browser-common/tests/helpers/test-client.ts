@@ -1,4 +1,4 @@
-import type { Logger } from '@posthog/core'
+import { isUndefined, type Logger } from '@posthog/core'
 import type { Properties } from '@posthog/types'
 
 import type {
@@ -39,24 +39,27 @@ export interface TestClientOptions {
 export class InMemoryKeyValueStore implements KeyValueStore {
     private _values = new Map<string, unknown>()
 
-    get<T = unknown>(key: string): Promise<T | undefined>
-    get<T extends object>(keys: readonly (keyof T & string)[]): Promise<Partial<T>>
-    async get(keyOrKeys: string | readonly string[]): Promise<unknown> {
+    initialize(): void {}
+
+    get<T = unknown>(key: string): T | undefined
+    get<T extends object>(keys: readonly (keyof T & string)[]): Partial<T>
+    get(keyOrKeys: string | readonly string[]): unknown {
         if (typeof keyOrKeys === 'string') {
             return this._values.get(keyOrKeys)
         }
         const values: Record<string, unknown> = {}
         for (const key of keyOrKeys) {
-            if (this._values.has(key)) {
-                values[key] = this._values.get(key)
+            const value = this._values.get(key)
+            if (!isUndefined(value)) {
+                values[key] = value
             }
         }
         return values
     }
 
-    async set(key: string, value: unknown): Promise<void>
-    async set(values: Record<string, unknown>): Promise<void>
-    async set(keyOrValues: string | Record<string, unknown>, value?: unknown): Promise<void> {
+    set(key: string, value: unknown): void
+    set(values: Record<string, unknown>): void
+    set(keyOrValues: string | Record<string, unknown>, value?: unknown): void {
         if (typeof keyOrValues === 'string') {
             this._values.set(keyOrValues, value)
         } else {
@@ -66,7 +69,7 @@ export class InMemoryKeyValueStore implements KeyValueStore {
         }
     }
 
-    async remove(keyOrKeys: string | readonly string[]): Promise<void> {
+    remove(keyOrKeys: string | readonly string[]): void {
         if (typeof keyOrKeys === 'string') {
             this._values.delete(keyOrKeys)
         } else {
