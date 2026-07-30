@@ -1565,11 +1565,9 @@ export class PostHog implements PostHogInterface {
 
         // Surface the release id injected into the bundle by posthog-cli (`globalThis._posthogReleaseId`)
         // on every event, so the server resolves the release for exceptions with a plain foreign-key
-        // lookup and any metric can be broken down by release.
-        const releaseId = CoreErrorTracking.getInjectedReleaseId()
-        if (releaseId) {
-            properties['$release_id'] = releaseId
-        }
+        // lookup and any metric can be broken down by release. Always set (null when nothing was
+        // injected) so the property is consistently present on every event.
+        properties['$release_id'] = CoreErrorTracking.getInjectedReleaseId() ?? null
 
         if (this._inCookielessMode()) {
             // Set a flag to tell the plugin server to use cookieless server hash mode
