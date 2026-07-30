@@ -1,19 +1,4 @@
 {
   "version": 1,
-  "items": [
-    {
-      "id": "issue-4326-auto-none-no-comment-no-close-1785394966675",
-      "kind": "issue",
-      "number": 4326,
-      "mode": "auto",
-      "commandMention": "@posthog-watcher",
-      "enqueuedAt": "2026-07-30T07:02:46.675Z",
-      "source": {
-        "eventName": "issues",
-        "runId": 30521562647,
-        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/30521562647"
-      },
-      "attempts": 1
-    }
-  ]
+  "items": []
 }
