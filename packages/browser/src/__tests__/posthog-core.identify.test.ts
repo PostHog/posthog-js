@@ -215,8 +215,8 @@ describe('identify()', () => {
                         event: '$identify',
                     })
                 )
-                expect(instance.featureFlags.reloadFeatureFlags).toHaveBeenCalledTimes(1)
-                expect(instance.unregister).toHaveBeenCalledWith('$flag_call_reported')
+                expect(instance.featureFlags.reloadFeatureFlags).not.toHaveBeenCalled()
+                expect(instance.unregister).not.toHaveBeenCalledWith('$flag_call_reported')
             })
 
             it('captures exactly one $set event with properties and does not duplicate it on the next identify', () => {
@@ -233,6 +233,8 @@ describe('identify()', () => {
                         }),
                     })
                 )
+                expect(instance.featureFlags.reloadFeatureFlags).toHaveBeenCalledTimes(1)
+                expect(instance.unregister).not.toHaveBeenCalledWith('$flag_call_reported')
             })
 
             it('does not let an existing property cache suppress the identity-state transition event', () => {
@@ -246,6 +248,8 @@ describe('identify()', () => {
                 expect(beforeSendMock).toHaveBeenCalledTimes(1)
                 expect(beforeSendMock).toHaveBeenCalledWith(expect.objectContaining({ event: '$set' }))
                 expect(instance.persistence!.get_property(USER_STATE)).toBe('identified')
+                expect(instance.featureFlags.reloadFeatureFlags).toHaveBeenCalledTimes(1)
+                expect(instance.unregister).not.toHaveBeenCalledWith('$flag_call_reported')
             })
         })
 
