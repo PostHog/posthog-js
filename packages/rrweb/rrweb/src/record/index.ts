@@ -140,7 +140,9 @@ function estimateRetainedSize(value: unknown, ceiling: number): number {
         bytes += current.byteLength;
       } else if (Array.isArray(current)) {
         bytes += current.length * 8;
-        stack.push(...current);
+        for (const item of current) {
+          stack.push(item);
+        }
       } else {
         const record = current as Record<string, unknown>;
         const keys = Object.keys(record);
