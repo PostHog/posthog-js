@@ -1,5 +1,17 @@
 # posthog-node
 
+## 5.47.0
+
+### Minor Changes
+
+- [#4308](https://github.com/PostHog/posthog-js/pull/4308) [`6e7f3ae`](https://github.com/PostHog/posthog-js/commit/6e7f3aeaf65d66d015508aec0618c0d7fe505db5) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Emit the release id that posthog-cli injects into your bundle as `$release_id` on `$exception` events, so PostHog can attach exceptions to a release without joining through symbol sets. Adds `getInjectedReleaseId()` to `@posthog/core`. The property is only attached when an injected release id can be read.
+  (2026-07-30)
+
+### Patch Changes
+
+- Updated dependencies [[`6e7f3ae`](https://github.com/PostHog/posthog-js/commit/6e7f3aeaf65d66d015508aec0618c0d7fe505db5)]:
+  - @posthog/core@1.46.0
+
 ## 5.46.1
 
 ### Patch Changes
