@@ -1,5 +1,17 @@
 # posthog-ai
 
+## 8.6.0
+
+### Minor Changes
+
+- [#4335](https://github.com/PostHog/posthog-js/pull/4335) [`9a453b9`](https://github.com/PostHog/posthog-js/commit/9a453b9bd52fab2821b4f063f1759bdab78147a3) Thanks [@marco-g-pm](https://github.com/marco-g-pm)! - The OpenAI Agents SDK `groupId` now also maps to `$ai_session_id` on `$ai_trace` and span events, so grouped runs show up as sessions in PostHog AI observability. `$ai_group_id` is still emitted alongside it.
+  (2026-07-30)
+
+### Patch Changes
+
+- [#4336](https://github.com/PostHog/posthog-js/pull/4336) [`1eb04c1`](https://github.com/PostHog/posthog-js/commit/1eb04c1c2daa02019c42dd8c5f55476ebdb7c5c6) Thanks [@marco-g-pm](https://github.com/marco-g-pm)! - Fix LangChain spans being named after their class instead of the runnable. LangChain passes `runName` as a bare string, which the name resolver skipped because it only inspected object arguments, so every tool span was captured as `DynamicStructuredTool` rather than the tool's own name.
+  (2026-07-30)
+
 ## 8.5.0
 
 ### Minor Changes
