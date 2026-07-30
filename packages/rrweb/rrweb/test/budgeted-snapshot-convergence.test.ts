@@ -1144,6 +1144,66 @@ describe('time-sliced full snapshot converges on replay', () => {
     }
   });
 
+  it('tears down active observers after a synchronous checkout failure', async () => {
+    const page = await browser.newPage();
+    try {
+      await fakeGoto(page, `${serverURL}/html/convergence.html`);
+      await page.setContent(
+        buildHtml(
+          '<p class="rr-mask">fail only on checkout</p>',
+          0,
+          `
+            maskTextFn: function (text) {
+              if (window.__failSynchronousCheckout) {
+                throw new Error('injected synchronous checkout failure');
+              }
+              return text;
+            },
+          `,
+        ),
+      );
+      await page.waitForFunction('window.snapshots.some((e) => e.type === 2)');
+
+      const result = (await page.evaluate(`
+        (async function () {
+          window.__failSynchronousCheckout = true;
+          rrweb.record.takeFullSnapshot(true);
+          var countAfterFailure = window.snapshots.length;
+          var customEventRejected = false;
+          try {
+            rrweb.record.addCustomEvent('must-not-emit-after-checkout', {});
+          } catch (error) {
+            customEventRejected = true;
+          }
+          var marker = document.createElement('button');
+          marker.id = 'after-sync-checkout-failure';
+          document.body.appendChild(marker);
+          marker.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+          await new Promise(function (resolve) { setTimeout(resolve, 100); });
+          return {
+            countAfterFailure: countAfterFailure,
+            finalCount: window.snapshots.length,
+            customEventRejected: customEventRejected,
+            fullSnapshots: window.snapshots.filter(function (e) {
+              return e.type === 2;
+            }).length,
+          };
+        })()
+      `)) as {
+        countAfterFailure: number;
+        finalCount: number;
+        customEventRejected: boolean;
+        fullSnapshots: number;
+      };
+
+      expect(result.fullSnapshots).toBe(1);
+      expect(result.customEventRejected).toBe(true);
+      expect(result.finalCount).toBe(result.countAfterFailure);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('bounds held events and recovers instead of flushing a partial queue', async () => {
     const page = await browser.newPage();
     const errors: string[] = [];
