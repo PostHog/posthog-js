@@ -1,5 +1,5 @@
 import { addEventListener, entries, extend } from '@posthog/browser-common/utils/general-utils'
-import type { Client, Disposable, Extension } from '@posthog/browser-common'
+import type { ApiResponse, Client, Disposable, Extension } from '@posthog/browser-common'
 import {
     FlagsResponse,
     FeatureFlagsCallback,
@@ -286,9 +286,9 @@ export class PostHogFeatureFlags implements Extension {
     private _staleEventProperties: Record<string, unknown> = {}
     private _reloadingHandlers: Array<() => void> = []
     private _hasLoadedFlags: boolean = false
-    private _requestInFlight: boolean = false
+    // Latest request wins logically. Superseded transports are not aborted because Client does not expose cancellation yet.
+    private _requestInFlight?: Promise<ApiResponse>
     private _reloadingDisabled: boolean = false
-    private _additionalReloadRequested: boolean = false
     private _reloadDebouncer?: ReturnType<typeof setTimeout>
     private _flagsLoadedFromRemote: boolean = false
     private _staleCacheRefreshTriggered: boolean = false
@@ -332,6 +332,7 @@ export class PostHogFeatureFlags implements Extension {
             return
         }
         this._clearDebouncer()
+        this._requestInFlight = undefined
         this._dynamicProperties?.dispose()
         this._dynamicProperties = undefined
         this._reloadingHandlers = []
@@ -663,7 +664,7 @@ export class PostHogFeatureFlags implements Extension {
      *
      * Constraints:
      *
-     * 1. Avoid parallel requests
+     * 1. Supersede any active request so only the latest response can update state
      * 2. Delay a few milliseconds after each reloadFeatureFlags call to batch subsequent changes together
      */
     reloadFeatureFlags(): void {
@@ -681,6 +682,8 @@ export class PostHogFeatureFlags implements Extension {
             // If we're already in a debounce then we don't want to do anything
             return
         }
+
+        this._requestInFlight = undefined
 
         // Notify browser-v1 facade listeners before the debounced request starts.
         this._reloadingHandlers.slice().forEach((handler) => handler())
@@ -713,8 +716,6 @@ export class PostHogFeatureFlags implements Extension {
     }
 
     setAnonymousDistinctId(anon_distinct_id: string): void {
-        this._requestInFlight = false
-        this._additionalReloadRequested = false
         this.$anon_distinct_id = anon_distinct_id
     }
 
@@ -730,10 +731,6 @@ export class PostHogFeatureFlags implements Extension {
         this._clearDebouncer()
         const client = this._client
         if (!client || this._config.remoteRequestsDisabled || this._hasStatusZeroCircuitBreakerTripped()) {
-            return
-        }
-        if (this._requestInFlight) {
-            this._additionalReloadRequested = true
             return
         }
 
@@ -768,10 +765,11 @@ export class PostHogFeatureFlags implements Extension {
 
         const isPartialFlagsResponse = this._config.onlyEvaluateSurveyFeatureFlags
         const path = `/flags/?v=2${isPartialFlagsResponse ? '&only_evaluate_survey_feature_flags=true' : ''}`
-        this._requestInFlight = true
+        this._requestInFlight = undefined
+        let request: Promise<ApiResponse> | undefined
 
         try {
-            const response = await client.sendRequest(path, {
+            request = client.sendRequest(path, {
                 target: 'flags',
                 method: 'POST',
                 body: data,
@@ -779,15 +777,19 @@ export class PostHogFeatureFlags implements Extension {
                 sentAt: 'body',
                 timeoutMs: this._config.requestTimeoutMs,
             })
+            this._requestInFlight = request
+            const response = await request
+            if (this._requestInFlight !== request) {
+                return
+            }
 
             const json = (response.json ?? {}) as Partial<FlagsResponse> & { quotaLimited?: string[] }
             const errorsLoading = response.statusCode !== 200
             this._trackStatusZeroReachability(response.statusCode)
-            if (!errorsLoading && !this._additionalReloadRequested) {
+            if (!errorsLoading) {
                 this.$anon_distinct_id = undefined
             }
-            this._requestInFlight = false
-            if (data.disable_flags && !this._additionalReloadRequested) {
+            if (data.disable_flags) {
                 return
             }
             this._flagsLoadedFromRemote = !errorsLoading
@@ -812,6 +814,9 @@ export class PostHogFeatureFlags implements Extension {
                 flagErrors.push(FeatureFlagError.QUOTA_LIMITED)
             }
             await this._set({ [PERSISTENCE_FEATURE_FLAG_ERRORS]: flagErrors })
+            if (this._requestInFlight !== request) {
+                return
+            }
 
             if (isQuotaLimited) {
                 client.logger.warn(
@@ -819,20 +824,18 @@ export class PostHogFeatureFlags implements Extension {
                 )
                 return
             }
-            if (!data.disable_flags) {
-                await this._receivedFeatureFlags(json, errorsLoading, { partialResponse: isPartialFlagsResponse })
-            }
-            if (this._additionalReloadRequested) {
-                this._additionalReloadRequested = false
-                await this._callFlagsEndpoint()
-            }
+            await this._receivedFeatureFlags(json, errorsLoading, { partialResponse: isPartialFlagsResponse })
         } catch (error) {
-            this._requestInFlight = false
+            if (request && this._requestInFlight !== request) {
+                return
+            }
             await this._set({ [PERSISTENCE_FEATURE_FLAG_ERRORS]: [FeatureFlagError.CONNECTION_ERROR] })
-            client.logger.error('Feature flag request failed', error)
-            if (this._additionalReloadRequested) {
-                this._additionalReloadRequested = false
-                await this._callFlagsEndpoint()
+            if (!request || this._requestInFlight === request) {
+                client.logger.error('Feature flag request failed', error)
+            }
+        } finally {
+            if (request && this._requestInFlight === request) {
+                this._requestInFlight = undefined
             }
         }
     }
@@ -1643,9 +1646,8 @@ export class PostHogFeatureFlags implements Extension {
         this._state = {}
         this._rebuildEventProperties()
         this._hasLoadedFlags = false
-        this._requestInFlight = false
+        this._requestInFlight = undefined
         this._reloadingDisabled = false
-        this._additionalReloadRequested = false
         this._flagsLoadedFromRemote = false
         this.$anon_distinct_id = undefined
         this._clearDebouncer()
