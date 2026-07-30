@@ -51,7 +51,7 @@ export function getNativeImplementation<T extends keyof NativeImplementationsCac
                 // MutationObserver callbacks from its realm to be silently dropped.
                 // Keep the iframe alive for the lifetime of the cached constructor.
                 // See https://webkit.org/b/179224 and the equivalent rrweb fallback.
-                if (name === 'MutationObserver' && isSafari(assignableWindow)) {
+                if (name === 'MutationObserver' && isWebKit(assignableWindow)) {
                     sandbox.classList.add('rr-block', 'ph-no-capture')
                     keepSandboxAttached = true
                 }
@@ -75,9 +75,9 @@ export function getNativeImplementation<T extends keyof NativeImplementationsCac
     return (cachedImplementations[name] = impl.bind(assignableWindow) as NativeImplementationsCache[T])
 }
 
-function isSafari(assignableWindow: BrowserWindow): boolean {
+function isWebKit(assignableWindow: BrowserWindow): boolean {
     const userAgent = assignableWindow.navigator?.userAgent ?? ''
-    return userAgent.includes('Safari') && !userAgent.includes('Chrome')
+    return userAgent.includes('AppleWebKit') && !userAgent.includes('Chrome')
 }
 
 export function getNativeMutationObserverImplementation(assignableWindow: BrowserWindow): typeof MutationObserver {
