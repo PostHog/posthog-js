@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.409.5
+
+### Patch Changes
+
+- [#4354](https://github.com/PostHog/posthog-js/pull/4354) [`6c500f1`](https://github.com/PostHog/posthog-js/commit/6c500f1c3165834f71e524eb500fc64eb792ec0c) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Fail open when an error tracking suppression rule cannot be evaluated, so an unknown operator or a key outside `$exception_types` / `$exception_values` no longer drops the exception.
+  (2026-07-31)
+
 ## 1.409.4
 
 ### Patch Changes
