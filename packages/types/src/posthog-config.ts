@@ -590,6 +590,23 @@ export interface SessionRecordingOptions {
     maskInputFn?: ((text: string, element?: HTMLElement) => string) | null
 
     /**
+     * Derived from `rrweb.record` options. Coarse switch that masks the value of every
+     * DOM attribute (except a small set needed to render the page, e.g. `class`, `id`,
+     * `style`, `src`, `href`). For per-attribute control use `maskAttributeFn`.
+     * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     * @default false
+     */
+    maskAllElementAttributes?: boolean
+
+    /**
+     * Derived from `rrweb.record` options. Called with `(name, value, element)` for every
+     * DOM attribute so you can mask specific attributes (e.g. `aria-label`, `title`,
+     * `placeholder`) that may contain PII, while leaving the rest untouched.
+     * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     */
+    maskAttributeFn?: ((name: string, value: string, element?: HTMLElement) => string) | null
+
+    /**
      * Derived from `rrweb.record` options
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
      * @default {}

@@ -287,6 +287,62 @@ describe('form', () => {
   });
 });
 
+describe('attribute masking', () => {
+  const serializeWith = (
+    html: string,
+    selector: string,
+    opts: { maskAllElementAttributes?: boolean; maskAttributeFn?: (name: string, value: string, element: HTMLElement) => string },
+  ): elementNode => {
+    document.write(html);
+    const el = document.querySelector(selector)!;
+    return serializeNodeWithId(el, {
+      doc: document,
+      mirror: new Mirror(),
+      blockClass: 'blockblock',
+      blockSelector: null,
+      maskTextClass: 'maskmask',
+      maskTextSelector: null,
+      skipChild: false,
+      inlineStylesheet: true,
+      maskTextFn: undefined,
+      maskInputFn: undefined,
+      slimDOMOptions: {},
+      ...opts,
+    }) as elementNode;
+  };
+
+  it('leaves attributes untouched by default', () => {
+    const sn = serializeWith(`<div id="d1" class="c1" aria-label="Jane Doe" title="secret"></div>`, 'div', {});
+    expect(sn.attributes['aria-label']).toBe('Jane Doe');
+    expect(sn.attributes.title).toBe('secret');
+  });
+
+  it('maskAllElementAttributes masks non-structural attributes but leaves rendering-critical ones alone', () => {
+    const sn = serializeWith(
+      `<a id="a1" class="c1" href="/profile" aria-label="Jane Doe" title="secret"></a>`,
+      'a',
+      { maskAllElementAttributes: true },
+    );
+    expect(sn.attributes['aria-label']).toBe('*'.repeat('Jane Doe'.length));
+    expect(sn.attributes.title).toBe('*'.repeat('secret'.length));
+    // rendering-critical attributes are left alone so the recording still renders
+    expect(sn.attributes.id).toBe('a1');
+    expect(sn.attributes.class).toBe('c1');
+    expect(sn.attributes.href).toContain('/profile');
+  });
+
+  it('maskAttributeFn gives full control and takes precedence over maskAllElementAttributes', () => {
+    const maskAttributeFn = vi.fn((name: string, value: string) => (name === 'aria-label' ? 'REDACTED' : value));
+    const sn = serializeWith(`<div aria-label="Jane Doe" title="visible"></div>`, 'div', {
+      maskAllElementAttributes: true,
+      maskAttributeFn,
+    });
+    expect(sn.attributes['aria-label']).toBe('REDACTED');
+    expect(sn.attributes.title).toBe('visible');
+    expect(maskAttributeFn).toHaveBeenCalledWith('title', 'visible', expect.any(HTMLElement));
+  });
+});
+
 describe('blocked elements with CSS transforms', () => {
   const renderWithStyle = (html: string, styles: string): HTMLElement => {
     const styleEl = document.createElement('style');

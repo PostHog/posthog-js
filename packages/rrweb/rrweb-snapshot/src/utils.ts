@@ -1,5 +1,6 @@
 import type {
   idNodeMap,
+  MaskAttributeFn,
   MaskInputFn,
   MaskInputOptions,
   nodeMetaMap,
@@ -312,6 +313,46 @@ export function maskInputValue({
 
 export function toLowerCase<T extends string>(str: T): Lowercase<T> {
   return str.toLowerCase() as unknown as Lowercase<T>;
+}
+
+// attributes the replayer relies on to render the page at all - masking these
+// wouldn't protect PII, it would just break the recording, so `maskAllElementAttributes`
+// leaves them alone. `maskAttributeFn` is unrestricted, since the caller owns that decision.
+const UNMASKABLE_ATTRIBUTES = new Set([
+  'id',
+  'class',
+  'style',
+  'src',
+  'srcset',
+  'href',
+  'rel',
+  'type',
+  'value',
+]);
+
+export function maskAttributeValue({
+  element,
+  name,
+  value,
+  maskAllElementAttributes,
+  maskAttributeFn,
+}: {
+  element: HTMLElement;
+  name: string;
+  value: string | null;
+  maskAllElementAttributes: boolean;
+  maskAttributeFn: MaskAttributeFn | undefined;
+}): string | null {
+  if (!value) {
+    return value;
+  }
+  if (maskAttributeFn) {
+    return maskAttributeFn(name, value, element);
+  }
+  if (maskAllElementAttributes && !UNMASKABLE_ATTRIBUTES.has(toLowerCase(name))) {
+    return '*'.repeat(value.length);
+  }
+  return value;
 }
 
 const ORIGINAL_ATTRIBUTE_NAME = '__rrweb_original__';
