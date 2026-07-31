@@ -6175,6 +6175,64 @@ describe('fetch context handling', () => {
   })
 })
 
+describe('feature flag definition request timeout', () => {
+  let posthog: PostHog
+
+  jest.useFakeTimers()
+
+  afterEach(async () => {
+    jest.useRealTimers()
+    await posthog.shutdown()
+    jest.useFakeTimers()
+  })
+
+  it('aborts a hanging definitions request and lets reload and evaluation settle', async () => {
+    const signals: AbortSignal[] = []
+    const hangingFetch = jest.fn((_url: string, options: { signal?: AbortSignal }) => {
+      const signal = options.signal
+      if (!signal) {
+        throw new Error('Expected feature flag definition request to include an AbortSignal')
+      }
+      signals.push(signal)
+
+      return new Promise<Response>((_resolve, reject) => {
+        signal.addEventListener('abort', () => {
+          const error = new Error('The operation was aborted')
+          error.name = 'AbortError'
+          reject(error)
+        })
+      })
+    })
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: hangingFetch as any,
+      requestTimeout: 10,
+      ...posthogImmediateResolveOptions,
+    })
+
+    const reloadPromise = posthog.reloadFeatureFlags()
+    expect(signals).toHaveLength(1)
+
+    await jest.advanceTimersByTimeAsync(10)
+
+    expect(signals[0].aborted).toBe(true)
+    await expect(reloadPromise).resolves.toBeUndefined()
+
+    const evaluationPromise = posthog.getFeatureFlag('missing-flag', 'distinct-id', {
+      onlyEvaluateLocally: true,
+      sendFeatureFlagEvents: false,
+    })
+    expect(signals).toHaveLength(2)
+
+    await jest.advanceTimersByTimeAsync(10)
+
+    expect(signals[1].aborted).toBe(true)
+    await expect(evaluationPromise).resolves.toBeUndefined()
+  })
+})
+
 describe('ETag support for local evaluation polling', () => {
   let posthog: PostHog
 

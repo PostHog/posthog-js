@@ -998,7 +998,7 @@ class FeatureFlagsPoller {
     }
   }
 
-  _requestFeatureFlagDefinitions(): Promise<PostHogFetchResponse> {
+  async _requestFeatureFlagDefinitions(): Promise<PostHogFetchResponse> {
     const url = `${this.host}/flags/definitions?token=${this.projectApiKey}&send_cohorts`
 
     const options = this.getPersonalApiKeyRequestOptions('GET', this.flagsEtag)
@@ -1017,7 +1017,7 @@ class FeatureFlagsPoller {
       // Unbind fetch from `this` to avoid potential issues in edge environments, e.g., Cloudflare Workers:
       // https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors
       const fetch = this.fetch
-      return fetch(url, options)
+      return await fetch(url, options)
     } finally {
       clearTimeout(abortTimeout)
     }
