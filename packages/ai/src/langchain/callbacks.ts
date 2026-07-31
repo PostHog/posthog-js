@@ -429,12 +429,16 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     } else if (outputs !== undefined) {
       eventProperties['$ai_output_state'] = withPrivacyMode(this.client, this.privacyMode, sanitizeLangChain(outputs))
     }
-    this.client.capture({
-      distinctId: this.distinctId ? this.distinctId.toString() : runId,
-      event: eventName,
-      properties: eventProperties,
-      groups: this.groups,
-    })
+    try {
+      this.client.capture({
+        distinctId: this.distinctId ? this.distinctId.toString() : runId,
+        event: eventName,
+        properties: eventProperties,
+        groups: this.groups,
+      })
+    } catch {
+      // Telemetry delivery must never affect the LangChain callback lifecycle.
+    }
   }
 
   private _popRunAndCaptureGeneration(
@@ -545,12 +549,16 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       eventProperties['$process_person_profile'] = false
     }
 
-    this.client.capture({
-      distinctId: this.distinctId ? this.distinctId.toString() : traceId,
-      event: '$ai_generation',
-      properties: eventProperties,
-      groups: this.groups,
-    })
+    try {
+      this.client.capture({
+        distinctId: this.distinctId ? this.distinctId.toString() : traceId,
+        event: '$ai_generation',
+        properties: eventProperties,
+        groups: this.groups,
+      })
+    } catch {
+      // Telemetry delivery must never affect the LangChain callback lifecycle.
+    }
   }
 
   private _logDebugEvent(eventName: string, runId: string, parentRunId: string | undefined, extra: any): void {

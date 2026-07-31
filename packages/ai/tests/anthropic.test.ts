@@ -810,6 +810,41 @@ describe('PostHogAnthropic', () => {
     })
   })
 
+  describe('Telemetry failure isolation', () => {
+    test('preserves the provider result when captureImmediate rejects', async () => {
+      ;(mockPostHogClient.captureImmediate as jest.Mock).mockRejectedValue(new Error('telemetry failed'))
+
+      const response = await client.messages.create({
+        model: 'claude-3-opus-20240229',
+        messages: [{ role: 'user', content: 'Hello' }],
+        max_tokens: 100,
+        posthogCaptureImmediate: true,
+      })
+
+      expect(response).toBe(mockResponse)
+      expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
+    })
+
+    test('preserves the provider error when captureImmediate rejects', async () => {
+      const providerError = new Error('provider failed')
+      const MessagesMock = AnthropicOriginal.Messages as jest.MockedClass<typeof AnthropicOriginal.Messages>
+      ;(MessagesMock.prototype.create as jest.Mock) = jest.fn().mockRejectedValue(providerError)
+      ;(mockPostHogClient.captureImmediate as jest.Mock).mockRejectedValue(new Error('telemetry failed'))
+
+      const rejection = await client.messages
+        .create({
+          model: 'claude-3-opus-20240229',
+          messages: [{ role: 'user', content: 'Hello' }],
+          max_tokens: 100,
+          posthogCaptureImmediate: true,
+        })
+        .catch((error: unknown) => error)
+
+      expect(rejection).toBe(providerError)
+      expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
+    })
+  })
+
   describe('Error Handling', () => {
     conditionalTest('should handle API errors', async () => {
       const apiError = new Error('API Error') as Error & { status: number }

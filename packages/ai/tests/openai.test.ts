@@ -542,6 +542,37 @@ describe('PostHogOpenAI - Jest test suite', () => {
     expect(settled).toBe(true)
   })
 
+  test('chat completions preserve the provider result when captureImmediate rejects', async () => {
+    ;(mockPostHogClient.captureImmediate as jest.Mock).mockRejectedValue(new Error('telemetry failed'))
+
+    const response = await client.chat.completions.create({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: 'Hello' }],
+      posthogCaptureImmediate: true,
+    })
+
+    expect(response).toBe(mockOpenAiChatResponse)
+    expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
+  })
+
+  test('chat completions preserve the provider error when captureImmediate rejects', async () => {
+    const providerError = new Error('provider failed')
+    const ChatMock: any = openaiModule.Chat
+    ;(ChatMock.Completions as any).prototype.create = jest.fn().mockRejectedValue(providerError)
+    ;(mockPostHogClient.captureImmediate as jest.Mock).mockRejectedValue(new Error('telemetry failed'))
+
+    const rejection = await client.chat.completions
+      .create({
+        model: 'gpt-4',
+        messages: [{ role: 'user', content: 'Hello' }],
+        posthogCaptureImmediate: true,
+      })
+      .catch((error: unknown) => error)
+
+    expect(rejection).toBe(providerError)
+    expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
+  })
+
   conditionalTest('groups', async () => {
     await client.chat.completions.create({
       model: 'gpt-4',

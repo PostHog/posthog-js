@@ -98,6 +98,27 @@ describe('captureAiGeneration', () => {
     expect(client.captureImmediate).toHaveBeenCalledTimes(1)
   })
 
+  it('swallows synchronous capture delivery failures', async () => {
+    const client = buildClient()
+    client.capture.mockImplementation(() => {
+      throw new Error('capture failed')
+    })
+
+    await expect(captureAiGeneration(client, baseRequiredOptions)).resolves.toBeUndefined()
+    expect(client.capture).toHaveBeenCalledTimes(1)
+  })
+
+  it('awaits the immediate delivery attempt but swallows its rejection', async () => {
+    const client = buildClient()
+    client.captureImmediate.mockRejectedValue(new Error('captureImmediate failed'))
+
+    await expect(
+      captureAiGeneration(client, { ...baseRequiredOptions, captureImmediate: true })
+    ).resolves.toBeUndefined()
+    expect(client.captureImmediate).toHaveBeenCalledTimes(1)
+    expect(client.capture).not.toHaveBeenCalled()
+  })
+
   it('redacts input and output when privacyMode is true', async () => {
     const client = buildClient()
 

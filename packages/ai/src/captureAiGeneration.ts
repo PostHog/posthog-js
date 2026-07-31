@@ -190,9 +190,13 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
     groups: options.groups,
   }
 
-  if (options.captureImmediate) {
-    await client.captureImmediate(event)
-  } else {
-    client.capture(event)
+  try {
+    if (options.captureImmediate) {
+      await client.captureImmediate(event)
+    } else {
+      client.capture(event)
+    }
+  } catch {
+    // Telemetry delivery must never affect the instrumented provider call.
   }
 }
