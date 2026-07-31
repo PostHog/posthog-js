@@ -3,7 +3,9 @@
 // Licensed under the MIT License: https://github.com/getsentry/sentry-javascript/blob/develop/LICENSE
 
 import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
-import { createReadStream } from 'node:fs'
+import { constants } from 'node:fs'
+import { open, realpath, stat, type FileHandle } from 'node:fs/promises'
+import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { createInterface } from 'node:readline'
 
 const LRU_FILE_CONTENTS_CACHE = new CoreErrorTracking.ReduceableCache<string, Record<number, string>>(25)
@@ -14,11 +16,14 @@ const DEFAULT_LINES_OF_CONTEXT = 7
 // Exported for testing purposes.
 export const MAX_CONTEXTLINES_COLNO: number = 1000
 export const MAX_CONTEXTLINES_LINENO: number = 10000
+export const MAX_CONTEXTLINES_FILE_SIZE: number = 10 * 1024 * 1024
 
 type ReadlineRange = [start: number, end: number]
+type OpenSourceFile = (path: string, flags: number) => Promise<FileHandle>
 
 export async function addSourceContext(
-  frames: CoreErrorTracking.StackFrame[]
+  frames: CoreErrorTracking.StackFrame[],
+  openSourceFile: OpenSourceFile = open
 ): Promise<CoreErrorTracking.StackFrame[]> {
   // keep a lookup map of which files we've already enqueued to read,
   // so we don't enqueue the same file multiple times which would cause multiple i/o reads
@@ -52,10 +57,22 @@ export async function addSourceContext(
     return frames
   }
 
+  let projectRoot: string
+  try {
+    projectRoot = await realpath(process.cwd())
+  } catch {
+    return frames
+  }
+  if (resolve(projectRoot, '..') === projectRoot) {
+    return frames
+  }
+
   const readlinePromises: Promise<void>[] = []
   for (const file of files) {
+    const cacheKey = makeCacheKey(projectRoot, file)
+
     // If we failed to read this before, dont try reading it again.
-    if (LRU_FILE_CONTENTS_FS_READ_FAILED.get(file)) {
+    if (LRU_FILE_CONTENTS_FS_READ_FAILED.get(cacheKey)) {
       continue
     }
 
@@ -68,12 +85,12 @@ export async function addSourceContext(
     filesToLineRanges.sort((a, b) => a - b)
     // Check if the contents are already in the cache and if we can avoid reading the file again.
     const ranges = makeLineReaderRanges(filesToLineRanges)
-    if (ranges.every((r) => rangeExistsInContentCache(file, r))) {
+    if (ranges.every((r) => rangeExistsInContentCache(cacheKey, r))) {
       continue
     }
 
-    const cache = emplace(LRU_FILE_CONTENTS_CACHE, file, {})
-    readlinePromises.push(getContextLinesFromFile(file, ranges, cache))
+    const cache = emplace(LRU_FILE_CONTENTS_CACHE, cacheKey, {})
+    readlinePromises.push(getContextLinesFromFile(file, ranges, cache, cacheKey, projectRoot, openSourceFile))
   }
 
   // The promise rejections are caught in order to prevent them from short circuiting Promise.all
@@ -82,7 +99,7 @@ export async function addSourceContext(
   // Perform the same loop as above, but this time we can assume all files are in the cache
   // and attempt to add source context to frames.
   if (frames && frames.length > 0) {
-    addSourceContextToFrames(frames, LRU_FILE_CONTENTS_CACHE)
+    addSourceContextToFrames(frames, LRU_FILE_CONTENTS_CACHE, projectRoot)
   }
 
   // Once we're finished processing an exception reduce the files held in the cache
@@ -93,24 +110,104 @@ export async function addSourceContext(
 }
 
 /**
+ * Check whether a path is contained by the application root.
+ */
+function isPathWithinRoot(path: string, projectRoot: string): boolean {
+  const relativePath = relative(projectRoot, path)
+  return relativePath !== '..' && !relativePath.startsWith(`..${sep}`) && !isAbsolute(relativePath)
+}
+
+/**
+ * Open a source file without allowing a parsed stack frame to escape the application root.
+ *
+ * O_NOFOLLOW rejects a final symlink. After opening, the descriptor's identity is compared with the
+ * canonical path currently reachable inside the root. This also detects intermediate symlink or path
+ * replacement between opening and validation. File type, size, and content reads use the returned descriptor.
+ */
+async function openSafeSourceFile(
+  path: string,
+  projectRoot: string,
+  openSourceFile: OpenSourceFile
+): Promise<FileHandle | undefined> {
+  const candidatePath = resolve(projectRoot, path)
+  if (!isPathWithinRoot(candidatePath, projectRoot)) {
+    return undefined
+  }
+
+  let fileHandle: FileHandle | undefined
+  let isSafe = false
+  try {
+    fileHandle = await openSourceFile(candidatePath, constants.O_RDONLY | constants.O_NOFOLLOW)
+    const fileStat = await fileHandle.stat()
+    if (!fileStat.isFile() || fileStat.size > MAX_CONTEXTLINES_FILE_SIZE) {
+      return undefined
+    }
+
+    const resolvedPath = await realpath(candidatePath)
+    if (!isPathWithinRoot(resolvedPath, projectRoot)) {
+      return undefined
+    }
+
+    // Node does not expose openat2-style path resolution. Comparing the opened descriptor's identity
+    // with the canonical in-root path ensures that validation applies to the file we will actually read.
+    const resolvedPathStat = await stat(resolvedPath)
+    if (fileStat.dev !== resolvedPathStat.dev || fileStat.ino !== resolvedPathStat.ino) {
+      return undefined
+    }
+
+    isSafe = true
+    return fileHandle
+  } catch {
+    return undefined
+  } finally {
+    if (fileHandle && !isSafe) {
+      await fileHandle.close().catch(() => {})
+    }
+  }
+}
+
+/**
  * Extracts lines from a file and stores them in a cache.
  */
-function getContextLinesFromFile(path: string, ranges: ReadlineRange[], output: Record<number, string>): Promise<void> {
+async function getContextLinesFromFile(
+  path: string,
+  ranges: ReadlineRange[],
+  output: Record<number, string>,
+  cacheKey: string,
+  projectRoot: string,
+  openSourceFile: OpenSourceFile
+): Promise<void> {
+  const fileHandle = await openSafeSourceFile(path, projectRoot, openSourceFile)
+  if (fileHandle === undefined) {
+    LRU_FILE_CONTENTS_FS_READ_FAILED.set(cacheKey, 1)
+    return
+  }
+  const openedFileHandle = fileHandle
+
   return new Promise((resolve) => {
     // It is important *not* to have any async code between createInterface and the 'line' event listener
     // as it will cause the 'line' event to
     // be emitted before the listener is attached.
-    const stream = createReadStream(path)
+    const stream = openedFileHandle.createReadStream({
+      autoClose: false,
+      start: 0,
+      end: MAX_CONTEXTLINES_FILE_SIZE - 1,
+    })
     const lineReaded = createInterface({
       input: stream,
     })
+    let finished = false
 
-    // We need to explicitly destroy the stream to prevent memory leaks,
+    // We need to explicitly destroy the stream and close its descriptor to prevent memory leaks,
     // removing the listeners on the readline interface is not enough.
     // Otherwise, repeated exception captures can keep opening the same files without closing them.
     function destroyStreamAndResolve(): void {
+      if (finished) {
+        return
+      }
+      finished = true
       stream.destroy()
-      resolve()
+      void openedFileHandle.close().then(resolve, resolve)
     }
 
     // Init at zero and increment at the start of the loop because lines are 1 indexed.
@@ -128,8 +225,8 @@ function getContextLinesFromFile(path: string, ranges: ReadlineRange[], output: 
     // We use this inside Promise.all, so we need to resolve the promise even if there is an error
     // to prevent Promise.all from short circuiting the rest.
     function onStreamError(): void {
-      // Mark file path as failed to read and prevent multiple read attempts.
-      LRU_FILE_CONTENTS_FS_READ_FAILED.set(path, 1)
+      // Mark this file under the current project root as failed to prevent repeated read attempts.
+      LRU_FILE_CONTENTS_FS_READ_FAILED.set(cacheKey, 1)
       lineReaded.close()
       lineReaded.removeAllListeners()
       destroyStreamAndResolve()
@@ -175,12 +272,13 @@ function getContextLinesFromFile(path: string, ranges: ReadlineRange[], output: 
 /** Adds context lines to frames */
 function addSourceContextToFrames(
   frames: CoreErrorTracking.StackFrame[],
-  cache: CoreErrorTracking.ReduceableCache<string, Record<number, string>>
+  cache: CoreErrorTracking.ReduceableCache<string, Record<number, string>>,
+  projectRoot: string
 ): void {
   for (const frame of frames) {
     // Only add context if we have a filename and it hasn't already been added
     if (frame.filename && frame.context_line === undefined && typeof frame.lineno === 'number') {
-      const contents = cache.get(frame.filename)
+      const contents = cache.get(makeCacheKey(projectRoot, frame.filename))
       if (contents === undefined) {
         continue
       }
@@ -281,10 +379,17 @@ function shouldSkipContextLinesForFrame(frame: CoreErrorTracking.StackFrame): bo
 }
 
 /**
+ * Scopes cached results to the canonical project root used to validate the source path.
+ */
+function makeCacheKey(projectRoot: string, file: string): string {
+  return JSON.stringify([projectRoot, file])
+}
+
+/**
  * Checks if we have all the contents that we need in the cache.
  */
-function rangeExistsInContentCache(file: string, range: ReadlineRange): boolean {
-  const contents = LRU_FILE_CONTENTS_CACHE.get(file)
+function rangeExistsInContentCache(cacheKey: string, range: ReadlineRange): boolean {
+  const contents = LRU_FILE_CONTENTS_CACHE.get(cacheKey)
   if (contents === undefined) {
     return false
   }
