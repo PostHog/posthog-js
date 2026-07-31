@@ -4443,7 +4443,7 @@
           "name": "linkedFlag"
         },
         {
-          "type": "Pick<SessionRecordingOptions, \"maskAllInputs\" | \"maskTextSelector\" | \"blockSelector\">",
+          "type": "Pick<SessionRecordingOptions, \"maskAllInputs\" | \"maskTextSelector\" | \"blockSelector\" | \"maskAllElementAttributes\">",
           "name": "masking"
         },
         {
