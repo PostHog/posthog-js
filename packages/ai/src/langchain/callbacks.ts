@@ -13,6 +13,10 @@ import { sanitizeLangChain } from '../sanitization'
 import { stringifyError } from '../serializeError'
 import { warnIfPostHogAiGateway } from '../gatewayWarning'
 
+// Mirror LangGraph's cross-package-safe guard without adding LangGraph as a dependency.
+const isLangGraphInterrupt = (error: Error): boolean =>
+  error.name === 'GraphInterrupt' || error.name === 'NodeInterrupt'
+
 interface SpanMetadata {
   /** Name of the trace/span (e.g. chain name) */
   name: string
@@ -424,8 +428,10 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       eventProperties['$process_person_profile'] = false
     }
     if (outputs instanceof Error) {
-      eventProperties['$ai_error'] = stringifyError(outputs)
-      eventProperties['$ai_is_error'] = true
+      if (!isLangGraphInterrupt(outputs)) {
+        eventProperties['$ai_error'] = stringifyError(outputs)
+        eventProperties['$ai_is_error'] = true
+      }
     } else if (outputs !== undefined) {
       eventProperties['$ai_output_state'] = withPrivacyMode(this.client, this.privacyMode, sanitizeLangChain(outputs))
     }
