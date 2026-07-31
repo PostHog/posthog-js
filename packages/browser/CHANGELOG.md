@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.409.3
+
+### Patch Changes
+
+- [#4312](https://github.com/PostHog/posthog-js/pull/4312) [`4729871`](https://github.com/PostHog/posthog-js/commit/4729871f833c1f83c28e13994a97889802999708) Thanks [@darkopia](https://github.com/darkopia)! - Fix hosted (external) surveys with URL prefill: the auto-submitted response now includes caller-provided event properties (extra URL query params), and a later manual submit no longer clears the prefilled answer from the partial-response merge.
+  (2026-07-31)
+
 ## 1.409.2
 
 ### Patch Changes
