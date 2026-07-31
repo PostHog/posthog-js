@@ -66,6 +66,79 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         featureFlags.dispose()
     })
 
+    it('enriches ordinary capture and direct calculation without enriching snapshots', async () => {
+        const posthog = await createPosthogInstance(undefined, {
+            advanced_disable_feature_flags: true,
+            request_batching: true,
+            before_send: (event) => event,
+        })
+        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+        await featureFlags.setup(posthog._getBrowserClientAdapter())
+        posthog.persistence?.register({
+            $feature_flag_request_id: 'request-id',
+            $override_feature_flags: { overridden: true },
+        })
+        featureFlags.updateFlags(
+            { active: true, variant: 'control' },
+            { active: { configured: true }, variant: 'payload' }
+        )
+
+        const enqueue = jest.spyOn(posthog._requestQueue!, 'enqueue')
+        posthog.capture('$snapshot', { explicitly_supplied: 'snapshot-value' })
+        posthog.capture('ordinary-event')
+
+        expect(enqueue).toHaveBeenNthCalledWith(
+            1,
+            expect.objectContaining({
+                data: expect.objectContaining({
+                    event: '$snapshot',
+                    properties: expect.objectContaining({ explicitly_supplied: 'snapshot-value' }),
+                }),
+            })
+        )
+        const snapshotProperties = enqueue.mock.calls[0][0].data.properties
+        for (const property of [
+            '$active_feature_flags',
+            '$feature_flag_payloads',
+            '$feature_flag_request_id',
+            '$override_feature_flags',
+            '$feature/active',
+            '$feature/variant',
+        ]) {
+            expect(snapshotProperties).not.toHaveProperty(property)
+        }
+
+        expect(enqueue).toHaveBeenNthCalledWith(
+            2,
+            expect.objectContaining({
+                data: expect.objectContaining({
+                    event: 'ordinary-event',
+                    properties: expect.objectContaining({
+                        $active_feature_flags: ['active', 'variant'],
+                        $feature_flag_payloads: {
+                            active: { configured: true },
+                            variant: 'payload',
+                        },
+                        $feature_flag_request_id: 'request-id',
+                        $override_feature_flags: { overridden: true },
+                        '$feature/active': true,
+                        '$feature/variant': 'control',
+                    }),
+                }),
+            })
+        )
+
+        expect(posthog.calculateEventProperties('segment-event', {})).toEqual(
+            expect.objectContaining({
+                $active_feature_flags: ['active', 'variant'],
+                $feature_flag_request_id: 'request-id',
+                '$feature/active': true,
+                '$feature/variant': 'control',
+            })
+        )
+        featureFlags.dispose()
+    })
+
     it('uses flags transport semantics and semantic request configuration', async () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
         const client = posthog._getBrowserClientAdapter()
