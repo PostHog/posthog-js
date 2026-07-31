@@ -1013,13 +1013,41 @@ class FeatureFlagsPoller {
       options.signal = controller.signal
     }
 
+    const clearAbortTimeout = () => clearTimeout(abortTimeout)
+
     try {
       // Unbind fetch from `this` to avoid potential issues in edge environments, e.g., Cloudflare Workers:
       // https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors
       const fetch = this.fetch
-      return await fetch(url, options)
-    } finally {
-      clearTimeout(abortTimeout)
+      const res = await fetch(url, options)
+
+      if (res.status !== 200) {
+        clearAbortTimeout()
+        return res
+      }
+
+      return {
+        status: res.status,
+        headers: res.headers,
+        body: res.body,
+        text: async () => {
+          try {
+            return await res.text()
+          } finally {
+            clearAbortTimeout()
+          }
+        },
+        json: async () => {
+          try {
+            return await res.json()
+          } finally {
+            clearAbortTimeout()
+          }
+        },
+      }
+    } catch (err) {
+      clearAbortTimeout()
+      throw err
     }
   }
 
