@@ -463,6 +463,7 @@ export class PostHog implements PostHogInterface {
     private readonly _extensionEventPropertyProducers: Array<() => Record<string, unknown>> = []
     private _browserClientAdapter: BrowserClientAdapter | undefined
     private _featureFlagsConfigSource: MutableFeatureFlagsConfigSource | undefined
+    private _featureFlagsReloadingUnsubscribe: (() => void) | undefined
 
     private _replaceExtension<T extends Extension>(oldExt: T | undefined, newExt: T): T {
         if (oldExt) {
@@ -887,9 +888,16 @@ export class PostHog implements PostHogInterface {
         }
         this._featureFlagsConfigSource ??= new MutableFeatureFlagsConfigSource(this.config, this._shouldDisableFlags())
         if (!this.featureFlags || !(this.featureFlags instanceof FeatureFlagsClass)) {
+            this._featureFlagsReloadingUnsubscribe?.()
+            this._featureFlagsReloadingUnsubscribe = undefined
             this.featureFlags = new FeatureFlagsClass(this._featureFlagsConfigSource)
         }
-        void this._getBrowserClientAdapter().add(this.featureFlags)
+        if (!this._featureFlagsReloadingUnsubscribe) {
+            this._featureFlagsReloadingUnsubscribe = this.featureFlags.onReloading(() => {
+                this._internalEventEmitter.emit('featureFlagsReloading', true)
+            })
+            void this._getBrowserClientAdapter().add(this.featureFlags)
+        }
     }
 
     private _initExtensions(startInCookielessMode: boolean): void {
@@ -2304,9 +2312,6 @@ export class PostHog implements PostHogInterface {
      * @returns {Function} A function that can be called to unsubscribe the listener.
      */
     on(event: 'eventCaptured' | 'featureFlagsReloading', cb: (...args: any[]) => void): () => void {
-        if (event === 'featureFlagsReloading' && this.featureFlags) {
-            return this.featureFlags.onReloading(cb)
-        }
         return this._internalEventEmitter.on(event, cb)
     }
 

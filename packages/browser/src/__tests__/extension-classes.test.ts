@@ -1,6 +1,6 @@
 import { PostHog } from '../posthog-core'
 import { PostHogConfig, RemoteConfig, RemoteConfigResult } from '../types'
-import { AllExtensions } from '../extensions/extension-bundles'
+import { AllExtensions, FeatureFlagsExtensions } from '../extensions/extension-bundles'
 import { Autocapture } from '../autocapture'
 import { PostHogFeatureFlags } from '../posthog-featureflags'
 import { SessionRecording } from '../extensions/replay/session-recording'
@@ -110,6 +110,122 @@ describe('__extensionClasses enrollment', () => {
         expect(posthog.logs).toBeUndefined()
         expect(posthog.experiments).toBeUndefined()
         expect(posthog.exceptions).toBeUndefined()
+    })
+
+    it('preserves feature flag reloading subscriptions across slim initialization', async () => {
+        jest.useFakeTimers()
+        try {
+            PostHog.__defaultExtensionClasses = {}
+            const token = uuidv7()
+            assignableWindow._POSTHOG_REMOTE_CONFIG = {
+                [token]: { config: { hasFeatureFlags: true }, siteApps: [] },
+            } as any
+
+            const posthog = new PostHog()
+            const beforeInitCallback = jest.fn()
+            const unsubscribeBeforeInit = posthog.on('featureFlagsReloading', beforeInitCallback)
+
+            expect(posthog.featureFlags).toBeUndefined()
+
+            posthog.init(token, {
+                __extensionClasses: FeatureFlagsExtensions,
+                capture_pageview: false,
+                remote_config_refresh_interval_ms: 0,
+                loaded: (instance) => {
+                    instance._send_request = jest.fn(({ callback }) =>
+                        callback?.({ statusCode: 200, json: { flags: [] } })
+                    )
+                },
+            })
+
+            expect(posthog.featureFlags).toBeInstanceOf(PostHogFeatureFlags)
+            expect(beforeInitCallback).toHaveBeenCalledTimes(1)
+            expect(beforeInitCallback).toHaveBeenLastCalledWith(true)
+
+            const afterInitCallback = jest.fn()
+            const unsubscribeAfterInit = posthog.on('featureFlagsReloading', afterInitCallback)
+
+            await jest.advanceTimersByTimeAsync(10)
+            posthog.reloadFeatureFlags()
+
+            expect(beforeInitCallback).toHaveBeenCalledTimes(2)
+            expect(beforeInitCallback).toHaveBeenLastCalledWith(true)
+            expect(afterInitCallback).toHaveBeenCalledTimes(1)
+            expect(afterInitCallback).toHaveBeenLastCalledWith(true)
+
+            await jest.advanceTimersByTimeAsync(10)
+            unsubscribeBeforeInit()
+            posthog.reloadFeatureFlags()
+
+            expect(beforeInitCallback).toHaveBeenCalledTimes(2)
+            expect(afterInitCallback).toHaveBeenCalledTimes(2)
+            expect(afterInitCallback).toHaveBeenLastCalledWith(true)
+
+            await jest.advanceTimersByTimeAsync(10)
+            unsubscribeAfterInit()
+            posthog.reloadFeatureFlags()
+
+            expect(beforeInitCallback).toHaveBeenCalledTimes(2)
+            expect(afterInitCallback).toHaveBeenCalledTimes(2)
+            posthog.featureFlags.reset()
+        } finally {
+            jest.clearAllTimers()
+            jest.useRealTimers()
+        }
+    })
+
+    it('emits feature flag reloading once for default extensions after init', async () => {
+        jest.useFakeTimers()
+        try {
+            PostHog.__defaultExtensionClasses = AllExtensions
+            const token = uuidv7()
+            assignableWindow._POSTHOG_REMOTE_CONFIG = {
+                [token]: { config: { hasFeatureFlags: true }, siteApps: [] },
+            } as any
+
+            const posthog = new PostHog()
+            posthog.init(token, {
+                capture_pageview: false,
+                remote_config_refresh_interval_ms: 0,
+                loaded: (instance) => {
+                    instance._send_request = jest.fn(({ callback }) =>
+                        callback?.({ statusCode: 200, json: { flags: [] } })
+                    )
+                },
+            })
+            await jest.advanceTimersByTimeAsync(10)
+
+            const callback = jest.fn()
+            posthog.on('featureFlagsReloading', callback)
+            posthog.reloadFeatureFlags()
+
+            expect(callback).toHaveBeenCalledTimes(1)
+            expect(callback).toHaveBeenCalledWith(true)
+            posthog.featureFlags.reset()
+        } finally {
+            jest.clearAllTimers()
+            jest.useRealTimers()
+        }
+    })
+
+    it('keeps one reloading bridge when feature flags are enrolled repeatedly', () => {
+        PostHog.__defaultExtensionClasses = FeatureFlagsExtensions
+        const posthog = new PostHog()
+        const add = jest.fn().mockResolvedValue(undefined)
+        posthog._getBrowserClientAdapter = jest.fn().mockReturnValue({ add }) as any
+
+        const enrollFeatureFlags = () => (posthog as any)._enrollFeatureFlags()
+        enrollFeatureFlags()
+        enrollFeatureFlags()
+
+        const callback = jest.fn()
+        posthog.on('featureFlagsReloading', callback)
+        posthog.featureFlags.reloadFeatureFlags()
+
+        expect(callback).toHaveBeenCalledTimes(1)
+        expect(callback).toHaveBeenCalledWith(true)
+        expect(add).toHaveBeenCalledTimes(1)
+        posthog.featureFlags.reset()
     })
 
     it('default extensions are used when __extensionClasses is not provided', async () => {
