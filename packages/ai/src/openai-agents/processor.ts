@@ -16,7 +16,7 @@ import type {
   SpeechSpanData,
   SpeechGroupSpanData,
   MCPListToolsSpanData,
-} from '@openai/agents-core'
+} from '@openai/agents'
 import { MAX_OUTPUT_SIZE, toContentString, truncate, utf8ByteLength, withPrivacyMode } from '../utils'
 import { version } from '../../package.json'
 import { warnIfPostHogAiGateway } from '../gatewayWarning'
