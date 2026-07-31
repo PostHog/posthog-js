@@ -1,4 +1,17 @@
 {
+  "PostHog/posthog-js/issue/4353": {
+    "key": "PostHog/posthog-js/issue/4353",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4353",
+    "url": "https://github.com/PostHog/posthog-js/issues/4353",
+    "conclusion": "Valid enhancement request, but true batch fetching requires a supporting PostHog API endpoint before SDK work can deliver the requested single network call.",
+    "labels": [
+      "enhancement",
+      "team/ai-observability"
+    ],
+    "closed": false,
+    "updatedAt": "2026-07-31T11:25:28.565Z"
+  },
   "PostHog/posthog-js/issue/4326": {
     "key": "PostHog/posthog-js/issue/4326",
     "repo": "PostHog/posthog-js",
