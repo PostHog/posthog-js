@@ -409,7 +409,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       $ai_lib: 'posthog-ai',
       $ai_lib_version: version,
       $ai_trace_id: traceId,
-      $ai_input_state: withPrivacyMode(this.client, this.privacyMode, run.input),
+      $ai_input_state: withPrivacyMode(this.client, this.privacyMode, sanitizeLangChain(run.input)),
       $ai_latency: latency,
       $ai_span_name: run.name,
       $ai_span_id: runId,
@@ -427,7 +427,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       eventProperties['$ai_error'] = stringifyError(outputs)
       eventProperties['$ai_is_error'] = true
     } else if (outputs !== undefined) {
-      eventProperties['$ai_output_state'] = withPrivacyMode(this.client, this.privacyMode, outputs)
+      eventProperties['$ai_output_state'] = withPrivacyMode(this.client, this.privacyMode, sanitizeLangChain(outputs))
     }
     this.client.capture({
       distinctId: this.distinctId ? this.distinctId.toString() : runId,
@@ -562,10 +562,17 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
   private _getLangchainRunName(serialized: any, ...args: any): string | undefined {
     if (args && args.length > 0) {
       for (const arg of args) {
-        if (arg && typeof arg === 'object' && 'name' in arg) {
-          return arg.name
-        } else if (arg && typeof arg === 'object' && 'runName' in arg) {
-          return arg.runName
+        // LangChain hands runName through as a bare string, not wrapped in an object
+        if (typeof arg === 'string' && arg) {
+          return arg
+        }
+        if (arg && typeof arg === 'object') {
+          if (arg.name) {
+            return arg.name
+          }
+          if (arg.runName) {
+            return arg.runName
+          }
         }
       }
     }

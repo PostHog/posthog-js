@@ -14,7 +14,7 @@ const sdk = new NodeSDK({
     }),
     spanProcessors: [
         new PostHogSpanProcessor({
-            apiKey: process.env.POSTHOG_API_KEY!,
+            projectToken: process.env.POSTHOG_API_KEY!,
             host: process.env.POSTHOG_HOST || 'https://us.i.posthog.com',
         }),
     ],

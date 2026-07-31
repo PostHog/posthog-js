@@ -51,6 +51,7 @@ const buildUmd = {
         file: 'dist/umd/index.js',
         name: 'PosthogReact',
         format: 'umd',
+        interop: 'compat',
         sourcemap: true,
         esModule: false,
         globals: {
@@ -92,6 +93,7 @@ const buildSlimUmd = {
         file: 'dist/umd/slim/index.js',
         name: 'PosthogReactSlim',
         format: 'umd',
+        interop: 'compat',
         sourcemap: true,
         esModule: false,
         globals: {
@@ -130,6 +132,7 @@ const buildSurveysUmd = {
         file: 'dist/umd/surveys/index.js',
         name: 'PosthogReactSurveys',
         format: 'umd',
+        interop: 'compat',
         sourcemap: true,
         esModule: false,
         globals: {

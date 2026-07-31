@@ -444,6 +444,40 @@ describe('config', () => {
             })
         })
 
+        it.each([
+            ['timestamp', '{"version":"1785400913428"}'],
+            [
+                'UUID containing an SSN-shaped substring',
+                '{"personalizationOptionId":"a2086e30-2564-40d2-b260-074641cd3b89"}',
+            ],
+        ])('does not redact a network body containing a %s', (_description, body) => {
+            const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'something',
+                requestBody: body,
+                responseBody: body,
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+            expect(cleaned).toEqual({
+                name: 'something',
+                requestBody: body,
+                responseBody: body,
+            })
+        })
+
+        it('does not capture SSN data in network bodies', () => {
+            const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'something',
+                requestBody: '{"ssn":"123-45-6789"}',
+                responseBody: '{"ssn":"123456789"}',
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+            expect(cleaned).toEqual({
+                name: 'something',
+                requestBody: '[SessionRecording] Request body redacted',
+                responseBody: '[SessionRecording] Response body redacted',
+            })
+        })
+
         it('does not capture CC data', () => {
             const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
             const cleaned = networkOptions.maskRequestFn!({

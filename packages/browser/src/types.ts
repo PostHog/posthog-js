@@ -6,7 +6,12 @@ import { PostHog } from './posthog-core'
 // only importing types here, so won't affect the bundle
 // eslint-disable-next-line posthog-js/no-external-replay-imports
 import type { SAMPLED } from './extensions/replay/external/triggerMatching'
-import { Compression, type RemoteConfig, type SessionRecordingRemoteConfig } from '@posthog/browser-common'
+import {
+    Compression,
+    type RemoteConfig,
+    type RemoteConfigResult as BrowserCommonRemoteConfigResult,
+    type SessionRecordingRemoteConfig,
+} from '@posthog/browser-common'
 
 // Extension class types for __extensionClasses (type-only, no bundle impact)
 import type { ExtensionConstructor } from './extensions/types'
@@ -65,6 +70,7 @@ export type { Headers, RequestResponse, RequestCallback } from '@posthog/types'
 // Session recording types
 export type {
     SessionRecordingCanvasOptions,
+    CanvasMaskRegion,
     InitiatorType,
     NetworkRequest,
     CapturedNetworkRequest,
@@ -239,7 +245,7 @@ export interface RequestWithOptions {
     compression?: Compression | 'best-available'
     /**
      * Controls where the request dispatch time is sent.
-     * - `body` adds ISO `sent_at` to the existing request object (for example, flags).
+     * - `body` adds ISO `sent_at` to the request object, or every object in an array (for example, flags and recordings).
      * - `capture-body` wraps events in `{ api_key, batch, sent_at }` with an ISO timestamp.
      * - `query` adds numeric `sent_at` to POST requests or cache-busting `_` to GET requests.
      */
@@ -302,7 +308,7 @@ export type SessionRecordingPersistedConfig = Omit<
  * Outcome of a remote config fetch: the config, or an explicit failure.
  * @internal
  */
-export type RemoteConfigResult = { ok: true; config: RemoteConfig } | { ok: false }
+export type RemoteConfigResult = BrowserCommonRemoteConfigResult
 
 /**
  * Flags returns feature flags and their payloads

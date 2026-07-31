@@ -4,6 +4,7 @@ WORKDIR /app
 
 # Copy the entire monorepo (needed for workspace dependencies)
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY patches ./patches
 COPY tooling ./tooling
 COPY packages/types ./packages/types
 COPY packages/core ./packages/core

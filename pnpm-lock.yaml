@@ -342,7 +342,7 @@ importers:
         specifier: ^1.5.5
         version: 1.5.5
       '@playwright/test':
-        specifier: ^1.52.0
+        specifier: 1.52.0
         version: 1.52.0
       '@posthog-tooling/rollup-utils':
         specifier: workspace:*
@@ -534,6 +534,9 @@ importers:
       jest:
         specifier: 'catalog:'
         version: 29.7.0(@types/node@26.1.1)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@26.1.1)(typescript@5.8.2))
+      jest-environment-jsdom:
+        specifier: 'catalog:'
+        version: 29.7.0
       ts-jest:
         specifier: 'catalog:'
         version: 29.4.11(@babel/core@7.28.5)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.29.7))(esbuild@0.25.10)(jest-util@29.7.0)(jest@29.7.0(@types/node@26.1.1)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@26.1.1)(typescript@5.8.2)))(typescript@5.8.2)
@@ -1606,6 +1609,10 @@ importers:
         version: 4.5.4(@types/node@26.1.1)(rollup@4.53.3)(typescript@5.8.2)(vite@6.4.2(@types/node@24.10.13)(jiti@2.6.1)(lightningcss@1.27.0)(terser@5.48.0)(yaml@2.8.0))
 
   packages/rrweb/utils:
+    dependencies:
+      '@posthog/core':
+        specifier: workspace:^
+        version: link:../../core
     devDependencies:
       vite:
         specifier: 'catalog:'

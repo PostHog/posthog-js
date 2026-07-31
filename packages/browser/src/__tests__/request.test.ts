@@ -270,20 +270,50 @@ describe('request', () => {
             })
         })
 
-        it('keeps session recording bodies unchanged and adds sent_at to the query', () => {
-            const recording = { event: '$snapshot' }
+        it('adds sent_at to an unbatched session recording body', () => {
             request(
                 createRequest({
                     url: 'https://any.posthog-instance.com/ingest/s/',
                     method: 'POST',
-                    data: recording,
-                    timestampMode: 'query',
+                    data: { event: '$snapshot' },
+                    timestampMode: 'body',
                 })
             )
 
             const [requestedUrl, requestOptions] = mockedFetch.mock.calls[0]
-            expect(requestedUrl).toBe('https://any.posthog-instance.com/ingest/s/?sent_at=1700000000000')
-            expect(JSON.parse(requestOptions.body)).toEqual(recording)
+            expect(requestedUrl).toBe('https://any.posthog-instance.com/ingest/s/')
+            expect(JSON.parse(requestOptions.body)).toEqual({
+                event: '$snapshot',
+                sent_at: '2023-11-14T22:13:20.000Z',
+            })
+        })
+
+        it('adds the same sent_at to every recording in a batched session recording body', () => {
+            const toISOString = jest
+                .spyOn(Date.prototype, 'toISOString')
+                .mockReturnValueOnce('2023-11-14T22:13:20.000Z')
+                .mockReturnValue('2023-11-14T22:13:21.000Z')
+
+            try {
+                request(
+                    createRequest({
+                        url: 'https://any.posthog-instance.com/ingest/s/',
+                        method: 'POST',
+                        data: [{ event: '$snapshot' }, { event: '$snapshot' }],
+                        timestampMode: 'body',
+                    })
+                )
+
+                const [requestedUrl, requestOptions] = mockedFetch.mock.calls[0]
+                expect(requestedUrl).toBe('https://any.posthog-instance.com/ingest/s/')
+                expect(JSON.parse(requestOptions.body)).toEqual([
+                    { event: '$snapshot', sent_at: '2023-11-14T22:13:20.000Z' },
+                    { event: '$snapshot', sent_at: '2023-11-14T22:13:20.000Z' },
+                ])
+                expect(toISOString).toHaveBeenCalledTimes(1)
+            } finally {
+                toISOString.mockRestore()
+            }
         })
 
         it('preserves caller-provided query parameters', () => {
@@ -1099,6 +1129,42 @@ describe('request', () => {
                             batch: [bigEvent(3), bigEvent(4)],
                             sent_at: '2023-11-14T22:13:20.000Z',
                         },
+                    ])
+                    expect(mockedFetch).not.toHaveBeenCalled()
+                })
+
+                it('adds sent_at to each split recording request body', async () => {
+                    mockedNavigator!.sendBeacon.mockReturnValueOnce(false).mockReturnValue(true)
+
+                    request(
+                        createRequest({
+                            method: 'POST',
+                            data: [bigEvent(1), bigEvent(2), bigEvent(3), bigEvent(4)],
+                            timestampMode: 'body',
+                        })
+                    )
+
+                    const splitBodies = await Promise.all(
+                        mockedNavigator!.sendBeacon.mock.calls.slice(1).map(async (call) => {
+                            const text = await new Promise<string>((resolve) => {
+                                const reader = new FileReader()
+                                reader.onload = () => resolve(reader.result as string)
+                                reader.readAsText(call[1] as Blob)
+                            })
+                            return JSON.parse(
+                                Buffer.from(decodeURIComponent(text.slice('data='.length)), 'base64').toString()
+                            )
+                        })
+                    )
+                    expect(splitBodies).toEqual([
+                        [
+                            { ...bigEvent(1), sent_at: '2023-11-14T22:13:20.000Z' },
+                            { ...bigEvent(2), sent_at: '2023-11-14T22:13:20.000Z' },
+                        ],
+                        [
+                            { ...bigEvent(3), sent_at: '2023-11-14T22:13:20.000Z' },
+                            { ...bigEvent(4), sent_at: '2023-11-14T22:13:20.000Z' },
+                        ],
                     ])
                     expect(mockedFetch).not.toHaveBeenCalled()
                 })

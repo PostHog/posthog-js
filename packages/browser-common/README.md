@@ -6,26 +6,22 @@ runtime, but it is not a public API surface and does not provide compatibility
 guarantees outside PostHog SDK packages.
 
 The shared extension contract includes the interface an extension implements
-(`Extension`), the host services it is handed (`Client`), the core analytics
-capability (`CoreExtension`), and small shared runtime primitives such as
-`Publisher`.
+(`Extension`), the host adapter it receives (`Client`), and small shared runtime
+primitives such as `Publisher`.
 
 This contract is designed so an extension can run unchanged across major
 versions of the web SDK. Concrete host adapters remain owned by their SDK
 packages; browser-v1 and browser-v2 composition and loading integration are
 separate from this shared runtime.
 
-A conforming SDK provides a _client adapter_ that implements `Client` over its
-own internals, so extension code never depends on a specific SDK.
-
 ## Concepts
 
 ### `Extension`
 
-What you implement. The host calls only `setup` and `dispose`:
+What you implement. The host calls `setup` once and optional `dispose` for final cleanup:
 
 ```ts
-import { CoreExtension, type Disposable, type Extension } from '@posthog/browser-common'
+import type { Disposable, Extension } from '@posthog/browser-common'
 
 export function webContext(): Extension {
     let removeProperties: Disposable | undefined
@@ -33,11 +29,7 @@ export function webContext(): Extension {
     return {
         name: 'webContext',
         setup(client) {
-            const core = client.getExtension(CoreExtension)
-            if (!core) {
-                throw new Error('CoreExtension is required')
-            }
-            removeProperties = core.registerDynamicEventProperties(() => ({
+            removeProperties = client.registerDynamicEventProperties(() => ({
                 $current_url: window.location.href,
             }))
         },
@@ -48,93 +40,64 @@ export function webContext(): Extension {
 }
 ```
 
-`setup(client)` may be async (read async state before you're ready); `dispose()`
-may be async (final flush). Static config the app sets goes in your constructor,
-not on the `Client`.
+`setup(client)` may be async to read state before the extension is ready. Async
+extensions must guard work after each `await` so cleanup cannot be followed by
+late listener or timer installation. `dispose()` is synchronous, optional,
+idempotent, and best-effort. Static app config goes in the constructor, not on
+`Client`.
 
 Anything in `setup` that returns a `Disposable` must be held by the extension
 and disposed in `dispose()`. Use `createDisposable(teardown)` when adapting a
-callback into idempotent teardown.
+synchronous callback into idempotent teardown.
 
 ### `Client`
 
-What an extension is given in `setup` — the host's extension services:
+What an extension is given in `setup` — the adapter shared by extensions on that host SDK instance:
 
-- **transport**: `projectToken`, `sendRequest(path, init?)`
-- **registry**: `getExtension(token)`
-- **storage & logging**: `kv`, `logger`
-
-### `CoreExtension`
-
-A conforming host must register one `CoreExtension` before setting up product
-extensions. Resolve it through `client.getExtension(CoreExtension)` for behavior
-owned by the PostHog client's analytics core:
-
-- **identity & session**: `distinctId`, `anonymousId`, `groups`, `session`
+- **identity and session**: `distinctId`, `anonymousId`, `groups`, `session`
 - **events**: `capture(...)`, `registerDynamicEventProperties(...)`, `onEvent(...)`
-- **lifecycle**: `onNewSession(...)`
-- **server config**: `getRemoteConfig()` (current), `onRemoteConfig(...)` (changes)
+- **server config**: `onRemoteConfig(...)`
+- **transport**: `projectToken`, `sendRequest(path, init?)`
+- **storage and logging**: `kv`, `logger`
 
 Identity, session, and the public project token are always-ready synchronous
-reads. Operations that perform I/O, including `capture`, `sendRequest`, `kv`,
-and `getRemoteConfig`, are awaitable.
+reads. Operations that may perform I/O, including `capture`, `sendRequest`,
+and `kv`, are awaitable. `onRemoteConfig` immediately replays the latest known
+success or failure and then reports subsequent outcomes. Extensions that want a
+named log prefix can create a child with `client.logger.createLogger('[myExtension]')`.
 
 ### Host runtime
 
 PostHog browser SDK implementations share extension registration and teardown
 through `ExtensionRuntime`, imported from the dedicated
-`@posthog/browser-common/extension-runtime` subpath. It reserves names and
-capability tokens during setup, publishes providers only after successful
-readiness, and disposes extensions once in reverse registration order. Concrete
-SDKs still own the `Client` adapter, Core implementation, and SDK lifecycle
-hooks.
+`@posthog/browser-common/extension-runtime` subpath. It reserves extension names
+during setup, rolls back failed setup, and disposes extensions once in reverse
+registration order without waiting for pending setup. Concrete SDKs still own
+their `Client` adapter and SDK lifecycle hooks.
 
 `ExtensionRuntime` is host infrastructure, not part of the extension-author
 surface exported from the package root.
 
 ### `Publisher`
 
-Use `Publisher<T>` when an extension provides its own event stream to other
-extensions or to app-facing controls. Keep the publisher private, expose only its
-`listener`, and dispose it when the extension is torn down:
+Use `Publisher<T>` when an extension exposes an event stream. Keep the publisher
+private, expose only its listener, and dispose it with the extension:
 
 ```ts
 import { Publisher, type Listener } from '@posthog/browser-common'
 
-const changes = new Publisher<FeatureFlagsChange>()
+const changes = new Publisher<{ enabled: boolean }>()
+export const onChange: Listener<{ enabled: boolean }> = changes.listener
 
-export const onChange: Listener<FeatureFlagsChange> = changes.listener
-
-changes.publish({ flag: 'beta-ui', value: true })
+changes.publish({ enabled: true })
 changes.dispose()
 ```
-
-## Cross-extension dependencies
-
-Extensions depend on one another through tokens, never implementation imports:
-
-```ts
-import { FeatureFlags } from './feature-flags/token'
-
-const flags = client.getExtension(FeatureFlags) // FeatureFlagsExtension | undefined
-if (flags && (await flags.getFeatureFlag('beta-ui'))) {
-    /* … */
-}
-```
-
-A token is an implementation-free branded string, so importing it never pulls
-the provider's code into your bundle — each extension stays independently
-tree-shakable and lazily loadable. Use a package-qualified runtime string, such
-as `posthog.featureFlags`, that is globally unique and stable so separately
-compiled scripts resolve the same capability. An extension that provides a
-capability declares its token(s) in `provides`.
 
 ## Utilities
 
 Reusable browser utilities are exposed through `utils/*` subpaths, but they are
 intentionally not re-exported from the package root or a utility barrel. Import
-the exact file you need so lazy extension bundles do not pull in unrelated
-helpers:
+the exact file needed so lazy extension bundles do not pull in unrelated helpers:
 
 ```ts
 import { createLogger } from '@posthog/browser-common/utils/logger'
@@ -145,13 +108,10 @@ import { formDataToQuery } from '@posthog/browser-common/utils/request-utils'
 
 See the **`develop-extension`** skill
 ([`.agents/skills/develop-extension/SKILL.md`](./.agents/skills/develop-extension/SKILL.md))
-for the full guide: the capability cheatsheet, the rules (enrichers are
-synchronous, dispose your disposables, design for asynchronous readiness,
-cross-extension state goes through `getExtension`, not shared storage), and the
-v1 → `Client` porting map.
+for the complete authoring and browser-v1 porting guide.
 
 ## Status
 
-Early and internal. The package currently defines the extension contract, the
-core analytics capability, a shared host runtime, shared lifecycle helpers, and
-directly imported browser utilities under `utils/*` subpaths.
+Early and internal. The package currently defines the extension and client
+contracts, a shared host runtime, lifecycle helpers, and directly imported
+browser utilities under `utils/*` subpaths.

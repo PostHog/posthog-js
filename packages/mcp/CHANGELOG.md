@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.10.2
+
+### Patch Changes
+
+- [#4358](https://github.com/PostHog/posthog-js/pull/4358) [`575c5e7`](https://github.com/PostHog/posthog-js/commit/575c5e75cc4f7ad39ac41001994e76194765bdbf) Thanks [@marandaneto](https://github.com/marandaneto)! - Redact sensitive exception messages and large binary payload encodings from MCP analytics.
+  (2026-07-31)
+
 ## 0.10.1
 
 ### Patch Changes

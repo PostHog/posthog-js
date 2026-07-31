@@ -265,6 +265,46 @@ describe('person processing', () => {
             })
         })
 
+        it('should carry a later gclid landing from an anonymous pageview onto identify without changing direct first-touch attribution', async () => {
+            // arrange: persist a direct first touch, then simulate a later browser session and SDK instance
+            const persistenceName = uuidv7()
+            const directUrl = 'https://example.com/landing'
+            mockReferrerGetter.mockReturnValue('')
+            mockURLGetter.mockReturnValue(directUrl)
+            const { posthog: firstVisitPosthog } = await setup('identified_only', undefined, persistenceName)
+            firstVisitPosthog.capture('direct first visit')
+            firstVisitPosthog.sessionManager!.resetSessionId()
+            firstVisitPosthog.sessionPersistence!.clear()
+            window.sessionStorage.clear()
+
+            const gclid = 'google-click-id'
+            mockURLGetter.mockReturnValue(`https://example.com/landing?gclid=${gclid}`)
+            const { posthog, beforeSendMock } = await setup('identified_only', undefined, persistenceName)
+
+            // act
+            posthog.capture('$pageview')
+            posthog.identify(distinctId)
+
+            // assert
+            const anonymousPageview = beforeSendMock.mock.calls[0][0]
+            expect(anonymousPageview.event).toBe('$pageview')
+            expect(anonymousPageview.properties.gclid).toBe(gclid)
+            expect(anonymousPageview.properties.$process_person_profile).toBe(false)
+            expect(anonymousPageview.$set_once).toBeUndefined()
+
+            const identifyCall = beforeSendMock.mock.calls[1][0]
+            expect(identifyCall.event).toBe('$identify')
+            expect(identifyCall.properties.gclid).toBe(gclid)
+            expect(identifyCall.properties.$process_person_profile).toBe(true)
+            expect(identifyCall.$set_once).toMatchObject({
+                $initial_current_url: directUrl,
+                $initial_referrer: '$direct',
+                $initial_referring_domain: '$direct',
+                $initial_gclid: null,
+                gclid,
+            })
+        })
+
         it('should preserve initial referrer info across a separate session', async () => {
             // arrange
             mockReferrerGetter.mockReturnValue('https://referrer1.com')
