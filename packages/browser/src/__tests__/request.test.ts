@@ -1309,6 +1309,51 @@ describe('request', () => {
             isolatedCompression = (await import('../types')).Compression
         })
 
+        it('does not let a transport that throws outside its own guard escape the async gzip chain as an unhandled rejection', async () => {
+            // `_fetch` has its own try/catch around the `fetch(...)` call itself, but building the
+            // request (e.g. `new Headers()`) happens before that guard. A third-party script (a
+            // Shopify storefront listener, an ad blocker) can monkey-patch `Headers` to throw
+            // synchronously, and that throw is not caught by `_fetch`'s internal guard. Inside the
+            // async-gzip promise chain, calling `transportMethod` without its own try/catch means
+            // such a throw rejects with no further `.catch` attached, becoming an unhandled
+            // rejection that error tracking's global handler picks up.
+            const networkError = new TypeError('Failed to fetch')
+            const OriginalHeaders = globalThis.Headers
+            // @ts-expect-error simulating a third-party monkey-patch of the global constructor
+            globalThis.Headers = function () {
+                throw networkError
+            }
+            mockedIsolatedGzipCompress.mockResolvedValueOnce({
+                arrayBuffer: () => Promise.resolve(new Uint8Array([0x1f, 0x8b]).buffer),
+            })
+
+            const unhandledRejections: unknown[] = []
+            const onUnhandledRejection = (reason: unknown) => unhandledRejections.push(reason)
+            process.on('unhandledRejection', onUnhandledRejection)
+
+            const callback = jest.fn()
+            try {
+                isolatedRequestModule.request({
+                    url: 'https://any.posthog-instance.com',
+                    data: { foo: 'bar' },
+                    headers: {},
+                    callback,
+                    transport: 'fetch',
+                    method: 'POST',
+                    compression: isolatedCompression.GZipJS,
+                })
+
+                await flushPromises()
+            } finally {
+                process.off('unhandledRejection', onUnhandledRejection)
+                globalThis.Headers = OriginalHeaders
+            }
+
+            expect(unhandledRejections).toEqual([])
+            expect(mockedIsolatedFetch).not.toHaveBeenCalled()
+            expect(callback).toHaveBeenCalledWith({ statusCode: 0, error: networkError })
+        })
+
         it('retries uncompressed without dropping the capture envelope after NotReadableError', async () => {
             mockedIsolatedGzipCompress.mockRejectedValueOnce({ name: 'NotReadableError' })
             const event = { event: 'test event', properties: { token: 'testtoken' } }
