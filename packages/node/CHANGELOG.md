@@ -1,5 +1,15 @@
 # posthog-node
 
+## 5.47.3
+
+### Patch Changes
+
+- [#4349](https://github.com/PostHog/posthog-js/pull/4349) [`0e2b371`](https://github.com/PostHog/posthog-js/commit/0e2b371f7bf3a32fbb5b7079c9adf4b106a35b29) Thanks [@marandaneto](https://github.com/marandaneto)! - Apply the feature flag definition request timeout while consuming the response body.
+  (2026-07-31)
+
+- [#4349](https://github.com/PostHog/posthog-js/pull/4349) [`0e2b371`](https://github.com/PostHog/posthog-js/commit/0e2b371f7bf3a32fbb5b7079c9adf4b106a35b29) Thanks [@marandaneto](https://github.com/marandaneto)! - Keep the feature flag definition request timeout active until the request settles.
+  (2026-07-31)
+
 ## 5.47.2
 
 ### Patch Changes
