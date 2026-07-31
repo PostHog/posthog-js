@@ -9,6 +9,7 @@ import type {
   MCPRequestLike,
   MCPServerLike,
   McpEvent,
+  SessionInfo,
   UserIdentity,
 } from '../types'
 import { MCPAnalyticsEventType } from './event-types'
@@ -129,10 +130,12 @@ export async function handleIdentify(
   data: MCPAnalyticsData,
   sessionId: string,
   request: MCPRequestLike,
+  requestAttribution: SessionInfo,
   extra?: CompatibleRequestHandlerExtra
-): Promise<void> {
+): Promise<UserIdentity | undefined> {
+  const identityBeforeRequest = data.identifiedSessions.get(sessionId)
   if (!data.options.identify) {
-    return
+    return identityBeforeRequest
   }
 
   const identifyEvent: McpEvent = {
@@ -167,16 +170,30 @@ export async function handleIdentify(
       const shouldPublish = changed || (firstSeen && !announcedAtInitialize)
 
       data.identifiedSessions.set(sessionId, mergedIdentity)
+      data.sessionInfo.identifyActorGivenId = mergedIdentity.distinctId
+      data.sessionInfo.identifyActorData = mergedIdentity.properties || {}
+      data.sessionInfo.identifyActorGroups = mergedIdentity.groups
 
       if (shouldPublish) {
         log(`Identified session ${sessionId} with identity: ${JSON.stringify(mergedIdentity)}`)
-        captureEvent(server, identifyEvent)
+        captureEvent(server, identifyEvent, withIdentity(requestAttribution, mergedIdentity))
       }
-    } else {
-      log(`Warning: Supplied identify function returned null for session ${sessionId}`)
+      return mergedIdentity
     }
+
+    log(`Warning: Supplied identify function returned null for session ${sessionId}`)
   } catch (error) {
     log(`Error: User supplied identify function threw an error while identifying session ${sessionId} - ${error}`)
+  }
+  return identityBeforeRequest
+}
+
+function withIdentity(sessionInfo: SessionInfo, identity: UserIdentity): SessionInfo {
+  return {
+    ...sessionInfo,
+    identifyActorGivenId: identity.distinctId,
+    identifyActorData: identity.properties || {},
+    identifyActorGroups: identity.groups,
   }
 }
 
