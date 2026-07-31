@@ -1270,33 +1270,28 @@ export class PostHogFeatureFlags implements Extension {
             const options = overrideOptions as FeatureFlagOverrideOptions
             this._override_warning = Boolean(options.suppressWarning ?? false)
             const statePatch: FeatureFlagsState = {}
-            const keysToRemove: (keyof FeatureFlagsState)[] = []
             const flags = options.flags as false | string[] | Record<string, string | boolean> | undefined
             const payloads = options.payloads as false | Record<string, JsonType> | undefined
 
             // Handle flags if provided, lets you do something like posthog.featureFlags.overrideFeatureFlags({flags: ['beta-feature']})
-            if ('flags' in options) {
-                if (flags === false) {
-                    keysToRemove.push(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
-                } else if (flags) {
-                    statePatch[PERSISTENCE_OVERRIDE_FEATURE_FLAGS] = isArray(flags) ? arrayToFlagsRecord(flags) : flags
-                }
+            if (flags) {
+                statePatch[PERSISTENCE_OVERRIDE_FEATURE_FLAGS] = isArray(flags) ? arrayToFlagsRecord(flags) : flags
             }
 
             // Handle payloads independently, lets you do something like posthog.featureFlags.overrideFeatureFlags({payloads: { 'beta-feature': { someData: true } }})
-            if ('payloads' in options) {
-                if (payloads === false) {
-                    keysToRemove.push(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
-                } else if (payloads) {
-                    statePatch[PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS] = payloads
-                }
+            if (payloads) {
+                statePatch[PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS] = payloads
             }
 
             if (Object.keys(statePatch).length) {
                 this._set(statePatch)
             }
-            if (keysToRemove.length) {
-                this._remove(keysToRemove)
+            if (flags === false && payloads === false) {
+                this._remove([PERSISTENCE_OVERRIDE_FEATURE_FLAGS, PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS])
+            } else if (flags === false) {
+                this._remove(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
+            } else if (payloads === false) {
+                this._remove(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
             }
             this._fireFeatureFlagsCallbacks()
             if (flags === false) {

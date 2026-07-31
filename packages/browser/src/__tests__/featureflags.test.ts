@@ -1057,6 +1057,30 @@ describe('featureflags', () => {
                 })
             })
 
+            it('clears structured flag and payload overrides independently or together', () => {
+                const setOverrides = (): void => {
+                    featureFlags.overrideFeatureFlags({
+                        flags: { 'beta-feature': false },
+                        payloads: { 'beta-feature': { overridden: 'payload' } },
+                    })
+                }
+
+                setOverrides()
+                featureFlags.overrideFeatureFlags({ flags: false })
+                expect(featureFlags.getFlagVariants()['beta-feature']).toBe(true)
+                expect(featureFlags.getFlagPayloads()['beta-feature']).toEqual({ overridden: 'payload' })
+
+                setOverrides()
+                featureFlags.overrideFeatureFlags({ payloads: false })
+                expect(featureFlags.getFlagVariants()['beta-feature']).toBe(false)
+                expect(featureFlags.getFlagPayloads()['beta-feature']).toEqual({ original: 'payload' })
+
+                setOverrides()
+                featureFlags.overrideFeatureFlags({ flags: false, payloads: false })
+                expect(featureFlags.getFlagVariants()['beta-feature']).toBe(true)
+                expect(featureFlags.getFlagPayloads()['beta-feature']).toEqual({ original: 'payload' })
+            })
+
             it('includes overridden payload in feature flag called event', () => {
                 featureFlags.overrideFeatureFlags({
                     flags: { 'beta-feature': true },
