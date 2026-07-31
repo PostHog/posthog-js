@@ -70,6 +70,46 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         featureFlags.dispose()
     })
 
+    it('propagates set_config updates to the enrolled feature flags extension', async () => {
+        const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
+        const sendRequest = jest
+            .spyOn(posthog._getBrowserClientAdapter(), 'sendRequest')
+            .mockResolvedValue({ statusCode: 200, json: {} })
+
+        posthog.set_config({
+            advanced_disable_feature_flags: false,
+            evaluation_contexts: ['updated-context'],
+        })
+        posthog.reloadFeatureFlags()
+        await jest.advanceTimersByTimeAsync(5)
+
+        expect(sendRequest).toHaveBeenCalledWith(
+            '/flags/?v=2',
+            expect.objectContaining({
+                body: expect.objectContaining({ evaluation_contexts: ['updated-context'] }),
+            })
+        )
+    })
+
+    it('logs feature flag request failures through the scoped logger', async () => {
+        const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
+        const client = posthog._getBrowserClientAdapter()
+        const clientError = jest.spyOn(client.logger, 'error').mockImplementation()
+        const scopedLogger = client.logger.createLogger('[FeatureFlags]')
+        const scopedError = jest.spyOn(scopedLogger, 'error').mockImplementation()
+        jest.spyOn(client.logger, 'createLogger').mockReturnValue(scopedLogger)
+        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+        featureFlags.setup(client)
+        const requestError = new Error('request failed')
+        jest.spyOn(client, 'sendRequest').mockRejectedValue(requestError)
+
+        await featureFlags._callFlagsEndpoint()
+
+        expect(scopedError).toHaveBeenCalledWith('Feature flag request failed', requestError)
+        expect(clientError).not.toHaveBeenCalled()
+        featureFlags.dispose()
+    })
+
     it('reuses cached dynamic event property snapshots until flag state changes', async () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
         const registerProperties = jest.spyOn(posthog, '_registerExtensionEventProperties')

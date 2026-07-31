@@ -1804,6 +1804,38 @@ describe('featureflags', () => {
             )
         })
 
+        it('continues requesting early access features when automatic flag requests are disabled', async () => {
+            instance.config.advanced_disable_flags = true
+            const callback = jest.fn()
+
+            featureFlags.getEarlyAccessFeatures(callback)
+            await jest.runAllTimersAsync()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(callback).toHaveBeenCalledWith([EARLY_ACCESS_FEATURE_FIRST])
+        })
+
+        it('isolates early access feature callback failures', async () => {
+            const callbackError = new Error('callback failed')
+            const error = jest.spyOn(window.console, 'error').mockImplementation()
+
+            featureFlags.getEarlyAccessFeatures(() => {
+                throw callbackError
+            })
+            await jest.runAllTimersAsync()
+
+            expect(error).toHaveBeenCalledWith(
+                '[PostHog.js] [FeatureFlags]',
+                'Early access feature callback failed',
+                callbackError
+            )
+            expect(error).not.toHaveBeenCalledWith(
+                '[PostHog.js] [FeatureFlags]',
+                'Early access feature request failed',
+                callbackError
+            )
+        })
+
         it('getEarlyAccessFeatures replaces existing features completely instead of merging', async () => {
             instance.persistence.props.$early_access_features = [
                 EARLY_ACCESS_FEATURE_FIRST,
@@ -3772,6 +3804,52 @@ describe('getRemoteConfigPayload', () => {
         }
     })
 
+    it('continues requesting remote config payloads when automatic flag requests are disabled', async () => {
+        featureFlags.dispose()
+        instance._shouldDisableFlags = jest.fn(() => true)
+        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            callback({
+                statusCode: 200,
+                json: { featureFlagPayloads: { 'test-flag': 'payload' } },
+            })
+        )
+        featureFlags = createFeatureFlags(instance)
+        const callback = jest.fn()
+
+        featureFlags.getRemoteConfigPayload('test-flag', callback)
+        await jest.runAllTimersAsync()
+
+        expect(instance._send_request).toHaveBeenCalledTimes(1)
+        expect(callback).toHaveBeenCalledWith('payload')
+    })
+
+    it('isolates remote config payload callback failures', async () => {
+        instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+            callback({
+                statusCode: 200,
+                json: { featureFlagPayloads: { 'test-flag': 'payload' } },
+            })
+        )
+        const callbackError = new Error('callback failed')
+        const error = jest.spyOn(window.console, 'error').mockImplementation()
+
+        featureFlags.getRemoteConfigPayload('test-flag', () => {
+            throw callbackError
+        })
+        await jest.runAllTimersAsync()
+
+        expect(error).toHaveBeenCalledWith(
+            '[PostHog.js] [FeatureFlags]',
+            'Remote config feature flag callback failed',
+            callbackError
+        )
+        expect(error).not.toHaveBeenCalledWith(
+            '[PostHog.js] [FeatureFlags]',
+            'Remote config feature flag request failed',
+            callbackError
+        )
+    })
+
     it('should not include evaluation_contexts when not configured', () => {
         const callback = jest.fn()
         featureFlags.getRemoteConfigPayload('test-flag', callback)
@@ -4182,6 +4260,7 @@ describe('$feature_flag_error tracking', () => {
 
     afterEach(() => {
         mockWarn.mockRestore()
+        delete window.POSTHOG_DEBUG
         jest.clearAllMocks()
     })
 
@@ -4255,6 +4334,7 @@ describe('$feature_flag_error tracking', () => {
     })
 
     it('should set $feature_flag_error to quota_limited when quota limited', async () => {
+        window.POSTHOG_DEBUG = true
         instance._send_request = jest.fn().mockImplementation(({ callback }) =>
             callback({
                 statusCode: 200,
@@ -4269,6 +4349,10 @@ describe('$feature_flag_error tracking', () => {
         await jest.advanceTimersByTimeAsync(10)
 
         expect(instance.persistence.props.$feature_flag_errors).toEqual([FeatureFlagError.QUOTA_LIMITED])
+        expect(mockWarn).toHaveBeenCalledWith(
+            '[PostHog.js] [FeatureFlags]',
+            expect.stringContaining('You have hit your feature flags quota limit')
+        )
     })
 
     it('should set $feature_flag_error to unknown_error when error is not an Error instance', async () => {
