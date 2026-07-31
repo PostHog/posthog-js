@@ -94,7 +94,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     data.options.enableConversationId ?? false,
     request.params?.arguments,
     request.params?.name,
-    resolveMissingCapabilityToolName(data.options)
+    data.missingCapabilityToolInjected ? resolveMissingCapabilityToolName(data.options) : ''
   )
   const downstreamRequest = conversation.conversationId ? cloneRequestWithoutConversationId(request) : request
 
@@ -360,15 +360,27 @@ async function getTracedToolsList(
       tools = addContextParameterToTools(tools, getContextDescription(data.options.context))
     }
 
-    if (data?.options.enableConversationId) {
-      tools = addConversationIdToTools(tools, resolveMissingCapabilityToolName(data.options))
-    }
+    if (data) {
+      data.missingCapabilityToolInjected = false
+      if (data.options.reportMissing) {
+        const missingToolName = resolveMissingCapabilityToolName(data.options)
+        const alreadyPresent = tools.some((tool) => tool?.name === missingToolName)
+        if (alreadyPresent) {
+          log(
+            `Warning: Cannot inject missing-capability tool "${missingToolName}" because a real tool already uses that name. The real tool will not be intercepted.`
+          )
+        } else {
+          tools.push(getReportMissingToolDescriptor(missingToolName))
+          data.missingCapabilityToolInjected = true
+        }
+      }
 
-    if (data?.options.reportMissing) {
-      const missingToolName = resolveMissingCapabilityToolName(data.options)
-      const alreadyPresent = tools.some((tool) => tool?.name === missingToolName)
-      if (!alreadyPresent) {
-        tools.push(getReportMissingToolDescriptor(missingToolName))
+      if (data.options.enableConversationId) {
+        tools = addConversationIdToTools(
+          tools,
+          resolveMissingCapabilityToolName(data.options),
+          data.missingCapabilityToolInjected
+        )
       }
     }
 

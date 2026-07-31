@@ -148,6 +148,7 @@ function buildTrackingData(
     sessionInfo: getSessionInfo(lowLevelServer, undefined),
     options: { ...DEFAULT_OPTIONS, ...options },
     sessionSource: 'generated',
+    missingCapabilityToolInjected: false,
   }
 }
 

@@ -347,6 +347,7 @@ The SDK does **not**: call an LLM, inspect tool arguments, build heuristics, or 
 
 ### Known sharp edges
 
+- `reportMissing` owns and intercepts its configured tool name only after a `tools/list` response actually injects the virtual descriptor. Calls before advertisement are left to the server's real handler. If a real tool already uses the name, the SDK warns, does not inject the virtual tool, and never intercepts the real handler.
 - The `get_more_tools` virtual tool emits its own `$mcp_missing_capability` event (a capability gap), **not** a `$mcp_tool_call`. Its `context` arg is recorded as `$mcp_intent` with `$mcp_intent_source = "context_parameter"`. It's defensible — the LLM did type a context string — but worth knowing if you segment by source.
 - `$mcp_intent_source` is currently **only** present when an intent was captured. Events with neither a context arg nor a fallback result have no `$mcp_intent` and no `$mcp_intent_source`. Dashboards filtering on `$mcp_intent_source = "inferred"` won't see them — that's the desired behavior; just don't expect a synthetic `"none"` value.
 

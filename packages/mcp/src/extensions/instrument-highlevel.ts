@@ -144,9 +144,6 @@ function addTracingToToolCallbackInternal(
   server: HighLevelMCPServerLike
 ): RegisteredTool {
   const originalCallback = getToolFunction(tool)
-  const missingToolName = resolveMissingCapabilityToolName(
-    getServerTrackingData(server.server as MCPServerLike)?.options
-  )
 
   if (wrappedCallbacks.has(originalCallback)) {
     log(`Tool ${toolName} callback already wrapped, skipping re-wrap`)
@@ -178,7 +175,10 @@ function addTracingToToolCallbackInternal(
       return input
     }
 
-    const cleanedArgs = toolName === missingToolName ? args : stripConversationId(removeContextFromArgs(args))
+    const data = getServerTrackingData(server.server as MCPServerLike)
+    const isMissingCapability =
+      data?.missingCapabilityToolInjected && toolName === resolveMissingCapabilityToolName(data.options)
+    const cleanedArgs = isMissingCapability ? args : stripConversationId(removeContextFromArgs(args))
 
     try {
       if (cleanedArgs === undefined) {
@@ -222,7 +222,7 @@ async function handleToolCallRequest(
     return await originalCallToolHandler(request, extra)
   }
 
-  if (request.params?.name === resolveMissingCapabilityToolName(data.options)) {
+  if (data.missingCapabilityToolInjected && request.params?.name === resolveMissingCapabilityToolName(data.options)) {
     const context = getContextArgument(request) || ''
     return await captureToolCall({
       server,

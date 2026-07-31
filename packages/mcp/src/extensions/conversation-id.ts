@@ -73,10 +73,11 @@ export function addConversationIdToTool<TTool extends ConversationIdInjectableTo
 
 export function addConversationIdToTools<TTool extends ConversationIdInjectableTool>(
   tools: TTool[],
-  missingCapabilityToolName: string = GET_MORE_TOOLS_NAME
+  missingCapabilityToolName: string = GET_MORE_TOOLS_NAME,
+  skipMissingCapabilityTool = true
 ): TTool[] {
   return tools.map((tool) => {
-    if (tool.name === missingCapabilityToolName) {
+    if (skipMissingCapabilityTool && tool.name === missingCapabilityToolName) {
       return tool
     }
     return addConversationIdToTool(tool)

@@ -38,13 +38,26 @@ const TOOLS = [
   },
 ]
 
-async function setupLowLevelServer() {
+async function setupLowLevelServer(realToolName?: string) {
   const server = new Server({ name: 'low-level test', version: '1.0.0' }, { capabilities: { tools: {} } })
+  const tools = realToolName
+    ? [
+        ...TOOLS,
+        {
+          name: realToolName,
+          description: 'A legitimate application tool',
+          inputSchema: { type: 'object' as const, properties: { value: { type: 'string' } } },
+        },
+      ]
+    : TOOLS
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }))
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }))
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const name = request.params?.name
+    if (name === realToolName) {
+      return { content: [{ type: 'text' as const, text: `real handler: ${request.params?.arguments?.value}` }] }
+    }
     if (name === 'explode') {
       throw new Error('boom')
     }
@@ -70,6 +83,110 @@ async function setupLowLevelServer() {
     },
   }
 }
+
+describe('Low-level Server reportMissing ownership (e2e)', () => {
+  let eventCapture: EventCapture
+
+  beforeEach(async () => {
+    eventCapture = new EventCapture()
+    await eventCapture.start()
+  })
+
+  afterEach(async () => {
+    await eventCapture.stop()
+  })
+
+  it('runs a default-named real tool normally when reportMissing is disabled', async () => {
+    const { server, client, connect, cleanup } = await setupLowLevelServer('get_more_tools')
+    try {
+      instrument(server, fakePostHog(), { reportMissing: false })
+      await connect()
+
+      const { tools } = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+      expect(tools.filter((tool) => tool.name === 'get_more_tools')).toHaveLength(1)
+      const result = await client.request(
+        { method: 'tools/call', params: { name: 'get_more_tools', arguments: { value: 'disabled' } } },
+        CallToolResultSchema
+      )
+      expect((result.content as { text: string }[])[0].text).toBe('real handler: disabled')
+    } finally {
+      await cleanup()
+    }
+  })
+
+  it('warns and runs a default-named real tool normally when reportMissing is enabled', async () => {
+    const logger = jest.fn()
+    const { server, client, connect, cleanup } = await setupLowLevelServer('get_more_tools')
+    try {
+      instrument(server, fakePostHog(), { reportMissing: true, enableConversationId: true, logger })
+      await connect()
+
+      // Before tools/list establishes ownership, a matching name is always treated as a real tool.
+      const preListResult = await client.request(
+        { method: 'tools/call', params: { name: 'get_more_tools', arguments: { value: 'before-list' } } },
+        CallToolResultSchema
+      )
+      expect((preListResult.content as { text: string }[])[0].text).toBe('real handler: before-list')
+
+      const { tools } = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+      const collidingTools = tools.filter((tool) => tool.name === 'get_more_tools')
+      expect(collidingTools).toHaveLength(1)
+      expect(collidingTools[0].inputSchema.properties?.conversation_id).toBeDefined()
+      expect(logger).toHaveBeenCalledWith(expect.stringContaining('real tool already uses that name'))
+      const result = await client.request(
+        { method: 'tools/call', params: { name: 'get_more_tools', arguments: { value: 'enabled' } } },
+        CallToolResultSchema
+      )
+      expect((result.content as { text: string }[])[0].text).toBe('real handler: enabled')
+    } finally {
+      await cleanup()
+    }
+  })
+
+  it('warns and runs a custom-named real tool normally when the configured name collides', async () => {
+    const customName = 'posthog_find_tools'
+    const logger = jest.fn()
+    const { server, client, connect, cleanup } = await setupLowLevelServer(customName)
+    try {
+      instrument(server, fakePostHog(), { reportMissing: true, missingCapabilityToolName: customName, logger })
+      await connect()
+
+      const { tools } = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+      expect(tools.filter((tool) => tool.name === customName)).toHaveLength(1)
+      expect(logger).toHaveBeenCalledWith(expect.stringContaining(`"${customName}"`))
+      const result = await client.request(
+        { method: 'tools/call', params: { name: customName, arguments: { value: 'custom' } } },
+        CallToolResultSchema
+      )
+      expect((result.content as { text: string }[])[0].text).toBe('real handler: custom')
+    } finally {
+      await cleanup()
+    }
+  })
+
+  it('advertises and handles the owned virtual tool normally', async () => {
+    const { server, client, connect, cleanup } = await setupLowLevelServer()
+    try {
+      instrument(server, fakePostHog(), { reportMissing: true })
+      await connect()
+
+      const { tools } = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+      expect(tools.filter((tool) => tool.name === 'get_more_tools')).toHaveLength(1)
+      const result = await client.request(
+        {
+          method: 'tools/call',
+          params: { name: 'get_more_tools', arguments: { context: 'Need a database tool' } },
+        },
+        CallToolResultSchema
+      )
+      expect((result.content as { text: string }[])[0].text).toContain('Unfortunately')
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(eventCapture.findCapturesByEvent('$mcp_missing_capability')).toHaveLength(1)
+    } finally {
+      await cleanup()
+    }
+  })
+})
 
 describe('Low-level Server tracing (e2e)', () => {
   let eventCapture: EventCapture

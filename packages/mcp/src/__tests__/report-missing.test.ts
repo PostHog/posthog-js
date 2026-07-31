@@ -1,4 +1,5 @@
 import { CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
+import { z } from 'zod'
 import { instrument } from '../index'
 import { DEFAULT_CONTEXT_PARAMETER_DESCRIPTION } from '../extensions/constants'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
@@ -7,6 +8,12 @@ import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
 
 const GET_MORE_TOOLS = 'get_more_tools'
+
+function registerRealTool(server: any, name: string): void {
+  server.tool(name, 'A legitimate application tool', { value: z.string() }, async ({ value }: { value: string }) => ({
+    content: [{ type: 'text' as const, text: `real handler: ${value}` }],
+  }))
+}
 
 describe('reportMissing (get_more_tools virtual tool)', () => {
   let server: any
@@ -60,11 +67,82 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
     })
   })
 
+  describe('real tool name collisions', () => {
+    it('runs a default-named real tool normally when reportMissing is disabled', async () => {
+      registerRealTool(server, GET_MORE_TOOLS)
+      instrument(server, fakePostHog(), { reportMissing: false })
+
+      const { tools } = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+      expect(tools.filter((tool: any) => tool.name === GET_MORE_TOOLS)).toHaveLength(1)
+
+      const result = await client.request(
+        {
+          method: 'tools/call',
+          params: { name: GET_MORE_TOOLS, arguments: { value: 'disabled', context: 'Call the real tool' } },
+        },
+        CallToolResultSchema
+      )
+      expect(result.content[0].text).toBe('real handler: disabled')
+    })
+
+    it('warns and runs a default-named real tool normally when reportMissing is enabled', async () => {
+      const logger = jest.fn()
+      registerRealTool(server, GET_MORE_TOOLS)
+      instrument(server, fakePostHog(), { reportMissing: true, enableConversationId: true, logger })
+
+      // Before tools/list establishes ownership, a matching name is always treated as a real tool.
+      const preListResult = await client.request(
+        {
+          method: 'tools/call',
+          params: { name: GET_MORE_TOOLS, arguments: { value: 'before-list', context: 'Call the real tool' } },
+        },
+        CallToolResultSchema
+      )
+      expect(preListResult.content[0].text).toBe('real handler: before-list')
+
+      const { tools } = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+      const collidingTools = tools.filter((tool: any) => tool.name === GET_MORE_TOOLS)
+      expect(collidingTools).toHaveLength(1)
+      expect(collidingTools[0].inputSchema.properties.conversation_id).toBeDefined()
+      expect(logger).toHaveBeenCalledWith(expect.stringContaining('real tool already uses that name'))
+
+      const result = await client.request(
+        {
+          method: 'tools/call',
+          params: { name: GET_MORE_TOOLS, arguments: { value: 'enabled', context: 'Call the real tool' } },
+        },
+        CallToolResultSchema
+      )
+      expect(result.content[0].text).toBe('real handler: enabled')
+    })
+
+    it('warns and runs a custom-named real tool normally when the configured name collides', async () => {
+      const customName = 'posthog_find_tools'
+      const logger = jest.fn()
+      registerRealTool(server, customName)
+      instrument(server, fakePostHog(), { reportMissing: true, missingCapabilityToolName: customName, logger })
+
+      const { tools } = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+      expect(tools.filter((tool: any) => tool.name === customName)).toHaveLength(1)
+      expect(logger).toHaveBeenCalledWith(expect.stringContaining(`"${customName}"`))
+
+      const result = await client.request(
+        {
+          method: 'tools/call',
+          params: { name: customName, arguments: { value: 'custom', context: 'Call the custom real tool' } },
+        },
+        CallToolResultSchema
+      )
+      expect(result.content[0].text).toBe('real handler: custom')
+    })
+  })
+
   describe('tools/call', () => {
     it('captures the report as a $mcp_missing_capability event with context as userIntent', async () => {
       const capture = new EventCapture()
       await capture.start()
       instrument(server, fakePostHog(), { reportMissing: true })
+      await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
 
       const context = 'Need a database query tool for SQL operations'
       const result = await client.request(
@@ -96,6 +174,7 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
       const capture = new EventCapture()
       await capture.start()
       instrument(server, fakePostHog(), { reportMissing: true })
+      await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
 
       const calls = [
         { name: 'add_todo', arguments: { text: 'First', context: 'Adding first todo' } },
@@ -129,6 +208,7 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
         reportMissing: true,
         identify: async () => ({ distinctId: 'user-1', properties: { role: 'developer' } }),
       })
+      await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
 
       await client.request(
         { method: 'tools/call', params: { name: GET_MORE_TOOLS, arguments: { context: 'Need GraphQL tool' } } },
