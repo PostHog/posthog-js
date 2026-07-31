@@ -159,6 +159,28 @@ describe('persistence', () => {
             saveMock.mockClear()
         })
 
+        it('persists nested object mutations when re-registering the same reference', () => {
+            const value = { nested: { status: 'initial' } }
+            library.register({ value })
+
+            value.nested.status = 'updated'
+            library.register({ value })
+
+            const reloaded = new PostHogPersistence(makePostHogConfig('test', persistenceMode))
+            expect(reloaded.props.value).toEqual({ nested: { status: 'updated' } })
+        })
+
+        it('persists array mutations when re-registering the same reference', () => {
+            const value = ['initial']
+            library.register({ value })
+
+            value.push('updated')
+            library.register({ value })
+
+            const reloaded = new PostHogPersistence(makePostHogConfig('test', persistenceMode))
+            expect(reloaded.props.value).toEqual(['initial', 'updated'])
+        })
+
         it('should rebuild storage when cookie_persisted_properties changes via update_config', () => {
             const encode = (props: any) => encodeURIComponent(JSON.stringify(props))
             const expectedProps = () => ({
