@@ -19,6 +19,7 @@ import type { FormattedMessage, FormattedContent } from '../types'
 import { sanitizeOpenAI, sanitizeOpenAIResponse } from '../sanitization'
 import { extractPosthogParams } from '../utils'
 import { isResponseTokenChunk, extractRequestId, buildProviderMetadata } from './utils'
+import { preserveProviderPromise } from '../providerPromise'
 
 const Chat = OpenAIOrignal.Chat
 const Completions = Chat.Completions
@@ -45,7 +46,6 @@ interface MonitoringOpenAIConfig extends ClientOptions {
 }
 
 type RequestOptions = Record<string, unknown>
-type APIPromiseWithResponse<T> = Awaited<ReturnType<APIPromise<T>['withResponse']>>
 
 function captureAiGenerationInBackground(...args: Parameters<typeof captureAiGeneration>): void {
   void captureAiGeneration(...args).catch(() => undefined)
@@ -59,29 +59,6 @@ async function captureAiGenerationAfterSuccess(...args: Parameters<typeof captur
   } else {
     captureAiGenerationInBackground(...args)
   }
-}
-
-function preserveAPIPromiseHelpers<Input, Output>(
-  parentPromise: APIPromise<Input>,
-  wrappedPromise: Promise<Output>
-): APIPromise<Output> {
-  const apiPromise = wrappedPromise as APIPromise<Output>
-
-  if (typeof parentPromise.asResponse === 'function') {
-    apiPromise.asResponse = () => parentPromise.asResponse()
-  }
-
-  if (typeof parentPromise.withResponse === 'function') {
-    apiPromise.withResponse = async () => {
-      const [response, data] = await Promise.all([parentPromise.withResponse(), wrappedPromise])
-      // swaps the `data` payload inside the SDK's generic withResponse shape; the compiler
-      // cannot relate the Input- and Output-instantiated conditional types
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-      return { ...response, data } as APIPromiseWithResponse<Output>
-    }
-  }
-
-  return apiPromise
 }
 
 const TERMINAL_RESPONSE_STATUSES = new Set(['completed', 'failed', 'cancelled', 'incomplete'])
@@ -379,7 +356,7 @@ export class WrappedCompletions extends Completions {
         return value
       })
 
-      return preserveAPIPromiseHelpers(parentPromise, wrappedPromise)
+      return preserveProviderPromise(parentPromise, wrappedPromise) as APIPromise<Stream<ChatCompletionChunk>>
     } else {
       const wrappedPromise = parentPromise.then(
         async (result) => {
@@ -442,7 +419,7 @@ export class WrappedCompletions extends Completions {
         }
       )
 
-      return preserveAPIPromiseHelpers(parentPromise, wrappedPromise)
+      return preserveProviderPromise(parentPromise, wrappedPromise) as APIPromise<ChatCompletion>
     }
   }
 }
@@ -619,7 +596,9 @@ export class WrappedResponses extends Responses {
         return value
       })
 
-      return preserveAPIPromiseHelpers(parentPromise, wrappedPromise)
+      return preserveProviderPromise(parentPromise, wrappedPromise) as APIPromise<
+        Stream<OpenAIOrignal.Responses.ResponseStreamEvent>
+      >
     } else {
       const wrappedPromise = parentPromise.then(
         async (result) => {
@@ -683,7 +662,7 @@ export class WrappedResponses extends Responses {
         }
       )
 
-      return preserveAPIPromiseHelpers(parentPromise, wrappedPromise)
+      return preserveProviderPromise(parentPromise, wrappedPromise) as APIPromise<OpenAIOrignal.Responses.Response>
     }
   }
 
@@ -752,7 +731,7 @@ export class WrappedResponses extends Responses {
         }
       )
 
-      return preserveAPIPromiseHelpers(parentPromise, wrappedPromise) as APIPromise<ParsedResponse<ParsedT>>
+      return preserveProviderPromise(parentPromise, wrappedPromise) as APIPromise<ParsedResponse<ParsedT>>
     } finally {
       // Restore our wrapped create method
       originalSelfRecord['create'] = tempCreate
@@ -824,7 +803,7 @@ export class WrappedEmbeddings extends Embeddings {
       }
     )
 
-    return preserveAPIPromiseHelpers(parentPromise, wrappedPromise)
+    return preserveProviderPromise(parentPromise, wrappedPromise) as APIPromise<CreateEmbeddingResponse>
   }
 }
 
@@ -995,10 +974,10 @@ export class WrappedTranscriptions extends Transcriptions {
         return value
       })
 
-      return preserveAPIPromiseHelpers(
+      return preserveProviderPromise(
         parentPromise as APIPromise<Stream<OpenAIOrignal.Audio.Transcriptions.TranscriptionStreamEvent>>,
         wrappedPromise
-      )
+      ) as APIPromise<Stream<OpenAIOrignal.Audio.Transcriptions.TranscriptionStreamEvent>>
     } else {
       const wrappedPromise = parentPromise.then(
         async (result) => {
@@ -1043,10 +1022,10 @@ export class WrappedTranscriptions extends Transcriptions {
         }
       )
 
-      return preserveAPIPromiseHelpers(
+      return preserveProviderPromise(
         parentPromise as APIPromise<OpenAIOrignal.Audio.Transcriptions.TranscriptionCreateResponse>,
         wrappedPromise
-      )
+      ) as APIPromise<OpenAIOrignal.Audio.Transcriptions.TranscriptionCreateResponse>
     }
   }
 }
