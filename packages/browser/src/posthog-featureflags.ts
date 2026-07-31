@@ -664,7 +664,13 @@ export class PostHogFeatureFlags implements Extension {
         this._requestInFlight = undefined
 
         // Notify browser-v1 facade listeners before the debounced request starts.
-        this._reloadingHandlers.slice().forEach((handler) => handler())
+        this._reloadingHandlers.slice().forEach((handler) => {
+            try {
+                handler()
+            } catch (error) {
+                this._logger.error('Error while running feature flags reloading callback', error)
+            }
+        })
 
         // Debounce multiple calls on the same tick
         this._reloadDebouncer = setTimeout(() => {
