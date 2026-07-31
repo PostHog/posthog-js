@@ -5,7 +5,7 @@
 
 import type { MCPAnalyticsOptions } from '../types'
 import { DEFAULT_CONTEXT_PARAMETER_DESCRIPTION } from './constants'
-import { log } from './logger'
+import { log, type LoggerFn } from './logger'
 
 interface JsonSchema {
   additionalProperties?: boolean
@@ -43,7 +43,8 @@ export function getContextDescription(context: MCPAnalyticsOptions['context']): 
  */
 export function addContextParameterToTool<TTool extends ContextInjectableTool>(
   tool: TTool,
-  contextDescriptionOverride?: string
+  contextDescriptionOverride?: string,
+  logger: LoggerFn = log
 ): TTool {
   // Create a shallow copy of the tool to avoid modifying the original
   const modifiedTool = { ...tool }
@@ -52,13 +53,13 @@ export function addContextParameterToTool<TTool extends ContextInjectableTool>(
 
   // Check if tool already has context parameter - skip to avoid collision
   if (schema?.properties?.context) {
-    log(`WARN: Tool "${toolName}" already has 'context' parameter. Skipping context injection.`)
+    logger(`WARN: Tool "${toolName}" already has 'context' parameter. Skipping context injection.`)
     return modifiedTool
   }
 
   // Skip complex schemas that can't safely have properties added at root level
   if (schema?.oneOf || schema?.allOf || schema?.anyOf) {
-    log(`WARN: Tool "${toolName}" has complex schema (oneOf/allOf/anyOf). Skipping context injection.`)
+    logger(`WARN: Tool "${toolName}" has complex schema (oneOf/allOf/anyOf). Skipping context injection.`)
     return modifiedTool
   }
 
@@ -112,13 +113,14 @@ export function addContextParameterToTool<TTool extends ContextInjectableTool>(
 
 export function addContextParameterToTools<TTool extends ContextInjectableTool>(
   tools: TTool[],
-  contextDescriptionOverride?: string
+  contextDescriptionOverride?: string,
+  logger: LoggerFn = log
 ): TTool[] {
   return tools.map((tool) => {
     // Skip get_more_tools - it has its own special context parameter
     if (tool.name === 'get_more_tools') {
       return tool
     }
-    return addContextParameterToTool(tool, contextDescriptionOverride)
+    return addContextParameterToTool(tool, contextDescriptionOverride, logger)
   })
 }

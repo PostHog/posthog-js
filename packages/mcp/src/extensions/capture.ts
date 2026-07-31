@@ -6,7 +6,6 @@
 import type { MCPServerLike, McpEvent } from '../types'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
-import { log } from './logger'
 import { getSessionInfo } from './session'
 
 /**
@@ -22,7 +21,6 @@ import { getSessionInfo } from './session'
 export function captureEvent(server: MCPServerLike, eventInput: McpEvent): Promise<void> | undefined {
   const data = getServerTrackingData(server)
   if (!data) {
-    log('Warning: Server tracking data not found. Event will not be published.')
     return
   }
 

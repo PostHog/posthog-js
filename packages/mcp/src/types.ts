@@ -274,6 +274,8 @@ export interface SessionInfo {
 export interface MCPAnalyticsData {
   sink: McpEventSink | undefined
   identifiedSessions: IdentityCache
+  /** Safe logger bound to this server; a no-op when no logger was configured. */
+  logger: LoggerFn
   lastActivity: Date
   options: MCPAnalyticsOptions
   sessionId: string

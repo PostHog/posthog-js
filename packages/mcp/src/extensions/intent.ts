@@ -11,7 +11,6 @@ import type {
   McpEvent,
 } from '../types'
 import { isContextEnabled } from './context-parameters'
-import { log } from './logger'
 
 interface ResolvedIntent {
   intent: string
@@ -45,7 +44,7 @@ async function runIntentFallback(
     const intent = normalizeIntent(await data.options.intentFallback(request, extra))
     return intent ? { intent, source: 'inferred' } : null
   } catch (error) {
-    log(`intentFallback callback error: ${error}`)
+    data.logger(`intentFallback callback error: ${error}`)
     return null
   }
 }

@@ -7,7 +7,6 @@ import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import type { CompatibleRequestHandlerExtra, MCPRequestLike, MCPServerLike } from '../types'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
-import { log } from './logger'
 import { handleReportMissing, resolveMissingCapabilityToolName } from './tools'
 import {
   handleInitializeRequest,
@@ -43,7 +42,7 @@ export function instrumentLowLevelServer(server: MCPServerLike): void {
       async (request, extra) => await handleToolCallRequest(server, originalCallToolHandler, request, extra)
     )
   } catch (error) {
-    log(`Warning: Failed to setup tool call instrumentation - ${error}`)
+    getServerTrackingData(server)?.logger(`Warning: Failed to setup tool call instrumentation - ${error}`)
     throw error
   }
 }
@@ -56,9 +55,6 @@ async function handleToolCallRequest(
 ): Promise<unknown> {
   const data = getServerTrackingData(server)
   if (!data) {
-    log(
-      'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called instrument(server, options) before using tool calls.'
-    )
     return await originalCallToolHandler?.(request, extra)
   }
 
@@ -71,7 +67,7 @@ async function handleToolCallRequest(
       extra,
       eventType: MCPAnalyticsEventType.mcpMissingCapability,
       explicitContextIntent: context,
-      execute: async () => handleReportMissing({ context }),
+      execute: async () => handleReportMissing({ context }, data.logger),
     })
   }
 

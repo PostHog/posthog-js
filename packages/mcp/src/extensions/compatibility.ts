@@ -4,7 +4,7 @@
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
 import type { HighLevelMCPServerLike, MCPServerLike } from '../types'
-import { log } from './logger'
+import { log, type LoggerFn } from './logger'
 
 type ServerRecord = Record<string, unknown>
 
@@ -22,8 +22,8 @@ type ServerRecord = Record<string, unknown>
  */
 
 // Function to log compatibility information
-export function logCompatibilityWarning(): void {
-  log(
+export function logCompatibilityWarning(logger: LoggerFn = log): void {
+  logger(
     'PostHog MCP analytics SDK Compatibility: This version only supports Model Context Protocol TypeScript SDK v1.11 and above. Please upgrade if using an older version.'
   )
 }
@@ -41,9 +41,12 @@ export function isLowLevelServer(server: unknown): server is ServerRecord {
 }
 
 // Type guard function that validates server compatibility and returns typed server
-export function isCompatibleServerType(server: unknown): MCPServerLike | HighLevelMCPServerLike {
+export function isCompatibleServerType(
+  server: unknown,
+  logger: LoggerFn = log
+): MCPServerLike | HighLevelMCPServerLike {
   if (!server || typeof server !== 'object') {
-    logCompatibilityWarning()
+    logCompatibilityWarning(logger)
     throw new Error(
       "PostHog MCP analytics SDK compatibility error: Server must be an object. Ensure you're using MCP SDK v1.11 or higher."
     )
@@ -52,13 +55,13 @@ export function isCompatibleServerType(server: unknown): MCPServerLike | HighLev
   if (isHighLevelServer(server)) {
     // Validate high-level server requirements
     if (!server._registeredTools || typeof server._registeredTools !== 'object') {
-      logCompatibilityWarning()
+      logCompatibilityWarning(logger)
       throw new Error(
         'PostHog MCP analytics SDK compatibility error: High-level server must have _registeredTools object. This requires MCP SDK v1.11 or higher.'
       )
     }
     if (typeof server.tool !== 'function') {
-      logCompatibilityWarning()
+      logCompatibilityWarning(logger)
       throw new Error(
         'PostHog MCP analytics SDK compatibility error: High-level server must have tool() method. This requires MCP SDK v1.11 or higher.'
       )
@@ -66,19 +69,19 @@ export function isCompatibleServerType(server: unknown): MCPServerLike | HighLev
 
     // Validate the underlying low-level server
     const targetServer = server.server
-    validateLowLevelServer(targetServer)
+    validateLowLevelServer(targetServer, logger)
 
     return server as unknown as HighLevelMCPServerLike
   }
   // Direct low-level server validation
-  validateLowLevelServer(server)
+  validateLowLevelServer(server, logger)
   return server as MCPServerLike
 }
 
 // Helper function to validate low-level server requirements
-function validateLowLevelServer(server: unknown): void {
+function validateLowLevelServer(server: unknown, logger: LoggerFn): void {
   if (!server || typeof server !== 'object') {
-    logCompatibilityWarning()
+    logCompatibilityWarning(logger)
     throw new Error(
       "PostHog MCP analytics SDK compatibility error: Server must be an object. Ensure you're using MCP SDK v1.11 or higher."
     )
@@ -87,14 +90,14 @@ function validateLowLevelServer(server: unknown): void {
   const serverRecord = server as ServerRecord
 
   if (typeof serverRecord.setRequestHandler !== 'function') {
-    logCompatibilityWarning()
+    logCompatibilityWarning(logger)
     throw new Error(
       'PostHog MCP analytics SDK compatibility error: Server must have a setRequestHandler method. This requires MCP SDK v1.11 or higher.'
     )
   }
 
   if (!(serverRecord._requestHandlers && serverRecord._requestHandlers instanceof Map)) {
-    logCompatibilityWarning()
+    logCompatibilityWarning(logger)
     throw new Error(
       'PostHog MCP analytics SDK compatibility error: Server._requestHandlers is not accessible. This requires MCP SDK v1.11 or higher.'
     )
@@ -102,14 +105,14 @@ function validateLowLevelServer(server: unknown): void {
 
   // Validate that _requestHandlers contains functions with compatible signatures
   if (typeof serverRecord._requestHandlers.get !== 'function') {
-    logCompatibilityWarning()
+    logCompatibilityWarning(logger)
     throw new Error(
       'PostHog MCP analytics SDK compatibility error: Server._requestHandlers must be a Map with a get method. This requires MCP SDK v1.11 or higher.'
     )
   }
 
   if (typeof serverRecord.getClientVersion !== 'function') {
-    logCompatibilityWarning()
+    logCompatibilityWarning(logger)
     throw new Error(
       'PostHog MCP analytics SDK compatibility error: Server.getClientVersion must be a function. This requires MCP SDK v1.11 or higher.'
     )
@@ -120,7 +123,7 @@ function validateLowLevelServer(server: unknown): void {
     typeof serverRecord._serverInfo !== 'object' ||
     !('name' in serverRecord._serverInfo)
   ) {
-    logCompatibilityWarning()
+    logCompatibilityWarning(logger)
     throw new Error(
       'PostHog MCP analytics SDK compatibility error: Server._serverInfo is not accessible or missing name. This requires MCP SDK v1.11 or higher.'
     )

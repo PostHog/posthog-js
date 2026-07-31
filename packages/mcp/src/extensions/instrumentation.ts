@@ -27,7 +27,6 @@ import { MCPAnalyticsEventType } from './event-types'
 import { captureException } from './exceptions'
 import { resolveToolCallIntent, setEventIntent, setExplicitContextIntent } from './intent'
 import { getServerTrackingData, handleIdentify, setServerTrackingData } from './internal'
-import { log } from './logger'
 import { buildCapturedMcpParameters } from './mcp-payloads'
 import { getLiteralValue, getObjectShape } from './mcp-sdk-compat'
 import { getSessionId, newSessionId } from './session'
@@ -162,7 +161,7 @@ async function prepareToolCallEvent(
     setEventIntent(event, await resolveToolCallIntent(data, request, extra))
     return event
   } catch (error) {
-    log(
+    data.logger(
       `Warning: PostHog MCP analytics instrumentation failed for tool ${request.params?.name}, the tool will still run - ${error}`
     )
     return null
@@ -213,7 +212,7 @@ function publishSuccessfulToolEvent(
     event.duration = Date.now() - startTime.getTime()
     captureEvent(server, event)
   } catch (error) {
-    log(`Warning: PostHog MCP analytics failed to publish tool event - ${error}`)
+    getServerTrackingData(server)?.logger(`Warning: PostHog MCP analytics failed to publish tool event - ${error}`)
   }
 }
 
@@ -236,7 +235,9 @@ function publishFailedToolEvent(
     event.duration = Date.now() - startTime.getTime()
     captureEvent(server, event)
   } catch (publishError) {
-    log(`Warning: PostHog MCP analytics failed to publish failed tool event - ${publishError}`)
+    getServerTrackingData(server)?.logger(
+      `Warning: PostHog MCP analytics failed to publish failed tool event - ${publishError}`
+    )
   }
 }
 
@@ -311,14 +312,11 @@ export async function handleListToolsRequest(
   const tools = await getTracedToolsList(server, originalListToolsHandler, request, extra, event)
 
   if (!data) {
-    log(
-      'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called instrument(server, options) before using tool calls.'
-    )
     return { tools }
   }
 
   if (tools.length === 0) {
-    log(
+    data.logger(
       'Warning: No tools found in the original list. This is likely due to the tools not being registered before PostHog MCP analytics.instrument().'
     )
     event.error = captureException('No tools were sent to MCP client.')
@@ -357,11 +355,11 @@ async function getTracedToolsList(
     let tools = originalResponse.tools || []
 
     if (data && isContextEnabled(data.options.context)) {
-      tools = addContextParameterToTools(tools, getContextDescription(data.options.context))
+      tools = addContextParameterToTools(tools, getContextDescription(data.options.context), data.logger)
     }
 
     if (data?.options.enableConversationId) {
-      tools = addConversationIdToTools(tools, resolveMissingCapabilityToolName(data.options))
+      tools = addConversationIdToTools(tools, resolveMissingCapabilityToolName(data.options), data.logger)
     }
 
     if (data?.options.reportMissing) {
@@ -379,7 +377,7 @@ async function getTracedToolsList(
 
     return tools
   } catch (error) {
-    log(
+    getServerTrackingData(server)?.logger(
       `Warning: Original list tools handler failed, this suggests an error PostHog MCP analytics did not cause - ${error}`
     )
     event.error = captureException(error)
@@ -481,7 +479,7 @@ function mintStatelessSessionOnInitialize(
     setServerTrackingData(server, data)
     return sessionId
   } catch (error) {
-    log(`Warning: PostHog MCP analytics failed to mint a stateless session id - ${error}`)
+    data.logger(`Warning: PostHog MCP analytics failed to mint a stateless session id - ${error}`)
     return undefined
   }
 }
@@ -511,7 +509,7 @@ function upgradeMintedTokenToNegotiated(
     })
     writeSessionIdToTransport(transport, token)
   } catch (error) {
-    log(`Warning: PostHog MCP analytics failed to upgrade the stateless session token - ${error}`)
+    data.logger(`Warning: PostHog MCP analytics failed to upgrade the stateless session token - ${error}`)
   }
 }
 
@@ -543,9 +541,6 @@ export async function handleInitializeRequest(
 ): Promise<unknown> {
   const data = getServerTrackingData(server)
   if (!data) {
-    log(
-      'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called instrument(server, options) before using tool calls.'
-    )
     return await originalInitializeHandler(request, extra)
   }
 

@@ -21,12 +21,25 @@ export function setLogger(logger: LoggerFn | undefined): void {
   activeLogger = logger
 }
 
-export function log(message: string): void {
-  if (activeLogger) {
+function writeLog(logger: LoggerFn | undefined, message: string): void {
+  if (logger) {
     try {
-      activeLogger(message)
+      logger(message)
     } catch {
       // never let logging blow up the tracking pipeline
     }
   }
+}
+
+/**
+ * Creates an isolated, safe logger for one instrumented server. In particular,
+ * an omitted logger stays a no-op rather than falling back to `activeLogger`.
+ */
+export function createLogger(logger: LoggerFn | undefined): LoggerFn {
+  return (message) => writeLog(logger, message)
+}
+
+/** Logs through the legacy module-level logger configured by {@link setLogger}. */
+export function log(message: string): void {
+  writeLog(activeLogger, message)
 }

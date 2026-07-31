@@ -14,7 +14,6 @@ import type {
 import { stripConversationId } from './conversation-id'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
-import { log } from './logger'
 import { createWrappedTool, getToolFunction, hasToolFunction } from './mcp-sdk-compat'
 import { handleReportMissing, resolveMissingCapabilityToolName } from './tools'
 import {
@@ -57,7 +56,6 @@ function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
   try {
     const data = getServerTrackingData(server.server as MCPServerLike)
     if (!data) {
-      log('Warning: Cannot setup listener - no tracking data found')
       return
     }
 
@@ -69,12 +67,12 @@ function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
               data.toolDescriptions.set(property, value.description)
             }
             if ((value as ProcessedRegisteredTool)[MCP_ANALYTICS_PROCESSED]) {
-              log(`Tool ${String(property)} already processed, skipping proxy wrapping`)
+              data.logger(`Tool ${String(property)} already processed, skipping proxy wrapping`)
               return Reflect.set(target, property, value)
             }
 
             if (wrappedCallbacks.has(getToolFunction(value))) {
-              log(`Tool ${String(property)} callback already wrapped, skipping proxy wrapping`)
+              data.logger(`Tool ${String(property)} callback already wrapped, skipping proxy wrapping`)
               return Reflect.set(target, property, value)
             }
 
@@ -102,7 +100,7 @@ function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
 
           return Reflect.set(target, property, value)
         } catch (error) {
-          log(`Warning: Error in proxy set handler for tool ${String(property)} - ${error}`)
+          data.logger(`Warning: Error in proxy set handler for tool ${String(property)} - ${error}`)
           return Reflect.set(target, property, value)
         }
       },
@@ -123,9 +121,11 @@ function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
     const originalTools = server._registeredTools || {}
     server._registeredTools = new Proxy(originalTools, handler)
 
-    log('Successfully set up listener for new tool registrations')
+    data.logger('Successfully set up listener for new tool registrations')
   } catch (error) {
-    log(`Warning: Failed to setup listener for registered tools - ${error}`)
+    getServerTrackingData(server.server as MCPServerLike)?.logger(
+      `Warning: Failed to setup listener for registered tools - ${error}`
+    )
   }
 }
 
@@ -144,17 +144,16 @@ function addTracingToToolCallbackInternal(
   server: HighLevelMCPServerLike
 ): RegisteredTool {
   const originalCallback = getToolFunction(tool)
-  const missingToolName = resolveMissingCapabilityToolName(
-    getServerTrackingData(server.server as MCPServerLike)?.options
-  )
+  const data = getServerTrackingData(server.server as MCPServerLike)
+  const missingToolName = resolveMissingCapabilityToolName(data?.options)
 
   if (wrappedCallbacks.has(originalCallback)) {
-    log(`Tool ${toolName} callback already wrapped, skipping re-wrap`)
+    data?.logger(`Tool ${toolName} callback already wrapped, skipping re-wrap`)
     return tool
   }
 
   if ((tool as ProcessedRegisteredTool)[MCP_ANALYTICS_PROCESSED]) {
-    log(`Tool ${toolName} already processed, skipping re-wrap`)
+    data?.logger(`Tool ${toolName} already processed, skipping re-wrap`)
     return tool
   }
 
@@ -216,9 +215,6 @@ async function handleToolCallRequest(
 ): Promise<unknown> {
   const data = getServerTrackingData(server)
   if (!data) {
-    log(
-      'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called instrument(server, options) before using tool calls.'
-    )
     return await originalCallToolHandler(request, extra)
   }
 
@@ -231,7 +227,7 @@ async function handleToolCallRequest(
       extra,
       eventType: MCPAnalyticsEventType.mcpMissingCapability,
       explicitContextIntent: context,
-      execute: async () => handleReportMissing({ context }),
+      execute: async () => handleReportMissing({ context }, data.logger),
     })
   }
 
@@ -277,7 +273,7 @@ export function instrumentHighLevelServer(server: HighLevelMCPServerLike): void 
 
     setupListenerToRegisteredTools(server)
   } catch (error) {
-    log(`Warning: Failed to setup tool call instrumentation - ${error}`)
+    getServerTrackingData(server.server)?.logger(`Warning: Failed to setup tool call instrumentation - ${error}`)
   }
 }
 
