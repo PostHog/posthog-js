@@ -4,8 +4,7 @@ import type { Logger } from '@posthog/core'
 import type { Client } from '../src/client'
 import type { Extension } from '../src/extension'
 import { ExtensionRuntime } from '../src/extension-runtime'
-import type { ExtensionToken } from '../src/token'
-import { InMemoryKeyValueStore } from './helpers/test-client'
+import { createTestClient } from './helpers/test-client'
 
 const logger: Logger = {
     info: jest.fn(),
@@ -19,29 +18,20 @@ const logger: Logger = {
 function testExtension(
     name: string,
     setup: (client: Client) => void | Promise<void> = jest.fn(),
-    dispose: () => void | Promise<void> = jest.fn(),
-    provides?: readonly ExtensionToken<unknown>[]
+    dispose: (() => void) | undefined = jest.fn()
 ): Extension {
-    return { name, provides, setup, dispose }
+    return { name, setup, dispose }
 }
 
 function createRuntime(): {
     runtime: ExtensionRuntime
+    client: Client
     add: (extension: Extension) => Promise<void>
-    clientNames: string[]
 } {
-    const clientNames: string[] = []
-    const runtime = new ExtensionRuntime(logger)
-    const add = (extension: Extension): Promise<void> => {
-        clientNames.push(extension.name)
-        return runtime.add(extension, {
-            apiRequest: async () => ({ statusCode: 200 }),
-            getExtension: (token) => runtime.getExtension(token),
-            kv: new InMemoryKeyValueStore(),
-            logger,
-        })
-    }
-    return { runtime, add, clientNames }
+    const client = createTestClient()
+    const runtime = new ExtensionRuntime(logger, client)
+    const add = (extension: Extension): Promise<void> => runtime.add(extension)
+    return { runtime, client, add }
 }
 
 describe('ExtensionRuntime', () => {
@@ -49,187 +39,127 @@ describe('ExtensionRuntime', () => {
         jest.clearAllMocks()
     })
 
-    it('publishes synchronous providers immediately using a client scoped to the extension', async () => {
-        interface Capability {
-            value: string
-        }
-        const token = 'posthog.test.sync' as ExtensionToken<Capability>
-        const equivalentToken = 'posthog.test.sync' as ExtensionToken<Capability>
-        const { runtime, add, clientNames } = createRuntime()
-        let dependency: Capability | undefined
-        const provider = testExtension('provider', jest.fn(), jest.fn(), [token]) as Extension & Capability
-        provider.value = 'ready'
-
-        const registration = add(provider)
-        add(
-            testExtension('dependent', (client) => {
-                dependency = client.getExtension(equivalentToken)
-            })
-        )
-
-        expect(runtime.getExtension(equivalentToken)).toBe(provider)
-        expect(dependency).toBe(provider)
-        expect(clientNames).toEqual(['provider', 'dependent'])
-        await registration
-        await runtime.dispose()
-    })
-
-    it('reserves asynchronous providers until setup succeeds and releases failed registrations', async () => {
-        interface Capability {
-            value: string
-        }
-        const token = 'posthog.test.async' as ExtensionToken<Capability>
-        const equivalentToken = 'posthog.test.async' as ExtensionToken<Capability>
-        const failedToken = 'posthog.test.failed' as ExtensionToken<Capability>
-        const { runtime, add } = createRuntime()
+    it('passes the client adapter and reserves names while setup is pending', async () => {
+        const { add, client } = createRuntime()
+        let receivedClient: Client | undefined
         let resolveSetup: (() => void) | undefined
-        const provider = testExtension(
-            'provider',
-            () => new Promise<void>((resolve) => (resolveSetup = resolve)),
-            jest.fn(),
-            [token]
+        const registration = add(
+            testExtension(
+                'pending',
+                (value) =>
+                    new Promise<void>((resolve) => {
+                        receivedClient = value
+                        resolveSetup = resolve
+                    })
+            )
         )
 
-        const registration = add(provider)
-        expect(runtime.getExtension(equivalentToken)).toBeUndefined()
-        await expect(add(testExtension('collision', jest.fn(), jest.fn(), [equivalentToken]))).rejects.toThrow(
-            'token "posthog.test.async" is already registered'
-        )
+        expect(receivedClient).toBe(client)
+        await expect(add(testExtension('pending'))).rejects.toThrow('already registered')
 
         resolveSetup?.()
         await registration
-        expect(runtime.getExtension(equivalentToken)).toBe(provider)
+    })
 
-        const failed = testExtension('failed', () => Promise.reject(new Error('setup failed')), jest.fn(), [
-            failedToken,
-        ])
-        await add(failed)
-        expect(runtime.getExtension(failedToken)).toBeUndefined()
-        expect(failed.dispose).toHaveBeenCalledTimes(1)
+    it.each([
+        {
+            label: 'synchronous',
+            setup: () => {
+                throw new Error('setup failed')
+            },
+        },
+        { label: 'asynchronous', setup: () => Promise.reject(new Error('setup failed')) },
+    ])('releases names and cleans up after $label setup failure', async ({ setup }) => {
+        const { add } = createRuntime()
+        const dispose = jest.fn()
+
+        await add(testExtension('failed', setup, dispose))
+
+        expect(dispose).toHaveBeenCalledTimes(1)
         expect(logger.error).toHaveBeenCalledWith('Failed to set up browser extension "failed"', expect.any(Error))
 
-        const replacement = testExtension('failed', jest.fn(), jest.fn(), [failedToken])
-        await add(replacement)
-        expect(runtime.getExtension(failedToken)).toBe(replacement)
-        await runtime.dispose()
+        await expect(add(testExtension('failed'))).resolves.toBeUndefined()
     })
 
-    it('cleans up synchronous setup failures and never publishes providers after disposal begins', async () => {
-        const thrownToken = 'posthog.test.thrown' as ExtensionToken<Extension>
-        const lateToken = 'posthog.test.late' as ExtensionToken<Extension>
+    it.each(['resolve', 'reject'] as const)('cleans pending setup immediately after late %s', async (outcome) => {
         const { runtime, add } = createRuntime()
-        const thrownDispose = jest.fn()
-
-        await add(
+        let settle: (() => void) | undefined
+        const dispose = jest.fn()
+        const registration = add(
             testExtension(
-                'throws-synchronously',
+                'pending',
+                () =>
+                    new Promise<void>((resolve, reject) => {
+                        settle = () => (outcome === 'resolve' ? resolve() : reject(new Error('late failure')))
+                    }),
+                dispose
+            )
+        )
+
+        runtime.dispose()
+        expect(dispose).toHaveBeenCalledTimes(1)
+
+        settle?.()
+        await registration
+        expect(dispose).toHaveBeenCalledTimes(1)
+    })
+
+    it('disposes extensions in reverse registration order', async () => {
+        const { runtime, add } = createRuntime()
+        let patched = 'host'
+        const wrappingExtension = (name: string): Extension => {
+            let previous = patched
+            return testExtension(
+                name,
                 () => {
-                    throw new Error('sync setup failure')
+                    previous = patched
+                    patched = `${name}(${patched})`
                 },
-                thrownDispose,
-                [thrownToken]
+                () => {
+                    patched = previous
+                }
             )
-        )
-        expect(runtime.getExtension(thrownToken)).toBeUndefined()
-        expect(thrownDispose).toHaveBeenCalledTimes(1)
+        }
 
-        let resolveLateSetup: (() => void) | undefined
-        const late = testExtension(
-            'late',
-            () => new Promise<void>((resolve) => (resolveLateSetup = resolve)),
-            jest.fn(),
-            [lateToken]
-        )
-        const lateRegistration = add(late)
-        const disposal = runtime.dispose()
-        resolveLateSetup?.()
+        await add(wrappingExtension('first'))
+        await add(wrappingExtension('second'))
+        expect(patched).toBe('second(first(host))')
 
-        await Promise.all([lateRegistration, disposal])
-        expect(runtime.getExtension(lateToken)).toBeUndefined()
-        expect(late.dispose).toHaveBeenCalledTimes(1)
+        runtime.dispose()
+
+        expect(patched).toBe('host')
     })
 
-    it('rejects duplicate extension names and capability tokens', async () => {
-        const token = 'posthog.test.shared' as ExtensionToken<unknown>
-        const equivalentToken = 'posthog.test.shared' as ExtensionToken<unknown>
+    it('logs rejected asynchronous cleanup without waiting for it', async () => {
         const { runtime, add } = createRuntime()
-        add(testExtension('first', jest.fn(), jest.fn(), [token]))
-
-        await expect(add(testExtension('first'))).rejects.toThrow('already registered')
-        await expect(add(testExtension('second', jest.fn(), jest.fn(), [equivalentToken]))).rejects.toThrow(
-            'token "posthog.test.shared" is already registered'
+        const error = new Error('async dispose failed')
+        await add(
+            testExtension('async', jest.fn(), async () => {
+                throw error
+            })
         )
-        await runtime.dispose()
+
+        expect(() => runtime.dispose()).not.toThrow()
+        await Promise.resolve()
+
+        expect(logger.error).toHaveBeenCalledWith('Failed to dispose browser extension "async"', error)
     })
 
-    it('preserves reverse order when an older setup fails during disposal', async () => {
-        const order: string[] = []
+    it('isolates cleanup errors, cleans each extension once, and rejects later additions', async () => {
         const { runtime, add } = createRuntime()
-        let rejectOlderSetup: ((error: Error) => void) | undefined
-        let resolveNewerSetup: (() => void) | undefined
-        const olderDispose = jest.fn(() => order.push('older'))
-        const newerDispose = jest.fn(() => order.push('newer'))
-
-        const olderRegistration = add(
-            testExtension(
-                'older',
-                () => new Promise<void>((_resolve, reject) => (rejectOlderSetup = reject)),
-                olderDispose
-            )
+        const successfulDispose = jest.fn()
+        await add(
+            testExtension('failing', jest.fn(), () => {
+                throw new Error('dispose failed')
+            })
         )
-        const newerRegistration = add(
-            testExtension('newer', () => new Promise<void>((resolve) => (resolveNewerSetup = resolve)), newerDispose)
-        )
+        await add(testExtension('successful', jest.fn(), successfulDispose))
 
-        const disposal = runtime.dispose()
-        rejectOlderSetup?.(new Error('setup failed'))
-        await olderRegistration
+        expect(() => runtime.dispose()).not.toThrow()
+        runtime.dispose()
 
-        expect(order).toEqual([])
-        expect(olderDispose).not.toHaveBeenCalled()
-        expect(newerDispose).not.toHaveBeenCalled()
-
-        resolveNewerSetup?.()
-        await Promise.all([newerRegistration, disposal])
-
-        expect(order).toEqual(['newer', 'older'])
-        expect(olderDispose).toHaveBeenCalledTimes(1)
-        expect(newerDispose).toHaveBeenCalledTimes(1)
-    })
-
-    it('coordinates setup failure with concurrent reverse-order disposal exactly once', async () => {
-        const order: string[] = []
-        const { runtime, add } = createRuntime()
-        let rejectSetup: ((error: Error) => void) | undefined
-        let resolveFailedDisposal: (() => void) | undefined
-        const failedDispose = jest.fn(
-            () =>
-                new Promise<void>((resolve) => {
-                    order.push('failed')
-                    resolveFailedDisposal = resolve
-                })
-        )
-
-        add(testExtension('first', jest.fn(), () => order.push('first')))
-        add(
-            testExtension(
-                'failed',
-                () => new Promise<void>((_resolve, reject) => (rejectSetup = reject)),
-                failedDispose
-            )
-        )
-
-        const firstDisposal = runtime.dispose()
-        const secondDisposal = runtime.dispose()
-        expect(firstDisposal).toBe(secondDisposal)
-        rejectSetup?.(new Error('setup failed'))
-        await new Promise((resolve) => setTimeout(resolve, 0))
-        expect(failedDispose).toHaveBeenCalledTimes(1)
-        resolveFailedDisposal?.()
-
-        await Promise.all([firstDisposal, secondDisposal])
-        expect(order).toEqual(['failed', 'first'])
-        expect(failedDispose).toHaveBeenCalledTimes(1)
+        expect(successfulDispose).toHaveBeenCalledTimes(1)
+        expect(logger.error).toHaveBeenCalledWith('Failed to dispose browser extension "failing"', expect.any(Error))
         await expect(add(testExtension('late'))).rejects.toThrow('disposed')
     })
 })

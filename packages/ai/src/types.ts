@@ -119,6 +119,7 @@ export interface CachedPrompt {
   name: string
   version: number
   label?: string
+  config: Record<string, unknown> | null
   fetchedAt: number
 }
 
@@ -132,6 +133,8 @@ export interface PromptApiResponse {
   version: number
   /** Present when the prompt was fetched by label. */
   label?: string
+  /** Model parameters or agent configuration stored with the version. Absent on older servers. */
+  config?: unknown
   created_by: string
   created_at: string
   updated_at: string
@@ -148,6 +151,12 @@ export interface PromptRemoteResult {
   version: number
   /** The label the prompt was fetched by, when fetching with the label option. */
   label?: string
+  /**
+   * JSON object of model parameters or agent configuration stored with the
+   * prompt version, or null when the version has none. Use defensive access,
+   * e.g. `result.config ?? {}` — fallback results carry no config.
+   */
+  config: Record<string, unknown> | null
 }
 
 /**
@@ -161,6 +170,7 @@ export interface PromptCodeFallbackResult {
   name: undefined
   version: undefined
   label: undefined
+  config: undefined
 }
 
 /**

@@ -1,5 +1,28 @@
 # posthog-react-native
 
+## 4.61.2
+
+### Patch Changes
+
+- [#4332](https://github.com/PostHog/posthog-js/pull/4332) [`b9a241e`](https://github.com/PostHog/posthog-js/commit/b9a241ec862ba5b753ef34d94c856257bdff2a2f) Thanks [@ioannisj](https://github.com/ioannisj)! - Fix `identify()` leaving a user anonymous when the supplied ID already matches the persisted distinct ID (for example after a non-identified bootstrap seeded the same ID). The user is now marked identified and a person-processed `$set` event is captured. Ports the same fix from posthog-js (browser) to the shared core used by React Native, Node, and posthog-js-lite.
+  (2026-07-31)
+- Updated dependencies [[`b9a241e`](https://github.com/PostHog/posthog-js/commit/b9a241ec862ba5b753ef34d94c856257bdff2a2f)]:
+  - @posthog/core@1.46.1
+
+## 4.61.1
+
+### Patch Changes
+
+- [#4291](https://github.com/PostHog/posthog-js/pull/4291) [`da71872`](https://github.com/PostHog/posthog-js/commit/da7187245e9624309162946f4647e5698e742281) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix iOS Expo source map uploads when another config plugin wraps the React Native bundle phase. After upgrading, projects with a checked-in `ios/` directory should run `npx expo prebuild --platform ios` to migrate the existing bundle phase.
+  (2026-07-28)
+
+## 4.61.0
+
+### Minor Changes
+
+- [#4265](https://github.com/PostHog/posthog-js/pull/4265) [`3bd6aed`](https://github.com/PostHog/posthog-js/commit/3bd6aed9e655da1b5487a1decd60ac9d4617a46f) Thanks [@ioannisj](https://github.com/ioannisj)! - Add an `autoPresentSurveys` prop to `PostHogSurveyProvider`. Set it to `false` to defer automatic presentation of popover surveys, for example while a native-stack `formSheet` or `modal` is on top. Deferral is display-only: the survey stays armed and presents once the prop becomes `true` again, and a survey already on screen is never interrupted.
+  (2026-07-27)
+
 ## 4.60.0
 
 ### Minor Changes

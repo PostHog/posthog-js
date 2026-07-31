@@ -20,13 +20,13 @@ jobs:
     steps:
       - name: Get app token
         id: app-token
-        uses: getsentry/action-github-app-token@97c9e23528286821f97fba885c1b1123284b29cc # v2.0.0
+        uses: getsentry/action-github-app-token@5c1e90706fe007857338ac1bfbd7a4177db2f789 # v4.0.0
         with:
           app_id: ${{ secrets.GH_APP_POSTHOG_JS_TESTS_APP_ID }}
           private_key: ${{ secrets.GH_APP_POSTHOG_JS_TESTS_PRIVATE_KEY }}
 
       - name: Checkout the repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
@@ -65,7 +65,7 @@ jobs:
             echo "No new latest references generated for $PACKAGE_NAME"
           fi
           
-      - uses: stefanzweifel/git-auto-commit-action@778341af668090896ca464160c2def5d1d1a3eb0 # v6.0.1
+      - uses: stefanzweifel/git-auto-commit-action@4a55954c782fc1ea30b9056cd3e7a2b40ca8887d # v7.2.0
         if: steps.changes.outputs.changed == 'true'
         with:
           commit_message: "Update generated references"
