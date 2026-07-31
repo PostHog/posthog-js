@@ -801,7 +801,7 @@ describe('SurveyManager', () => {
         })
     })
 
-    describe('renderSurvey with URL prefill that completes the survey', () => {
+    describe('renderSurvey with URL prefill', () => {
         let surveyManager: SurveyManager
         let originalLocation: Location
 
