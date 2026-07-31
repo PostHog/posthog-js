@@ -492,6 +492,76 @@ describe('PostHogOpenAI - Jest test suite', () => {
     })
   })
 
+  test('redacts chat audio and Responses output without changing provider payloads', async () => {
+    const binary = 'A'.repeat(80)
+    mockOpenAiChatResponse = {
+      ...mockOpenAiChatResponse,
+      choices: [
+        {
+          ...mockOpenAiChatResponse.choices[0],
+          message: {
+            role: 'assistant',
+            content: null,
+            refusal: null,
+            audio: { id: 'audio-1', data: binary, transcript: 'hello', expires_at: 0 },
+          },
+        },
+      ],
+    } as ChatCompletion
+
+    const chatRequest = {
+      model: 'gpt-4o-audio-preview',
+      messages: [{ role: 'user' as const, content: 'play audio' }],
+    }
+    await client.chat.completions.create(chatRequest)
+
+    expect((openaiModule.Chat.Completions as any).prototype.create).toHaveBeenCalledWith(chatRequest, undefined)
+    expect((mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties['$ai_output_choices']).toEqual([
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'audio',
+            id: 'audio-1',
+            data: '[base64 audio redacted]',
+            transcript: 'hello',
+            expires_at: 0,
+          },
+        ],
+      },
+    ])
+
+    jest.clearAllMocks()
+    mockOpenAiParsedResponse = {
+      ...mockOpenAiParsedResponse,
+      output: [{ type: 'image_generation_call', id: 'image-1', status: 'completed', result: binary } as any],
+    }
+    const responseRequest = { model: 'gpt-4o', input: 'draw a picture' }
+    const response = await client.responses.parse(responseRequest as any)
+
+    expect(response.output[0]).toMatchObject({ result: binary })
+    expect((openaiModule.Responses as any).prototype.parse).toHaveBeenCalledWith(responseRequest, undefined)
+    expect((mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties['$ai_output_choices']).toEqual([
+      { type: 'image_generation_call', id: 'image-1', status: 'completed', result: '[base64 redacted]' },
+    ])
+
+    jest.clearAllMocks()
+    const transcriptionResult = { text: `data:audio/wav;base64,${binary}` }
+    const TranscriptionsMock: any = openaiModule.Audio.Transcriptions
+    TranscriptionsMock.prototype.create = jest.fn().mockResolvedValue(transcriptionResult)
+    const file = new Blob(['audio'], { type: 'audio/wav' }) as any
+    file.name = 'audio.wav'
+    const transcriptionRequest = { model: 'whisper-1', file }
+
+    const transcription = await client.audio.transcriptions.create(transcriptionRequest)
+
+    expect(transcription).toBe(transcriptionResult)
+    expect(TranscriptionsMock.prototype.create).toHaveBeenCalledWith(transcriptionRequest, undefined)
+    expect((mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties['$ai_output_choices']).toBe(
+      '[base64 audio/wav redacted]'
+    )
+  })
+
   test('chat completions create preserves OpenAI APIPromise helpers', async () => {
     const promise = client.chat.completions.create({
       model: 'gpt-4',

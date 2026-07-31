@@ -42,7 +42,11 @@ export class BinaryContentRedactor {
   }
 
   private redactString(value: string, ctx: MediaTypeContext): string {
-    const minLength = ctx.signalsBinary() ? STRONG_CONTEXT_MIN_LENGTH : WEAK_CONTEXT_MIN_LENGTH
+    const minLength = ctx.hasExplicitMediaType()
+      ? 1
+      : ctx.signalsBinary()
+        ? STRONG_CONTEXT_MIN_LENGTH
+        : WEAK_CONTEXT_MIN_LENGTH
     const recognition = this.recognizer.recognize(value, minLength)
     switch (recognition.kind) {
       case 'data-url':

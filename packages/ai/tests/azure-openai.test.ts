@@ -262,6 +262,75 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     expect(properties['foo']).toBe('bar')
   })
 
+  conditionalTest('redacts chat and Responses input/output without changing Azure payloads', async () => {
+    const binary = 'A'.repeat(80)
+    const chatResponse = {
+      id: 'chatcmpl-binary',
+      model: 'gpt-4o-audio-preview',
+      choices: [
+        {
+          index: 0,
+          finish_reason: 'stop',
+          message: {
+            role: 'assistant',
+            content: null,
+            audio: { id: 'audio-1', data: binary, transcript: 'hello', expires_at: 0 },
+          },
+        },
+      ],
+      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+    }
+    const ChatMock: any = openaiModule.Chat
+    ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue(chatResponse)
+    const chatRequest = {
+      model: 'gpt-4o-audio-preview',
+      messages: [
+        {
+          role: 'user' as const,
+          content: [{ type: 'input_audio' as const, input_audio: { data: binary, format: 'wav' as const } }],
+        },
+      ],
+    }
+
+    await client.chat.completions.create(chatRequest)
+
+    expect((ChatMock.Completions as any).prototype.create).toHaveBeenCalledWith(chatRequest, undefined)
+    const chatProperties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+    expect(JSON.stringify(chatProperties['$ai_input'])).not.toContain(binary)
+    expect(JSON.stringify(chatProperties['$ai_output_choices'])).not.toContain(binary)
+    expect(JSON.stringify(chatProperties)).toContain('[base64 audio/wav redacted]')
+    expect(JSON.stringify(chatProperties)).toContain('[base64 audio redacted]')
+
+    jest.clearAllMocks()
+    const responsesResult = {
+      id: 'resp-binary',
+      model: 'gpt-4o',
+      output: [{ type: 'image_generation_call', id: 'image-1', status: 'completed', result: binary }],
+      usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+    }
+    const ResponsesMock: any = openaiModule.Responses
+    ResponsesMock.prototype.create = jest.fn().mockResolvedValue(responsesResult)
+    const responsesRequest = {
+      model: 'gpt-4o',
+      input: [
+        {
+          role: 'user' as const,
+          content: [{ type: 'input_image' as const, image_url: `data:image/png;base64,${binary}` }],
+        },
+      ],
+    }
+
+    const response = await client.responses.create(responsesRequest as any)
+
+    expect(response.output[0]).toMatchObject({ result: binary })
+    expect(ResponsesMock.prototype.create).toHaveBeenCalledWith(responsesRequest, undefined)
+    const responsesProperties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+    expect(JSON.stringify(responsesProperties['$ai_input'])).not.toContain(binary)
+    expect(JSON.stringify(responsesProperties['$ai_output_choices'])).not.toContain(binary)
+    expect(JSON.stringify(responsesProperties)).toContain('[base64 image/png redacted]')
+    expect(JSON.stringify(responsesProperties)).toContain('[base64 redacted]')
+  })
+
   conditionalTest('groups', async () => {
     const mockAzureChatResponse = {
       id: 'test-response-id',

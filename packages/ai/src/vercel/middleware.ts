@@ -113,10 +113,13 @@ const mapVercelPrompt = (messages: LanguageModelPrompt): PostHogInput[] => {
             const contentData: unknown = c.data
 
             if (contentData instanceof URL) {
-              fileData = contentData.toString()
+              fileData = redactBase64DataUrl(
+                contentData.toString(),
+                contentData.protocol === 'data:' ? c.mediaType : undefined
+              )
             } else if (isString(contentData)) {
               // Redact base64 data URLs and raw base64 to prevent oversized events
-              fileData = redactBase64DataUrl(contentData)
+              fileData = redactBase64DataUrl(contentData, c.mediaType)
             } else {
               fileData = 'raw files not supported'
             }
@@ -227,9 +230,12 @@ const mapVercelOutput = (result: LanguageModelContent[]): PostHogInput[] => {
       // Handle files similar to input mapping - avoid large base64 data
       let fileData: string
       if (item.data instanceof URL) {
-        fileData = item.data.toString()
+        fileData = redactBase64DataUrl(
+          item.data.toString(),
+          item.data.protocol === 'data:' ? item.mediaType : undefined
+        )
       } else if (typeof item.data === 'string') {
-        fileData = redactBase64DataUrl(item.data)
+        fileData = redactBase64DataUrl(item.data, item.mediaType)
 
         // If not redacted and still large, replace with size indicator
         if (fileData === item.data && item.data.length > 1000) {

@@ -2,10 +2,11 @@ import { BinaryContentRedactor } from './sanitization/binary_content_redactor'
 
 const redactor = new BinaryContentRedactor()
 
-export function redactBase64DataUrl(str: string): string
-export function redactBase64DataUrl(str: unknown): unknown
-export function redactBase64DataUrl(str: unknown): unknown {
-  return redactor.redact(str)
+export function redactBase64DataUrl(str: string, mediaType?: string): string
+export function redactBase64DataUrl(str: unknown, mediaType?: string): unknown
+export function redactBase64DataUrl(str: unknown, mediaType?: string): unknown {
+  if (!mediaType) return redactor.redact(str)
+  return (redactor.redact({ data: str, mediaType }) as { data: unknown }).data
 }
 
 export const sanitizeOpenAI = (data: unknown): unknown => redactor.redact(data)

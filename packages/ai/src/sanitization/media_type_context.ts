@@ -89,6 +89,11 @@ export class MediaTypeContext {
     return undefined
   }
 
+  hasExplicitMediaType(): boolean {
+    if (!this.parent || !this.key || !STRONG_CONTEXT_KEYS.has(this.key)) return false
+    return MIME_HINT_KEYS.some((hint) => typeof this.parent?.[hint] === 'string')
+  }
+
   signalsBinary(): boolean {
     if (this.parent) {
       for (const hint of MIME_HINT_KEYS) {

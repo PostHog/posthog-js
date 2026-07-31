@@ -175,6 +175,39 @@ describe('PostHogGemini - Jest test suite', () => {
     })
   })
 
+  test('redacts short explicit-MIME inline data without changing the Gemini request or response', async () => {
+    const binary = 'U0hPUlQgQklOQVJZ'
+    mockGeminiResponse = {
+      candidates: [
+        {
+          content: { parts: [{ inlineData: { mimeType: 'image/png', data: binary } }] },
+          finishReason: 'STOP',
+        },
+      ],
+      usageMetadata: {},
+    }
+    ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue(mockGeminiResponse)
+    const request = {
+      model: 'gemini-2.0-flash-001',
+      contents: [
+        {
+          role: 'user',
+          parts: [{ inlineData: { mimeType: 'audio/wav', data: binary } }],
+        },
+      ],
+    }
+
+    const response = await client.models.generateContent(request)
+
+    expect(response).toBe(mockGeminiResponse)
+    expect((client as any).client.models.generateContent).toHaveBeenCalledWith(request)
+    const properties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+    expect(JSON.stringify(properties['$ai_input'])).not.toContain(binary)
+    expect(JSON.stringify(properties['$ai_output_choices'])).not.toContain(binary)
+    expect(JSON.stringify(properties)).toContain('[base64 audio/wav redacted]')
+    expect(JSON.stringify(properties)).toContain('[base64 image/png redacted]')
+  })
+
   test('streaming content generation', async () => {
     const stream = client.models.generateContentStream({
       model: 'gemini-2.0-flash-001',

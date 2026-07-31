@@ -14,7 +14,7 @@ import type { Stream } from 'openai/streaming'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
 import type { ResponseCreateParamsWithTools, ExtractParsedContentFromParams } from 'openai/lib/ResponsesParser'
 import type { FormattedMessage, FormattedContent } from '../types'
-import { sanitizeOpenAI } from '../sanitization'
+import { sanitizeOpenAI, sanitizeOpenAIResponse } from '../sanitization'
 import { extractPosthogParams } from '../utils'
 import { isResponseTokenChunk, extractRequestId, buildProviderMetadata } from './utils'
 
@@ -250,7 +250,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 model: openAIParams.model ?? modelFromResponse,
                 provider: 'azure',
                 input: sanitizeOpenAI(openAIParams.messages),
-                output: formattedOutput,
+                output: sanitizeOpenAIResponse(formattedOutput),
                 latency,
                 timeToFirstToken,
                 baseURL: this.baseURL,
@@ -299,8 +299,8 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
               ...posthogParams,
               model: openAIParams.model ?? result.model,
               provider: 'azure',
-              input: openAIParams.messages,
-              output: formatResponseOpenAI(result),
+              input: sanitizeOpenAI(openAIParams.messages),
+              output: sanitizeOpenAIResponse(formatResponseOpenAI(result)),
               latency,
               baseURL: this.baseURL,
               modelParameters: getModelParams(body, result.service_tier),
@@ -330,7 +330,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
             ...posthogParams,
             model: openAIParams.model,
             provider: 'azure',
-            input: openAIParams.messages,
+            input: sanitizeOpenAI(openAIParams.messages),
             output: [],
             latency: 0,
             baseURL: this.baseURL,
@@ -454,8 +454,10 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 ...posthogParams,
                 model: openAIParams.model ?? modelFromResponse,
                 provider: 'azure',
-                input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
-                output: finalContent,
+                input: sanitizeOpenAI(
+                  formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions)
+                ),
+                output: sanitizeOpenAIResponse(finalContent),
                 latency,
                 timeToFirstToken,
                 baseURL: this.baseURL,
@@ -469,7 +471,9 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 ...posthogParams,
                 model: openAIParams.model,
                 provider: 'azure',
-                input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
+                input: sanitizeOpenAI(
+                  formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions)
+                ),
                 output: [],
                 latency: 0,
                 baseURL: this.baseURL,
@@ -500,8 +504,10 @@ export class WrappedResponses extends AzureOpenAI.Responses {
               ...posthogParams,
               model: openAIParams.model ?? result.model,
               provider: 'azure',
-              input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
-              output: result.output,
+              input: sanitizeOpenAI(
+                formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions)
+              ),
+              output: sanitizeOpenAIResponse(result.output),
               latency,
               baseURL: this.baseURL,
               modelParameters: getModelParams(body, result.service_tier),
@@ -528,7 +534,9 @@ export class WrappedResponses extends AzureOpenAI.Responses {
             ...posthogParams,
             model: openAIParams.model,
             provider: 'azure',
-            input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
+            input: sanitizeOpenAI(
+              formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions)
+            ),
             output: [],
             latency: 0,
             baseURL: this.baseURL,
@@ -564,8 +572,10 @@ export class WrappedResponses extends AzureOpenAI.Responses {
           ...posthogParams,
           model: openAIParams.model ?? result.model,
           provider: 'azure',
-          input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
-          output: result.output,
+          input: sanitizeOpenAI(
+            formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions)
+          ),
+          output: sanitizeOpenAIResponse(result.output),
           latency,
           baseURL: this.baseURL,
           modelParameters: getModelParams(body, result.service_tier),
@@ -586,7 +596,9 @@ export class WrappedResponses extends AzureOpenAI.Responses {
           ...posthogParams,
           model: openAIParams.model,
           provider: 'azure',
-          input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
+          input: sanitizeOpenAI(
+            formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions)
+          ),
           output: [],
           latency: 0,
           baseURL: this.baseURL,
