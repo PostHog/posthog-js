@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.47.1
+
+### Patch Changes
+
+- [#4351](https://github.com/PostHog/posthog-js/pull/4351) [`15aad20`](https://github.com/PostHog/posthog-js/commit/15aad20f31cfd04318a88a808d2befd6a9f0f7a8) Thanks [@marandaneto](https://github.com/marandaneto)! - Isolate NestJS request context per Observable subscription.
+  (2026-07-31)
+
 ## 5.47.0
 
 ### Minor Changes
