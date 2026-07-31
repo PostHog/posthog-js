@@ -16,7 +16,13 @@ import type { ResponseCreateParamsWithTools, ExtractParsedContentFromParams } fr
 import type { FormattedMessage, FormattedContent } from '../types'
 import { sanitizeOpenAI } from '../sanitization'
 import { extractPosthogParams } from '../utils'
-import { isResponseTokenChunk, extractRequestId, buildProviderMetadata } from './utils'
+import {
+  isResponseTokenChunk,
+  extractRequestId,
+  buildProviderMetadata,
+  isTerminalResponse,
+  getResponseFailure,
+} from './utils'
 
 type ChatCompletion = OpenAIOrignal.ChatCompletion
 type ChatCompletionChunk = OpenAIOrignal.ChatCompletionChunk
@@ -411,6 +417,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 inputTokens: 0,
                 outputTokens: 0,
               }
+              let terminalResponse: OpenAIOrignal.Responses.Response | undefined
 
               for await (const chunk of stream1) {
                 // Track first token time on content delta events
@@ -429,14 +436,18 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                   if (chunk.response.service_tier != null) {
                     serviceTierFromResponse = chunk.response.service_tier
                   }
-                }
-                if (
-                  chunk.type === 'response.completed' &&
-                  'response' in chunk &&
-                  chunk.response?.output &&
-                  chunk.response.output.length > 0
-                ) {
-                  finalContent = chunk.response.output
+                  if (isTerminalResponse(chunk.response)) {
+                    terminalResponse = chunk.response
+                    finalContent = chunk.response.output
+                    if (chunk.response.status !== 'completed' && chunk.response.usage) {
+                      usage = {
+                        inputTokens: chunk.response.usage.input_tokens ?? 0,
+                        outputTokens: chunk.response.usage.output_tokens ?? 0,
+                        reasoningTokens: chunk.response.usage.output_tokens_details?.reasoning_tokens ?? 0,
+                        cacheReadInputTokens: chunk.response.usage.input_tokens_details?.cached_tokens ?? 0,
+                      }
+                    }
+                  }
                 }
                 if ('usage' in chunk && chunk.usage) {
                   usage = {
@@ -462,7 +473,13 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 modelParameters: getModelParams(body, serviceTierFromResponse),
                 httpStatus: 200,
                 usage,
+                stopReason:
+                  terminalResponse?.status === 'completed' ? undefined : (terminalResponse?.status ?? undefined),
                 completionId: completionIdFromResponse,
+                providerMetadata: buildProviderMetadata({
+                  incompleteDetails: terminalResponse?.incomplete_details,
+                }),
+                error: getResponseFailure(terminalResponse),
               })
             } catch (error: unknown) {
               await captureAiGeneration(this.phClient, {
@@ -512,8 +529,13 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
                 cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
               },
+              stopReason: result.status === 'completed' ? undefined : (result.status ?? undefined),
               completionId: result.id,
-              providerMetadata: buildProviderMetadata({ requestId: extractRequestId(result) }),
+              providerMetadata: buildProviderMetadata({
+                requestId: extractRequestId(result),
+                incompleteDetails: result.incomplete_details,
+              }),
+              error: getResponseFailure(result),
             })
           }
           return result
@@ -576,8 +598,13 @@ export class WrappedResponses extends AzureOpenAI.Responses {
             reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
             cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
           },
+          stopReason: result.status === 'completed' ? undefined : (result.status ?? undefined),
           completionId: result.id,
-          providerMetadata: buildProviderMetadata({ requestId: extractRequestId(result) }),
+          providerMetadata: buildProviderMetadata({
+            requestId: extractRequestId(result),
+            incompleteDetails: result.incomplete_details,
+          }),
+          error: getResponseFailure(result),
         })
         return result
       },
