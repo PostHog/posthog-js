@@ -16,6 +16,18 @@ function makeResponse(status: number, body?: unknown, headers?: Record<string, s
   }
 }
 
+function makeStallingResponse(status: number, cancel: jest.Mock<Promise<void>, []>): PostHogFetchResponse {
+  const stalledBody = () => new Promise<string>(() => {})
+
+  return {
+    status,
+    text: stalledBody,
+    json: stalledBody,
+    headers: { get: () => null },
+    body: { cancel } as unknown as ReadableStream<Uint8Array>,
+  }
+}
+
 function msg(uuid: string, overrides: PostHogEventProperties = {}): PostHogEventProperties {
   return { event: 'test', distinct_id: 'user', uuid, properties: {}, ...overrides }
 }
@@ -390,6 +402,25 @@ describe('V1CaptureSender', () => {
       expect(fetch).toHaveBeenCalledTimes(4)
       expect((errors[0] as CaptureV1Error).retryExhausted).toEqual(['u1'])
     })
+
+    it('does not wait for response body cancellation before retrying a 5xx', async () => {
+      const { sender, fetch, errors, sleeps } = makeSender({ maxAttempts: 2 })
+      const cancel = jest.fn<Promise<void>, []>(() => new Promise<void>(() => {}))
+      fetch
+        .mockResolvedValueOnce(makeStallingResponse(503, cancel))
+        .mockResolvedValueOnce(makeResponse(503, 'still unavailable'))
+
+      await sender.sendV1Batch([msg('u1')])
+
+      expect(cancel).toHaveBeenCalledTimes(1)
+      expect(fetch).toHaveBeenCalledTimes(2)
+      expect(sleeps).toEqual([100])
+      expect(errors).toHaveLength(1)
+      expect(errors[0]).toBeInstanceOf(CaptureV1Error)
+      expect((errors[0] as CaptureV1Error).retryExhausted).toEqual(['u1'])
+      expect(((errors[0] as CaptureV1Error).cause as Error).message).toContain('HTTP 503: still unavailable')
+      expect(jest.getTimerCount()).toBe(0)
+    })
   })
 
   describe('transport errors', () => {
@@ -413,6 +444,67 @@ describe('V1CaptureSender', () => {
       const error = errors[0] as CaptureV1Error
       expect(error.retryExhausted).toEqual(['u1', 'u2'])
       expect((error.cause as Error).message).toBe('timeout')
+    })
+
+    it('retries a stalled success body without waiting for body cancellation to settle', async () => {
+      const { sender, fetch, errors, sleeps } = makeSender({ maxAttempts: 2, requestTimeoutMs: 1000 })
+      const cancel = jest.fn<Promise<void>, []>(() => new Promise<void>(() => {}))
+      fetch
+        .mockImplementationOnce(() => Promise.resolve(makeStallingResponse(200, cancel)))
+        .mockResolvedValueOnce(makeResponse(200, { results: {} }))
+
+      const sendPromise = sender.sendV1Batch([msg('u1')])
+      await jest.advanceTimersByTimeAsync(1000)
+      await sendPromise
+
+      expect(fetch).toHaveBeenCalledTimes(2)
+      expect(sleeps).toEqual([100])
+      expect(cancel).toHaveBeenCalledTimes(1)
+      expect(errors).toEqual([])
+      expect(jest.getTimerCount()).toBe(0)
+    })
+
+    it('surfaces CaptureV1Error after stalled success bodies exhaust the timeout retry budget', async () => {
+      const { sender, fetch, errors } = makeSender({ maxAttempts: 2, requestTimeoutMs: 1000 })
+      const cancels: jest.Mock<Promise<void>, []>[] = []
+      fetch.mockImplementation(() => {
+        const cancel = jest.fn<Promise<void>, []>(() => new Promise<void>(() => {}))
+        cancels.push(cancel)
+        return Promise.resolve(makeStallingResponse(200, cancel))
+      })
+
+      const sendPromise = sender.sendV1Batch([msg('u1')])
+      await jest.advanceTimersByTimeAsync(1000)
+      await jest.advanceTimersByTimeAsync(1000)
+      await sendPromise
+
+      expect(fetch).toHaveBeenCalledTimes(2)
+      expect(cancels).toHaveLength(2)
+      expect(cancels.every((cancel) => cancel.mock.calls.length === 1)).toBe(true)
+      expect(errors).toHaveLength(1)
+      const error = errors[0] as CaptureV1Error
+      expect(error).toBeInstanceOf(CaptureV1Error)
+      expect(error.retryExhausted).toEqual(['u1'])
+      expect((error.cause as Error).name).toBe('AbortError')
+      expect(jest.getTimerCount()).toBe(0)
+    })
+
+    it('times out a stalled HTTP error body without changing terminal status classification', async () => {
+      const { sender, fetch, errors } = makeSender({ maxAttempts: 2, requestTimeoutMs: 1000 })
+      const cancel = jest.fn<Promise<void>, []>().mockResolvedValue(undefined)
+      fetch.mockResolvedValue(makeStallingResponse(400, cancel))
+
+      const sendPromise = sender.sendV1Batch([msg('u1')])
+      await jest.advanceTimersByTimeAsync(1000)
+      await sendPromise
+
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(cancel).toHaveBeenCalledTimes(1)
+      expect(errors).toHaveLength(1)
+      expect(errors[0]).toBeInstanceOf(CaptureV1Error)
+      expect((errors[0] as CaptureV1Error).retryExhausted).toEqual(['u1'])
+      expect(((errors[0] as CaptureV1Error).cause as Error).message).toContain('HTTP 400')
+      expect(jest.getTimerCount()).toBe(0)
     })
   })
 
