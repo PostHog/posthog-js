@@ -56,7 +56,14 @@ async function setupLowLevelServer(realToolName?: string) {
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const name = request.params?.name
     if (name === realToolName) {
-      return { content: [{ type: 'text' as const, text: `real handler: ${request.params?.arguments?.value}` }] }
+      const value = request.params?.arguments?.value
+      if (value === 'explode') {
+        throw new Error('real collision failed')
+      }
+      if (typeof value !== 'string') {
+        throw new Error(`Invalid arguments for tool ${name}: value is required`)
+      }
+      return { content: [{ type: 'text' as const, text: `real handler: ${value}` }] }
     }
     if (name === 'explode') {
       throw new Error('boom')
@@ -64,8 +71,11 @@ async function setupLowLevelServer(realToolName?: string) {
     if (name === 'soft_fail') {
       return { isError: true, content: [{ type: 'text', text: 'nope' }] }
     }
-    const text = (request.params?.arguments?.text as string) ?? ''
-    return { content: [{ type: 'text', text: `echo: ${text}` }] }
+    if (name === 'echo') {
+      const text = (request.params?.arguments?.text as string) ?? ''
+      return { content: [{ type: 'text', text: `echo: ${text}` }] }
+    }
+    throw new Error(`Unknown tool: ${name}`)
   })
 
   const client = new Client({ name: 'test client', version: '1.0' }, { capabilities: {} })
@@ -121,7 +131,7 @@ describe('Low-level Server reportMissing ownership (e2e)', () => {
       instrument(server, fakePostHog(), { reportMissing: true, enableConversationId: true, logger })
       await connect()
 
-      // Before tools/list establishes ownership, a matching name is always treated as a real tool.
+      // The original dispatcher establishes ownership even before tools/list is called.
       const preListResult = await client.request(
         { method: 'tools/call', params: { name: 'get_more_tools', arguments: { value: 'before-list' } } },
         CallToolResultSchema
@@ -164,15 +174,18 @@ describe('Low-level Server reportMissing ownership (e2e)', () => {
     }
   })
 
-  it('advertises and handles the owned virtual tool normally', async () => {
-    const { server, client, connect, cleanup } = await setupLowLevelServer()
+  it('handles a virtual call on a fresh pod after another pod advertised it', async () => {
+    const podA = await setupLowLevelServer()
+    const podB = await setupLowLevelServer()
     try {
-      instrument(server, fakePostHog(), { reportMissing: true })
-      await connect()
+      instrument(podA.server, fakePostHog(), { reportMissing: true, enableConversationId: true })
+      instrument(podB.server, fakePostHog(), { reportMissing: true, enableConversationId: true })
+      await Promise.all([podA.connect(), podB.connect()])
 
-      const { tools } = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+      const { tools } = await podA.client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
       expect(tools.filter((tool) => tool.name === 'get_more_tools')).toHaveLength(1)
-      const result = await client.request(
+
+      const result = await podB.client.request(
         {
           method: 'tools/call',
           params: { name: 'get_more_tools', arguments: { context: 'Need a database tool' } },
@@ -180,8 +193,142 @@ describe('Low-level Server reportMissing ownership (e2e)', () => {
         CallToolResultSchema
       )
       expect((result.content as { text: string }[])[0].text).toContain('Unfortunately')
+      expect(result.content).toHaveLength(1)
       await new Promise((resolve) => setTimeout(resolve, 50))
-      expect(eventCapture.findCapturesByEvent('$mcp_missing_capability')).toHaveLength(1)
+      const captures = eventCapture.findCapturesByEvent('$mcp_missing_capability')
+      expect(captures).toHaveLength(1)
+      expect(captures[0].properties.$mcp_conversation_id).toBeUndefined()
+      expect(eventCapture.findCapturesByEvent('$mcp_tool_call')).toHaveLength(0)
+    } finally {
+      await Promise.all([podA.cleanup(), podB.cleanup()])
+    }
+  })
+
+  it('handles a custom-named virtual tool on a fresh instance', async () => {
+    const customName = 'posthog_find_tools'
+    const { server, client, connect, cleanup } = await setupLowLevelServer()
+    try {
+      instrument(server, fakePostHog(), { reportMissing: true, missingCapabilityToolName: customName })
+      await connect()
+
+      const result = await client.request(
+        {
+          method: 'tools/call',
+          params: { name: customName, arguments: { context: 'Need a deployment tool' } },
+        },
+        CallToolResultSchema
+      )
+      expect((result.content as { text: string }[])[0].text).toContain('Unfortunately')
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const captures = eventCapture.findCapturesByEvent('$mcp_missing_capability')
+      expect(captures).toHaveLength(1)
+      expect(captures[0].properties.$mcp_resource_name).toBe(customName)
+      expect(eventCapture.findCapturesByEvent('$mcp_tools_list')).toHaveLength(0)
+    } finally {
+      await cleanup()
+    }
+  })
+
+  it('does not mutate a reused frozen tools array while injecting the virtual descriptor', async () => {
+    const { server, client, connect, cleanup } = await setupLowLevelServer()
+    const frozenTools = Object.freeze([...TOOLS])
+    server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: frozenTools as any }))
+    try {
+      instrument(server, fakePostHog(), { reportMissing: true, enableConversationId: true })
+      await connect()
+
+      const first = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+      const second = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+      const firstVirtual = first.tools.find((tool) => tool.name === 'get_more_tools')
+      const secondVirtual = second.tools.find((tool) => tool.name === 'get_more_tools')
+
+      expect(first.tools.filter((tool) => tool.name === 'get_more_tools')).toHaveLength(1)
+      expect(second.tools.filter((tool) => tool.name === 'get_more_tools')).toHaveLength(1)
+      expect((firstVirtual as any)?.inputSchema?.properties?.conversation_id).toBeUndefined()
+      expect((secondVirtual as any)?.inputSchema?.properties?.conversation_id).toBeUndefined()
+      expect(frozenTools.some((tool) => tool.name === 'get_more_tools')).toBe(false)
+    } finally {
+      await cleanup()
+    }
+  })
+
+  it('does not swallow errors from a colliding real handler', async () => {
+    const { server, client, connect, cleanup } = await setupLowLevelServer('get_more_tools')
+    try {
+      instrument(server, fakePostHog(), { reportMissing: true })
+      await connect()
+
+      await expect(
+        client.request(
+          { method: 'tools/call', params: { name: 'get_more_tools', arguments: { value: 'explode' } } },
+          CallToolResultSchema
+        )
+      ).rejects.toThrow('real collision failed')
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(eventCapture.findCapturesByEvent('$mcp_missing_capability')).toHaveLength(0)
+      expect(eventCapture.findCapturesByEvent('$mcp_tool_call')).toHaveLength(1)
+    } finally {
+      await cleanup()
+    }
+  })
+
+  it('fails open to a colliding real handler when the ownership probe fails', async () => {
+    const { server, client, connect, cleanup } = await setupLowLevelServer('get_more_tools')
+    server.setRequestHandler(ListToolsRequestSchema, async () => {
+      throw new Error('listing unavailable')
+    })
+    try {
+      instrument(server, fakePostHog(), { reportMissing: true })
+      await connect()
+
+      const result = await client.request(
+        { method: 'tools/call', params: { name: 'get_more_tools', arguments: { value: 'fallback' } } },
+        CallToolResultSchema
+      )
+      expect((result.content as { text: string }[])[0].text).toBe('real handler: fallback')
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(eventCapture.findCapturesByEvent('$mcp_missing_capability')).toHaveLength(0)
+      expect(eventCapture.findCapturesByEvent('$mcp_tool_call')).toHaveLength(1)
+    } finally {
+      await cleanup()
+    }
+  })
+
+  it('fails open after the server removes its tools/list handler', async () => {
+    const { server, client, connect, cleanup } = await setupLowLevelServer('get_more_tools')
+    try {
+      instrument(server, fakePostHog(), { reportMissing: true })
+      server.removeRequestHandler('tools/list')
+      await connect()
+
+      const result = await client.request(
+        { method: 'tools/call', params: { name: 'get_more_tools', arguments: { value: 'after-remove' } } },
+        CallToolResultSchema
+      )
+      expect((result.content as { text: string }[])[0].text).toBe('real handler: after-remove')
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(eventCapture.findCapturesByEvent('$mcp_missing_capability')).toHaveLength(0)
+      expect(eventCapture.findCapturesByEvent('$mcp_tool_call')).toHaveLength(1)
+    } finally {
+      await cleanup()
+    }
+  })
+
+  it('does not misclassify a colliding real tool validation failure as unknown', async () => {
+    const { server, client, connect, cleanup } = await setupLowLevelServer('get_more_tools')
+    try {
+      instrument(server, fakePostHog(), { reportMissing: true })
+      await connect()
+
+      await expect(
+        client.request(
+          { method: 'tools/call', params: { name: 'get_more_tools', arguments: {} } },
+          CallToolResultSchema
+        )
+      ).rejects.toThrow('Invalid arguments')
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(eventCapture.findCapturesByEvent('$mcp_missing_capability')).toHaveLength(0)
+      expect(eventCapture.findCapturesByEvent('$mcp_tool_call')).toHaveLength(1)
     } finally {
       await cleanup()
     }
@@ -354,6 +501,66 @@ describe('Low-level Server — late handler registration', () => {
 
   afterEach(async () => {
     await eventCapture.stop()
+  })
+
+  it('instruments a tools/call handler registered after instrument()', async () => {
+    const server = new Server({ name: 'late low-level', version: '1.0.0' }, { capabilities: { tools: {} } })
+
+    instrument(server, fakePostHog(), { reportMissing: true })
+    server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }))
+    server.setRequestHandler(CallToolRequestSchema, async (request) => ({
+      content: [{ type: 'text', text: `echo: ${request.params?.arguments?.text ?? ''}` }],
+    }))
+
+    const client = new Client({ name: 'test client', version: '1.0' }, { capabilities: {} })
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+
+    try {
+      await Promise.all([client.connect(clientTransport), server.connect(serverTransport)])
+
+      const result = await client.request(
+        { method: 'tools/call', params: { name: 'get_more_tools', arguments: { context: 'Need SQL' } } },
+        CallToolResultSchema
+      )
+      expect((result.content as { text: string }[])[0].text).toContain('Unfortunately')
+
+      await new Promise((r) => setTimeout(r, 50))
+      expect(eventCapture.findCapturesByEvent('$mcp_missing_capability')).toHaveLength(1)
+      expect(eventCapture.findCapturesByEvent('$mcp_tool_call')).toHaveLength(0)
+    } finally {
+      await clientTransport.close?.()
+      await serverTransport.close?.()
+    }
+  })
+
+  it('captures late-handler result validation failures as failed tool calls', async () => {
+    const server = new Server({ name: 'late low-level', version: '1.0.0' }, { capabilities: { tools: {} } })
+
+    instrument(server, fakePostHog())
+    server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }))
+    server.setRequestHandler(CallToolRequestSchema, async () => null as any)
+
+    const client = new Client({ name: 'test client', version: '1.0' }, { capabilities: {} })
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+
+    try {
+      await Promise.all([client.connect(clientTransport), server.connect(serverTransport)])
+
+      await expect(
+        client.request(
+          { method: 'tools/call', params: { name: 'echo', arguments: { text: 'invalid' } } },
+          CallToolResultSchema
+        )
+      ).rejects.toThrow('Invalid tools/call result')
+
+      await new Promise((r) => setTimeout(r, 50))
+      const toolCalls = eventCapture.findCapturesByEvent('$mcp_tool_call')
+      expect(toolCalls).toHaveLength(1)
+      expect(toolCalls[0].properties.$mcp_is_error).toBe(true)
+    } finally {
+      await clientTransport.close?.()
+      await serverTransport.close?.()
+    }
   })
 
   it('instruments a tools/list handler registered after instrument()', async () => {

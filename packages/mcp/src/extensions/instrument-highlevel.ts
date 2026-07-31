@@ -22,6 +22,7 @@ import {
   handleListToolsRequest,
   patchRequestHandlers,
   captureToolCall,
+  isToolAdvertised,
   readToolMetaCategory,
 } from './instrumentation'
 import { getContextArgument } from './tracing-helpers'
@@ -175,10 +176,7 @@ function addTracingToToolCallbackInternal(
       return input
     }
 
-    const data = getServerTrackingData(server.server as MCPServerLike)
-    const isMissingCapability =
-      data?.missingCapabilityToolInjected && toolName === resolveMissingCapabilityToolName(data.options)
-    const cleanedArgs = isMissingCapability ? args : stripConversationId(removeContextFromArgs(args))
+    const cleanedArgs = stripConversationId(removeContextFromArgs(args))
 
     try {
       if (cleanedArgs === undefined) {
@@ -222,7 +220,11 @@ async function handleToolCallRequest(
     return await originalCallToolHandler(request, extra)
   }
 
-  if (data.missingCapabilityToolInjected && request.params?.name === resolveMissingCapabilityToolName(data.options)) {
+  const toolName = request.params?.name
+  const isMissingCapabilityCandidate =
+    data.options.reportMissing && toolName === resolveMissingCapabilityToolName(data.options)
+
+  if (isMissingCapabilityCandidate && (await isToolAdvertised(server, toolName, extra)) === false) {
     const context = getContextArgument(request) || ''
     return await captureToolCall({
       server,

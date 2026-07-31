@@ -9,10 +9,15 @@ import { resetTodos, setupTestServerAndClient } from './test-utils/client-server
 
 const GET_MORE_TOOLS = 'get_more_tools'
 
-function registerRealTool(server: any, name: string): void {
-  server.tool(name, 'A legitimate application tool', { value: z.string() }, async ({ value }: { value: string }) => ({
-    content: [{ type: 'text' as const, text: `real handler: ${value}` }],
-  }))
+function registerRealTool(server: any, name: string): any {
+  return server.tool(
+    name,
+    'A legitimate application tool',
+    { value: z.string() },
+    async ({ value }: { value: string }) => ({
+      content: [{ type: 'text' as const, text: `real handler: ${value}` }],
+    })
+  )
 }
 
 describe('reportMissing (get_more_tools virtual tool)', () => {
@@ -90,7 +95,7 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
       registerRealTool(server, GET_MORE_TOOLS)
       instrument(server, fakePostHog(), { reportMissing: true, enableConversationId: true, logger })
 
-      // Before tools/list establishes ownership, a matching name is always treated as a real tool.
+      // Registry ownership is available even before tools/list is called.
       const preListResult = await client.request(
         {
           method: 'tools/call',
@@ -135,14 +140,50 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
       )
       expect(result.content[0].text).toBe('real handler: custom')
     })
+
+    it('uses the virtual tool when a colliding high-level registration is disabled', async () => {
+      const registeredTool = registerRealTool(server, GET_MORE_TOOLS)
+      registeredTool.disable()
+      instrument(server, fakePostHog(), { reportMissing: true })
+
+      const { tools } = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+      const matchingTools = tools.filter((tool: any) => tool.name === GET_MORE_TOOLS)
+      expect(matchingTools).toHaveLength(1)
+      expect(matchingTools[0].description).toContain('Check for additional tools')
+
+      const result = await client.request(
+        {
+          method: 'tools/call',
+          params: { name: GET_MORE_TOOLS, arguments: { context: 'Need a database tool' } },
+        },
+        CallToolResultSchema
+      )
+      expect(result.content[0].text).toContain('Unfortunately')
+    })
+
+    it('preserves validation failures from a colliding real tool', async () => {
+      registerRealTool(server, GET_MORE_TOOLS)
+      instrument(server, fakePostHog(), { reportMissing: true })
+
+      const result = await client.request(
+        {
+          method: 'tools/call',
+          params: { name: GET_MORE_TOOLS, arguments: { context: 'Missing the required real-tool value' } },
+        },
+        CallToolResultSchema
+      )
+
+      expect(result.isError).toBe(true)
+      expect(result.content[0].text).toMatch(/Invalid|required/i)
+      expect(result.content[0].text).not.toContain('Unfortunately')
+    })
   })
 
   describe('tools/call', () => {
-    it('captures the report as a $mcp_missing_capability event with context as userIntent', async () => {
+    it('handles a fresh-instance call without a prior tools/list request', async () => {
       const capture = new EventCapture()
       await capture.start()
-      instrument(server, fakePostHog(), { reportMissing: true })
-      await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+      instrument(server, fakePostHog(), { reportMissing: true, enableConversationId: true })
 
       const context = 'Need a database query tool for SQL operations'
       const result = await client.request(
@@ -151,6 +192,7 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
       )
 
       expect(result.content[0].text).toContain('Unfortunately')
+      expect(result.content).toHaveLength(1)
 
       await new Promise((r) => setTimeout(r, 50))
       const event = capture
@@ -160,6 +202,7 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
       expect(event?.userIntent).toBe(context)
       expect(event?.sessionId).toBeDefined()
       expect(event?.userIntentSource).toBe('context_parameter')
+      expect(event?.conversationId).toBeUndefined()
 
       // It's a capability gap, not a tool invocation.
       expect(capture.findCapturesByEvent('$mcp_missing_capability')).toHaveLength(1)
@@ -174,7 +217,6 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
       const capture = new EventCapture()
       await capture.start()
       instrument(server, fakePostHog(), { reportMissing: true })
-      await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
 
       const calls = [
         { name: 'add_todo', arguments: { text: 'First', context: 'Adding first todo' } },
@@ -208,7 +250,6 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
         reportMissing: true,
         identify: async () => ({ distinctId: 'user-1', properties: { role: 'developer' } }),
       })
-      await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
 
       await client.request(
         { method: 'tools/call', params: { name: GET_MORE_TOOLS, arguments: { context: 'Need GraphQL tool' } } },
@@ -238,17 +279,17 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
       await capture.start()
       instrument(server, fakePostHog(), { reportMissing: true, missingCapabilityToolName: CUSTOM })
 
-      // advertised under the custom name, not the default
-      const { tools } = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
-      expect(tools.find((t: any) => t.name === CUSTOM)).toBeDefined()
-      expect(tools.find((t: any) => t.name === GET_MORE_TOOLS)).toBeUndefined()
-
-      // detected + captured when called under the custom name
+      // Detected + captured on a fresh instance before any tools/list request.
       const result = await client.request(
         { method: 'tools/call', params: { name: CUSTOM, arguments: { context: 'Need a deploy tool' } } },
         CallToolResultSchema
       )
       expect(result.content[0].text).toContain('Unfortunately')
+
+      // Advertised under the custom name, not the default.
+      const { tools } = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+      expect(tools.find((t: any) => t.name === CUSTOM)).toBeDefined()
+      expect(tools.find((t: any) => t.name === GET_MORE_TOOLS)).toBeUndefined()
 
       await new Promise((r) => setTimeout(r, 50))
       const event = capture

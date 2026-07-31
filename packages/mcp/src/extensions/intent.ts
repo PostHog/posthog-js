@@ -12,7 +12,6 @@ import type {
 } from '../types'
 import { isContextEnabled } from './context-parameters'
 import { log } from './logger'
-import { resolveMissingCapabilityToolName } from './tools'
 
 interface ResolvedIntent {
   intent: string
@@ -57,9 +56,7 @@ export async function resolveToolCallIntent(
   extra?: CompatibleRequestHandlerExtra
 ): Promise<ResolvedIntent | null> {
   const contextArgument = getContextArgument(request)
-  const isMissingCapability =
-    data.missingCapabilityToolInjected && request.params?.name === resolveMissingCapabilityToolName(data.options)
-  if (isContextEnabled(data.options.context) && !isMissingCapability && contextArgument) {
+  if (isContextEnabled(data.options.context) && contextArgument) {
     return { intent: contextArgument, source: 'context_parameter' }
   }
 

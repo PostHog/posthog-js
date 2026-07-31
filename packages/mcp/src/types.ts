@@ -280,8 +280,6 @@ export interface MCPAnalyticsData {
   sessionInfo: SessionInfo
   /** `token` = recovered from a self-encoded `Mcp-Session-Id` token (see session-token.ts). */
   sessionSource: 'generated' | 'mcp' | 'token'
-  /** True only after PostHog injects the configured missing-capability tool into a tools/list response. */
-  missingCapabilityToolInjected: boolean
   toolCategories: Map<string, string>
   toolDescriptions: Map<string, string>
 }

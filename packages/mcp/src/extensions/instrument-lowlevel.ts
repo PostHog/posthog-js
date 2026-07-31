@@ -14,6 +14,7 @@ import {
   handleListToolsRequest,
   patchRequestHandlers,
   captureToolCall,
+  isToolAdvertised,
 } from './instrumentation'
 import { getContextArgument } from './tracing-helpers'
 
@@ -31,17 +32,22 @@ type MCPRequestExtra = Parameters<MCPRequestHandler>[1]
 export function instrumentLowLevelServer(server: MCPServerLike): void {
   try {
     // Patch already existing handlers, and patch setRequestHandler to capture dynamically created handlers.
+    const hadCallToolHandler = server._requestHandlers.has('tools/call')
     const handlers = {
       initialize: handleInitializeRequest,
       'tools/list': handleListToolsRequest,
+      'tools/call': handleToolCallRequest,
     }
     patchRequestHandlers(server, handlers)
 
-    const originalCallToolHandler = server._requestHandlers.get('tools/call')
-    server.setRequestHandler(
-      CallToolRequestSchema,
-      async (request, extra) => await handleToolCallRequest(server, originalCallToolHandler, request, extra)
-    )
+    if (!hadCallToolHandler) {
+      // Register a raw fallback through the patched setter so reportMissing works
+      // even before an application dispatcher is attached. A later registration
+      // replaces it and is wrapped by patchRequestHandlers.
+      server.setRequestHandler(CallToolRequestSchema, async (request) => {
+        throw new Error(`Unknown tool: ${request.params?.name || 'unknown'}`)
+      })
+    }
   } catch (error) {
     log(`Warning: Failed to setup tool call instrumentation - ${error}`)
     throw error
@@ -62,7 +68,11 @@ async function handleToolCallRequest(
     return await originalCallToolHandler?.(request, extra)
   }
 
-  if (data.missingCapabilityToolInjected && request.params?.name === resolveMissingCapabilityToolName(data.options)) {
+  const toolName = request.params?.name
+  const isMissingCapabilityCandidate =
+    data.options.reportMissing && toolName === resolveMissingCapabilityToolName(data.options)
+
+  if (isMissingCapabilityCandidate && (await isToolAdvertised(server, toolName, extra)) === false) {
     const context = getContextArgument(request) || ''
     return await captureToolCall({
       server,
