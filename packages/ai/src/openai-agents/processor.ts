@@ -256,6 +256,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
       ...errorProperties,
     }
     if (groupId) {
+      properties.$ai_session_id = groupId
       properties.$ai_group_id = groupId
     }
     return properties
@@ -341,7 +342,11 @@ export class PostHogTracingProcessor implements TracingProcessor {
         properties.$ai_latency = latency
       }
 
+      // The Agents SDK groupId links traces from one conversation, which is exactly
+      // what PostHog calls a session. $ai_group_id is still emitted for anyone
+      // already querying it.
       if (groupId) {
+        properties.$ai_session_id = groupId
         properties.$ai_group_id = groupId
       }
 

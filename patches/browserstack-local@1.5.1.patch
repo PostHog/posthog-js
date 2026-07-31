@@ -1,0 +1,10 @@
+diff --git a/lib/LocalBinary.js b/lib/LocalBinary.js
+index 1b013e7a9567cdc7b4a2b87798729c4d28217abe..009baf8c201bb4ec213a6975fd02654ab8888af7 100644
+--- a/lib/LocalBinary.js
++++ b/lib/LocalBinary.js
+@@ -142 +142 @@ function LocalBinary(){
+-    if(this.checkPath(binaryPath, fs.X_OK)){
++    if(this.checkPath(binaryPath, fs.constants.X_OK)){
+@@ -156 +156 @@ function LocalBinary(){
+-    mode = mode || (fs.R_OK | fs.W_OK);
++    mode = mode || (fs.constants.R_OK | fs.constants.W_OK);

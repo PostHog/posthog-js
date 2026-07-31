@@ -45,7 +45,6 @@ describe('RemoteConfigLoader', () => {
 
         beforeEach(() => {
             assignableWindow._POSTHOG_REMOTE_CONFIG = undefined
-            assignableWindow.POSTHOG_DEBUG = true
 
             assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(
                 (_ph: PostHog, _name: string, cb: (err?: any) => void) => {
@@ -125,6 +124,52 @@ describe('RemoteConfigLoader', () => {
             } else {
                 expect(posthog.featureFlags.ensureFlagsLoaded).not.toHaveBeenCalled()
             }
+        })
+
+        it('does not retry or rethrow synchronous config application errors', () => {
+            assignableWindow._POSTHOG_REMOTE_CONFIG = {
+                [posthog.config.token]: {
+                    config,
+                    siteApps: [],
+                },
+            }
+            posthog._onRemoteConfig = jest.fn(() => {
+                throw new Error('config application failed')
+            })
+
+            expect(() => new RemoteConfigLoader(posthog).load()).not.toThrow()
+
+            expect(posthog._onRemoteConfig).toHaveBeenCalledTimes(1)
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({ ok: true, config })
+            expect(posthog.featureFlags.ensureFlagsLoaded).toHaveBeenCalled()
+        })
+
+        it('does not rethrow feature flag initialization errors', () => {
+            assignableWindow._POSTHOG_REMOTE_CONFIG = {
+                [posthog.config.token]: {
+                    config,
+                    siteApps: [],
+                },
+            }
+            posthog.featureFlags.ensureFlagsLoaded = jest.fn(() => {
+                throw new Error('feature flag initialization failed')
+            })
+
+            expect(() => new RemoteConfigLoader(posthog).load()).not.toThrow()
+
+            expect(posthog._onRemoteConfig).toHaveBeenCalledTimes(1)
+            expect(posthog.featureFlags.ensureFlagsLoaded).toHaveBeenCalledTimes(1)
+        })
+
+        it('reports synchronous loading errors as a failed outcome', () => {
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(() => {
+                throw new Error('loader failed')
+            })
+
+            new RemoteConfigLoader(posthog).load()
+
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({ ok: false })
+            expect(posthog.featureFlags.ensureFlagsLoaded).toHaveBeenCalled()
         })
 
         it('still initializes extensions and loads flags when config fetch fails', () => {

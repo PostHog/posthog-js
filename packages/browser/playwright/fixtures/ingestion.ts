@@ -2,6 +2,7 @@ import { CaptureResult } from '@/types'
 import { PosthogPage, testPostHog } from './posthog'
 
 const INGESTION_TIMEOUT = 30 * 60 * 1000 // 30 min
+const INITIAL_INGESTION_DELAY = 5 * 1000 // 5 seconds
 const currentEnv = process.env
 const {
     POSTHOG_PERSONAL_API_KEY = 'private_key',
@@ -121,6 +122,8 @@ export async function retryUntilResults(
     let last_validation_error: unknown = null
     let elapsedSeconds = 0
 
+    await delay(INITIAL_INGESTION_DELAY)
+
     do {
         attempts++
         let results
@@ -154,10 +157,9 @@ export async function retryUntilResults(
                     return dedupedResults
                 } catch (err) {
                     last_validation_error = err
-                    const message = err instanceof Error ? err.message : String(err)
                     // eslint-disable-next-line no-console
                     console.log(
-                        `Validation failed with ${dedupedResults.length} results (attempt: ${attempts}, testSessionId: ${testSessionId}, testTitle: ${testTitle}): ${message}`
+                        `Validation pending with ${dedupedResults.length} results (attempt: ${attempts}, testSessionId: ${testSessionId}, testTitle: ${testTitle})`
                     )
                 }
             } else if (dedupedResults.length >= target_results) {

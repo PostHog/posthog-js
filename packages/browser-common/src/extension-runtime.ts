@@ -3,142 +3,69 @@ import { isFunction, type Logger } from '@posthog/core'
 import type { Client } from './client'
 import type { Disposable } from './disposable'
 import type { Extension } from './extension'
-import type { ExtensionToken } from './token'
 
-interface RegisteredExtension {
-    extension: Extension
-    setupPromise: Promise<void>
-    disposalPromise?: Promise<void>
-}
-
-/**
- * Shared lifecycle and capability registry for browser extension hosts.
- *
- * Hosts provide the concrete Client adapter while this runtime coordinates
- * names, capability readiness, setup failures, and reverse-order teardown.
- */
+/** Shared setup and lifecycle registry for browser extension hosts. */
 export class ExtensionRuntime implements Disposable {
-    private readonly _extensions = new Map<string, RegisteredExtension>()
-    private readonly _registrationOrder: RegisteredExtension[] = []
-    private readonly _providerReservations = new Map<string, RegisteredExtension>()
-    private readonly _providers = new Map<string, unknown>()
-    private _disposePromise: Promise<void> | undefined
+    private readonly _extensions = new Map<string, Extension>()
+    private _disposed = false
 
-    constructor(private readonly _logger: Logger) {}
+    constructor(
+        private readonly _logger: Logger,
+        private readonly _client: Client
+    ) {}
 
-    /**
-     * Sets up an extension and publishes its capabilities once setup succeeds.
-     * Names and tokens remain reserved while asynchronous setup is pending.
-     */
-    async add(extension: Extension, client: Client): Promise<void> {
-        if (this._disposePromise) {
+    /** Reserves an extension name and sets it up with the host client adapter. */
+    async add(extension: Extension): Promise<void> {
+        if (this._disposed) {
             throw new Error('Cannot add an extension to a disposed ExtensionRuntime')
         }
         if (this._extensions.has(extension.name)) {
             throw new Error(`Browser extension "${extension.name}" is already registered`)
         }
 
-        for (const token of extension.provides ?? []) {
-            if (this._providerReservations.has(token)) {
-                throw new Error(`Browser extension token "${token}" is already registered`)
-            }
-        }
+        this._extensions.set(extension.name, extension)
 
-        // eslint-disable-next-line compat/compat -- Extension setup is intentionally awaitable.
-        const registered = { extension, setupPromise: Promise.resolve() } satisfies RegisteredExtension
-        this._extensions.set(extension.name, registered)
-        this._registrationOrder.push(registered)
-        for (const token of extension.provides ?? []) {
-            this._providerReservations.set(token, registered)
-        }
-
-        let setupResult: void | Promise<void>
         try {
-            setupResult = extension.setup(client)
+            const setup = extension.setup(this._client)
+            if (setup) {
+                await setup
+            }
         } catch (error) {
-            registered.setupPromise = this._handleSetupFailure(registered, error)
-            return registered.setupPromise
+            const active = this._extensions.get(extension.name) === extension
+            if (active) {
+                this._extensions.delete(extension.name)
+            }
+            this._logger.error(`Failed to set up browser extension "${extension.name}"`, error)
+            if (active) {
+                this._disposeExtension(extension)
+            }
         }
-
-        if (setupResult && isFunction(setupResult.then)) {
-            registered.setupPromise = setupResult
-                .then(() => this._publishRegistration(registered))
-                .catch((error) => this._handleSetupFailure(registered, error))
-        } else {
-            this._publishRegistration(registered)
-        }
-        return registered.setupPromise
     }
 
-    /** Resolves a capability only after its provider has completed setup. */
-    getExtension<T>(token: ExtensionToken<T>): T | undefined {
-        return this._providers.get(token) as T | undefined
-    }
-
-    /** Disposes every registered extension once, in reverse registration order. */
-    dispose(): Promise<void> {
-        if (!this._disposePromise) {
-            this._disposePromise = this._disposeAll()
+    /** Releases every registered extension once in reverse registration order without waiting for pending setup. */
+    dispose(): void {
+        if (this._disposed) {
+            return
         }
-        return this._disposePromise
-    }
+        this._disposed = true
 
-    private async _disposeAll(): Promise<void> {
-        for (const registered of this._registrationOrder.slice().reverse()) {
-            await registered.setupPromise
-            await this._disposeRegistration(registered)
-        }
-
+        const extensions = Array.from(this._extensions.values()).reverse()
         this._extensions.clear()
-        this._registrationOrder.length = 0
-        this._providerReservations.clear()
-        this._providers.clear()
-    }
-
-    private async _handleSetupFailure(registered: RegisteredExtension, error: unknown): Promise<void> {
-        this._removeRegistration(registered)
-        this._logger.error(`Failed to set up browser extension "${registered.extension.name}"`, error)
-        if (this._disposePromise) {
-            return
-        }
-        await this._disposeRegistration(registered)
-        const index = this._registrationOrder.indexOf(registered)
-        if (index !== -1) {
-            this._registrationOrder.splice(index, 1)
+        for (const extension of extensions) {
+            this._disposeExtension(extension)
         }
     }
 
-    private _disposeRegistration(registered: RegisteredExtension): Promise<void> {
-        if (!registered.disposalPromise) {
-            registered.disposalPromise = Promise.resolve()
-                .then(() => registered.extension.dispose())
-                .catch((error) => {
-                    this._logger.error(`Failed to dispose browser extension "${registered.extension.name}"`, error)
+    private _disposeExtension(extension: Extension): void {
+        try {
+            const result = extension.dispose?.() as unknown
+            if (result && isFunction((result as PromiseLike<void>).then)) {
+                void (result as PromiseLike<void>).then(undefined, (error) => {
+                    this._logger.error(`Failed to dispose browser extension "${extension.name}"`, error)
                 })
-        }
-        return registered.disposalPromise
-    }
-
-    private _removeRegistration(registered: RegisteredExtension): void {
-        if (this._extensions.get(registered.extension.name) === registered) {
-            this._extensions.delete(registered.extension.name)
-        }
-        for (const token of registered.extension.provides ?? []) {
-            if (this._providerReservations.get(token) === registered) {
-                this._providerReservations.delete(token)
             }
-            if (this._providers.get(token) === registered.extension) {
-                this._providers.delete(token)
-            }
-        }
-    }
-
-    private _publishRegistration(registered: RegisteredExtension): void {
-        if (this._disposePromise || this._extensions.get(registered.extension.name) !== registered) {
-            return
-        }
-        for (const token of registered.extension.provides ?? []) {
-            this._providers.set(token, registered.extension)
+        } catch (error) {
+            this._logger.error(`Failed to dispose browser extension "${extension.name}"`, error)
         }
     }
 }

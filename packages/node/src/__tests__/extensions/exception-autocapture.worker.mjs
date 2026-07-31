@@ -27,3 +27,4 @@ await new Promise((res) => {
 })
 
 await posthog.shutdown()
+parentPort.close()

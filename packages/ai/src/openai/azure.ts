@@ -113,6 +113,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
               const contentBlocks: FormattedContent = []
               let accumulatedContent = ''
               let modelFromResponse: string | undefined
+              let serviceTierFromResponse: string | undefined
               let firstTokenTime: number | undefined
               let usage: {
                 inputTokens?: number
@@ -144,6 +145,9 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 }
                 if (!systemFingerprintFromResponse && chunk.system_fingerprint) {
                   systemFingerprintFromResponse = chunk.system_fingerprint
+                }
+                if (chunk.service_tier != null) {
+                  serviceTierFromResponse = chunk.service_tier
                 }
 
                 const choice = chunk?.choices?.[0]
@@ -250,7 +254,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 latency,
                 timeToFirstToken,
                 baseURL: this.baseURL,
-                modelParameters: getModelParams(body),
+                modelParameters: getModelParams(body, serviceTierFromResponse),
                 httpStatus: 200,
                 usage,
                 completionId: completionIdFromResponse,
@@ -299,7 +303,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
               output: formatResponseOpenAI(result),
               latency,
               baseURL: this.baseURL,
-              modelParameters: getModelParams(body),
+              modelParameters: getModelParams(body, result.service_tier),
               httpStatus: 200,
               usage: {
                 inputTokens: result.usage?.prompt_tokens ?? 0,
@@ -396,6 +400,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
             try {
               let finalContent: any[] = []
               let modelFromResponse: string | undefined
+              let serviceTierFromResponse: string | undefined
               let firstTokenTime: number | undefined
               let usage: {
                 inputTokens?: number
@@ -420,6 +425,9 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                   }
                   if (!completionIdFromResponse && chunk.response.id) {
                     completionIdFromResponse = chunk.response.id
+                  }
+                  if (chunk.response.service_tier != null) {
+                    serviceTierFromResponse = chunk.response.service_tier
                   }
                 }
                 if (
@@ -451,7 +459,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 latency,
                 timeToFirstToken,
                 baseURL: this.baseURL,
-                modelParameters: getModelParams(body),
+                modelParameters: getModelParams(body, serviceTierFromResponse),
                 httpStatus: 200,
                 usage,
                 completionId: completionIdFromResponse,
@@ -496,7 +504,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
               output: result.output,
               latency,
               baseURL: this.baseURL,
-              modelParameters: getModelParams(body),
+              modelParameters: getModelParams(body, result.service_tier),
               httpStatus: 200,
               usage: {
                 inputTokens: result.usage?.input_tokens ?? 0,
@@ -560,7 +568,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
           output: result.output,
           latency,
           baseURL: this.baseURL,
-          modelParameters: getModelParams(body),
+          modelParameters: getModelParams(body, result.service_tier),
           httpStatus: 200,
           usage: {
             inputTokens: result.usage?.input_tokens ?? 0,

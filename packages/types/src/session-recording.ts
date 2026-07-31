@@ -37,6 +37,17 @@ export type SessionRecordingCanvasOptions = {
     canvasQuality?: string | null
 }
 
+/**
+ * A rectangle to paint over a recorded canvas frame, in CSS pixels relative
+ * to the canvas element.
+ */
+export type CanvasMaskRegion = {
+    x: number
+    y: number
+    width: number
+    height: number
+}
+
 /* for rrweb/network@1
  ** when that is released as part of rrweb this can be removed
  ** don't rely on this type, it may change without notice

@@ -184,6 +184,73 @@ describe('identify()', () => {
         beforeEach(() => {
             // set the current/old identity
             instance.persistence!.props['distinct_id'] = 'a-new-id'
+            instance.persistence!.set_property(USER_STATE, 'identified')
+        })
+
+        describe('when the persisted user state is anonymous', () => {
+            beforeEach(() => {
+                instance.persistence!.set_property(USER_STATE, 'anonymous')
+            })
+
+            it('marks the user identified and captures one person-processed $set event', () => {
+                instance.identify('a-new-id')
+
+                expect(instance.persistence!.get_property(USER_STATE)).toBe('identified')
+                expect(beforeSendMock).toHaveBeenCalledTimes(1)
+                expect(beforeSendMock).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        event: '$set',
+                        properties: expect.objectContaining({
+                            $process_person_profile: true,
+                            $set: {},
+                            $set_once: {},
+                        }),
+                        $set_once: expect.objectContaining({
+                            $initial_current_url: expect.any(String),
+                        }),
+                    })
+                )
+                expect(beforeSendMock).not.toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        event: '$identify',
+                    })
+                )
+                expect(instance.featureFlags.reloadFeatureFlags).not.toHaveBeenCalled()
+                expect(instance.unregister).not.toHaveBeenCalledWith('$flag_call_reported')
+            })
+
+            it('captures exactly one $set event with properties and does not duplicate it on the next identify', () => {
+                instance.identify('a-new-id', { email: 'john@example.com' }, { howOftenAmISet: 'once!' })
+                instance.identify('a-new-id', { email: 'john@example.com' }, { howOftenAmISet: 'once!' })
+
+                expect(beforeSendMock).toHaveBeenCalledTimes(1)
+                expect(beforeSendMock).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        event: '$set',
+                        properties: expect.objectContaining({
+                            $set: { email: 'john@example.com' },
+                            $set_once: expect.objectContaining({ howOftenAmISet: 'once!' }),
+                        }),
+                    })
+                )
+                expect(instance.featureFlags.reloadFeatureFlags).toHaveBeenCalledTimes(1)
+                expect(instance.unregister).not.toHaveBeenCalledWith('$flag_call_reported')
+            })
+
+            it('does not let an existing property cache suppress the identity-state transition event', () => {
+                const properties = { email: 'john@example.com' }
+                instance.setPersonProperties(properties)
+                beforeSendMock.mockClear()
+                instance.persistence!.set_property(USER_STATE, 'anonymous')
+
+                instance.identify('a-new-id', properties)
+
+                expect(beforeSendMock).toHaveBeenCalledTimes(1)
+                expect(beforeSendMock).toHaveBeenCalledWith(expect.objectContaining({ event: '$set' }))
+                expect(instance.persistence!.get_property(USER_STATE)).toBe('identified')
+                expect(instance.featureFlags.reloadFeatureFlags).toHaveBeenCalledTimes(1)
+                expect(instance.unregister).not.toHaveBeenCalledWith('$flag_call_reported')
+            })
         })
 
         it('does not capture or set user properties', () => {
@@ -231,6 +298,7 @@ describe('identify()', () => {
     describe('invalid id passed', () => {
         it('does not update user', () => {
             console.error = jest.fn()
+            console.log = jest.fn()
 
             instance.debug()
 
@@ -246,6 +314,7 @@ describe('identify()', () => {
 
         it('does not update user when distinct ID is $posthog_cookieless', () => {
             console.error = jest.fn()
+            console.log = jest.fn()
 
             instance.debug()
 
@@ -268,8 +337,9 @@ describe('identify()', () => {
             expect(instance.featureFlags.reloadFeatureFlags).toHaveBeenCalled()
         })
 
-        it('does not reload feature flags if identity does not change', () => {
+        it('does not reload feature flags if identity and identified state do not change', () => {
             instance.persistence!.props['distinct_id'] = 'a-new-id'
+            instance.persistence!.set_property(USER_STATE, 'identified')
 
             instance.identify('a-new-id')
 
@@ -277,8 +347,9 @@ describe('identify()', () => {
             expect(instance.featureFlags.reloadFeatureFlags).not.toHaveBeenCalled()
         })
 
-        it('reloads feature flags if identity does not change but properties do', () => {
+        it('updates feature flag properties without reloading if identity and identified state do not change', () => {
             instance.persistence!.props['distinct_id'] = 'a-new-id'
+            instance.persistence!.set_property(USER_STATE, 'identified')
 
             instance.identify('a-new-id', { email: 'john@example.com' }, { howOftenAmISet: 'once!' })
 

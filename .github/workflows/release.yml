@@ -24,7 +24,7 @@ jobs:
             has-changesets: ${{ steps.check.outputs.has-changesets }}
         steps:
             - name: Checkout repository
-              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   ref: main
                   fetch-depth: 0
@@ -45,7 +45,7 @@ jobs:
         name: Notify Slack - Approval Needed
         needs: check-changesets
         if: needs.check-changesets.outputs.has-changesets == 'true'
-        uses: PostHog/.github/.github/workflows/notify-approval-needed.yml@5fc4680761e8ac29a61b212756230eba0e276d8c
+        uses: PostHog/.github/.github/workflows/notify-approval-needed.yml@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1
         with:
             slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
             slack_user_group_id: ${{ vars.GROUP_CLIENT_LIBRARIES_SLACK_GROUP_ID }}
@@ -72,7 +72,7 @@ jobs:
         steps:
             - name: Notify Slack - Approved
               continue-on-error: true # Don't block release if Slack notification fails
-              uses: PostHog/.github/.github/actions/slack-thread-reply@cb0979b67dcd585828b61ac45927eef4da8f6287 # main
+              uses: PostHog/.github/.github/actions/slack-thread-reply@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1 # main
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
@@ -82,13 +82,13 @@ jobs:
 
             - name: Get GitHub App token
               id: releaser
-              uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+              uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
               with:
                   client-id: ${{ secrets.GH_APP_POSTHOG_JS_RELEASER_APP_ID }}
                   private-key: ${{ secrets.GH_APP_POSTHOG_JS_RELEASER_PRIVATE_KEY }} # Secrets available only inside the `NPM Release` environment, requires approval from a maintainer
 
             - name: Checkout repository
-              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   ref: main
                   fetch-depth: 0
@@ -135,7 +135,7 @@ jobs:
 
             - name: Commit version bump and lockfile
               id: commit-version-bump
-              uses: planetscale/ghcommit-action@25309d8005ac7c3bcd61d3fe19b69e0fe47dbdde # v0.2.20
+              uses: planetscale/ghcommit-action@a6b150b81dca5dd027baa898604418eec9e11465 # v0.2.22
               with:
                   commit_message: 'chore: update versions and lockfile [version bump]'
                   repo: ${{ github.repository }}
@@ -192,7 +192,7 @@ jobs:
 
             - name: Notify Slack - Failed
               if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
-              uses: PostHog/.github/.github/actions/slack-thread-reply@cb0979b67dcd585828b61ac45927eef4da8f6287 # main
+              uses: PostHog/.github/.github/actions/slack-thread-reply@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1 # main
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
@@ -232,7 +232,7 @@ jobs:
             - name: Notify Slack - Rejected
               if: steps.check-rejection.outputs.was_rejected == 'true'
               continue-on-error: true
-              uses: PostHog/.github/.github/actions/slack-thread-reply@cb0979b67dcd585828b61ac45927eef4da8f6287 # main
+              uses: PostHog/.github/.github/actions/slack-thread-reply@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1 # main
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
@@ -249,7 +249,6 @@ jobs:
         if: always() && needs.version-bump.outputs.commit-hash != ''
         permissions:
             contents: write
-            actions: write
             id-token: write
         strategy:
             fail-fast: false
@@ -284,7 +283,7 @@ jobs:
 
         steps:
             - name: Checkout repository
-              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   ref: ${{ needs.version-bump.outputs.commit-hash }}
                   fetch-depth: 0
@@ -306,6 +305,10 @@ jobs:
               uses: PostHog/check-package-version@f540540cb12d45ec3c58d42dbf1d60070ed2d268 # v2.1.1
               with:
                   path: ${{ steps.get-package-path.outputs.path }}
+
+            - name: Ensure modern npm (OIDC support)
+              if: steps.check-package-version.outputs.is-new-version == 'true'
+              run: npm install -g npm@11.6.4
 
             - name: Install and build dependencies
               if: steps.check-package-version.outputs.is-new-version == 'true'
@@ -346,34 +349,12 @@ jobs:
                     --title "$PACKAGE_NAME@$COMMITTED_VERSION" \
                     --notes "$LAST_CHANGELOG_ENTRY"
 
-            ########################################################
-            ############## posthog-js auto-update ##################
-            - name: Dispatch posthog upgrade for posthog-js
-              id: dispatch-posthog-upgrade
-              continue-on-error: true
-              if: matrix.package.name == 'posthog-js' && steps.check-package-version.outputs.is-new-version == 'true'
-              env:
-                  PACKAGE_NAME: ${{ matrix.package.name }}
-                  PACKAGE_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              run: |
-                  curl -f -sS -X POST \
-                       -H "Accept: application/vnd.github+json" \
-                       -H "Authorization: Bearer $GITHUB_TOKEN" \
-                       https://api.github.com/repos/posthog/posthog-js/actions/workflows/posthog-upgrade.yml/dispatches \
-                       -d "$(jq -n \
-                         --arg ref "main" \
-                         --arg package_name "$PACKAGE_NAME" \
-                         --arg package_version "$PACKAGE_VERSION" \
-                         '{ref: $ref, inputs: {package_name: $package_name, package_version: $package_version}}' \
-                       )"
-
             ####################################################
             # Notify ourselves in case of a failure here
             # https://us.posthog.com/project/11213/functions/019ae9c0-03ee-0000-2f32-971f64be8ffe
             - name: Resolve release failure metadata
               id: release-failure-metadata
-              if: ${{ failure() || steps.dispatch-posthog-upgrade.outcome == 'failure' }}
+              if: ${{ failure() }}
               env:
                   PACKAGE_NAME: ${{ matrix.package.name }}
                   PACKAGE_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
@@ -398,35 +379,8 @@ jobs:
                       echo "package_ref=$package_ref"
                   } >> "$GITHUB_OUTPUT"
 
-            - name: Send PostHog upgrade dispatch failure event
-              if: ${{ steps.dispatch-posthog-upgrade.outcome == 'failure' }}
-              continue-on-error: true
-              uses: PostHog/posthog-github-action@9a6a19d360820ab4d95ecc4a5a7564062c895f84 # v1.3.0
-              with:
-                  posthog-token: '${{ secrets.POSTHOG_PROJECT_API_KEY }}'
-                  event: 'posthog-sdk-github-release-workflow-failure'
-                  properties: >-
-                      {
-                        "commitSha": "${{ github.sha }}",
-                        "jobStatus": "failure",
-                        "ref": "${{ github.ref }}",
-                        "repository": "${{ github.repository }}",
-                        "sdk": "posthog-js",
-                        "jobName": "dispatch-posthog-upgrade",
-                        "packageName": "posthog-js",
-                        "packageVersion": "${{ steps.release-failure-metadata.outputs.package_version || 'unknown' }}",
-                        "actionUrl": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-                        "failedStepName": "dispatch-posthog-upgrade",
-                        "alertText": ":warning: Failed to dispatch PostHog/posthog upgrade for ${{ steps.release-failure-metadata.outputs.package_ref }}",
-                        "alertContext": "The SDK release may have succeeded; only the downstream monorepo upgrade workflow dispatch failed."
-                      }
-
-            - name: Fail if posthog upgrade dispatch failed
-              if: ${{ steps.dispatch-posthog-upgrade.outcome == 'failure' }}
-              run: exit 1
-
             - name: Send failure event to PostHog
-              if: ${{ failure() && steps.dispatch-posthog-upgrade.outcome != 'failure' }}
+              if: ${{ failure() }}
               continue-on-error: true
               uses: PostHog/posthog-github-action@9a6a19d360820ab4d95ecc4a5a7564062c895f84 # v1.3.0
               with:
@@ -449,14 +403,102 @@ jobs:
 
             - name: Notify Slack - Failed
               continue-on-error: true # Slack failure shouldn't mark release as failed
-              if: ${{ failure() && steps.dispatch-posthog-upgrade.outcome != 'failure' && needs.notify-approval-needed.outputs.slack_ts != '' }}
-              uses: PostHog/.github/.github/actions/slack-thread-reply@cb0979b67dcd585828b61ac45927eef4da8f6287 # main
+              if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
+              uses: PostHog/.github/.github/actions/slack-thread-reply@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1 # main
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
                   thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
                   message: '❌ Failed to release `${{ steps.release-failure-metadata.outputs.package_ref }}`! <${{ steps.release-failure-metadata.outputs.action_url }}|View workflow run>'
                   emoji_reaction: 'x'
+
+    # Wait for the full publish matrix so newly bumped workspace dependencies are available on npm.
+    # The posthog-js tag points at this release commit only when this run published a new browser SDK version.
+    dispatch-posthog-upgrade:
+        name: Dispatch PostHog upgrade
+        needs: [version-bump, publish]
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            actions: write
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ needs.version-bump.outputs.commit-hash }}
+                  fetch-depth: 1
+
+            - name: Check whether posthog-js was published by this release
+              id: release-metadata
+              env:
+                  RELEASE_SHA: ${{ needs.version-bump.outputs.commit-hash }}
+              run: |
+                  set -euo pipefail
+
+                  package_version=$(jq -r '.version' packages/browser/package.json)
+                  package_ref="posthog-js@v$package_version"
+                  tag_sha=$(git ls-remote --tags origin "refs/tags/posthog-js@$package_version" | awk 'NR == 1 { print $1 }')
+
+                  was_published=false
+                  if [ "$tag_sha" = "$RELEASE_SHA" ]; then
+                      was_published=true
+                      echo "$package_ref was published by this release."
+                  else
+                      echo "$package_ref was not published by this release; skipping the downstream upgrade."
+                  fi
+
+                  {
+                      echo "package_version=$package_version"
+                      echo "package_ref=$package_ref"
+                      echo "was_published=$was_published"
+                  } >> "$GITHUB_OUTPUT"
+
+            - name: Dispatch posthog upgrade
+              id: dispatch-posthog-upgrade
+              continue-on-error: true
+              if: steps.release-metadata.outputs.was_published == 'true'
+              env:
+                  PACKAGE_VERSION: ${{ steps.release-metadata.outputs.package_version }}
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  curl -f -sS -X POST \
+                       -H "Accept: application/vnd.github+json" \
+                       -H "Authorization: Bearer $GITHUB_TOKEN" \
+                       https://api.github.com/repos/posthog/posthog-js/actions/workflows/posthog-upgrade.yml/dispatches \
+                       -d "$(jq -n \
+                         --arg ref "main" \
+                         --arg package_name "posthog-js" \
+                         --arg package_version "$PACKAGE_VERSION" \
+                         '{ref: $ref, inputs: {package_name: $package_name, package_version: $package_version}}' \
+                       )"
+
+            # https://us.posthog.com/project/11213/functions/019ae9c0-03ee-0000-2f32-971f64be8ffe
+            - name: Send PostHog upgrade dispatch failure event
+              if: ${{ steps.dispatch-posthog-upgrade.outcome == 'failure' }}
+              continue-on-error: true
+              uses: PostHog/posthog-github-action@9a6a19d360820ab4d95ecc4a5a7564062c895f84 # v1.3.0
+              with:
+                  posthog-token: '${{ secrets.POSTHOG_PROJECT_API_KEY }}'
+                  event: 'posthog-sdk-github-release-workflow-failure'
+                  properties: >-
+                      {
+                        "commitSha": "${{ github.sha }}",
+                        "jobStatus": "failure",
+                        "ref": "${{ github.ref }}",
+                        "repository": "${{ github.repository }}",
+                        "sdk": "posthog-js",
+                        "jobName": "dispatch-posthog-upgrade",
+                        "packageName": "posthog-js",
+                        "packageVersion": "${{ steps.release-metadata.outputs.package_version || 'unknown' }}",
+                        "actionUrl": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+                        "failedStepName": "dispatch-posthog-upgrade",
+                        "alertText": ":warning: Failed to dispatch PostHog/posthog upgrade for ${{ steps.release-metadata.outputs.package_ref }}",
+                        "alertContext": "The SDK release may have succeeded; only the downstream monorepo upgrade workflow dispatch failed."
+                      }
+
+            - name: Fail if posthog upgrade dispatch failed
+              if: ${{ steps.dispatch-posthog-upgrade.outcome == 'failure' }}
+              run: exit 1
 
     build-s3-artifacts:
         name: Build posthog-js dist for S3
@@ -473,7 +515,7 @@ jobs:
             committed-version: ${{ steps.check-version.outputs.committed-version }}
         steps:
             - name: Checkout repository
-              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   ref: ${{ needs.version-bump.outputs.commit-hash }}
                   fetch-depth: 1
@@ -573,19 +615,19 @@ jobs:
             TOOLBAR_PUBLIC_PATH: https://${{ matrix.region.host }}/static/${{ needs.version-bump.outputs.version }}/
         steps:
             - name: Checkout posthog/posthog
-              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   repository: PostHog/posthog
                   ref: master
                   fetch-depth: 1
 
             - name: Setup Node.js
-              uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
               with:
                   node-version: 24
 
             - name: Setup pnpm
-              uses: pnpm/setup@f7d0e5f4b1b3089d2799ef9722859e7ba314c4c8 # v1
+              uses: pnpm/setup@5d160c5bc68a09337ad0d5654e237e03253b5879 # v1
               with:
                   cache: false
                   install: false
@@ -778,7 +820,7 @@ jobs:
             # Sparse checkout the release tooling plus the root pnpm files so
             # we can do a locked, filtered install for @posthog-tooling/release.
             - name: Checkout release tooling
-              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   ref: ${{ needs.version-bump.outputs.commit-hash }}
                   sparse-checkout: |
@@ -789,12 +831,15 @@ jobs:
                       pnpm-workspace.yaml
                       tooling/release
 
-            - name: Setup pnpm and Node.js
-              uses: pnpm/setup@f7d0e5f4b1b3089d2799ef9722859e7ba314c4c8 # v1
+            - name: Setup Node.js
+              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
               with:
-                  # TODO: pnpm/setup does not read .nvmrc yet. Keep this in sync with .nvmrc
-                  # until https://github.com/jasongin/nvs/pull/315 lands.
-                  runtime: node@24
+                  node-version: 24
+                  package-manager-cache: false
+
+            - name: Setup pnpm
+              uses: pnpm/setup@5d160c5bc68a09337ad0d5654e237e03253b5879 # v1
+              with:
                   cache: false
                   install: false
 
@@ -826,7 +871,7 @@ jobs:
             # right role ARN with a ternary on the region name. If you add a
             # region here, also add it below.
             - name: Configure AWS credentials
-              uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
+              uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
               with:
                   role-to-assume: ${{ matrix.region.name == 'us' && vars.AWS_S3_UPLOAD_ROLE_ARN_US || vars.AWS_S3_UPLOAD_ROLE_ARN_EU }}
                   aws-region: ${{ matrix.region.aws_region }}
@@ -884,7 +929,7 @@ jobs:
             - name: Notify Slack - S3 Upload Failed
               continue-on-error: true
               if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
-              uses: PostHog/.github/.github/actions/slack-thread-reply@cb0979b67dcd585828b61ac45927eef4da8f6287 # main
+              uses: PostHog/.github/.github/actions/slack-thread-reply@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1 # main
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
@@ -894,20 +939,21 @@ jobs:
 
     notify-released:
         name: Notify Slack - Released
-        needs: [notify-approval-needed, publish, upload-s3]
+        needs: [notify-approval-needed, publish, dispatch-posthog-upgrade, upload-s3]
         runs-on: ubuntu-latest
         if: >-
             always() &&
             needs.publish.result == 'success' &&
+            needs.dispatch-posthog-upgrade.result == 'success' &&
             (needs.upload-s3.result == 'success' || needs.upload-s3.result == 'skipped') &&
             needs.notify-approval-needed.outputs.slack_ts != ''
         steps:
             - name: Checkout repository
-              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
             - name: Notify Slack - Released
               continue-on-error: true # Slack failure shouldn't mark release as failed
-              uses: PostHog/.github/.github/actions/slack-thread-reply@cb0979b67dcd585828b61ac45927eef4da8f6287 # main
+              uses: PostHog/.github/.github/actions/slack-thread-reply@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1 # main
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
@@ -923,11 +969,12 @@ jobs:
     # failed step is retried.
     notify-partial-release:
         name: Notify Slack - Partial Release (npm only)
-        needs: [notify-approval-needed, build-s3-artifacts, publish, upload-s3]
+        needs: [notify-approval-needed, build-s3-artifacts, publish, dispatch-posthog-upgrade, upload-s3]
         runs-on: ubuntu-latest
         if: >-
             always() &&
             needs.publish.result == 'success' &&
+            needs.dispatch-posthog-upgrade.result == 'success' &&
             needs.build-s3-artifacts.outputs.is-new-version == 'true' &&
             needs.upload-s3.result == 'failure' &&
             needs.notify-approval-needed.outputs.slack_ts != ''
@@ -952,7 +999,7 @@ jobs:
 
             - name: Notify Slack - Partial Release
               continue-on-error: true # Slack failure shouldn't mark release as failed
-              uses: PostHog/.github/.github/actions/slack-thread-reply@cb0979b67dcd585828b61ac45927eef4da8f6287 # main
+              uses: PostHog/.github/.github/actions/slack-thread-reply@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1 # main
               with:
                   slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
                   slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}

@@ -400,12 +400,23 @@ export class PostHogSurveys implements Extension {
         return this._surveyManager.checkSurveyEligibility(survey)
     }
 
+    private _checkSurveyRenderability(surveyId: string | Survey): { eligible: boolean; reason?: string } {
+        if (isNullish(this._surveyManager)) {
+            return { eligible: false, reason: SURVEY_NOT_LOADED }
+        }
+        const survey = typeof surveyId === 'string' ? this._getSurveyById(surveyId) : surveyId
+        if (!survey) {
+            return { eligible: false, reason: 'Survey not found' }
+        }
+        return this._surveyManager.checkSurveyRenderability(survey)
+    }
+
     canRenderSurvey(surveyId: string | Survey): SurveyRenderReason {
         if (isNullish(this._surveyManager)) {
             logger.warn('init was not called')
             return { visible: false, disabledReason: SURVEY_NOT_LOADED }
         }
-        const eligibility = this._checkSurveyEligibility(surveyId)
+        const eligibility = this._checkSurveyRenderability(surveyId)
 
         return { visible: eligibility.eligible, disabledReason: eligibility.reason }
     }
@@ -428,7 +439,7 @@ export class PostHogSurveys implements Extension {
                 if (!survey) {
                     resolve({ visible: false, disabledReason: 'Survey not found' })
                 } else {
-                    const eligibility = this._checkSurveyEligibility(survey)
+                    const eligibility = this._checkSurveyRenderability(survey)
                     resolve({ visible: eligibility.eligible, disabledReason: eligibility.reason })
                 }
             }, forceReload)
@@ -494,9 +505,11 @@ export class PostHogSurveys implements Extension {
             logger.warn('initialResponses is only supported for popover surveys. prefill will not be applied.')
         }
         if (options.ignoreConditions === false) {
-            const canRender = this.canRenderSurvey(survey)
-            if (!canRender.visible) {
-                logger.warn('Survey is not eligible to be displayed: ', canRender.disabledReason)
+            // Explicit display goes through eligibility only, not renderability: the event/action
+            // trigger state lives in memory and is irrelevant when the caller asks to show the survey.
+            const eligibility = this._checkSurveyEligibility(survey)
+            if (!eligibility.eligible) {
+                logger.warn('Survey is not eligible to be displayed: ', eligibility.reason)
                 return
             }
         }

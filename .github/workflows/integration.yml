@@ -12,11 +12,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  affected:
+    uses: ./.github/workflows/check-affected.yml
+    with:
+      package-name: posthog-js
+      additional-paths: |
+        packages/browser/
+        packages/react/
+        .github/workflows/integration.yml
+        .github/workflows/check-affected.yml
+        .github/actions/is-affected/action.yaml
+        .github/actions/setup/action.yaml
+
   browsers:
     name: Test on ${{ matrix.tests.name }}
+    needs: affected
     runs-on: ubuntu-22.04
+    container:
+      # Keep this version in sync with packages/browser's @playwright/test dependency.
+      image: mcr.microsoft.com/playwright:v1.52.0-noble@sha256:a021500a801bab0611049217ffad6b9697d827205c15babb86a53bc1a61c02d5
     env:
-      CAN_RUN_INTEGRATION_TESTS: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+      HOME: /root
       POSTHOG_PROJECT_API_KEY: "${{ secrets.POSTHOG_PROJECT_API_KEY }}"
       POSTHOG_PERSONAL_API_KEY: "${{ secrets.POSTHOG_PERSONAL_API_KEY }}"
 
@@ -25,57 +41,40 @@ jobs:
       matrix:
         tests:
           - name: Chromium
-            project: "chromium"
-            install: "chromium"
+            projects: "--project chromium --project chromium-es5"
+            browser: "chromium"
 
           - name: Firefox
-            project: "firefox"
-            install: "firefox"
+            projects: "--project firefox"
+            browser: "firefox"
 
           - name: Safari
-            project: "webkit"
-            install: "webkit"
-
-          - name: Edge
-            project: "msedge"
-            install: "chromium"
+            projects: "--project webkit"
+            browser: "webkit"
 
     steps:
-      - name: Skip fork PR
-        if: ${{ env.CAN_RUN_INTEGRATION_TESTS != 'true' }}
-        run: echo "Skipping ${{ matrix.tests.name }} integration tests for fork PRs because required secrets are unavailable."
+      - name: Skip integration tests
+        if: ${{ github.event.pull_request.head.repo.full_name != github.repository || needs.affected.outputs.is-affected != 'true' }}
+        run: echo "Skipping ${{ matrix.tests.name }} integration tests because the browser package is unaffected or required secrets are unavailable for fork PRs."
 
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        if: ${{ env.CAN_RUN_INTEGRATION_TESTS == 'true' }}
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && needs.affected.outputs.is-affected == 'true' }}
 
       - uses: ./.github/actions/setup
-        if: ${{ env.CAN_RUN_INTEGRATION_TESTS == 'true' }}
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && needs.affected.outputs.is-affected == 'true' }}
         with:
           build: false
 
-      - uses: ./.github/actions/is-affected
-        if: ${{ env.CAN_RUN_INTEGRATION_TESTS == 'true' }}
-        id: is-affected
-        with:
-          package-name: posthog-js
-
       - name: Build packages
-        if: ${{ env.CAN_RUN_INTEGRATION_TESTS == 'true' && steps.is-affected.outputs.is-affected == 'true' }}
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && needs.affected.outputs.is-affected == 'true' }}
         run: pnpm build
 
-      - name: Install Playwright Browsers
-        if: ${{ env.CAN_RUN_INTEGRATION_TESTS == 'true' && steps.is-affected.outputs.is-affected == 'true' }}
-        run: pnpm exec playwright install ${{ matrix.tests.install }} --with-deps --only-shell
-        working-directory: packages/browser
-
       - name: Run ${{ matrix.tests.name }} test
-        if: ${{ env.CAN_RUN_INTEGRATION_TESTS == 'true' && steps.is-affected.outputs.is-affected == 'true' }}
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && needs.affected.outputs.is-affected == 'true' }}
         timeout-minutes: 30
         env:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
           RUN_ID: ${{ github.run_id }}
-          BROWSER: ${{ matrix.tests.project }}
-        run: pnpm exec playwright test --config playwright.config.integration.ts --project ${{ matrix.tests.project }}
+          BROWSER: ${{ matrix.tests.browser }}
+        run: pnpm exec playwright test --config playwright.config.integration.ts ${{ matrix.tests.projects }}
         working-directory: packages/browser

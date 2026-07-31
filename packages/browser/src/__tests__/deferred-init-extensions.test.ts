@@ -1,6 +1,6 @@
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
-import { RemoteConfig } from '../types'
+import { RemoteConfig, RemoteConfigResult } from '../types'
 
 jest.mock('@posthog/browser-common/utils/globals', () => {
     const orig = jest.requireActual('@posthog/browser-common/utils/globals')
@@ -118,26 +118,42 @@ describe('deferred extension initialization', () => {
             const remoteConfig: RemoteConfig = {
                 supportedCompression: ['gzip'],
             } as RemoteConfig
+            const legacyRemoteConfigs: RemoteConfigResult[] = []
+            class TestAutocapture {
+                initialize(): void {}
+
+                onRemoteConfig(result: RemoteConfigResult): void {
+                    legacyRemoteConfigs.push(result)
+                }
+            }
 
             const posthog = await createPosthogInstance(token, {
                 __preview_deferred_init_extensions: true,
+                __extensionClasses: { autocapture: TestAutocapture as any },
                 advanced_disable_decide: false,
                 capture_pageview: false,
                 disable_session_recording: true,
             })
 
+            const sharedRemoteConfigs: RemoteConfigResult[] = []
+            posthog
+                ._getBrowserClientAdapter()
+                .onRemoteConfig((result) => sharedRemoteConfigs.push(result as RemoteConfigResult))
+            const initialSharedRemoteConfigCount = sharedRemoteConfigs.length
+
             // Call _onRemoteConfig before extensions are ready
             posthog._onRemoteConfig({ ok: true, config: remoteConfig })
             expect((posthog as any)._pendingRemoteConfig).toEqual({ ok: true, config: remoteConfig })
-
-            // Spy on _onRemoteConfig to see if it gets called again during replay
-            const onRemoteConfigSpy = jest.spyOn(posthog as any, '_onRemoteConfig')
+            expect(legacyRemoteConfigs).toEqual([])
 
             // Wait for extensions to initialize
             await new Promise((resolve) => setTimeout(resolve, 200))
 
-            // _onRemoteConfig should have been called again with the pending config during replay
-            expect(onRemoteConfigSpy).toHaveBeenCalledWith({ ok: true, config: remoteConfig })
+            // Legacy extensions receive the post-initialization replay, while shared listeners
+            // receive each remote config outcome only once.
+            expect(legacyRemoteConfigs).toEqual([{ ok: true, config: remoteConfig }])
+            expect(sharedRemoteConfigs).toHaveLength(initialSharedRemoteConfigCount + 1)
+            expect(sharedRemoteConfigs.at(-1)).toEqual({ ok: true, config: remoteConfig })
             // Extensions should be initialized, proving the replay worked
             expect(posthog.sessionRecording).toBeDefined()
             expect(posthog.autocapture).toBeDefined()

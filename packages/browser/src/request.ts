@@ -1,12 +1,7 @@
 import { each, find } from '@posthog/browser-common/utils/general-utils'
 import Config from './config'
 import { Compression, RequestWithOptions, RequestResponse } from './types'
-import {
-    convertToURL,
-    formDataToQuery,
-    getQueryParam,
-    jsonStringify,
-} from '@posthog/browser-common/utils/request-utils'
+import { formDataToQuery, getQueryParam, jsonStringify } from '@posthog/browser-common/utils/request-utils'
 
 import { logger } from '@posthog/browser-common/utils/logger'
 import {
@@ -419,6 +414,17 @@ const _fetch = (options: RequestWithOptions & { _keepaliveDisabled?: boolean }) 
 // below this size a rejection means the shared quota is exhausted, not that the payload is too big
 const BEACON_SPLIT_FLOOR_BYTES = 16 * 1024
 
+const addSentAtToBody = (
+    data: NonNullable<RequestWithOptions['data']>,
+    sentAt = new Date().toISOString()
+): NonNullable<RequestWithOptions['data']> => {
+    if (!isArray(data)) {
+        return { ...data, sent_at: sentAt }
+    }
+
+    return data.map((item) => ({ ...item, sent_at: sentAt }))
+}
+
 const _sendBeacon = (options: RequestWithOptions) => {
     // beacon documentation https://w3c.github.io/beacon/
     // beacons format the message and use the type property
@@ -458,43 +464,18 @@ const _sendBeacon = (options: RequestWithOptions) => {
     }
 }
 
-const VERSIONLESS_ENDPOINTS = ['/e/', '/s/']
-
-const getURLPath = (url: string): string => {
-    const parsedURL = convertToURL(url)
-    const path = parsedURL?.pathname || url.split(/[?#]/)[0]
-
-    return path ? (path[0] === '/' ? path : `/${path}`) : '/'
-}
-
-const hasEndpointSuffix = (path: string, endpoint: string): boolean => {
-    return path.slice(path.length - endpoint.length) === endpoint
-}
-
-const isVersionlessEndpoint = (url: string): boolean => {
-    const path = getURLPath(url)
-
-    return VERSIONLESS_ENDPOINTS.some((endpoint) => hasEndpointSuffix(path, endpoint))
-}
-
 const buildRequestURL = (
     url: string,
     method: RequestWithOptions['method'],
     compression?: RequestWithOptions['compression'],
     timestampMode?: RequestWithOptions['timestampMode']
 ): string => {
-    const versionlessEndpoint = isVersionlessEndpoint(url)
-    const requestURL = versionlessEndpoint ? removeURLParam(url, 'ver') : url
     const timestampParam = timestampMode === 'query' ? (method === 'POST' ? 'sent_at' : '_') : undefined
 
-    return extendURLParams(
-        compression === Compression.GZipJS ? removeURLParam(requestURL, 'compression') : requestURL,
-        {
-            ...(timestampParam ? { [timestampParam]: Date.now().toString() } : {}),
-            ...(versionlessEndpoint ? {} : { ver: Config.JS_SDK_VERSION }),
-            ...(compression === Compression.GZipJS ? {} : { compression }),
-        }
-    )
+    return extendURLParams(compression === Compression.GZipJS ? removeURLParam(url, 'compression') : url, {
+        ...(timestampParam ? { [timestampParam]: Date.now().toString() } : {}),
+        ...(compression === Compression.GZipJS ? {} : { compression }),
+    })
 }
 
 const addSentAtToCaptureBody = (data: NonNullable<RequestWithOptions['data']>): Record<string, any> => {
@@ -552,8 +533,8 @@ export const request = (_options: RequestWithOptions) => {
     if (options.method === 'POST' && options.data) {
         if (options.timestampMode === 'capture-body') {
             options.data = addSentAtToCaptureBody(options.data)
-        } else if (options.timestampMode === 'body' && !isArray(options.data)) {
-            options.data = { ...options.data, sent_at: new Date().toISOString() }
+        } else if (options.timestampMode === 'body') {
+            options.data = addSentAtToBody(options.data)
         }
     }
 

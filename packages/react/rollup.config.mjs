@@ -3,6 +3,13 @@ import copy from 'rollup-plugin-copy'
 
 const extensions = ['.js', '.jsx', '.ts', '.tsx']
 
+const onLog = (level, log, defaultHandler) => {
+    if (log.code === 'UNKNOWN_OPTION') {
+        throw new Error(log.message)
+    }
+    defaultHandler(level, log)
+}
+
 const plugins = [
     // Resolve modules from node_modules
     resolve({
@@ -44,6 +51,7 @@ const buildUmd = {
         file: 'dist/umd/index.js',
         name: 'PosthogReact',
         format: 'umd',
+        interop: 'compat',
         sourcemap: true,
         esModule: false,
         globals: {
@@ -85,6 +93,7 @@ const buildSlimUmd = {
         file: 'dist/umd/slim/index.js',
         name: 'PosthogReactSlim',
         format: 'umd',
+        interop: 'compat',
         sourcemap: true,
         esModule: false,
         globals: {
@@ -123,6 +132,7 @@ const buildSurveysUmd = {
         file: 'dist/umd/surveys/index.js',
         name: 'PosthogReactSurveys',
         format: 'umd',
+        interop: 'compat',
         sourcemap: true,
         esModule: false,
         globals: {
@@ -165,4 +175,4 @@ export default [
     buildSurveysEsm,
     buildSurveysUmd,
     buildSurveysTypes,
-]
+].map((config) => ({ ...config, onLog }))

@@ -107,21 +107,21 @@ describe('config', () => {
                 ],
                 [
                     {
-                        name: 'https://app.posthog.com/s/?ver=123',
+                        name: 'https://app.posthog.com/s/?_=123',
                     },
                     undefined,
                     undefined,
                 ],
                 [
                     {
-                        name: 'https://app.posthog.com/e/?ver=123',
+                        name: 'https://app.posthog.com/e/?_=123',
                     },
                     undefined,
                     undefined,
                 ],
                 [
                     {
-                        name: 'https://app.posthog.com/i/v0/e/?ver=123',
+                        name: 'https://app.posthog.com/i/v0/e/?_=123',
                     },
                     undefined,
                     undefined,
@@ -129,7 +129,7 @@ describe('config', () => {
                 [
                     {
                         // even an imaginary future world of rust session replay capture
-                        name: 'https://app.posthog.com/i/v0/s/?ver=123',
+                        name: 'https://app.posthog.com/i/v0/s/?_=123',
                     },
                     undefined,
                     undefined,
@@ -137,7 +137,7 @@ describe('config', () => {
                 [
                     {
                         // using a relative path as a reverse proxy api host
-                        name: 'https://app.posthog.com/ingest/s/?ver=123',
+                        name: 'https://app.posthog.com/ingest/s/?_=123',
                     },
                     undefined,
                     '/ingest',
@@ -145,7 +145,7 @@ describe('config', () => {
                 [
                     {
                         // using a reverse proxy with a path
-                        name: 'https://app.posthog.com/ingest/s/?ver=123',
+                        name: 'https://app.posthog.com/ingest/s/?_=123',
                     },
                     undefined,
                     'https://app.posthog.com/ingest',
@@ -441,6 +441,40 @@ describe('config', () => {
                     AuThOrIzAtIoN: 'redacted',
                     'content-type': 'application/json',
                 },
+            })
+        })
+
+        it.each([
+            ['timestamp', '{"version":"1785400913428"}'],
+            [
+                'UUID containing an SSN-shaped substring',
+                '{"personalizationOptionId":"a2086e30-2564-40d2-b260-074641cd3b89"}',
+            ],
+        ])('does not redact a network body containing a %s', (_description, body) => {
+            const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'something',
+                requestBody: body,
+                responseBody: body,
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+            expect(cleaned).toEqual({
+                name: 'something',
+                requestBody: body,
+                responseBody: body,
+            })
+        })
+
+        it('does not capture SSN data in network bodies', () => {
+            const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'something',
+                requestBody: '{"ssn":"123-45-6789"}',
+                responseBody: '{"ssn":"123456789"}',
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+            expect(cleaned).toEqual({
+                name: 'something',
+                requestBody: '[SessionRecording] Request body redacted',
+                responseBody: '[SessionRecording] Response body redacted',
             })
         })
 
