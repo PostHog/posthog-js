@@ -2,7 +2,7 @@
 // Copyright (c) 2012 Functional Software, Inc. dba Sentry
 // Licensed under the MIT License: https://github.com/getsentry/sentry-javascript/blob/develop/LICENSE
 
-import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
+import { ErrorTracking as CoreErrorTracking, type Logger } from '@posthog/core'
 import { constants, type ReadStream } from 'node:fs'
 import { open, type FileHandle } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
@@ -23,7 +23,8 @@ type OpenSourceFile = (path: string, flags: number) => Promise<FileHandle>
 
 export async function addSourceContext(
   frames: CoreErrorTracking.StackFrame[],
-  openSourceFile: OpenSourceFile = open
+  openSourceFile: OpenSourceFile = open,
+  logger?: Pick<Logger, 'debug'>
 ): Promise<CoreErrorTracking.StackFrame[]> {
   // keep a lookup map of which files we've already enqueued to read,
   // so we don't enqueue the same file multiple times which would cause multiple i/o reads
@@ -92,7 +93,7 @@ export async function addSourceContext(
     }
 
     const cache = emplace(LRU_FILE_CONTENTS_CACHE, cacheKey, {})
-    readlinePromises.push(getContextLinesFromFile(file, ranges, cache, cacheKey, openSourceFile))
+    readlinePromises.push(getContextLinesFromFile(file, ranges, cache, cacheKey, openSourceFile, logger))
   }
 
   // The promise rejections are caught in order to prevent them from short circuiting Promise.all
@@ -115,13 +116,23 @@ export async function addSourceContext(
  * Opens a bounded regular file without blocking on special files such as FIFOs.
  * File validation and content reads use the same descriptor so path replacement cannot change what is read.
  */
-async function openRegularSourceFile(path: string, openSourceFile: OpenSourceFile): Promise<FileHandle | undefined> {
+async function openRegularSourceFile(
+  path: string,
+  openSourceFile: OpenSourceFile,
+  logger?: Pick<Logger, 'debug'>
+): Promise<FileHandle | undefined> {
   let fileHandle: FileHandle | undefined
   let isValid = false
   try {
     fileHandle = await openSourceFile(path, constants.O_RDONLY | constants.O_NONBLOCK)
     const fileStat = await fileHandle.stat()
-    if (!fileStat.isFile() || fileStat.size > MAX_CONTEXTLINES_FILE_SIZE) {
+    if (!fileStat.isFile()) {
+      return undefined
+    }
+    if (fileStat.size > MAX_CONTEXTLINES_FILE_SIZE) {
+      logger?.debug(
+        `Skipping source context for oversized file ${path}: ${fileStat.size} bytes exceeds ${MAX_CONTEXTLINES_FILE_SIZE}`
+      )
       return undefined
     }
 
@@ -144,9 +155,10 @@ async function getContextLinesFromFile(
   ranges: ReadlineRange[],
   output: Record<number, string>,
   cacheKey: string,
-  openSourceFile: OpenSourceFile
+  openSourceFile: OpenSourceFile,
+  logger?: Pick<Logger, 'debug'>
 ): Promise<void> {
-  const fileHandle = await openRegularSourceFile(path, openSourceFile)
+  const fileHandle = await openRegularSourceFile(path, openSourceFile, logger)
   if (fileHandle === undefined) {
     LRU_FILE_CONTENTS_FS_READ_FAILED.set(cacheKey, 1)
     return

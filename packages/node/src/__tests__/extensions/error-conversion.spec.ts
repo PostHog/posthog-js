@@ -1,4 +1,5 @@
 import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
+import { execFileSync } from 'node:child_process'
 import { constants, type ReadStream } from 'node:fs'
 import { mkdtemp, open, rename, rm, symlink, truncate, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -187,7 +188,9 @@ describe('error conversion', () => {
       await writeFile(replacementFile, 'replacement context\n')
       const openSourceFile = jest.fn(async (path: string, flags: number) => {
         expect(path).toBe(sourceFile)
-        expect(flags & constants.O_NONBLOCK).toBe(constants.O_NONBLOCK)
+        if (process.platform !== 'win32') {
+          expect(flags & constants.O_NONBLOCK).toBe(constants.O_NONBLOCK)
+        }
         const fileHandle = await open(path, flags)
         await rename(sourceFile, openedFile)
         await rename(replacementFile, sourceFile)
@@ -243,15 +246,28 @@ describe('error conversion', () => {
       await writeFile(sourceFile, '')
       await truncate(sourceFile, MAX_CONTEXTLINES_FILE_SIZE + 1)
       const frame = makeFrame(sourceFile)
+      const logger = { debug: jest.fn() }
 
-      await addSourceContext([frame])
+      await addSourceContext([frame], undefined, logger)
 
       expect(frame.context_line).toBeUndefined()
+      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining(`oversized file ${sourceFile}`))
     })
 
     if (process.platform !== 'win32') {
       it.each(['/dev/null', '/dev/zero'])('does not read special file %s', async (specialFile) => {
         const frame = makeFrame(specialFile)
+
+        await addSourceContext([frame])
+
+        expect(frame.context_line).toBeUndefined()
+      })
+
+      it('does not block when the source path is a FIFO', async () => {
+        const directory = await makeTemporaryDirectory(tmpdir())
+        const fifoPath = join(directory, 'source.fifo')
+        execFileSync('mkfifo', [fifoPath])
+        const frame = makeFrame(fifoPath)
 
         await addSourceContext([frame])
 
