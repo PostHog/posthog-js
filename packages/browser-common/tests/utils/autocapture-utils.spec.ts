@@ -55,12 +55,15 @@ describe('autocapture utils', () => {
             expect(shouldCaptureValue('{"ssn":"123456789"}', false)).toBe(false)
             expect(shouldCaptureValue('{"ssn":"123-456789"}', false)).toBe(false)
             expect(shouldCaptureValue('{"ssn":"12345-6789"}', false)).toBe(false)
+            expect(shouldCaptureValue('{"note":"SSN123-45-6789"}', false)).toBe(false)
+            expect(shouldCaptureValue('{"note":"123-45-6789SSN"}', false)).toBe(false)
             expect(shouldCaptureValue('{"itin":"912-70-1234"}', false)).toBe(false)
         })
 
         it('does not treat timestamps, UUID fragments, or invalid SSN groups as sensitive in network bodies', () => {
             expect(shouldCaptureValue('{"version":"1785400913428"}', false)).toBe(true)
             expect(shouldCaptureValue('{"id":"a2086e30-2564-40d2-b260-074641cd3b89"}', false)).toBe(true)
+            expect(shouldCaptureValue('{"id":"prefix123-45-6789suffix"}', false)).toBe(true)
             expect(shouldCaptureValue('{"ssn":"000-12-3456"}', false)).toBe(true)
             expect(shouldCaptureValue('{"ssn":"666-12-3456"}', false)).toBe(true)
             expect(shouldCaptureValue('{"ssn":"123-00-4567"}', false)).toBe(true)
