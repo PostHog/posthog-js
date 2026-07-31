@@ -215,7 +215,7 @@ describe('Lazy SessionRecording', () => {
             wasMaxDepthReached: jest.fn(() => false),
             resetMaxDepthState: jest.fn(),
             getLastSnapshotCost: jest.fn(() => null),
-            getMutationCost: jest.fn(() => ({ totalMs: 0, slowestBatchMs: 0 })),
+            getMutationCost: jest.fn(() => ({ slowestBatchMs: 0 })),
             resetSnapshotCostState: jest.fn(),
         }
         assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot = jest.fn(() => {
@@ -2283,7 +2283,7 @@ describe('Lazy SessionRecording', () => {
             rrweb.getLastSnapshotCost.mockReturnValue(cost(12))
             _emit(createFullSnapshot())
 
-            rrweb.getMutationCost.mockReturnValue({ totalMs: 900, slowestBatchMs: 240.6 })
+            rrweb.getMutationCost.mockReturnValue({ slowestBatchMs: 240.6 })
 
             expect(sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties).toMatchObject({
                 $sdk_debug_replay_slowest_full_snapshot_ms: 3918,

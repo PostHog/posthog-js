@@ -26,8 +26,6 @@ export type SnapshotCost = {
 };
 
 export type MutationCost = {
-  /** total ms spent processing mutation batches since the last reset */
-  totalMs: number;
   /** slowest single mutation batch, in ms, since the last reset */
   slowestBatchMs: number;
 };
@@ -63,7 +61,7 @@ let lastCost: SnapshotCost | null = null;
 let stylesheetBudgetRules: number | null = null;
 let deferredStylesheetLinks: HTMLLinkElement[] = [];
 
-let mutationCost: MutationCost = { totalMs: 0, slowestBatchMs: 0 };
+let mutationCost: MutationCost = { slowestBatchMs: 0 };
 
 const positiveOrNull = (n: number | null | undefined) =>
   n && n > 0 ? n : null;
@@ -115,10 +113,23 @@ export function countSerializedNode(): void {
   }
 }
 
-export function countCssRules(count: number): void {
-  if (trackingDepth > 0) {
-    inProgress.cssRuleCount += count;
+/**
+ * Charge a stringified sheet's rules to the running total, in the same units
+ * as {@link safeCssRuleCount} estimates (one level into grouping rules).
+ * Charging bare `rules.length` would let @media-organised pages consume the
+ * budget at ~1 rule per block and sail past the cap sheet after sheet.
+ * `@import`ed sheets are charged by their own `stringifyStylesheet` recursion.
+ */
+export function countStylesheetRules(rules: CSSRuleList): void {
+  if (trackingDepth === 0) {
+    return;
   }
+  let total = rules.length;
+  for (let i = 0; i < rules.length; i++) {
+    const rule = rules[i] as CSSRule & { cssRules?: CSSRuleList };
+    total += rule.cssRules?.length || 0;
+  }
+  inProgress.cssRuleCount += total;
 }
 
 export function recordStylesheetCost(ms: number): void {
@@ -128,44 +139,57 @@ export function recordStylesheetCost(ms: number): void {
 }
 
 /**
- * Whether inlining a sheet with `ruleCount` rules would take this snapshot past
- * its stylesheet budget. Always false when no budget is configured or no snapshot
- * is in progress, i.e. the incremental mutation path is never capped.
+ * Whether inlining `sheet` would take this snapshot past its stylesheet budget.
+ * Always false when no budget is configured or no snapshot is in progress, i.e.
+ * the incremental mutation path is never capped. Guards run before the rule
+ * count so the unbudgeted paths never pay the walk over the sheet's rules.
  */
-export function shouldDeferStylesheetInlining(ruleCount: number): boolean {
+export function shouldDeferStylesheetInlining(
+  sheet: CSSStyleSheet | null | undefined,
+): boolean {
+  if (trackingDepth === 0 || stylesheetBudgetRules === null) {
+    return false;
+  }
   return (
-    trackingDepth > 0 &&
-    stylesheetBudgetRules !== null &&
-    inProgress.cssRuleCount + ruleCount > stylesheetBudgetRules
+    inProgress.cssRuleCount + safeCssRuleCount(sheet) > stylesheetBudgetRules
   );
 }
 
 /**
- * Rules a sheet would cost to stringify, or 0 when it can't be read (e.g.
- * cross-origin, where `stringifyStylesheet` bails immediately anyway).
+ * Rules a sheet would cost to stringify, or 0 when it can't be read at all
+ * (e.g. cross-origin, where `stringifyStylesheet` bails immediately anyway).
+ * A sheet that throws partway through still returns the rules counted so far:
+ * returning 0 would wave a huge but partly-unreadable sheet past the budget.
  *
  * Descends one level into grouping (`@media`, `@supports`) and `@import` rules,
  * which are a single CSSRule each however many rules they hold - without that a
  * media-query-organised framework would look almost free and slip past the cap.
  */
 export function safeCssRuleCount(sheet: CSSStyleSheet | null | undefined) {
+  let total = 0;
   try {
     const rules = sheet && (sheet.rules || sheet.cssRules);
     if (!rules) {
       return 0;
     }
-    let total = rules.length;
+    total = rules.length;
     for (let i = 0; i < rules.length; i++) {
       const rule = rules[i] as CSSRule & {
         cssRules?: CSSRuleList;
         styleSheet?: CSSStyleSheet;
       };
-      total += rule.cssRules?.length || rule.styleSheet?.cssRules?.length || 0;
+      try {
+        total +=
+          rule.cssRules?.length || rule.styleSheet?.cssRules?.length || 0;
+      } catch (e) {
+        // a cross-origin @import throws on .cssRules; those rules can't be
+        // stringified either, so they cost the budget nothing
+      }
     }
-    return total;
   } catch (e) {
-    return 0;
+    //
   }
+  return total;
 }
 
 export function deferStylesheetLink(linkEl: HTMLLinkElement): void {
@@ -182,7 +206,6 @@ export function takeDeferredStylesheetLinks(): HTMLLinkElement[] {
 }
 
 export function recordMutationCost(ms: number): void {
-  mutationCost.totalMs += ms;
   if (ms > mutationCost.slowestBatchMs) {
     mutationCost.slowestBatchMs = ms;
   }
@@ -199,5 +222,5 @@ export function resetSnapshotCostState(): void {
   lastCost = null;
   stylesheetBudgetRules = null;
   deferredStylesheetLinks = [];
-  mutationCost = { totalMs: 0, slowestBatchMs: 0 };
+  mutationCost = { slowestBatchMs: 0 };
 }

@@ -16,7 +16,11 @@ import type {
   elementNode,
 } from '@posthog/rrweb-types';
 import dom from '@posthog/rrweb-utils';
-import { countCssRules, nowMs, recordStylesheetCost } from './snapshot-cost';
+import {
+  countStylesheetRules,
+  nowMs,
+  recordStylesheetCost,
+} from './snapshot-cost';
 
 export function isElement(n: Node): n is Element {
   return n.nodeType === n.ELEMENT_NODE;
@@ -136,7 +140,7 @@ export function stringifyStylesheet(s: CSSStyleSheet): string | null {
     if (!rules) {
       return null;
     }
-    countCssRules(rules.length);
+    countStylesheetRules(rules);
     let sheetHref = s.href;
     if (!sheetHref && s.ownerNode) {
       // an inline <style> element

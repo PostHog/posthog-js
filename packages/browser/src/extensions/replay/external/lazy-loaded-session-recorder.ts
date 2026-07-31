@@ -1378,13 +1378,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $window_id: targetWindowId,
         }
 
-        if (event.type === EventType.FullSnapshot) {
-            if (getRRWeb()?.wasMaxDepthReached?.()) {
-                this._maxDepthExceeded = true
-            }
-            this._trackFullSnapshotCost()
-        }
-
         if (this.status === DISABLED) {
             this._clearBuffer()
             return
@@ -1579,6 +1572,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         // we're processing a full snapshot, so we should reset the timer
         if (rawEvent.type === EventType.FullSnapshot) {
+            // read the cost globals now, synchronously with the snapshot that produced
+            // them; by the time the event drains from the async compression queue a
+            // newer snapshot (or a session reset) may have replaced them
+            if (getRRWeb()?.wasMaxDepthReached?.()) {
+                this._maxDepthExceeded = true
+            }
+            this._trackFullSnapshotCost()
+
             this._scheduleFullSnapshot()
             // Full snapshots reset rrweb's node IDs, so clear any logged node tracking
             this._mutationThrottler?.reset()

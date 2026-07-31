@@ -193,6 +193,57 @@ describe('snapshot cost accounting', () => {
       expect(safeCssRuleCount(null)).toBe(0);
       expect(safeCssRuleCount(undefined)).toBe(0);
     });
+
+    it('still counts readable rules when a cross-origin @import throws mid-walk', () => {
+      // returning 0 here would wave the whole sheet past the budget
+      const sheet = {
+        cssRules: [
+          { cssText: '.a {}' },
+          {
+            get styleSheet(): CSSStyleSheet {
+              throw new Error('SecurityError');
+            },
+          },
+          { cssRules: { length: 40 } },
+        ],
+      } as unknown as CSSStyleSheet;
+
+      expect(safeCssRuleCount(sheet)).toBe(3 + 40);
+    });
+  });
+
+  it('accumulates grouping-rule counts across sheets, so @media-organised pages still trip the budget', () => {
+    // each sheet is a single @media block holding 99 rules: 1 top-level CSSRule,
+    // but it must be charged as ~100 or sheet after sheet slips under the cap
+    const makeMediaSheet = (href: string) =>
+      ({
+        href,
+        cssRules: [
+          {
+            cssText: '@media (min-width: 0px) { .a { color: red } }',
+            cssRules: { length: 99 },
+          },
+        ],
+      }) as unknown as CSSStyleSheet;
+
+    appendLink('/m1.css', makeMediaSheet('http://localhost/m1.css'));
+    const second = appendLink(
+      '/m2.css',
+      makeMediaSheet('http://localhost/m2.css'),
+    );
+    const third = appendLink(
+      '/m3.css',
+      makeMediaSheet('http://localhost/m3.css'),
+    );
+
+    const sn = takeSnapshot(150);
+
+    const links = findByTag(sn!, 'link');
+    expect(links[0].attributes._cssText).toBeDefined();
+    expect(links[1].attributes._cssText).toBeUndefined();
+    expect(links[2].attributes._cssText).toBeUndefined();
+    expect(getLastSnapshotCost()!.cssRuleCount).toBe(100);
+    expect(takeDeferredStylesheetLinks()).toEqual([second, third]);
   });
 
   it('tracks the slowest mutation batch', () => {
@@ -200,9 +251,9 @@ describe('snapshot cost accounting', () => {
     recordMutationCost(40);
     recordMutationCost(3);
 
-    expect(getMutationCost()).toEqual({ totalMs: 55, slowestBatchMs: 40 });
+    expect(getMutationCost()).toEqual({ slowestBatchMs: 40 });
 
     resetSnapshotCostState();
-    expect(getMutationCost()).toEqual({ totalMs: 0, slowestBatchMs: 0 });
+    expect(getMutationCost()).toEqual({ slowestBatchMs: 0 });
   });
 });

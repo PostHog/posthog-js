@@ -39,7 +39,6 @@ import {
   countSerializedNode,
   deferStylesheetLink,
   endSnapshotCostTracking,
-  safeCssRuleCount,
   shouldDeferStylesheetInlining,
 } from './snapshot-cost';
 
@@ -645,9 +644,7 @@ function serializeTextNode(
         // to _only_ include the current rule(s) added by the text node.
         // So we'll be conservative and keep textContent as-is.
       } else if (
-        shouldDeferStylesheetInlining(
-          safeCssRuleCount((parent as HTMLStyleElement).sheet),
-        )
+        shouldDeferStylesheetInlining((parent as HTMLStyleElement).sheet)
       ) {
         // Budget spent - keep the raw textContent, which is what we already fall
         // back to for sheets we can't read. Costs us `@import` expansion and the
@@ -776,7 +773,7 @@ function serializeElementNode(
     }
     let cssText: string | null = null;
     if (stylesheet) {
-      if (shouldDeferStylesheetInlining(safeCssRuleCount(stylesheet))) {
+      if (shouldDeferStylesheetInlining(stylesheet)) {
         // This snapshot has already spent its stylesheet budget. Leave `rel`/`href`
         // in place so the replayer can still load the sheet remotely, and hand the
         // element to the caller to inline off the critical path.

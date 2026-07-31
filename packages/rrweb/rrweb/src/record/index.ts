@@ -52,7 +52,6 @@ import dom from '@posthog/rrweb-utils';
 let wrappedEmit!: (e: eventWithoutTime, isCheckout?: boolean) => void;
 
 let takeFullSnapshot!: (isCheckout?: boolean) => void;
-let cancelDeferredStylesheetInlining: (() => void) | undefined;
 let canvasManager!: CanvasManager;
 let recording = false;
 
@@ -162,6 +161,9 @@ function inlineDeferredStylesheets(
 function record<T = eventWithTime>(
   options: recordOptions<T> = {},
 ): listenerHandler | undefined {
+  // per-recorder, unlike its module-level siblings, so a stale recorder's stop
+  // handler can't cancel a newer recorder's pending deferred inlining
+  let cancelDeferredStylesheetInlining: (() => void) | undefined;
   const {
     emit,
     checkoutEveryNms,
