@@ -1420,18 +1420,6 @@ export class PostHog implements PostHogInterface {
             return
         }
 
-        if (this._extensionEventPropertyProducers.length > 0) {
-            const dynamicProperties: Properties = {}
-            for (const producer of this._extensionEventPropertyProducers.slice()) {
-                try {
-                    extend(dynamicProperties, producer() as Properties)
-                } catch (error) {
-                    logger.error('Failed to produce browser extension event properties', error)
-                }
-            }
-            properties = { ...dynamicProperties, ...(properties ?? {}) }
-        }
-
         if (properties?.$current_url && !isString(properties?.$current_url)) {
             logger.error(
                 'Invalid `$current_url` property provided to `posthog.capture`. Input must be a string. Ignoring provided value.'
@@ -1753,8 +1741,22 @@ export class PostHog implements PostHogInterface {
             }
         })
 
+        const dynamicProperties: Properties = {}
+        if (this._extensionEventPropertyProducers.length > 0) {
+            for (const producer of this._extensionEventPropertyProducers.slice()) {
+                try {
+                    extend(dynamicProperties, producer() as Properties)
+                } catch (error) {
+                    logger.error('Failed to produce browser extension event properties', error)
+                }
+            }
+        }
+
         // update properties with pageview info and super-properties
-        properties = extend({}, infoProperties, persistenceProperties, sessionPersistenceProperties, properties)
+        properties = extend({}, infoProperties, persistenceProperties, sessionPersistenceProperties, {
+            ...dynamicProperties,
+            ...properties,
+        })
 
         properties['$is_identified'] = this._isIdentified()
 
