@@ -3083,6 +3083,69 @@ describe('match properties', () => {
     expect(matchProperty(property_b, { key: 'three' })).toBe(false)
   })
 
+  it('with operator starts_with', () => {
+    const property_a = { key: 'key', value: 'Val', operator: 'starts_with' }
+
+    expect(matchProperty(property_a, { key: 'value' })).toBe(true)
+    expect(matchProperty(property_a, { key: 'VALUE' })).toBe(true)
+    expect(matchProperty(property_a, { key: 'vaLue4' })).toBe(true)
+
+    expect(matchProperty(property_a, { key: 'prevalue' })).toBe(false)
+    expect(matchProperty(property_a, { key: 'Alakazam' })).toBe(false)
+    expect(matchProperty(property_a, { key: 123 })).toBe(false)
+
+    expect(() => matchProperty(property_a, { key2: 'value' })).toThrow(InconclusiveMatchError)
+    expect(() => matchProperty(property_a, {})).toThrow(InconclusiveMatchError)
+
+    const property_b = { key: 'key', value: '3', operator: 'starts_with' }
+
+    expect(matchProperty(property_b, { key: '3' })).toBe(true)
+    expect(matchProperty(property_b, { key: 323 })).toBe(true)
+
+    expect(matchProperty(property_b, { key: 123 })).toBe(false)
+    expect(matchProperty(property_b, { key: 'val3' })).toBe(false)
+
+    const property_c = { key: 'key', value: 'Val', operator: 'not_starts_with' }
+
+    expect(matchProperty(property_c, { key: 'value' })).toBe(false)
+    expect(matchProperty(property_c, { key: 'VALUE' })).toBe(false)
+
+    expect(matchProperty(property_c, { key: 'prevalue' })).toBe(true)
+    expect(matchProperty(property_c, { key: 'Alakazam' })).toBe(true)
+  })
+
+  it('with operator ends_with', () => {
+    const property_a = { key: 'key', value: 'lUe', operator: 'ends_with' }
+
+    expect(matchProperty(property_a, { key: 'value' })).toBe(true)
+    expect(matchProperty(property_a, { key: 'VALUE' })).toBe(true)
+    expect(matchProperty(property_a, { key: '343tfvalue' })).toBe(true)
+
+    expect(matchProperty(property_a, { key: 'value2' })).toBe(false)
+    expect(matchProperty(property_a, { key: 'Alakazam' })).toBe(false)
+    expect(matchProperty(property_a, { key: 123 })).toBe(false)
+
+    expect(() => matchProperty(property_a, { key2: 'value' })).toThrow(InconclusiveMatchError)
+    expect(() => matchProperty(property_a, {})).toThrow(InconclusiveMatchError)
+
+    const property_b = { key: 'key', value: '3', operator: 'ends_with' }
+
+    expect(matchProperty(property_b, { key: '3' })).toBe(true)
+    expect(matchProperty(property_b, { key: 323 })).toBe(true)
+    expect(matchProperty(property_b, { key: 13 })).toBe(true)
+
+    expect(matchProperty(property_b, { key: 321 })).toBe(false)
+    expect(matchProperty(property_b, { key: '3val' })).toBe(false)
+
+    const property_c = { key: 'key', value: 'lUe', operator: 'not_ends_with' }
+
+    expect(matchProperty(property_c, { key: 'value' })).toBe(false)
+    expect(matchProperty(property_c, { key: 'VALUE' })).toBe(false)
+
+    expect(matchProperty(property_c, { key: 'value2' })).toBe(true)
+    expect(matchProperty(property_c, { key: 'Alakazam' })).toBe(true)
+  })
+
   it('with operator regex', () => {
     const property_a = { key: 'key', value: '\\.com$', operator: 'regex' }
 
