@@ -121,6 +121,7 @@ import {
 } from '@posthog/core'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { ExternalIntegrations } from './extensions/external-integration'
+import { BrowserClientAdapter } from './extensions/browser-client'
 import type { PostHogSurveys } from './posthog-surveys'
 import type { Autocapture } from './autocapture'
 import type { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
@@ -458,6 +459,8 @@ export class PostHog implements PostHogInterface {
     _internalEventEmitter = new SimpleEventEmitter()
 
     private readonly _extensions: Extension[] = []
+    private readonly _extensionEventPropertyProducers: Array<() => Record<string, unknown>> = []
+    private _browserClientAdapter: BrowserClientAdapter | undefined
 
     private _replaceExtension<T extends Extension>(oldExt: T | undefined, newExt: T): T {
         if (oldExt) {
@@ -950,8 +953,8 @@ export class PostHog implements PostHogInterface {
         initTasks.push(() => {
             if (this._pendingRemoteConfig) {
                 const result = this._pendingRemoteConfig
-                this._pendingRemoteConfig = undefined // Clear before replaying to avoid re-storing
-                this._onRemoteConfig(result)
+                this._pendingRemoteConfig = undefined
+                this._extensions.forEach((ext) => ext.onRemoteConfig?.(result))
             }
         })
 
@@ -1049,7 +1052,9 @@ export class PostHog implements PostHogInterface {
                 : PERSON_PROFILES_IDENTIFIED_ONLY,
         })
 
-        // Every extension receives the full result and handles the failure case itself.
+        this._browserClientAdapter?.handleRemoteConfig(result)
+
+        // Every legacy extension receives the canonical result and handles failures itself.
         this._extensions.forEach((ext) => ext.onRemoteConfig?.(result))
     }
 
@@ -1355,6 +1360,18 @@ export class PostHog implements PostHogInterface {
             return
         }
 
+        if (this._extensionEventPropertyProducers.length > 0) {
+            const dynamicProperties: Properties = {}
+            for (const producer of this._extensionEventPropertyProducers.slice()) {
+                try {
+                    extend(dynamicProperties, producer() as Properties)
+                } catch (error) {
+                    logger.error('Failed to produce browser extension event properties', error)
+                }
+            }
+            properties = { ...dynamicProperties, ...(properties ?? {}) }
+        }
+
         if (properties?.$current_url && !isString(properties?.$current_url)) {
             logger.error(
                 'Invalid `$current_url` property provided to `posthog.capture`. Input must be a string. Ignoring provided value.'
@@ -1529,6 +1546,25 @@ export class PostHog implements PostHogInterface {
 
     _addCaptureHook(callback: (eventName: string, eventPayload?: CaptureResult) => void): () => void {
         return this.on('eventCaptured', (data) => callback(data.event, data))
+    }
+
+    _getBrowserClientAdapter(): BrowserClientAdapter {
+        return (this._browserClientAdapter ??= new BrowserClientAdapter(this))
+    }
+
+    _registerExtensionEventProperties(producer: () => Record<string, unknown>): () => void {
+        this._extensionEventPropertyProducers.push(producer)
+        let active = true
+        return () => {
+            if (!active) {
+                return
+            }
+            active = false
+            const index = this._extensionEventPropertyProducers.indexOf(producer)
+            if (index !== -1) {
+                this._extensionEventPropertyProducers.splice(index, 1)
+            }
+        }
     }
 
     /**
@@ -3092,9 +3128,9 @@ export class PostHog implements PostHogInterface {
      * @remarks
      * This exists primarily for parity with the server-side
      * [Node.js SDK](/docs/libraries/node), whose `shutdown()` you call once before a
-     * process exits. In the browser there is no process to exit — the SDK already
-     * flushes pending events on `pagehide`/`unload` — so this method is mostly a
-     * graceful no-op that best-effort flushes the request queues and always resolves.
+     * process exits. In the browser there is no process to exit, so this method
+     * performs synchronous best-effort extension cleanup, flushes the request
+     * queues, and always resolves.
      *
      * It is safe to call in isomorphic teardown code (for example a Nuxt/Next module
      * that calls `shutdown()` on both the server and the client) so the same
@@ -3109,15 +3145,18 @@ export class PostHog implements PostHogInterface {
      *
      * @public
      *
-     * @param {number} [_shutdownTimeoutMs] Accepted for call-site parity with the Node.js SDK. The browser flush is synchronous, so this is ignored.
-     * @returns {Promise<void>} A promise that resolves once the queues have been flushed.
+     * @param {number} [_shutdownTimeoutMs] Retained for parity with the Node.js SDK; ignored in browsers.
+     * @returns {Promise<void>} A promise that resolves once best-effort cleanup and queue flushing complete.
      */
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     async shutdown(_shutdownTimeoutMs?: number): Promise<void> {
+        void _shutdownTimeoutMs
         if (!this.__loaded) {
             logger.uninitializedWarning('posthog.shutdown')
             return
         }
+
+        this._remoteConfigLoader?.stop()
+        this._browserClientAdapter?.dispose()
 
         // Best-effort flush of anything still queued, mirroring page-unload teardown
         // so no buffered events are silently dropped when teardown is explicit.

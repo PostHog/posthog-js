@@ -6,7 +6,12 @@ import { PostHog } from './posthog-core'
 // only importing types here, so won't affect the bundle
 // eslint-disable-next-line posthog-js/no-external-replay-imports
 import type { SAMPLED } from './extensions/replay/external/triggerMatching'
-import { Compression, type RemoteConfig, type SessionRecordingRemoteConfig } from '@posthog/browser-common'
+import {
+    Compression,
+    type RemoteConfig,
+    type RemoteConfigResult as BrowserCommonRemoteConfigResult,
+    type SessionRecordingRemoteConfig,
+} from '@posthog/browser-common'
 
 // Extension class types for __extensionClasses (type-only, no bundle impact)
 import type { ExtensionConstructor } from './extensions/types'
@@ -303,7 +308,7 @@ export type SessionRecordingPersistedConfig = Omit<
  * Outcome of a remote config fetch: the config, or an explicit failure.
  * @internal
  */
-export type RemoteConfigResult = { ok: true; config: RemoteConfig } | { ok: false }
+export type RemoteConfigResult = BrowserCommonRemoteConfigResult
 
 /**
  * Flags returns feature flags and their payloads
