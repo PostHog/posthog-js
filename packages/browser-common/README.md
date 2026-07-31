@@ -56,14 +56,15 @@ What an extension is given in `setup` — the adapter shared by extensions on th
 
 - **identity and session**: `distinctId`, `anonymousId`, `groups`, `session`
 - **events**: `capture(...)`, `registerDynamicEventProperties(...)`, `onEvent(...)`
-- **server config**: `getRemoteConfig()` and `onRemoteConfig(...)`
+- **server config**: `onRemoteConfig(...)`
 - **transport**: `projectToken`, `sendRequest(path, init?)`
 - **storage and logging**: `kv`, `logger`
 
 Identity, session, and the public project token are always-ready synchronous
 reads. Operations that may perform I/O, including `capture`, `sendRequest`,
-`kv`, and `getRemoteConfig`, are awaitable. Extensions that want a named log
-prefix can create a child with `client.logger.createLogger('[myExtension]')`.
+and `kv`, are awaitable. `onRemoteConfig` immediately replays the latest known
+success or failure and then reports subsequent outcomes. Extensions that want a
+named log prefix can create a child with `client.logger.createLogger('[myExtension]')`.
 
 ### Host runtime
 
