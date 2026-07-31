@@ -9,6 +9,7 @@ import {
     SurveyEventName,
     SurveySchedule,
 } from '../../posthog-surveys-types'
+import { SURVEYS_ACTIVATED_TIMESTAMPS } from '../../constants'
 import { PostHogPersistence } from '../../posthog-persistence'
 import { PostHog } from '../../posthog-core'
 import { CaptureResult, PostHogConfig, PropertyMatchType } from '../../types'
@@ -492,6 +493,7 @@ describe('survey-event-receiver', () => {
                 _addCaptureHook: mockAddCaptureHook,
                 getSurveys: jest.fn((callback) => callback([survey])),
                 get_session_id: () => (hasSession ? currentSessionId : undefined),
+                cancelPendingSurvey: jest.fn(),
                 onSessionId: (listener: (sessionId: string) => void) => {
                     sessionIdListeners.push(listener)
                     return () => {}
@@ -563,17 +565,35 @@ describe('survey-event-receiver', () => {
         it.each([
             ['dismissed', SurveyEventName.DISMISSED],
             ['sent', SurveyEventName.SENT],
-        ])('clears the delayed activation once the survey is %s', (_label, interactionEvent) => {
+        ])('removes the activation once the survey is %s', (_label, interactionEvent) => {
             const { receiver, hook } = setup(makeDelayedSurvey())
 
             hook('trigger_event')
             hook(SurveyEventName.SHOWN, surveyEventPayload('delayed-survey', SurveyEventName.SHOWN))
-            // being shown already dropped the timestamp
-            expect(receiver.getActivationTimestamp('delayed-survey')).toBeUndefined()
 
             hook(interactionEvent, surveyEventPayload('delayed-survey', interactionEvent))
             expect(receiver.getSurveys()).not.toContain('delayed-survey')
-            expect(receiver.getActivationTimestamp('delayed-survey')).toBeUndefined()
+        })
+
+        // A cancel event deactivates a survey that was never shown, so it is the one path that
+        // still has a timestamp to clean up. Asserted on persistence directly because
+        // getActivationTimestamp reads through the activation set and would hide a leaked entry.
+        it('forgets the stored activation time when a cancel event fires before the survey is shown', () => {
+            const { receiver, hook } = setup(
+                makeDelayedSurvey({
+                    conditions: {
+                        events: { values: [{ name: 'trigger_event' }] },
+                        cancelEvents: { values: [{ name: 'cancel_event' }] },
+                    },
+                } as Partial<Survey>)
+            )
+
+            hook('trigger_event')
+            expect(receiver.getActivationTimestamp('delayed-survey')).toBe(1_000_000)
+
+            hook('cancel_event')
+            expect(receiver.getSurveys()).not.toContain('delayed-survey')
+            expect(instance.persistence?.props[SURVEYS_ACTIVATED_TIMESTAMPS]).toBeUndefined()
         })
 
         it('drops the activation time once the survey is shown, so a later page waits the full delay', () => {
