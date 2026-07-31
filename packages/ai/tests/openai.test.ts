@@ -3,6 +3,7 @@ import PostHogOpenAI, { WrappedCompletions } from '../src/openai'
 import openaiModule from 'openai'
 import type { ChatCompletion, ChatCompletionChunk } from 'openai/resources/chat/completions'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
+import { Stream as OpenAIStream } from 'openai/streaming'
 import { collectUnhandledRejections, flushPromises } from './test-utils'
 import { version } from '../package.json'
 
@@ -417,12 +418,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     const ChatMock: any = openaiModule.Chat
     ;(ChatMock.Completions as any).prototype.create = jest.fn().mockImplementation((params: any) => {
       if (params.stream) {
-        // Return a mock stream with tee() method
-        const mockStream = {
-          tee: jest
-            .fn()
-            .mockReturnValue([createMockAsyncIterator(mockStreamChunks), createMockAsyncIterator(mockStreamChunks)]),
-        }
+        const mockStream = createMockAsyncIterator(mockStreamChunks)
         return createMockAPIPromise(mockStream)
       }
       return createMockAPIPromise(mockOpenAiChatResponse)
@@ -698,11 +694,9 @@ describe('PostHogOpenAI - Jest test suite', () => {
         },
       ]
       const ResponsesMock: any = openaiModule.Responses
-      ResponsesMock.prototype.create = jest.fn().mockImplementation(() =>
-        createMockAPIPromise({
-          tee: jest.fn().mockReturnValue([createMockAsyncIterator(chunks), createMockAsyncIterator(chunks)]),
-        })
-      )
+      ResponsesMock.prototype.create = jest
+        .fn()
+        .mockImplementation(() => createMockAPIPromise(createMockAsyncIterator(chunks)))
 
       const stream = await client.responses.create({
         model: 'gpt-4',
@@ -1073,6 +1067,52 @@ describe('PostHogOpenAI - Jest test suite', () => {
   })
 
   describe('Streaming Responses', () => {
+    test('break after first chunk cancels the real OpenAI stream and captures only the partial response', async () => {
+      const sourceController = new AbortController()
+      let pulls = 0
+      let sourceReturned = false
+      const firstChunk = createMockStreamChunks({ content: 'first second' })[0]
+      const secondChunk = createMockStreamChunks({ content: 'unobserved' })[0]
+      const source = new OpenAIStream<ChatCompletionChunk>(() => {
+        const iterator = (async function* () {
+          try {
+            pulls += 1
+            yield firstChunk
+            pulls += 1
+            yield secondChunk
+          } finally {
+            sourceReturned = true
+            sourceController.abort()
+          }
+        })()
+        return iterator
+      }, sourceController)
+
+      const ChatMock: any = openaiModule.Chat
+      ;(ChatMock.Completions as any).prototype.create = jest.fn().mockReturnValue(createMockAPIPromise(source))
+
+      const stream = await client.chat.completions.create({
+        model: 'gpt-4',
+        messages: [{ role: 'user', content: 'Stop early' }],
+        stream: true,
+        posthogDistinctId: 'test-stream-break-user',
+      })
+
+      expect(stream).toBeInstanceOf(OpenAIStream)
+      expect(pulls).toBe(0)
+      for await (const _chunk of stream) {
+        break
+      }
+      await flushPromises()
+
+      expect(pulls).toBe(1)
+      expect(sourceReturned).toBe(true)
+      expect(sourceController.signal.aborted).toBe(true)
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const properties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+      expect(properties['$ai_output_choices'][0].content[0].text).toBe(firstChunk.choices[0]?.delta.content)
+    })
+
     conditionalTest('handles basic streaming completion', async () => {
       // Create a simple streaming response
       mockStreamChunks = createMockStreamChunks({
@@ -1200,13 +1240,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
           },
         })
 
-        streamErrorCase.stubCreate(
-          jest.fn().mockImplementation(() =>
-            createMockAPIPromise({
-              tee: jest.fn().mockReturnValue([createErroringIterator(), createErroringIterator()]),
-            })
-          )
-        )
+        streamErrorCase.stubCreate(jest.fn().mockImplementation(() => createMockAPIPromise(createErroringIterator())))
 
         const unhandledRejections = await collectUnhandledRejections(async () => {
           const stream = await streamErrorCase.invoke()
@@ -1452,36 +1486,24 @@ describe('PostHogOpenAI - Jest test suite', () => {
     conditionalTest('handles streaming errors gracefully', async () => {
       // Mock a stream that throws an error
       const errorStream = {
-        tee: jest.fn().mockReturnValue([
-          {
-            [Symbol.asyncIterator]: async function* () {
-              yield {
-                id: 'error-chunk',
-                model: 'gpt-4',
-                object: 'chat.completion.chunk',
-                created: Date.now() / 1000,
-                choices: [
-                  {
-                    index: 0,
-                    delta: { content: 'Starting...' },
-                    finish_reason: null,
-                  },
-                ],
-              }
-              const error = new Error('Stream interrupted') as Error & { status: number }
-              error.status = 503
-              throw error
-            },
-          },
-          {
-            [Symbol.asyncIterator]: async function* () {
-              const error = new Error('Stream interrupted') as Error & { status: number }
-              error.status = 503
-              throw error
-              yield // Adding yield to satisfy generator function requirement
-            },
-          },
-        ]),
+        [Symbol.asyncIterator]: async function* () {
+          yield {
+            id: 'error-chunk',
+            model: 'gpt-4',
+            object: 'chat.completion.chunk',
+            created: Date.now() / 1000,
+            choices: [
+              {
+                index: 0,
+                delta: { content: 'Starting...' },
+                finish_reason: null,
+              },
+            ],
+          }
+          const error = new Error('Stream interrupted') as Error & { status: number }
+          error.status = 503
+          throw error
+        },
       }
 
       const ChatMock: any = openaiModule.Chat

@@ -1,6 +1,7 @@
 import { PostHog } from 'posthog-node'
 import { PostHogAzureOpenAI } from '../src/openai/azure'
 import openaiModule from 'openai'
+import { Stream as OpenAIStream } from 'openai/streaming'
 import { collectUnhandledRejections, flushPromises } from './test-utils'
 
 let mockAzureEmbeddingResponse: any = {}
@@ -784,6 +785,55 @@ describe('PostHogAzureOpenAI - streaming error safety', () => {
     } as any)
   })
 
+  test('break after first chunk cancels the real Azure OpenAI stream and captures only partial output', async () => {
+    const sourceController = new AbortController()
+    let pulls = 0
+    let sourceReturned = false
+    const firstChunk = {
+      id: 'chatcmpl-azure-partial',
+      model: 'gpt-4',
+      object: 'chat.completion.chunk',
+      created: 1,
+      choices: [{ index: 0, delta: { content: 'partial' }, finish_reason: null, logprobs: null }],
+    }
+    const source = new OpenAIStream<any>(() => {
+      const iterator = (async function* () {
+        try {
+          pulls += 1
+          yield firstChunk
+          pulls += 1
+          yield { ...firstChunk, choices: [{ ...firstChunk.choices[0], delta: { content: 'unobserved' } }] }
+        } finally {
+          sourceReturned = true
+          sourceController.abort()
+        }
+      })()
+      return iterator
+    }, sourceController)
+
+    ;((openaiModule as any).Chat.Completions as any).prototype.create = jest.fn().mockResolvedValue(source)
+    const stream = await safetyClient.chat.completions.create({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: 'Stop early' }],
+      stream: true,
+      posthogDistinctId: 'azure-break-user',
+    } as any)
+
+    expect(stream).toBeInstanceOf(OpenAIStream)
+    expect(pulls).toBe(0)
+    for await (const _chunk of stream as unknown as AsyncIterable<unknown>) {
+      break
+    }
+    await flushPromises()
+
+    expect(pulls).toBe(1)
+    expect(sourceReturned).toBe(true)
+    expect(sourceController.signal.aborted).toBe(true)
+    expect(safetyMockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const properties = (safetyMockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+    expect(properties['$ai_output_choices'][0].content[0].text).toBe('partial')
+  })
+
   const streamErrorCases: {
     name: string
     firstChunk: unknown
@@ -835,13 +885,7 @@ describe('PostHogAzureOpenAI - streaming error safety', () => {
       },
     })
 
-    streamErrorCase.stubCreate(
-      jest.fn().mockImplementation(() =>
-        Promise.resolve({
-          tee: jest.fn().mockReturnValue([createErroringIterator(), createErroringIterator()]),
-        })
-      )
-    )
+    streamErrorCase.stubCreate(jest.fn().mockImplementation(() => Promise.resolve(createErroringIterator())))
 
     const unhandledRejections = await collectUnhandledRejections(async () => {
       const stream = await streamErrorCase.invoke()
@@ -1007,9 +1051,7 @@ describe('PostHogAzureOpenAI - response service tier', () => {
       },
     ]
     const ChatMock: any = openaiModule.Chat
-    ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue({
-      tee: jest.fn().mockReturnValue([createMockAsyncIterator(chunks), createMockAsyncIterator(chunks)]),
-    })
+    ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue(createMockAsyncIterator(chunks))
 
     const stream = await client.chat.completions.create({
       model: 'gpt-4',
@@ -1064,9 +1106,7 @@ describe('PostHogAzureOpenAI - response service tier', () => {
       { type: 'response.completed', response: mockResponsesResult('flex') },
     ]
     const ResponsesMock: any = openaiModule.Responses
-    ResponsesMock.prototype.create = jest.fn().mockResolvedValue({
-      tee: jest.fn().mockReturnValue([createMockAsyncIterator(chunks), createMockAsyncIterator(chunks)]),
-    })
+    ResponsesMock.prototype.create = jest.fn().mockResolvedValue(createMockAsyncIterator(chunks))
 
     const stream = await client.responses.create({
       model: 'gpt-4',
