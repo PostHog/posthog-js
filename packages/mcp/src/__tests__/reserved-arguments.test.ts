@@ -3,6 +3,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
+import { DEFAULT_CONTEXT_PARAMETER_DESCRIPTION, DEFAULT_CONVERSATION_ID_DESCRIPTION } from '../extensions/constants'
 import { instrument } from '../index'
 import { fakePostHog } from './test-utils'
 
@@ -65,54 +66,36 @@ describe('high-level reserved analytics arguments', () => {
     }
   })
 
-  it('recomputes ownership after a schema-only tool update', async () => {
-    const server = new McpServer({ name: 'updated-reserved-arguments', version: '1.0.0' })
-    const receivedArgs: Record<string, unknown>[] = []
+  it('strips analytics arguments injected into a non-object Zod schema', async () => {
+    const server = new McpServer({ name: 'record-schema-reserved-arguments', version: '1.0.0' })
+    let receivedArgs: Record<string, string> | undefined
 
-    const registeredTool = server.registerTool(
-      'updated_schema',
-      { inputSchema: z.object({ value: z.string() }).passthrough() },
-      async (args) => {
-        receivedArgs.push({ ...args })
-        return { content: [{ type: 'text', text: 'ok' }] }
-      }
-    )
+    server.registerTool('record_schema', { inputSchema: z.record(z.string()) }, async (args) => {
+      receivedArgs = { ...args }
+      return { content: [{ type: 'text', text: 'ok' }] }
+    })
 
     const { client, cleanup } = await connect(server)
     try {
       instrument(server, fakePostHog(), { context: true, enableConversationId: true })
 
-      const argumentsWithReservedFields = {
-        context: 'supplied context',
-        conversation_id: 'supplied conversation',
-        value: 'kept',
-      }
-      await client.request(
-        { method: 'tools/call', params: { name: 'updated_schema', arguments: argumentsWithReservedFields } },
-        CallToolResultSchema
-      )
-
-      registeredTool.update({
-        paramsSchema: {
-          context: z.string(),
-          conversation_id: z.string(),
-          value: z.string(),
-        },
-      })
+      const listResult = await client.request({ method: 'tools/list' }, ListToolsResultSchema)
+      const tool = listResult.tools.find((candidate) => candidate.name === 'record_schema')
+      expect(tool?.inputSchema.properties?.context).toBeDefined()
+      expect(tool?.inputSchema.properties?.conversation_id).toBeDefined()
 
       await client.request(
-        { method: 'tools/call', params: { name: 'updated_schema', arguments: argumentsWithReservedFields } },
-        CallToolResultSchema
-      )
-
-      expect(receivedArgs).toEqual([
-        { value: 'kept' },
         {
-          context: 'supplied context',
-          conversation_id: 'supplied conversation',
-          value: 'kept',
+          method: 'tools/call',
+          params: {
+            name: 'record_schema',
+            arguments: { context: 'analytics context', conversation_id: 'analytics conversation', value: 'kept' },
+          },
         },
-      ])
+        CallToolResultSchema
+      )
+
+      expect(receivedArgs).toEqual({ value: 'kept' })
     } finally {
       await cleanup()
     }
@@ -126,7 +109,11 @@ describe('high-level reserved analytics arguments', () => {
     server.registerTool(
       'existing_context',
       {
-        inputSchema: z.object({ context: z.string().describe('Application context'), value: z.string() }).passthrough(),
+        inputSchema: {
+          properties: z.string().optional(),
+          context: z.string().describe('Application context'),
+          value: z.string(),
+        },
       },
       async (args) => {
         receivedArgs.set('existing_context', { ...args })
@@ -159,11 +146,26 @@ describe('high-level reserved analytics arguments', () => {
       instrument(server, fakePostHog(), { context: true, enableConversationId: true })
 
       const listResult = await client.request({ method: 'tools/list' }, ListToolsResultSchema)
-      for (const name of ['existing_context', 'existing_conversation_id', 'analytics_owned']) {
-        const tool = listResult.tools.find((candidate) => candidate.name === name)
-        expect(tool?.inputSchema.properties?.context).toBeDefined()
-        expect(tool?.inputSchema.properties?.conversation_id).toBeDefined()
-      }
+      const listedTools = new Map(listResult.tools.map((tool) => [tool.name, tool]))
+      expect(listedTools.get('existing_context')?.inputSchema.properties?.context).toMatchObject({
+        description: 'Application context',
+      })
+      expect(listedTools.get('existing_context')?.inputSchema.properties?.conversation_id).toMatchObject({
+        description: DEFAULT_CONVERSATION_ID_DESCRIPTION,
+      })
+      expect(listedTools.get('existing_context')?.inputSchema.properties?.properties).toBeDefined()
+      expect(listedTools.get('existing_conversation_id')?.inputSchema.properties?.context).toMatchObject({
+        description: DEFAULT_CONTEXT_PARAMETER_DESCRIPTION,
+      })
+      expect(listedTools.get('existing_conversation_id')?.inputSchema.properties?.conversation_id).toMatchObject({
+        description: 'Application conversation',
+      })
+      expect(listedTools.get('analytics_owned')?.inputSchema.properties?.context).toMatchObject({
+        description: DEFAULT_CONTEXT_PARAMETER_DESCRIPTION,
+      })
+      expect(listedTools.get('analytics_owned')?.inputSchema.properties?.conversation_id).toMatchObject({
+        description: DEFAULT_CONVERSATION_ID_DESCRIPTION,
+      })
 
       const suppliedArguments = {
         context: 'supplied context',

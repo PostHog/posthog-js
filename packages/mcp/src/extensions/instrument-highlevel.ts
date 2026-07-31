@@ -11,12 +11,19 @@ import type {
   RegisteredTool,
   ToolCallback,
 } from '../types'
+import { canInjectAnalyticsParameter } from './analytics-parameters'
 import { stripConversationId } from './conversation-id'
 import { isContextEnabled } from './context-parameters'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
 import { log } from './logger'
-import { createWrappedTool, getObjectShape, getToolFunction, hasToolFunction } from './mcp-sdk-compat'
+import {
+  createWrappedTool,
+  getObjectShape,
+  getToolFunction,
+  hasToolFunction,
+  isZodRawShapeCompat,
+} from './mcp-sdk-compat'
 import { handleReportMissing, resolveMissingCapabilityToolName } from './tools'
 import {
   handleInitializeRequest,
@@ -47,31 +54,25 @@ function isCallbackUpdate(value: unknown): value is { callback: ToolCallback } {
 
 function analyticsOwnsParameter(inputSchema: unknown, parameterName: string): boolean {
   if (!inputSchema || typeof inputSchema !== 'object') {
-    return true
+    return canInjectAnalyticsParameter(undefined, parameterName)
+  }
+
+  if (isZodRawShapeCompat(inputSchema)) {
+    return canInjectAnalyticsParameter({ properties: inputSchema }, parameterName)
   }
 
   const shape = getObjectShape(inputSchema)
   if (shape) {
-    return !Object.prototype.hasOwnProperty.call(shape, parameterName)
+    return canInjectAnalyticsParameter({ properties: shape }, parameterName)
   }
 
   const schema = inputSchema as Record<string, unknown>
-  if (schema.oneOf || schema.allOf || schema.anyOf) {
-    return false
-  }
-
-  if (schema.properties && typeof schema.properties === 'object') {
-    return !Object.prototype.hasOwnProperty.call(schema.properties, parameterName)
-  }
-
-  // A non-object Zod schema is converted to a complex JSON schema that the
-  // list instrumentation deliberately leaves alone.
   if ('_def' in schema || '_zod' in schema || '~standard' in schema) {
-    return false
+    // The MCP SDK advertises non-object schemas as an empty object schema.
+    return canInjectAnalyticsParameter(undefined, parameterName)
   }
 
-  // Older MCP SDKs may retain the raw Zod shape rather than a Zod object.
-  return !Object.prototype.hasOwnProperty.call(schema, parameterName)
+  return canInjectAnalyticsParameter(schema, parameterName)
 }
 
 function stripOwnedAnalyticsArguments(
@@ -129,9 +130,8 @@ function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
                 if (updateArgs[0]) {
                   const updateObj = updateArgs[0]
                   if (isCallbackUpdate(updateObj)) {
-                    const updatedTool = createWrappedTool(nextValue, updateObj.callback)
                     const wrappedTool = addTracingToToolCallbackInternal(
-                      updatedTool,
+                      { callback: updateObj.callback },
                       property,
                       server,
                       getCurrentInputSchema
