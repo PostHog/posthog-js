@@ -62,9 +62,10 @@ What an extension is given in `setup` — the adapter shared by extensions on th
 - **storage and logging**: `kv`, `logger`
 
 Identity, session, SDK metadata, and the public project token are always-ready synchronous reads. `capture` and
-`sendRequest` are awaitable. `onRemoteConfig` immediately replays the latest known success or failure and then reports
-subsequent outcomes. Extensions that want a named log prefix can create a child with
-`client.logger.createLogger('[myExtension]')`.
+`sendRequest` are awaitable. For `sendRequest`, `sentAt` controls `sent_at` placement on POST requests; GET query mode
+uses the cache-busting `_` parameter instead, and GET body mode has no effect. `onRemoteConfig` immediately replays the
+latest known success or failure and then reports subsequent outcomes. Extensions that want a named log prefix can
+create a child with `client.logger.createLogger('[myExtension]')`.
 
 Initialize KV during asynchronous setup before using its synchronous buffer:
 

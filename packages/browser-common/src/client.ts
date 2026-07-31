@@ -80,7 +80,7 @@ export interface SendRequestInit {
     timeoutMs?: number
     /** Compression used by the browser transport. */
     compression?: Compression | 'best-available'
-    /** Where the transport adds its sent-at timestamp. */
+    /** Where POST requests add `sent_at`. For GET, `query` adds the cache-busting `_` parameter and `body` has no effect. */
     sentAt?: 'body' | 'query'
 }
 
