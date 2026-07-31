@@ -800,7 +800,7 @@ export class PostHogFeatureFlags implements Extension {
             this._set({ [PERSISTENCE_FEATURE_FLAG_ERRORS]: flagErrors })
 
             if (isQuotaLimited) {
-                client.logger.warn(
+                this._logger.warn(
                     'You have hit your feature flags quota limit, and will not be able to load feature flags until the quota is reset.  Please visit https://posthog.com/docs/billing/limits-alerts to learn more.'
                 )
                 return
@@ -812,7 +812,7 @@ export class PostHogFeatureFlags implements Extension {
             }
             this._set({ [PERSISTENCE_FEATURE_FLAG_ERRORS]: [FeatureFlagError.CONNECTION_ERROR] })
             if (!request || this._requestInFlight === request) {
-                client.logger.error('Feature flag request failed', error)
+                this._logger.error('Feature flag request failed', error)
             }
         } finally {
             if (request && this._requestInFlight === request) {
@@ -952,12 +952,7 @@ export class PostHogFeatureFlags implements Extension {
         const flagReportValue = String(flagValue)
         const requestId = this._prop(PERSISTENCE_FEATURE_FLAG_REQUEST_ID) || undefined
         const evaluatedAt = this._prop(PERSISTENCE_FEATURE_FLAG_EVALUATED_AT) || undefined
-        let flagCallReported: Record<string, string[]> = Object.fromEntries(
-            Object.entries((this._prop(FLAG_CALL_REPORTED) || {}) as Record<string, string[]>).map(([flag, values]) => [
-                flag,
-                [...values],
-            ])
-        )
+        let flagCallReported: Record<string, string[]> = this._prop(FLAG_CALL_REPORTED) || {}
 
         let sessionIdToPersist: string | undefined
         // When session-scoped dedup is enabled, reset the reported flags whenever the session changes.
@@ -1090,9 +1085,10 @@ export class PostHogFeatureFlags implements Extension {
 
     private async _getRemoteConfigPayload(key: string, callback: RemoteConfigFeatureFlagCallback): Promise<void> {
         const client = this._client
-        if (!client || this._config.remoteRequestsDisabled) {
+        if (!client) {
             return
         }
+        // TODO: Reconsider whether direct remote config payload requests should respect remoteRequestsDisabled.
         const data: Record<string, any> = {
             distinct_id: client.distinctId,
             token: client.projectToken,
@@ -1106,6 +1102,7 @@ export class PostHogFeatureFlags implements Extension {
         if (!isUndefined(flagKeys)) {
             data.flag_keys = flagKeys
         }
+        let payload: JsonType | undefined
         try {
             const response = await client.sendRequest('/flags/?v=2', {
                 target: 'flags',
@@ -1116,9 +1113,15 @@ export class PostHogFeatureFlags implements Extension {
                 timeoutMs: this._config.requestTimeoutMs,
             })
             const payloads = (response.json as Partial<FlagsResponse> | undefined)?.featureFlagPayloads
-            callback(payloads?.[key] || undefined)
+            payload = payloads?.[key] || undefined
         } catch (error) {
             this._logger.error('Remote config feature flag request failed', error)
+            return
+        }
+        try {
+            callback(payload)
+        } catch (error) {
+            this._logger.error('Remote config feature flag callback failed', error)
         }
     }
 
@@ -1402,15 +1405,17 @@ export class PostHogFeatureFlags implements Extension {
         void this._getEarlyAccessFeatures(callback, stages)
     }
 
+    // TODO: Consider moving early access features to their own extension.
     private async _getEarlyAccessFeatures(
         callback: EarlyAccessFeatureCallback,
         stages?: EarlyAccessFeatureStage[]
     ): Promise<void> {
         const client = this._client
-        if (!client || this._config.remoteRequestsDisabled) {
+        if (!client) {
             return
         }
         const stageParams = stages ? `&${stages.map((s) => `stage=${s}`).join('&')}` : ''
+        let earlyAccessFeatures: EarlyAccessFeature[]
         try {
             const response = await client.sendRequest(
                 `/api/early_access_features/?token=${client.projectToken}${stageParams}`,
@@ -1423,11 +1428,16 @@ export class PostHogFeatureFlags implements Extension {
             if (!response.json) {
                 return
             }
-            const earlyAccessFeatures = (response.json as EarlyAccessFeatureResponse).earlyAccessFeatures
+            earlyAccessFeatures = (response.json as EarlyAccessFeatureResponse).earlyAccessFeatures
             this._set({ [PERSISTENCE_EARLY_ACCESS_FEATURES]: earlyAccessFeatures })
-            callback(earlyAccessFeatures)
         } catch (error) {
             this._logger.error('Early access feature request failed', error)
+            return
+        }
+        try {
+            callback(earlyAccessFeatures)
+        } catch (error) {
+            this._logger.error('Early access feature callback failed', error)
         }
     }
 

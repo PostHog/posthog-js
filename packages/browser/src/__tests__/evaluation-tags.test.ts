@@ -6,6 +6,7 @@ import { createPosthogInstance } from './helpers/posthog-instance'
 describe('feature flag evaluation contexts', () => {
     afterEach(() => {
         jest.restoreAllMocks()
+        delete (window as Window & { POSTHOG_DEBUG?: boolean }).POSTHOG_DEBUG
     })
 
     it('includes valid evaluation contexts in Client flags requests', async () => {
@@ -57,9 +58,24 @@ describe('feature flag evaluation contexts', () => {
         expect(source.get().evaluationContexts).toEqual(['legacy'])
         expect(warn).toHaveBeenCalledTimes(1)
         expect(warn).toHaveBeenCalledWith(
-            '[PostHog.js]',
+            '[PostHog.js] [FeatureFlags]',
             expect.stringContaining('evaluation_environments is deprecated')
         )
-        delete (window as Window & { POSTHOG_DEBUG?: boolean }).POSTHOG_DEBUG
+    })
+
+    it('scopes invalid flag key configuration errors to feature flags', () => {
+        ;(window as Window & { POSTHOG_DEBUG?: boolean }).POSTHOG_DEBUG = true
+        const config = defaultConfig()
+        config.flag_keys = 'invalid' as unknown as string[]
+        const error = jest.spyOn(window.console, 'error').mockImplementation()
+
+        new MutableFeatureFlagsConfigSource(config)
+
+        expect(error).toHaveBeenCalledWith(
+            '[PostHog.js] [FeatureFlags]',
+            'Invalid flag_keys found:',
+            'invalid',
+            'Expected array of non-empty strings'
+        )
     })
 })

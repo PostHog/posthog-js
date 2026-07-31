@@ -1,6 +1,8 @@
-import { logger } from '@posthog/browser-common/utils/logger'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 import { isArray, isUndefined } from '@posthog/core'
 import type { JsonType, PostHogConfig } from './types'
+
+const logger = createLogger('[FeatureFlags]')
 
 export interface FeatureFlagsConfig {
     readonly bootstrap: {
