@@ -12,10 +12,11 @@ import type {
   ToolCallback,
 } from '../types'
 import { stripConversationId } from './conversation-id'
+import { isContextEnabled } from './context-parameters'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
 import { log } from './logger'
-import { createWrappedTool, getToolFunction, hasToolFunction } from './mcp-sdk-compat'
+import { createWrappedTool, getObjectShape, getToolFunction, hasToolFunction } from './mcp-sdk-compat'
 import { handleReportMissing, resolveMissingCapabilityToolName } from './tools'
 import {
   handleInitializeRequest,
@@ -42,6 +43,47 @@ type ProcessedRegisteredTool = RegisteredTool & {
 
 function isCallbackUpdate(value: unknown): value is { callback: ToolCallback } {
   return !!value && typeof value === 'object' && 'callback' in value && typeof value.callback === 'function'
+}
+
+function analyticsOwnsParameter(inputSchema: unknown, parameterName: string): boolean {
+  if (!inputSchema || typeof inputSchema !== 'object') {
+    return true
+  }
+
+  const shape = getObjectShape(inputSchema)
+  if (shape) {
+    return !Object.prototype.hasOwnProperty.call(shape, parameterName)
+  }
+
+  const schema = inputSchema as Record<string, unknown>
+  if (schema.oneOf || schema.allOf || schema.anyOf) {
+    return false
+  }
+
+  if (schema.properties && typeof schema.properties === 'object') {
+    return !Object.prototype.hasOwnProperty.call(schema.properties, parameterName)
+  }
+
+  // A non-object Zod schema is converted to a complex JSON schema that the
+  // list instrumentation deliberately leaves alone.
+  if ('_def' in schema || '_zod' in schema || '~standard' in schema) {
+    return false
+  }
+
+  // Older MCP SDKs may retain the raw Zod shape rather than a Zod object.
+  return !Object.prototype.hasOwnProperty.call(schema, parameterName)
+}
+
+function stripOwnedAnalyticsArguments(
+  args: unknown,
+  ownership: { context: boolean; conversationId: boolean }
+): unknown {
+  let cleanedArgs = args
+  if (ownership.context && cleanedArgs && typeof cleanedArgs === 'object' && 'context' in cleanedArgs) {
+    const { context: _context, ...rest } = cleanedArgs
+    cleanedArgs = rest
+  }
+  return ownership.conversationId ? stripConversationId(cleanedArgs) : cleanedArgs
 }
 
 function addTracingToToolRegistry(
@@ -78,7 +120,8 @@ function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
               return Reflect.set(target, property, value)
             }
 
-            const nextValue = addTracingToToolCallbackInternal(value, property, server)
+            const getCurrentInputSchema = () => value.inputSchema
+            const nextValue = addTracingToToolCallbackInternal(value, property, server, getCurrentInputSchema)
 
             if (typeof nextValue.update === 'function') {
               const originalUpdate = nextValue.update
@@ -86,10 +129,12 @@ function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
                 if (updateArgs[0]) {
                   const updateObj = updateArgs[0]
                   if (isCallbackUpdate(updateObj)) {
+                    const updatedTool = createWrappedTool(nextValue, updateObj.callback)
                     const wrappedTool = addTracingToToolCallbackInternal(
-                      { callback: updateObj.callback },
+                      updatedTool,
                       property,
-                      server
+                      server,
+                      getCurrentInputSchema
                     )
                     updateObj.callback = getToolFunction(wrappedTool)
                   }
@@ -141,12 +186,12 @@ function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
 function addTracingToToolCallbackInternal(
   tool: RegisteredTool,
   toolName: string,
-  server: HighLevelMCPServerLike
+  server: HighLevelMCPServerLike,
+  getCurrentInputSchema: () => unknown = () => tool.inputSchema
 ): RegisteredTool {
   const originalCallback = getToolFunction(tool)
-  const missingToolName = resolveMissingCapabilityToolName(
-    getServerTrackingData(server.server as MCPServerLike)?.options
-  )
+  const options = getServerTrackingData(server.server as MCPServerLike)?.options
+  const missingToolName = resolveMissingCapabilityToolName(options)
 
   if (wrappedCallbacks.has(originalCallback)) {
     log(`Tool ${toolName} callback already wrapped, skipping re-wrap`)
@@ -170,15 +215,17 @@ function addTracingToToolCallbackInternal(
       extra = params[0] as CompatibleRequestHandlerExtra
     }
 
-    const removeContextFromArgs = (input: unknown): unknown => {
-      if (input && typeof input === 'object' && 'context' in input) {
-        const { context: _context, ...rest } = input
-        return rest
-      }
-      return input
-    }
-
-    const cleanedArgs = toolName === missingToolName ? args : stripConversationId(removeContextFromArgs(args))
+    const inputSchema = getCurrentInputSchema()
+    const cleanedArgs = stripOwnedAnalyticsArguments(args, {
+      context:
+        toolName !== missingToolName &&
+        isContextEnabled(options?.context) &&
+        analyticsOwnsParameter(inputSchema, 'context'),
+      conversationId:
+        toolName !== missingToolName &&
+        options?.enableConversationId === true &&
+        analyticsOwnsParameter(inputSchema, 'conversation_id'),
+    })
 
     try {
       if (cleanedArgs === undefined) {
