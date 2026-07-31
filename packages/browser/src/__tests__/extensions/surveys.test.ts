@@ -338,7 +338,9 @@ describe('SurveyManager', () => {
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
         expect(mockPostHog.surveys.getSurveys).toHaveBeenCalled()
-        expect(handlePopoverSurveyMock).toHaveBeenCalledWith(mockSurveys[0])
+        expect(handlePopoverSurveyMock).toHaveBeenCalledWith(mockSurveys[0], undefined, {
+            resumeDelayFromActivation: true,
+        })
     })
 
     test('should initialize surveyInFocus correctly', () => {
@@ -373,7 +375,9 @@ describe('SurveyManager', () => {
         expect(mockPostHog.surveys.getSurveys).toHaveBeenCalled()
 
         // First popover should be handled
-        expect(handlePopoverSurveySpy).toHaveBeenCalledWith(mockSurveys[0])
+        expect(handlePopoverSurveySpy).toHaveBeenCalledWith(mockSurveys[0], undefined, {
+            resumeDelayFromActivation: true,
+        })
         expect(addSurveyToFocusSpy).toHaveBeenCalledWith(mockSurveys[0])
         expect(surveyManager.getTestAPI().surveyInFocus).toBe(mockSurveys[0].id)
 
@@ -381,7 +385,9 @@ describe('SurveyManager', () => {
         surveyManager.callSurveysAndEvaluateDisplayLogic(true)
 
         // Second popover should NOT be handled as one is already in focus
-        expect(handlePopoverSurveySpy).not.toHaveBeenCalledWith(anotherPopover)
+        expect(handlePopoverSurveySpy).not.toHaveBeenCalledWith(anotherPopover, undefined, {
+            resumeDelayFromActivation: true,
+        })
 
         // Ensure only called once for the first popover
         expect(handlePopoverSurveySpy).toHaveBeenCalledTimes(1)
@@ -529,6 +535,36 @@ describe('SurveyManager', () => {
             expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
         })
+
+        // An explicit displaySurvey() call honors its own `ignoreDelay` option, so it must never
+        // shortcut the wait using an activation the display loop recorded.
+        it('waits the full delay for an explicit display call even when the trigger fired long ago', () => {
+            jest.useFakeTimers()
+            const survey = makeDelayedSurvey('explicit-display-survey', 60)
+            mockPostHog.surveys.getSurveys = jest.fn((cb) => cb([survey]))
+            stubEventReceiver(survey.id, Date.now() - 90_000)
+
+            surveyManager.handlePopoverSurvey(survey)
+
+            jest.advanceTimersByTime(59_000)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(true)
+            jest.advanceTimersByTime(1_000)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
+        })
+
+        it('never waits longer than the configured delay when the clock moved backwards', () => {
+            jest.useFakeTimers()
+            const survey = makeDelayedSurvey('clock-skew-survey', 60)
+            mockPostHog.surveys.getSurveys = jest.fn((cb) => cb([survey]))
+            // stamped in the future, so the naive elapsed time is negative
+            stubEventReceiver(survey.id, Date.now() + 600_000)
+
+            surveyManager.callSurveysAndEvaluateDisplayLogic(true)
+            jest.advanceTimersByTime(60_000)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
+        })
     })
 
     describe('waits for feature flags to load before trusting the internal targeting flag', () => {
@@ -620,7 +656,9 @@ describe('SurveyManager', () => {
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
         expect(mockPostHog.surveys.getSurveys).toHaveBeenCalled()
-        expect(handlePopoverSurveyMock).toHaveBeenCalledWith(mockSurveys[0])
+        expect(handlePopoverSurveyMock).toHaveBeenCalledWith(mockSurveys[0], undefined, {
+            resumeDelayFromActivation: true,
+        })
         expect(handleWidgetMock).not.toHaveBeenCalled()
         expect(manageWidgetSelectorListener).not.toHaveBeenCalled()
     })

@@ -3,7 +3,7 @@ import { ActionMatcher } from '../extensions/surveys/action-matcher'
 import { PostHog } from '../posthog-core'
 import { CaptureResult } from '../types'
 import { matchPropertyFilters } from '@posthog/browser-common/utils/property-utils'
-import { isNumber, isUndefined } from '@posthog/core'
+import { isEmptyObject, isNumber, isUndefined } from '@posthog/core'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 
 /**
@@ -266,6 +266,10 @@ export abstract class EventReceiver<T extends EventTriggerable> {
             if (outcome === 'persist') {
                 logger.info('shown item promoted to persisted activation', { event, itemId })
                 this._persistActivation(itemId)
+                // The display delay has served its purpose once the item was shown, so drop the
+                // activation time: a later page load in this session waits the full delay again
+                // instead of re-rendering the item instantly on every navigation.
+                this._clearActivationTimestamps([itemId])
                 return
             }
             // 'ignore': no activation transition for this item on this event — fall through.
@@ -411,9 +415,14 @@ export abstract class EventReceiver<T extends EventTriggerable> {
                 next[id] = ts
             }
         }
-        if (changed) {
-            this._writeActivationTimestamps(next)
+        if (!changed) {
+            return
         }
+        if (isEmptyObject(next)) {
+            this._clearActivationTimestampsStore()
+            return
+        }
+        this._writeActivationTimestamps(next)
     }
 
     /** Forget all activation timestamps (e.g. on reset or a session rollover). */

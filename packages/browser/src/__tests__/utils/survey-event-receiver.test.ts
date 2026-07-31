@@ -563,16 +563,31 @@ describe('survey-event-receiver', () => {
         it.each([
             ['dismissed', SurveyEventName.DISMISSED],
             ['sent', SurveyEventName.SENT],
-        ])('clears the delayed activation timestamp once the survey is %s', (_label, interactionEvent) => {
+        ])('clears the delayed activation once the survey is %s', (_label, interactionEvent) => {
             const { receiver, hook } = setup(makeDelayedSurvey())
 
             hook('trigger_event')
             hook(SurveyEventName.SHOWN, surveyEventPayload('delayed-survey', SurveyEventName.SHOWN))
-            expect(receiver.getActivationTimestamp('delayed-survey')).toBe(1_000_000)
+            // being shown already dropped the timestamp
+            expect(receiver.getActivationTimestamp('delayed-survey')).toBeUndefined()
 
             hook(interactionEvent, surveyEventPayload('delayed-survey', interactionEvent))
             expect(receiver.getSurveys()).not.toContain('delayed-survey')
             expect(receiver.getActivationTimestamp('delayed-survey')).toBeUndefined()
+        })
+
+        it('drops the activation time once the survey is shown, so a later page waits the full delay', () => {
+            const { receiver, hook } = setup(makeDelayedSurvey())
+
+            hook('trigger_event')
+            hook(SurveyEventName.SHOWN, surveyEventPayload('delayed-survey', SurveyEventName.SHOWN))
+
+            // Still activated, so a reload re-displays it until the user dismisses or answers it...
+            expect(receiver.getSurveys()).toContain('delayed-survey')
+            // ...but with no activation time the next page counts the whole delay down again
+            // instead of re-rendering the survey instantly.
+            expect(receiver.getActivationTimestamp('delayed-survey')).toBeUndefined()
+            expect(new SurveyEventReceiver(instance).getActivationTimestamp('delayed-survey')).toBeUndefined()
         })
 
         it('falls back to in-memory arming for a delayed survey when no session id is resolvable', () => {
