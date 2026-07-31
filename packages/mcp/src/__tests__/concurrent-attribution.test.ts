@@ -1,7 +1,8 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
-import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js'
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import { instrument } from '../index'
-import { encodeSessionId } from '../extensions/session-token'
+import { getServerTrackingData } from '../extensions/internal'
+import { decodeSessionId, encodeSessionId } from '../extensions/session-token'
 import type { CompatibleRequestHandlerExtra, MCPAnalyticsOptions, MCPRequestLike, MCPServerLike } from '../types'
 import { EventCapture, fakePostHog } from './test-utils'
 
@@ -23,6 +24,9 @@ function createServer(options: MCPAnalyticsOptions): MCPServerLike {
   server.setRequestHandler(CallToolRequestSchema, async (request) => ({
     content: [{ type: 'text', text: String(request.params.arguments?.requestLabel) }],
   }))
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: [{ name: 'echo', description: 'Echoes a request label', inputSchema: { type: 'object' } }],
+  }))
   instrument(server, fakePostHog(), options)
   return server as unknown as MCPServerLike
 }
@@ -41,6 +45,30 @@ function invokeTool(
     params: { name: 'echo', arguments: { requestLabel } },
   }
   return handler(request, extra)
+}
+
+function invokeListTools(server: MCPServerLike, extra?: CompatibleRequestHandlerExtra): Promise<unknown> {
+  const handler = server._requestHandlers.get('tools/list')
+  if (!handler) {
+    throw new Error('tools/list handler was not registered')
+  }
+  return handler({ method: 'tools/list', params: {} }, extra)
+}
+
+function invokeInitialize(
+  server: MCPServerLike,
+  request: MCPRequestLike,
+  extra?: CompatibleRequestHandlerExtra
+): Promise<unknown> {
+  const handler = server._requestHandlers.get('initialize')
+  if (!handler) {
+    throw new Error('initialize handler was not registered')
+  }
+  return handler(request, extra)
+}
+
+function setFakeTransport(server: MCPServerLike, transport: unknown): void {
+  ;(server as unknown as { _transport?: unknown })._transport = transport
 }
 
 describe('concurrent request attribution', () => {
@@ -90,6 +118,211 @@ describe('concurrent request attribution', () => {
     expect(captureA?.properties.$set).toMatchObject({ requestLabel: 'A' })
     expect(captureB?.distinct_id).toBe('user-B')
     expect(captureB?.properties.$set).toMatchObject({ requestLabel: 'B' })
+  })
+
+  it('snapshots token client metadata before an overlapping identify callback yields', async () => {
+    const identifyAStarted = deferred()
+    const releaseIdentifyA = deferred()
+    const server = createServer({
+      identify: async (request) => {
+        const requestLabel = String(request.params?.arguments?.requestLabel)
+        if (requestLabel === 'A') {
+          identifyAStarted.resolve()
+          await releaseIdentifyA.promise
+        }
+        return { distinctId: `user-${requestLabel}` }
+      },
+    })
+    const tokenA = encodeSessionId({
+      sessionId: 'ses_a',
+      clientName: 'client-a',
+      clientVersion: '1.0.0',
+      protocolVersion: '2025-03-26',
+    })
+    const tokenB = encodeSessionId({
+      sessionId: 'ses_b',
+      clientName: 'client-b',
+      clientVersion: '2.0.0',
+      protocolVersion: '2025-06-18',
+    })
+
+    const requestA = invokeTool(server, 'A', {
+      requestInfo: { headers: { 'mcp-session-id': tokenA } },
+    })
+    await identifyAStarted.promise
+
+    await invokeTool(server, 'B', {
+      requestInfo: { headers: { 'mcp-session-id': tokenB } },
+    })
+    releaseIdentifyA.resolve()
+    await requestA
+    await Promise.resolve()
+
+    const toolCalls = capture.findCapturesByEvent('$mcp_tool_call')
+    const captureA = toolCalls.find((event) => event.distinct_id === 'user-A')
+    const captureB = toolCalls.find((event) => event.distinct_id === 'user-B')
+
+    expect(captureA?.properties).toMatchObject({
+      $session_id: 'ses_a',
+      $mcp_client_name: 'client-a',
+      $mcp_client_version: '1.0.0',
+      $mcp_protocol_version: '2025-03-26',
+    })
+    expect(captureB?.properties).toMatchObject({
+      $session_id: 'ses_b',
+      $mcp_client_name: 'client-b',
+      $mcp_client_version: '2.0.0',
+      $mcp_protocol_version: '2025-06-18',
+    })
+  })
+
+  it('keeps tools/list anonymous while another request finishes identifying', async () => {
+    const identifyAStarted = deferred()
+    const releaseIdentifyA = deferred()
+    const listMetadataStarted = deferred()
+    const releaseListMetadata = deferred()
+    const server = createServer({
+      identify: async (request) => {
+        if (request.method === 'tools/call') {
+          identifyAStarted.resolve()
+          await releaseIdentifyA.promise
+          return { distinctId: 'user-A', properties: { requestLabel: 'A' } }
+        }
+        return null
+      },
+      eventProperties: async (request) => {
+        if (request.method === 'tools/list') {
+          listMetadataStarted.resolve()
+          await releaseListMetadata.promise
+        }
+        return null
+      },
+    })
+    const tokenA = encodeSessionId({ sessionId: 'ses_a', clientName: 'client-a', clientVersion: '1.0.0' })
+    const tokenB = encodeSessionId({ sessionId: 'ses_b', clientName: 'client-b', clientVersion: '2.0.0' })
+
+    const requestA = invokeTool(server, 'A', {
+      requestInfo: { headers: { 'mcp-session-id': tokenA } },
+    })
+    await identifyAStarted.promise
+
+    const listRequestB = invokeListTools(server, {
+      requestInfo: { headers: { 'mcp-session-id': tokenB } },
+    })
+    await listMetadataStarted.promise
+
+    releaseIdentifyA.resolve()
+    await requestA
+    releaseListMetadata.resolve()
+    await listRequestB
+    await Promise.resolve()
+
+    const listings = capture.findCapturesByEvent('$mcp_tools_list')
+    expect(listings).toHaveLength(1)
+    expect(listings[0].distinct_id).toBe('ses_b')
+    expect(listings[0].properties).toMatchObject({
+      $session_id: 'ses_b',
+      $mcp_client_name: 'client-b',
+      $mcp_client_version: '2.0.0',
+      $process_person_profile: false,
+    })
+    expect(listings[0].properties.$set).toBeUndefined()
+  })
+
+  it("uses each request's pre-await session source when deciding whether to publish identify", async () => {
+    const identifyAStarted = deferred()
+    const releaseIdentifyA = deferred()
+    const server = createServer({
+      identify: async (request) => {
+        const requestLabel = String(request.params?.arguments?.requestLabel)
+        if (requestLabel === 'A') {
+          identifyAStarted.resolve()
+          await releaseIdentifyA.promise
+        }
+        return { distinctId: `user-${requestLabel}` }
+      },
+    })
+    const tokenB = encodeSessionId({ sessionId: 'ses_b', clientName: 'client-b', clientVersion: '2.0.0' })
+
+    const requestA = invokeTool(server, 'A')
+    await identifyAStarted.promise
+    await invokeTool(server, 'B', {
+      requestInfo: { headers: { 'mcp-session-id': tokenB } },
+    })
+    releaseIdentifyA.resolve()
+    await requestA
+    await Promise.resolve()
+
+    const identifyCaptures = capture.findCapturesByEvent('$identify')
+    expect(identifyCaptures).toHaveLength(1)
+    expect(identifyCaptures[0].distinct_id).toBe('user-A')
+  })
+
+  it('keeps a delayed initialize token and shared state scoped to their requests', async () => {
+    const initializeMetadataStarted = deferred()
+    const releaseInitializeMetadata = deferred()
+    const server = createServer({
+      eventProperties: async (request) => {
+        if (request.method === 'initialize') {
+          initializeMetadataStarted.resolve()
+          await releaseInitializeMetadata.promise
+        }
+        return null
+      },
+    })
+    const transport: { sessionId?: string } = {}
+    setFakeTransport(server, transport)
+    const initializeRequest: MCPRequestLike = {
+      method: 'initialize',
+      params: {
+        protocolVersion: '2025-06-18',
+        capabilities: {},
+        clientInfo: { name: 'client-a', version: '1.0.0' },
+      },
+    }
+    const tokenB = encodeSessionId({
+      sessionId: 'ses_b',
+      clientName: 'client-b',
+      clientVersion: '2.0.0',
+      protocolVersion: '2099-token-b',
+    })
+
+    const initializeA = invokeInitialize(server, initializeRequest, { requestInfo: { headers: {} } })
+    await initializeMetadataStarted.promise
+    const initialToken = decodeSessionId(transport.sessionId)
+    expect(initialToken?.clientName).toBe('client-a')
+
+    await invokeTool(server, 'B', {
+      requestInfo: { headers: { 'mcp-session-id': tokenB } },
+    })
+    releaseInitializeMetadata.resolve()
+    await initializeA
+    await Promise.resolve()
+
+    const upgradedToken = decodeSessionId(transport.sessionId)
+    expect(upgradedToken).toMatchObject({
+      sessionId: initialToken?.sessionId,
+      clientName: 'client-a',
+      clientVersion: '1.0.0',
+      protocolVersion: '2025-06-18',
+    })
+
+    const data = getServerTrackingData(server)
+    expect(data?.sessionId).toBe('ses_b')
+    expect(data?.sessionInfo).toMatchObject({
+      clientName: 'client-b',
+      clientVersion: '2.0.0',
+      protocolVersion: '2099-token-b',
+    })
+
+    const initializeCaptures = capture.findCapturesByEvent('$mcp_initialize')
+    expect(initializeCaptures).toHaveLength(1)
+    expect(initializeCaptures[0].properties).toMatchObject({
+      $session_id: initialToken?.sessionId,
+      $mcp_client_name: 'client-a',
+      $mcp_client_version: '1.0.0',
+      $mcp_protocol_version: '2025-06-18',
+    })
   })
 
   it('keeps token client and protocol metadata scoped to each overlapping request', async () => {

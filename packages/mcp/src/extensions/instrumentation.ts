@@ -158,7 +158,7 @@ async function prepareToolCallEvent(
     const sessionId = getSessionId(server, extra)
     // Snapshot token/client/protocol metadata synchronously, before identify or
     // metadata callbacks can yield and let another request replace shared state.
-    const sessionInfo = getSessionInfo(server, data, sessionId)
+    const sessionInfo = { ...getSessionInfo(server, data, sessionId) }
     const identity = await handleIdentify(server, data, sessionId, request, sessionInfo, extra)
     const requestAttribution = withIdentity(sessionInfo, identity)
 
@@ -319,7 +319,9 @@ export async function handleListToolsRequest(
   const data = getServerTrackingData(server)
   const startTime = new Date()
   const sessionId = getSessionId(server, extra)
-  const requestAttribution = getSessionInfo(server, data, sessionId)
+  // Snapshot before metadata resolution or the list handler can yield to a
+  // concurrent request using the same instrumented server.
+  const requestAttribution = { ...getSessionInfo(server, data, sessionId) }
   const event: McpEvent = {
     sessionId,
     parameters: buildCapturedMcpParameters(request),
@@ -519,8 +521,8 @@ function mintStatelessSessionOnInitialize(
  */
 function upgradeMintedTokenToNegotiated(
   server: MCPServerLike,
-  data: MCPAnalyticsData,
   mintedSessionId: string,
+  sessionInfo: SessionInfo,
   negotiatedProtocolVersion: string | undefined
 ): void {
   try {
@@ -530,8 +532,8 @@ function upgradeMintedTokenToNegotiated(
     }
     const token = encodeSessionId({
       sessionId: mintedSessionId,
-      clientName: data.sessionInfo.clientName,
-      clientVersion: data.sessionInfo.clientVersion,
+      clientName: sessionInfo.clientName,
+      clientVersion: sessionInfo.clientVersion,
       protocolVersion: negotiatedProtocolVersion,
     })
     writeSessionIdToTransport(transport, token)
@@ -577,7 +579,9 @@ export async function handleInitializeRequest(
   // Mint first so the `$mcp_initialize` event below already carries the minted id.
   const mintedSessionId = mintStatelessSessionOnInitialize(server, data, request, extra)
   const sessionId = getSessionId(server, extra)
-  const sessionInfo = getSessionInfo(server, data, sessionId)
+  // Snapshot before identify, metadata, or the initialize handler can yield to
+  // another request using the same instrumented server.
+  const sessionInfo = { ...getSessionInfo(server, data, sessionId) }
   const initializeClientInfo = readInitializeClientInfo(request)
   const requestSessionInfo: SessionInfo = {
     ...sessionInfo,
@@ -608,10 +612,14 @@ export async function handleInitializeRequest(
   // re-mint the token so pods replaying it report the negotiated version too.
   const negotiatedProtocolVersion = readProtocolVersion(result, request)
   event.protocolVersion = negotiatedProtocolVersion
-  data.sessionInfo.protocolVersion = negotiatedProtocolVersion
-  setServerTrackingData(server, data)
+  // Do not let a delayed initialize overwrite whichever session became current
+  // while its callbacks or the original handler were awaiting.
+  if (data.sessionId === sessionId) {
+    data.sessionInfo = { ...data.sessionInfo, protocolVersion: negotiatedProtocolVersion }
+    setServerTrackingData(server, data)
+  }
   if (mintedSessionId) {
-    upgradeMintedTokenToNegotiated(server, data, mintedSessionId, negotiatedProtocolVersion)
+    upgradeMintedTokenToNegotiated(server, mintedSessionId, requestSessionInfo, negotiatedProtocolVersion)
   }
   captureEvent(server, event, { ...requestAttribution, protocolVersion: negotiatedProtocolVersion })
   return result

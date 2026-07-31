@@ -134,6 +134,7 @@ export async function handleIdentify(
   extra?: CompatibleRequestHandlerExtra
 ): Promise<UserIdentity | undefined> {
   const identityBeforeRequest = data.identifiedSessions.get(sessionId)
+  const sessionSourceBeforeIdentify = data.sessionSource
   if (!data.options.identify) {
     return identityBeforeRequest
   }
@@ -166,13 +167,10 @@ export async function handleIdentify(
       // announced); revisit with the stateless-by-default rework.
       const changed = previousIdentity !== undefined && !areIdentitiesEqual(previousIdentity, mergedIdentity)
       const firstSeen = previousIdentity === undefined
-      const announcedAtInitialize = data.sessionSource === 'token' && request.method !== 'initialize'
+      const announcedAtInitialize = sessionSourceBeforeIdentify === 'token' && request.method !== 'initialize'
       const shouldPublish = changed || (firstSeen && !announcedAtInitialize)
 
       data.identifiedSessions.set(sessionId, mergedIdentity)
-      data.sessionInfo.identifyActorGivenId = mergedIdentity.distinctId
-      data.sessionInfo.identifyActorData = mergedIdentity.properties || {}
-      data.sessionInfo.identifyActorGroups = mergedIdentity.groups
 
       if (shouldPublish) {
         log(`Identified session ${sessionId} with identity: ${JSON.stringify(mergedIdentity)}`)
