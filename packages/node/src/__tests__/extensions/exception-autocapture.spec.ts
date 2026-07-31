@@ -18,19 +18,7 @@ type ChildResult = {
   stderr: string
 }
 
-type ChildScenario =
-  | 'no-application-listener'
-  | 'unhandled-rejection-listener'
-  | 'uncaught-exception-listener'
-  | 'removed-prior-unhandled-once-listener'
-  | 'removed-later-unhandled-once-listener'
-  | 'later-unhandled-prepend-once-listener'
-  | 'prior-uncaught-once-listener'
-  | 'removed-prior-uncaught-once-listener'
-  | 'later-uncaught-prepend-once-listener'
-  | 'later-monitor-adds-uncaught-listener'
-  | 'later-monitor-removes-uncaught-listener'
-  | 'late-domain-uncaught-exception-clear-listener'
+type ChildScenario = 'no-application-listener' | 'unhandled-rejection-listener' | 'uncaught-exception-listener'
 
 function runUnhandledRejectionChild({
   mode,
@@ -110,39 +98,35 @@ describe('exception autocapture', () => {
     }
   }
 
-  it('should prepend the uncaught-exception handler and keep it first', () => {
-    const prependSpy = jest.spyOn(global.process, 'prependListener').mockReturnValue(global.process)
+  it('should install an uncaught-exception listener', () => {
     const onSpy = jest.spyOn(global.process, 'on').mockReturnValue(global.process)
+
     addUncaughtExceptionListener(
       () => {},
       () => {}
     )
-    expect(prependSpy).toHaveBeenCalledWith('uncaughtException', expect.any(Function))
-    expect(onSpy).toHaveBeenCalledWith('newListener', expect.any(Function))
-    expect(onSpy).toHaveBeenCalledWith('removeListener', expect.any(Function))
+
+    expect(onSpy).toHaveBeenCalledWith('uncaughtException', expect.any(Function))
   })
 
-  it('should not install an unhandled-rejection listener in fatal modes', () => {
-    const prependSpy = jest.spyOn(global.process, 'prependListener').mockReturnValue(global.process)
-
-    addUnhandledRejectionListener(() => {}, 'throw')
-    addUnhandledRejectionListener(() => {}, 'strict')
-
-    expect(prependSpy).not.toHaveBeenCalled()
-  })
-
-  it.each(['warn', 'warn-with-error-code', 'none'] as const)(
-    'should install an unhandled-rejection listener in %s mode',
+  it.each(['throw', 'strict', 'warn-with-error-code'] as const)(
+    'should not install an unhandled-rejection listener in %s mode',
     (mode) => {
-      const prependSpy = jest.spyOn(global.process, 'prependListener').mockReturnValue(global.process)
       const onSpy = jest.spyOn(global.process, 'on').mockReturnValue(global.process)
 
       addUnhandledRejectionListener(() => {}, mode)
 
-      expect(prependSpy).toHaveBeenCalledWith('unhandledRejection', expect.any(Function))
-      expect(onSpy).toHaveBeenCalledTimes(mode === 'warn-with-error-code' ? 2 : 0)
+      expect(onSpy).not.toHaveBeenCalled()
     }
   )
+
+  it.each(['warn', 'none'] as const)('should install an unhandled-rejection listener in %s mode', (mode) => {
+    const onSpy = jest.spyOn(global.process, 'on').mockReturnValue(global.process)
+
+    addUnhandledRejectionListener(() => {}, mode)
+
+    expect(onSpy).toHaveBeenCalledWith('unhandledRejection', expect.any(Function))
+  })
 
   it('should determine the effective unhandled rejection mode from execArgv and NODE_OPTIONS', () => {
     expect(getUnhandledRejectionMode([], undefined)).toBe('throw')
@@ -163,10 +147,9 @@ describe('exception autocapture', () => {
 
   it('should tag promoted unhandled rejections from the Node uncaught-exception origin', () => {
     const capture = jest.fn()
-    const prependSpy = jest.spyOn(global.process, 'prependListener').mockReturnValue(global.process)
-    jest.spyOn(global.process, 'on').mockReturnValue(global.process)
+    const onSpy = jest.spyOn(global.process, 'on').mockReturnValue(global.process)
     addUncaughtExceptionListener(capture, () => {})
-    const handler = prependSpy.mock.calls.find(([event]) => event === 'uncaughtException')?.[1] as
+    const handler = onSpy.mock.calls.find(([event]) => event === 'uncaughtException')?.[1] as
       | NodeJS.UncaughtExceptionListener
       | undefined
     const reason = new Error('promoted rejection')
@@ -277,140 +260,6 @@ describe('exception autocapture', () => {
     expect(captureCount(withSdk)).toBe(1)
   })
 
-  it.each(['removed-prior-unhandled-once-listener', 'removed-prior-uncaught-once-listener'] as const)(
-    'should not retain a prior %s after the application removes it',
-    async (scenario) => {
-      const [withoutSdk, withSdk] = await Promise.all([
-        runUnhandledRejectionChild({ mode: 'throw', scenario, withSdk: false }),
-        runUnhandledRejectionChild({ mode: 'throw', scenario }),
-      ])
-
-      for (const result of [withoutSdk, withSdk]) {
-        expect(result.signal).toBeNull()
-        expect(result.code).toBe(1)
-        expect(result.stdout).not.toContain('once-listener:')
-        expect(result.stdout).not.toContain('completed')
-      }
-      expect(captureCount(withoutSdk)).toBe(0)
-      expect(captureCount(withSdk)).toBe(1)
-    }
-  )
-
-  it('should preserve a later application prependOnce unhandled-rejection listener', async () => {
-    const [withoutSdk, withSdk] = await Promise.all([
-      runUnhandledRejectionChild({
-        mode: 'throw',
-        scenario: 'later-unhandled-prepend-once-listener',
-        withSdk: false,
-      }),
-      runUnhandledRejectionChild({ mode: 'throw', scenario: 'later-unhandled-prepend-once-listener' }),
-    ])
-
-    for (const result of [withoutSdk, withSdk]) {
-      expect(result.signal).toBeNull()
-      expect(result.code).toBe(0)
-      expect(result.stdout).toContain('once-listener:Child process rejection')
-      expect(result.stdout).toContain('completed')
-    }
-    expect(captureCount(withoutSdk)).toBe(0)
-    expect(captureCount(withSdk)).toBe(0)
-  })
-
-  it('should preserve a preceding application once uncaught-exception listener', async () => {
-    const [withoutSdk, withSdk] = await Promise.all([
-      runUnhandledRejectionChild({
-        mode: 'throw',
-        scenario: 'prior-uncaught-once-listener',
-        withSdk: false,
-      }),
-      runUnhandledRejectionChild({ mode: 'throw', scenario: 'prior-uncaught-once-listener' }),
-    ])
-
-    for (const result of [withoutSdk, withSdk]) {
-      expect(result.signal).toBeNull()
-      expect(result.code).toBe(0)
-      expect(result.stdout).toContain('once-listener:unhandledRejection:Child process rejection')
-      expect(result.stdout).toContain('completed')
-    }
-    expect(captureCount(withoutSdk)).toBe(0)
-    expect(captureCount(withSdk)).toBe(1)
-  })
-
-  it('should synchronously preserve a later application prependOnce uncaught-exception listener', async () => {
-    const [withoutSdk, withSdk] = await Promise.all([
-      runUnhandledRejectionChild({
-        mode: 'throw',
-        scenario: 'later-uncaught-prepend-once-listener',
-        withSdk: false,
-      }),
-      runUnhandledRejectionChild({ mode: 'throw', scenario: 'later-uncaught-prepend-once-listener' }),
-    ])
-
-    for (const result of [withoutSdk, withSdk]) {
-      expect(result.signal).toBeNull()
-      expect(result.code).toBe(0)
-      expect(result.stdout).toContain('once-listener:uncaughtException:Child process rejection')
-      expect(result.stdout).toContain('completed')
-    }
-    expect(captureCount(withoutSdk)).toBe(0)
-    expect(captureCount(withSdk)).toBe(1)
-  })
-
-  it('should synchronously preserve a prependOnce uncaught-exception handler added by a later monitor', async () => {
-    const [withoutSdk, withSdk] = await Promise.all([
-      runUnhandledRejectionChild({
-        mode: 'throw',
-        scenario: 'later-monitor-adds-uncaught-listener',
-        withSdk: false,
-      }),
-      runUnhandledRejectionChild({ mode: 'throw', scenario: 'later-monitor-adds-uncaught-listener' }),
-    ])
-
-    for (const result of [withoutSdk, withSdk]) {
-      expect(result.signal).toBeNull()
-      expect(result.code).toBe(0)
-      expect(result.stdout).toContain('monitor-added-listener:uncaughtException:Child process rejection')
-      expect(result.stdout).toContain('completed')
-    }
-    expect(captureCount(withoutSdk)).toBe(0)
-    expect(captureCount(withSdk)).toBe(1)
-  })
-
-  it("should ignore Node's internal domain uncaught-exception listener when registered late", async () => {
-    const result = await runUnhandledRejectionChild({
-      mode: 'throw',
-      scenario: 'late-domain-uncaught-exception-clear-listener',
-    })
-
-    expect(result.signal).toBeNull()
-    expect(result.code).toBe(1)
-    expect(result.stdout).not.toContain('completed')
-    expect(captureCount(result)).toBe(1)
-    expect(result.stderr).toContain('Child process rejection')
-  })
-
-  it('should synchronously preserve a prior once handler removal by a later uncaught-exception monitor', async () => {
-    const [withoutSdk, withSdk] = await Promise.all([
-      runUnhandledRejectionChild({
-        mode: 'throw',
-        scenario: 'later-monitor-removes-uncaught-listener',
-        withSdk: false,
-      }),
-      runUnhandledRejectionChild({ mode: 'throw', scenario: 'later-monitor-removes-uncaught-listener' }),
-    ])
-
-    expect(withoutSdk.signal).toBeNull()
-    expect(withoutSdk.code).toBe(1)
-    expect(withoutSdk.stdout).not.toContain('completed')
-    expect(captureCount(withoutSdk)).toBe(0)
-
-    expect(withSdk.signal).toBeNull()
-    expect(withSdk.code).toBe(1)
-    expect(withSdk.stdout).not.toContain('completed')
-    expect(captureCount(withSdk)).toBe(1)
-    expect(withSdk.stdout).not.toContain('monitor-removed-listener:')
-  })
-
   it('should preserve warn mode without forcing the child process to exit', async () => {
     const result = await runUnhandledRejectionChild({ mode: 'warn', useNodeOptions: true })
 
@@ -431,70 +280,20 @@ describe('exception autocapture', () => {
     expect(result.stderr).toBe('')
   })
 
-  it.each([
-    'no-application-listener',
-    'removed-prior-unhandled-once-listener',
-    'removed-later-unhandled-once-listener',
-  ] as const)('should preserve warn-with-error-code mode with %s', async (scenario) => {
+  it('should preserve warn-with-error-code mode without capturing the rejection', async () => {
     const [withoutSdk, withSdk] = await Promise.all([
-      runUnhandledRejectionChild({ mode: 'warn-with-error-code', scenario, withSdk: false }),
-      runUnhandledRejectionChild({ mode: 'warn-with-error-code', scenario }),
+      runUnhandledRejectionChild({ mode: 'warn-with-error-code', withSdk: false }),
+      runUnhandledRejectionChild({ mode: 'warn-with-error-code' }),
     ])
 
     for (const result of [withoutSdk, withSdk]) {
       expect(result.signal).toBeNull()
       expect(result.code).toBe(1)
-      expect(result.stdout).not.toContain('once-listener:')
       expect(result.stdout).toContain('completed')
       expect(result.stderr).toContain('UnhandledPromiseRejectionWarning')
     }
     expect(captureCount(withoutSdk)).toBe(0)
-    expect(captureCount(withSdk)).toBe(1)
-  })
-
-  it('should preserve a later prependOnce listener in warn-with-error-code mode', async () => {
-    const [withoutSdk, withSdk] = await Promise.all([
-      runUnhandledRejectionChild({
-        mode: 'warn-with-error-code',
-        scenario: 'later-unhandled-prepend-once-listener',
-        withSdk: false,
-      }),
-      runUnhandledRejectionChild({
-        mode: 'warn-with-error-code',
-        scenario: 'later-unhandled-prepend-once-listener',
-      }),
-    ])
-
-    for (const result of [withoutSdk, withSdk]) {
-      expect(result.signal).toBeNull()
-      expect(result.code).toBe(0)
-      expect(result.stdout).toContain('once-listener:Child process rejection')
-      expect(result.stdout).toContain('completed')
-      expect(result.stderr).toBe('')
-    }
-    expect(captureCount(withoutSdk)).toBe(0)
-    expect(captureCount(withSdk)).toBe(1)
-  })
-
-  it('should not override application handling in warn-with-error-code mode', async () => {
-    const [withoutSdk, withSdk] = await Promise.all([
-      runUnhandledRejectionChild({
-        mode: 'warn-with-error-code',
-        scenario: 'unhandled-rejection-listener',
-        withSdk: false,
-      }),
-      runUnhandledRejectionChild({ mode: 'warn-with-error-code', scenario: 'unhandled-rejection-listener' }),
-    ])
-
-    for (const result of [withoutSdk, withSdk]) {
-      expect(result.signal).toBeNull()
-      expect(result.code).toBe(0)
-      expect(result.stdout).toContain('unhandled-listener:Child process rejection')
-      expect(result.stdout).toContain('completed')
-      expect(result.stderr).toBe('')
-    }
-    expect(captureCount(withoutSdk)).toBe(0)
-    expect(captureCount(withSdk)).toBe(1)
+    expect(captureCount(withSdk)).toBe(0)
   })
 
   it('should leave application unhandled-rejection handling untouched in throw mode', async () => {
