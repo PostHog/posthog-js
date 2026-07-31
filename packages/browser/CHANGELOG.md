@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.409.4
+
+### Patch Changes
+
+- [#4338](https://github.com/PostHog/posthog-js/pull/4338) [`c458807`](https://github.com/PostHog/posthog-js/commit/c458807d30fae5b3adcf6be95f03b16629b0161f) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix canvases staying blank after seeking in session replay by re-sending one frame per canvas after each full snapshot
+  (2026-07-31)
+
 ## 1.409.3
 
 ### Patch Changes
