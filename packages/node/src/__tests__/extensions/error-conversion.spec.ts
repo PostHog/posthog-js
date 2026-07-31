@@ -2,7 +2,7 @@ import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 import { constants, type ReadStream } from 'node:fs'
 import { mkdtemp, open, rename, rm, symlink, truncate, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join, relative } from 'node:path'
+import { join, relative, sep } from 'node:path'
 import { createModulerModifier } from '@/extensions/error-tracking/modifiers/module.node'
 import { addSourceContext, MAX_CONTEXTLINES_FILE_SIZE } from '@/extensions/error-tracking/modifiers/context-lines.node'
 import { createRelativePathModifier } from '@/extensions/error-tracking/modifiers/relative-path.node'
@@ -161,6 +161,21 @@ describe('error conversion', () => {
       await addSourceContext([frame])
 
       expect(frame.context_line).toBe('linked context')
+    })
+
+    it('preserves filesystem semantics for paths traversing symlink parents', async () => {
+      const sourceRoot = await makeTemporaryDirectory(tmpdir())
+      const linkedTarget = await makeTemporaryDirectory(sourceRoot)
+      await writeFile(join(sourceRoot, 'source.ts'), 'target context\n')
+      const linkRoot = await makeTemporaryDirectory(tmpdir())
+      await writeFile(join(linkRoot, 'source.ts'), 'lexically normalized context\n')
+      const linkedDirectory = join(linkRoot, 'linked-directory')
+      await symlink(linkedTarget, linkedDirectory, 'dir')
+      const frame = makeFrame(`${linkedDirectory}${sep}..${sep}source.ts`)
+
+      await addSourceContext([frame])
+
+      expect(frame.context_line).toBe('target context')
     })
 
     it('reads from the validated descriptor when the source path is replaced', async () => {

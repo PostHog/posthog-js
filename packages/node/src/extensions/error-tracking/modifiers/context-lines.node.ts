@@ -5,7 +5,7 @@
 import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 import { constants, type ReadStream } from 'node:fs'
 import { open, type FileHandle } from 'node:fs/promises'
-import { isAbsolute, normalize, resolve } from 'node:path'
+import { isAbsolute } from 'node:path'
 import { createInterface } from 'node:readline'
 
 const LRU_FILE_CONTENTS_CACHE = new CoreErrorTracking.ReduceableCache<string, Record<number, string>>(25)
@@ -51,15 +51,14 @@ export async function addSourceContext(
       continue
     }
 
-    const filePath = resolveSourcePath(filename, basePath)
-    if (filePath === undefined) {
+    if (!isAbsolute(filename) && basePath === undefined) {
       continue
     }
-    const filesToLinesOutput = filesToLines[filePath]
+    const filesToLinesOutput = filesToLines[filename]
     if (!filesToLinesOutput) {
-      filesToLines[filePath] = []
+      filesToLines[filename] = []
     }
-    filesToLines[filePath].push(frame.lineno)
+    filesToLines[filename].push(frame.lineno)
   }
 
   const files = Object.keys(filesToLines)
@@ -69,8 +68,13 @@ export async function addSourceContext(
 
   const readlinePromises: Promise<void>[] = []
   for (const file of files) {
+    const cacheKey = makeSourceCacheKey(file, basePath)
+    if (cacheKey === undefined) {
+      continue
+    }
+
     // If we failed to read this before, dont try reading it again.
-    if (LRU_FILE_CONTENTS_FS_READ_FAILED.get(file)) {
+    if (LRU_FILE_CONTENTS_FS_READ_FAILED.get(cacheKey)) {
       continue
     }
 
@@ -83,12 +87,12 @@ export async function addSourceContext(
     filesToLineRanges.sort((a, b) => a - b)
     // Check if the contents are already in the cache and if we can avoid reading the file again.
     const ranges = makeLineReaderRanges(filesToLineRanges)
-    if (ranges.every((r) => rangeExistsInContentCache(file, r))) {
+    if (ranges.every((r) => rangeExistsInContentCache(cacheKey, r))) {
       continue
     }
 
-    const cache = emplace(LRU_FILE_CONTENTS_CACHE, file, {})
-    readlinePromises.push(getContextLinesFromFile(file, ranges, cache, openSourceFile))
+    const cache = emplace(LRU_FILE_CONTENTS_CACHE, cacheKey, {})
+    readlinePromises.push(getContextLinesFromFile(file, ranges, cache, cacheKey, openSourceFile))
   }
 
   // The promise rejections are caught in order to prevent them from short circuiting Promise.all
@@ -139,11 +143,12 @@ async function getContextLinesFromFile(
   path: string,
   ranges: ReadlineRange[],
   output: Record<number, string>,
+  cacheKey: string,
   openSourceFile: OpenSourceFile
 ): Promise<void> {
   const fileHandle = await openRegularSourceFile(path, openSourceFile)
   if (fileHandle === undefined) {
-    LRU_FILE_CONTENTS_FS_READ_FAILED.set(path, 1)
+    LRU_FILE_CONTENTS_FS_READ_FAILED.set(cacheKey, 1)
     return
   }
   const openedFileHandle = fileHandle
@@ -174,7 +179,7 @@ async function getContextLinesFromFile(
         end: MAX_CONTEXTLINES_FILE_SIZE - 1,
       })
     } catch {
-      LRU_FILE_CONTENTS_FS_READ_FAILED.set(path, 1)
+      LRU_FILE_CONTENTS_FS_READ_FAILED.set(cacheKey, 1)
       destroyStreamAndResolve()
       return
     }
@@ -185,7 +190,7 @@ async function getContextLinesFromFile(
         input: stream,
       })
     } catch {
-      LRU_FILE_CONTENTS_FS_READ_FAILED.set(path, 1)
+      LRU_FILE_CONTENTS_FS_READ_FAILED.set(cacheKey, 1)
       destroyStreamAndResolve(stream)
       return
     }
@@ -206,7 +211,7 @@ async function getContextLinesFromFile(
     // to prevent Promise.all from short circuiting the rest.
     function onStreamError(): void {
       // Mark the file as failed to prevent repeated read attempts.
-      LRU_FILE_CONTENTS_FS_READ_FAILED.set(path, 1)
+      LRU_FILE_CONTENTS_FS_READ_FAILED.set(cacheKey, 1)
       lineReaded.close()
       lineReaded.removeAllListeners()
       destroyStreamAndResolve(stream)
@@ -258,8 +263,8 @@ function addSourceContextToFrames(
   for (const frame of frames) {
     // Only add context if we have a filename and it hasn't already been added
     if (frame.filename && frame.context_line === undefined && typeof frame.lineno === 'number') {
-      const filePath = resolveSourcePath(frame.filename, basePath)
-      const contents = filePath === undefined ? undefined : cache.get(filePath)
+      const cacheKey = makeSourceCacheKey(frame.filename, basePath)
+      const contents = cacheKey === undefined ? undefined : cache.get(cacheKey)
       if (contents === undefined) {
         continue
       }
@@ -359,11 +364,11 @@ function shouldSkipContextLinesForFrame(frame: CoreErrorTracking.StackFrame): bo
   return false
 }
 
-function resolveSourcePath(path: string, basePath: string | undefined): string | undefined {
+function makeSourceCacheKey(path: string, basePath: string | undefined): string | undefined {
   if (isAbsolute(path)) {
-    return normalize(path)
+    return JSON.stringify([null, path])
   }
-  return basePath === undefined ? undefined : resolve(basePath, path)
+  return basePath === undefined ? undefined : JSON.stringify([basePath, path])
 }
 
 /**
