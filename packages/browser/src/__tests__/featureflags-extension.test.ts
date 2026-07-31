@@ -46,6 +46,30 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         featureFlags.dispose()
     })
 
+    it('continues reloading when a reloading handler throws', async () => {
+        const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
+        const client = posthog._getBrowserClientAdapter()
+        const sendRequest = jest.spyOn(client, 'sendRequest').mockResolvedValue({ statusCode: 200, json: {} })
+        jest.spyOn(client.logger, 'createLogger').mockReturnValue(client.logger)
+        const error = jest.spyOn(client.logger, 'error').mockImplementation()
+        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+        featureFlags.setup(client)
+        const handlerError = new Error('handler failed')
+        const laterHandler = jest.fn()
+        featureFlags.onReloading(() => {
+            throw handlerError
+        })
+        featureFlags.onReloading(laterHandler)
+
+        expect(() => featureFlags.reloadFeatureFlags()).not.toThrow()
+        expect(laterHandler).toHaveBeenCalledTimes(1)
+        expect(error).toHaveBeenCalledWith('Error while running feature flags reloading callback', handlerError)
+
+        jest.advanceTimersByTime(5)
+        expect(sendRequest).toHaveBeenCalledTimes(1)
+        featureFlags.dispose()
+    })
+
     it('reuses cached dynamic event property snapshots until flag state changes', async () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
         const registerProperties = jest.spyOn(posthog, '_registerExtensionEventProperties')
