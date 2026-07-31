@@ -211,7 +211,7 @@ describe('BrowserClientAdapter', () => {
         expect(client!.onRemoteConfig(jest.fn()).dispose).toEqual(expect.any(Function))
     })
 
-    it('replays cached and disabled remote-config outcomes', async () => {
+    it('replays only canonical cached remote-config outcomes', async () => {
         const cachedResult = {
             ok: true,
             config: { supportedCompression: [], cached: true } as any,
@@ -229,7 +229,7 @@ describe('BrowserClientAdapter', () => {
         disabledHost.add(testExtension('disabled', (client) => (disabledClient = client)))
         const disabledListener = jest.fn()
         disabledClient?.onRemoteConfig(disabledListener)
-        expect(disabledListener).toHaveBeenCalledWith({ ok: false })
+        expect(disabledListener).not.toHaveBeenCalled()
         await disabledHost.dispose()
     })
 
@@ -494,9 +494,11 @@ describe('BrowserClientAdapter', () => {
         await posthog.shutdown()
     })
 
-    it('applies core remote config before pre-DOM publication and hands cached config to a lazy host', async () => {
+    it('publishes remote config after DOM readiness and replays it to late subscribers', async () => {
         const posthog = await createPosthogInstance(undefined)
         const legacyConsumer = jest.spyOn(posthog.autocapture!, 'onRemoteConfig')
+        const initialEndpoint = posthog.analyticsDefaultEndpoint
+        const initialCompression = posthog.compression
         const body = document.body
         body.remove()
         jest.useFakeTimers()
@@ -507,35 +509,34 @@ describe('BrowserClientAdapter', () => {
                 nested: { approved: true },
                 autocapture_opt_out: true,
             } as any
-            posthog._onRemoteConfig({ ok: true, config: canonicalConfig })
+            const result = { ok: true, config: canonicalConfig } as const
+            posthog._onRemoteConfig(result)
 
             const host = posthog._getBrowserClientAdapter()
             let client: Client | undefined
             await host.add(testExtension('remote-config-test', (value) => (client = value)))
-            expect(posthog.analyticsDefaultEndpoint).toBe('/new-endpoint/')
-            expect(posthog.compression).toBe('base64')
+            const earlySubscriber = jest.fn()
+            client?.onRemoteConfig(earlySubscriber)
+            const initialCallCount = earlySubscriber.mock.calls.length
 
-            const first = jest.fn(() => {
-                expect(posthog.analyticsDefaultEndpoint).toBe('/new-endpoint/')
-            })
-            const second = jest.fn()
-            client?.onRemoteConfig(first)
-            client?.onRemoteConfig(second)
-            expect(first).toHaveBeenCalledWith({ ok: true, config: canonicalConfig })
-            expect(second).toHaveBeenCalledWith({ ok: true, config: canonicalConfig })
-
-            const nextConfig = { ...canonicalConfig, marker: 'next', nested: { approved: true } }
-            posthog._onRemoteConfig({ ok: true, config: nextConfig })
-
-            expect(first).toHaveBeenLastCalledWith({ ok: true, config: nextConfig })
-            expect(second).toHaveBeenLastCalledWith({ ok: true, config: nextConfig })
-            expect(legacyConsumer).not.toHaveBeenCalledWith(expect.objectContaining({ config: nextConfig }))
+            expect(posthog.analyticsDefaultEndpoint).toBe(initialEndpoint)
+            expect(posthog.compression).toBe(initialCompression)
+            expect(earlySubscriber).not.toHaveBeenCalledWith(result)
+            expect(legacyConsumer).not.toHaveBeenCalledWith(result)
 
             document.documentElement.appendChild(body)
             jest.advanceTimersByTime(500)
-            expect(first).toHaveBeenCalledTimes(2)
-            expect(second).toHaveBeenCalledTimes(2)
-            expect(legacyConsumer).toHaveBeenCalledWith({ ok: true, config: nextConfig })
+
+            expect(posthog.analyticsDefaultEndpoint).toBe('/new-endpoint/')
+            expect(posthog.compression).toBe('base64')
+            expect(earlySubscriber).toHaveBeenCalledTimes(initialCallCount + 1)
+            expect(earlySubscriber).toHaveBeenLastCalledWith(result)
+            expect(legacyConsumer).toHaveBeenCalledWith(result)
+
+            const lateSubscriber = jest.fn()
+            client?.onRemoteConfig(lateSubscriber)
+            expect(lateSubscriber).toHaveBeenCalledTimes(1)
+            expect(lateSubscriber).toHaveBeenCalledWith(result)
         } finally {
             if (!document.body) {
                 document.documentElement.appendChild(body)
@@ -617,14 +618,14 @@ describe('BrowserClientAdapter', () => {
                 ok: true,
                 config: { supportedCompression: [], lifecycle: true } as any,
             })
+            expect(remoteConfigs).toHaveLength(initialRemoteConfigCount)
+            document.documentElement.appendChild(body)
+            jest.advanceTimersByTime(500)
             expect(remoteConfigs).toHaveLength(initialRemoteConfigCount + 1)
             expect(remoteConfigs.at(-1)).toEqual({
                 ok: true,
                 config: expect.objectContaining({ lifecycle: true }),
             })
-            document.documentElement.appendChild(body)
-            jest.advanceTimersByTime(500)
-            expect(remoteConfigs).toHaveLength(initialRemoteConfigCount + 1)
         } finally {
             if (!document.body) {
                 document.documentElement.appendChild(body)

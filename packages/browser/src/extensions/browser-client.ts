@@ -59,8 +59,7 @@ export class BrowserClientAdapter implements Client, Disposable {
 
     constructor(readonly instance: PostHog) {
         this._logger = logger.createLogger('[BrowserExtensions]')
-        this._latestRemoteConfigResult =
-            instance._lastRemoteConfig ?? (instance._shouldDisableFlags() ? { ok: false } : undefined)
+        this._latestRemoteConfigResult = instance._lastRemoteConfig
         this.kv = new BrowserExtensionKeyValueStore(instance)
         this.onEvent = (handler) => {
             const unsubscribe = this.instance.on('eventCaptured', (event) => {

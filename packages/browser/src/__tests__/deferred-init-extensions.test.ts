@@ -118,9 +118,18 @@ describe('deferred extension initialization', () => {
             const remoteConfig: RemoteConfig = {
                 supportedCompression: ['gzip'],
             } as RemoteConfig
+            const legacyRemoteConfigs: RemoteConfigResult[] = []
+            class TestAutocapture {
+                initialize(): void {}
+
+                onRemoteConfig(result: RemoteConfigResult): void {
+                    legacyRemoteConfigs.push(result)
+                }
+            }
 
             const posthog = await createPosthogInstance(token, {
                 __preview_deferred_init_extensions: true,
+                __extensionClasses: { autocapture: TestAutocapture as any },
                 advanced_disable_decide: false,
                 capture_pageview: false,
                 disable_session_recording: true,
@@ -135,14 +144,14 @@ describe('deferred extension initialization', () => {
             // Call _onRemoteConfig before extensions are ready
             posthog._onRemoteConfig({ ok: true, config: remoteConfig })
             expect((posthog as any)._pendingRemoteConfig).toEqual({ ok: true, config: remoteConfig })
-
-            // Legacy extensions replay config application without republishing it to shared extensions.
-            const applyRemoteConfigSpy = jest.spyOn(posthog as any, '_applyRemoteConfig')
+            expect(legacyRemoteConfigs).toEqual([])
 
             // Wait for extensions to initialize
             await new Promise((resolve) => setTimeout(resolve, 200))
 
-            expect(applyRemoteConfigSpy).toHaveBeenCalledWith({ ok: true, config: remoteConfig })
+            // Legacy extensions receive the post-initialization replay, while shared listeners
+            // receive each remote config outcome only once.
+            expect(legacyRemoteConfigs).toEqual([{ ok: true, config: remoteConfig }])
             expect(sharedRemoteConfigs).toHaveLength(initialSharedRemoteConfigCount + 1)
             expect(sharedRemoteConfigs.at(-1)).toEqual({ ok: true, config: remoteConfig })
             // Extensions should be initialized, proving the replay worked

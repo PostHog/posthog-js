@@ -954,7 +954,7 @@ export class PostHog implements PostHogInterface {
             if (this._pendingRemoteConfig) {
                 const result = this._pendingRemoteConfig
                 this._pendingRemoteConfig = undefined
-                this._applyRemoteConfig(result)
+                this._extensions.forEach((ext) => ext.onRemoteConfig?.(result))
             }
         })
 
@@ -1008,15 +1008,26 @@ export class PostHog implements PostHogInterface {
     }
 
     _onRemoteConfig(result: RemoteConfigResult) {
-        // Core state and the canonical result are available before shared callbacks,
-        // regardless of DOM readiness. DOM retries must not reapply or republish them.
-        this._lastRemoteConfig = result
-        this._applyRemoteConfigCore(result)
-        this._browserClientAdapter?.handleRemoteConfig(result)
-        this._applyRemoteConfig(result)
-    }
+        if (!(document && document.body)) {
+            logger.info('document not ready yet, trying again in 500 milliseconds...')
+            setTimeout(() => {
+                this._onRemoteConfig(result)
+            }, 500)
+            return
+        }
 
-    private _applyRemoteConfigCore(result: RemoteConfigResult): void {
+        // Store config in case extensions aren't initialized yet (only needed for deferred init)
+        if (this.config.__preview_deferred_init_extensions) {
+            this._pendingRemoteConfig = result
+        }
+
+        // Cache the latest remote config result so extensions that are created later
+        // (e.g. sessionRecording after opt_in_capturing from cookieless mode) can
+        // replay it and pick up server-side settings like recording enable flags.
+        // Storing the result (not just a config) means a replayed failure is
+        // distinguishable from a successful empty config.
+        this._lastRemoteConfig = result
+
         this.compression = undefined
         if (result.ok) {
             const config = result.config
@@ -1040,21 +1051,8 @@ export class PostHog implements PostHogInterface {
                 ? this._initialPersonProfilesConfig
                 : PERSON_PROFILES_IDENTIFIED_ONLY,
         })
-    }
 
-    private _applyRemoteConfig(result: RemoteConfigResult): void {
-        if (!(document && document.body)) {
-            logger.info('document not ready yet, trying again in 500 milliseconds...')
-            setTimeout(() => {
-                this._applyRemoteConfig(result)
-            }, 500)
-            return
-        }
-
-        // Store config in case extensions aren't initialized yet (only needed for deferred init)
-        if (this.config.__preview_deferred_init_extensions) {
-            this._pendingRemoteConfig = result
-        }
+        this._browserClientAdapter?.handleRemoteConfig(result)
 
         // Every legacy extension receives the canonical result and handles failures itself.
         this._extensions.forEach((ext) => ext.onRemoteConfig?.(result))

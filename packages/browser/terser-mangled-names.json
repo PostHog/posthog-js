@@ -19,8 +19,6 @@
         "_additionalReloadRequested",
         "_admitNewSeries",
         "_applyRefill",
-        "_applyRemoteConfig",
-        "_applyRemoteConfigCore",
         "_applyTicketStatusUpdate",
         "_applyTicketsToState",
         "_applyTransforms",
