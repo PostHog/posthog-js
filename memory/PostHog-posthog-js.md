@@ -2,16 +2,7 @@
 
 ...<older entries truncated>
 
-nd test suite cover only the three `models` methods, with no Interactions API coverage.; `packages/ai/package.json` declares `@google/genai` as an optional peer and development dependency at `^1.43.0`, and the lockfile resolves version `1.43.0`; the reporter uses 2.13.0, which is outside that declared peer range.
-- Fix assessment: The missing public API surface is clear, but a safe implementation depends on the actual Interactions API types and response lifecycle in the supported 2.x Google SDK. Mapping inputs, outputs, usage metadata, tool activity, streaming behavior, and errors from the legacy generateContent assumptions without verification would be speculative.
-
-## 2026-07-26T16:46:27.007Z
-- Item: issue #4275 — @posthog/nuxt: deleteAfterUpload leaves stale .js.map entries in the Nitro asset manifest, causing 500s
-- Conclusion: Confirmed @posthog/nuxt sourcemap-cleanup bug: deleting maps in the Nuxt close hook can leave Nitro's already-generated public-asset manifest pointing at missing files, producing runtime 500s.
-- Labels: nuxt, feature/error-tracking, team/error-tracking
-- URL: https://github.com/PostHog/posthog-js/issues/4275
-- Relevant files: `packages/nuxt/src/module.ts`, `packages/nuxt/tests/sourcemaps-ssr.test.mjs`, `packages/nuxt/package.json`
-- Findings: `packages/nuxt/src/module.ts` configures hidden client and server sourcemaps during `build:before` when PostHog sourcemaps are enabled.; The module runs `sourcemap inject` for `publicDir` in the `nitro:build:public-assets` hook, but runs `sourcemap upload --directory outputDir` only in the `close` hook.; `getUploadArgs()` adds `--delete-after` when `sourcemaps.deleteAfterUpload` is omitted, so deletion is enabled by default.; Because the upload scans `outputDir`, the close-hook upload deletes both public and server maps after Nitro's output has been generated, matching the stale-manifest ordering described in the report.; The existing `sourcemaps-ssr.test.mjs` verifies mocked CLI call ordering and the SSR/non-SSR server-injection branch, but does not build Nitro output or assert manifest contents and HTTP behavior.
+both public and server maps after Nitro's output has been generated, matching the stale-manifest ordering described in the report.; The existing `sourcemaps-ssr.test.mjs` verifies mocked CLI call ordering and the SSR/non-SSR server-injection branch, but does not build Nitro output or assert manifest contents and HTTP behavior.
 - Fix assessment: The affected behavior is localized to the Nuxt module's sourcemap lifecycle hooks. The reported ordering directly matches the current implementation, though a real Nuxt/Nitro integration regression test is needed to verify the exact hook ordering and preserve SSR and SPA sourcemap uploads.
 
 ## 2026-07-28T00:27:03.586Z
@@ -87,3 +78,12 @@ nd test suite cover only the three `models` methods, with no Interactions API co
 - Findings: `PostHogPersistence` initializes `_campaign_params_saved` to `false`; `update_campaign_params()` calls `getCampaignParams()` only while that boolean is false, then permanently sets it to `true`.; `PostHog.capture()` invokes `sessionPersistence.update_campaign_params()` on each capture when `save_campaign_params` is enabled, so the missing refresh is localized to persistence caching rather than capture not being called.; `getCampaignParams()` derives URL campaign values from `document.URL`, confirming that the current gate prevents detection after an SPA navigation.; Campaign vectors containing only null values are stripped and not registered. Therefore, after campaign attribution has been stored, navigating to a direct URL does not clear it under the current registration behavior.; The existing core tests cover first-capture behavior for direct URLs and a URL with `utm_source`, but do not change the mocked URL between captures.
 - Fix assessment: The defect is isolated to a single cache guard and the requested semantics match the existing persistence behavior. A narrowly scoped replacement of the boolean with the last processed URL, plus focused regressions, avoids changing campaign parsing or attribution rules.
 - PR: https://github.com/PostHog/posthog-js/pull/4327
+
+## 2026-07-31T11:25:32.142Z
+- Item: issue #4353 — Prompt management: support fetching multiple prompts in a single call (batch fetch)
+- Conclusion: Valid enhancement request, but true batch fetching requires a supporting PostHog API endpoint before SDK work can deliver the requested single network call.
+- Labels: enhancement, team/ai-observability
+- URL: https://github.com/PostHog/posthog-js/issues/4353
+- Relevant files: `packages/ai/src/prompts.ts`, `packages/ai/src/types.ts`, `packages/ai/tests/prompts.test.ts`, `packages/ai/CHANGELOG.md`
+- Findings: `Prompts.get(name, options)` is the only retrieval method exposed by `packages/ai/src/prompts.ts`; it obtains one `PromptResult` at a time.; The only implemented API request is `GET /api/environments/@current/llm_prompts/name/:name/`, which encodes a single prompt name and validates a single prompt-object response.; Caching is already keyed per prompt name and version, label, or latest selection, so it can be reused by a future batch method but does not itself coalesce network requests.; The existing tests cover single-prompt cache hits, stale-cache recovery, code fallbacks, version/label selection, and response validation; there is no batch endpoint, batch response type, or batch behavior coverage.; Adding `getMany()` as `Promise.all(names.map(name => get(name)))` would preserve client behavior but still issue N requests, contrary to the issue's primary requirement.
+- Fix assessment: The JavaScript SDK change is localized only after a backend batch endpoint exists. The required server request/response contract and partial-failure semantics are not present in this repository, and the request also calls for corresponding Python support. Implementing an SDK-only approximation would not provide a single request.
