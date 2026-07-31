@@ -1,5 +1,12 @@
 # @posthog/browser-common
 
+## 0.3.0
+
+### Minor Changes
+
+- [#4300](https://github.com/PostHog/posthog-js/pull/4300) [`6b48a59`](https://github.com/PostHog/posthog-js/commit/6b48a59ed096a52f720a608ce59cc81c54c2ef4d) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Stream replayable remote config outcomes through shared browser extension clients.
+  (2026-07-31)
+
 ## 0.2.5
 
 ### Patch Changes

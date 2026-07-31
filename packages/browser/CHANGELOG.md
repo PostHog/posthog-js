@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.409.1
+
+### Patch Changes
+
+- [#4301](https://github.com/PostHog/posthog-js/pull/4301) [`4b36c44`](https://github.com/PostHog/posthog-js/commit/4b36c445efec6f26849e358a43ee84ff2b8304aa) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add the browser-v1 client adapter for shared extensions, including analytics, request, persistence, replayed remote-config outcomes, and synchronous best-effort cleanup.
+  (2026-07-31)
+- Updated dependencies [[`6b48a59`](https://github.com/PostHog/posthog-js/commit/6b48a59ed096a52f720a608ce59cc81c54c2ef4d)]:
+    - @posthog/browser-common@0.3.0
+
 ## 1.409.0
 
 ### Minor Changes
