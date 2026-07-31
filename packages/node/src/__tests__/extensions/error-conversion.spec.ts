@@ -1,6 +1,6 @@
 import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
-import { constants } from 'node:fs'
-import { mkdtemp, open, realpath, rename, rm, symlink, truncate, writeFile } from 'node:fs/promises'
+import { constants, type ReadStream } from 'node:fs'
+import { mkdtemp, open, rename, rm, symlink, truncate, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { createModulerModifier } from '@/extensions/error-tracking/modifiers/module.node'
@@ -59,7 +59,7 @@ describe('error conversion', () => {
     expect(exceptionList[1].value).toEqual('Object captured as exception with keys: error_code')
   })
 
-  describe('source context file safety', () => {
+  describe('source context file reads', () => {
     const originalWorkingDirectory = process.cwd()
     const temporaryPaths: string[] = []
 
@@ -98,13 +98,14 @@ describe('error conversion', () => {
       expect(frame.post_context).toEqual(['fourth'])
     })
 
-    it('scopes successful and failed source caches to the canonical project root', async () => {
+    it('scopes successful and failed source caches to the working directory', async () => {
       const rootA = await makeTemporaryDirectory(tmpdir())
       const rootB = await makeTemporaryDirectory(tmpdir())
       const cachedFilename = 'cached.ts'
       const failedFilename = 'failed.ts'
-      const rootASourceFile = join(rootA, cachedFilename)
-      await writeFile(rootASourceFile, 'root A context\n')
+      await writeFile(join(rootA, cachedFilename), 'root A context\n')
+      await writeFile(join(rootB, cachedFilename), 'root B context\n')
+      await writeFile(join(rootB, failedFilename), 'root B context\n')
 
       process.chdir(rootA)
       const rootACachedFrame = makeFrame(cachedFilename)
@@ -113,53 +114,66 @@ describe('error conversion', () => {
       expect(rootACachedFrame.context_line).toBe('root A context')
       expect(rootAFailedFrame.context_line).toBeUndefined()
 
-      await symlink(rootASourceFile, join(rootB, cachedFilename))
-      await writeFile(join(rootB, failedFilename), 'root B context\n')
       process.chdir(rootB)
-      const rootBOutsideFrame = makeFrame(cachedFilename)
+      const rootBCachedFrame = makeFrame(cachedFilename)
       const rootBValidFrame = makeFrame(failedFilename)
+      await addSourceContext([rootBCachedFrame, rootBValidFrame])
 
-      await addSourceContext([rootBOutsideFrame, rootBValidFrame])
-
-      expect(rootBOutsideFrame.context_line).toBeUndefined()
+      expect(rootBCachedFrame.context_line).toBe('root B context')
       expect(rootBValidFrame.context_line).toBe('root B context')
     })
 
-    it('does not read regular files outside the project root', async () => {
+    it('preserves source context for regular files outside the working directory', async () => {
       const directory = await makeTemporaryDirectory(tmpdir())
       const outsideFile = join(directory, 'outside.ts')
-      await writeFile(outsideFile, 'outside secret\n')
+      await writeFile(outsideFile, 'outside context\n')
       const frames = [makeFrame(outsideFile), makeFrame(relative(process.cwd(), outsideFile))]
 
       await addSourceContext(frames)
 
-      expect(frames[0].context_line).toBeUndefined()
-      expect(frames[1].context_line).toBeUndefined()
+      expect(frames[0].context_line).toBe('outside context')
+      expect(frames[1].context_line).toBe('outside context')
     })
 
-    it('does not follow project symlinks to files outside the project root', async () => {
-      const outsideDirectory = await makeTemporaryDirectory(tmpdir())
-      const outsideFile = join(outsideDirectory, 'outside.ts')
-      await writeFile(outsideFile, 'outside secret\n')
-      const projectDirectory = await makeTemporaryDirectory(process.cwd())
-      const linkedFile = join(projectDirectory, 'linked.ts')
-      await symlink(await realpath(outsideFile), linkedFile)
+    it('preserves absolute source context when the working directory was removed', async () => {
+      const removedDirectory = await makeTemporaryDirectory(tmpdir())
+      const sourceDirectory = await makeTemporaryDirectory(tmpdir())
+      const sourceFile = join(sourceDirectory, 'source.ts')
+      await writeFile(sourceFile, 'absolute context\n')
+      process.chdir(removedDirectory)
+      await rm(removedDirectory, { recursive: true, force: true })
+      const frame = makeFrame(sourceFile)
+
+      await addSourceContext([frame])
+
+      expect(frame.context_line).toBe('absolute context')
+    })
+
+    it('preserves source context for symlinked regular files', async () => {
+      const sourceDirectory = await makeTemporaryDirectory(tmpdir())
+      const sourceFile = join(sourceDirectory, 'source.ts')
+      await writeFile(sourceFile, 'linked context\n')
+      const linkDirectory = await makeTemporaryDirectory(tmpdir())
+      const linkedFile = join(linkDirectory, 'linked.ts')
+      await symlink(sourceFile, linkedFile)
       const frame = makeFrame(linkedFile)
 
       await addSourceContext([frame])
 
-      expect(frame.context_line).toBeUndefined()
+      expect(frame.context_line).toBe('linked context')
     })
 
-    it('rejects a source path replaced after its descriptor is opened', async () => {
-      const directory = await makeTemporaryDirectory(process.cwd())
+    it('reads from the validated descriptor when the source path is replaced', async () => {
+      const directory = await makeTemporaryDirectory(tmpdir())
       const sourceFile = join(directory, 'application.ts')
       const openedFile = join(directory, 'opened.ts')
       const replacementFile = join(directory, 'replacement.ts')
       await writeFile(sourceFile, 'original context\n')
       await writeFile(replacementFile, 'replacement context\n')
-      const openSourceFile = jest.fn(async () => {
-        const fileHandle = await open(sourceFile, constants.O_RDONLY | constants.O_NOFOLLOW)
+      const openSourceFile = jest.fn(async (path: string, flags: number) => {
+        expect(path).toBe(sourceFile)
+        expect(flags & constants.O_NONBLOCK).toBe(constants.O_NONBLOCK)
+        const fileHandle = await open(path, flags)
         await rename(sourceFile, openedFile)
         await rename(replacementFile, sourceFile)
         return fileHandle
@@ -169,11 +183,47 @@ describe('error conversion', () => {
       await addSourceContext([frame], openSourceFile)
 
       expect(openSourceFile).toHaveBeenCalledTimes(1)
+      expect(frame.context_line).toBe('original context')
+    })
+
+    it('closes the descriptor when stream initialization fails', async () => {
+      const directory = await makeTemporaryDirectory(tmpdir())
+      const sourceFile = join(directory, 'source.ts')
+      await writeFile(sourceFile, 'source context\n')
+      const fileHandle = await open(sourceFile, constants.O_RDONLY)
+      const closeSourceFile = jest.spyOn(fileHandle, 'close')
+      jest.spyOn(fileHandle, 'createReadStream').mockImplementation(() => {
+        throw new Error('stream initialization failed')
+      })
+      const frame = makeFrame(sourceFile)
+
+      await addSourceContext([frame], async () => fileHandle)
+
+      expect(closeSourceFile).toHaveBeenCalledTimes(1)
       expect(frame.context_line).toBeUndefined()
     })
 
+    it('destroys the stream after collecting an early line range', async () => {
+      const directory = await makeTemporaryDirectory(tmpdir())
+      const sourceFile = join(directory, 'source.ts')
+      await writeFile(sourceFile, 'source context\n'.repeat(100_000))
+      const fileHandle = await open(sourceFile, constants.O_RDONLY)
+      const createSourceStream = fileHandle.createReadStream.bind(fileHandle)
+      let sourceStream: ReadStream | undefined
+      jest.spyOn(fileHandle, 'createReadStream').mockImplementation((options) => {
+        sourceStream = createSourceStream(options)
+        return sourceStream
+      })
+      const frame = makeFrame(sourceFile)
+
+      await addSourceContext([frame], async () => fileHandle)
+
+      expect(frame.context_line).toBe('source context')
+      expect(sourceStream?.destroyed).toBe(true)
+    })
+
     it('does not read oversized regular files', async () => {
-      const directory = await makeTemporaryDirectory(process.cwd())
+      const directory = await makeTemporaryDirectory(tmpdir())
       const sourceFile = join(directory, 'oversized.ts')
       await writeFile(sourceFile, '')
       await truncate(sourceFile, MAX_CONTEXTLINES_FILE_SIZE + 1)

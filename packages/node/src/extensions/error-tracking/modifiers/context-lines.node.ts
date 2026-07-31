@@ -3,9 +3,9 @@
 // Licensed under the MIT License: https://github.com/getsentry/sentry-javascript/blob/develop/LICENSE
 
 import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
-import { constants } from 'node:fs'
-import { open, realpath, stat, type FileHandle } from 'node:fs/promises'
-import { isAbsolute, relative, resolve, sep } from 'node:path'
+import { constants, type ReadStream } from 'node:fs'
+import { open, type FileHandle } from 'node:fs/promises'
+import { isAbsolute, normalize, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 
 const LRU_FILE_CONTENTS_CACHE = new CoreErrorTracking.ReduceableCache<string, Record<number, string>>(25)
@@ -28,6 +28,12 @@ export async function addSourceContext(
   // keep a lookup map of which files we've already enqueued to read,
   // so we don't enqueue the same file multiple times which would cause multiple i/o reads
   const filesToLines: Record<string, number[]> = {}
+  let basePath: string | undefined
+  try {
+    basePath = process.cwd()
+  } catch {
+    // Absolute source paths can still be processed when the working directory was removed.
+  }
 
   // Maps preserve insertion order, so we iterate in reverse, starting at the
   // outermost frame and closer to where the exception has occurred (poor mans priority)
@@ -45,11 +51,15 @@ export async function addSourceContext(
       continue
     }
 
-    const filesToLinesOutput = filesToLines[filename]
-    if (!filesToLinesOutput) {
-      filesToLines[filename] = []
+    const filePath = resolveSourcePath(filename, basePath)
+    if (filePath === undefined) {
+      continue
     }
-    filesToLines[filename].push(frame.lineno)
+    const filesToLinesOutput = filesToLines[filePath]
+    if (!filesToLinesOutput) {
+      filesToLines[filePath] = []
+    }
+    filesToLines[filePath].push(frame.lineno)
   }
 
   const files = Object.keys(filesToLines)
@@ -57,22 +67,10 @@ export async function addSourceContext(
     return frames
   }
 
-  let projectRoot: string
-  try {
-    projectRoot = await realpath(process.cwd())
-  } catch {
-    return frames
-  }
-  if (resolve(projectRoot, '..') === projectRoot) {
-    return frames
-  }
-
   const readlinePromises: Promise<void>[] = []
   for (const file of files) {
-    const cacheKey = makeCacheKey(projectRoot, file)
-
     // If we failed to read this before, dont try reading it again.
-    if (LRU_FILE_CONTENTS_FS_READ_FAILED.get(cacheKey)) {
+    if (LRU_FILE_CONTENTS_FS_READ_FAILED.get(file)) {
       continue
     }
 
@@ -85,12 +83,12 @@ export async function addSourceContext(
     filesToLineRanges.sort((a, b) => a - b)
     // Check if the contents are already in the cache and if we can avoid reading the file again.
     const ranges = makeLineReaderRanges(filesToLineRanges)
-    if (ranges.every((r) => rangeExistsInContentCache(cacheKey, r))) {
+    if (ranges.every((r) => rangeExistsInContentCache(file, r))) {
       continue
     }
 
-    const cache = emplace(LRU_FILE_CONTENTS_CACHE, cacheKey, {})
-    readlinePromises.push(getContextLinesFromFile(file, ranges, cache, cacheKey, projectRoot, openSourceFile))
+    const cache = emplace(LRU_FILE_CONTENTS_CACHE, file, {})
+    readlinePromises.push(getContextLinesFromFile(file, ranges, cache, openSourceFile))
   }
 
   // The promise rejections are caught in order to prevent them from short circuiting Promise.all
@@ -99,7 +97,7 @@ export async function addSourceContext(
   // Perform the same loop as above, but this time we can assume all files are in the cache
   // and attempt to add source context to frames.
   if (frames && frames.length > 0) {
-    addSourceContextToFrames(frames, LRU_FILE_CONTENTS_CACHE, projectRoot)
+    addSourceContextToFrames(frames, LRU_FILE_CONTENTS_CACHE, basePath)
   }
 
   // Once we're finished processing an exception reduce the files held in the cache
@@ -110,57 +108,25 @@ export async function addSourceContext(
 }
 
 /**
- * Check whether a path is contained by the application root.
+ * Opens a bounded regular file without blocking on special files such as FIFOs.
+ * File validation and content reads use the same descriptor so path replacement cannot change what is read.
  */
-function isPathWithinRoot(path: string, projectRoot: string): boolean {
-  const relativePath = relative(projectRoot, path)
-  return relativePath !== '..' && !relativePath.startsWith(`..${sep}`) && !isAbsolute(relativePath)
-}
-
-/**
- * Open a source file without allowing a parsed stack frame to escape the application root.
- *
- * O_NOFOLLOW rejects a final symlink. After opening, the descriptor's identity is compared with the
- * canonical path currently reachable inside the root. This also detects intermediate symlink or path
- * replacement between opening and validation. File type, size, and content reads use the returned descriptor.
- */
-async function openSafeSourceFile(
-  path: string,
-  projectRoot: string,
-  openSourceFile: OpenSourceFile
-): Promise<FileHandle | undefined> {
-  const candidatePath = resolve(projectRoot, path)
-  if (!isPathWithinRoot(candidatePath, projectRoot)) {
-    return undefined
-  }
-
+async function openRegularSourceFile(path: string, openSourceFile: OpenSourceFile): Promise<FileHandle | undefined> {
   let fileHandle: FileHandle | undefined
-  let isSafe = false
+  let isValid = false
   try {
-    fileHandle = await openSourceFile(candidatePath, constants.O_RDONLY | constants.O_NOFOLLOW)
+    fileHandle = await openSourceFile(path, constants.O_RDONLY | constants.O_NONBLOCK)
     const fileStat = await fileHandle.stat()
     if (!fileStat.isFile() || fileStat.size > MAX_CONTEXTLINES_FILE_SIZE) {
       return undefined
     }
 
-    const resolvedPath = await realpath(candidatePath)
-    if (!isPathWithinRoot(resolvedPath, projectRoot)) {
-      return undefined
-    }
-
-    // Node does not expose openat2-style path resolution. Comparing the opened descriptor's identity
-    // with the canonical in-root path ensures that validation applies to the file we will actually read.
-    const resolvedPathStat = await stat(resolvedPath)
-    if (fileStat.dev !== resolvedPathStat.dev || fileStat.ino !== resolvedPathStat.ino) {
-      return undefined
-    }
-
-    isSafe = true
+    isValid = true
     return fileHandle
   } catch {
     return undefined
   } finally {
-    if (fileHandle && !isSafe) {
+    if (fileHandle && !isValid) {
       await fileHandle.close().catch(() => {})
     }
   }
@@ -173,41 +139,55 @@ async function getContextLinesFromFile(
   path: string,
   ranges: ReadlineRange[],
   output: Record<number, string>,
-  cacheKey: string,
-  projectRoot: string,
   openSourceFile: OpenSourceFile
 ): Promise<void> {
-  const fileHandle = await openSafeSourceFile(path, projectRoot, openSourceFile)
+  const fileHandle = await openRegularSourceFile(path, openSourceFile)
   if (fileHandle === undefined) {
-    LRU_FILE_CONTENTS_FS_READ_FAILED.set(cacheKey, 1)
+    LRU_FILE_CONTENTS_FS_READ_FAILED.set(path, 1)
     return
   }
   const openedFileHandle = fileHandle
 
   return new Promise((resolve) => {
-    // It is important *not* to have any async code between createInterface and the 'line' event listener
-    // as it will cause the 'line' event to
-    // be emitted before the listener is attached.
-    const stream = openedFileHandle.createReadStream({
-      autoClose: false,
-      start: 0,
-      end: MAX_CONTEXTLINES_FILE_SIZE - 1,
-    })
-    const lineReaded = createInterface({
-      input: stream,
-    })
     let finished = false
 
     // We need to explicitly destroy the stream and close its descriptor to prevent memory leaks,
     // removing the listeners on the readline interface is not enough.
     // Otherwise, repeated exception captures can keep opening the same files without closing them.
-    function destroyStreamAndResolve(): void {
+    function destroyStreamAndResolve(stream?: ReadStream): void {
       if (finished) {
         return
       }
       finished = true
-      stream.destroy()
+      stream?.destroy()
       void openedFileHandle.close().then(resolve, resolve)
+    }
+
+    // It is important *not* to have any async code between createInterface and the 'line' event listener
+    // as it will cause the 'line' event to
+    // be emitted before the listener is attached.
+    let stream: ReadStream
+    try {
+      stream = openedFileHandle.createReadStream({
+        autoClose: false,
+        start: 0,
+        end: MAX_CONTEXTLINES_FILE_SIZE - 1,
+      })
+    } catch {
+      LRU_FILE_CONTENTS_FS_READ_FAILED.set(path, 1)
+      destroyStreamAndResolve()
+      return
+    }
+
+    let lineReaded: ReturnType<typeof createInterface>
+    try {
+      lineReaded = createInterface({
+        input: stream,
+      })
+    } catch {
+      LRU_FILE_CONTENTS_FS_READ_FAILED.set(path, 1)
+      destroyStreamAndResolve(stream)
+      return
     }
 
     // Init at zero and increment at the start of the loop because lines are 1 indexed.
@@ -216,7 +196,7 @@ async function getContextLinesFromFile(
     const range = ranges[currentRangeIndex]
     if (range === undefined) {
       // We should never reach this point, but if we do, we should resolve the promise to prevent it from hanging.
-      destroyStreamAndResolve()
+      destroyStreamAndResolve(stream)
       return
     }
     let rangeStart = range[0]
@@ -225,18 +205,18 @@ async function getContextLinesFromFile(
     // We use this inside Promise.all, so we need to resolve the promise even if there is an error
     // to prevent Promise.all from short circuiting the rest.
     function onStreamError(): void {
-      // Mark this file under the current project root as failed to prevent repeated read attempts.
-      LRU_FILE_CONTENTS_FS_READ_FAILED.set(cacheKey, 1)
+      // Mark the file as failed to prevent repeated read attempts.
+      LRU_FILE_CONTENTS_FS_READ_FAILED.set(path, 1)
       lineReaded.close()
       lineReaded.removeAllListeners()
-      destroyStreamAndResolve()
+      destroyStreamAndResolve(stream)
     }
 
     // We need to handle the error event to prevent the process from crashing in < Node 16
     // https://github.com/nodejs/node/pull/31603
     stream.on('error', onStreamError)
     lineReaded.on('error', onStreamError)
-    lineReaded.on('close', destroyStreamAndResolve)
+    lineReaded.on('close', () => destroyStreamAndResolve(stream))
 
     lineReaded.on('line', (line) => {
       lineNumber++
@@ -273,12 +253,13 @@ async function getContextLinesFromFile(
 function addSourceContextToFrames(
   frames: CoreErrorTracking.StackFrame[],
   cache: CoreErrorTracking.ReduceableCache<string, Record<number, string>>,
-  projectRoot: string
+  basePath: string | undefined
 ): void {
   for (const frame of frames) {
     // Only add context if we have a filename and it hasn't already been added
     if (frame.filename && frame.context_line === undefined && typeof frame.lineno === 'number') {
-      const contents = cache.get(makeCacheKey(projectRoot, frame.filename))
+      const filePath = resolveSourcePath(frame.filename, basePath)
+      const contents = filePath === undefined ? undefined : cache.get(filePath)
       if (contents === undefined) {
         continue
       }
@@ -378,11 +359,11 @@ function shouldSkipContextLinesForFrame(frame: CoreErrorTracking.StackFrame): bo
   return false
 }
 
-/**
- * Scopes cached results to the canonical project root used to validate the source path.
- */
-function makeCacheKey(projectRoot: string, file: string): string {
-  return JSON.stringify([projectRoot, file])
+function resolveSourcePath(path: string, basePath: string | undefined): string | undefined {
+  if (isAbsolute(path)) {
+    return normalize(path)
+  }
+  return basePath === undefined ? undefined : resolve(basePath, path)
 }
 
 /**

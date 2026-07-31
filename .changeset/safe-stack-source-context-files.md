@@ -2,4 +2,4 @@
 'posthog-node': patch
 ---
 
-Secure stack source context file reads against unsafe paths and file types.
+Bound stack source context reads and skip non-regular or oversized files.
