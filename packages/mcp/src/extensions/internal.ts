@@ -169,7 +169,7 @@ export async function handleIdentify(
 
       if (shouldPublish) {
         data.logger(`Identified session ${sessionId}`)
-        captureEvent(server, identifyEvent)
+        captureEvent(server, identifyEvent, data.logger)
       }
     } else {
       data.logger(`Warning: Supplied identify function returned null for session ${sessionId}`)

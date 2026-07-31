@@ -159,12 +159,12 @@ function setupTrackedServer(
 ): void {
   if (isHighLevelServer(validatedServer)) {
     const highLevelServer = validatedServer as HighLevelMCPServerLike
-    instrumentHighLevelServer(highLevelServer)
+    instrumentHighLevelServer(highLevelServer, logger)
     return
   }
 
   try {
-    instrumentLowLevelServer(lowLevelServer)
+    instrumentLowLevelServer(lowLevelServer, logger)
   } catch (error) {
     logger(`Warning: Failed to setup tool call instrumentation - ${error}`)
   }
@@ -190,7 +190,7 @@ async function captureCustomEvent(lowLevelServer: MCPServerLike, eventData: Capt
 
   // Re-use the same per-server publish path so the event picks up session info,
   // identity, sdk metadata, etc. Awaited so callers know the event was processed.
-  await captureEvent(lowLevelServer, event)
+  await captureEvent(lowLevelServer, event, trackingData.logger)
   trackingData.logger(`Captured event "${eventData.event}" for session ${trackingData.sessionId}`)
 }
 

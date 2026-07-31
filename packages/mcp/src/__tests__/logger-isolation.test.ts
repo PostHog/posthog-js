@@ -1,7 +1,11 @@
 import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'
 
 import { instrument, setLogger } from '../index'
+import { captureEvent } from '../extensions/capture'
+import { MCPAnalyticsEventType } from '../extensions/event-types'
+import { instrumentHighLevelServer } from '../extensions/instrument-highlevel'
 import { getServerTrackingData } from '../extensions/internal'
+import { createLogger } from '../extensions/logger'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
 import { fakePostHog } from './test-utils'
 
@@ -69,6 +73,26 @@ describe('per-server logger isolation', () => {
       expect(combinedLogs).not.toContain('b-secret@example.com')
     } finally {
       await Promise.all([setupA.cleanup(), setupB.cleanup()])
+    }
+  })
+
+  it('keeps missing tracking data observable through the server-bound logger', async () => {
+    const setup = await setupTestServerAndClient()
+    const logs: string[] = []
+    const logger = createLogger((message) => logs.push(message))
+
+    try {
+      captureEvent(setup.server.server, { eventType: MCPAnalyticsEventType.custom }, logger)
+      instrumentHighLevelServer(setup.server, logger)
+      await callTool(setup.client, 'missing-tracking-data')
+
+      expect(logs).toContain('Warning: Server tracking data not found. Event will not be published.')
+      expect(logs).toContain('Warning: Cannot setup listener - no tracking data found')
+      expect(logs).toContain(
+        'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called instrument(server, options) before using tool calls.'
+      )
+    } finally {
+      await setup.cleanup()
     }
   })
 
