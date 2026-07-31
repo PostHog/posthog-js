@@ -183,6 +183,7 @@
         "_extensionEventPropertyProducers",
         "_extensions",
         "_featureFlagsConfigSource",
+        "_featureFlagsReloadingUnsubscribe",
         "_finishQueuedCompressionEvent",
         "_finishSetup",
         "_fireFeatureFlagsCallbacks",
