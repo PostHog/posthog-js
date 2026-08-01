@@ -1,5 +1,24 @@
 # posthog-node
 
+## 5.47.3
+
+### Patch Changes
+
+- [#4349](https://github.com/PostHog/posthog-js/pull/4349) [`0e2b371`](https://github.com/PostHog/posthog-js/commit/0e2b371f7bf3a32fbb5b7079c9adf4b106a35b29) Thanks [@marandaneto](https://github.com/marandaneto)! - Apply the feature flag definition request timeout while consuming the response body.
+  (2026-07-31)
+
+- [#4349](https://github.com/PostHog/posthog-js/pull/4349) [`0e2b371`](https://github.com/PostHog/posthog-js/commit/0e2b371f7bf3a32fbb5b7079c9adf4b106a35b29) Thanks [@marandaneto](https://github.com/marandaneto)! - Keep the feature flag definition request timeout active until the request settles.
+  (2026-07-31)
+
+## 5.47.2
+
+### Patch Changes
+
+- [#4332](https://github.com/PostHog/posthog-js/pull/4332) [`b9a241e`](https://github.com/PostHog/posthog-js/commit/b9a241ec862ba5b753ef34d94c856257bdff2a2f) Thanks [@ioannisj](https://github.com/ioannisj)! - Fix `identify()` leaving a user anonymous when the supplied ID already matches the persisted distinct ID (for example after a non-identified bootstrap seeded the same ID). The user is now marked identified and a person-processed `$set` event is captured. Ports the same fix from posthog-js (browser) to the shared core used by React Native, Node, and posthog-js-lite.
+  (2026-07-31)
+- Updated dependencies [[`b9a241e`](https://github.com/PostHog/posthog-js/commit/b9a241ec862ba5b753ef34d94c856257bdff2a2f)]:
+  - @posthog/core@1.46.1
+
 ## 5.47.1
 
 ### Patch Changes
