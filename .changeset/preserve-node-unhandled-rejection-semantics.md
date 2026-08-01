@@ -2,4 +2,4 @@
 'posthog-node': patch
 ---
 
-Preserve Node.js unhandled rejection behavior when exception autocapture is enabled.
+Fix `enableExceptionAutocapture` suppressing Node's default crash on unhandled promise rejections; rejections handled by another `unhandledRejection` listener are no longer captured.

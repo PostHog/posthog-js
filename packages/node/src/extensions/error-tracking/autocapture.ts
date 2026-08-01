@@ -19,36 +19,25 @@ const UNHANDLED_REJECTION_MODES = new Set<UnhandledRejectionMode>([
 function splitNodeOptions(nodeOptions: string): string[] {
   const args: string[] = []
   let current = ''
-  let quote: "'" | '"' | undefined
-  let escaped = false
+  let isInString = false
 
-  for (const character of nodeOptions) {
-    if (escaped) {
-      current += character
-      escaped = false
-    } else if (character === '\\' && quote !== "'") {
-      escaped = true
-    } else if (quote) {
-      if (character === quote) {
-        quote = undefined
-      } else {
-        current += character
-      }
-    } else if (character === "'" || character === '"') {
-      quote = character
-    } else if (/\s/.test(character)) {
+  for (let index = 0; index < nodeOptions.length; index++) {
+    const character = nodeOptions[index]
+
+    if (character === '\\' && isInString && index + 1 < nodeOptions.length) {
+      current += nodeOptions[++index]
+    } else if (character === ' ' && !isInString) {
       if (current) {
         args.push(current)
         current = ''
       }
+    } else if (character === '"') {
+      isInString = !isInString
     } else {
       current += character
     }
   }
 
-  if (escaped) {
-    current += '\\'
-  }
   if (current) {
     args.push(current)
   }

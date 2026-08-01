@@ -27,9 +27,9 @@ if (posthog) {
   }
 }
 
-setTimeout(async () => {
+process.once('beforeExit', async () => {
   await posthog?.shutdown()
   process.stdout.write('completed\n')
-}, 50)
+})
 
 Promise.reject(new Error('Child process rejection'))

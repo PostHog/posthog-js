@@ -134,9 +134,11 @@ describe('exception autocapture', () => {
     expect(
       getUnhandledRejectionMode(
         [],
-        "--require='./path with --unhandled-rejections=none.js' --unhandled_rejections=none"
+        '--require="./path with --unhandled-rejections=none.js" --unhandled_rejections=none'
       )
     ).toBe('none')
+    expect(getUnhandledRejectionMode([], '--require=module\t--unhandled-rejections=warn')).toBe('throw')
+    expect(getUnhandledRejectionMode([], "--require='./path with --unhandled-rejections=none.js'")).toBe('throw')
     expect(
       getUnhandledRejectionMode(
         ['--unhandled-rejections=strict', '--unhandled-rejections', 'throw'],
