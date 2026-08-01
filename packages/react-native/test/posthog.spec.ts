@@ -1895,20 +1895,25 @@ describe('PostHog React Native', () => {
       const logsShutdownSpy = jest.spyOn((posthog as any)._logs, 'shutdown')
       const sendLogsSpy = jest.spyOn(posthog as any, '_sendLogsBatch').mockResolvedValue({ kind: 'ok' } as never)
 
-      // Queue a log and fire a single capture so both pipelines have work.
-      ;(posthog as any)._logs.captureLog({ body: 'terminal' })
-      posthog.capture('terminal-event', {})
+      jest.useFakeTimers()
+      try {
+        // Queue a log and fire a single capture so both pipelines have work.
+        ;(posthog as any)._logs.captureLog({ body: 'terminal' })
+        posthog.capture('terminal-event', {})
 
-      await posthog.shutdown(5000)
+        await posthog.shutdown(5000)
 
-      // Both pipelines drained through the shared shutdown path. Logs use
-      // the smaller of the caller's shutdown budget and the configured
-      // `terminationFlushBudgetMs` (default 2000ms) — see _shutdown.
-      expect(logsShutdownSpy).toHaveBeenCalledWith(2000)
-      expect(sendLogsSpy).toHaveBeenCalled()
-
-      logsShutdownSpy.mockRestore()
-      sendLogsSpy.mockRestore()
+        // Both pipelines drained through the shared shutdown path. Logs use
+        // the smaller of the caller's shutdown budget and the configured
+        // `terminationFlushBudgetMs` (default 2000ms) — see _shutdown.
+        expect(logsShutdownSpy).toHaveBeenCalledWith(2000)
+        expect(sendLogsSpy).toHaveBeenCalled()
+        expect(jest.getTimerCount()).toBe(0)
+      } finally {
+        jest.useRealTimers()
+        logsShutdownSpy.mockRestore()
+        sendLogsSpy.mockRestore()
+      }
     })
 
     it('pre-init captureLog is drained on flush once init completes', async () => {

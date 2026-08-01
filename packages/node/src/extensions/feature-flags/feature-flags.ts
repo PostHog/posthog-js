@@ -1062,12 +1062,20 @@ class FeatureFlagsPoller {
           // This follows the same timeout logic defined in _shutdown.
           // We time out after some period of time to avoid hanging the entire
           // shutdown process if the cache provider misbehaves.
-          await Promise.race([
-            shutdownResult,
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error(`Cache shutdown timeout after ${timeoutMs}ms`)), timeoutMs)
-            ),
-          ])
+          let shutdownTimeout: ReturnType<typeof setTimeout> | undefined
+          try {
+            await Promise.race([
+              shutdownResult,
+              new Promise((_, reject) => {
+                shutdownTimeout = setTimeout(
+                  () => reject(new Error(`Cache shutdown timeout after ${timeoutMs}ms`)),
+                  timeoutMs
+                )
+              }),
+            ])
+          } finally {
+            clearTimeout(shutdownTimeout)
+          }
         }
       } catch (err) {
         this.onError?.(new Error(`Error during cache shutdown: ${err}`))

@@ -2461,10 +2461,17 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       // this flush runs before super._shutdown starts its own timeout, so an
       // unresponsive transport must not be able to hold shutdown past the
       // caller's deadline (its retry stack alone can take ~49s).
-      await Promise.race([
-        this._metrics.flush().catch(() => {}),
-        new Promise<void>((resolve) => safeSetTimeout(resolve, Math.max(0, shutdownDeadlineMs - Date.now()))),
-      ])
+      let timeoutHandle: ReturnType<typeof safeSetTimeout> | undefined
+      try {
+        await Promise.race([
+          this._metrics.flush().catch(() => {}),
+          new Promise<void>((resolve) => {
+            timeoutHandle = safeSetTimeout(resolve, Math.max(0, shutdownDeadlineMs - Date.now()))
+          }),
+        ])
+      } finally {
+        clearTimeout(timeoutHandle)
+      }
       // reset() also invalidates a flush that lost the race above: when its
       // send finally settles, the stale window is discarded instead of being
       // merged back onto a re-armed timer after teardown.

@@ -383,7 +383,17 @@ export class PostHogLogs {
       await flushPromise
       return
     }
-    await Promise.race([flushPromise, new Promise<void>((resolve) => safeSetTimeout(resolve, timeoutMs))])
+    let timeoutHandle: ReturnType<typeof safeSetTimeout> | undefined
+    try {
+      await Promise.race([
+        flushPromise,
+        new Promise<void>((resolve) => {
+          timeoutHandle = safeSetTimeout(resolve, timeoutMs)
+        }),
+      ])
+    } finally {
+      clearTimeout(timeoutHandle)
+    }
   }
 
   /**
@@ -401,15 +411,17 @@ export class PostHogLogs {
   async flushWithTimeout(timeoutMs: number): Promise<void> {
     let timedOut = false
     const flushPromise = this.flush()
-    const timerPromise = new Promise<void>((resolve) =>
-      safeSetTimeout(() => {
+    let timeoutHandle: ReturnType<typeof safeSetTimeout> | undefined
+    const timerPromise = new Promise<void>((resolve) => {
+      timeoutHandle = safeSetTimeout(() => {
         timedOut = true
         resolve()
       }, timeoutMs)
-    )
+    })
     try {
       await Promise.race([flushPromise, timerPromise])
     } finally {
+      clearTimeout(timeoutHandle)
       if (timedOut) {
         // Race lost — flush is still in flight. Attach a no-op rejection
         // handler so a late failure isn't logged as unhandled.
