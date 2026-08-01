@@ -1895,7 +1895,8 @@ describe('PostHog React Native', () => {
       const logsShutdownSpy = jest.spyOn((posthog as any)._logs, 'shutdown')
       const sendLogsSpy = jest.spyOn(posthog as any, '_sendLogsBatch').mockResolvedValue({ kind: 'ok' } as never)
 
-      jest.useFakeTimers()
+      const setTimeoutSpy = jest.spyOn(global, 'setTimeout')
+      const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout')
       try {
         // Queue a log and fire a single capture so both pipelines have work.
         ;(posthog as any)._logs.captureLog({ body: 'terminal' })
@@ -1908,9 +1909,13 @@ describe('PostHog React Native', () => {
         // `terminationFlushBudgetMs` (default 2000ms) — see _shutdown.
         expect(logsShutdownSpy).toHaveBeenCalledWith(2000)
         expect(sendLogsSpy).toHaveBeenCalled()
-        expect(jest.getTimerCount()).toBe(0)
+
+        const drainTimeoutIndex = setTimeoutSpy.mock.calls.findIndex(([, delay]) => Number(delay) > 4000)
+        expect(drainTimeoutIndex).toBeGreaterThanOrEqual(0)
+        expect(clearTimeoutSpy).toHaveBeenCalledWith(setTimeoutSpy.mock.results[drainTimeoutIndex].value)
       } finally {
-        jest.useRealTimers()
+        setTimeoutSpy.mockRestore()
+        clearTimeoutSpy.mockRestore()
         logsShutdownSpy.mockRestore()
         sendLogsSpy.mockRestore()
       }
