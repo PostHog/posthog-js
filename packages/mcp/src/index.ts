@@ -143,6 +143,7 @@ function buildTrackingData(
     sessionId: newSessionId(),
     lastActivity: new Date(),
     identifiedSessions: new IdentityCache(),
+    toolAnalyticsParameterOwnership: new Map(),
     toolCategories: new Map<string, string>(),
     toolDescriptions: new Map<string, string>(),
     sessionInfo: getSessionInfo(lowLevelServer, undefined),

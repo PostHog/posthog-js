@@ -5,7 +5,7 @@ import { CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotoc
 import { z } from 'zod'
 import { DEFAULT_CONTEXT_PARAMETER_DESCRIPTION, DEFAULT_CONVERSATION_ID_DESCRIPTION } from '../extensions/constants'
 import { instrument } from '../index'
-import { fakePostHog } from './test-utils'
+import { EventCapture, fakePostHog } from './test-utils'
 
 async function connect(server: McpServer) {
   const client = new Client({ name: 'reserved-argument-test-client', version: '1.0.0' })
@@ -97,6 +97,109 @@ describe('high-level reserved analytics arguments', () => {
 
       expect(receivedArgs).toEqual({ value: 'kept' })
     } finally {
+      await cleanup()
+    }
+  })
+
+  it('strips analytics-owned arguments before strict Zod validation', async () => {
+    const server = new McpServer({ name: 'strict-reserved-arguments', version: '1.0.0' })
+    let receivedArgs: Record<string, unknown> | undefined
+    const capture = new EventCapture()
+    await capture.start()
+
+    server.registerTool('strict_schema', { inputSchema: z.object({ value: z.string() }).strict() }, async (args) => {
+      receivedArgs = { ...args }
+      return { content: [{ type: 'text', text: 'ok' }] }
+    })
+
+    const { client, cleanup } = await connect(server)
+    try {
+      instrument(server, fakePostHog(), { context: true, enableConversationId: true })
+
+      const response = await client.request(
+        {
+          method: 'tools/call',
+          params: {
+            name: 'strict_schema',
+            arguments: { context: 'analytics context', conversation_id: 'analytics conversation', value: 'kept' },
+          },
+        },
+        CallToolResultSchema
+      )
+
+      expect(response.isError).not.toBe(true)
+      expect(receivedArgs).toEqual({ value: 'kept' })
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const event = capture.getEvents().find((candidate) => candidate.resourceName === 'strict_schema')
+      expect(event?.userIntent).toBe('analytics context')
+      expect(event?.conversationId).toBe('analytics conversation')
+    } finally {
+      await capture.stop()
+      await cleanup()
+    }
+  })
+
+  it('does not consume tool-owned reserved arguments as analytics metadata', async () => {
+    const server = new McpServer({ name: 'tool-owned-analytics-arguments', version: '1.0.0' })
+    const receivedArgs: Record<string, unknown>[] = []
+    const capture = new EventCapture()
+    await capture.start()
+
+    server.registerTool(
+      'tool_owned',
+      {
+        inputSchema: z
+          .object({ context: z.string(), conversation_id: z.string().optional(), value: z.string() })
+          .strict(),
+      },
+      async (args) => {
+        receivedArgs.push({ ...args })
+        return { content: [{ type: 'text', text: 'ok' }] }
+      }
+    )
+
+    const { client, cleanup } = await connect(server)
+    try {
+      instrument(server, fakePostHog(), { context: true, enableConversationId: true })
+
+      const withoutConversationId = await client.request(
+        {
+          method: 'tools/call',
+          params: { name: 'tool_owned', arguments: { context: 'application state', value: 'first' } },
+        },
+        CallToolResultSchema
+      )
+      expect(withoutConversationId.content).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ text: expect.stringContaining('conversation_id=') })])
+      )
+
+      const withConversationId = await client.request(
+        {
+          method: 'tools/call',
+          params: {
+            name: 'tool_owned',
+            arguments: { context: 'application state', conversation_id: 'application conversation', value: 'second' },
+          },
+        },
+        CallToolResultSchema
+      )
+      expect(withConversationId.content).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ text: expect.stringContaining('conversation_id=') })])
+      )
+
+      expect(receivedArgs).toEqual([
+        { context: 'application state', value: 'first' },
+        { context: 'application state', conversation_id: 'application conversation', value: 'second' },
+      ])
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const events = capture.getEvents().filter((candidate) => candidate.resourceName === 'tool_owned')
+      expect(events).toHaveLength(2)
+      for (const event of events) {
+        expect(event.userIntent).toBeUndefined()
+        expect(event.conversationId).toBeUndefined()
+      }
+    } finally {
+      await capture.stop()
       await cleanup()
     }
   })
