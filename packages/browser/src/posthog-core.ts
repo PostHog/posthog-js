@@ -422,6 +422,7 @@ export class PostHog implements PostHogInterface {
     sessionPersistence?: PostHogPersistence
     sessionManager?: SessionIdManager
     sessionPropsManager?: SessionPropsManager
+    _sessionPersistenceLastSessionId?: string
     requestRouter: RequestRouter
     siteApps?: SiteApps
     autocapture?: Autocapture
@@ -716,6 +717,7 @@ export class PostHog implements PostHogInterface {
         if (!startInCookielessMode) {
             this.sessionManager = new SessionIdManager(this)
             this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager, this.persistence)
+            this.sessionManager.onSessionId(this._clearSessionPersistenceOnNewSession)
         }
 
         // Conditionally defer extension initialization based on config
@@ -1930,6 +1932,26 @@ export class PostHog implements PostHogInterface {
      */
     unregister_for_session(property: string): void {
         this.sessionPersistence?.unregister(property)
+    }
+
+    // Session-scoped properties (register_for_session, campaign/referrer info) are documented as
+    // cleared when the session ends. onSessionId fires immediately on subscription with the current
+    // id, so the first call only records a baseline instead of clearing — otherwise props registered
+    // before this handler is wired up (or across a page load within the same session) would be wiped.
+    // When sessionPersistence and persistence are the same instance (persistence: 'sessionStorage' or
+    // 'memory'), clearing would wipe unrelated state like distinct_id and feature flags, so skip it.
+    _clearSessionPersistenceOnNewSession = (sessionId: string): void => {
+        if (isUndefined(this._sessionPersistenceLastSessionId)) {
+            this._sessionPersistenceLastSessionId = sessionId
+            return
+        }
+        if (this._sessionPersistenceLastSessionId === sessionId) {
+            return
+        }
+        this._sessionPersistenceLastSessionId = sessionId
+        if (this.sessionPersistence && this.sessionPersistence !== this.persistence) {
+            this.sessionPersistence.clear()
+        }
     }
 
     _register_single(prop: string, value: Property) {
@@ -3975,6 +3997,8 @@ export class PostHog implements PostHogInterface {
             if (this.persistence) {
                 this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager, this.persistence)
             }
+            this._sessionPersistenceLastSessionId = undefined
+            this.sessionManager.onSessionId(this._clearSessionPersistenceOnNewSession)
             const SessionRecordingClass =
                 this.config.__extensionClasses?.sessionRecording ?? PostHog.__defaultExtensionClasses?.sessionRecording
             if (SessionRecordingClass) {
