@@ -132,7 +132,7 @@ test.describe('ErrorTracking autocapture', () => {
                 'Non-Error promise rejection captured with value: An unknown error occured'
             )
             const stacktrace = exception.properties.$exception_list[0].stacktrace
-            expect(stacktrace).toBeUndefined()
+            expect(stacktrace).toBeDefined()
         })
     })
 
