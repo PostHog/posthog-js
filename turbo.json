@@ -49,6 +49,11 @@
             "inputs": ["src/**", "tsconfig.json", "tsconfig.build.json", "package.json", "rslib.config.ts"],
             "outputs": ["dist/**"]
         },
+        "@posthog/browser#build": {
+            "dependsOn": ["^build"],
+            "inputs": ["src/**", "tsconfig.json", "tsconfig.build.json", "package.json", "rslib.config.ts"],
+            "outputs": ["dist/**"]
+        },
         "lint": {
             "dependsOn": []
         },
