@@ -20,6 +20,8 @@ const wrapOnError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) 
         const event = args[0]
         const errorProperties = errorPropertiesBuilder.buildFromUnknown(error || event, {
             mechanism: { handled: false },
+            syntheticException: new Error('PostHog syntheticException'),
+            skipFirstLines: 2,
         })
         captureFn(errorProperties)
         return isFunction(originalOnError) ? (originalOnError(...args) ?? false) : false
@@ -43,6 +45,8 @@ const wrapUnhandledRejection = (captureFn: (props: ErrorTracking.ErrorProperties
     win.onunhandledrejection = function (ev: PromiseRejectionEvent): boolean {
         const errorProperties = errorPropertiesBuilder.buildFromUnknown(ev, {
             mechanism: { handled: false },
+            syntheticException: new Error('PostHog syntheticException'),
+            skipFirstLines: 2,
         })
         captureFn(errorProperties)
         return isFunction(originalOnUnhandledRejection) ? (originalOnUnhandledRejection(ev) ?? false) : false
