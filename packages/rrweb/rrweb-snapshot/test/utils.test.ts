@@ -548,6 +548,28 @@ describe('utils', () => {
       expect(toDataURL).toHaveBeenCalledTimes(2);
     });
 
+    it('evicts only the oldest entry when the cache is full', () => {
+      const img = makeImg(800, 600);
+      // one more than MAX_RECOMPRESSION_CACHE_ENTRIES
+      const dataURLs = Array.from({ length: 11 }, () =>
+        makeDataURL(200_000),
+      );
+      for (const dataURL of dataURLs) {
+        recompressBase64Image(img, dataURL, 'image/webp', 0.4);
+      }
+      expect(toDataURL).toHaveBeenCalledTimes(11);
+
+      // the 10 most recent entries are still cached
+      for (const dataURL of dataURLs.slice(1)) {
+        recompressBase64Image(img, dataURL, 'image/webp', 0.4);
+      }
+      expect(toDataURL).toHaveBeenCalledTimes(11);
+
+      // only the oldest entry was evicted and needs re-encoding
+      recompressBase64Image(img, dataURLs[0], 'image/webp', 0.4);
+      expect(toDataURL).toHaveBeenCalledTimes(12);
+    });
+
     it('returns the original for images that are not loaded', () => {
       const dataURL = makeDataURL(200_000);
       expect(recompressBase64Image(makeImg(0, 0, false), dataURL)).toBe(

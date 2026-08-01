@@ -550,7 +550,12 @@ export function recompressBase64Image(
       recompressed.length < dataURL.length ? recompressed : dataURL;
 
     if (recompressionCache.size >= MAX_RECOMPRESSION_CACHE_ENTRIES) {
-      recompressionCache.clear();
+      // evict only the oldest entry (Map preserves insertion order) so
+      // pages with many unique images keep the rest of the cache warm
+      const oldestKey = recompressionCache.keys().next().value;
+      if (oldestKey !== undefined) {
+        recompressionCache.delete(oldestKey);
+      }
     }
     recompressionCache.set(dataURL, { type, quality, result });
 
