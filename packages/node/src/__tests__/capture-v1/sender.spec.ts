@@ -403,14 +403,20 @@ describe('V1CaptureSender', () => {
       expect((errors[0] as CaptureV1Error).retryExhausted).toEqual(['u1'])
     })
 
-    it('does not wait for response body cancellation before retrying a 5xx', async () => {
+    it('bounds response body cancellation by the request deadline before retrying a 5xx', async () => {
       const { sender, fetch, errors, sleeps } = makeSender({ maxAttempts: 2 })
       const cancel = jest.fn<Promise<void>, []>(() => new Promise<void>(() => {}))
       fetch
         .mockResolvedValueOnce(makeStallingResponse(503, cancel))
         .mockResolvedValueOnce(makeResponse(503, 'still unavailable'))
 
-      await sender.sendV1Batch([msg('u1')])
+      const sendPromise = sender.sendV1Batch([msg('u1')])
+      await jest.advanceTimersByTimeAsync(999)
+      expect(fetch).toHaveBeenCalledTimes(1)
+      expect(sleeps).toEqual([])
+
+      await jest.advanceTimersByTimeAsync(1)
+      await sendPromise
 
       expect(cancel).toHaveBeenCalledTimes(1)
       expect(fetch).toHaveBeenCalledTimes(2)
@@ -446,6 +452,51 @@ describe('V1CaptureSender', () => {
       expect((error.cause as Error).message).toBe('timeout')
     })
 
+    it('identifies a timeout before response headers arrive when custom fetch rejects on abort', async () => {
+      const { sender, fetch, errors } = makeSender({ maxAttempts: 1, requestTimeoutMs: 1000 })
+      fetch.mockImplementation(
+        (_url, options) =>
+          new Promise<PostHogFetchResponse>((_resolve, reject) => {
+            options.signal.addEventListener('abort', () => reject(new Error('custom fetch abort')), { once: true })
+          })
+      )
+
+      const sendPromise = sender.sendV1Batch([msg('u1')])
+      await jest.advanceTimersByTimeAsync(1000)
+      await sendPromise
+
+      expect(errors).toHaveLength(1)
+      const error = errors[0] as CaptureV1Error
+      expect((error.cause as Error).name).toBe('AbortError')
+      expect((error.cause as Error).message).toBe(
+        'Capture V1 request timed out waiting for response headers after 1000ms'
+      )
+      expect(jest.getTimerCount()).toBe(0)
+    })
+
+    it('cancels a response body when custom fetch resolves after the header deadline', async () => {
+      const { sender, fetch, errors } = makeSender({ maxAttempts: 1, requestTimeoutMs: 1000 })
+      let resolveFetch!: (response: PostHogFetchResponse) => void
+      fetch.mockImplementation(
+        () =>
+          new Promise<PostHogFetchResponse>((resolve) => {
+            resolveFetch = resolve
+          })
+      )
+
+      const sendPromise = sender.sendV1Batch([msg('u1')])
+      await jest.advanceTimersByTimeAsync(1000)
+      await sendPromise
+
+      const cancel = jest.fn<Promise<void>, []>().mockResolvedValue(undefined)
+      resolveFetch(makeStallingResponse(200, cancel))
+      await Promise.resolve()
+
+      expect(cancel).toHaveBeenCalledTimes(1)
+      expect(errors).toHaveLength(1)
+      expect(jest.getTimerCount()).toBe(0)
+    })
+
     it('retries a stalled success body without waiting for body cancellation to settle', async () => {
       const { sender, fetch, errors, sleeps } = makeSender({ maxAttempts: 2, requestTimeoutMs: 1000 })
       const cancel = jest.fn<Promise<void>, []>(() => new Promise<void>(() => {}))
@@ -461,6 +512,32 @@ describe('V1CaptureSender', () => {
       expect(sleeps).toEqual([100])
       expect(cancel).toHaveBeenCalledTimes(1)
       expect(errors).toEqual([])
+      expect(jest.getTimerCount()).toBe(0)
+    })
+
+    it('preserves the response-body timeout error when custom body reading rejects on abort', async () => {
+      const { sender, fetch, errors } = makeSender({ maxAttempts: 1, requestTimeoutMs: 1000 })
+      const cancel = jest.fn<Promise<void>, []>().mockResolvedValue(undefined)
+      fetch.mockImplementation((_url, options) => {
+        const response = makeStallingResponse(200, cancel)
+        response.text = () =>
+          new Promise<string>((_resolve, reject) => {
+            options.signal.addEventListener('abort', () => reject(new Error('custom body abort')), { once: true })
+          })
+        return Promise.resolve(response)
+      })
+
+      const sendPromise = sender.sendV1Batch([msg('u1')])
+      await jest.advanceTimersByTimeAsync(1000)
+      await sendPromise
+
+      expect(errors).toHaveLength(1)
+      const error = errors[0] as CaptureV1Error
+      expect((error.cause as Error).name).toBe('AbortError')
+      expect((error.cause as Error).message).toBe(
+        'Capture V1 request timed out while reading the response body after 1000ms'
+      )
+      expect(cancel).toHaveBeenCalledTimes(1)
       expect(jest.getTimerCount()).toBe(0)
     })
 
@@ -486,6 +563,9 @@ describe('V1CaptureSender', () => {
       expect(error).toBeInstanceOf(CaptureV1Error)
       expect(error.retryExhausted).toEqual(['u1'])
       expect((error.cause as Error).name).toBe('AbortError')
+      expect((error.cause as Error).message).toBe(
+        'Capture V1 request timed out while reading the response body after 1000ms'
+      )
       expect(jest.getTimerCount()).toBe(0)
     })
 
