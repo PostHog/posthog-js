@@ -755,7 +755,9 @@ function serializeElementNode(
     }
   }
   // remote css
-  if (tagName === 'link' && inlineStylesheet) {
+  // a blocked link is serialized as a dimensions-only placeholder, so reading its
+  // sheet would be wasted work - and deferring it would leak CSS the block excluded
+  if (tagName === 'link' && inlineStylesheet && !needBlock) {
     // Direct sheet reference survives baseURI drift; href lookup is the fallback.
     let stylesheet: CSSStyleSheet | null | undefined = (n as HTMLLinkElement)
       .sheet;

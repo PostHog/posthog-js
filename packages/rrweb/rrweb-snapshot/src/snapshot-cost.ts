@@ -113,23 +113,64 @@ export function countSerializedNode(): void {
   }
 }
 
+// Counting descends as deep as the CSS nests; past this we stop (undercount)
+// rather than risk pathological recursion on adversarial stylesheets.
+const MAX_COUNT_DEPTH = 32;
+
+/**
+ * Rules in a list, descending grouping rules (`@media`, `@supports`, `@layer`,
+ * native nesting) to any depth - counting only the top level would let a
+ * media-query-organised framework consume the budget at ~1 rule per block and
+ * sail past the cap sheet after sheet. When `visitedSheets` is given, also
+ * descends into `@import`ed sheets, each at most once so cyclic or
+ * diamond-shaped import graphs terminate. Unreadable rules (cross-origin
+ * `@import`) cost nothing: `stringifyStylesheet` can't read them either.
+ */
+function countRuleList(
+  rules: CSSRuleList,
+  visitedSheets: WeakSet<CSSStyleSheet> | null,
+  depth: number,
+): number {
+  let total = rules.length;
+  if (depth >= MAX_COUNT_DEPTH) {
+    return total;
+  }
+  for (let i = 0; i < rules.length; i++) {
+    const rule = rules[i] as CSSRule & {
+      cssRules?: CSSRuleList;
+      styleSheet?: CSSStyleSheet;
+    };
+    try {
+      const nested = rule.cssRules;
+      if (nested && nested.length) {
+        total += countRuleList(nested, visitedSheets, depth + 1);
+      } else if (visitedSheets && rule.styleSheet) {
+        const imported = rule.styleSheet;
+        if (!visitedSheets.has(imported)) {
+          visitedSheets.add(imported);
+          const importedRules = imported.rules || imported.cssRules;
+          if (importedRules) {
+            total += countRuleList(importedRules, visitedSheets, depth + 1);
+          }
+        }
+      }
+    } catch (e) {
+      //
+    }
+  }
+  return total;
+}
+
 /**
  * Charge a stringified sheet's rules to the running total, in the same units
- * as {@link safeCssRuleCount} estimates (one level into grouping rules).
- * Charging bare `rules.length` would let @media-organised pages consume the
- * budget at ~1 rule per block and sail past the cap sheet after sheet.
- * `@import`ed sheets are charged by their own `stringifyStylesheet` recursion.
+ * as {@link safeCssRuleCount} estimates. `@import`ed sheets are charged by
+ * their own `stringifyStylesheet` recursion, so they are not descended here.
  */
 export function countStylesheetRules(rules: CSSRuleList): void {
   if (trackingDepth === 0) {
     return;
   }
-  let total = rules.length;
-  for (let i = 0; i < rules.length; i++) {
-    const rule = rules[i] as CSSRule & { cssRules?: CSSRuleList };
-    total += rule.cssRules?.length || 0;
-  }
-  inProgress.cssRuleCount += total;
+  inProgress.cssRuleCount += countRuleList(rules, null, 0);
 }
 
 export function recordStylesheetCost(ms: number): void {
@@ -150,6 +191,10 @@ export function shouldDeferStylesheetInlining(
   if (trackingDepth === 0 || stylesheetBudgetRules === null) {
     return false;
   }
+  if (inProgress.cssRuleCount >= stylesheetBudgetRules) {
+    // budget already spent: defer without paying the rule walk
+    return true;
+  }
   return (
     inProgress.cssRuleCount + safeCssRuleCount(sheet) > stylesheetBudgetRules
   );
@@ -160,36 +205,20 @@ export function shouldDeferStylesheetInlining(
  * (e.g. cross-origin, where `stringifyStylesheet` bails immediately anyway).
  * A sheet that throws partway through still returns the rules counted so far:
  * returning 0 would wave a huge but partly-unreadable sheet past the budget.
- *
- * Descends one level into grouping (`@media`, `@supports`) and `@import` rules,
- * which are a single CSSRule each however many rules they hold - without that a
- * media-query-organised framework would look almost free and slip past the cap.
+ * See {@link countRuleList} for the nesting and `@import` descent rules.
  */
 export function safeCssRuleCount(sheet: CSSStyleSheet | null | undefined) {
-  let total = 0;
   try {
     const rules = sheet && (sheet.rules || sheet.cssRules);
     if (!rules) {
       return 0;
     }
-    total = rules.length;
-    for (let i = 0; i < rules.length; i++) {
-      const rule = rules[i] as CSSRule & {
-        cssRules?: CSSRuleList;
-        styleSheet?: CSSStyleSheet;
-      };
-      try {
-        total +=
-          rule.cssRules?.length || rule.styleSheet?.cssRules?.length || 0;
-      } catch (e) {
-        // a cross-origin @import throws on .cssRules; those rules can't be
-        // stringified either, so they cost the budget nothing
-      }
-    }
+    const visited = new WeakSet<CSSStyleSheet>();
+    visited.add(sheet as CSSStyleSheet);
+    return countRuleList(rules, visited, 0);
   } catch (e) {
-    //
+    return 0;
   }
-  return total;
 }
 
 export function deferStylesheetLink(linkEl: HTMLLinkElement): void {

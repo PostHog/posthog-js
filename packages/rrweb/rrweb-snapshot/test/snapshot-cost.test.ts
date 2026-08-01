@@ -194,6 +194,27 @@ describe('snapshot cost accounting', () => {
       expect(safeCssRuleCount(undefined)).toBe(0);
     });
 
+    it('counts rules nested two or more levels deep (e.g. @layer > @media)', () => {
+      const sheet = {
+        cssRules: [{ cssRules: [{ cssRules: { length: 50 } }] }],
+      } as unknown as CSSStyleSheet;
+
+      expect(safeCssRuleCount(sheet)).toBe(1 + 1 + 50);
+    });
+
+    it('terminates on cyclic @import graphs, counting each sheet once', () => {
+      const a: { href: string; cssRules?: unknown } = {
+        href: 'http://localhost/a.css',
+      };
+      const b: { href: string; cssRules?: unknown } = {
+        href: 'http://localhost/b.css',
+      };
+      a.cssRules = [{ styleSheet: b }];
+      b.cssRules = [{ styleSheet: a }];
+
+      expect(safeCssRuleCount(a as unknown as CSSStyleSheet)).toBe(2);
+    });
+
     it('still counts readable rules when a cross-origin @import throws mid-walk', () => {
       // returning 0 here would wave the whole sheet past the budget
       const sheet = {
@@ -244,6 +265,57 @@ describe('snapshot cost accounting', () => {
     expect(links[2].attributes._cssText).toBeUndefined();
     expect(getLastSnapshotCost()!.cssRuleCount).toBe(100);
     expect(takeDeferredStylesheetLinks()).toEqual([second, third]);
+  });
+
+  it('charges deeply nested rules to the budget, so nested-heavy sheets still trip the cap', () => {
+    // each sheet is one @layer block holding one @media block of 99 rules: only
+    // 1 top-level CSSRule, but it must be charged as ~101 at every depth
+    const makeLayerSheet = (href: string) =>
+      ({
+        href,
+        cssRules: [
+          {
+            cssText: '@layer a { @media (min-width: 0px) { .a {} } }',
+            cssRules: [
+              { cssText: '@media (min-width: 0px) { .a {} }', cssRules: { length: 99 } },
+            ],
+          },
+        ],
+      }) as unknown as CSSStyleSheet;
+
+    appendLink('/l1.css', makeLayerSheet('http://localhost/l1.css'));
+    const second = appendLink(
+      '/l2.css',
+      makeLayerSheet('http://localhost/l2.css'),
+    );
+
+    const sn = takeSnapshot(150);
+
+    const links = findByTag(sn!, 'link');
+    expect(links[0].attributes._cssText).toBeDefined();
+    expect(links[1].attributes._cssText).toBeUndefined();
+    expect(getLastSnapshotCost()!.cssRuleCount).toBe(101);
+    expect(takeDeferredStylesheetLinks()).toEqual([second]);
+  });
+
+  it('never defers or reads the sheet of a blocked stylesheet link', () => {
+    appendLink('/a.css', makeSheet('http://localhost/a.css', 20));
+    const blocked = appendLink(
+      '/secret.css',
+      makeSheet('http://localhost/secret.css', 20),
+    );
+    blocked.className = 'rr-block';
+
+    const sn = takeSnapshot(10);
+
+    // over budget, but the blocked link must not join the deferred queue: its
+    // idle-time inlining would leak CSS the block excluded from the snapshot
+    expect(takeDeferredStylesheetLinks().map((l) => l.getAttribute('href'))).toEqual(['/a.css']);
+    const links = findByTag(sn!, 'link');
+    const blockedSn = links.find((l) => l.attributes.class === 'rr-block')!;
+    expect(blockedSn).toBeDefined();
+    expect(blockedSn.attributes._cssText).toBeUndefined();
+    expect(blockedSn.attributes.href).toBeUndefined();
   });
 
   it('tracks the slowest mutation batch', () => {

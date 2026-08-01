@@ -57,8 +57,8 @@ export class StylesheetManager {
    */
   public inlineDeferredLinkElement(linkEl: HTMLLinkElement, id: number) {
     if (id === -1 || !linkEl.isConnected) {
-      // never made it into the mirror (blocked), or detached while we were queued -
-      // either way a mutation for it would only make the replayer warn
+      // never made it into the mirror (slimDOM dropped it), or detached while we
+      // were queued - either way a mutation for it would only make the replayer warn
       return;
     }
     let cssText: string | null = null;

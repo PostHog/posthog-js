@@ -99,12 +99,13 @@ const nonUserInitiatedSources = new Set<IncrementalSource>([
 export const DEFAULT_INLINE_STYLESHEET_BUDGET_RULES = 10_000;
 
 type IdleTask = { cancel: () => void };
+type IdleDeadline = { didTimeout: boolean; timeRemaining: () => number };
 
-function whenIdle(cb: () => void): IdleTask {
+function whenIdle(cb: (deadline?: IdleDeadline) => void): IdleTask {
   const win = window as Window &
     typeof globalThis & {
       requestIdleCallback?: (
-        cb: () => void,
+        cb: (deadline: IdleDeadline) => void,
         opts?: { timeout: number },
       ) => number;
       cancelIdleCallback?: (handle: number) => void;
@@ -114,38 +115,53 @@ function whenIdle(cb: () => void): IdleTask {
     const handle = win.requestIdleCallback(cb, { timeout: 2000 });
     return { cancel: () => win.cancelIdleCallback?.(handle) };
   }
-  const handle = setTimeout(cb, 0);
+  // no idle scheduling (e.g. Safari <= 17): space the chunks out instead, so
+  // they don't run back-to-back inside the page-load busy window
+  const handle = setTimeout(cb, 250);
   return { cancel: () => clearTimeout(handle) };
 }
 
 /**
  * Inline the `<link rel=stylesheet>` elements the snapshot skipped once it ran out
- * of stylesheet budget, one per idle callback, emitting each as an attribute
- * mutation. Splitting the work this way keeps every task short - the total CPU is
- * unchanged, but the page stays responsive between chunks.
+ * of stylesheet budget, emitting each as an attribute mutation. At least one sheet
+ * per idle callback so a busy main thread still makes progress, more while the
+ * deadline says we're genuinely idle. Splitting the work this way keeps every task
+ * short - the total CPU is unchanged, but the page stays responsive between chunks.
  */
 function inlineDeferredStylesheets(
-  links: HTMLLinkElement[],
+  links: Array<HTMLLinkElement | null>,
   stylesheetManager: StylesheetManager,
+  onDone: () => void,
 ): () => void {
   let cancelled = false;
   let pending: IdleTask | null = null;
   let index = 0;
 
-  const step = () => {
+  const step = (deadline?: IdleDeadline) => {
     pending = null;
     if (cancelled) {
       return;
     }
-    const link = links[index];
-    index += 1;
-    if (link) {
-      callSafely(() =>
-        stylesheetManager.inlineDeferredLinkElement(link, mirror.getId(link)),
-      );
-    }
+    do {
+      const link = links[index];
+      // release the element so completed entries aren't pinned by this closure
+      links[index] = null;
+      index += 1;
+      if (link) {
+        callSafely(() =>
+          stylesheetManager.inlineDeferredLinkElement(link, mirror.getId(link)),
+        );
+      }
+    } while (
+      index < links.length &&
+      deadline &&
+      !deadline.didTimeout &&
+      deadline.timeRemaining() > 5
+    );
     if (index < links.length) {
       pending = whenIdle(step);
+    } else {
+      onDone();
     }
   };
 
@@ -524,53 +540,57 @@ function record<T = eventWithTime>(
     shadowDomManager.init();
 
     mutationBuffers.forEach((buf) => buf.lock()); // don't allow any mirror modifications during snapshotting
-    const node = snapshot(document, {
-      mirror,
-      blockClass,
-      blockSelector,
-      maskTextClass,
-      maskTextSelector,
-      inlineStylesheet,
-      maskAllInputs: maskInputOptions,
-      inlineStylesheetBudgetRules,
-      maskTextFn,
-      maskInputFn,
-      slimDOM: slimDOMOptions,
-      dataURLOptions,
-      recordCanvas,
-      canvasMaskingConfigured,
-      inlineImages,
-      onSerialize: (n) => {
-        if (isSerializedIframe(n, mirror)) {
-          iframeManager.addIframe(n as HTMLIFrameElement);
-        }
-        if (isSerializedStylesheet(n, mirror)) {
-          stylesheetManager.trackLinkElement(n as HTMLLinkElement);
-        }
-        if (hasShadowRoot(n)) {
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-          shadowDomManager.addShadowRoot(dom.shadowRoot(n as Node)!, document);
-        }
-      },
-      onIframeLoad: (iframe, childSn) => {
-        iframeManager.attachIframe(iframe, childSn);
-        shadowDomManager.observeAttachShadow(iframe);
-      },
-      onIframeListenerRegistered: (
-        iframe: HTMLIFrameElement,
-        disposer: () => void,
-      ) => {
-        iframeManager.registerLoadListenerDisposer(iframe, disposer);
-      },
-      onStylesheetLoad: (linkEl, childSn) => {
-        stylesheetManager.attachLinkElement(linkEl, childSn);
-      },
-      keepIframeSrcFn,
-    });
-
-    // Drain these whether or not the snapshot succeeded, so a failed snapshot
-    // doesn't leave links queued for the next one.
-    const deferredStylesheetLinks = takeDeferredStylesheetLinks();
+    let node: ReturnType<typeof snapshot> = null;
+    let deferredStylesheetLinks: HTMLLinkElement[] = [];
+    try {
+      node = snapshot(document, {
+        mirror,
+        blockClass,
+        blockSelector,
+        maskTextClass,
+        maskTextSelector,
+        inlineStylesheet,
+        maskAllInputs: maskInputOptions,
+        inlineStylesheetBudgetRules,
+        maskTextFn,
+        maskInputFn,
+        slimDOM: slimDOMOptions,
+        dataURLOptions,
+        recordCanvas,
+        canvasMaskingConfigured,
+        inlineImages,
+        onSerialize: (n) => {
+          if (isSerializedIframe(n, mirror)) {
+            iframeManager.addIframe(n as HTMLIFrameElement);
+          }
+          if (isSerializedStylesheet(n, mirror)) {
+            stylesheetManager.trackLinkElement(n as HTMLLinkElement);
+          }
+          if (hasShadowRoot(n)) {
+            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+            shadowDomManager.addShadowRoot(dom.shadowRoot(n as Node)!, document);
+          }
+        },
+        onIframeLoad: (iframe, childSn) => {
+          iframeManager.attachIframe(iframe, childSn);
+          shadowDomManager.observeAttachShadow(iframe);
+        },
+        onIframeListenerRegistered: (
+          iframe: HTMLIFrameElement,
+          disposer: () => void,
+        ) => {
+          iframeManager.registerLoadListenerDisposer(iframe, disposer);
+        },
+        onStylesheetLoad: (linkEl, childSn) => {
+          stylesheetManager.attachLinkElement(linkEl, childSn);
+        },
+        keepIframeSrcFn,
+      });
+    } finally {
+      // drain even when the snapshot throws, so a failed snapshot doesn't
+      // leave links queued for the next one
+      deferredStylesheetLinks = takeDeferredStylesheetLinks();
+    }
 
     if (!node) {
       return console.warn('Failed to snapshot the document');
@@ -592,6 +612,10 @@ function record<T = eventWithTime>(
       cancelDeferredStylesheetInlining = inlineDeferredStylesheets(
         deferredStylesheetLinks,
         stylesheetManager,
+        () => {
+          // queue drained: drop the handle so the closure and its links can be collected
+          cancelDeferredStylesheetInlining = undefined;
+        },
       );
     }
 
