@@ -121,6 +121,8 @@ function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
               return Reflect.set(target, property, value)
             }
 
+            // The MCP SDK's registry copy is currently stale after update(), but keep this lookup lazy so
+            // ownership follows the current schema once the registry reflects live tool state.
             const getCurrentInputSchema = () => value.inputSchema
             const nextValue = addTracingToToolCallbackInternal(value, property, server, getCurrentInputSchema)
 
