@@ -1,0 +1,50 @@
+{
+    "name": "@posthog/browser",
+    "version": "0.0.0",
+    "description": "A small, extension-based PostHog client for modern browsers",
+    "license": "MIT",
+    "private": true,
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/PostHog/posthog-js.git",
+        "directory": "packages/browser-next"
+    },
+    "sideEffects": false,
+    "files": [
+        "dist",
+        "README.md"
+    ],
+    "main": "dist/index.js",
+    "module": "dist/index.mjs",
+    "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "require": "./dist/index.js",
+            "import": "./dist/index.mjs"
+        }
+    },
+    "scripts": {
+        "clean": "rimraf dist",
+        "lint": "eslint src tests fixtures scripts/*.mjs",
+        "lint:fix": "eslint src tests fixtures scripts/*.mjs --fix",
+        "build": "rslib build",
+        "dev": "rslib build -w",
+        "test:unit": "jest -c jest.config.cjs",
+        "check-types": "tsc --noEmit --project tsconfig.json",
+        "bundle-size": "pnpm build && node scripts/check-bundle-size.mjs",
+        "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
+    },
+    "dependencies": {
+        "@posthog/browser-common": "workspace:^"
+    },
+    "devDependencies": {
+        "@posthog-tooling/tsconfig-base": "workspace:*",
+        "@rslib/core": "catalog:",
+        "@types/jest": "catalog:",
+        "esbuild": "^0.25.0",
+        "jest": "catalog:",
+        "ts-jest": "catalog:",
+        "typescript": "catalog:"
+    }
+}

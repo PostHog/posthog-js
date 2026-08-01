@@ -240,13 +240,13 @@ importers:
         version: 1.52.0(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.1.13))
       '@langchain/core':
         specifier: ^1.2.3
-        version: 1.2.3(@opentelemetry/api@1.9.0)(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.48.0(@aws-sdk/credential-provider-node@3.972.30)(@smithy/signature-v4@5.6.10)(ws@8.21.1)(zod@4.1.13))(ws@8.21.1)
+        version: 1.2.3(@opentelemetry/api@1.9.0)(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.48.0(@aws-sdk/credential-provider-node@3.972.30)(@smithy/signature-v4@5.6.12)(ws@8.21.1)(zod@4.1.13))(ws@8.21.1)
       '@openai/agents':
         specifier: ^0.8.0
-        version: 0.8.3(@aws-sdk/credential-provider-node@3.972.30)(@cfworker/json-schema@4.1.1)(@smithy/signature-v4@5.6.10)(ws@8.21.1)(zod@4.1.13)
+        version: 0.8.3(@aws-sdk/credential-provider-node@3.972.30)(@cfworker/json-schema@4.1.1)(@smithy/signature-v4@5.6.12)(ws@8.21.2)(zod@4.1.13)
       '@openai/agents-core':
         specifier: ^0.8.0
-        version: 0.8.3(@aws-sdk/credential-provider-node@3.972.30)(@cfworker/json-schema@4.1.1)(@smithy/signature-v4@5.6.10)(ws@8.21.1)(zod@4.1.13)
+        version: 0.8.3(@aws-sdk/credential-provider-node@3.972.30)(@cfworker/json-schema@4.1.1)(@smithy/signature-v4@5.6.12)(ws@8.21.2)(zod@4.1.13)
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
@@ -270,13 +270,13 @@ importers:
         version: 29.5.14
       jest:
         specifier: 'catalog:'
-        version: 29.7.0(@types/node@26.1.1)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@26.1.1)(typescript@5.8.2))
+        version: 29.7.0(@types/node@22.20.1)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.8.2))
       node-fetch:
         specifier: ^3.3.2
         version: 3.3.2
       openai:
         specifier: ^6.48.0
-        version: 6.48.0(@aws-sdk/credential-provider-node@3.972.30)(@smithy/signature-v4@5.6.10)(ws@8.21.1)(zod@4.1.13)
+        version: 6.48.0(@aws-sdk/credential-provider-node@3.972.30)(@smithy/signature-v4@5.6.12)(ws@8.21.1)(zod@4.1.13)
       posthog-node:
         specifier: workspace:^
         version: link:../node
@@ -544,6 +544,34 @@ importers:
         specifier: 'catalog:'
         version: 5.8.2
 
+  packages/browser-next:
+    dependencies:
+      '@posthog/browser-common':
+        specifier: workspace:^
+        version: link:../browser-common
+    devDependencies:
+      '@posthog-tooling/tsconfig-base':
+        specifier: workspace:*
+        version: link:../../tooling/tsconfig-base
+      '@rslib/core':
+        specifier: 'catalog:'
+        version: 0.10.6(@microsoft/api-extractor@7.58.9(@types/node@26.1.1))(typescript@5.8.2)
+      '@types/jest':
+        specifier: 'catalog:'
+        version: 29.5.14
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.12
+      jest:
+        specifier: 'catalog:'
+        version: 29.7.0(@types/node@26.1.1)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@26.1.1)(typescript@5.8.2))
+      ts-jest:
+        specifier: 'catalog:'
+        version: 29.4.11(@babel/core@7.29.7)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.29.7))(esbuild@0.25.12)(jest-util@29.7.0)(jest@29.7.0(@types/node@26.1.1)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@26.1.1)(typescript@5.8.2)))(typescript@5.8.2)
+      typescript:
+        specifier: 'catalog:'
+        version: 5.8.2
+
   packages/convex:
     dependencies:
       '@posthog/core':
@@ -681,7 +709,7 @@ importers:
         version: 7.0.0-dev.20260216.1
       '@vercel/functions':
         specifier: ^3.4.3
-        version: 3.4.3(@aws-sdk/credential-provider-web-identity@3.972.67)
+        version: 3.4.3(@aws-sdk/credential-provider-web-identity@3.972.73)
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@26.1.1)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@26.1.1)(typescript@5.8.2))
@@ -1137,13 +1165,13 @@ importers:
         version: link:../../tooling/tsconfig-base
       '@rslib/core':
         specifier: 'catalog:'
-        version: 0.10.6(@microsoft/api-extractor@7.58.9(@types/node@22.20.1))(typescript@5.9.3)
+        version: 0.10.6(@microsoft/api-extractor@7.58.9(@types/node@26.1.1))(typescript@5.9.3)
       '@types/jest':
         specifier: 'catalog:'
         version: 29.5.14
       jest:
         specifier: 'catalog:'
-        version: 29.7.0(@types/node@22.20.1)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.9.3))
+        version: 29.7.0(@types/node@26.1.1)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@26.1.1)(typescript@5.9.3))
       rollup:
         specifier: ~4.53.2
         version: 4.53.3
@@ -1527,7 +1555,7 @@ importers:
         version: 5.0.1
       jest-image-snapshot:
         specifier: ^6.2.0
-        version: 6.5.2(jest@29.7.0(@types/node@18.19.130)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@18.19.130)(typescript@5.8.2)))
+        version: 6.5.2(jest@29.7.0(@types/node@18.19.130)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.19.1)(typescript@5.8.2)))
       jsdom:
         specifier: ^22.1.0
         version: 22.1.0
@@ -1920,10 +1948,6 @@ packages:
 
   '@aws-sdk/credential-provider-sso@3.973.11':
     resolution: {integrity: sha512-gAQBkBZxUB84d71+pPcI9L+jh2ujhuAVxc/4FgGiWFDjkPBlMKxzd5XDtkSXTFX8Ro7ansnT88+XadasxMeCRw==}
-    engines: {node: '>=20.0.0'}
-
-  '@aws-sdk/credential-provider-web-identity@3.972.67':
-    resolution: {integrity: sha512-FTNZ05gkPBA6CKbU3N4zPgybV+stdazwMOya75CmGdcJL7p8Fw/BdHP8WVxJd0mvzyPK2cg/C3gli58Ir4HgCw==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/credential-provider-web-identity@3.972.73':
@@ -6865,10 +6889,6 @@ packages:
     resolution: {integrity: sha512-YpYSyM0vMDwKbHD/JA7bVOF6kToVRpa+FM5ateEVRpsTNu564g1muBlkTubXhSKKYXInhpADF46FPyrZcTLpXg==}
     engines: {node: '>=18.0.0'}
 
-  '@smithy/signature-v4@5.6.10':
-    resolution: {integrity: sha512-EXhWePm3SXJAX38npIy4TXL2Aex/OVgCClTjelN2QHw/U+8CQUH8C7AaxsVzQcYieYPseywn48s89DmvuGjiAg==}
-    engines: {node: '>=18.0.0'}
-
   '@smithy/signature-v4@5.6.12':
     resolution: {integrity: sha512-I6KLtq3H0qqSuV9vLglfi8puHqzygzWHOnI4z/Rdoo+q50vvo18vBRdPAvvEtcaKROz7Zn6qnPa14kRfPH6PcQ==}
     engines: {node: '>=18.0.0'}
@@ -7918,6 +7938,7 @@ packages:
   '@xmldom/xmldom@0.8.13':
     resolution: {integrity: sha512-KRYzxepc14G/CEpEGc3Yn+JKaAeT63smlDr+vjB8jRfgTBBI9wRj/nkQEO+ucV8p8I9bfKLWp37uHgFrbntPvw==}
     engines: {node: '>=10.0.0'}
+    deprecated: this version has critical issues, please update to the latest version
 
   '@xmldom/xmldom@0.8.7':
     resolution: {integrity: sha512-sI1Ly2cODlWStkINzqGrZ8K6n+MTSbAeQnAipGyL+KZCXuHaRlj2gyyy8B/9MvsFFqN7XHryQnB2QwhzvJXovg==}
@@ -7927,6 +7948,7 @@ packages:
   '@xmldom/xmldom@0.9.10':
     resolution: {integrity: sha512-A9gOqLdi6cV4ibazAjcQufGj0B1y/vDqYrcuP6d/6x8P27gRS8643Dj9o1dEKtB6O7fwxb2FgBmJS2mX7gpvdw==}
     engines: {node: '>=14.6'}
+    deprecated: this version has critical issues, please update to the latest version
 
   '@xstate/fsm@1.5.2':
     resolution: {integrity: sha512-l2l7ztpLw/0EomJcvl86F8M6cLeMXhSEOtmI89fg34DbDMaatUKfiiAQpZpdcRqWHMjZYPAfC8EqmnHbmIlyEg==}
@@ -18414,16 +18436,6 @@ snapshots:
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
-  '@aws-sdk/credential-provider-web-identity@3.972.67':
-    dependencies:
-      '@aws-sdk/core': 3.977.6
-      '@aws-sdk/nested-clients': 3.997.41
-      '@aws-sdk/types': 3.974.2
-      '@smithy/core': 3.31.1
-      '@smithy/types': 4.16.1
-      tslib: 2.8.1
-    optional: true
-
   '@aws-sdk/credential-provider-web-identity@3.972.73':
     dependencies:
       '@aws-sdk/core': 3.977.6
@@ -22516,44 +22528,6 @@ snapshots:
       jest-util: 29.7.0
       slash: 3.0.0
 
-  '@jest/core@29.7.0(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@18.19.130)(typescript@5.8.2))':
-    dependencies:
-      '@jest/console': 29.7.0
-      '@jest/reporters': 29.7.0(node-notifier@8.0.2)
-      '@jest/test-result': 29.7.0
-      '@jest/transform': 29.7.0
-      '@jest/types': 29.6.3
-      '@types/node': 22.20.1
-      ansi-escapes: 4.3.2
-      chalk: 4.1.2
-      ci-info: 3.9.0
-      exit: 0.1.2
-      graceful-fs: 4.2.11
-      jest-changed-files: 29.7.0
-      jest-config: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@18.19.130)(typescript@5.8.2))
-      jest-haste-map: 29.7.0
-      jest-message-util: 29.7.0
-      jest-regex-util: 29.6.3
-      jest-resolve: 29.7.0
-      jest-resolve-dependencies: 29.7.0
-      jest-runner: 29.7.0
-      jest-runtime: 29.7.0
-      jest-snapshot: 29.7.0
-      jest-util: 29.7.0
-      jest-validate: 29.7.0
-      jest-watcher: 29.7.0
-      micromatch: 4.0.8
-      pretty-format: 29.7.0
-      slash: 3.0.0
-      strip-ansi: 6.0.1
-    optionalDependencies:
-      node-notifier: 8.0.2
-    transitivePeerDependencies:
-      - babel-plugin-macros
-      - supports-color
-      - ts-node
-    optional: true
-
   '@jest/core@29.7.0(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@20.19.9)(typescript@5.9.3))':
     dependencies:
       '@jest/console': 29.7.0
@@ -22666,7 +22640,7 @@ snapshots:
       - ts-node
     optional: true
 
-  '@jest/core@29.7.0(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.9.3))':
+  '@jest/core@29.7.0(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.8.2))':
     dependencies:
       '@jest/console': 29.7.0
       '@jest/reporters': 29.7.0(node-notifier@8.0.2)
@@ -22680,7 +22654,7 @@ snapshots:
       exit: 0.1.2
       graceful-fs: 4.2.11
       jest-changed-files: 29.7.0
-      jest-config: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.9.3))
+      jest-config: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.8.2))
       jest-haste-map: 29.7.0
       jest-message-util: 29.7.0
       jest-regex-util: 29.6.3
@@ -23034,7 +23008,7 @@ snapshots:
       '@jest/schemas': 29.6.3
       '@types/istanbul-lib-coverage': 2.0.6
       '@types/istanbul-reports': 3.0.4
-      '@types/node': 26.1.1
+      '@types/node': 22.20.1
       '@types/yargs': 17.0.35
       chalk: 4.1.2
 
@@ -23089,12 +23063,12 @@ snapshots:
 
   '@kwsites/promise-deferred@1.1.1': {}
 
-  '@langchain/core@1.2.3(@opentelemetry/api@1.9.0)(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.48.0(@aws-sdk/credential-provider-node@3.972.30)(@smithy/signature-v4@5.6.10)(ws@8.21.1)(zod@4.1.13))(ws@8.21.1)':
+  '@langchain/core@1.2.3(@opentelemetry/api@1.9.0)(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.48.0(@aws-sdk/credential-provider-node@3.972.30)(@smithy/signature-v4@5.6.12)(ws@8.21.1)(zod@4.1.13))(ws@8.21.1)':
     dependencies:
       '@cfworker/json-schema': 4.1.1
       '@standard-schema/spec': 1.1.0
       js-tiktoken: 1.0.21
-      langsmith: 0.8.3(@opentelemetry/api@1.9.0)(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.48.0(@aws-sdk/credential-provider-node@3.972.30)(@smithy/signature-v4@5.6.10)(ws@8.21.1)(zod@4.1.13))(ws@8.21.1)
+      langsmith: 0.8.3(@opentelemetry/api@1.9.0)(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.48.0(@aws-sdk/credential-provider-node@3.972.30)(@smithy/signature-v4@5.6.12)(ws@8.21.1)(zod@4.1.13))(ws@8.21.1)
       mustache: 4.2.0
       p-queue: 6.6.2
       zod: 4.1.13
@@ -23170,15 +23144,6 @@ snapshots:
       '@rushstack/node-core-library': 5.23.1(@types/node@22.19.1)
     transitivePeerDependencies:
       - '@types/node'
-
-  '@microsoft/api-extractor-model@7.33.8(@types/node@22.20.1)':
-    dependencies:
-      '@microsoft/tsdoc': 0.16.0
-      '@microsoft/tsdoc-config': 0.18.1
-      '@rushstack/node-core-library': 5.23.1(@types/node@22.20.1)
-    transitivePeerDependencies:
-      - '@types/node'
-    optional: true
 
   '@microsoft/api-extractor-model@7.33.8(@types/node@26.1.1)':
     dependencies:
@@ -23260,25 +23225,6 @@ snapshots:
       typescript: 5.9.3
     transitivePeerDependencies:
       - '@types/node'
-
-  '@microsoft/api-extractor@7.58.9(@types/node@22.20.1)':
-    dependencies:
-      '@microsoft/api-extractor-model': 7.33.8(@types/node@22.20.1)
-      '@microsoft/tsdoc': 0.16.0
-      '@microsoft/tsdoc-config': 0.18.1
-      '@rushstack/node-core-library': 5.23.1(@types/node@22.20.1)
-      '@rushstack/rig-package': 0.7.3
-      '@rushstack/terminal': 0.24.0(@types/node@22.20.1)
-      '@rushstack/ts-command-line': 5.3.10(@types/node@22.20.1)
-      diff: 8.0.4
-      minimatch: 10.2.3
-      resolve: 1.22.12
-      semver: 7.7.4
-      source-map: 0.6.1
-      typescript: 5.9.3
-    transitivePeerDependencies:
-      - '@types/node'
-    optional: true
 
   '@microsoft/api-extractor@7.58.9(@types/node@26.1.1)':
     dependencies:
@@ -23977,10 +23923,10 @@ snapshots:
 
   '@open-draft/until@1.0.3': {}
 
-  '@openai/agents-core@0.8.3(@aws-sdk/credential-provider-node@3.972.30)(@cfworker/json-schema@4.1.1)(@smithy/signature-v4@5.6.10)(ws@8.21.1)(zod@4.1.13)':
+  '@openai/agents-core@0.8.3(@aws-sdk/credential-provider-node@3.972.30)(@cfworker/json-schema@4.1.1)(@smithy/signature-v4@5.6.12)(ws@8.21.1)(zod@4.1.13)':
     dependencies:
       debug: 4.4.3
-      openai: 6.48.0(@aws-sdk/credential-provider-node@3.972.30)(@smithy/signature-v4@5.6.10)(ws@8.21.1)(zod@4.1.13)
+      openai: 6.48.0(@aws-sdk/credential-provider-node@3.972.30)(@smithy/signature-v4@5.6.12)(ws@8.21.1)(zod@4.1.13)
     optionalDependencies:
       '@modelcontextprotocol/sdk': 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.1.13)
       zod: 4.1.13
@@ -23992,11 +23938,12 @@ snapshots:
       - supports-color
       - ws
 
-  '@openai/agents-openai@0.8.3(@aws-sdk/credential-provider-node@3.972.30)(@cfworker/json-schema@4.1.1)(@smithy/signature-v4@5.6.10)(ws@8.21.1)(zod@4.1.13)':
+  '@openai/agents-core@0.8.3(@aws-sdk/credential-provider-node@3.972.30)(@cfworker/json-schema@4.1.1)(@smithy/signature-v4@5.6.12)(ws@8.21.2)(zod@4.1.13)':
     dependencies:
-      '@openai/agents-core': 0.8.3(@aws-sdk/credential-provider-node@3.972.30)(@cfworker/json-schema@4.1.1)(@smithy/signature-v4@5.6.10)(ws@8.21.1)(zod@4.1.13)
       debug: 4.4.3
-      openai: 6.48.0(@aws-sdk/credential-provider-node@3.972.30)(@smithy/signature-v4@5.6.10)(ws@8.21.1)(zod@4.1.13)
+      openai: 6.48.0(@aws-sdk/credential-provider-node@3.972.30)(@smithy/signature-v4@5.6.12)(ws@8.21.2)(zod@4.1.13)
+    optionalDependencies:
+      '@modelcontextprotocol/sdk': 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.1.13)
       zod: 4.1.13
     transitivePeerDependencies:
       - '@aws-sdk/credential-provider-node'
@@ -24006,9 +23953,23 @@ snapshots:
       - supports-color
       - ws
 
-  '@openai/agents-realtime@0.8.3(@aws-sdk/credential-provider-node@3.972.30)(@cfworker/json-schema@4.1.1)(@smithy/signature-v4@5.6.10)(zod@4.1.13)':
+  '@openai/agents-openai@0.8.3(@aws-sdk/credential-provider-node@3.972.30)(@cfworker/json-schema@4.1.1)(@smithy/signature-v4@5.6.12)(ws@8.21.2)(zod@4.1.13)':
     dependencies:
-      '@openai/agents-core': 0.8.3(@aws-sdk/credential-provider-node@3.972.30)(@cfworker/json-schema@4.1.1)(@smithy/signature-v4@5.6.10)(ws@8.21.1)(zod@4.1.13)
+      '@openai/agents-core': 0.8.3(@aws-sdk/credential-provider-node@3.972.30)(@cfworker/json-schema@4.1.1)(@smithy/signature-v4@5.6.12)(ws@8.21.2)(zod@4.1.13)
+      debug: 4.4.3
+      openai: 6.48.0(@aws-sdk/credential-provider-node@3.972.30)(@smithy/signature-v4@5.6.12)(ws@8.21.1)(zod@4.1.13)
+      zod: 4.1.13
+    transitivePeerDependencies:
+      - '@aws-sdk/credential-provider-node'
+      - '@cfworker/json-schema'
+      - '@smithy/hash-node'
+      - '@smithy/signature-v4'
+      - supports-color
+      - ws
+
+  '@openai/agents-realtime@0.8.3(@aws-sdk/credential-provider-node@3.972.30)(@cfworker/json-schema@4.1.1)(@smithy/signature-v4@5.6.12)(zod@4.1.13)':
+    dependencies:
+      '@openai/agents-core': 0.8.3(@aws-sdk/credential-provider-node@3.972.30)(@cfworker/json-schema@4.1.1)(@smithy/signature-v4@5.6.12)(ws@8.21.1)(zod@4.1.13)
       '@types/ws': 8.18.1
       debug: 4.4.3
       ws: 8.21.1
@@ -24022,13 +23983,13 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@openai/agents@0.8.3(@aws-sdk/credential-provider-node@3.972.30)(@cfworker/json-schema@4.1.1)(@smithy/signature-v4@5.6.10)(ws@8.21.1)(zod@4.1.13)':
+  '@openai/agents@0.8.3(@aws-sdk/credential-provider-node@3.972.30)(@cfworker/json-schema@4.1.1)(@smithy/signature-v4@5.6.12)(ws@8.21.2)(zod@4.1.13)':
     dependencies:
-      '@openai/agents-core': 0.8.3(@aws-sdk/credential-provider-node@3.972.30)(@cfworker/json-schema@4.1.1)(@smithy/signature-v4@5.6.10)(ws@8.21.1)(zod@4.1.13)
-      '@openai/agents-openai': 0.8.3(@aws-sdk/credential-provider-node@3.972.30)(@cfworker/json-schema@4.1.1)(@smithy/signature-v4@5.6.10)(ws@8.21.1)(zod@4.1.13)
-      '@openai/agents-realtime': 0.8.3(@aws-sdk/credential-provider-node@3.972.30)(@cfworker/json-schema@4.1.1)(@smithy/signature-v4@5.6.10)(zod@4.1.13)
+      '@openai/agents-core': 0.8.3(@aws-sdk/credential-provider-node@3.972.30)(@cfworker/json-schema@4.1.1)(@smithy/signature-v4@5.6.12)(ws@8.21.2)(zod@4.1.13)
+      '@openai/agents-openai': 0.8.3(@aws-sdk/credential-provider-node@3.972.30)(@cfworker/json-schema@4.1.1)(@smithy/signature-v4@5.6.12)(ws@8.21.2)(zod@4.1.13)
+      '@openai/agents-realtime': 0.8.3(@aws-sdk/credential-provider-node@3.972.30)(@cfworker/json-schema@4.1.1)(@smithy/signature-v4@5.6.12)(zod@4.1.13)
       debug: 4.4.3
-      openai: 6.48.0(@aws-sdk/credential-provider-node@3.972.30)(@smithy/signature-v4@5.6.10)(ws@8.21.1)(zod@4.1.13)
+      openai: 6.48.0(@aws-sdk/credential-provider-node@3.972.30)(@smithy/signature-v4@5.6.12)(ws@8.21.1)(zod@4.1.13)
       zod: 4.1.13
     transitivePeerDependencies:
       - '@aws-sdk/credential-provider-node'
@@ -25447,15 +25408,6 @@ snapshots:
       '@microsoft/api-extractor': 7.58.9(@types/node@22.16.5)
       typescript: 5.8.2
 
-  '@rslib/core@0.10.6(@microsoft/api-extractor@7.58.9(@types/node@22.20.1))(typescript@5.9.3)':
-    dependencies:
-      '@rsbuild/core': 1.4.8
-      rsbuild-plugin-dts: 0.10.6(@microsoft/api-extractor@7.58.9(@types/node@22.20.1))(@rsbuild/core@1.4.8)(typescript@5.9.3)
-      tinyglobby: 0.2.17
-    optionalDependencies:
-      '@microsoft/api-extractor': 7.58.9(@types/node@22.20.1)
-      typescript: 5.9.3
-
   '@rslib/core@0.10.6(@microsoft/api-extractor@7.58.9(@types/node@26.1.1))(typescript@5.8.2)':
     dependencies:
       '@rsbuild/core': 1.4.8
@@ -25582,20 +25534,6 @@ snapshots:
     optionalDependencies:
       '@types/node': 22.19.1
 
-  '@rushstack/node-core-library@5.23.1(@types/node@22.20.1)':
-    dependencies:
-      ajv: 8.18.0
-      ajv-draft-04: 1.0.0(ajv@8.18.0)
-      ajv-formats: 3.0.1(ajv@8.18.0)
-      fs-extra: 11.3.6
-      import-lazy: 4.0.0
-      jju: 1.4.0
-      resolve: 1.22.12
-      semver: 7.7.4
-    optionalDependencies:
-      '@types/node': 22.20.1
-    optional: true
-
   '@rushstack/node-core-library@5.23.1(@types/node@26.1.1)':
     dependencies:
       ajv: 8.18.0
@@ -25625,11 +25563,6 @@ snapshots:
   '@rushstack/problem-matcher@0.2.1(@types/node@22.19.1)':
     optionalDependencies:
       '@types/node': 22.19.1
-
-  '@rushstack/problem-matcher@0.2.1(@types/node@22.20.1)':
-    optionalDependencies:
-      '@types/node': 22.20.1
-    optional: true
 
   '@rushstack/problem-matcher@0.2.1(@types/node@26.1.1)':
     optionalDependencies:
@@ -25672,15 +25605,6 @@ snapshots:
       supports-color: 8.1.1
     optionalDependencies:
       '@types/node': 22.19.1
-
-  '@rushstack/terminal@0.24.0(@types/node@22.20.1)':
-    dependencies:
-      '@rushstack/node-core-library': 5.23.1(@types/node@22.20.1)
-      '@rushstack/problem-matcher': 0.2.1(@types/node@22.20.1)
-      supports-color: 8.1.1
-    optionalDependencies:
-      '@types/node': 22.20.1
-    optional: true
 
   '@rushstack/terminal@0.24.0(@types/node@26.1.1)':
     dependencies:
@@ -25726,16 +25650,6 @@ snapshots:
       string-argv: 0.3.2
     transitivePeerDependencies:
       - '@types/node'
-
-  '@rushstack/ts-command-line@5.3.10(@types/node@22.20.1)':
-    dependencies:
-      '@rushstack/terminal': 0.24.0(@types/node@22.20.1)
-      '@types/argparse': 1.0.38
-      argparse: 1.0.10
-      string-argv: 0.3.2
-    transitivePeerDependencies:
-      - '@types/node'
-    optional: true
 
   '@rushstack/ts-command-line@5.3.10(@types/node@26.1.1)':
     dependencies:
@@ -26048,13 +25962,6 @@ snapshots:
       '@smithy/util-utf8': 4.2.2
       tslib: 2.8.1
 
-  '@smithy/signature-v4@5.6.10':
-    dependencies:
-      '@smithy/core': 3.31.1
-      '@smithy/types': 4.16.1
-      tslib: 2.8.1
-    optional: true
-
   '@smithy/signature-v4@5.6.12':
     dependencies:
       '@smithy/core': 3.31.1
@@ -26340,7 +26247,7 @@ snapshots:
 
   '@types/babel__traverse@7.14.2':
     dependencies:
-      '@babel/types': 7.29.7
+      '@babel/types': 7.29.8
 
   '@types/babel__traverse@7.28.0':
     dependencies:
@@ -26424,7 +26331,7 @@ snapshots:
 
   '@types/graceful-fs@4.1.9':
     dependencies:
-      '@types/node': 26.1.1
+      '@types/node': 22.20.1
 
   '@types/http-errors@2.0.5': {}
 
@@ -26510,6 +26417,7 @@ snapshots:
   '@types/node@26.1.1':
     dependencies:
       undici-types: 8.3.0
+    optional: true
 
   '@types/normalize-package-data@2.4.4': {}
 
@@ -27089,18 +26997,11 @@ snapshots:
     dependencies:
       valibot: 1.4.2(typescript@5.8.2)
 
-  '@vercel/functions@3.4.3(@aws-sdk/credential-provider-web-identity@3.972.67)':
-    dependencies:
-      '@vercel/oidc': 3.2.0
-    optionalDependencies:
-      '@aws-sdk/credential-provider-web-identity': 3.972.67
-
   '@vercel/functions@3.4.3(@aws-sdk/credential-provider-web-identity@3.972.73)':
     dependencies:
       '@vercel/oidc': 3.2.0
     optionalDependencies:
       '@aws-sdk/credential-provider-web-identity': 3.972.73
-    optional: true
 
   '@vercel/nft@1.10.2(rollup@4.62.3)':
     dependencies:
@@ -27234,14 +27135,14 @@ snapshots:
       '@babel/core': 7.29.7
       '@babel/helper-module-imports': 7.29.7
       '@babel/helper-plugin-utils': 7.29.7
-      '@babel/parser': 7.29.7
+      '@babel/parser': 7.29.8
       '@vue/compiler-sfc': 3.5.22
     transitivePeerDependencies:
       - supports-color
 
   '@vue/compiler-core@3.5.22':
     dependencies:
-      '@babel/parser': 7.29.7
+      '@babel/parser': 7.29.8
       '@vue/shared': 3.5.22
       entities: 4.5.0
       estree-walker: 2.0.2
@@ -27267,7 +27168,7 @@ snapshots:
 
   '@vue/compiler-sfc@3.5.22':
     dependencies:
-      '@babel/parser': 7.29.7
+      '@babel/parser': 7.29.8
       '@vue/compiler-core': 3.5.22
       '@vue/compiler-dom': 3.5.22
       '@vue/compiler-ssr': 3.5.22
@@ -27768,12 +27669,12 @@ snapshots:
 
   ast-kit@2.1.3:
     dependencies:
-      '@babel/parser': 7.29.7
+      '@babel/parser': 7.29.8
       pathe: 2.0.3
 
   ast-kit@2.2.0:
     dependencies:
-      '@babel/parser': 7.29.7
+      '@babel/parser': 7.29.8
       pathe: 2.0.3
 
   ast-metadata-inferer@0.8.1:
@@ -27901,8 +27802,8 @@ snapshots:
 
   babel-plugin-jest-hoist@26.6.2:
     dependencies:
-      '@babel/template': 7.27.2
-      '@babel/types': 7.29.7
+      '@babel/template': 7.29.7
+      '@babel/types': 7.29.8
       '@types/babel__core': 7.1.18
       '@types/babel__traverse': 7.14.2
 
@@ -29039,13 +28940,13 @@ snapshots:
       crc-32: 1.2.2
       readable-stream: 4.7.0
 
-  create-jest@29.7.0(@types/node@18.19.130)(ts-node@10.9.2(@types/node@18.19.130)(typescript@5.8.2)):
+  create-jest@29.7.0(@types/node@18.19.130)(ts-node@10.9.2(@types/node@22.19.1)(typescript@5.8.2)):
     dependencies:
       '@jest/types': 29.6.3
       chalk: 4.1.2
       exit: 0.1.2
       graceful-fs: 4.2.11
-      jest-config: 29.7.0(@types/node@18.19.130)(ts-node@10.9.2(@types/node@18.19.130)(typescript@5.8.2))
+      jest-config: 29.7.0(@types/node@18.19.130)(ts-node@10.9.2(@types/node@22.19.1)(typescript@5.8.2))
       jest-util: 29.7.0
       prompts: 2.4.2
     transitivePeerDependencies:
@@ -29101,13 +29002,13 @@ snapshots:
       - ts-node
     optional: true
 
-  create-jest@29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.9.3)):
+  create-jest@29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.8.2)):
     dependencies:
       '@jest/types': 29.6.3
       chalk: 4.1.2
       exit: 0.1.2
       graceful-fs: 4.2.11
-      jest-config: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.9.3))
+      jest-config: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.8.2))
       jest-util: 29.7.0
       prompts: 2.4.2
     transitivePeerDependencies:
@@ -30167,7 +30068,6 @@ snapshots:
       '@esbuild/win32-arm64': 0.25.12
       '@esbuild/win32-ia32': 0.25.12
       '@esbuild/win32-x64': 0.25.12
-    optional: true
 
   esbuild@0.27.0:
     optionalDependencies:
@@ -32527,7 +32427,7 @@ snapshots:
   istanbul-lib-instrument@6.0.3:
     dependencies:
       '@babel/core': 7.29.7
-      '@babel/parser': 7.29.7
+      '@babel/parser': 7.29.8
       '@istanbuljs/schema': 0.1.6
       istanbul-lib-coverage: 3.2.2
       semver: 7.8.5
@@ -32600,16 +32500,16 @@ snapshots:
       - babel-plugin-macros
       - supports-color
 
-  jest-cli@29.7.0(@types/node@18.19.130)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@18.19.130)(typescript@5.8.2)):
+  jest-cli@29.7.0(@types/node@18.19.130)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.19.1)(typescript@5.8.2)):
     dependencies:
-      '@jest/core': 29.7.0(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@18.19.130)(typescript@5.8.2))
+      '@jest/core': 29.7.0(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.19.1)(typescript@5.8.2))
       '@jest/test-result': 29.7.0
       '@jest/types': 29.6.3
       chalk: 4.1.2
-      create-jest: 29.7.0(@types/node@18.19.130)(ts-node@10.9.2(@types/node@18.19.130)(typescript@5.8.2))
+      create-jest: 29.7.0(@types/node@18.19.130)(ts-node@10.9.2(@types/node@22.19.1)(typescript@5.8.2))
       exit: 0.1.2
       import-local: 3.2.0
-      jest-config: 29.7.0(@types/node@18.19.130)(ts-node@10.9.2(@types/node@18.19.130)(typescript@5.8.2))
+      jest-config: 29.7.0(@types/node@18.19.130)(ts-node@10.9.2(@types/node@22.19.1)(typescript@5.8.2))
       jest-util: 29.7.0
       jest-validate: 29.7.0
       yargs: 17.7.3
@@ -32686,16 +32586,16 @@ snapshots:
       - ts-node
     optional: true
 
-  jest-cli@29.7.0(@types/node@22.20.1)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.9.3)):
+  jest-cli@29.7.0(@types/node@22.20.1)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.8.2)):
     dependencies:
-      '@jest/core': 29.7.0(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.9.3))
+      '@jest/core': 29.7.0(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.8.2))
       '@jest/test-result': 29.7.0
       '@jest/types': 29.6.3
       chalk: 4.1.2
-      create-jest: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.9.3))
+      create-jest: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.8.2))
       exit: 0.1.2
       import-local: 3.2.0
-      jest-config: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.9.3))
+      jest-config: 29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.8.2))
       jest-util: 29.7.0
       jest-validate: 29.7.0
       yargs: 17.7.3
@@ -32791,7 +32691,7 @@ snapshots:
       - supports-color
       - ts-node
 
-  jest-config@29.7.0(@types/node@18.19.130)(ts-node@10.9.2(@types/node@18.19.130)(typescript@5.8.2)):
+  jest-config@29.7.0(@types/node@18.19.130)(ts-node@10.9.2(@types/node@22.19.1)(typescript@5.8.2)):
     dependencies:
       '@babel/core': 7.29.7
       '@jest/test-sequencer': 29.7.0
@@ -32817,7 +32717,7 @@ snapshots:
       strip-json-comments: 3.1.1
     optionalDependencies:
       '@types/node': 18.19.130
-      ts-node: 10.9.2(@types/node@18.19.130)(typescript@5.8.2)
+      ts-node: 10.9.2(@types/node@22.19.1)(typescript@5.8.2)
     transitivePeerDependencies:
       - babel-plugin-macros
       - supports-color
@@ -32917,38 +32817,6 @@ snapshots:
       - supports-color
     optional: true
 
-  jest-config@29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@18.19.130)(typescript@5.8.2)):
-    dependencies:
-      '@babel/core': 7.29.7
-      '@jest/test-sequencer': 29.7.0
-      '@jest/types': 29.6.3
-      babel-jest: 29.7.0(@babel/core@7.29.7)
-      chalk: 4.1.2
-      ci-info: 3.9.0
-      deepmerge: 4.3.1
-      glob: 7.2.3
-      graceful-fs: 4.2.11
-      jest-circus: 29.7.0
-      jest-environment-node: 29.7.0
-      jest-get-type: 29.6.3
-      jest-regex-util: 29.6.3
-      jest-resolve: 29.7.0
-      jest-runner: 29.7.0
-      jest-util: 29.7.0
-      jest-validate: 29.7.0
-      micromatch: 4.0.8
-      parse-json: 5.2.0
-      pretty-format: 29.7.0
-      slash: 3.0.0
-      strip-json-comments: 3.1.1
-    optionalDependencies:
-      '@types/node': 22.20.1
-      ts-node: 10.9.2(@types/node@18.19.130)(typescript@5.8.2)
-    transitivePeerDependencies:
-      - babel-plugin-macros
-      - supports-color
-    optional: true
-
   jest-config@29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@20.19.9)(typescript@5.9.3)):
     dependencies:
       '@babel/core': 7.29.7
@@ -33043,7 +32911,7 @@ snapshots:
       - supports-color
     optional: true
 
-  jest-config@29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.9.3)):
+  jest-config@29.7.0(@types/node@22.20.1)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.8.2)):
     dependencies:
       '@babel/core': 7.29.7
       '@jest/test-sequencer': 29.7.0
@@ -33069,7 +32937,7 @@ snapshots:
       strip-json-comments: 3.1.1
     optionalDependencies:
       '@types/node': 22.20.1
-      ts-node: 10.9.2(@types/node@22.20.1)(typescript@5.9.3)
+      ts-node: 10.9.2(@types/node@22.20.1)(typescript@5.8.2)
     transitivePeerDependencies:
       - babel-plugin-macros
       - supports-color
@@ -33427,7 +33295,7 @@ snapshots:
     dependencies:
       '@jest/types': 29.6.3
       '@types/graceful-fs': 4.1.9
-      '@types/node': 26.1.1
+      '@types/node': 22.20.1
       anymatch: 3.1.3
       fb-watchman: 2.0.2
       graceful-fs: 4.2.11
@@ -33439,7 +33307,7 @@ snapshots:
     optionalDependencies:
       fsevents: 2.3.3
 
-  jest-image-snapshot@6.5.2(jest@29.7.0(@types/node@18.19.130)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@18.19.130)(typescript@5.8.2))):
+  jest-image-snapshot@6.5.2(jest@29.7.0(@types/node@18.19.130)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.19.1)(typescript@5.8.2))):
     dependencies:
       chalk: 4.1.2
       get-stdin: 5.0.1
@@ -33449,7 +33317,7 @@ snapshots:
       pngjs: 3.4.0
       ssim.js: 3.5.0
     optionalDependencies:
-      jest: 29.7.0(@types/node@18.19.130)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@18.19.130)(typescript@5.8.2))
+      jest: 29.7.0(@types/node@18.19.130)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.19.1)(typescript@5.8.2))
 
   jest-leak-detector@29.7.0:
     dependencies:
@@ -33594,10 +33462,10 @@ snapshots:
   jest-snapshot@29.7.0:
     dependencies:
       '@babel/core': 7.29.7
-      '@babel/generator': 7.29.7
+      '@babel/generator': 7.29.8
       '@babel/plugin-syntax-jsx': 7.29.7(@babel/core@7.29.7)
       '@babel/plugin-syntax-typescript': 7.29.7(@babel/core@7.29.7)
-      '@babel/types': 7.29.7
+      '@babel/types': 7.29.8
       '@jest/expect-utils': 29.7.0
       '@jest/transform': 29.7.0
       '@jest/types': 29.6.3
@@ -33646,7 +33514,7 @@ snapshots:
   jest-util@29.7.0:
     dependencies:
       '@jest/types': 29.6.3
-      '@types/node': 26.1.1
+      '@types/node': 22.20.1
       chalk: 4.1.2
       ci-info: 3.9.0
       graceful-fs: 4.2.11
@@ -33727,12 +33595,12 @@ snapshots:
       merge-stream: 2.0.0
       supports-color: 8.1.1
 
-  jest@29.7.0(@types/node@18.19.130)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@18.19.130)(typescript@5.8.2)):
+  jest@29.7.0(@types/node@18.19.130)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.19.1)(typescript@5.8.2)):
     dependencies:
-      '@jest/core': 29.7.0(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@18.19.130)(typescript@5.8.2))
+      '@jest/core': 29.7.0(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.19.1)(typescript@5.8.2))
       '@jest/types': 29.6.3
       import-local: 3.2.0
-      jest-cli: 29.7.0(@types/node@18.19.130)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@18.19.130)(typescript@5.8.2))
+      jest-cli: 29.7.0(@types/node@18.19.130)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.19.1)(typescript@5.8.2))
     optionalDependencies:
       node-notifier: 8.0.2
     transitivePeerDependencies:
@@ -33785,12 +33653,12 @@ snapshots:
       - ts-node
     optional: true
 
-  jest@29.7.0(@types/node@22.20.1)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.9.3)):
+  jest@29.7.0(@types/node@22.20.1)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.8.2)):
     dependencies:
-      '@jest/core': 29.7.0(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.9.3))
+      '@jest/core': 29.7.0(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.8.2))
       '@jest/types': 29.6.3
       import-local: 3.2.0
-      jest-cli: 29.7.0(@types/node@22.20.1)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.9.3))
+      jest-cli: 29.7.0(@types/node@22.20.1)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.20.1)(typescript@5.8.2))
     optionalDependencies:
       node-notifier: 8.0.2
     transitivePeerDependencies:
@@ -34196,13 +34064,13 @@ snapshots:
 
   kuler@2.0.0: {}
 
-  langsmith@0.8.3(@opentelemetry/api@1.9.0)(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.48.0(@aws-sdk/credential-provider-node@3.972.30)(@smithy/signature-v4@5.6.10)(ws@8.21.1)(zod@4.1.13))(ws@8.21.1):
+  langsmith@0.8.3(@opentelemetry/api@1.9.0)(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.48.0(@aws-sdk/credential-provider-node@3.972.30)(@smithy/signature-v4@5.6.12)(ws@8.21.1)(zod@4.1.13))(ws@8.21.1):
     dependencies:
       p-queue: 6.6.2
     optionalDependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/sdk-trace-base': 2.2.0(@opentelemetry/api@1.9.0)
-      openai: 6.48.0(@aws-sdk/credential-provider-node@3.972.30)(@smithy/signature-v4@5.6.10)(ws@8.21.1)(zod@4.1.13)
+      openai: 6.48.0(@aws-sdk/credential-provider-node@3.972.30)(@smithy/signature-v4@5.6.12)(ws@8.21.1)(zod@4.1.13)
       ws: 8.21.1
 
   launch-editor@2.14.1:
@@ -35026,7 +34894,7 @@ snapshots:
   metro-source-map@0.83.1:
     dependencies:
       '@babel/traverse': 7.28.5
-      '@babel/traverse--for-generate-function-map': '@babel/traverse@7.28.4'
+      '@babel/traverse--for-generate-function-map': '@babel/traverse@7.29.8'
       '@babel/types': 7.28.5
       flow-enums-runtime: 0.0.6
       invariant: 2.2.4
@@ -35075,8 +34943,8 @@ snapshots:
   metro-transform-plugins@0.70.4:
     dependencies:
       '@babel/core': 7.29.7
-      '@babel/generator': 7.29.7
-      '@babel/template': 7.27.2
+      '@babel/generator': 7.29.8
+      '@babel/template': 7.29.7
       '@babel/traverse': 7.28.5
       nullthrows: 1.1.1
     transitivePeerDependencies:
@@ -35085,8 +34953,8 @@ snapshots:
   metro-transform-plugins@0.80.12:
     dependencies:
       '@babel/core': 7.29.7
-      '@babel/generator': 7.29.7
-      '@babel/template': 7.27.2
+      '@babel/generator': 7.29.8
+      '@babel/template': 7.29.7
       '@babel/traverse': 7.28.5
       flow-enums-runtime: 0.0.6
       nullthrows: 1.1.1
@@ -35107,9 +34975,9 @@ snapshots:
   metro-transform-worker@0.70.4:
     dependencies:
       '@babel/core': 7.29.7
-      '@babel/generator': 7.29.7
-      '@babel/parser': 7.29.7
-      '@babel/types': 7.29.7
+      '@babel/generator': 7.29.8
+      '@babel/parser': 7.29.8
+      '@babel/types': 7.29.8
       babel-preset-fbjs: 3.4.0(@babel/core@7.29.7)
       metro: 0.70.4
       metro-babel-transformer: 0.70.4
@@ -35128,9 +34996,9 @@ snapshots:
   metro-transform-worker@0.80.12:
     dependencies:
       '@babel/core': 7.29.7
-      '@babel/generator': 7.29.7
-      '@babel/parser': 7.29.7
-      '@babel/types': 7.29.7
+      '@babel/generator': 7.29.8
+      '@babel/parser': 7.29.8
+      '@babel/types': 7.29.8
       flow-enums-runtime: 0.0.6
       metro: 0.80.12
       metro-babel-transformer: 0.80.12
@@ -35169,11 +35037,11 @@ snapshots:
     dependencies:
       '@babel/code-frame': 7.29.7
       '@babel/core': 7.29.7
-      '@babel/generator': 7.29.7
-      '@babel/parser': 7.29.7
-      '@babel/template': 7.27.2
+      '@babel/generator': 7.29.8
+      '@babel/parser': 7.29.8
+      '@babel/template': 7.29.7
       '@babel/traverse': 7.28.5
-      '@babel/types': 7.29.7
+      '@babel/types': 7.29.8
       absolute-path: 0.0.0
       accepts: 1.3.8
       async: 3.2.6
@@ -35490,7 +35358,7 @@ snapshots:
       citty: 0.1.6
       cssnano: 7.1.1(postcss@8.5.23)
       defu: 6.1.7
-      esbuild: 0.25.10
+      esbuild: 0.25.12
       jiti: 1.21.7
       mlly: 1.8.0
       pathe: 2.0.3
@@ -36178,11 +36046,18 @@ snapshots:
       is-docker: 2.2.1
       is-wsl: 2.2.0
 
-  openai@6.48.0(@aws-sdk/credential-provider-node@3.972.30)(@smithy/signature-v4@5.6.10)(ws@8.21.1)(zod@4.1.13):
+  openai@6.48.0(@aws-sdk/credential-provider-node@3.972.30)(@smithy/signature-v4@5.6.12)(ws@8.21.1)(zod@4.1.13):
     optionalDependencies:
       '@aws-sdk/credential-provider-node': 3.972.30
-      '@smithy/signature-v4': 5.6.10
+      '@smithy/signature-v4': 5.6.12
       ws: 8.21.1
+      zod: 4.1.13
+
+  openai@6.48.0(@aws-sdk/credential-provider-node@3.972.30)(@smithy/signature-v4@5.6.12)(ws@8.21.2)(zod@4.1.13):
+    optionalDependencies:
+      '@aws-sdk/credential-provider-node': 3.972.30
+      '@smithy/signature-v4': 5.6.12
+      ws: 8.21.2
       zod: 4.1.13
 
   opener@1.5.2: {}
@@ -38385,18 +38260,6 @@ snapshots:
       '@microsoft/api-extractor': 7.58.9(@types/node@22.16.5)
       typescript: 5.8.2
 
-  rsbuild-plugin-dts@0.10.6(@microsoft/api-extractor@7.58.9(@types/node@22.20.1))(@rsbuild/core@1.4.8)(typescript@5.9.3):
-    dependencies:
-      '@ast-grep/napi': 0.37.0
-      '@rsbuild/core': 1.4.8
-      magic-string: 0.30.21
-      picocolors: 1.1.1
-      tinyglobby: 0.2.17
-      tsconfig-paths: 4.2.0
-    optionalDependencies:
-      '@microsoft/api-extractor': 7.58.9(@types/node@22.20.1)
-      typescript: 5.9.3
-
   rsbuild-plugin-dts@0.10.6(@microsoft/api-extractor@7.58.9(@types/node@26.1.1))(@rsbuild/core@1.4.8)(typescript@5.8.2):
     dependencies:
       '@ast-grep/napi': 0.37.0
@@ -39886,24 +39749,26 @@ snapshots:
       esbuild: 0.25.10
       jest-util: 29.7.0
 
-  ts-node@10.9.2(@types/node@18.19.130)(typescript@5.8.2):
+  ts-jest@29.4.11(@babel/core@7.29.7)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.29.7))(esbuild@0.25.12)(jest-util@29.7.0)(jest@29.7.0(@types/node@26.1.1)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@26.1.1)(typescript@5.8.2)))(typescript@5.8.2):
     dependencies:
-      '@cspotcode/source-map-support': 0.8.1
-      '@tsconfig/node10': 1.0.12
-      '@tsconfig/node12': 1.0.11
-      '@tsconfig/node14': 1.0.3
-      '@tsconfig/node16': 1.0.4
-      '@types/node': 18.19.130
-      acorn: 8.18.0
-      acorn-walk: 8.3.5
-      arg: 4.1.3
-      create-require: 1.1.1
-      diff: 4.0.4
+      bs-logger: 0.2.6
+      fast-json-stable-stringify: 2.1.0
+      handlebars: 4.7.9
+      jest: 29.7.0(@types/node@26.1.1)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@26.1.1)(typescript@5.8.2))
+      json5: 2.2.3
+      lodash.memoize: 4.1.2
       make-error: 1.3.6
+      semver: 7.8.2
+      type-fest: 4.41.0
       typescript: 5.8.2
-      v8-compile-cache-lib: 3.0.1
-      yn: 3.1.1
-    optional: true
+      yargs-parser: 21.1.1
+    optionalDependencies:
+      '@babel/core': 7.29.7
+      '@jest/transform': 29.7.0
+      '@jest/types': 29.6.3
+      babel-jest: 29.7.0(@babel/core@7.29.7)
+      esbuild: 0.25.12
+      jest-util: 29.7.0
 
   ts-node@10.9.2(@types/node@20.19.9)(typescript@5.9.3):
     dependencies:
@@ -39961,7 +39826,7 @@ snapshots:
       v8-compile-cache-lib: 3.0.1
       yn: 3.1.1
 
-  ts-node@10.9.2(@types/node@22.20.1)(typescript@5.9.3):
+  ts-node@10.9.2(@types/node@22.20.1)(typescript@5.8.2):
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       '@tsconfig/node10': 1.0.12
@@ -39975,7 +39840,7 @@ snapshots:
       create-require: 1.1.1
       diff: 4.0.4
       make-error: 1.3.6
-      typescript: 5.9.3
+      typescript: 5.8.2
       v8-compile-cache-lib: 3.0.1
       yn: 3.1.1
     optional: true
@@ -40234,7 +40099,7 @@ snapshots:
       citty: 0.1.6
       consola: 3.4.2
       defu: 6.1.7
-      esbuild: 0.25.10
+      esbuild: 0.25.12
       fix-dts-default-cjs-exports: 1.0.1
       hookable: 5.5.3
       jiti: 2.7.0
@@ -40908,7 +40773,7 @@ snapshots:
 
   vite@6.4.2(@types/node@18.19.130)(jiti@2.6.1)(lightningcss@1.27.0)(terser@5.48.0)(yaml@2.8.0):
     dependencies:
-      esbuild: 0.25.10
+      esbuild: 0.25.12
       fdir: 6.5.0(picomatch@4.0.4)
       picomatch: 4.0.4
       postcss: 8.5.23
@@ -40924,7 +40789,7 @@ snapshots:
 
   vite@6.4.2(@types/node@20.19.9)(jiti@2.6.1)(lightningcss@1.27.0)(terser@5.48.0)(yaml@2.8.0):
     dependencies:
-      esbuild: 0.25.10
+      esbuild: 0.25.12
       fdir: 6.5.0(picomatch@4.0.4)
       picomatch: 4.0.4
       postcss: 8.5.23
@@ -40940,7 +40805,7 @@ snapshots:
 
   vite@6.4.2(@types/node@24.10.13)(jiti@2.6.1)(lightningcss@1.27.0)(terser@5.48.0)(yaml@2.8.0):
     dependencies:
-      esbuild: 0.25.10
+      esbuild: 0.25.12
       fdir: 6.5.0(picomatch@4.0.4)
       picomatch: 4.0.4
       postcss: 8.5.23

@@ -53,6 +53,33 @@ describe('Publisher', () => {
         expect(secondCalls).toEqual([])
     })
 
+    it('continues after a listener throws', () => {
+        const errors: unknown[] = []
+        const calls: string[] = []
+        const publisher = new Publisher<string>((error) => errors.push(error))
+        const listenerError = new Error('listener failed')
+
+        publisher.listener(() => {
+            throw listenerError
+        })
+        publisher.listener((payload) => calls.push(payload))
+        publisher.publish('payload')
+
+        expect(errors).toEqual([listenerError])
+        expect(calls).toEqual(['payload'])
+    })
+
+    it('does not retain listeners registered after disposal', () => {
+        const publisher = new Publisher<string>()
+        const calls: string[] = []
+
+        publisher.dispose()
+        publisher.listener((payload) => calls.push(payload))
+        publisher.publish('payload')
+
+        expect(calls).toEqual([])
+    })
+
     it('does not call listeners registered during the current publish', () => {
         const publisher = new Publisher<string>()
         const calls: string[] = []
