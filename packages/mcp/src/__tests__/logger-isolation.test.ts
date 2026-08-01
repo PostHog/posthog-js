@@ -96,7 +96,7 @@ describe('per-server logger isolation', () => {
     }
   })
 
-  it('does not route a loggerless server through another server or the legacy logger', async () => {
+  it('routes a loggerless server through the legacy logger without leaking another server logger', async () => {
     const [setupA, setupWithoutLogger] = await Promise.all([setupTestServerAndClient(), setupTestServerAndClient()])
     const logsA: string[] = []
     const legacyLogs: string[] = []
@@ -117,7 +117,9 @@ describe('per-server logger isolation', () => {
       expect(logsA.some((message) => message.includes('sink-a'))).toBe(true)
       expect(logsA.join('\n')).not.toContain('sink-without-logger')
       expect(logsA.join('\n')).not.toContain('user-a')
-      expect(legacyLogs).toEqual([])
+      expect(legacyLogs.some((message) => message.includes('sink-without-logger'))).toBe(true)
+      expect(legacyLogs.join('\n')).not.toContain('sink-a')
+      expect(legacyLogs.join('\n')).not.toContain('user-without-logger')
     } finally {
       await Promise.all([setupA.cleanup(), setupWithoutLogger.cleanup()])
     }
