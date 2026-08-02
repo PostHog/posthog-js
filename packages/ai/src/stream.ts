@@ -140,6 +140,11 @@ export function monitoredStreamTee<Item, StreamType extends SDKStream<Item>>(
       return cancellationPromise
     }
 
+    removeAbortListener()
+    if (!controller.signal.aborted) {
+      controller.abort()
+    }
+
     cancellationPromise = (async () => {
       try {
         const defaultResult: IteratorResult<Item> = { done: true, value }

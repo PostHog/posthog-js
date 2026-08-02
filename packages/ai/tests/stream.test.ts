@@ -93,6 +93,57 @@ describe('monitorStream', () => {
     expect(controller.signal.aborted).toBe(true)
   })
 
+  test('return aborts the source while next is in flight', async () => {
+    const controller = new AbortController()
+    let sourceFinalized = false
+    let markNextStarted: () => void = () => undefined
+    const nextStarted = new Promise<void>((resolve) => {
+      markNextStarted = resolve
+    })
+    const sourceIterator = (async function* () {
+      try {
+        yield 1
+        await new Promise<void>((resolve) => {
+          markNextStarted()
+          if (controller.signal.aborted) {
+            resolve()
+          } else {
+            controller.signal.addEventListener('abort', () => resolve(), { once: true })
+          }
+        })
+      } finally {
+        sourceFinalized = true
+      }
+    })()
+    const sourceReturn = jest.spyOn(sourceIterator, 'return')
+    const source = new OpenAIStream<number>(() => sourceIterator, controller)
+    const monitored: number[] = []
+
+    const [monitoringStream, wrapped] = monitoredStreamTee<number, OpenAIStream<number>>(
+      source,
+      (iterator, streamController) => new OpenAIStream(iterator, streamController)
+    )
+    const monitoringPromise = (async () => {
+      for await (const item of monitoringStream) {
+        monitored.push(item)
+      }
+    })()
+    const iterator = wrapped[Symbol.asyncIterator]()
+
+    await expect(iterator.next()).resolves.toEqual({ done: false, value: 1 })
+    const pendingNext = iterator.next()
+    await nextStarted
+    const returnPromise = iterator.return?.()
+
+    expect(controller.signal.aborted).toBe(true)
+    await expect(pendingNext).resolves.toEqual({ done: true, value: undefined })
+    await expect(returnPromise).resolves.toEqual({ done: true, value: undefined })
+    await monitoringPromise
+    expect(monitored).toEqual([1])
+    expect(sourceReturn).toHaveBeenCalledTimes(1)
+    expect(sourceFinalized).toBe(true)
+  })
+
   test('resolves 3+ concurrent next calls in FIFO order without reading ahead of the monitor', async () => {
     const sourceIterator = (async function* () {
       yield 1
