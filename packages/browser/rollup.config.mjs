@@ -385,8 +385,8 @@ const entrypointTargets = entrypoints.map((file) => {
                 file: `dist/${fileName}.js`,
                 sourcemap: true,
                 // Mark every source in our bundles as third-party so devtools skip our frames.
-                // Without this, wrappers we install on globals — most visibly the console capture
-                // in entrypoints/logs.ts and rrweb's console plugin — become the reported location
+                // Without this, wrappers we install on globals (most visibly the console capture
+                // in entrypoints/logs.ts and rrweb's console plugin) become the reported location
                 // of the caller's own `console.*` calls (e.g. everything blamed on `logs.ts`).
                 // Rollup's default only ignore-lists paths containing node_modules, which misses
                 // both our `src/` and workspace packages (they resolve through symlinks).

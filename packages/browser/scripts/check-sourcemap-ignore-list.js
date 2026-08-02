@@ -9,7 +9,7 @@
  * posthog-js unless our sources are marked as third party via the `x_google_ignoreList`
  * source map extension. The same field keeps our frames out of stack traces users see.
  *
- * `sourcemapIgnoreList` in rollup.config.mjs is what populates it — this script fails the
+ * `sourcemapIgnoreList` in rollup.config.mjs is what populates it. This script fails the
  * build if a bundle ever ships without it.
  */
 
@@ -25,7 +25,7 @@ const NOT_OURS = /^image-bitmap-data-url-worker-/
 const mapFiles = fs.readdirSync(DIST).filter((file) => file.endsWith('.js.map') && !NOT_OURS.test(file))
 
 if (mapFiles.length === 0) {
-    console.error('FAIL: no source maps found in dist/ — is `sourcemap: true` still set in rollup.config.mjs?')
+    console.error('FAIL: no source maps found in dist/. Is `sourcemap: true` still set in rollup.config.mjs?')
     process.exit(1)
 }
 
@@ -33,13 +33,9 @@ const failures = []
 
 for (const file of mapFiles) {
     const map = JSON.parse(fs.readFileSync(path.join(DIST, file), 'utf8'))
-    const sourceCount = map.sources?.length || 0
-    if (sourceCount === 0) {
-        continue
-    }
-    const ignoreList = map.ignoreList || map.x_google_ignoreList || []
-    if (ignoreList.length !== sourceCount) {
-        const missing = map.sources.filter((_, index) => !ignoreList.includes(index))
+    const ignoreList = new Set(map.ignoreList || map.x_google_ignoreList || [])
+    const missing = (map.sources || []).filter((_, index) => !ignoreList.has(index))
+    if (missing.length > 0) {
         failures.push({ file, missing })
     }
 }
@@ -47,7 +43,7 @@ for (const file of mapFiles) {
 if (failures.length > 0) {
     console.error(`FAIL: ${failures.length} bundle source map(s) don't ignore-list every source`)
     console.error(
-        "Devtools will blame our frames — e.g. the console wrapper in entrypoints/logs.ts — for the caller's console messages\n"
+        "Devtools will blame our frames (e.g. the console wrapper in entrypoints/logs.ts) for the caller's console messages\n"
     )
     failures.forEach(({ file, missing }) =>
         console.error(
