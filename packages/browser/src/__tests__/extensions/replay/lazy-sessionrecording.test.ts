@@ -2122,6 +2122,7 @@ describe('Lazy SessionRecording', () => {
             // someUnregisteredProp should not be present
             expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith({
                 emit: expect.anything(),
+                errorHandler: expect.anything(),
                 maskAllInputs: false,
                 blockClass: 'ph-no-capture',
                 blockSelector: undefined,
