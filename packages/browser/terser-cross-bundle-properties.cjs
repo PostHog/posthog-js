@@ -28,6 +28,7 @@ const knownNonAbiOverlaps = [
     '_loadRemoteConfigJs',
     '_loadScript',
     '_log',
+    '_logger',
     '_noTruncate',
     '_onRemoteConfig',
     '_persistence',

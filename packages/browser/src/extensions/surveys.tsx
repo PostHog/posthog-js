@@ -404,7 +404,7 @@ export class SurveyManager {
         const { survey: translatedSurvey, language: surveyLanguage } = this._translateSurveyForRendering(survey)
         let isSurveyCompleted = false
         if (this._posthog.config?.surveys?.prefillFromUrl) {
-            isSurveyCompleted = this._handleUrlPrefill(translatedSurvey, surveyLanguage)
+            isSurveyCompleted = this._handleUrlPrefill(translatedSurvey, surveyLanguage, properties)
         }
 
         render(
@@ -427,7 +427,7 @@ export class SurveyManager {
         return applySurveyTranslationForUser(survey, this._posthog)
     }
 
-    private _handleUrlPrefill(survey: Survey, surveyLanguage?: string | null): boolean {
+    private _handleUrlPrefill(survey: Survey, surveyLanguage?: string | null, properties?: Properties): boolean {
         // Only handle prefill once per survey session to avoid overwriting in-progress responses
         if (this._prefillHandledSurveys.has(survey.id)) {
             return false
@@ -461,6 +461,7 @@ export class SurveyManager {
                 surveySubmissionId: submissionId,
                 posthog: this._posthog,
                 isSurveyCompleted,
+                properties,
                 surveyLanguage,
             })
         }
@@ -534,7 +535,7 @@ export class SurveyManager {
 
             // calculate which question to start at based on prefilled questions
             const prefilledIndices = Object.keys(prefillParams).map((k) => parseInt(k, 10))
-            const { startQuestionIndex, skippedResponses } = calculatePrefillStartIndex(
+            const { startQuestionIndex, skippedResponses, skippedIndices } = calculatePrefillStartIndex(
                 survey,
                 prefilledIndices,
                 responses
@@ -545,6 +546,8 @@ export class SurveyManager {
                 surveySubmissionId: submissionId,
                 responses: responses,
                 lastQuestionIndex: startQuestionIndex,
+                // Mark auto-advanced questions visited so a manual submit doesn't prune their answers.
+                visitedIndices: skippedIndices,
                 surveyLanguage,
             })
 

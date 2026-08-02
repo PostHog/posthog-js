@@ -1,5 +1,19 @@
 # @posthog/core
 
+## 1.46.1
+
+### Patch Changes
+
+- [#4332](https://github.com/PostHog/posthog-js/pull/4332) [`b9a241e`](https://github.com/PostHog/posthog-js/commit/b9a241ec862ba5b753ef34d94c856257bdff2a2f) Thanks [@ioannisj](https://github.com/ioannisj)! - Fix `identify()` leaving a user anonymous when the supplied ID already matches the persisted distinct ID (for example after a non-identified bootstrap seeded the same ID). The user is now marked identified and a person-processed `$set` event is captured. Ports the same fix from posthog-js (browser) to the shared core used by React Native, Node, and posthog-js-lite.
+  (2026-07-31)
+
+## 1.46.0
+
+### Minor Changes
+
+- [#4308](https://github.com/PostHog/posthog-js/pull/4308) [`6e7f3ae`](https://github.com/PostHog/posthog-js/commit/6e7f3aeaf65d66d015508aec0618c0d7fe505db5) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Emit the release id that posthog-cli injects into your bundle as `$release_id` on `$exception` events, so PostHog can attach exceptions to a release without joining through symbol sets. Adds `getInjectedReleaseId()` to `@posthog/core`. The property is only attached when an injected release id can be read.
+  (2026-07-30)
+
 ## 1.45.3
 
 ### Patch Changes

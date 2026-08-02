@@ -1,5 +1,56 @@
 # posthog-js
 
+## 1.409.5
+
+### Patch Changes
+
+- [#4354](https://github.com/PostHog/posthog-js/pull/4354) [`6c500f1`](https://github.com/PostHog/posthog-js/commit/6c500f1c3165834f71e524eb500fc64eb792ec0c) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Fail open when an error tracking suppression rule cannot be evaluated, so an unknown operator or a key outside `$exception_types` / `$exception_values` no longer drops the exception.
+  (2026-07-31)
+
+## 1.409.4
+
+### Patch Changes
+
+- [#4338](https://github.com/PostHog/posthog-js/pull/4338) [`c458807`](https://github.com/PostHog/posthog-js/commit/c458807d30fae5b3adcf6be95f03b16629b0161f) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix canvases staying blank after seeking in session replay by re-sending one frame per canvas after each full snapshot
+  (2026-07-31)
+
+## 1.409.3
+
+### Patch Changes
+
+- [#4312](https://github.com/PostHog/posthog-js/pull/4312) [`4729871`](https://github.com/PostHog/posthog-js/commit/4729871f833c1f83c28e13994a97889802999708) Thanks [@darkopia](https://github.com/darkopia)! - Fix hosted (external) surveys with URL prefill: the auto-submitted response now includes caller-provided event properties (extra URL query params), and a later manual submit no longer clears the prefilled answer from the partial-response merge.
+  (2026-07-31)
+
+## 1.409.2
+
+### Patch Changes
+
+- [#4340](https://github.com/PostHog/posthog-js/pull/4340) [`4b8867c`](https://github.com/PostHog/posthog-js/commit/4b8867c1e3f752b29ae17339870bd7175d5117c5) Thanks [@marandaneto](https://github.com/marandaneto)! - Avoid redacting session replay network bodies when timestamps or UUID fragments resemble social security or credit card numbers.
+  (2026-07-31)
+- Updated dependencies [[`4b8867c`](https://github.com/PostHog/posthog-js/commit/4b8867c1e3f752b29ae17339870bd7175d5117c5)]:
+    - @posthog/browser-common@0.3.1
+
+## 1.409.1
+
+### Patch Changes
+
+- [#4301](https://github.com/PostHog/posthog-js/pull/4301) [`4b36c44`](https://github.com/PostHog/posthog-js/commit/4b36c445efec6f26849e358a43ee84ff2b8304aa) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add the browser-v1 client adapter for shared extensions, including analytics, request, persistence, replayed remote-config outcomes, and synchronous best-effort cleanup.
+  (2026-07-31)
+- Updated dependencies [[`6b48a59`](https://github.com/PostHog/posthog-js/commit/6b48a59ed096a52f720a608ce59cc81c54c2ef4d)]:
+    - @posthog/browser-common@0.3.0
+
+## 1.409.0
+
+### Minor Changes
+
+- [#4308](https://github.com/PostHog/posthog-js/pull/4308) [`6e7f3ae`](https://github.com/PostHog/posthog-js/commit/6e7f3aeaf65d66d015508aec0618c0d7fe505db5) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Emit the release id that posthog-cli injects into your bundle as `$release_id` on `$exception` events, so PostHog can attach exceptions to a release without joining through symbol sets. Adds `getInjectedReleaseId()` to `@posthog/core`. The property is only attached when an injected release id can be read.
+  (2026-07-30)
+
+### Patch Changes
+
+- Updated dependencies [[`6e7f3ae`](https://github.com/PostHog/posthog-js/commit/6e7f3aeaf65d66d015508aec0618c0d7fe505db5)]:
+    - @posthog/core@1.46.0
+
 ## 1.408.3
 
 ### Patch Changes
