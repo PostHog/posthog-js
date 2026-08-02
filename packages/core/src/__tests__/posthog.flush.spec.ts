@@ -318,6 +318,59 @@ describe('PostHog Core', () => {
       expect(batches[1]).toMatchObject([{ event: 'second' }, { event: 'third' }])
     })
 
+    it('preserves replacement events captured into a full queue during an in-flight flush', async () => {
+      jest.useRealTimers()
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+        flushAt: 3,
+        maxQueueSize: 3,
+        flushInterval: 0,
+        fetchRetryCount: 0,
+        preloadFeatureFlags: false,
+      })
+
+      const batches: any[][] = []
+      let resolveFirstFetch!: () => void
+      mocks.fetch.mockImplementation(async (_, options) => {
+        batches.push(JSON.parse((options.body || '') as string).batch)
+        if (batches.length === 1) {
+          await new Promise<void>((resolve) => (resolveFirstFetch = resolve))
+        }
+        return {
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve({ status: 'ok' }),
+        }
+      })
+
+      posthog.capture('initial-1')
+      posthog.capture('initial-2')
+      posthog.capture('initial-3')
+      const inFlight = posthog.flush()
+      await waitForPromises() // first flush has snapshotted the full queue and is mid-fetch
+
+      posthog.capture('replacement-1')
+      posthog.capture('replacement-2')
+      posthog.capture('replacement-3')
+
+      resolveFirstFetch()
+      await inFlight
+
+      const queuedEvents = (posthog.getPersistedProperty<any[]>(PostHogPersistedProperty.Queue) || []).map(
+        (item) => item.message.event
+      )
+      expect(queuedEvents).toEqual(['replacement-1', 'replacement-2', 'replacement-3'])
+
+      await posthog.flush()
+
+      expect(batches).toHaveLength(2)
+      expect(batches[0]).toMatchObject([{ event: 'initial-1' }, { event: 'initial-2' }, { event: 'initial-3' }])
+      expect(batches[1]).toMatchObject([
+        { event: 'replacement-1' },
+        { event: 'replacement-2' },
+        { event: 'replacement-3' },
+      ])
+    })
+
     it('does not chain one flush per capture while flushes fail', async () => {
       jest.useRealTimers()
       ;[posthog, mocks] = createTestClient('TEST_API_KEY', {

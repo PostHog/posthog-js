@@ -182,6 +182,77 @@ describe('PostHog Core', () => {
       expect(mocks.storage.setItem).not.toHaveBeenCalledWith('distinct_id', 'id-1')
     })
 
+    describe('when the persisted id already matches the identify id while still anonymous', () => {
+      // e.g. a non-identified bootstrap seeded the id as the anonymous id
+      beforeEach(() => {
+        ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+          flushAt: 1,
+          bootstrap: { distinctId: 'user-123' },
+        })
+      })
+
+      const batchEvents = (): any[] =>
+        mocks.fetch.mock.calls.filter((c) => (c[0] as string).includes('/batch/')).flatMap((c) => parseBody(c).batch)
+      const flagsCalls = (): any[] => mocks.fetch.mock.calls.filter((c) => (c[0] as string).includes('/flags/'))
+
+      it('marks the user identified and captures one person-processed $set, not $identify', async () => {
+        posthog.identify('user-123')
+        await waitForPromises()
+
+        const events = batchEvents()
+        expect(events).toHaveLength(1)
+        expect(events[0].event).toEqual('$set')
+        expect(events[0].properties.$process_person_profile).toEqual(true)
+        expect(events[0].properties.$is_identified).toEqual(true)
+        expect(events.some((e) => e.event === '$identify')).toBe(false)
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.PersonMode)).toEqual('identified')
+      })
+
+      it('does not reload feature flags on the transition when no properties are supplied', async () => {
+        posthog.identify('user-123')
+        await waitForPromises()
+
+        expect(flagsCalls()).toHaveLength(0)
+      })
+
+      it('reloads feature flags on the transition when properties are supplied', async () => {
+        posthog.identify('user-123', { email: 'john@example.com' })
+        await waitForPromises()
+
+        expect(flagsCalls()).toHaveLength(1)
+      })
+
+      it('does not emit a second $set on a repeated matching-id identify', async () => {
+        posthog.identify('user-123', { email: 'john@example.com' })
+        posthog.identify('user-123', { email: 'john@example.com' })
+        await waitForPromises()
+
+        expect(batchEvents().filter((e) => e.event === '$set')).toHaveLength(1)
+      })
+
+      it('fires the transition $set even when the same properties were already cached', async () => {
+        // Populate the person-properties cache first, then identify with identical props: the
+        // identity-state transition must still emit its $set (dedup cannot suppress it).
+        posthog.setPersonProperties({ email: 'john@example.com' })
+        await waitForPromises()
+        expect(batchEvents().filter((e) => e.event === '$set')).toHaveLength(1)
+
+        posthog.identify('user-123', { email: 'john@example.com' })
+        await waitForPromises()
+
+        expect(batchEvents().filter((e) => e.event === '$set')).toHaveLength(2)
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.PersonMode)).toEqual('identified')
+      })
+
+      it('does not upgrade an anonymous user to identified on an argument-less identify()', async () => {
+        posthog.identify()
+        await waitForPromises()
+
+        expect(batchEvents()).toHaveLength(0)
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.PersonMode)).not.toEqual('identified')
+      })
+    })
+
     it('should send $anon_distinct_id when identify is called during in-flight preload flags', async () => {
       // This test verifies the fix for the race condition where identify() calls
       // triggered during preloadFeatureFlags would drop the $anon_distinct_id.

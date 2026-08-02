@@ -152,13 +152,16 @@ export function calculatePrefillStartIndex(
     survey: Survey,
     prefilledIndices: number[],
     responses: Record<string, any>
-): { startQuestionIndex: number; skippedResponses: Record<string, any> } {
+): { startQuestionIndex: number; skippedResponses: Record<string, any>; skippedIndices: number[] } {
     let currentIndex = 0
     const skippedResponses: Record<string, any> = {}
+    // Auto-advanced questions, persisted as visitedIndices so a manual submit keeps their answers.
+    const skippedIndices: number[] = []
 
     const MAX_ITERATIONS = survey.questions.length + 1
-    const iterations = 0
+    let iterations = 0
     while (currentIndex < survey.questions.length && iterations < MAX_ITERATIONS) {
+        iterations++
         // Stop if current question is not prefilled
         if (!prefilledIndices.includes(currentIndex)) {
             break
@@ -179,6 +182,7 @@ export function calculatePrefillStartIndex(
                 skippedResponses[responseKey] = responses[responseKey]
             }
         }
+        skippedIndices.push(currentIndex)
 
         // Use branching logic to determine the next question
         const response = question.id ? responses[getSurveyResponseKey(question.id)] : null
@@ -186,12 +190,12 @@ export function calculatePrefillStartIndex(
 
         if (nextStep === SurveyQuestionBranchingType.End) {
             // Survey is complete - return questions.length to indicate completion
-            return { startQuestionIndex: survey.questions.length, skippedResponses }
+            return { startQuestionIndex: survey.questions.length, skippedResponses, skippedIndices }
         }
 
         // Move to the next question (respecting branching)
         currentIndex = nextStep
     }
 
-    return { startQuestionIndex: currentIndex, skippedResponses }
+    return { startQuestionIndex: currentIndex, skippedResponses, skippedIndices }
 }

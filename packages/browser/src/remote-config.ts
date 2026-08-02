@@ -74,6 +74,7 @@ export class RemoteConfigLoader {
             })
         } catch (error) {
             logger.error('Error loading remote config', error)
+            this._onRemoteConfig()
         }
     }
 
@@ -130,11 +131,17 @@ export class RemoteConfigLoader {
         // Even when config fails, we notify extensions so they initialize with their
         // defaults — as an explicit failure, so settings that must not fail open
         // (e.g. autocapture's opt-out) can keep their last known value.
-        this._instance._onRemoteConfig(config ? { ok: true, config } : { ok: false })
+        try {
+            this._instance._onRemoteConfig(config ? { ok: true, config } : { ok: false })
+        } catch (error) {
+            logger.error('Error applying remote config', error)
+        }
 
-        if (config?.hasFeatureFlags !== false) {
-            if (!this._instance.config.advanced_disable_feature_flags_on_first_load) {
+        if (config?.hasFeatureFlags !== false && !this._instance.config.advanced_disable_feature_flags_on_first_load) {
+            try {
                 this._instance.featureFlags?.ensureFlagsLoaded()
+            } catch (error) {
+                logger.error('Error loading feature flags', error)
             }
         }
     }

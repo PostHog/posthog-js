@@ -24,6 +24,7 @@ import {
     doesSurveyActivateByAction,
     doesSurveyActivateByEvent,
     IN_APP_SURVEY_TYPES,
+    isSurveyIterationBased,
     isSurveyRunning,
     SURVEY_LOGGER as logger,
 } from '../utils/survey-utils'
@@ -403,7 +404,7 @@ export class SurveyManager {
         const { survey: translatedSurvey, language: surveyLanguage } = this._translateSurveyForRendering(survey)
         let isSurveyCompleted = false
         if (this._posthog.config?.surveys?.prefillFromUrl) {
-            isSurveyCompleted = this._handleUrlPrefill(translatedSurvey, surveyLanguage)
+            isSurveyCompleted = this._handleUrlPrefill(translatedSurvey, surveyLanguage, properties)
         }
 
         render(
@@ -426,7 +427,7 @@ export class SurveyManager {
         return applySurveyTranslationForUser(survey, this._posthog)
     }
 
-    private _handleUrlPrefill(survey: Survey, surveyLanguage?: string | null): boolean {
+    private _handleUrlPrefill(survey: Survey, surveyLanguage?: string | null, properties?: Properties): boolean {
         // Only handle prefill once per survey session to avoid overwriting in-progress responses
         if (this._prefillHandledSurveys.has(survey.id)) {
             return false
@@ -460,6 +461,7 @@ export class SurveyManager {
                 surveySubmissionId: submissionId,
                 posthog: this._posthog,
                 isSurveyCompleted,
+                properties,
                 surveyLanguage,
             })
         }
@@ -533,7 +535,7 @@ export class SurveyManager {
 
             // calculate which question to start at based on prefilled questions
             const prefilledIndices = Object.keys(prefillParams).map((k) => parseInt(k, 10))
-            const { startQuestionIndex, skippedResponses } = calculatePrefillStartIndex(
+            const { startQuestionIndex, skippedResponses, skippedIndices } = calculatePrefillStartIndex(
                 survey,
                 prefilledIndices,
                 responses
@@ -544,6 +546,8 @@ export class SurveyManager {
                 surveySubmissionId: submissionId,
                 responses: responses,
                 lastQuestionIndex: startQuestionIndex,
+                // Mark auto-advanced questions visited so a manual submit doesn't prune their answers.
+                visitedIndices: skippedIndices,
                 surveyLanguage,
             })
 
@@ -593,7 +597,23 @@ export class SurveyManager {
         // SDK serves the previous value from cache until the next /flags load. Trusting that stale
         // value on a revisit re-displays the survey and records a duplicate response, so wait until
         // flags have actually (re)loaded this session before relying on the internal targeting flag.
-        if (survey.internal_targeting_flag_key && !this._posthog.featureFlags?.hasLoadedFlags) {
+        //
+        // Only iteration-based surveys need that wait: their stored seen state is keyed by iteration
+        // and rolls over, leaving the flag as the sole duplicate gate. Any other survey keeps one
+        // stable seen key that already blocks re-display, and waiting there costs real eligibility,
+        // permanently so for a caller that asks once and never asks again.
+        //
+        // The gap this accepts: a response recorded on another device, or a cleared localStorage,
+        // leaves no seen key here while this browser can still hold a cached enabled flag, so the
+        // survey can display once more before the next /flags load corrects it. A zero-delay popover
+        // is already rendered by then and no later evaluation withdraws it. Waiting on flags closes
+        // that gap but drops every impression in the pre-flags window, which is the larger loss, so
+        // do not widen this condition back out without replacing what it costs.
+        if (
+            survey.internal_targeting_flag_key &&
+            isSurveyIterationBased(survey) &&
+            !this._posthog.featureFlags?.hasLoadedFlags
+        ) {
             return {
                 satisfied: false,
                 reason: 'Feature flags have not loaded yet; deferring internal targeting flag check',

@@ -1454,7 +1454,25 @@ export abstract class PostHogCoreStateless {
 
       const persistQueueChange = async (): Promise<void> => {
         const refreshedQueue = this.getPersistedProperty<PostHogQueueItem[]>(queueKey) || []
-        const newQueue = refreshedQueue.slice(batchItems.length)
+        // The live queue may have overflowed while this batch was in flight. Remove only
+        // snapshotted items: UUID survives persistence, while reference identity supports
+        // legacy queue items without a UUID.
+        const remainingBatchItems = [...batchItems]
+        const newQueue = refreshedQueue.filter((item) => {
+          const itemUuid = item.message?.uuid
+          const batchItemIndex = remainingBatchItems.findIndex(
+            (batchItem) =>
+              batchItem === item ||
+              (typeof itemUuid === 'string' && itemUuid.length > 0 && batchItem.message?.uuid === itemUuid)
+          )
+
+          if (batchItemIndex === -1) {
+            return true
+          }
+
+          remainingBatchItems.splice(batchItemIndex, 1)
+          return false
+        })
         this.setPersistedProperty<PostHogQueueItem[]>(queueKey, newQueue)
         queue = newQueue
         this._dequeuedMessagesCount += batchItems.length

@@ -1,7 +1,7 @@
 import { PostHog } from 'posthog-node'
 import { PostHogAzureOpenAI } from '../src/openai/azure'
 import openaiModule from 'openai'
-import { collectUnhandledRejections } from './test-utils'
+import { collectUnhandledRejections, flushPromises } from './test-utils'
 
 let mockAzureEmbeddingResponse: any = {}
 
@@ -926,5 +926,160 @@ describe('PostHogAzureOpenAI - cache token reporting convention', () => {
     expect(properties['$ai_cache_read_input_tokens']).toBe(27929)
     expect(properties['$ai_cache_reporting_exclusive']).toBe(expectedFlag)
     ;(ChatMock.Completions as any).prototype.create = originalCreate
+  })
+})
+
+describe('PostHogAzureOpenAI - response service tier', () => {
+  let mockPostHogClient: PostHog
+  let client: PostHogAzureOpenAI
+
+  const createMockAsyncIterator = <T>(chunks: T[]): { [Symbol.asyncIterator](): AsyncIterator<T> } => ({
+    async *[Symbol.asyncIterator]() {
+      for (const chunk of chunks) {
+        yield chunk
+      }
+    },
+  })
+
+  const mockResponsesResult = (serviceTier: 'default' | 'flex') => ({
+    id: 'resp-service-tier',
+    model: 'gpt-4',
+    object: 'response',
+    created_at: 1234567890,
+    status: 'completed',
+    output: [],
+    usage: null,
+    service_tier: serviceTier,
+  })
+
+  const capturedServiceTier = (): string => {
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    return captureArgs[0].properties['$ai_model_parameters'].service_tier
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockPostHogClient = new (PostHog as any)()
+    client = new PostHogAzureOpenAI({
+      apiKey: 'mock-azure-key',
+      posthog: mockPostHogClient as any,
+    })
+  })
+
+  test('prefers the response tier for non-streaming chat completions', async () => {
+    const ChatMock: any = openaiModule.Chat
+    ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue({
+      id: 'chatcmpl-service-tier',
+      model: 'gpt-4',
+      object: 'chat.completion',
+      created: 1234567890,
+      choices: [],
+      service_tier: 'flex',
+    })
+
+    await client.chat.completions.create({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: 'Hello' }],
+      service_tier: 'auto',
+      posthogDistinctId: 'test-id',
+    })
+
+    expect(capturedServiceTier()).toBe('flex')
+  })
+
+  test('prefers the final response tier for streaming chat completions', async () => {
+    const chunks = [
+      {
+        id: 'chatcmpl-service-tier',
+        model: 'gpt-4',
+        object: 'chat.completion.chunk',
+        created: 1234567890,
+        choices: [],
+        service_tier: 'default',
+      },
+      {
+        id: 'chatcmpl-service-tier',
+        model: 'gpt-4',
+        object: 'chat.completion.chunk',
+        created: 1234567890,
+        choices: [],
+        service_tier: 'flex',
+      },
+    ]
+    const ChatMock: any = openaiModule.Chat
+    ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue({
+      tee: jest.fn().mockReturnValue([createMockAsyncIterator(chunks), createMockAsyncIterator(chunks)]),
+    })
+
+    const stream = await client.chat.completions.create({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: 'Hello' }],
+      service_tier: 'auto',
+      stream: true,
+      posthogDistinctId: 'test-id',
+    })
+    for await (const _chunk of stream) {
+      // consume the stream so the analytics copy reaches the final chunk
+    }
+    await flushPromises()
+
+    expect(capturedServiceTier()).toBe('flex')
+  })
+
+  test.each([
+    {
+      api: 'responses.create',
+      method: 'create',
+      invoke: () =>
+        client.responses.create({
+          model: 'gpt-4',
+          input: 'Hello',
+          service_tier: 'auto',
+          posthogDistinctId: 'test-id',
+        }),
+    },
+    {
+      api: 'responses.parse',
+      method: 'parse',
+      invoke: () =>
+        client.responses.parse({
+          model: 'gpt-4',
+          input: 'Hello',
+          service_tier: 'auto',
+          posthogDistinctId: 'test-id',
+        } as any),
+    },
+  ])('prefers the response tier for non-streaming $api', async ({ method, invoke }) => {
+    const ResponsesMock: any = openaiModule.Responses
+    ResponsesMock.prototype[method] = jest.fn().mockResolvedValue(mockResponsesResult('flex'))
+
+    await invoke()
+
+    expect(capturedServiceTier()).toBe('flex')
+  })
+
+  test('prefers the final response tier for streaming responses', async () => {
+    const chunks = [
+      { type: 'response.created', response: mockResponsesResult('default') },
+      { type: 'response.completed', response: mockResponsesResult('flex') },
+    ]
+    const ResponsesMock: any = openaiModule.Responses
+    ResponsesMock.prototype.create = jest.fn().mockResolvedValue({
+      tee: jest.fn().mockReturnValue([createMockAsyncIterator(chunks), createMockAsyncIterator(chunks)]),
+    })
+
+    const stream = await client.responses.create({
+      model: 'gpt-4',
+      input: 'Hello',
+      service_tier: 'auto',
+      stream: true,
+      posthogDistinctId: 'test-id',
+    })
+    for await (const _chunk of stream) {
+      // consume the stream so the analytics copy reaches the final chunk
+    }
+    await flushPromises()
+
+    expect(capturedServiceTier()).toBe('flex')
   })
 })

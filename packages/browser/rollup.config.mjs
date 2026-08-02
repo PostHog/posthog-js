@@ -12,7 +12,9 @@ import postcssNesting from 'postcss-nesting'
 import cssnano from 'cssnano'
 import fs from 'fs'
 import path from 'path'
+import crossBundlePropertyConfig from './terser-cross-bundle-properties.cjs'
 
+const { crossBundlePrivateProperties, globallyReservedPrivateProperties } = crossBundlePropertyConfig
 const WRITE_MANGLED_PROPERTIES = process.env.WRITE_MANGLED_PROPERTIES
 const nameCachePath = './terser-mangled-names.json'
 let nameCache = {}
@@ -22,7 +24,7 @@ let nameCache = {}
 // Only property names (props) are shared; top-level variable names (vars) are
 // reset per-entry by the plugin below since each module has its own scope.
 
-const plugins = (es5, noExternal) => [
+const plugins = (es5, noExternal, preserveCrossBundleProperties) => [
     {
         name: 'reset-vars-name-cache',
         buildStart() {
@@ -177,13 +179,14 @@ const plugins = (es5, noExternal) => [
                               // we don't mangle _surveyManager as it's used by external surveys to paint them on the dom directly
                               '_surveyManager',
 
+                              // private ABI between independently emitted slim cores and extension bundles
+                              ...(preserveCrossBundleProperties
+                                  ? crossBundlePrivateProperties
+                                  : globallyReservedPrivateProperties),
+
                               // used in conversations - external bundle needs to access these on the posthog instance
                               '_conversationsManager',
                               '_conversations',
-                              '_send_request', // called by conversations external bundle
-
-                              // used in product-tours - external bundle needs to access this on the posthog instance
-                              '_addCaptureHook',
 
                               // part of setup/teardown code, preserve these out of caution
                               '_init',
@@ -346,9 +349,7 @@ const plugins = (es5, noExternal) => [
 
 const entryFilter = process.env.ENTRY
 const allEntrypoints = fs.readdirSync('./src/entrypoints')
-const entrypoints = entryFilter
-    ? allEntrypoints.filter((file) => file.startsWith(entryFilter))
-    : allEntrypoints
+const entrypoints = entryFilter ? allEntrypoints.filter((file) => file.startsWith(entryFilter)) : allEntrypoints
 
 const entrypointTargets = entrypoints.map((file) => {
     const fileParts = file.split('.')
@@ -365,7 +366,12 @@ const entrypointTargets = entrypoints.map((file) => {
 
     const fileName = fileParts.join('.')
 
-    const pluginsForThisFile = plugins(fileName.includes('es5'), fileName.includes('no-external'))
+    const preserveCrossBundleProperties = ['extension-bundles', 'module.slim'].includes(fileName)
+    const pluginsForThisFile = plugins(
+        fileName.includes('es5'),
+        fileName.includes('no-external'),
+        preserveCrossBundleProperties
+    )
 
     // we're allowed to console log in this file :)
     // eslint-disable-next-line no-console
