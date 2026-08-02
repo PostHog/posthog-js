@@ -1,4 +1,16 @@
 {
+  "PostHog/posthog-js/issue/4385": {
+    "key": "PostHog/posthog-js/issue/4385",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4385",
+    "url": "https://github.com/PostHog/posthog-js/issues/4385",
+    "conclusion": "Confirmed likely build-artifact bug in the inline rrweb canvas worker sourcemap handling.",
+    "labels": [
+      "feature/replay"
+    ],
+    "closed": false,
+    "updatedAt": "2026-08-02T05:05:51.116Z"
+  },
   "PostHog/posthog-js/issue/4353": {
     "key": "PostHog/posthog-js/issue/4353",
     "repo": "PostHog/posthog-js",
