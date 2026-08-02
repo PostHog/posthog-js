@@ -728,6 +728,29 @@ describe('Vercel AI SDK - Dual Version Support', () => {
     )
 
     it.each(['v2', 'v3'] as const)(
+      'should close promptly when immediate telemetry never settles in %s streams',
+      async (version) => {
+        const streamParts = [{ type: 'text-delta' as const, id: 'text-1', delta: 'complete response' }]
+        const baseModel = createMockStreamingModel(version, streamParts as any)
+        ;(mockPostHogClient.captureImmediate as jest.Mock).mockReturnValue(new Promise<void>(() => undefined))
+        const model = withTracing(baseModel, mockPostHogClient, {
+          posthogDistinctId: 'test-user',
+          posthogTraceId: `test-${version}-nonblocking-completion`,
+          posthogCaptureImmediate: true,
+        })
+
+        const result = await model.doStream({ prompt: [] })
+        const reader = result.stream.getReader()
+        await expect(reader.read()).resolves.toEqual({ done: false, value: streamParts[0] })
+        await expect(settlePromptly(reader.read())).resolves.toEqual({ done: true, value: undefined })
+        await flushPromises()
+
+        expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
+        expect(mockPostHogClient.capture).not.toHaveBeenCalled()
+      }
+    )
+
+    it.each(['v2', 'v3'] as const)(
       'should reject reads promptly when immediate telemetry never settles in %s streams',
       async (version) => {
         const sourceError = new Error('source stream failed')

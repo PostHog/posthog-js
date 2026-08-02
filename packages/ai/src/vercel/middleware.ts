@@ -806,8 +806,8 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
                 }
 
                 if (result.done) {
-                  await finalize()
                   controller.close()
+                  void finalize()
                   return
                 }
 
