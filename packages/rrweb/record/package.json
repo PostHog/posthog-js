@@ -7,7 +7,7 @@
     "scripts": {
         "dev": "vite build --watch",
         "build": "pnpm turbo run prepublish",
-        "test": "vitest run",
+        "test": "pnpm build && vitest run",
         "test:watch": "vitest watch",
         "check-types": "tsc -noEmit",
         "prepublish": "tsc -noEmit && vite build",
