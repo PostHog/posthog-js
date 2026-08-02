@@ -740,7 +740,9 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         })
 
         const result = await model.doStream({ prompt: [] })
-        const reader = result.stream.getReader()
+        const reader = (
+          result.stream as ReadableStream<LanguageModelV2StreamPart | LanguageModelV3StreamPart>
+        ).getReader()
         await expect(reader.read()).resolves.toEqual({ done: false, value: streamParts[0] })
         await expect(settlePromptly(reader.read())).resolves.toEqual({ done: true, value: undefined })
         await flushPromises()
