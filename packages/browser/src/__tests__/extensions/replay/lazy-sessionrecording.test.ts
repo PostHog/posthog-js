@@ -2156,6 +2156,27 @@ describe('Lazy SessionRecording', () => {
             )
         })
 
+        it('passes a configured fullSnapshotYieldBudgetMs through to rrweb.record', () => {
+            // the allowlist is the only route this option takes into the
+            // recorder — a silently dropped key would leave a customer who
+            // opted in running synchronous snapshots with no signal
+            posthog.config.session_recording.fullSnapshotYieldBudgetMs = 10
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    fullSnapshotYieldBudgetMs: 10,
+                })
+            )
+        })
+
         it('still starts when the bundled core has no SessionIdManager.on (version skew with CDN recorder)', () => {
             // The recorder chunk is loaded from the CDN and can run against an older bundled core.
             // SessionIdManager.on was only added in posthog-js 1.268.6, so simulate an older core that
