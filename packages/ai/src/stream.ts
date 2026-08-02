@@ -34,6 +34,14 @@ export function monitoredStreamTee<Item, StreamType extends SDKStream<Item>>(
   let terminalError: unknown
   let hasTerminalError = false
   let cancellationPromise: Promise<IteratorResult<Item>> | undefined
+  let abortListener: (() => void) | undefined
+
+  const removeAbortListener = (): void => {
+    if (abortListener) {
+      controller.signal.removeEventListener('abort', abortListener)
+      abortListener = undefined
+    }
+  }
 
   const settleMonitorTerminal = (): void => {
     if (!monitorPending) {
@@ -75,6 +83,7 @@ export function monitoredStreamTee<Item, StreamType extends SDKStream<Item>>(
         operationInFlight = false
         if (result.done) {
           terminalResult = result
+          removeAbortListener()
         }
         pendingCaller.resolve(result)
         pendingMonitor?.resolve(result)
@@ -88,6 +97,7 @@ export function monitoredStreamTee<Item, StreamType extends SDKStream<Item>>(
         operationInFlight = false
         terminalError = error
         hasTerminalError = true
+        removeAbortListener()
         pendingCaller.reject(error)
         pendingMonitor?.reject(error)
         settleCallersTerminal()
@@ -136,6 +146,7 @@ export function monitoredStreamTee<Item, StreamType extends SDKStream<Item>>(
         const result = sourceIterator.return ? await sourceIterator.return(value) : defaultResult
         if (result.done) {
           terminalResult = result
+          removeAbortListener()
           settleMonitorTerminal()
           settleCallersTerminal()
         } else if (monitorPending) {
@@ -150,6 +161,7 @@ export function monitoredStreamTee<Item, StreamType extends SDKStream<Item>>(
       } catch (error: unknown) {
         terminalError = error
         hasTerminalError = true
+        removeAbortListener()
         settleMonitorTerminal()
         settleCallersTerminal()
         throw error
@@ -160,7 +172,7 @@ export function monitoredStreamTee<Item, StreamType extends SDKStream<Item>>(
     return cancellationPromise
   }
 
-  const abortListener = (): void => {
+  abortListener = (): void => {
     void cancelSource()
   }
   if (controller.signal.aborted) {
@@ -194,6 +206,7 @@ export function monitoredStreamTee<Item, StreamType extends SDKStream<Item>>(
           const result = await sourceIterator.throw(error)
           if (result.done) {
             terminalResult = result
+            removeAbortListener()
             settleCallersTerminal()
           }
           if (monitorPending) {
@@ -206,6 +219,7 @@ export function monitoredStreamTee<Item, StreamType extends SDKStream<Item>>(
         } catch (sourceError: unknown) {
           terminalError = sourceError
           hasTerminalError = true
+          removeAbortListener()
           settleMonitorTerminal()
           settleCallersTerminal()
           throw sourceError

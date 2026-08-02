@@ -48,6 +48,51 @@ describe('monitorStream', () => {
     expect(monitored).toEqual([recovered])
   })
 
+  test('aborting the returned SDK stream cancels the source while next is in flight', async () => {
+    const controller = new AbortController()
+    let sourceFinalized = false
+    const sourceIterator = (async function* () {
+      try {
+        yield 1
+        await new Promise<void>((resolve) => {
+          if (controller.signal.aborted) {
+            resolve()
+          } else {
+            controller.signal.addEventListener('abort', () => resolve(), { once: true })
+          }
+        })
+      } finally {
+        sourceFinalized = true
+      }
+    })()
+    const sourceReturn = jest.spyOn(sourceIterator, 'return')
+    const source = new OpenAIStream<number>(() => sourceIterator, controller)
+    const monitored: number[] = []
+
+    const [monitoringStream, wrapped] = monitoredStreamTee<number, OpenAIStream<number>>(
+      source,
+      (iterator, streamController) => new OpenAIStream(iterator, streamController)
+    )
+    const monitoringPromise = (async () => {
+      for await (const item of monitoringStream) {
+        monitored.push(item)
+      }
+    })()
+    const iterator = wrapped[Symbol.asyncIterator]()
+
+    await expect(iterator.next()).resolves.toEqual({ done: false, value: 1 })
+    const pendingNext = iterator.next()
+    await new Promise<void>((resolve) => process.nextTick(resolve))
+    wrapped.controller.abort()
+
+    await expect(pendingNext).resolves.toEqual({ done: true, value: undefined })
+    await monitoringPromise
+    expect(monitored).toEqual([1])
+    expect(sourceReturn).toHaveBeenCalledTimes(1)
+    expect(sourceFinalized).toBe(true)
+    expect(controller.signal.aborted).toBe(true)
+  })
+
   test('resolves 3+ concurrent next calls in FIFO order without reading ahead of the monitor', async () => {
     const sourceIterator = (async function* () {
       yield 1
@@ -86,8 +131,10 @@ describe('monitorStream', () => {
   })
 
   test('settles every concurrent next call when the source stream is empty', async () => {
+    const controller = new AbortController()
+    const removeAbortListener = jest.spyOn(controller.signal, 'removeEventListener')
     const sourceNext = jest.fn().mockResolvedValue({ done: true, value: undefined })
-    const source = createTestStream<number>(() => ({ next: sourceNext }), new AbortController())
+    const source = createTestStream<number>(() => ({ next: sourceNext }), controller)
     const [monitoringStream, wrapped] = monitoredStreamTee(source, createTestStream)
     const monitoringPromise = (async () => {
       for await (const _item of monitoringStream) {
@@ -104,6 +151,7 @@ describe('monitorStream', () => {
     ])
     await monitoringPromise
     expect(sourceNext).toHaveBeenCalledTimes(1)
+    expect(removeAbortListener).toHaveBeenCalledWith('abort', expect.any(Function))
   })
 
   test('rejects every concurrent next call when the source stream errors', async () => {
