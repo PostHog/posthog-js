@@ -144,6 +144,7 @@ function buildHtml(
   budget: number,
   recordOptions = '',
   bodyTail = '',
+  keepMessageChannel = false,
 ): string {
   const doc = buildDocument(bodyExtra, bodyTail);
   // The walk yields through a MessageChannel macrotask, which makes the real
@@ -157,7 +158,7 @@ function buildHtml(
   // node structure (any script content serializes as SCRIPT_PLACEHOLDER; an
   // empty script would have no text child at all).
   const script = `
-    <script>${budget > 0 ? slowYield : ';'}</script>
+    <script>${budget > 0 && !keepMessageChannel ? slowYield : ';'}</script>
     <script>${snapshotCode}</script>
     <script>${rrwebCode}</script>
     <script>${CANONICALIZER}</script>
@@ -189,6 +190,10 @@ type Scenario = {
   waitFor?: string;
   /** Markup placed AFTER the big table — deep in the walk's frontier. */
   bodyTail?: string;
+  /** Keep the production MessageChannel yielder instead of the slow fallback. */
+  keepMessageChannel?: boolean;
+  /** Extra expression evaluated in the replay page (against `replayer`). */
+  replayProbe?: string;
 };
 
 type ScenarioResult = {
@@ -200,6 +205,9 @@ type ScenarioResult = {
   /** body.innerHTML of the first same-origin iframe in the replayed document. */
   replayedIframeHtml: string;
   unknownIdEvents: Array<{ source: number; id: number }>;
+  /** Node ids delivered as an add while already attached — double delivery. */
+  duplicateAddIds: number[];
+  replayProbeResult: unknown;
   eventTypes: number[];
   events: Array<Record<string, unknown>>;
 };
@@ -220,6 +228,7 @@ async function runScenario(
         budget,
         scenario.recordOptions ?? '',
         scenario.bodyTail ?? '',
+        scenario.keepMessageChannel ?? false,
       ),
     );
 
@@ -305,8 +314,13 @@ async function runScenario(
       await waitForRAF(replayPage);
       await waitForRAF(replayPage);
 
-      const { replayedCanon, unknownIdEvents, replayedIframeHtml } =
-        (await replayPage.evaluate(`
+      const {
+        replayedCanon,
+        unknownIdEvents,
+        duplicateAddIds,
+        replayedIframeHtml,
+        replayProbeResult,
+      } = (await replayPage.evaluate(`
         (function () {
           var doc = window.replayer.iframe.contentDocument;
           // Any id on the wire that the recording never introduced (via the
@@ -316,14 +330,55 @@ async function runScenario(
           // stays known: the reference was valid when it applied.
           var unknownIdEvents = [];
           var known = new Set();
-          function learn(sn) {
+          // A node id delivered as an add while already attached means the
+          // same node was described twice (walker AND buffer both claimed
+          // it) — the replayer tolerates it, so final-state convergence
+          // alone can't catch double delivery. Attachment tracking can.
+          // Removing an id detaches its whole recorded subtree, mirroring
+          // the replayer, so a moved parent's re-added children are not
+          // false positives.
+          var attached = new Set();
+          var childrenOf = new Map();
+          var parentOf = new Map();
+          var duplicateAddIds = [];
+          function linkChild(parentId, childId) {
+            // a re-learned (moved) child leaves its old parent's set, or a
+            // later removal of that old parent would detach it spuriously
+            var previousParent = parentOf.get(childId);
+            if (previousParent !== undefined && childrenOf.has(previousParent)) {
+              childrenOf.get(previousParent).delete(childId);
+            }
+            if (!childrenOf.has(parentId)) childrenOf.set(parentId, new Set());
+            childrenOf.get(parentId).add(childId);
+            parentOf.set(childId, parentId);
+          }
+          function learn(sn, parentId) {
             if (!sn) return;
             known.add(sn.id);
-            (sn.childNodes || []).forEach(learn);
+            if (attached.has(sn.id)) {
+              duplicateAddIds.push(sn.id);
+            }
+            attached.add(sn.id);
+            if (typeof parentId === 'number') linkChild(parentId, sn.id);
+            (sn.childNodes || []).forEach(function (child) {
+              learn(child, sn.id);
+            });
+          }
+          function detach(id) {
+            attached.delete(id);
+            parentOf.delete(id);
+            var kids = childrenOf.get(id);
+            if (kids) {
+              childrenOf.delete(id);
+              kids.forEach(detach);
+            }
           }
           window.events.forEach(function (e) {
             if (e.type === 2) {
-              learn(e.data.node);
+              attached = new Set();
+              childrenOf = new Map();
+              parentOf = new Map();
+              learn(e.data.node, undefined);
               return;
             }
             if (e.type !== 3) return;
@@ -346,11 +401,16 @@ async function runScenario(
             (d.attributes || []).forEach(function (a) {
               if (typeof a.id === 'number') ids.push(a.id);
             });
+            // the replayer applies removes before adds within a batch, so a
+            // remove+add of the same id (a move) is not double delivery
+            (d.removes || []).forEach(function (r) {
+              detach(r.id);
+            });
             // adds are learned before checking: within one mutation batch the
             // payload may reference a parent added later in the same batch
             // (the replayer buffers out-of-order adds), which is legitimate
             (d.adds || []).forEach(function (a) {
-              learn(a.node);
+              learn(a.node, a.parentId);
             });
             ids.forEach(function (id) {
               if (id < 0) return;
@@ -375,13 +435,21 @@ async function runScenario(
           return {
             replayedCanon: window.__canon(doc),
             unknownIdEvents: unknownIdEvents,
+            duplicateAddIds: duplicateAddIds,
             replayedIframeHtml: replayedIframeHtml,
+            replayProbeResult: ${
+              scenario.replayProbe
+                ? `(${scenario.replayProbe})(doc)`
+                : 'null'
+            },
           };
         })()
       `)) as {
           replayedCanon: string;
           unknownIdEvents: Array<{ source: number; id: number }>;
+          duplicateAddIds: number[];
           replayedIframeHtml: string;
+          replayProbeResult: unknown;
         };
 
       return {
@@ -391,6 +459,8 @@ async function runScenario(
         replayedCanon,
         replayedIframeHtml,
         unknownIdEvents,
+        duplicateAddIds,
+        replayProbeResult,
         eventTypes: events.map((e) => e.type as number),
         events,
       };
@@ -447,6 +517,7 @@ async function expectConvergence(scenario: Scenario) {
   // The test is only meaningful if the ops ran inside the snapshot window.
   expect(sliced.fullSnapshotAlreadyEmitted).toBe(false);
   expect(sliced.unknownIdEvents).toEqual([]);
+  expect(sliced.duplicateAddIds).toEqual([]);
 
   // The sliced path has to land where the synchronous path lands. Checked
   // first, and independently of whether the replayer reproduces the page
@@ -1144,7 +1215,7 @@ describe('time-sliced full snapshot converges on replay', () => {
     }
   });
 
-  it('tears down active observers after a synchronous checkout failure', async () => {
+  it('recovers from a synchronous checkout failure without tearing recording down', async () => {
     const page = await browser.newPage();
     try {
       await fakeGoto(page, `${serverURL}/html/convergence.html`);
@@ -1167,11 +1238,22 @@ describe('time-sliced full snapshot converges on replay', () => {
       const result = (await page.evaluate(`
         (async function () {
           window.__failSynchronousCheckout = true;
-          rrweb.record.takeFullSnapshot(true);
-          var countAfterFailure = window.snapshots.length;
+          // the failure propagates to the caller (the SDK catches and
+          // retries) instead of being swallowed into silent teardown
+          var checkoutThrew = false;
+          try {
+            rrweb.record.takeFullSnapshot(true);
+          } catch (error) {
+            checkoutThrew = true;
+          }
+          var fullSnapshotsAfterFailure = window.snapshots.filter(function (e) {
+            return e.type === 2;
+          }).length;
+          // recording survives: custom events are accepted and interactions
+          // keep being observed against the last good snapshot
           var customEventRejected = false;
           try {
-            rrweb.record.addCustomEvent('must-not-emit-after-checkout', {});
+            rrweb.record.addCustomEvent('emitted-after-checkout-failure', {});
           } catch (error) {
             customEventRejected = true;
           }
@@ -1180,25 +1262,43 @@ describe('time-sliced full snapshot converges on replay', () => {
           document.body.appendChild(marker);
           marker.dispatchEvent(new MouseEvent('click', { bubbles: true }));
           await new Promise(function (resolve) { setTimeout(resolve, 100); });
+          // the failed checkout released its buffer locks: the next checkout
+          // must succeed outright
+          window.__failSynchronousCheckout = false;
+          rrweb.record.takeFullSnapshot(true);
+          await new Promise(function (resolve) { setTimeout(resolve, 50); });
           return {
-            countAfterFailure: countAfterFailure,
-            finalCount: window.snapshots.length,
+            checkoutThrew: checkoutThrew,
+            fullSnapshotsAfterFailure: fullSnapshotsAfterFailure,
             customEventRejected: customEventRejected,
+            hasCustomEvent: window.snapshots.some(function (e) {
+              return e.type === 5 && e.data && e.data.tag === 'emitted-after-checkout-failure';
+            }),
+            hasMarkerMutation: window.snapshots.some(function (e) {
+              return JSON.stringify(e).indexOf('after-sync-checkout-failure') !== -1;
+            }),
             fullSnapshots: window.snapshots.filter(function (e) {
               return e.type === 2;
             }).length,
           };
         })()
       `)) as {
-        countAfterFailure: number;
-        finalCount: number;
+        checkoutThrew: boolean;
+        fullSnapshotsAfterFailure: number;
         customEventRejected: boolean;
+        hasCustomEvent: boolean;
+        hasMarkerMutation: boolean;
         fullSnapshots: number;
       };
 
-      expect(result.fullSnapshots).toBe(1);
-      expect(result.customEventRejected).toBe(true);
-      expect(result.finalCount).toBe(result.countAfterFailure);
+      expect(result.checkoutThrew).toBe(true);
+      expect(result.fullSnapshotsAfterFailure).toBe(1);
+      expect(result.customEventRejected).toBe(false);
+      expect(result.hasCustomEvent).toBe(true);
+      expect(result.hasMarkerMutation).toBe(true);
+      // the retried checkout produced a second FullSnapshot — the locks from
+      // the failed one did not strand
+      expect(result.fullSnapshots).toBe(2);
     } finally {
       await page.close();
     }
@@ -1325,5 +1425,469 @@ describe('time-sliced full snapshot converges on replay', () => {
     } finally {
       await page.close();
     }
+  });
+
+  it('keeps the whole subtree when a serialized ancestor moves before its children are reached', async () => {
+    // The hardest structural case: tbody is serialized early, its thousands of
+    // rows are still pending, and then the entire tbody moves to a different
+    // container. The buffer must deliver tbody AND every pending row at the
+    // new location — a remove(tbody)+add(tbody) pair with no child adds
+    // permanently loses the subtree in replay.
+    await expectConvergence({
+      body: '<div id="new-home"></div>',
+      ops: async () => {
+        const mirror = (
+          window as unknown as {
+            rrweb: {
+              record: {
+                mirror: { hasNode: (n: Node) => boolean };
+              };
+            };
+          }
+        ).rrweb.record.mirror;
+        const tbody = document.querySelector('tbody')!;
+        const lateRow = document.getElementById('row-2900')!;
+        // preconditions verified, not assumed: the ancestor is in the mirror,
+        // deep rows are not yet. The move itself always happens so the sync
+        // control arm produces the same final DOM.
+        while (!mirror.hasNode(tbody)) {
+          await new Promise((r) => setTimeout(r, 5));
+        }
+        const movedInWindow = !mirror.hasNode(lateRow);
+        document.getElementById('new-home')!.appendChild(tbody);
+        return { movedInWindow };
+      },
+      settleMs: 2500,
+    }).then((result) => {
+      expect(
+        (result.opsResult as { movedInWindow: boolean }).movedInWindow,
+      ).toBe(true);
+    });
+  });
+
+  it('converges when pending siblings are reordered within the same parent', async () => {
+    // A node reordered inside its own container passes the walker's
+    // container-identity revalidation, so without the buffer as the single
+    // source of truth it would be frozen into the snapshot at its captured
+    // (stale) index with no corrective event ever emitted.
+    await expectConvergence({
+      ops: async () => {
+        const mirror = (
+          window as unknown as {
+            rrweb: {
+              record: {
+                mirror: { hasNode: (n: Node) => boolean };
+              };
+            };
+          }
+        ).rrweb.record.mirror;
+        const tbody = document.querySelector('tbody')!;
+        const first = document.getElementById('row-0')!;
+        const last = document.getElementById('row-2999')!;
+        while (!mirror.hasNode(tbody)) {
+          await new Promise((r) => setTimeout(r, 5));
+        }
+        const reorderedInWindow = !mirror.hasNode(last);
+        // move the still-pending last row to the front, and a serialized row
+        // to the back — both directions of the same hazard. Performed
+        // unconditionally so the sync control arm matches.
+        tbody.insertBefore(last, first);
+        tbody.appendChild(document.getElementById('row-1')!);
+        return { reorderedInWindow };
+      },
+      settleMs: 1500,
+    }).then((result) => {
+      expect(
+        (result.opsResult as { reorderedInWindow: boolean }).reorderedInWindow,
+      ).toBe(true);
+    });
+  });
+
+  it('delivers adopted stylesheets for shadow roots created during the walk', async () => {
+    const result = await expectConvergence({
+      ops: () => {
+        // standard web-component pattern: host appended into long-visited
+        // territory, shadow attached, styles adopted — all mid-walk
+        const host = document.createElement('div');
+        host.id = 'late-shadow-host';
+        document.body.insertBefore(host, document.body.firstChild);
+        const root = host.attachShadow({ mode: 'open' });
+        const span = document.createElement('span');
+        span.textContent = 'shadow-content';
+        root.appendChild(span);
+        const sheet = new CSSStyleSheet();
+        sheet.replaceSync('.adopted-marker { color: rgb(9, 9, 9); }');
+        root.adoptedStyleSheets = [sheet];
+        return { adopted: true };
+      },
+      settleMs: 1200,
+    });
+
+    // the adopted styles must reach the wire referencing an id the replayer
+    // knows — scrubbing them loses shadow styling for the rest of the session
+    const adoptedEvents = result.events.filter((e) => {
+      const data = e.data as
+        | { source?: number; styles?: Array<{ rules: Array<{ rule: string }> }> }
+        | undefined;
+      return (
+        e.type === 3 &&
+        data?.source === 15 &&
+        JSON.stringify(data).includes('adopted-marker')
+      );
+    });
+    expect(adoptedEvents.length).toBeGreaterThan(0);
+  });
+
+  it('replays CSSOM rules the snapshot could not inline (var() shorthand keeps raw text)', async () => {
+    // `margin: var(--m)` makes stringifyStylesheet emit empty longhands, so
+    // serializeTextNode keeps the raw author text — the snapshot does NOT
+    // contain rules inserted into the live CSSOM during the walk, and the
+    // held delta must be delivered, not dropped.
+    const result = await expectConvergence({
+      bodyTail:
+        '<style id="var-sheet" data-probe>.v { margin: var(--m); }</style>',
+      ops: async () => {
+        const mirror = (
+          window as unknown as {
+            rrweb: {
+              record: { mirror: { hasNode: (n: Node) => boolean } };
+            };
+          }
+        ).rrweb.record.mirror;
+        const sheetEl = document.getElementById(
+          'var-sheet',
+        ) as HTMLStyleElement;
+        const insertedInWindow = !mirror.hasNode(sheetEl);
+        sheetEl.sheet!.insertRule('.inserted-var-rule { color: rgb(7, 7, 7); }', 1);
+        return {
+          insertedInWindow,
+          liveRules: Array.from(sheetEl.sheet!.cssRules).map((r) => r.cssText),
+        };
+      },
+      settleMs: 1200,
+      replayProbe: `function (doc) {
+        var el = doc.querySelector('style[data-probe]');
+        if (!el || !el.sheet) return null;
+        return Array.prototype.map.call(el.sheet.cssRules, function (r) {
+          return r.cssText;
+        });
+      }`,
+    });
+
+    const ops = result.opsResult as {
+      insertedInWindow: boolean;
+      liveRules?: string[];
+    };
+    expect(ops.insertedInWindow).toBe(true);
+    const replayedRules = result.replayProbeResult as string[];
+    expect(replayedRules).not.toBeNull();
+    expect(
+      replayedRules.some((r) => r.includes('inserted-var-rule')),
+    ).toBe(true);
+    expect(replayedRules.length).toBe(ops.liveRules!.length);
+  });
+
+  it('does not double-apply CSSOM rules the snapshot did inline', async () => {
+    // The mirror image: a clean single-text sheet whose serialization DOES
+    // read the live CSSOM. A rule inserted before the sheet is serialized is
+    // inside the snapshot; delivering the held delta too would apply it twice
+    // and shift every later rule index.
+    const result = await expectConvergence({
+      bodyTail:
+        '<style id="clean-sheet" data-probe>.c { color: rgb(3, 3, 3); }</style>',
+      ops: async () => {
+        const mirror = (
+          window as unknown as {
+            rrweb: {
+              record: { mirror: { hasNode: (n: Node) => boolean } };
+            };
+          }
+        ).rrweb.record.mirror;
+        const sheetEl = document.getElementById(
+          'clean-sheet',
+        ) as HTMLStyleElement;
+        const insertedInWindow = !mirror.hasNode(sheetEl);
+        sheetEl.sheet!.insertRule('.inserted-clean-rule { color: rgb(8, 8, 8); }', 1);
+        return {
+          insertedInWindow,
+          liveRuleCount: sheetEl.sheet!.cssRules.length,
+        };
+      },
+      settleMs: 1200,
+      replayProbe: `function (doc) {
+        var el = doc.querySelector('style[data-probe]');
+        if (!el || !el.sheet) return null;
+        return Array.prototype.map.call(el.sheet.cssRules, function (r) {
+          return r.cssText;
+        });
+      }`,
+    });
+
+    const ops = result.opsResult as {
+      insertedInWindow: boolean;
+      liveRuleCount?: number;
+    };
+    expect(ops.insertedInWindow).toBe(true);
+    const replayedRules = result.replayProbeResult as string[];
+    expect(replayedRules).not.toBeNull();
+    // exactly once: present, not duplicated
+    expect(
+      replayedRules.filter((r) => r.includes('inserted-clean-rule')).length,
+    ).toBe(1);
+    expect(replayedRules.length).toBe(ops.liveRuleCount);
+  });
+
+  it('does not run away when the walk takes longer than checkoutEveryNms', async () => {
+    // The FullSnapshot is backdated to walk start, so a checkout clock keyed
+    // to the event timestamp sees, on a held event flushed after the walk,
+    // (observation time - walk start) — the walk takes seconds and
+    // checkoutEveryNms is 200ms, so a single held event re-trips a checkout
+    // immediately at flush. The clock must run from when the snapshot reached
+    // the wire instead: this exact recording must produce exactly ONE
+    // FullSnapshot.
+    const page = await browser.newPage();
+    try {
+      await fakeGoto(page, `${serverURL}/html/convergence.html`);
+      await page.setContent(
+        buildHtml('', YIELD_BUDGET_MS, 'checkoutEveryNms: 200,'),
+      );
+      const probe = (await page.evaluate(`
+        (async function () {
+          var inFlight = !window.snapshots.some(function (e) {
+            return e.type === 2;
+          });
+          // give the walk enough runway that the marker lands >200ms after
+          // walk start, then mutate — the held mutation's observation
+          // timestamp is what the broken clock would evaluate at flush
+          await new Promise(function (resolve) { setTimeout(resolve, 400); });
+          var stillInFlight = !window.snapshots.some(function (e) {
+            return e.type === 2;
+          });
+          var marker = document.createElement('div');
+          marker.id = 'held-checkout-bait';
+          document.body.appendChild(marker);
+          return { inFlight: inFlight, stillInFlight: stillInFlight };
+        })()
+      `)) as { inFlight: boolean; stillInFlight: boolean };
+      expect(probe.inFlight).toBe(true);
+      expect(probe.stillInFlight).toBe(true);
+
+      await page.waitForFunction('window.snapshots.some((e) => e.type === 2)', {
+        timeout: 120_000,
+      });
+      await new Promise((r) => setTimeout(r, 2000));
+      const fullSnapshots = (await page.evaluate(
+        'window.snapshots.filter(function (e) { return e.type === 2; }).length',
+      )) as number;
+
+      // nothing after the flush exceeds the 200ms clock, so a second
+      // FullSnapshot can only come from the backdated-timestamp runaway
+      expect(fullSnapshots).toBe(1);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('releases buffer locks even when the consumer emit throws mid-flush', async () => {
+    const page = await browser.newPage();
+    try {
+      await fakeGoto(page, `${serverURL}/html/convergence.html`);
+      const doc = buildDocument('', '');
+      const script = `
+        <script>globalThis.MessageChannel = undefined;</script>
+        <script>${snapshotCode}</script>
+        <script>${rrwebCode}</script>
+        <script>
+          window.snapshots = [];
+          window.__stop = rrweb.record({
+            emit: function (event) {
+              if (
+                event.type === 5 &&
+                event.data &&
+                event.data.tag === 'boom'
+              ) {
+                throw new Error('injected consumer emit failure');
+              }
+              window.snapshots.push(event);
+            },
+            fullSnapshotYieldBudgetMs: ${YIELD_BUDGET_MS},
+          });
+        </script>
+      `;
+      await page.setContent(doc.replace('</body>', `${script}</body>`));
+
+      const probe = (await page.evaluate(`
+        (function () {
+          var inFlight = !window.snapshots.some(function (e) {
+            return e.type === 2;
+          });
+          // held during the walk; the flush's re-emit of it will throw inside
+          // the consumer callback, inside the flush
+          rrweb.record.addCustomEvent('boom', {});
+          return { inFlight: inFlight };
+        })()
+      `)) as { inFlight: boolean };
+      expect(probe.inFlight).toBe(true);
+
+      await page.waitForFunction('window.snapshots.some((e) => e.type === 2)', {
+        timeout: 120_000,
+      });
+      const result = (await page.evaluate(`
+        (async function () {
+          var marker = document.createElement('div');
+          marker.id = 'after-emit-throw';
+          document.body.appendChild(marker);
+          await new Promise(function (resolve) { setTimeout(resolve, 400); });
+          return {
+            mutationDelivered: window.snapshots.some(function (e) {
+              return JSON.stringify(e).indexOf('after-emit-throw') !== -1;
+            }),
+          };
+        })()
+      `)) as { mutationDelivered: boolean };
+
+      // the throw must not leave the buffers locked: mutations observed after
+      // the flush still reach the wire
+      expect(result.mutationDelivered).toBe(true);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('converges through the production MessageChannel yielder', async () => {
+    // Every other scenario stretches the walk via the setTimeout fallback;
+    // this one runs the code path production actually takes. The window is
+    // tens of milliseconds, too narrow to reliably land ops inside — so this
+    // asserts convergence and wire integrity, not interleaving.
+    const sliced = await runScenario(
+      {
+        keepMessageChannel: true,
+        ops: () => {
+          const marker = document.createElement('div');
+          marker.id = 'mc-marker';
+          document.body.appendChild(marker);
+          return {};
+        },
+        settleMs: 800,
+      },
+      YIELD_BUDGET_MS,
+    );
+    expect(sliced.unknownIdEvents).toEqual([]);
+    expect(sliced.duplicateAddIds).toEqual([]);
+    expect(sliced.eventTypes).toContain(2);
+    expectCanonEqual(
+      sliced.liveCanon,
+      sliced.replayedCanon,
+      'MessageChannel yielder path',
+    );
+  });
+
+  it('flushes the walk synchronously when the page hides', async () => {
+    const page = await browser.newPage();
+    try {
+      await fakeGoto(page, `${serverURL}/html/convergence.html`);
+      await page.setContent(buildHtml('', YIELD_BUDGET_MS));
+
+      const result = (await page.evaluate(`
+        (function () {
+          var inFlight = !window.snapshots.some(function (e) {
+            return e.type === 2;
+          });
+          rrweb.record.addCustomEvent('typed-before-hide', { value: 42 });
+          // a dying page's parked yield never fires; the pagehide handler
+          // must complete the walk and flush in THIS task
+          window.dispatchEvent(new Event('pagehide'));
+          return {
+            inFlight: inFlight,
+            hasFullSnapshotNow: window.snapshots.some(function (e) {
+              return e.type === 2;
+            }),
+            hasHeldCustomNow: window.snapshots.some(function (e) {
+              return e.type === 5 && e.data && e.data.tag === 'typed-before-hide';
+            }),
+          };
+        })()
+      `)) as {
+        inFlight: boolean;
+        hasFullSnapshotNow: boolean;
+        hasHeldCustomNow: boolean;
+      };
+
+      expect(result.inFlight).toBe(true);
+      // both were on the wire synchronously, inside the dispatch task
+      expect(result.hasFullSnapshotNow).toBe(true);
+      expect(result.hasHeldCustomNow).toBe(true);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('held events keep their observation timestamps through the flush', async () => {
+    const result = await expectConvergence({
+      ops: async () => {
+        // the target must already be serialized: a click on a claimed id is
+        // delivered with its observation timestamp, while events on mid-walk
+        // nodes are deferred past the commit and deliberately re-stamped
+        const mirror = (
+          window as unknown as {
+            rrweb: {
+              record: { mirror: { hasNode: (n: Node) => boolean } };
+            };
+          }
+        ).rrweb.record.mirror;
+        const target = document.getElementById('row-0')!;
+        while (!mirror.hasNode(target)) {
+          await new Promise((r) => setTimeout(r, 5));
+        }
+        target.dispatchEvent(
+          new MouseEvent('click', { bubbles: true }),
+        );
+        return { clickedAt: Date.now() };
+      },
+      settleMs: 800,
+    });
+
+    const clickedAt = (result.opsResult as { clickedAt: number }).clickedAt;
+    // 2 === MouseInteraction, interaction type 2 === Click
+    const click = result.events.find((e) => {
+      const data = e.data as { source?: number; type?: number } | undefined;
+      return e.type === 3 && data?.source === 2 && data?.type === 2;
+    }) as { timestamp: number } | undefined;
+    expect(click).toBeDefined();
+    // observation time, not flush time: the walk runs for seconds after the
+    // click, so a re-stamped event would sit far from clickedAt
+    expect(Math.abs(click!.timestamp - clickedAt)).toBeLessThan(1000);
+  });
+
+  it('delivers selections spanning nodes created during the walk', async () => {
+    const result = await expectConvergence({
+      ops: async () => {
+        // node created in visited territory mid-walk, then selected: the
+        // Selection event references reserved ids only the commit's add will
+        // introduce, so it must be deferred past the commit, not dropped
+        const paragraph = document.createElement('p');
+        paragraph.id = 'late-selectable';
+        paragraph.textContent = 'select this text';
+        document.body.insertBefore(paragraph, document.body.firstChild);
+        const range = document.createRange();
+        range.selectNodeContents(paragraph);
+        const selection = window.getSelection()!;
+        selection.removeAllRanges();
+        selection.addRange(range);
+        // selectionchange delivers async
+        await new Promise((r) => setTimeout(r, 50));
+        return { selected: true };
+      },
+      settleMs: 1200,
+    });
+
+    // 14 === IncrementalSource.Selection
+    const selections = result.events.filter((e) => {
+      const data = e.data as { source?: number } | undefined;
+      return e.type === 3 && data?.source === 14;
+    });
+    expect(selections.length).toBeGreaterThan(0);
+    // and none of them reference an unknown id (expectConvergence asserted
+    // unknownIdEvents === [] — this pins that a selection actually survived)
   });
 });

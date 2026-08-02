@@ -82,42 +82,87 @@ export function lockMutationBuffers(token: number): boolean {
   }
   activeMutationBufferLockToken = token;
   let locked = true;
-  for (const buffer of mutationBuffers) {
-    if (!buffer.lock(token)) {
+  for (const buffer of [...mutationBuffers]) {
+    try {
+      if (!buffer.lock(token)) {
+        locked = false;
+      }
+    } catch {
       locked = false;
     }
   }
   if (!locked) {
-    for (const buffer of mutationBuffers) {
-      buffer.discard(token);
-    }
-    activeMutationBufferLockToken = null;
+    discardMutationBuffers(token);
   }
   return locked;
 }
 
+// commit() re-enters consumer code synchronously (emit → mutationCb →
+// wrappedEmit → the consumer's callback), which can throw, splice
+// `mutationBuffers` (iframe/shadow teardown), or attach an iframe whose new
+// buffer the still-armed gate locks with this same token. Each hazard would
+// otherwise strand buffers locked forever with no owner — so: iterate a
+// snapshot of the array, isolate per-buffer failures, keep the token armed
+// until every holder is released, and sweep for buffers born mid-commit.
 export function commitMutationBuffers(token: number): boolean {
   if (activeMutationBufferLockToken !== token) {
     return false;
   }
-  activeMutationBufferLockToken = null;
   let committed = true;
-  for (const buffer of mutationBuffers) {
-    if (!buffer.commit(token)) {
+  let sweeps = 0;
+  while (sweeps++ < 4) {
+    const holding = [...mutationBuffers].filter((buffer) =>
+      buffer.hasLockToken(token),
+    );
+    if (holding.length === 0) {
+      break;
+    }
+    for (const buffer of holding) {
+      try {
+        if (!buffer.commit(token)) {
+          committed = false;
+        }
+      } catch {
+        committed = false;
+        try {
+          buffer.discard(token);
+        } catch {
+          // released below by the force-discard sweep
+        }
+      }
+    }
+  }
+  activeMutationBufferLockToken = null;
+  for (const buffer of [...mutationBuffers]) {
+    if (buffer.hasLockToken(token)) {
       committed = false;
+      try {
+        buffer.discard(token);
+      } catch {
+        // the buffer is unusable; splice-out and GC are its only exit
+      }
     }
   }
   return committed;
 }
 
+// Releases by token rather than by global ownership: recovery from a
+// half-failed lock or commit must work even when the owner slot was already
+// cleared, or the discarding paths become dead code exactly when needed.
 export function discardMutationBuffers(token: number): boolean {
-  if (activeMutationBufferLockToken !== token) {
-    return false;
+  if (activeMutationBufferLockToken === token) {
+    activeMutationBufferLockToken = null;
   }
-  activeMutationBufferLockToken = null;
   let discarded = true;
-  for (const buffer of mutationBuffers) {
-    if (!buffer.discard(token)) {
+  for (const buffer of [...mutationBuffers]) {
+    if (!buffer.hasLockToken(token)) {
+      continue;
+    }
+    try {
+      if (!buffer.discard(token)) {
+        discarded = false;
+      }
+    } catch {
       discarded = false;
     }
   }
@@ -129,6 +174,19 @@ export function discardActiveMutationBufferTransaction(): void {
   if (token !== null) {
     discardMutationBuffers(token);
   }
+}
+
+/**
+ * Whether any buffer holds a pending add for `n` — the time-sliced walker's
+ * skip predicate (see MutationBuffer.hasPendingAdd).
+ */
+export function anyMutationBufferHasPendingAdd(n: Node): boolean {
+  for (const buffer of mutationBuffers) {
+    if (buffer.hasPendingAdd(n)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 // Event.path is non-standard and used in some older browsers

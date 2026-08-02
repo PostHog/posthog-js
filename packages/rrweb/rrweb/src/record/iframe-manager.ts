@@ -531,6 +531,13 @@ export class IframeManager {
       // Verify the iframe ID is still in the mirror (still being tracked by rrweb)
       // If removed, the mirror would have been cleaned up via removeNodeFromMap()
       if (!this.mirror.has(iframeId)) {
+        // An iframe attached during a time-sliced walk holds a reserved id
+        // until the post-flush buffer commit claims it. Its cache entry must
+        // survive to serve the NEXT snapshot's reattach; its held attach
+        // event delivers the content this time.
+        if (this.mirror.isPendingReservation(iframeId)) {
+          return;
+        }
         this.attachedIframes.delete(iframeId);
         return;
       }

@@ -193,6 +193,7 @@ export default class MutationBuffer {
   private shadowDomManager: observerParam['shadowDomManager'];
   private canvasManager: observerParam['canvasManager'];
   private processedNodeManager: observerParam['processedNodeManager'];
+  private onStylesheetTextSerialized: observerParam['onStylesheetTextSerialized'];
   private unattachedDoc: HTMLDocument;
   private canvasManagerReleased = false;
 
@@ -221,6 +222,7 @@ export default class MutationBuffer {
         'shadowDomManager',
         'canvasManager',
         'processedNodeManager',
+        'onStylesheetTextSerialized',
       ] as const
     ).forEach((key) => {
       // just a type trick, the runtime result is correct
@@ -258,15 +260,33 @@ export default class MutationBuffer {
   }
 
   /**
-   * A time-sliced full snapshot serializes the live tree, so a node that was
-   * added while the buffer was locked can end up *inside* the FullSnapshot —
-   * its pending add must then be forgotten, or the unlock would emit a
-   * duplicate add for a node the snapshot already delivered (and undo any
-   * removal that came after it). Called by the recorder's onSerialize hook
-   * for every node the sliced walk serializes.
+   * Whether this (locked) buffer is going to deliver `n` as an add on commit.
+   * The time-sliced walker skips such nodes — the buffer's add carries their
+   * live position, so the buffer is their single source of truth. (The
+   * inverse — serializing them and forgetting the pending add — froze them
+   * into the snapshot at stale positions and lost whole subtrees whenever a
+   * serialized ancestor moved before its children were reached.)
    */
-  public forgetAddedNode(n: Node) {
-    this.addedSet.delete(n);
+  public hasPendingAdd(n: Node): boolean {
+    return this.addedSet.has(n);
+  }
+
+  public hasLockToken(token: number): boolean {
+    return this.lockToken === token;
+  }
+
+  /**
+   * Approximate count of records a locked buffer is retaining, used to bound
+   * how much a time-sliced snapshot lets accumulate before giving up.
+   */
+  public pendingRecordCount(): number {
+    return (
+      this.texts.length +
+      this.attributes.length +
+      this.removes.length +
+      this.addedSet.size +
+      this.movedSet.size
+    );
   }
 
   public commit(token: number): boolean {
@@ -284,6 +304,10 @@ export default class MutationBuffer {
       return false;
     }
     this.lockToken = null;
+    // symmetric with commit(): a failed transaction must not leave the
+    // shared canvas manager locked, or every frame is dropped until the
+    // next successful snapshot's commit
+    this.canvasManager.unlock();
     this.texts = [];
     this.attributes = [];
     this.attributeMap = new WeakMap<Node, attributeCursor>();
@@ -299,6 +323,9 @@ export default class MutationBuffer {
   }
 
   public reset() {
+    // A buffer torn down mid-snapshot must not stay a lock holder: a stale
+    // token here would fail every future lockMutationBuffers sweep.
+    this.lockToken = null;
     // Don't reset the shared shadowDomManager here — that would disconnect every shadow-root observer on the page when any single buffer is torn down.
     this.releaseCanvasManager();
   }
@@ -387,6 +414,7 @@ export default class MutationBuffer {
         recordCanvas: this.recordCanvas,
         canvasMaskingConfigured: this.canvasMaskingConfigured,
         inlineImages: this.inlineImages,
+        onStylesheetTextSerialized: this.onStylesheetTextSerialized,
         onSerialize: (currentN) => {
           if (isSerializedIframe(currentN, this.mirror)) {
             this.iframeManager.addIframe(currentN as HTMLIFrameElement);

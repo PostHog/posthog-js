@@ -2,14 +2,17 @@ import {
   snapshot,
   snapshotWithBudget,
   genId,
+  type BudgetedSnapshotController,
   type MaskInputOptions,
   type serializedElementNodeWithId,
   slimDOMDefaults,
   createMirror,
 } from '@posthog/rrweb-snapshot';
+import type { serializedNodeWithId } from '@posthog/rrweb-types';
 import {
   initObservers,
   mutationBuffers,
+  anyMutationBufferHasPendingAdd,
   createMutationBufferLockToken,
   lockMutationBuffers,
   commitMutationBuffers,
@@ -39,6 +42,7 @@ import {
   IncrementalSource,
   type listenerHandler,
   type mutationCallbackParam,
+  NodeType,
   type scrollCallback,
   type canvasMutationParam,
   type adoptedStyleSheetParam,
@@ -52,6 +56,7 @@ import ProcessedNodeManager from './processed-node-manager';
 import {
   callbackWrapper,
   registerErrorHandler,
+  reportError,
   unregisterErrorHandler,
 } from './error-handler';
 import dom from '@posthog/rrweb-utils';
@@ -104,20 +109,54 @@ const nonUserInitiatedSources = new Set<IncrementalSource>([
   IncrementalSource.AdoptedStyleSheet,
 ]);
 
+interface HeldEvent {
+  event: eventWithoutTime;
+  isCheckout: boolean | undefined;
+  // How many nodes the walk had serialized when this event was observed —
+  // the happens-before marker the flush uses to decide whether the snapshot
+  // already contains a CSSOM delta's effect.
+  seq: number;
+}
+
 interface BudgetedSnapshotTransaction {
   bufferToken: number;
   generation: number;
   startedAt: number;
   isCheckout: boolean;
+  isRetry: boolean;
   didEmitFullSnapshot: boolean;
+  completed: boolean;
+  controller: BudgetedSnapshotController | null;
   error: unknown | null;
   abortRequested: boolean;
+  abortReason: string | null;
   heldEventBytes: number;
-  eventQueue: Array<[eventWithoutTime, boolean | undefined]>;
+  eventQueue: HeldEvent[];
+  serializedCount: number;
+  // Per stylesheet carrier (<style>/<link>): when its CSS was read (walk
+  // sequence) and whether the output carries live CSSOM or raw author text.
+  styleTargets: Map<number, { seq: number; inlined: boolean }>;
+  // Degradation accounting, reported as a custom event at flush so operators
+  // can see a canary giving up instead of inferring it from missing data.
+  overflow: { count: number; bytes: number } | null;
+  droppedAfterAbort: number;
+  // True while the pagehide/hidden path drains the walk synchronously: the
+  // backlog cap must not veto a page-death flush — finishing IS the recovery.
+  draining: boolean;
 }
 
 const MAX_HELD_EVENT_COUNT = 4_096;
 const MAX_HELD_EVENT_BYTES = 16 * 1024 * 1024;
+// Mutations don't pass through the held queue — locked buffers retain them as
+// records and node references. A page churning hard enough to bank this many
+// during one walk is better served by the synchronous fallback than by an
+// unboundedly growing buffer and one giant commit batch.
+const MAX_LOCKED_BUFFER_RECORDS = 50_000;
+// Hard bound on a single walk. Continuous mutation stretches a cooperative
+// walk (every fresh child list can contain new work), so past this the walk
+// is abandoned in favor of the synchronous fallback.
+const MAX_WALK_WALL_CLOCK_MS = 30_000;
+const WATCHDOG_MESSAGE = 'exceeded its wall-clock limit';
 
 function estimateRetainedSize(value: unknown, ceiling: number): number {
   const seen = new WeakSet<object>();
@@ -164,12 +203,18 @@ function estimateRetainedSize(value: unknown, ceiling: number): number {
 }
 
 /**
- * Removes references to unclaimed reserved ids from an event held during a
- * time-sliced full snapshot (see the flush in takeFullSnapshotBudgeted for why
- * dropping these is lossless). Returns the event, a copy with the offending
- * positions filtered out, or null when nothing referencing a known node is
- * left. Covers every id-bearing incremental payload shape: a single `id`,
- * pointer `positions`, and selection `ranges`.
+ * Detects and removes references to the given reserved ids from an event held
+ * during a time-sliced full snapshot. Used twice by the flush: any event still
+ * referencing an id in the set is *deferred* until the buffer commit has
+ * claimed the ids it references; after the commit the same scrub runs against
+ * the ids that remained unclaimed (their nodes also left the DOM mid-walk, so
+ * they exist for no one) and drops those references for good. Returns the
+ * event unchanged, a copy with offending pointer positions filtered out, or
+ * null. Covers every id-bearing payload shape: a single `id`, pointer
+ * `positions`, selection `ranges`, mutation `adds` (attach-iframe payloads —
+ * real mutations sit in locked buffers; under `recordCrossOriginIframes`,
+ * child-frame events forwarded by the parent also land here), and custom
+ * events carrying a `payload.id` (fullscreen).
  */
 function scrubUnclaimedIds(
   event: eventWithoutTime,
@@ -177,6 +222,17 @@ function scrubUnclaimedIds(
 ): eventWithoutTime | null {
   if (unclaimedIds.size === 0) return event;
   const e = event as { type: EventType; data?: Record<string, unknown> };
+  if (e.type === EventType.Custom && e.data) {
+    const payload = e.data.payload as { id?: unknown } | undefined;
+    if (
+      payload &&
+      typeof payload.id === 'number' &&
+      unclaimedIds.has(payload.id)
+    ) {
+      return null;
+    }
+    return event;
+  }
   if (e.type !== EventType.IncrementalSnapshot || !e.data) return event;
   const data = e.data;
   if (typeof data.id === 'number' && unclaimedIds.has(data.id)) {
@@ -200,11 +256,6 @@ function scrubUnclaimedIds(
     ).some((r) => unclaimedIds.has(r.start) || unclaimedIds.has(r.end));
     if (referencesUnclaimed) return null;
   }
-  // The only mutation events that can be held are attach-iframe payloads
-  // (real mutations sit in locked buffers). One whose iframe was never
-  // reached is dropped whole: the iframe's buffered add re-serializes it on
-  // unlock, which re-fires onIframeLoad and re-attaches the content against
-  // an id the replayer does know.
   if (Array.isArray(data.adds)) {
     const referencesUnclaimed = (
       data.adds as Array<{ parentId: number; node: { id: number } }>
@@ -221,7 +272,7 @@ function record<T = eventWithTime>(
     emit,
     checkoutEveryNms,
     checkoutEveryNth,
-    fullSnapshotYieldBudgetMs = 0,
+    fullSnapshotYieldBudgetMs: rawFullSnapshotYieldBudgetMs = 0,
     blockClass = 'rr-block',
     blockSelector = null,
     ignoreClass = 'rr-ignore',
@@ -258,6 +309,21 @@ function record<T = eventWithTime>(
   } = options;
 
   registerErrorHandler(errorHandler);
+
+  // Only a finite positive number is a real budget; anything else means off.
+  // `true` would coerce to a 1ms budget (a minutes-long walk on large pages)
+  // and Infinity to a walk that never yields at all.
+  const fullSnapshotYieldBudgetMs =
+    typeof rawFullSnapshotYieldBudgetMs === 'number' &&
+    isFinite(rawFullSnapshotYieldBudgetMs) &&
+    rawFullSnapshotYieldBudgetMs > 0
+      ? rawFullSnapshotYieldBudgetMs
+      : 0;
+  if (fullSnapshotYieldBudgetMs !== (rawFullSnapshotYieldBudgetMs ?? 0)) {
+    console.warn(
+      'fullSnapshotYieldBudgetMs must be a finite number of milliseconds > 0; falling back to synchronous full snapshots',
+    );
+  }
 
   const dataURLOptions = {
     type: 'image/webp',
@@ -333,7 +399,7 @@ function record<T = eventWithTime>(
 
   polyfill();
 
-  let lastFullSnapshotEvent: eventWithTime;
+  let lastFullSnapshotWallTime = 0;
   let incrementalSnapshotCount = 0;
   // Budgeted (time-sliced) full snapshot state. The FullSnapshot has to reach
   // the wire before anything that references the mirror it builds, so every
@@ -395,26 +461,6 @@ function record<T = eventWithTime>(
       e.type !== EventType.Meta &&
       e.type !== EventType.FullSnapshot
     ) {
-      // CSSOM-family deltas (StyleSheetRule/StyleDeclaration) and canvas
-      // commands describe a change to state the walk itself is about to
-      // capture: if their target hasn't been serialized yet, the FullSnapshot
-      // will already contain the post-change state, and delivering the delta
-      // afterwards would apply it twice — for index-based CSSOM payloads that
-      // also shifts every later rule index. Their post-snapshot deltas stay
-      // consistent precisely because the snapshot reflects the live CSSOM at
-      // serialization time.
-      if (e.type === EventType.IncrementalSnapshot) {
-        const data = e.data as { source?: number; id?: number };
-        if (
-          (data.source === IncrementalSource.StyleSheetRule ||
-            data.source === IncrementalSource.StyleDeclaration ||
-            data.source === IncrementalSource.CanvasMutation) &&
-          typeof data.id === 'number' &&
-          mirror.isPendingReservation(data.id)
-        ) {
-          return;
-        }
-      }
       // A sliced snapshot spans several tasks, so real events land while the
       // FullSnapshot is still being built. They cannot go out ahead of it — the
       // replayer needs the snapshot before anything that references it — so
@@ -432,7 +478,11 @@ function record<T = eventWithTime>(
       // and StyleSheetRule deltas are index-based, so a dropped insertRule
       // misaligns every later rule index.
       const transaction = activeBudgetedSnapshot;
-      if (!transaction || transaction.abortRequested) {
+      if (!transaction) {
+        return;
+      }
+      if (transaction.abortRequested) {
+        transaction.droppedAfterAbort++;
         return;
       }
       const retainedBytes = estimateRetainedSize(
@@ -444,14 +494,23 @@ function record<T = eventWithTime>(
         transaction.heldEventBytes + retainedBytes > MAX_HELD_EVENT_BYTES
       ) {
         transaction.abortRequested = true;
+        transaction.abortReason = 'held-queue-overflow';
         transaction.error = new Error(
           'Budgeted full snapshot held-event queue exceeded its safety limit',
         );
+        transaction.overflow = {
+          count: transaction.eventQueue.length,
+          bytes: transaction.heldEventBytes,
+        };
         transaction.eventQueue.length = 0;
         transaction.heldEventBytes = 0;
         return;
       }
-      transaction.eventQueue.push([r, isCheckout]);
+      transaction.eventQueue.push({
+        event: r,
+        isCheckout,
+        seq: transaction.serializedCount,
+      });
       transaction.heldEventBytes += retainedBytes;
       return;
     }
@@ -481,7 +540,13 @@ function record<T = eventWithTime>(
     }
 
     if (e.type === EventType.FullSnapshot) {
-      lastFullSnapshotEvent = e;
+      // The budgeted path backdates the event to walk start, but the checkout
+      // clock must run from when the snapshot actually reached the wire — a
+      // backdated marker makes every walk longer than checkoutEveryNms
+      // immediately re-trip the checkout, a self-sustaining snapshot loop.
+      lastFullSnapshotWallTime = preserveTimestamp
+        ? nowTimestamp()
+        : e.timestamp;
       incrementalSnapshotCount = 0;
     } else if (e.type === EventType.IncrementalSnapshot) {
       // attach iframe should be considered as full snapshot
@@ -497,7 +562,7 @@ function record<T = eventWithTime>(
         checkoutEveryNth && incrementalSnapshotCount >= checkoutEveryNth;
       const exceedTime =
         checkoutEveryNms &&
-        e.timestamp - lastFullSnapshotEvent.timestamp > checkoutEveryNms;
+        e.timestamp - lastFullSnapshotWallTime > checkoutEveryNms;
       if (exceedCount || exceedTime) {
         takeFullSnapshot(true);
       }
@@ -575,6 +640,35 @@ function record<T = eventWithTime>(
       },
     });
 
+  // Reported from inside serializeTextNode for every <style> holding author
+  // text — the walk and the commit both serialize through it. seq Infinity
+  // marks a commit-time serialization, which happens after every held delta
+  // was observed.
+  const onStylesheetTextSerialized = (textNode: Text, inlined: boolean) => {
+    const transaction = activeBudgetedSnapshot;
+    if (!transaction) {
+      return;
+    }
+    const styleEl = dom.parentNode(textNode);
+    if (!styleEl) {
+      return;
+    }
+    const id = mirror.getId(styleEl);
+    if (id === -1) {
+      return;
+    }
+    transaction.styleTargets.set(id, {
+      // +1: this callback fires from inside the TEXT child's serialization,
+      // before onSerialize increments the count for it — a delta observed in
+      // the yield between the <style> element and its text child must compare
+      // as before-the-read, or an inlined rule is applied twice.
+      seq: budgetedSnapshotFlushing
+        ? Infinity
+        : transaction.serializedCount + 1,
+      inlined,
+    });
+  };
+
   const stylesheetManager = new StylesheetManager({
     mutationCb: wrappedMutationEmit,
     adoptedStyleSheetCb: wrappedAdoptedStyleSheetEmit,
@@ -642,6 +736,7 @@ function record<T = eventWithTime>(
       keepIframeSrcFn,
       processedNodeManager,
       attributeFilter,
+      onStylesheetTextSerialized,
     },
     mirror,
   });
@@ -662,14 +757,27 @@ function record<T = eventWithTime>(
     canvasMaskingConfigured,
     inlineImages,
     onSerialize: (n: Node) => {
-      if (budgetedSnapshotInFlight) {
-        // A node added mid-walk to a parent the walk hadn't reached yet gets
-        // serialized here, live — so its pending add in the locked buffers
-        // has been superseded and must be forgotten, or the unlock would
-        // emit a duplicate add (and resurrect the node past any later
-        // removal). Sync snapshots never hit this: nothing runs while they
-        // serialize, so nothing can be pending.
-        mutationBuffers.forEach((buf) => buf.forgetAddedNode(n));
+      const transaction = activeBudgetedSnapshot;
+      if (transaction && !budgetedSnapshotFlushing) {
+        transaction.serializedCount++;
+        // Track what the snapshot captured for each stylesheet carrier, so
+        // the flush can tell which held CSSOM deltas the FullSnapshot already
+        // contains. `_cssText` presence covers <link> and empty <style>; a
+        // <style> holding author text is corrected right after by
+        // onStylesheetTextSerialized (its CSS lives in the text child,
+        // serialized next).
+        const meta = mirror.getMeta(n);
+        if (meta && meta.type === NodeType.Element) {
+          const tagName = (meta as { tagName?: string }).tagName;
+          if (tagName === 'link' || tagName === 'style') {
+            transaction.styleTargets.set(meta.id, {
+              seq: transaction.serializedCount,
+              inlined:
+                (meta as { attributes?: Record<string, unknown> }).attributes
+                  ?._cssText !== undefined,
+            });
+          }
+        }
       }
       if (isSerializedIframe(n, mirror)) {
         iframeManager.addIframe(n as HTMLIFrameElement);
@@ -701,6 +809,7 @@ function record<T = eventWithTime>(
     ) => {
       stylesheetManager.attachLinkElement(linkEl, childSn);
     },
+    onStylesheetTextSerialized,
     keepIframeSrcFn,
   });
 
@@ -724,6 +833,26 @@ function record<T = eventWithTime>(
     );
   };
 
+  // Degraded budgeted-snapshot outcomes must be visible in production — a
+  // console.warn is invisible to the operator deciding whether a canary is
+  // healthy. Custom events ride the normal wire and are queryable/ingestable.
+  const emitBudgetedSnapshotDiagnostic = (
+    status: string,
+    detail: Record<string, unknown> = {},
+  ) => {
+    try {
+      wrappedEmit({
+        type: EventType.Custom,
+        data: {
+          tag: 'budgeted-full-snapshot',
+          payload: { status, budgetMs: fullSnapshotYieldBudgetMs, ...detail },
+        },
+      } as eventWithoutTime);
+    } catch {
+      // diagnostics must never break the recording
+    }
+  };
+
   const finishFullSnapshot = () => {
     if (recordCrossOriginIframes) {
       iframeManager.reattachIframes();
@@ -738,6 +867,10 @@ function record<T = eventWithTime>(
   };
 
   const takeFullSnapshotSynchronous = (isCheckout: boolean): boolean => {
+    // Meta first, matching the pre-budget ordering — a throw from the
+    // consumer's Meta handling must not leak a held buffer lock.
+    emitMetaEvent(isCheckout);
+
     stylesheetManager.reset();
     shadowDomManager.init();
 
@@ -746,13 +879,11 @@ function record<T = eventWithTime>(
       console.warn('A different full snapshot owns the mutation buffers');
       return false;
     }
-    emitMetaEvent(isCheckout);
 
     try {
       const node = snapshot(document, buildFullSnapshotOptions());
       if (!node) {
         discardMutationBuffers(bufferToken);
-        mirror.reset();
         console.warn('Failed to snapshot the document');
         return false;
       }
@@ -768,20 +899,328 @@ function record<T = eventWithTime>(
         isCheckout,
       );
       commitMutationBuffers(bufferToken);
+      canvasManager.onFullSnapshot();
       finishFullSnapshot();
       return true;
     } catch (error) {
+      // Release the locks, then let the error propagate exactly as the
+      // pre-budget path did: the SDK catches and retries. Swallowing it here
+      // turned one transient throw into silent permanent teardown. The mirror
+      // is deliberately NOT reset — partially claimed ids are reused by the
+      // next serialization (the checkout invariant), and a reset would re-key
+      // every node and orphan iframeManager's attached trees.
       discardMutationBuffers(bufferToken);
-      mirror.reset();
-      console.warn('Synchronous full snapshot failed', error);
+      throw error;
+    }
+  };
+
+  // Whether the snapshot already contains a held CSSOM delta's effect. The
+  // walk records, per stylesheet carrier, when its CSS was read and whether
+  // the output carries live CSSOM or raw author text; a delta observed before
+  // that read is inside an inlined snapshot (delivering it would double-apply
+  // and shift every later rule index) but missing from a raw one (dropping it
+  // would lose the rule and misalign every later index — the two failure
+  // modes of gating on "the snapshot will contain it" without checking).
+  const heldCssomDeltaCoveredBySnapshot = (
+    transaction: BudgetedSnapshotTransaction,
+    held: HeldEvent,
+  ): boolean => {
+    const e = held.event as {
+      type: EventType;
+      data?: { source?: number; id?: unknown };
+    };
+    if (e.type !== EventType.IncrementalSnapshot || !e.data) return false;
+    if (
+      e.data.source !== IncrementalSource.StyleSheetRule &&
+      e.data.source !== IncrementalSource.StyleDeclaration
+    ) {
       return false;
+    }
+    // styleId-keyed deltas (constructed/adopted sheets) aren't node-targeted;
+    // their sheets ride separate AdoptedStyleSheet events, never the snapshot
+    if (typeof e.data.id !== 'number') return false;
+    const entry = transaction.styleTargets.get(e.data.id);
+    if (entry) {
+      return held.seq < entry.seq && entry.inlined;
+    }
+    // No walk entry: the target was created mid-walk and delivered by the
+    // commit's add, which serializes after every held delta was observed.
+    // <link>/empty <style> carry the live CSSOM as _cssText; a <style> with
+    // author text wrote an entry via onStylesheetTextSerialized above.
+    const node = mirror.getNode(e.data.id);
+    const meta = node && mirror.getMeta(node);
+    if (meta && meta.type === NodeType.Element) {
+      return (
+        (meta as { attributes?: Record<string, unknown> }).attributes
+          ?._cssText !== undefined
+      );
+    }
+    return false;
+  };
+
+  // Everything that has to happen once the walk produced a tree (or failed):
+  // emit, flush the held window, release the transaction. One idempotent
+  // function rather than promise-chain stages, because it has two callers
+  // with different timing: the walk's own promise chain, and the pagehide /
+  // hidden-tab path that drains the walk synchronously — a parked yield never
+  // fires on a dying page, and the promise chain would run too late for the
+  // SDK's unload flush to see the events.
+  const completeBudgetedWalk = (
+    transaction: BudgetedSnapshotTransaction,
+    node: serializedNodeWithId | null,
+  ) => {
+    if (transaction.completed) {
+      return;
+    }
+    transaction.completed = true;
+    if (transaction.generation !== recordingGeneration) {
+      // This walk's recording is gone — torn down, or replaced by a newer
+      // record() call. Leave EVERYTHING alone: the queue and buffers
+      // belong to whoever owns the current generation now, and the id
+      // reservation may be the new session's, mid-walk. Just stand down.
+      budgetedSnapshotInFlight = false;
+      budgetedSnapshotQueued = null;
+      transaction.eventQueue.length = 0;
+      discardMutationBuffers(transaction.bufferToken);
+      if (activeBudgetedSnapshot === transaction) {
+        activeBudgetedSnapshot = null;
+      }
+      return;
+    }
+
+    if (node && !transaction.error) {
+      const fullSnapshotEvent = {
+        type: EventType.FullSnapshot,
+        // The tree the walk produced describes the document as it was at walk
+        // start — that's the time it belongs at, and it keeps the FullSnapshot
+        // ahead of everything observed during the walk on the wire.
+        timestamp: transaction.startedAt,
+        data: {
+          node,
+          initialOffset: getWindowScroll(window),
+        },
+      };
+      try {
+        wrappedEmit(
+          fullSnapshotEvent as unknown as eventWithoutTime,
+          transaction.isCheckout,
+          true,
+        );
+        transaction.didEmitFullSnapshot = true;
+      } catch (error) {
+        // a throwing consumer callback must fall through to the failure
+        // path's cleanup, not escape with the transaction latched in-flight
+        transaction.error = error;
+        reportError(error);
+        console.warn('Budgeted full snapshot emit failed', error);
+      }
+    } else {
+      // an overflow/watchdog abort already recorded its own error
+      transaction.error ??= new Error('Failed to snapshot the document');
+    }
+
+    if (!transaction.didEmitFullSnapshot) {
+      const reason = transaction.abortReason ?? 'walk-error';
+      // a checkout that coalesced while this walk ran must not be silently
+      // downgraded by the recovery snapshot
+      const isCheckout =
+        transaction.isCheckout || (budgetedSnapshotQueued?.isCheckout ?? false);
+      transaction.eventQueue.length = 0;
+      budgetedSnapshotQueued = null;
+      mirror.endIdReservation();
+      discardMutationBuffers(transaction.bufferToken);
+      budgetedSnapshotInFlight = false;
+      activeBudgetedSnapshot = null;
+
+      // The mirror is deliberately NOT reset on any failure path: ids the
+      // aborted walk already claimed are reused by the next serialization
+      // (the checkout invariant), and a reset would re-key every node and
+      // orphan iframeManager's attached cross-origin trees.
+      if (!transaction.isRetry && reason !== 'walk-error') {
+        // Overflow and watchdog aborts are load-dependent — the page may have
+        // been mid-burst (a route change, a data refresh). One fresh walk is
+        // cheap; going straight to the synchronous fallback re-runs the very
+        // stall this feature exists to avoid.
+        emitBudgetedSnapshotDiagnostic('budgeted-retry', {
+          reason,
+          walkMs: nowTimestamp() - transaction.startedAt,
+          droppedHeldEventCount:
+            (transaction.overflow?.count ?? 0) + transaction.droppedAfterAbort,
+          droppedHeldEventBytes: transaction.overflow?.bytes ?? 0,
+        });
+        try {
+          takeFullSnapshotBudgeted(isCheckout, true);
+        } catch (retryError) {
+          // e.g. the consumer's emit now throws at the retry's Meta — an
+          // escape here would surface as an unhandled rejection
+          reportError(retryError);
+          console.warn('Budgeted full snapshot retry failed', retryError);
+        }
+        return;
+      }
+
+      emitBudgetedSnapshotDiagnostic('sync-fallback', {
+        reason,
+        isRetry: transaction.isRetry,
+        walkMs: nowTimestamp() - transaction.startedAt,
+        droppedHeldEventCount:
+          (transaction.overflow?.count ?? 0) + transaction.droppedAfterAbort,
+        droppedHeldEventBytes: transaction.overflow?.bytes ?? 0,
+      });
+
+      // A fallback failure must not tear recording down — incremental
+      // events still flow against the last good snapshot, and the next
+      // periodic snapshot retries. Teardown here converted one transient
+      // consumer throw into a silently dead recording.
+      try {
+        takeFullSnapshotSynchronous(isCheckout);
+      } catch (fallbackError) {
+        reportError(fallbackError);
+        emitBudgetedSnapshotDiagnostic('sync-fallback-failed');
+        console.warn(
+          'Synchronous fallback full snapshot failed',
+          fallbackError,
+        );
+      }
+      return;
+    }
+
+    // Reservation stays claimable through the commit below: a reserved id
+    // whose node was never reached belongs to a node created (or moved) during
+    // the walk, and the commit's re-serialization claims exactly that id — so
+    // events referencing it are deferred past the commit rather than dropped.
+    // Only the *handout* of new ids stops here: the commit's add-ordering
+    // probes parents via getId and must read -1 for an unserialized parent to
+    // defer the add, not receive a fresh reservation.
+    mirror.pauseReservationHandout();
+    const pendingBeforeCommit = new Set(mirror.getUnclaimedReservedIds());
+
+    // Held events go out first, each keeping the time it was observed —
+    // all of which are inside the walk, and so before the mutations that
+    // are about to be flushed. Ordering the stream by time rather than
+    // bunching everything onto the instant the walk ended matters: index
+    // based payloads (StyleSheetRule) are applied by the replayer in the
+    // order it receives them, and collapsing a whole window into one
+    // millisecond leaves it no room to interleave them correctly.
+    //
+    // The gate stays armed while this runs (deliveries bypass it via the
+    // flushing flag): a held event can carry a timestamp old enough for
+    // checkoutEveryNms/Nth to request a checkout mid-flush, and that
+    // request must coalesce into the follow-up below — starting a new
+    // walk here would interleave its Meta with the flush and its unlock
+    // with the new walk's locks.
+    budgetedSnapshotFlushing = true;
+    try {
+      try {
+        if (recordCrossOriginIframes) {
+          // Held child-frame events reference nodes inside previously
+          // attached iframe documents; the replayer drops them as unknown
+          // unless the reattach lands first.
+          iframeManager.reattachIframes();
+        }
+        const queuedEvents = transaction.eventQueue.splice(0);
+        const deferred: HeldEvent[] = [];
+        // a consumer throw on one delivery must not drop the rest of the
+        // held window — input/scroll dedup means dropped deltas never re-send
+        const emitHeld = (
+          event: eventWithoutTime,
+          isCheckout: boolean | undefined,
+          preserveTimestamp: boolean,
+        ) => {
+          try {
+            wrappedEmit(event, isCheckout, preserveTimestamp);
+          } catch (emitError) {
+            reportError(emitError);
+            console.warn('Held event delivery failed', emitError);
+          }
+        };
+        for (const held of queuedEvents) {
+          if (heldCssomDeltaCoveredBySnapshot(transaction, held)) {
+            continue;
+          }
+          if (
+            recordCrossOriginIframes &&
+            (held.event as { data?: { isAttachIframe?: boolean } }).data
+              ?.isAttachIframe &&
+            scrubUnclaimedIds(held.event, pendingBeforeCommit) === held.event
+          ) {
+            // the reattach above already re-delivered this iframe's content
+            // from the attach cache; emitting the held original would attach
+            // it twice
+            continue;
+          }
+          if (scrubUnclaimedIds(held.event, pendingBeforeCommit) !== held.event) {
+            // references a node only the commit's add will introduce
+            deferred.push(held);
+            continue;
+          }
+          emitHeld(held.event, held.isCheckout, true);
+        }
+
+        commitMutationBuffers(transaction.bufferToken); // generate & emit any mutations that happened during snapshotting, as can now apply against the newly built mirror
+
+        if (deferred.length > 0) {
+          // The commit just claimed the reserved ids for every node it
+          // re-added; ids still pending belong to nodes that also left the
+          // DOM mid-walk (their add cancelled) and exist for no one.
+          const stillPending = new Set(mirror.getUnclaimedReservedIds());
+          for (const held of deferred) {
+            if (heldCssomDeltaCoveredBySnapshot(transaction, held)) {
+              continue;
+            }
+            const scrubbed = scrubUnclaimedIds(held.event, stillPending);
+            if (scrubbed) {
+              // re-stamped at flush time: to the replayer these targets came
+              // into existence with the commit, just now
+              emitHeld(scrubbed, held.isCheckout, false);
+            }
+          }
+        }
+      } finally {
+        // A consumer throw mid-flush must not leave the buffers locked: the
+        // commit is the transaction's release, not an optional step. (A
+        // second call after a successful commit is a token-mismatch no-op.)
+        commitMutationBuffers(transaction.bufferToken);
+      }
+      canvasManager.onFullSnapshot();
+      if (document.adoptedStyleSheets && document.adoptedStyleSheets.length > 0)
+        stylesheetManager.adoptStyleSheets(
+          document.adoptedStyleSheets,
+          mirror.getId(document),
+        );
+    } catch (flushError) {
+      // a consumer throw mid-flush loses that one delivery, nothing else —
+      // the commit already ran (finally above) and recording continues.
+      // Escaping here would surface as an unhandled rejection on the walk's
+      // promise path, or propagate into an unload handler on the sync path.
+      reportError(flushError);
+      console.warn('Budgeted full snapshot flush failed', flushError);
+    } finally {
+      mirror.endIdReservation();
+      budgetedSnapshotFlushing = false;
+      budgetedSnapshotInFlight = false;
+      activeBudgetedSnapshot = null;
+    }
+
+    const pending = budgetedSnapshotQueued;
+    budgetedSnapshotQueued = null;
+    if (pending) {
+      try {
+        takeFullSnapshotBudgeted(pending.isCheckout);
+      } catch (followUpError) {
+        reportError(followUpError);
+        console.warn(
+          'Coalesced follow-up full snapshot failed',
+          followUpError,
+        );
+      }
     }
   };
 
   // Time-sliced variant: same phases as the synchronous path below, but the
   // serialization yields to the event loop on the configured budget so a large
   // document doesn't block the page in one long task. Because the walk spans
-  // several tasks, the page keeps running during it, and three things have to
+  // several tasks, the page keeps running during it, and four things have to
   // hold for the recording to stay correct:
   //  - every mutation buffer stays locked for the whole walk, including buffers
   //    created *during* it (the document's own, plus shadow-root and iframe
@@ -789,9 +1228,12 @@ function record<T = eventWithTime>(
   //    than a loop over the ones that happen to exist right now;
   //  - ids are reserved on demand, so an event observed before its node has
   //    been reached still resolves to the id that node is about to get;
+  //  - nodes the locked buffers will re-add at commit (added or moved during
+  //    the walk) are skipped by the walk itself — the buffer is their single
+  //    source of truth, carrying their live position and final state;
   //  - everything observed in the meantime is held and delivered after the
-  //    FullSnapshot, in order (see wrappedEmit).
-  const takeFullSnapshotBudgeted = (isCheckout: boolean) => {
+  //    FullSnapshot, in order (see wrappedEmit and completeBudgetedWalk).
+  const takeFullSnapshotBudgeted = (isCheckout: boolean, isRetry = false) => {
     if (budgetedSnapshotInFlight) {
       // coalesce concurrent requests into a single follow-up snapshot
       budgetedSnapshotQueued = {
@@ -799,157 +1241,102 @@ function record<T = eventWithTime>(
       };
       return;
     }
-    budgetedSnapshotInFlight = true;
     const transaction: BudgetedSnapshotTransaction = {
       bufferToken: createMutationBufferLockToken(),
       generation: recordingGeneration,
       startedAt: nowTimestamp(),
       isCheckout,
+      isRetry,
       didEmitFullSnapshot: false,
+      completed: false,
+      controller: null,
       error: null,
       abortRequested: false,
+      abortReason: null,
       heldEventBytes: 0,
       eventQueue: [],
+      serializedCount: 0,
+      styleTargets: new Map(),
+      overflow: null,
+      droppedAfterAbort: 0,
+      draining: false,
     };
-    activeBudgetedSnapshot = transaction;
-    // The tree the walk produces describes the document as it is now, so this is
-    // the time the FullSnapshot belongs at — not the time the walk happens to
-    // finish. It also keeps the FullSnapshot ahead of everything observed during
-    // the walk, so the stream stays in timestamp order.
+    // Meta is emitted before any transaction state is committed: the
+    // consumer's emit is outside our control, and a throw from it must leave
+    // the recorder able to snapshot again — not latched in-flight with no
+    // promise chain to recover. It carries the walk's start time so it stays
+    // ahead of the backdated FullSnapshot on the wire.
     emitMetaEvent(isCheckout, transaction.startedAt);
 
     // When we take a full snapshot, old tracked StyleSheets need to be removed.
     stylesheetManager.reset();
     shadowDomManager.init();
 
-    // Armed synchronously, before the first yield can happen, so that no buffer
-    // can be created unlocked while the walk is in flight.
-    if (!lockMutationBuffers(transaction.bufferToken)) {
+    budgetedSnapshotInFlight = true;
+    activeBudgetedSnapshot = transaction;
+    try {
+      // Armed synchronously, before the first yield can happen, so that no
+      // buffer can be created unlocked while the walk is in flight.
+      if (!lockMutationBuffers(transaction.bufferToken)) {
+        throw new Error('A different full snapshot owns the mutation buffers');
+      }
+      mirror.beginIdReservation(genId);
+    } catch (error) {
       budgetedSnapshotInFlight = false;
       activeBudgetedSnapshot = null;
-      throw new Error('A different full snapshot owns the mutation buffers');
+      throw error;
     }
-    mirror.beginIdReservation(genId);
     void snapshotWithBudget(document, {
       ...buildFullSnapshotOptions(),
       yieldBudgetMs: fullSnapshotYieldBudgetMs,
+      maxWalkWallClockMs: MAX_WALK_WALL_CLOCK_MS,
+      shouldSkipNode: anyMutationBufferHasPendingAdd,
+      onController: (controller) => {
+        transaction.controller = controller;
+      },
       // `mirror` is shared across recording sessions, so a walk whose recording
       // has been torn down has to stop writing to it, not just be ignored.
-      shouldAbort: () =>
-        transaction.generation !== recordingGeneration ||
-        transaction.abortRequested,
-    })
-      .then((node) => {
-        if (transaction.generation !== recordingGeneration) {
-          // recording was stopped (or restarted) while we were serializing
-          return;
+      // The buffer backlog is checked here too — mutations never pass through
+      // the held-event queue, so its caps can't see them.
+      shouldAbort: () => {
+        if (
+          transaction.generation !== recordingGeneration ||
+          transaction.abortRequested
+        ) {
+          return true;
         }
-        if (!node) {
-          transaction.error = new Error('Failed to snapshot the document');
-          return;
+        if (transaction.draining) {
+          return false;
         }
-        const fullSnapshotEvent = {
-          type: EventType.FullSnapshot,
-          timestamp: transaction.startedAt,
-          data: {
-            node,
-            initialOffset: getWindowScroll(window),
-          },
-        };
-        wrappedEmit(
-          fullSnapshotEvent as unknown as eventWithoutTime,
-          isCheckout,
-          true,
-        );
-        transaction.didEmitFullSnapshot = true;
-      })
-      .catch((error: unknown) => {
+        let backlog = 0;
+        for (const buffer of mutationBuffers) {
+          backlog += buffer.pendingRecordCount();
+        }
+        if (backlog > MAX_LOCKED_BUFFER_RECORDS) {
+          transaction.abortRequested = true;
+          transaction.abortReason = 'mutation-backlog';
+          transaction.error = new Error(
+            'Budgeted full snapshot mutation backlog exceeded its safety limit',
+          );
+          return true;
+        }
+        return false;
+      },
+    }).then(
+      (node) => completeBudgetedWalk(transaction, node),
+      (error: unknown) => {
         transaction.error = error;
+        if (
+          error instanceof Error &&
+          error.message.includes(WATCHDOG_MESSAGE)
+        ) {
+          transaction.abortReason = 'watchdog-timeout';
+        }
+        reportError(error);
         console.warn('Budgeted full snapshot failed', error);
-      })
-      .finally(() => {
-        if (transaction.generation !== recordingGeneration) {
-          // This walk's recording is gone — torn down, or replaced by a newer
-          // record() call. Leave EVERYTHING alone: the queue and buffers
-          // belong to whoever owns the current generation now, and the id
-          // reservation may be the new session's, mid-walk. Just stand down.
-          budgetedSnapshotInFlight = false;
-          budgetedSnapshotQueued = null;
-          transaction.eventQueue.length = 0;
-          discardMutationBuffers(transaction.bufferToken);
-          if (activeBudgetedSnapshot === transaction) {
-            activeBudgetedSnapshot = null;
-          }
-          return;
-        }
-        if (!transaction.didEmitFullSnapshot || transaction.error) {
-          transaction.eventQueue.length = 0;
-          budgetedSnapshotQueued = null;
-          mirror.endIdReservation();
-          discardMutationBuffers(transaction.bufferToken);
-          mirror.reset();
-          budgetedSnapshotInFlight = false;
-          activeBudgetedSnapshot = null;
-
-          if (!takeFullSnapshotSynchronous(transaction.isCheckout)) {
-            recordingGeneration++;
-            stopRecording?.();
-          }
-          return;
-        }
-        // A reserved id whose node was never reached belongs to a node created
-        // during the walk inside already-visited territory. Its held events
-        // have to be weeded out — the replayer will never learn that id — and
-        // dropping them loses nothing: the node's add is sitting in the locked
-        // mutation buffer and will re-serialize its *final* state (value,
-        // attributes, text) on unlock. This matches the synchronous semantics
-        // too: under a blocking snapshot a node cannot be created and
-        // interacted with mid-snapshot at all.
-        const unclaimedIds = new Set(mirror.getUnclaimedReservedIds());
-        // Reservation ends with the walk. It must not still be on during the
-        // unlock below: pushAdd relies on `parentId === -1` to know a parent
-        // isn't serialized yet and defer the add, and a reserved id would hide
-        // that, emitting an add against a parent the replayer never received.
-        mirror.endIdReservation();
-
-        // Held events go out first, each keeping the time it was observed —
-        // all of which are inside the walk, and so before the mutations that
-        // are about to be flushed. Ordering the stream by time rather than
-        // bunching everything onto the instant the walk ended matters: index
-        // based payloads (StyleSheetRule) are applied by the replayer in the
-        // order it receives them, and collapsing a whole window into one
-        // millisecond leaves it no room to interleave them correctly.
-        //
-        // The gate stays armed while this runs (deliveries bypass it via the
-        // flushing flag): a held event can carry a timestamp old enough for
-        // checkoutEveryNms/Nth to request a checkout mid-flush, and that
-        // request must coalesce into the follow-up below — starting a new
-        // walk here would interleave its Meta with the flush and its unlock
-        // with the new walk's locks.
-        budgetedSnapshotFlushing = true;
-        try {
-          const queuedEvents = transaction.eventQueue.splice(0);
-          for (const [event, eventIsCheckout] of queuedEvents) {
-            const scrubbed = scrubUnclaimedIds(event, unclaimedIds);
-            if (scrubbed) {
-              wrappedEmit(scrubbed, eventIsCheckout, true);
-            }
-          }
-
-          commitMutationBuffers(transaction.bufferToken); // generate & emit any mutations that happened during snapshotting, as can now apply against the newly built mirror
-          finishFullSnapshot();
-        } finally {
-          budgetedSnapshotFlushing = false;
-          budgetedSnapshotInFlight = false;
-          activeBudgetedSnapshot = null;
-        }
-
-        const pending = budgetedSnapshotQueued;
-        budgetedSnapshotQueued = null;
-        if (pending) {
-          takeFullSnapshotBudgeted(pending.isCheckout);
-        }
-      });
+        completeBudgetedWalk(transaction, null);
+      },
+    );
   };
 
   takeFullSnapshot = (isCheckout = false) => {
@@ -960,11 +1347,7 @@ function record<T = eventWithTime>(
       takeFullSnapshotBudgeted(isCheckout);
       return true;
     }
-    const succeeded = takeFullSnapshotSynchronous(isCheckout);
-    if (!succeeded) {
-      stopRecording?.();
-    }
-    return succeeded;
+    return takeFullSnapshotSynchronous(isCheckout);
   };
 
   try {
@@ -1116,6 +1499,7 @@ function record<T = eventWithTime>(
           canvasManager,
           ignoreCSSAttributes,
           attributeFilter,
+          onStylesheetTextSerialized,
           plugins:
             plugins
               ?.filter((p) => p.observer)
@@ -1231,11 +1615,41 @@ function record<T = eventWithTime>(
       unregisterErrorHandler();
     };
 
+    // A walk in flight when the page hides or unloads must not die parked on
+    // a yield that will never fire: finish it synchronously — invisible to a
+    // hidden page — so the FullSnapshot and the held window flush in this
+    // task and the SDK's own unload flush can still send them. An aborted
+    // walk (overflow/teardown) is left for its normal completion path: a
+    // synchronous fallback snapshot inside an unload handler would be the
+    // original multi-second stall, spent on a page that is going away.
+    const completeWalkBeforePageHides = () => {
+      const transaction = activeBudgetedSnapshot;
+      if (!transaction || transaction.completed || !transaction.controller) {
+        return;
+      }
+      transaction.draining = true;
+      const node = transaction.controller.flushSync();
+      if (node) {
+        completeBudgetedWalk(transaction, node);
+      }
+    };
+
     const init = () => {
       if (!takeFullSnapshot()) {
         return;
       }
       handlers.push(observe(document));
+      if (fullSnapshotYieldBudgetMs > 0) {
+        handlers.push(
+          on('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') {
+              completeWalkBeforePageHides();
+            }
+          }),
+        );
+        // pagehide fires on window, not document
+        handlers.push(on('pagehide', completeWalkBeforePageHides, window));
+      }
       handlers.push(on('fullscreenchange', emitFullscreenChange));
       handlers.push(on('webkitfullscreenchange', emitFullscreenChange));
       handlers.push(on('mozfullscreenchange', emitFullscreenChange));
