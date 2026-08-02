@@ -282,6 +282,7 @@
         "_hasCompletedInitialFlush",
         "_hasLoadedFlags",
         "_hasLoggedDeprecationWarning",
+        "_hasLoggedRecorderCallbackError",
         "_hasPassedMinimumDuration",
         "_hasPersonProcessing",
         "_hasProcessedRestoreToken",
