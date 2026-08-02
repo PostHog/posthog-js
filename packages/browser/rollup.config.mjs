@@ -418,6 +418,7 @@ const typeTargets = entrypoints
     .map((file) => {
         const source = `./lib/src/entrypoints/${file.replace('.ts', '.d.ts')}`
         const isExtensionBundles = file === 'extension-bundles.es.ts'
+        const isSlimModule = file === 'module.slim.es.ts'
         // customizations types must reference the main module for the PostHog class —
         // an inlined duplicate would be nominally incompatible with the consumer's
         // `posthog` instance (same private-fields problem as extension-bundles).
@@ -429,8 +430,12 @@ const typeTargets = entrypoints
             input: source,
             // extension-bundles types must reference module.slim rather than inlining
             // their own copies — classes with private fields are nominally typed, so
-            // duplicate declarations across .d.ts files are incompatible.
+            // duplicate declarations across .d.ts files are incompatible. For the same
+            // reason, module.slim must use a source-level re-export from
+            // module.slim.no-external and keep that module external here, so dts preserves
+            // the reference instead of inlining a second declaration graph.
             ...(isExtensionBundles ? { external: [/module\.slim/] } : {}),
+            ...(isSlimModule ? { external: [/module\.slim\.no-external/] } : {}),
             ...(isCustomizations ? { external: [/posthog-core$/] } : {}),
             output: [
                 {
@@ -444,14 +449,19 @@ const typeTargets = entrypoints
                     exclude: [],
                     ...(inlineExternalTypes ? { respectExternal: true } : {}),
                 }),
-                // dts preserves the tsc-era path (e.g. './module.slim.es') but the
-                // output has been renamed to module.slim.d.ts — fix the reference.
-                ...(isExtensionBundles
+                // dts preserves tsc-era paths ending in `.es`, but the output files
+                // omit that segment — fix references between the generated declarations.
+                ...(isExtensionBundles || isSlimModule
                     ? [
                           {
                               name: 'fix-dts-external-paths',
                               renderChunk(code) {
-                                  return code.replace(/\.\/module\.slim\.es(?=['"])/g, './module.slim')
+                                  return code
+                                      .replace(/\.\/module\.slim\.es(?=['"])/g, './module.slim')
+                                      .replace(
+                                          /\.\/module\.slim\.no-external\.es(?=['"])/g,
+                                          './module.slim.no-external'
+                                      )
                               },
                           },
                       ]
