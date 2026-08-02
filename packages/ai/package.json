@@ -13,8 +13,7 @@
   "license": "MIT",
   "scripts": {
     "clean": "rimraf dist",
-    "test": "pnpm test:unit && pnpm test:module-load",
-    "test:unit": "jest",
+    "test:unit": "jest && pnpm test:module-load",
     "test:module-load": "node tests/otel-module-load.cjs",
     "lint": "eslint src tests",
     "lint:fix": "eslint src tests --fix",
