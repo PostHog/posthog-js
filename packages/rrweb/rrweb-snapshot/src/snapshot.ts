@@ -522,6 +522,7 @@ function serializeNode(
      * `newlyAddedElement: true` skips scrollTop and scrollLeft check
      */
     newlyAddedElement?: boolean;
+    onStylesheetTextSerialized?: (textNode: Text, inlined: boolean) => void;
   },
 ): serializedNode | false {
   const {
@@ -540,6 +541,7 @@ function serializeNode(
     canvasMaskingConfigured,
     keepIframeSrcFn,
     newlyAddedElement = false,
+    onStylesheetTextSerialized,
   } = options;
   // Only record root id when document object is not the base document
   const rootId = getRootId(doc, mirror);
@@ -587,6 +589,7 @@ function serializeNode(
         needsMask,
         maskTextFn,
         rootId,
+        onStylesheetTextSerialized,
       });
     case n.CDATA_SECTION_NODE:
       return {
@@ -618,9 +621,10 @@ function serializeTextNode(
     needsMask: boolean;
     maskTextFn: MaskTextFn | undefined;
     rootId: number | undefined;
+    onStylesheetTextSerialized?: (textNode: Text, inlined: boolean) => void;
   },
 ): serializedNode {
-  const { needsMask, maskTextFn, rootId } = options;
+  const { needsMask, maskTextFn, rootId, onStylesheetTextSerialized } = options;
   // The parent node may not be a html element which has a tagName attribute.
   // So just let it be undefined which is ok in this use case.
   const parent = dom.parentNode(n);
@@ -629,6 +633,12 @@ function serializeTextNode(
   const isStyle = parentTagName === 'STYLE' ? true : undefined;
   const isScript = parentTagName === 'SCRIPT' ? true : undefined;
   if (isStyle && text) {
+    // Whether the output carries the live CSSOM (rules read at serialization
+    // time) or the raw author text. A time-sliced snapshot needs this to
+    // decide which held CSSOM deltas the snapshot already contains — with the
+    // raw text kept, an insertRule from during the walk is NOT in the output
+    // and its delta must be replayed, not dropped.
+    let inlinedCssom = false;
     try {
       // try to read style sheet
       if (n.nextSibling || n.previousSibling) {
@@ -645,6 +655,7 @@ function serializeTextNode(
         // when stringifyStylesheet would emit that corruption.
         if (stringified && !hasEmptyShorthandLonghand(stringified)) {
           text = stringified;
+          inlinedCssom = true;
         }
       }
     } catch (err) {
@@ -653,6 +664,7 @@ function serializeTextNode(
         n,
       );
     }
+    onStylesheetTextSerialized?.(n, inlinedCssom);
     text = absolutifyURLs(text, getHref(options.doc));
   }
   if (isScript) {
@@ -1147,6 +1159,7 @@ export function serializeNodeWithId(
     depth?: number;
     maxDepth?: number;
     onMaxDepthReached?: () => void;
+    onStylesheetTextSerialized?: (textNode: Text, inlined: boolean) => void;
   },
 ): serializedNodeWithId | null {
   const {
@@ -1176,6 +1189,7 @@ export function serializeNodeWithId(
     newlyAddedElement = false,
     depth = 0,
     maxDepth = DEFAULT_MAX_DEPTH,
+    onStylesheetTextSerialized,
   } = options;
   let { needsMask } = options;
   let { preserveWhiteSpace = true } = options;
@@ -1220,6 +1234,7 @@ export function serializeNodeWithId(
     canvasMaskingConfigured,
     keepIframeSrcFn,
     newlyAddedElement,
+    onStylesheetTextSerialized,
   });
   if (!_serializedNode) {
     // TODO: dev only
@@ -1674,13 +1689,27 @@ function createInputPendingCheck(): () => boolean {
   return () => false;
 }
 
+export type BudgetedSnapshotController = {
+  /**
+   * Synchronously drains the rest of the walk and returns the completed root
+   * (or null if the walk was aborted / already finished). Built for pagehide:
+   * a parked yield never fires on a dying page, so the recorder needs a way
+   * to finish the snapshot inside the unload handler's task. Idempotent with
+   * the async driver — whichever side finishes first wins, the other no-ops.
+   */
+  flushSync: () => serializedNodeWithId | null;
+};
+
 export type SnapshotWithBudgetOptions = NonNullable<
   Parameters<typeof snapshot>[1]
 > & {
   /**
-   * Maximum milliseconds of continuous main-thread work before yielding to
-   * the event loop. Must be > 0 — callers wanting a fully synchronous
-   * snapshot should use `snapshot()` instead.
+   * Milliseconds of continuous main-thread work before yielding to the event
+   * loop. Must be > 0 — callers wanting a fully synchronous snapshot should
+   * use `snapshot()` instead. The budget is cooperative, not a hard bound:
+   * the clock is only consulted between nodes, so a single expensive node (a
+   * large stylesheet, a canvas capture, a same-origin iframe document) can
+   * overshoot it within one slice.
    */
   yieldBudgetMs: number;
   /**
@@ -1695,6 +1724,26 @@ export type SnapshotWithBudgetOptions = NonNullable<
    * its result discarded.
    */
   shouldAbort?: () => boolean;
+  /**
+   * Consulted at pop time, before a captured reference is serialized. Nodes
+   * the recorder's locked mutation buffers are already going to deliver (they
+   * were added or moved while the walk was in flight) must be skipped here:
+   * serializing them would freeze them into the snapshot at a stale position,
+   * and the buffer's own add — the one carrying their live position — would
+   * then have to be suppressed, losing whichever of the two descriptions was
+   * right. Skipping makes the buffer the single source of truth for them.
+   */
+  shouldSkipNode?: (n: Node) => boolean;
+  /**
+   * Hard wall-clock bound on the whole walk. A page that mutates continuously
+   * can stretch a cooperative walk arbitrarily; past this limit the walk
+   * throws (the recorder falls back to a synchronous snapshot).
+   */
+  maxWalkWallClockMs?: number;
+  /**
+   * Receives the controller once, synchronously, before the first slice.
+   */
+  onController?: (controller: BudgetedSnapshotController) => void;
 };
 
 /**
@@ -1728,6 +1777,9 @@ export async function snapshotWithBudget(
     yieldBudgetMs,
     yieldFn,
     shouldAbort,
+    shouldSkipNode,
+    maxWalkWallClockMs,
+    onController,
     ...snapshotOptions
   } = options;
   const {
@@ -1828,7 +1880,10 @@ export async function snapshotWithBudget(
     },
   ];
   let sliceStart = performance.now();
+  const walkStart = sliceStart;
   let nodesSinceCheck = 0;
+  let finished = false;
+  let aborted = false;
   const serializedThisWalk = new WeakSet<Node>();
   // Progress floor: input can arrive continuously (a 125Hz+ mouse reports
   // several times per frame), and ending a slice after every single node
@@ -1838,28 +1893,7 @@ export async function snapshotWithBudget(
   // still bounding input latency to the floor.
   const minSliceMs = Math.min(4, yieldBudgetMs);
 
-  try {
-  while (stack.length > 0) {
-    // The budget is the ceiling (rendering needs a turn even on an idle
-    // page); pending input ends the slice early — once the progress floor is
-    // met — so a click doesn't wait out the rest of a slice. The clock and
-    // the input queue are probed every 16 nodes, not every node: both cost
-    // real time at 100k+ nodes, and a 16-node stride bounds the overshoot to
-    // well under a millisecond.
-    if (++nodesSinceCheck >= 16) {
-      nodesSinceCheck = 0;
-      const elapsed = performance.now() - sliceStart;
-      if (
-        elapsed >= yieldBudgetMs ||
-        (elapsed >= minSliceMs && inputPending())
-      ) {
-        await doYield();
-        if (shouldAbort?.()) {
-          return null;
-        }
-        sliceStart = performance.now();
-      }
-    }
+  const processNode = (): void => {
     // LIFO pop with children pushed in reverse ⇒ same pre-order as recursion.
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const item = stack.pop()!;
@@ -1878,11 +1912,11 @@ export async function snapshotWithBudget(
     // parent is serialized).
     if (item.container) {
       if (!node.isConnected) {
-        continue;
+        return;
       }
       const currentContainer = dom.parentNode(node);
       if (currentContainer !== item.container) {
-        continue;
+        return;
       }
       // A node serialized earlier in this walk and then moved under a parent
       // the walk hadn't reached yet would be encountered — and serialized —
@@ -1890,7 +1924,13 @@ export async function snapshotWithBudget(
       // was observed as remove+add and reconciles through the mutation
       // buffer instead.
       if (serializedThisWalk.has(node)) {
-        continue;
+        return;
+      }
+      // Nodes the locked buffers will deliver at commit (added or moved while
+      // the walk was in flight) are theirs alone to describe — see the
+      // shouldSkipNode option doc.
+      if (shouldSkipNode?.(node)) {
+        return;
       }
     }
 
@@ -1903,7 +1943,7 @@ export async function snapshotWithBudget(
     if (!sn) {
       // slimDOM-excluded / ignorable whitespace / max depth — the recursive
       // path skips these nodes' children too.
-      continue;
+      return;
     }
     // Every node that made it into the FullSnapshot must participate in the
     // duplicate guard, including leaves (text/comments) and blocked-element
@@ -1917,14 +1957,14 @@ export async function snapshotWithBudget(
 
     // ---- descend decision: mirrors serializeNodeWithId's recursive section ----
     if (sn.type !== NodeType.Document && sn.type !== NodeType.Element) {
-      continue;
+      return;
     }
     if (
       sn.type === NodeType.Element &&
       _isBlockedElement(node as HTMLElement, blockClass, blockSelector)
     ) {
       // blocked elements record a placeholder only; children get no ids
-      continue;
+      return;
     }
 
     // children inherit needsMask exactly as the recursive path computes it
@@ -1976,12 +2016,81 @@ export async function snapshotWithBudget(
     if (!skipLightChildren) {
       pushChildren(Array.from(dom.childNodes(node)), node);
     }
-  }
+  };
+
+  onController?.({
+    flushSync: () => {
+      if (finished || aborted) {
+        return finished ? root : null;
+      }
+      if (shouldAbort?.()) {
+        aborted = true;
+        return null;
+      }
+      while (stack.length > 0) {
+        processNode();
+      }
+      finished = true;
+      return root;
+    },
+  });
+
+  try {
+    while (!finished && !aborted) {
+      if (stack.length === 0) {
+        // checked before the deadline probe: yielding with a complete tree
+        // in hand would let an abort discard a finished walk
+        finished = true;
+        break;
+      }
+      // The budget is the ceiling (rendering needs a turn even on an idle
+      // page); pending input ends the slice early — once the progress floor
+      // is met — so a click doesn't wait out the rest of a slice. The clock
+      // and the input queue are probed every 16 nodes, not every node: both
+      // cost real time at 100k+ nodes, and a 16-node stride bounds the
+      // overshoot to well under a millisecond.
+      if (++nodesSinceCheck >= 16) {
+        nodesSinceCheck = 0;
+        const elapsed = performance.now() - sliceStart;
+        if (
+          elapsed >= yieldBudgetMs ||
+          (elapsed >= minSliceMs && inputPending())
+        ) {
+          if (
+            maxWalkWallClockMs !== undefined &&
+            performance.now() - walkStart > maxWalkWallClockMs
+          ) {
+            // A page mutating continuously can stretch a cooperative walk
+            // without bound; the caller falls back to a synchronous snapshot.
+            throw new Error(
+              'Budgeted full snapshot exceeded its wall-clock limit',
+            );
+          }
+          // A hidden page paints no frames and has no user waiting on the
+          // main thread, while background throttling can stretch every yield
+          // — and a tab freeze would park the walk (and the buffer locks and
+          // held queue behind it) indefinitely. Finish in one task instead.
+          if (n.visibilityState !== 'hidden') {
+            await doYield();
+            if (shouldAbort?.()) {
+              aborted = true;
+              break;
+            }
+            sliceStart = performance.now();
+          }
+        }
+      }
+      if (finished || aborted) {
+        // flushSync may have completed the walk while this driver was parked
+        break;
+      }
+      processNode();
+    }
   } finally {
     yielder.dispose();
   }
 
-  return root;
+  return finished && !aborted ? root : null;
 }
 
 export function visitSnapshot(

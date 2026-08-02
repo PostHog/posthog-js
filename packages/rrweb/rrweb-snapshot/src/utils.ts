@@ -246,6 +246,19 @@ export class Mirror implements IMirror<Node> {
     this.pendingReservedIds = new Set();
   }
 
+  /**
+   * Stops handing out NEW reserved ids while keeping existing reservations
+   * claimable. Used around the post-walk buffer commit: the commit's
+   * re-serialization must claim the ids that held events already reference,
+   * but an unserialized parent probed by the mutation buffer's add-ordering
+   * must read as -1 so the add defers until the parent is serialized —
+   * a fresh reservation there would emit an add against a parent id the
+   * replayer never receives.
+   */
+  pauseReservationHandout() {
+    this.reserveNextId = null;
+  }
+
   endIdReservation() {
     this.reserveNextId = null;
     this.reservedIds = null;

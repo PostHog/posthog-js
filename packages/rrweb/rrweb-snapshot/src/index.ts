@@ -1,6 +1,7 @@
 import snapshot, {
   snapshotWithBudget,
   type SnapshotWithBudgetOptions,
+  type BudgetedSnapshotController,
   serializeNodeWithId,
   transformAttribute,
   ignoreAttribute,
@@ -28,6 +29,7 @@ export {
   snapshot,
   snapshotWithBudget,
   type SnapshotWithBudgetOptions,
+  type BudgetedSnapshotController,
   serializeNodeWithId,
   rebuild,
   buildNodeWithSN,
