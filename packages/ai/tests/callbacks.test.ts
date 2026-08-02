@@ -79,84 +79,87 @@ describe('LangChainCallbackHandler', () => {
     expect(captureCall[0].properties.$ai_provider).toBe('openai')
   })
 
-  it('should extract usage and stop reason from AIMessage metadata without llmOutput', () => {
-    const serialized = {
-      lc: 1,
-      type: 'constructor' as const,
-      id: ['langchain', 'chat_models', 'openai', 'ChatOpenAI'],
-      kwargs: {},
-    }
-    const runId = 'run_ai_message_metadata'
-
-    handler.handleLLMStart(serialized, ['Test prompt'], runId, undefined, { invocation_params: {} }, undefined, {
-      ls_model_name: 'gpt-4',
-      ls_provider: 'openai',
-    })
-    const llmResult = {
-      generations: [
-        [
-          {
-            text: 'Test response',
-            message: new AIMessage({
-              content: 'Test response',
-              usage_metadata: {
-                input_tokens: 12,
-                output_tokens: 4,
-                total_tokens: 16,
-              },
-              response_metadata: { finish_reason: 'stop' },
-            }),
+  it.each([
+    {
+      name: 'usage_metadata and finish_reason',
+      serializedId: ['langchain', 'chat_models', 'openai', 'ChatOpenAI'],
+      runId: 'run_ai_message_metadata',
+      model: 'gpt-4',
+      provider: 'openai',
+      message: new AIMessage({
+        content: 'Test response',
+        usage_metadata: {
+          input_tokens: 12,
+          output_tokens: 4,
+          total_tokens: 16,
+        },
+        response_metadata: { finish_reason: 'stop' },
+      }),
+      expectedInputTokens: 12,
+      expectedOutputTokens: 4,
+      expectedStopReason: 'stop',
+    },
+    {
+      name: 'response_metadata usage and stop_reason',
+      serializedId: ['langchain', 'chat_models', 'anthropic', 'ChatAnthropic'],
+      runId: 'run_ai_message_response_metadata',
+      model: 'claude-3',
+      provider: 'anthropic',
+      message: new AIMessage({
+        content: 'Test response',
+        response_metadata: {
+          stop_reason: 'end_turn',
+          usage: {
+            input_tokens: 15,
+            output_tokens: 5,
           },
+        },
+      }),
+      expectedInputTokens: 15,
+      expectedOutputTokens: 5,
+      expectedStopReason: 'end_turn',
+    },
+  ])(
+    'should extract usage and stop reason from AIMessage $name without llmOutput',
+    ({
+      serializedId,
+      runId,
+      model,
+      provider,
+      message,
+      expectedInputTokens,
+      expectedOutputTokens,
+      expectedStopReason,
+    }) => {
+      const serialized = {
+        lc: 1,
+        type: 'constructor' as const,
+        id: serializedId,
+        kwargs: {},
+      }
+
+      handler.handleLLMStart(serialized, ['Test prompt'], runId, undefined, { invocation_params: {} }, undefined, {
+        ls_model_name: model,
+        ls_provider: provider,
+      })
+      const llmResult = {
+        generations: [
+          [
+            {
+              text: 'Test response',
+              message,
+            },
+          ],
         ],
-      ],
+      }
+      handler.handleLLMEnd(llmResult, runId)
+
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      expect(captureCall[0].properties['$ai_input_tokens']).toBe(expectedInputTokens)
+      expect(captureCall[0].properties['$ai_output_tokens']).toBe(expectedOutputTokens)
+      expect(captureCall[0].properties['$ai_stop_reason']).toBe(expectedStopReason)
     }
-    handler.handleLLMEnd(llmResult, runId)
-
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
-    expect(captureCall[0].properties['$ai_input_tokens']).toBe(12)
-    expect(captureCall[0].properties['$ai_output_tokens']).toBe(4)
-    expect(captureCall[0].properties['$ai_stop_reason']).toBe('stop')
-  })
-
-  it('should extract usage and stop reason from AIMessage response_metadata without llmOutput', () => {
-    const serialized = {
-      lc: 1,
-      type: 'constructor' as const,
-      id: ['langchain', 'chat_models', 'anthropic', 'ChatAnthropic'],
-      kwargs: {},
-    }
-    const runId = 'run_ai_message_response_metadata'
-
-    handler.handleLLMStart(serialized, ['Test prompt'], runId, undefined, { invocation_params: {} }, undefined, {
-      ls_model_name: 'claude-3',
-      ls_provider: 'anthropic',
-    })
-    const llmResult = {
-      generations: [
-        [
-          {
-            text: 'Test response',
-            message: new AIMessage({
-              content: 'Test response',
-              response_metadata: {
-                stop_reason: 'end_turn',
-                usage: {
-                  input_tokens: 15,
-                  output_tokens: 5,
-                },
-              },
-            }),
-          },
-        ],
-      ],
-    }
-    handler.handleLLMEnd(llmResult, runId)
-
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
-    expect(captureCall[0].properties['$ai_input_tokens']).toBe(15)
-    expect(captureCall[0].properties['$ai_output_tokens']).toBe(5)
-    expect(captureCall[0].properties['$ai_stop_reason']).toBe('end_turn')
-  })
+  )
 
   it('should convert AIMessage with tool calls to dict format', () => {
     const toolCalls = [
