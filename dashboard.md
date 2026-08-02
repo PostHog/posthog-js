@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4385](https://github.com/PostHog/posthog-js/issues/4385) | Confirmed likely build-artifact bug in the inline rrweb canvas worker sourcemap handling. | feature/replay |  | no | 2026-08-02T05:05:51.116Z |
 | PostHog/posthog-js | [issue 4353](https://github.com/PostHog/posthog-js/issues/4353) | Valid enhancement request, but true batch fetching requires a supporting PostHog API endpoint before SDK work can deliver the requested single network call. | enhancement, team/ai-observability |  | no | 2026-07-31T11:25:28.565Z |
 | PostHog/posthog-js | [issue 4326](https://github.com/PostHog/posthog-js/issues/4326) | Confirmed browser SDK bug: campaign parameters are cached for the entire persistence instance rather than per URL. | web | https://github.com/PostHog/posthog-js/pull/4327 | no | 2026-07-30T07:06:34.032Z |
 | PostHog/posthog-js | [issue 4321](https://github.com/PostHog/posthog-js/issues/4321) | Likely React Native iOS source-map upload regression: the Xcode wrapper cannot discover a CLI installed through nvm, despite Expo providing the Node binary. | react-native, iOS, feature/error-tracking, team/error-tracking | https://github.com/PostHog/posthog-js/pull/4322 | no | 2026-07-30T00:35:51.497Z |
