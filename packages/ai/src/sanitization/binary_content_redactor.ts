@@ -42,7 +42,7 @@ export class BinaryContentRedactor {
   }
 
   private redactString(value: string, ctx: MediaTypeContext): string {
-    const minLength = ctx.hasExplicitMediaType()
+    const minLength = ctx.hasExplicitBinaryMediaType()
       ? 1
       : ctx.signalsBinary()
         ? STRONG_CONTEXT_MIN_LENGTH

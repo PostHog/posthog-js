@@ -71,6 +71,13 @@ describe('redactBinaryContent', () => {
       }
     )
 
+    it('redacts line-wrapped base64 when an explicit binary MIME is present', () => {
+      const lineWrappedBase64 = `${SHORT_B64.slice(0, 8)}\r\n${SHORT_B64.slice(8)}`
+      expect((redactBinaryContent({ data: lineWrappedBase64, mediaType: 'image/png' }) as any).data).toBe(
+        placeholder('image/png')
+      )
+    })
+
     it('keeps the strong threshold when context has no explicit MIME', () => {
       expect((redactBinaryContent({ type: 'image', data: SHORT_B64 }) as any).data).toBe(SHORT_B64)
     })
@@ -131,6 +138,16 @@ describe('redactBinaryContent', () => {
       expect(redactBinaryContent('hello world')).toBe('hello world')
       expect(redactBinaryContent({ token: 'abc.def.ghi' })).toEqual({ token: 'abc.def.ghi' })
     })
+
+    it.each(['mediaType', 'media_type', 'mimeType', 'mime_type'])(
+      'preserves non-base64 data when sibling %s provides an explicit MIME',
+      (key) => {
+        expect(redactBinaryContent({ data: 'hello', [key]: 'text/plain' })).toEqual({
+          data: 'hello',
+          [key]: 'text/plain',
+        })
+      }
+    )
   })
 
   describe('walking nested structures', () => {

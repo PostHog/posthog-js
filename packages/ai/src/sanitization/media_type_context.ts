@@ -89,9 +89,12 @@ export class MediaTypeContext {
     return undefined
   }
 
-  hasExplicitMediaType(): boolean {
+  hasExplicitBinaryMediaType(): boolean {
     if (!this.parent || !this.key || !STRONG_CONTEXT_KEYS.has(this.key)) return false
-    return MIME_HINT_KEYS.some((hint) => typeof this.parent?.[hint] === 'string')
+    return MIME_HINT_KEYS.some((hint) => {
+      const mediaType = this.parent?.[hint]
+      return typeof mediaType === 'string' && !mediaType.toLowerCase().startsWith('text/')
+    })
   }
 
   signalsBinary(): boolean {
