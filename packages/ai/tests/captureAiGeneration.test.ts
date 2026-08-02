@@ -98,13 +98,14 @@ describe('captureAiGeneration', () => {
     expect(client.captureImmediate).toHaveBeenCalledTimes(1)
   })
 
-  it('redacts input and output when privacyMode is true', async () => {
+  it('redacts input and output when privacyMode is true, including property overrides', async () => {
     const client = buildClient()
 
     await captureAiGeneration(client, {
       ...baseRequiredOptions,
       input: 'secret prompt',
       output: 'secret response',
+      properties: { $ai_input: 'override prompt', $ai_output_choices: 'override response' },
       privacyMode: true,
     })
 

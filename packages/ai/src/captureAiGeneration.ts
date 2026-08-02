@@ -1,117 +1,11 @@
 import { EventMessage, PostHog } from 'posthog-node'
 import { v4 as uuidv4 } from 'uuid'
-import { uuidv7, ErrorTracking as CoreErrorTracking } from '@posthog/core'
+import { uuidv7, ErrorTracking as CoreErrorTracking, toJsonSafeValue } from '@posthog/core'
 import { version } from '../package.json'
 import type { TokenUsage } from './types'
 import { stringifyError } from './serializeError'
 import { AIEvent, CostOverride, getTokensSource, withPrivacyMode } from './utils'
 import { warnIfPostHogAiGateway } from './gatewayWarning'
-
-const MAX_CAPTURE_VALUE_DEPTH = 20
-const MAX_CAPTURE_VALUE_ITEMS = 1_000
-const MAX_CAPTURE_VALUE_NODES = 10_000
-const CIRCULAR_VALUE = '[Circular]'
-const TRUNCATED_VALUE = '[Truncated]'
-const UNSERIALIZABLE_VALUE = '[Unserializable]'
-const FUNCTION_VALUE = '[Function]'
-
-const captureTextEncoder = new TextEncoder()
-const captureTextDecoder = new TextDecoder()
-const dateGetTime = Date.prototype.getTime
-const dateToISOString = Date.prototype.toISOString
-
-interface CaptureValueConversionState {
-  ancestors: WeakSet<object>
-  remainingNodes: number
-}
-
-/**
- * Convert arbitrary caller-owned values without invoking `toJSON`. The limits
- * keep pathological values from causing unbounded recursion or traversal, and
- * the returned value can always be passed to a JSON event serializer.
- */
-function toCaptureValue(value: unknown): unknown {
-  const state: CaptureValueConversionState = {
-    ancestors: new WeakSet(),
-    remainingNodes: MAX_CAPTURE_VALUE_NODES,
-  }
-
-  const convert = (current: unknown, depth: number): unknown => {
-    if (state.remainingNodes <= 0) {
-      return TRUNCATED_VALUE
-    }
-    state.remainingNodes--
-
-    try {
-      if (current === null || current === undefined || typeof current === 'boolean') {
-        return current
-      }
-      if (typeof current === 'string') {
-        // Sanitize lone surrogates by round-tripping through UTF-8.
-        return captureTextDecoder.decode(captureTextEncoder.encode(current))
-      }
-      if (typeof current === 'number') {
-        return Number.isFinite(current) ? current : null
-      }
-      if (typeof current === 'bigint') {
-        return current.toString()
-      }
-      if (typeof current === 'function') {
-        return FUNCTION_VALUE
-      }
-      if (typeof current === 'symbol') {
-        return current.description ? `Symbol(${current.description})` : 'Symbol()'
-      }
-      if (depth >= MAX_CAPTURE_VALUE_DEPTH) {
-        return TRUNCATED_VALUE
-      }
-
-      if (state.ancestors.has(current)) {
-        return CIRCULAR_VALUE
-      }
-
-      state.ancestors.add(current)
-      try {
-        if (current instanceof Date) {
-          return Number.isFinite(dateGetTime.call(current)) ? dateToISOString.call(current) : null
-        }
-
-        if (Array.isArray(current)) {
-          const itemCount = Math.min(current.length, MAX_CAPTURE_VALUE_ITEMS)
-          const output = Array.from({ length: itemCount }, (_, index) => convert(current[index], depth + 1))
-          if (current.length > itemCount) {
-            output.push(TRUNCATED_VALUE)
-          }
-          return output
-        }
-
-        const output: Record<string, unknown> = {}
-        const keys = Object.keys(current)
-        const itemCount = Math.min(keys.length, MAX_CAPTURE_VALUE_ITEMS)
-        for (let index = 0; index < itemCount; index++) {
-          const key = keys[index]
-          const converted = convert((current as Record<string, unknown>)[key], depth + 1)
-          Object.defineProperty(output, key, {
-            value: converted,
-            enumerable: true,
-            configurable: true,
-            writable: true,
-          })
-        }
-        if (keys.length > itemCount) {
-          output[TRUNCATED_VALUE] = `${keys.length - itemCount} properties omitted`
-        }
-        return output
-      } finally {
-        state.ancestors.delete(current)
-      }
-    } catch {
-      return UNSERIALIZABLE_VALUE
-    }
-  }
-
-  return convert(value, 0)
-}
 
 /**
  * Options for `captureAiGeneration`. Mirrors the `$ai_generation` event shape
@@ -214,8 +108,8 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
   // needless work, this ensures hostile getters/proxies cannot observe a value
   // that the caller explicitly requested us to redact.
   const shouldRedact = withPrivacyMode(client, privacyMode, false) === null
-  const safeInput = shouldRedact ? null : toCaptureValue(options.input)
-  const safeOutput = shouldRedact ? null : toCaptureValue(options.output)
+  const safeInput = shouldRedact ? null : toJsonSafeValue(options.input)
+  const safeOutput = shouldRedact ? null : toJsonSafeValue(options.output)
 
   let httpStatus = options.httpStatus
   let errorData: Record<string, unknown> = {}
@@ -270,8 +164,6 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
     $ai_provider: options.providerOverride ?? options.provider,
     $ai_model: options.modelOverride ?? options.model,
     $ai_model_parameters: options.modelParameters ?? {},
-    $ai_input: safeInput,
-    $ai_output_choices: safeOutput,
     $ai_http_status: httpStatus,
     $ai_input_tokens: usage.inputTokens ?? 0,
     ...(usage.outputTokens !== undefined ? { $ai_output_tokens: usage.outputTokens } : {}),
@@ -281,6 +173,8 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
     $ai_trace_id: traceId,
     $ai_base_url: options.baseURL ?? '',
     ...options.properties,
+    $ai_input: safeInput,
+    $ai_output_choices: safeOutput,
     $ai_tokens_source: getTokensSource(options.properties),
     ...(options.distinctId ? {} : { $process_person_profile: false }),
     ...(options.stopReason ? { $ai_stop_reason: options.stopReason } : {}),
