@@ -20,7 +20,7 @@ export const compatSkips: { range: string; test: string; reason: string }[] = [
         reason: 'web_vitals_attribution option added in #2953',
     },
     {
-        range: '<1.410.3',
+        range: '<1.410.4',
         test: 'does not request a recorder script',
         reason: 'full bundles before #4309 intentionally fetched lazy-recorder.js',
     },
