@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.409.6
+
+### Patch Changes
+
+- [#4299](https://github.com/PostHog/posthog-js/pull/4299) [`8a7bb3f`](https://github.com/PostHog/posthog-js/commit/8a7bb3f93412604273698149a90bbef1faff4cec) Thanks [@posthog](https://github.com/apps/posthog)! - Mark our bundles as third-party code in the source maps we publish (the `x_google_ignoreList` extension). Browser devtools now attribute `console.*` messages to the code that called them instead of to posthog-js's console wrapper, which previously showed every message as coming from `logs.ts` when `captureConsoleLogs` or session replay's `enable_recording_console_log` was enabled.
+  (2026-08-03)
+- Updated dependencies [[`7c3a9af`](https://github.com/PostHog/posthog-js/commit/7c3a9af42be80051705f7fe820623dd7e1b879d5)]:
+    - @posthog/core@1.46.2
+
 ## 1.409.5
 
 ### Patch Changes
