@@ -251,6 +251,11 @@ function scrubPayloads(capturedRequest: CapturedNetworkRequest | undefined): Cap
     return capturedRequest
 }
 
+const initialMaskFallbackRequests = new WeakSet<CapturedNetworkRequest>()
+
+export const isInitialMaskFallback = (request: CapturedNetworkRequest | undefined): boolean =>
+    !!request && initialMaskFallbackRequests.has(request)
+
 /**
  *  whether a maskRequestFn is provided or not,
  *  we ensure that we remove the denied header from requests
@@ -336,7 +341,11 @@ export const buildNetworkRequestOptions = (
 
               // A nullish result normally drops the request. Initial timing metadata must remain for replay,
               // so retain it without the URL or any network content rather than exposing deliberately filtered data.
-              return maskedRequest ?? requiredInitialMetadata
+              if (isNullish(maskedRequest) && requiredInitialMetadata) {
+                  initialMaskFallbackRequests.add(requiredInitialMetadata)
+                  return requiredInitialMetadata
+              }
+              return maskedRequest ?? undefined
           }
         : (data) => scrubPayloads(enforcedCleaningFn(data))
 
