@@ -474,7 +474,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
      * and a queue - that contains rrweb events that we want to send to rrweb, but rrweb wasn't able to accept them yet
      */
     private _queuedRRWebEvents: QueuedRRWebEvent[] = []
+    // 'unknown' means no user interaction has been seen since THIS recorder started, not since
+    // the session started. A recorder started late in an active session (lazy script load,
+    // trigger activation) holds its buffer until the next interaction even though the user was
+    // active earlier; any ACTIVE_SOURCES event (mouse move, scroll, touch) clears it.
     private _isIdle: boolean | 'unknown' = 'unknown'
+    private _lastIdleSessionCheckTimestamp = 0
     private _rrwebError = false
     private _rrwebStartAttempted = false
     private _maxDepthExceeded = false
@@ -1327,6 +1332,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     stop() {
+        // stopping while the buffer is held (no user interaction yet) drops it by design,
+        // but that shouldn't be an invisible data path
+        if (this._isIdle === 'unknown' && this._buffer.data.length > 0) {
+            logger.info('discarding held buffer for a session that saw no user interaction', {
+                sessionId: this._buffer.sessionId,
+                bufferLength: this._buffer.data.length,
+            })
+        }
+
         if (this._stopAfterCompressionQueueDrains()) {
             return
         }
@@ -1745,23 +1759,32 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 break
             }
         }
-        if (lastFullSnapshotIndex <= 0) {
-            // no snapshot, or it's already the head: nothing older than it to drop
-            return
-        }
 
         const precedingIsMeta =
+            lastFullSnapshotIndex > 0 &&
             (this._buffer.data[lastFullSnapshotIndex - 1] as eventWithTime | undefined)?.type === EventType.Meta
         const keepFrom = precedingIsMeta ? lastFullSnapshotIndex - 1 : lastFullSnapshotIndex
-        if (keepFrom === 0) {
-            return
+
+        if (keepFrom > 0) {
+            for (let i = 0; i < keepFrom; i++) {
+                this._buffer.size -= this._buffer.sizes[i]
+            }
+            this._buffer.data = this._buffer.data.slice(keepFrom)
+            this._buffer.sizes = this._buffer.sizes.slice(keepFrom)
         }
 
-        for (let i = 0; i < keepFrom; i++) {
-            this._buffer.size -= this._buffer.sizes[i]
+        // Prefix-pruning only helps while the periodic full snapshot keeps creating new prune
+        // points. If events pile up behind a single snapshot (a mutation-heavy page, or the
+        // snapshot interval not firing), reset the hold and request a fresh snapshot so the
+        // playable prefix re-establishes at a bounded size.
+        if (this._buffer.size + incomingBytes > 2 * RECORDING_MAX_EVENT_SIZE) {
+            logger.info('held buffer for uninteracted session exceeded the hard cap; resetting it', {
+                sessionId: this._buffer.sessionId,
+                bufferSize: this._buffer.size,
+            })
+            this._clearBuffer()
+            this._tryTakeFullSnapshot()
         }
-        this._buffer.data = this._buffer.data.slice(keepFrom)
-        this._buffer.sizes = this._buffer.sizes.slice(keepFrom)
     }
 
     private _flushBuffer(force = false): SnapshotBuffer {
@@ -2078,6 +2101,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // cap (sessionPastMaximumLength rotates even on readOnly calls) and hears cross-tab
         // rotations. Skipping it here is how idle tabs used to accrete multi-day sessions
         // that blew straight through SESSION_LENGTH_LIMIT.
+        if (this._isIdle === true) {
+            // Neither of those outcomes needs per-event precision, and the check reads
+            // persistence, so a mutation storm in an idle tab shouldn't pay for it per event.
+            if (event.timestamp - this._lastIdleSessionCheckTimestamp < 60_000) {
+                return
+            }
+            this._lastIdleSessionCheckTimestamp = event.timestamp
+        }
+
         // We only want to extend the session if it is an interactive event.
         const { windowId, sessionId } = this._sessionManager.checkAndGetSessionAndWindowId(
             !isUserInteraction,
