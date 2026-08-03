@@ -117,6 +117,7 @@ describe('record: attribute masking', () => {
       target.setAttribute('class', 'alice@example.com');
       target.setAttribute('style', '--owner: alice@example.com');
       target.setAttribute('title', 'alice@example.com');
+      target.setAttribute('rr_open_mode', 'alice@example.com');
     });
     await waitForRAF(page);
 
@@ -124,6 +125,7 @@ describe('record: attribute masking', () => {
     expect(attributes.class).toMatch(/^\*+$/);
     expect(attributes.style).toMatch(/^\*+$/);
     expect(attributes.title).toMatch(/^\*+$/);
+    expect(attributes.rr_open_mode).toMatch(/^\*+$/);
     expect(JSON.stringify(attributes)).not.toContain('alice@example.com');
   });
 

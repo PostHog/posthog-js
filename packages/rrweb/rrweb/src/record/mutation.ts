@@ -167,6 +167,7 @@ export default class MutationBuffer {
   private texts: textCursor[] = [];
   private attributes: attributeCursor[] = [];
   private attributeMap = new WeakMap<Node, attributeCursor>();
+  private generatedAttributes = new WeakMap<Node, Set<string>>();
   private removes: removedNodeMutation[] = [];
   private mapRemoves: Node[] = [];
 
@@ -556,7 +557,9 @@ export default class MutationBuffer {
                   value,
                   maskAllElementAttributes: this.maskAllElementAttributes,
                   maskAttributeFn: this.maskAttributeFn,
-                  isGenerated: name === 'rr_open_mode',
+                  isGenerated: this.generatedAttributes
+                    .get(attribute.node)
+                    ?.has(name),
                 });
               }
             }
@@ -587,6 +590,7 @@ export default class MutationBuffer {
     this.texts = [];
     this.attributes = [];
     this.attributeMap = new WeakMap<Node, attributeCursor>();
+    this.generatedAttributes = new WeakMap<Node, Set<string>>();
     this.removes = [];
     this.addedSet = new Set<Node>();
     this.movedSet = new Set<Node>();
@@ -736,6 +740,7 @@ export default class MutationBuffer {
           }
           // overwrite attribute if the mutation was triggered in same time
           item.attributes[attributeName] = transformedValue;
+          this.generatedAttributes.get(m.target)?.delete(attributeName);
           if (attributeName === 'style') {
             if (!this.unattachedDoc) {
               try {
@@ -781,6 +786,12 @@ export default class MutationBuffer {
             } else {
               item.attributes['rr_open_mode'] = 'non-modal';
             }
+            let generated = this.generatedAttributes.get(m.target);
+            if (!generated) {
+              generated = new Set();
+              this.generatedAttributes.set(m.target, generated);
+            }
+            generated.add('rr_open_mode');
           }
         }
         break;
