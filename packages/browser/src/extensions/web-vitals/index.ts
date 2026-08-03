@@ -4,7 +4,7 @@ import { createLogger } from '@posthog/browser-common/utils/logger'
 import { isBoolean, isNullish, isNumber, isUndefined, isObject, stripUrlHash } from '@posthog/core'
 import { WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
 import { window, location } from '@posthog/browser-common/utils/globals'
-import { assignableWindow, WebVitalsReportOpts } from '../../utils/globals'
+import { assignableWindow, WebVitalsCallbackFlavor, WebVitalsReportOpts } from '../../utils/globals'
 import { maskQueryParams } from '@posthog/browser-common/utils/request-utils'
 import { PERSONAL_DATA_CAMPAIGN_PARAMS, MASKED } from '@posthog/browser-common/utils/event-utils'
 
@@ -18,13 +18,23 @@ export const DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS = 5000
 const ONE_MINUTE_IN_MILLIS = 60 * 1000
 export const FIFTEEN_MINUTES_IN_MILLIS = 15 * ONE_MINUTE_IN_MILLIS
 
-type WebVitalsEventBuffer = { url: string | undefined; metrics: any[]; firstMetricTimestamp: number | undefined }
+type WebVitalsEventBuffer = {
+    navigationKey: string | undefined
+    url: string | undefined
+    metrics: any[]
+    firstMetricTimestamp: number | undefined
+}
 
 export class WebVitalsAutocapture {
     private _enabledServerSide: boolean = false
     private _initialized = false
 
-    private _buffer: WebVitalsEventBuffer = { url: undefined, metrics: [], firstMetricTimestamp: undefined }
+    private _buffer: WebVitalsEventBuffer = {
+        navigationKey: undefined,
+        url: undefined,
+        metrics: [],
+        firstMetricTimestamp: undefined,
+    }
     private _delayedFlushTimer: ReturnType<typeof setTimeout> | undefined
 
     constructor(private readonly _instance: PostHog) {
@@ -133,24 +143,28 @@ export class WebVitalsAutocapture {
         this.startIfEnabled()
     }
 
-    private _loadScript(cb: () => void): void {
-        if (assignableWindow.__PosthogExtensions__?.postHogWebVitalsCallbacks) {
-            // already loaded
-            cb()
-            return
-        }
-
-        // the soft-navs builds understand `reportSoftNavs`; the standard builds don't,
-        // so only load them when the user has opted into soft navigations
-        const kind = this.useSoftNavs
+    private get _callbackFlavor(): WebVitalsCallbackFlavor {
+        return this.useSoftNavs
             ? this.useAttribution
                 ? 'web-vitals-with-attribution-soft-navs'
                 : 'web-vitals-soft-navs'
             : this.useAttribution
               ? 'web-vitals-with-attribution'
               : 'web-vitals'
+    }
 
-        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, kind, (err) => {
+    private _loadScript(cb: () => void): void {
+        const posthogExtensions = assignableWindow.__PosthogExtensions__
+        const flavor = this._callbackFlavor
+        if (
+            posthogExtensions?.postHogWebVitalsCallbacksByFlavor?.[flavor] ||
+            (flavor === 'web-vitals' && posthogExtensions?.postHogWebVitalsCallbacks)
+        ) {
+            cb()
+            return
+        }
+
+        posthogExtensions?.loadExternalDependency?.(this._instance, flavor, (err) => {
             if (err) {
                 logger.error('failed to load script', err)
                 return
@@ -160,16 +174,14 @@ export class WebVitalsAutocapture {
         })
     }
 
-    private _currentURL(): string | undefined {
-        const href = window
-            ? this._instance.config.disable_capture_url_hashes
-                ? stripUrlHash(window.location.href)
-                : window.location.href
-            : undefined
+    private _maskedURL(url?: string): string | undefined {
+        const href = url || window?.location.href
         if (!href) {
             logger.error('Could not determine current URL')
             return undefined
         }
+
+        const urlWithoutHash = this._instance.config.disable_capture_url_hashes ? stripUrlHash(href) : href
 
         // mask url query params
         const maskPersonalDataProperties = this._instance.config.mask_personal_data_properties
@@ -179,7 +191,7 @@ export class WebVitalsAutocapture {
             ? [...PERSONAL_DATA_CAMPAIGN_PARAMS, ...(customPersonalDataProperties || [])]
             : []
 
-        return maskQueryParams(href, paramsToMask, MASKED)
+        return maskQueryParams(urlWithoutHash, paramsToMask, MASKED)
     }
 
     private _flushToCapture = () => {
@@ -188,9 +200,9 @@ export class WebVitalsAutocapture {
             return
         }
 
-        this._instance.capture(
-            '$web_vitals',
-            this._buffer.metrics.reduce(
+        this._instance.capture('$web_vitals', {
+            $current_url: this._buffer.url,
+            ...this._buffer.metrics.reduce(
                 (acc, metric) => ({
                     ...acc,
                     // the entire event so we can use it in the future e.g. includes google's rating
@@ -198,23 +210,30 @@ export class WebVitalsAutocapture {
                     [`$web_vitals_${metric.name}_value`]: metric.value,
                 }),
                 {}
-            )
-        )
-        this._buffer = { url: undefined, metrics: [], firstMetricTimestamp: undefined }
+            ),
+        })
+        this._buffer = { navigationKey: undefined, url: undefined, metrics: [], firstMetricTimestamp: undefined }
     }
 
     private _addToBuffer = (metric: any) => {
-        this._buffer = this._buffer || { url: undefined, metrics: [], firstMetricTimestamp: undefined }
-
-        const $currentUrl = this._currentURL()
-        if (isUndefined($currentUrl)) {
-            return
+        this._buffer = this._buffer || {
+            navigationKey: undefined,
+            url: undefined,
+            metrics: [],
+            firstMetricTimestamp: undefined,
         }
 
         if (isNullish(metric?.name) || isNullish(metric?.value)) {
             logger.error('Invalid metric received', metric)
             return
         }
+
+        const navigationURL = typeof metric.navigationURL === 'string' ? metric.navigationURL : undefined
+        const $currentUrl = this._maskedURL(navigationURL)
+        if (isUndefined($currentUrl)) {
+            return
+        }
+        const navigationKey = isNumber(metric.navigationId) ? `navigation:${metric.navigationId}` : `url:${$currentUrl}`
 
         // we observe some very large values sometimes, we'll ignore them
         // since the likelihood of LCP > 1 hour being correct is very low
@@ -223,9 +242,9 @@ export class WebVitalsAutocapture {
             return
         }
 
-        const urlHasChanged = this._buffer.url !== $currentUrl
+        const navigationHasChanged = this._buffer.navigationKey !== navigationKey
 
-        if (urlHasChanged) {
+        if (navigationHasChanged) {
             // we need to send what we have
             this._flushToCapture()
 
@@ -235,7 +254,8 @@ export class WebVitalsAutocapture {
             this._delayedFlushTimer = setTimeout(this._flushToCapture, this.flushToCaptureTimeoutMs)
         }
 
-        if (isUndefined(this._buffer.url)) {
+        if (isUndefined(this._buffer.navigationKey)) {
+            this._buffer.navigationKey = navigationKey
             this._buffer.url = $currentUrl
         }
 
@@ -254,6 +274,7 @@ export class WebVitalsAutocapture {
         const sessionIds = this._instance.sessionManager?.checkAndGetSessionAndWindowId(true)
         const bufferedMetric: Record<string, unknown> = {
             ...metric,
+            ...(navigationURL ? { navigationURL: $currentUrl } : {}),
             $current_url: $currentUrl,
             timestamp: Date.now(),
         }
@@ -285,8 +306,11 @@ export class WebVitalsAutocapture {
         let onINP: WebVitalsMetricCallback | undefined
 
         const posthogExtensions = assignableWindow.__PosthogExtensions__
-        if (!isUndefined(posthogExtensions) && !isUndefined(posthogExtensions.postHogWebVitalsCallbacks)) {
-            ;({ onLCP, onCLS, onFCP, onINP } = posthogExtensions.postHogWebVitalsCallbacks)
+        const callbacks =
+            posthogExtensions?.postHogWebVitalsCallbacksByFlavor?.[this._callbackFlavor] ||
+            (this._callbackFlavor === 'web-vitals' ? posthogExtensions?.postHogWebVitalsCallbacks : undefined)
+        if (!isUndefined(callbacks)) {
+            ;({ onLCP, onCLS, onFCP, onINP } = callbacks)
         }
 
         if (!onLCP || !onCLS || !onFCP || !onINP) {
@@ -294,9 +318,8 @@ export class WebVitalsAutocapture {
             return
         }
 
-        // scope metrics to the browser's Soft Navigation entries when opted in, so SPA
+        // Scope metrics to the browser's Soft Navigation entries when opted in, so SPA
         // route changes don't keep inflating the metric against the original hard navigation.
-        // only the soft-navs builds honour this; the standard builds ignore it.
         const reportOpts: WebVitalsReportOpts = { reportSoftNavs: this.useSoftNavs }
 
         // register performance observers

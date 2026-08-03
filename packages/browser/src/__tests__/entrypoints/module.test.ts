@@ -14,6 +14,50 @@ const moduleFullNoExternalJs = fs.readFileSync(
     path.join(__dirname, '../../../dist/module.full.no-external.js'),
     'utf-8'
 )
+const webVitalsSoftNavsJs = fs.readFileSync(path.join(__dirname, '../../../dist/web-vitals-soft-navs.js'), 'utf-8')
+
+const evaluateBundle = (bundle: string, supportsSoftNavigations = false) => {
+    const iframe = document.createElement('iframe')
+    document.body.appendChild(iframe)
+    const frameWindow = iframe.contentWindow as typeof window & {
+        __PosthogExtensions__?: {
+            postHogWebVitalsCallbacksByFlavor?: Record<
+                string,
+                { onLCP: (callback: () => void, options: object) => void }
+            >
+        }
+        __observedEntryTypes?: string[]
+        PerformanceSoftNavigation?: { prototype: { getLargestInteractionContentfulPaint: () => void } }
+    }
+    frameWindow.__observedEntryTypes = []
+    class MockPerformanceObserver {
+        static supportedEntryTypes = supportsSoftNavigations
+            ? ['largest-contentful-paint', 'interaction-contentful-paint', 'soft-navigation']
+            : ['largest-contentful-paint']
+
+        observe(options: { type: string }) {
+            frameWindow.__observedEntryTypes!.push(options.type)
+        }
+
+        disconnect() {}
+        takeRecords() {
+            return []
+        }
+    }
+    Object.defineProperty(frameWindow, 'PerformanceObserver', { value: MockPerformanceObserver, configurable: true })
+    Object.defineProperty(frameWindow.performance, 'getEntriesByType', { value: () => [], configurable: true })
+    if (supportsSoftNavigations) {
+        class MockPerformanceSoftNavigation {
+            getLargestInteractionContentfulPaint() {}
+        }
+        Object.defineProperty(frameWindow, 'PerformanceSoftNavigation', {
+            value: MockPerformanceSoftNavigation,
+            configurable: true,
+        })
+    }
+    frameWindow.eval(bundle)
+    return { frameWindow, iframe }
+}
 
 describe('Array entrypoint', () => {
     it('should not contain any script loaders', () => {
@@ -31,6 +75,39 @@ describe('Module entrypoint', () => {
         expect(moduleFullJs).toContain('__PosthogExtensions__.loadExternalDependency=')
         expect(moduleNoExternalJs).not.toContain('__PosthogExtensions__.loadExternalDependency=')
         expect(moduleFullNoExternalJs).not.toContain('__PosthogExtensions__.loadExternalDependency=')
+    })
+})
+
+describe('Web vitals bundles', () => {
+    afterEach(() => {
+        document.querySelectorAll('iframe').forEach((iframe) => iframe.remove())
+    })
+
+    it.each([
+        ['array.full', arrayFullJs],
+        ['array.full.no-external', arrayFullNoExternalJs],
+    ])('%s includes every callback flavor', (_name, bundle) => {
+        const { frameWindow } = evaluateBundle(bundle)
+
+        expect(Object.keys(frameWindow.__PosthogExtensions__?.postHogWebVitalsCallbacksByFlavor || {})).toEqual([
+            'web-vitals-with-attribution-soft-navs',
+            'web-vitals-soft-navs',
+            'web-vitals-with-attribution',
+            'web-vitals',
+        ])
+    })
+
+    it.each([
+        [false, ['largest-contentful-paint']],
+        [true, ['largest-contentful-paint', 'interaction-contentful-paint', 'soft-navigation']],
+    ])('soft-nav entrypoint falls back when browser support is %p', (supportsSoftNavigations, expectedEntryTypes) => {
+        const { frameWindow } = evaluateBundle(webVitalsSoftNavsJs, supportsSoftNavigations)
+
+        frameWindow.__PosthogExtensions__?.postHogWebVitalsCallbacksByFlavor?.['web-vitals-soft-navs'].onLCP(() => {}, {
+            reportSoftNavs: true,
+        })
+
+        expect(frameWindow.__observedEntryTypes).toEqual(expectedEntryTypes)
     })
 })
 

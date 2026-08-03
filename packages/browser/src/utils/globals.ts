@@ -157,14 +157,23 @@ export type AssignableWindow = Window &
 
 export type ExternalExtensionKind = 'intercom-integration' | 'crisp-chat-integration'
 
-/**
- * Subset of the web-vitals library's `ReportOpts` that we pass through to the metric
- * observers. `reportSoftNavs` is only honoured by the soft-navs build; the standard
- * build ignores it.
- */
+/** Subset of the web-vitals library's `ReportOpts` passed to metric observers. */
 export interface WebVitalsReportOpts {
     reportAllChanges?: boolean
     reportSoftNavs?: boolean
+}
+
+export type WebVitalsCallbackFlavor =
+    | 'web-vitals'
+    | 'web-vitals-with-attribution'
+    | 'web-vitals-soft-navs'
+    | 'web-vitals-with-attribution-soft-navs'
+
+export type WebVitalsCallbacks = {
+    onLCP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
+    onCLS: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
+    onFCP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
+    onINP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
 }
 
 export type PostHogExtensionKind =
@@ -252,15 +261,9 @@ interface PostHogExtensions {
     logs?: {
         initializeLogs?: (posthog: PostHog) => any | undefined
     }
-    postHogWebVitalsCallbacks?: {
-        // the metric observer registration functions from the web-vitals library.
-        // the optional second argument is web-vitals' ReportOpts (e.g. `reportSoftNavs`);
-        // the standard build silently ignores options it doesn't recognise.
-        onLCP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
-        onCLS: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
-        onFCP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
-        onINP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
-    }
+    /** @deprecated Use `postHogWebVitalsCallbacksByFlavor` to select callbacks explicitly. */
+    postHogWebVitalsCallbacks?: WebVitalsCallbacks
+    postHogWebVitalsCallbacksByFlavor?: Partial<Record<WebVitalsCallbackFlavor, WebVitalsCallbacks>>
     /**
      * @deprecated
      *

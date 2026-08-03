@@ -37,6 +37,10 @@ const postHogWebVitalsCallbacks = {
 }
 
 assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
+assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacksByFlavor =
+    assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacksByFlavor || {}
+assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacksByFlavor['web-vitals-with-attribution'] =
+    postHogWebVitalsCallbacks
 assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = postHogWebVitalsCallbacks
 
 // we used to put posthogWebVitalsCallbacks on window, and now we put it on __PosthogExtensions__

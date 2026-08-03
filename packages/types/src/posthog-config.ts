@@ -253,10 +253,10 @@ export interface PerformanceCaptureConfig {
      * which inflates LCP (and the other metrics) by the time spent on the app.
      *
      * This is a preview option (opt-in) because it relies on Chrome's Soft Navigation Detection API,
-     * which is still experimental. When enabled, PostHog loads a soft-navs build of
-     * the web-vitals library (a slightly larger bundle) and passes `reportSoftNavs`
-     * to the observers; the standard build silently ignores the option. In browsers
-     * without soft-nav support the metrics behave as they do today.
+     * which is still experimental. When enabled, PostHog loads a pinned stable web-vitals 6.x
+     * bundle and passes `reportSoftNavs` to the observers. The default path remains on the
+     * existing web-vitals 5.x bundle. In browsers without soft-nav support, metrics fall
+     * back to their existing hard-navigation behavior.
      *
      * @default false
      */

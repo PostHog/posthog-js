@@ -478,14 +478,17 @@ describe('web vitals', () => {
             [undefined, false],
             [true, true],
             [false, false],
-        ])('when __preview_web_vitals_soft_navs is %p, useSoftNavs should be %p', async (softNavsConfig, expectedUseSoftNavs) => {
-            posthog = await createPosthogInstance(uuidv7(), {
-                capture_performance: { web_vitals: true, __preview_web_vitals_soft_navs: softNavsConfig },
-                capture_pageview: false,
-            })
+        ])(
+            'when __preview_web_vitals_soft_navs is %p, useSoftNavs should be %p',
+            async (softNavsConfig, expectedUseSoftNavs) => {
+                posthog = await createPosthogInstance(uuidv7(), {
+                    capture_performance: { web_vitals: true, __preview_web_vitals_soft_navs: softNavsConfig },
+                    capture_pageview: false,
+                })
 
-            expect(posthog.webVitalsAutocapture!.useSoftNavs).toBe(expectedUseSoftNavs)
-        })
+                expect(posthog.webVitalsAutocapture!.useSoftNavs).toBe(expectedUseSoftNavs)
+            }
+        )
 
         it.each([
             // [soft_navs, attribution, expected bundle]
@@ -498,13 +501,16 @@ describe('web vitals', () => {
         ])(
             'when __preview_web_vitals_soft_navs is %p and web_vitals_attribution is %p, should load %s bundle',
             async (softNavsConfig, attributionConfig, expectedBundle) => {
-                const loadScriptMock = jest.fn().mockImplementation((_ph, _kind, callback) => {
-                    assignableWindow.__PosthogExtensions__ = {}
-                    assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
-                        onLCP: jest.fn(),
-                        onCLS: jest.fn(),
-                        onFCP: jest.fn(),
-                        onINP: jest.fn(),
+                const loadScriptMock = jest.fn().mockImplementation((_ph, kind, callback) => {
+                    assignableWindow.__PosthogExtensions__ = {
+                        postHogWebVitalsCallbacksByFlavor: {
+                            [kind]: {
+                                onLCP: jest.fn(),
+                                onCLS: jest.fn(),
+                                onFCP: jest.fn(),
+                                onINP: jest.fn(),
+                            },
+                        },
                     }
                     callback()
                 })
@@ -544,9 +550,12 @@ describe('web vitals', () => {
                 const onFCP = jest.fn()
                 const onINP = jest.fn()
 
-                const loadScriptMock = jest.fn().mockImplementation((_ph, _kind, callback) => {
-                    assignableWindow.__PosthogExtensions__ = {}
-                    assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = { onLCP, onCLS, onFCP, onINP }
+                const loadScriptMock = jest.fn().mockImplementation((_ph, kind, callback) => {
+                    assignableWindow.__PosthogExtensions__ = {
+                        postHogWebVitalsCallbacksByFlavor: {
+                            [kind]: { onLCP, onCLS, onFCP, onINP },
+                        },
+                    }
                     callback()
                 })
 
@@ -572,6 +581,77 @@ describe('web vitals', () => {
                 }
             }
         )
+
+        it('loads soft-nav callbacks when stable callbacks were preloaded by another instance', async () => {
+            const stableOnLCP = jest.fn()
+            const softOnLCP = jest.fn()
+            const softCallbacks = {
+                onLCP: softOnLCP,
+                onCLS: jest.fn(),
+                onFCP: jest.fn(),
+                onINP: jest.fn(),
+            }
+            const stableCallbacks = {
+                onLCP: stableOnLCP,
+                onCLS: jest.fn(),
+                onFCP: jest.fn(),
+                onINP: jest.fn(),
+            }
+            const loadExternalDependency = jest.fn((_ph, kind, callback) => {
+                assignableWindow.__PosthogExtensions__!.postHogWebVitalsCallbacksByFlavor![kind] = softCallbacks
+                callback()
+            })
+            assignableWindow.__PosthogExtensions__ = {
+                postHogWebVitalsCallbacks: stableCallbacks,
+                postHogWebVitalsCallbacksByFlavor: { 'web-vitals': stableCallbacks },
+                loadExternalDependency,
+            }
+
+            posthog = await createPosthogInstance(uuidv7(), {
+                capture_performance: { web_vitals: true, __preview_web_vitals_soft_navs: true },
+                capture_pageview: false,
+            })
+
+            expect(loadExternalDependency).toHaveBeenCalledWith(
+                expect.anything(),
+                'web-vitals-soft-navs',
+                expect.any(Function)
+            )
+            expect(softOnLCP).toHaveBeenCalledWith(expect.any(Function), { reportSoftNavs: true })
+            expect(stableOnLCP).not.toHaveBeenCalled()
+        })
+
+        it('uses the requested preloaded callback flavor without loading another bundle', async () => {
+            const stableOnLCP = jest.fn()
+            const softOnLCP = jest.fn()
+            const loadExternalDependency = jest.fn()
+            assignableWindow.__PosthogExtensions__ = {
+                postHogWebVitalsCallbacksByFlavor: {
+                    'web-vitals': {
+                        onLCP: stableOnLCP,
+                        onCLS: jest.fn(),
+                        onFCP: jest.fn(),
+                        onINP: jest.fn(),
+                    },
+                    'web-vitals-soft-navs': {
+                        onLCP: softOnLCP,
+                        onCLS: jest.fn(),
+                        onFCP: jest.fn(),
+                        onINP: jest.fn(),
+                    },
+                },
+                loadExternalDependency,
+            }
+
+            posthog = await createPosthogInstance(uuidv7(), {
+                capture_performance: { web_vitals: true, __preview_web_vitals_soft_navs: true },
+                capture_pageview: false,
+            })
+
+            expect(loadExternalDependency).not.toHaveBeenCalled()
+            expect(softOnLCP).toHaveBeenCalledWith(expect.any(Function), { reportSoftNavs: true })
+            expect(stableOnLCP).not.toHaveBeenCalled()
+        })
     })
 
     describe('onRemoteConfig empty config handling', () => {
@@ -808,6 +888,98 @@ describe('web vitals', () => {
         })
 
         expect(posthog.webVitalsAutocapture!.isEnabled).toBe(true)
+    })
+
+    describe('soft-navigation metric attribution', () => {
+        const initializeWebVitals = async () => {
+            beforeSendMock = jest.fn().mockImplementation((event) => event)
+            assignableWindow.__PosthogExtensions__ = {
+                postHogWebVitalsCallbacksByFlavor: {
+                    'web-vitals-soft-navs': {
+                        onLCP: (callback) => {
+                            onLCPCallback = callback
+                        },
+                        onCLS: (callback) => {
+                            onCLSCallback = callback
+                        },
+                        onFCP: jest.fn(),
+                        onINP: jest.fn(),
+                    },
+                },
+            }
+            posthog = await createPosthogInstance(uuidv7(), {
+                before_send: beforeSendMock,
+                capture_performance: {
+                    web_vitals: true,
+                    web_vitals_allowed_metrics: ['LCP', 'CLS'],
+                    __preview_web_vitals_soft_navs: true,
+                },
+                capture_pageview: false,
+                mask_personal_data_properties: true,
+            })
+        }
+
+        it('attributes a delayed metric to its masked navigation URL after the live URL changes', async () => {
+            mockLocation.mockReturnValue({
+                protocol: 'http:',
+                host: 'localhost',
+                pathname: '/new',
+                search: '',
+                hash: '',
+                href: 'http://localhost/new',
+            })
+            await initializeWebVitals()
+
+            onLCPCallback?.({
+                name: 'LCP',
+                value: 123.45,
+                navigationId: 1,
+                navigationURL: 'http://localhost/old?gclid=secret',
+            })
+            onCLSCallback?.({
+                name: 'CLS',
+                value: 0.1,
+                navigationId: 2,
+                navigationURL: 'http://localhost/new?gclid=secret',
+            })
+            jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+
+            expect(beforeSendMock).toHaveBeenCalledTimes(2)
+            expect(beforeSendMock.mock.calls[0][0]).toMatchObject({
+                event: '$web_vitals',
+                properties: {
+                    $current_url: 'http://localhost/old?gclid=<masked>',
+                    $web_vitals_LCP_event: {
+                        $current_url: 'http://localhost/old?gclid=<masked>',
+                        navigationURL: 'http://localhost/old?gclid=<masked>',
+                        navigationId: 1,
+                    },
+                },
+            })
+            expect(beforeSendMock.mock.calls[1][0]).toMatchObject({
+                event: '$web_vitals',
+                properties: {
+                    $current_url: 'http://localhost/new?gclid=<masked>',
+                    $web_vitals_CLS_event: {
+                        $current_url: 'http://localhost/new?gclid=<masked>',
+                        navigationURL: 'http://localhost/new?gclid=<masked>',
+                        navigationId: 2,
+                    },
+                },
+            })
+        })
+
+        it('separates buffers by navigation identity even when the navigation URL is unchanged', async () => {
+            await initializeWebVitals()
+
+            onLCPCallback?.({ name: 'LCP', value: 100, navigationId: 10, navigationURL: 'http://localhost/route' })
+            onCLSCallback?.({ name: 'CLS', value: 0.1, navigationId: 11, navigationURL: 'http://localhost/route' })
+            jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+
+            expect(beforeSendMock).toHaveBeenCalledTimes(2)
+            expect(beforeSendMock.mock.calls[0][0].properties.$web_vitals_LCP_event.navigationId).toBe(10)
+            expect(beforeSendMock.mock.calls[1][0].properties.$web_vitals_CLS_event.navigationId).toBe(11)
+        })
     })
 
     describe.each([

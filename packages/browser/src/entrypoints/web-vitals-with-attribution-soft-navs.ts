@@ -1,8 +1,8 @@
 /**
  * Web Vitals entrypoint (soft navigations, with attribution)
  *
- * Identical to web-vitals-with-attribution.ts, but built against a soft-navs build
- * of the web-vitals library so the observers understand the `reportSoftNavs` option.
+ * Identical to web-vitals-with-attribution.ts, but built against pinned stable
+ * web-vitals 6.x so the observers understand the `reportSoftNavs` option.
  * That option scopes each metric to the browser's Soft Navigation entries, so on a
  * single-page app the measurement window restarts on client-side route changes
  * instead of accumulating against the original hard-navigation timestamp.
@@ -39,6 +39,10 @@ const postHogWebVitalsCallbacks = {
 }
 
 assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
+assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacksByFlavor =
+    assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacksByFlavor || {}
+assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacksByFlavor['web-vitals-with-attribution-soft-navs'] =
+    postHogWebVitalsCallbacks
 assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = postHogWebVitalsCallbacks
 
 // we used to put posthogWebVitalsCallbacks on window, and now we put it on __PosthogExtensions__
