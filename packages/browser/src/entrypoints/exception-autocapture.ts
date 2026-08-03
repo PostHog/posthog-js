@@ -10,7 +10,7 @@ const errorPropertiesBuilder = buildErrorPropertiesBuilder()
 
 // `window.onerror` exposes the location positionally, so preserve it when there is no Error object.
 const resolveOnErrorInput = ([event, source, lineno, colno, error]: ErrorEventArgs): unknown => {
-    if (error) {
+    if (error != null) {
         return error
     }
     if (isString(event) && isString(source) && source.length > 0 && typeof ErrorEvent !== 'undefined') {
