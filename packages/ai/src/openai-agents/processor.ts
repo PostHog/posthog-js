@@ -102,13 +102,7 @@ interface TraceMetadata {
 
 export type DistinctIdResolver = string | ((trace: Trace) => string | null | undefined)
 export type TracingProcessorErrorContext =
-  | 'capture'
-  | 'onTraceStart'
-  | 'onTraceEnd'
-  | 'onSpanStart'
-  | 'onSpanEnd'
-  | 'shutdown'
-  | 'forceFlush'
+  'capture' | 'onTraceStart' | 'onTraceEnd' | 'onSpanStart' | 'onSpanEnd' | 'shutdown' | 'forceFlush'
 export type TracingProcessorErrorHandler = (error: unknown, context: TracingProcessorErrorContext) => void
 
 export interface PostHogTracingProcessorOptions {
