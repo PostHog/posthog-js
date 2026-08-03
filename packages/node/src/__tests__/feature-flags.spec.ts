@@ -3112,6 +3112,16 @@ describe('match properties', () => {
 
     expect(matchProperty(property_c, { key: 'prevalue' })).toBe(true)
     expect(matchProperty(property_c, { key: 'Alakazam' })).toBe(true)
+
+    expect(() => matchProperty(property_c, { key2: 'value' })).toThrow(InconclusiveMatchError)
+    expect(() => matchProperty(property_c, {})).toThrow(InconclusiveMatchError)
+
+    // The null guard fires before operator dispatch, so the not_ variant is not a pure
+    // negation here — both directions return false, matching icontains.
+    expect(matchProperty(property_a, { key: null })).toBe(false)
+    expect(matchProperty(property_a, { key: undefined })).toBe(false)
+    expect(matchProperty(property_c, { key: null })).toBe(false)
+    expect(matchProperty(property_c, { key: undefined })).toBe(false)
   })
 
   it('with operator ends_with', () => {
@@ -3144,6 +3154,16 @@ describe('match properties', () => {
 
     expect(matchProperty(property_c, { key: 'value2' })).toBe(true)
     expect(matchProperty(property_c, { key: 'Alakazam' })).toBe(true)
+
+    expect(() => matchProperty(property_c, { key2: 'value' })).toThrow(InconclusiveMatchError)
+    expect(() => matchProperty(property_c, {})).toThrow(InconclusiveMatchError)
+
+    // The null guard fires before operator dispatch, so the not_ variant is not a pure
+    // negation here — both directions return false, matching icontains.
+    expect(matchProperty(property_a, { key: null })).toBe(false)
+    expect(matchProperty(property_a, { key: undefined })).toBe(false)
+    expect(matchProperty(property_c, { key: null })).toBe(false)
+    expect(matchProperty(property_c, { key: undefined })).toBe(false)
   })
 
   it('with operator regex', () => {
