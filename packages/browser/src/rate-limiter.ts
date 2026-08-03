@@ -3,7 +3,7 @@ import type { PostHog } from './posthog-core'
 import { RequestResponse } from './types'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { location } from '@posthog/browser-common/utils/globals'
-import { isNumber } from '@posthog/core'
+import { isArray, isNumber } from '@posthog/core'
 
 const logger = createLogger('[RateLimiter]')
 
@@ -71,9 +71,11 @@ export class RateLimiter {
             const droppedSinceLastWarning = (isNumber(bucket.dropped) ? bucket.dropped : 0) + 1
             bucket.dropped = droppedSinceLastWarning
 
-            if (!this.lastEventRateLimited) {
+            if (!this.lastEventRateLimited && this._captureWarning(droppedSinceLastWarning)) {
+                // `capture` returns the accepted event after the full local pipeline has run. Keep
+                // the tally when (for example) `before_send` rejects the warning so the next
+                // accepted warning still accounts for every dropped event.
                 bucket.dropped = 0
-                this._captureWarning(droppedSinceLastWarning)
             }
         }
 
@@ -86,26 +88,31 @@ export class RateLimiter {
         }
     }
 
+    private _isPropertyAllowed(property: string): boolean {
+        const denylist = this.instance.config.property_denylist
+        return !isArray(denylist) || !denylist.includes(property)
+    }
+
     /**
      * The page the limiter tripped on, without the query string or hash - enough to spot a
      * self-reloading 404 without putting whatever a customer keeps in their query params into
-     * an ingestion warning.
+     * an ingestion warning. Because this value recombines `$current_url` and `$pathname`, omit it
+     * if either standard property has been denylisted rather than reintroducing denied context.
      */
     private _triggeringPage(): string | undefined {
-        if (!location?.pathname) {
+        if (!this._isPropertyAllowed('$current_url') || !this._isPropertyAllowed('$pathname') || !location?.pathname) {
             return undefined
         }
         return `${location.origin ?? ''}${location.pathname}`
     }
 
-    private _captureWarning(droppedSinceLastWarning: number): void {
+    private _captureWarning(droppedSinceLastWarning: number): boolean {
         const { captureEventsBurstLimit, captureEventsPerSecond } = this
         const page = this._triggeringPage()
-        const sessionId = this.instance.get_session_id?.()
+        const sessionId = this._isPropertyAllowed('$session_id') ? this.instance.get_session_id?.() : undefined
 
-        // Only `$$client_ingestion_warning_message` survives into the ingestion warning the
-        // customer actually sees, so the diagnostics have to be in the string as well as in
-        // properties on the event.
+        // Ingestion currently retains only this message for client ingestion warnings. Keep the
+        // diagnostics here instead of adding structured properties that the backend discards.
         const context = [
             `${droppedSinceLastWarning} event(s) dropped since the last warning`,
             page ? `triggered on ${page}` : undefined,
@@ -114,15 +121,10 @@ export class RateLimiter {
             .filter(Boolean)
             .join(', ')
 
-        this.instance.capture(
+        return !!this.instance.capture(
             RATE_LIMIT_EVENT,
             {
                 $$client_ingestion_warning_message: `posthog-js client rate limited: ${context}. Config is set to ${captureEventsPerSecond} events per second and ${captureEventsBurstLimit} events burst limit.`,
-                $$client_ingestion_warning_dropped_events: droppedSinceLastWarning,
-                $$client_ingestion_warning_page: page,
-                $$client_ingestion_warning_session_id: sessionId,
-                $$client_ingestion_warning_events_per_second: captureEventsPerSecond,
-                $$client_ingestion_warning_events_burst_limit: captureEventsBurstLimit,
             },
             {
                 skip_client_rate_limiting: true,
