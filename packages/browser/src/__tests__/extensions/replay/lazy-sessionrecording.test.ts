@@ -1483,6 +1483,32 @@ describe('Lazy SessionRecording', () => {
                 )
             })
 
+            it('an event trigger match releases the hold even when its activation is a no-op', () => {
+                // With triggerMatchType 'any', a URL trigger can satisfy the combined trigger
+                // status long before an error event fires; the activation then short-circuits
+                // on hasPendingTriggers. The event evidence must still release the hold, or
+                // record-on-exception never ships from tabs the user hasn't touched.
+                jest.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+
+                const snapshot = emitInactiveEvent(startingTimestamp + 100, 'unknown')
+                jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                expect(posthog.capture).not.toHaveBeenCalled()
+
+                // no pending triggers in this setup, so this activation is a no-op beyond the
+                // evidence flag, mirroring the already-activated-by-url case
+                sessionRecording['_lazyLoadedSessionRecording']['_activateTrigger']('event', '$exception')
+                jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                expect(posthog.capture).toHaveBeenCalledWith(
+                    '$snapshot',
+                    expect.objectContaining({
+                        $session_id: sessionId,
+                        $snapshot_data: [snapshot],
+                    }),
+                    expect.any(Object)
+                )
+            })
+
             it('ships nothing when a session rotates away without ever seeing interaction', () => {
                 // The billing regression this policy exists for: a parked tab whose session
                 // rotates on activity timeout must not ship a recording per rotation.

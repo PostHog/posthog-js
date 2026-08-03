@@ -480,6 +480,17 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // active earlier; any ACTIVE_SOURCES event (mouse move, scroll, touch) clears it.
     private _isIdle: boolean | 'unknown' = 'unknown'
     private _lastIdleSessionCheckTimestamp = 0
+    // An event-trigger match (V1) counts as ship evidence even without interaction; see
+    // _holdingForInteraction. V2 trigger groups activate inside the strategy and don't set
+    // this yet, so V2 event-trigger sessions hold until interaction (known follow-up).
+    private _eventTriggerActivated = false
+
+    // While this is true, nothing ships: the session has shown no evidence anyone cares about
+    // it. Evidence is either a user interaction this recorder run (_isIdle leaves 'unknown')
+    // or an event-trigger match (an explicit record-on-X config).
+    private get _holdingForInteraction(): boolean {
+        return this._isIdle === 'unknown' && !this._eventTriggerActivated
+    }
     private _rrwebError = false
     private _rrwebStartAttempted = false
     private _maxDepthExceeded = false
@@ -915,6 +926,21 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private _activateTrigger(triggerType: TriggerType, matchDetail?: string) {
+        // An event trigger is explicit "this session matters" intent (e.g. record on
+        // exception), so it releases the interaction hold. This must happen BEFORE the
+        // pending-trigger short circuit below: with triggerMatchType 'any' a URL trigger may
+        // have satisfied the combined status long ago, making the activation itself a no-op,
+        // but the event (the error) still just happened and is what makes a quiet session
+        // worth shipping. URL triggers only scope where recording is allowed and never count.
+        if (triggerType === 'event' && !this._eventTriggerActivated) {
+            this._eventTriggerActivated = true
+            if (this._buffer.data.length > 0 && !this._flushBufferTimer) {
+                this._flushBufferTimer = setTimeout(() => {
+                    this._flushBuffer()
+                }, RECORDING_BUFFER_TIMEOUT)
+            }
+        }
+
         // V1 only: V2 uses per-group activation and never calls this method
         // Prevent re-entry: if we're already activating a trigger, skip to avoid infinite recursion
         // This can happen when _reportStarted emits custom events that match the trigger condition
@@ -1224,6 +1250,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             (this._sessionId !== sessionId || this._windowId !== windowId)
         ) {
             this._isIdle = 'unknown'
+            // ship evidence is per session: the new session's event trigger must match again
+            this._eventTriggerActivated = false
             this.stop()
             this.start('session_id_changed')
         }
@@ -1332,9 +1360,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     stop() {
-        // stopping while the buffer is held (no user interaction yet) drops it by design,
+        // stopping while the buffer is held (no ship evidence yet) drops it by design,
         // but that shouldn't be an invisible data path
-        if (this._isIdle === 'unknown' && this._buffer.data.length > 0) {
+        if (this._holdingForInteraction && this._buffer.data.length > 0) {
             logger.info('discarding held buffer for a session that saw no user interaction', {
                 sessionId: this._buffer.sessionId,
                 bufferLength: this._buffer.data.length,
@@ -1790,13 +1818,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _flushBuffer(force = false): SnapshotBuffer {
         this._clearFlushBufferTimer()
 
-        // A recorder that has never seen user interaction (_isIdle === 'unknown') holds its
-        // buffer instead of shipping. Without this, every activity-timeout rotation in a parked
-        // tab ships a Meta + FullSnapshot recording nobody interacted with, and each one bills
-        // as a full recording. The held buffer ships on the first user interaction (which flips
-        // _isIdle to false and arms the flush timer), or on unload via force; a rotation's
+        // A recorder with no ship evidence (no user interaction this run, no event-trigger
+        // match) holds its buffer instead of shipping. Without this, every activity-timeout
+        // rotation in a parked tab ships a Meta + FullSnapshot recording nobody interacted
+        // with, and each one bills as a full recording. The held buffer ships on the first
+        // user interaction or event-trigger match, or on unload via force; a rotation's
         // stop() finds it held and clears it, so a session nobody ever touched ships nothing.
-        if (this._isIdle === 'unknown' && !force) {
+        if (this._holdingForInteraction && !force) {
             this._pruneHeldBuffer()
             return this._buffer
         }
@@ -1904,8 +1932,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         if (
             sessionChanged ||
-            // we never want to flush a healthy same-session buffer while confirmed idle
-            (this._isIdle === false &&
+            // we never want to flush a healthy same-session buffer while confirmed idle,
+            // nor while holding for interaction (that path prunes below instead)
+            (this._isIdle !== true &&
+                !this._holdingForInteraction &&
                 this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE)
         ) {
             this._buffer = this._flushBuffer()
@@ -1918,7 +1948,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             // After flushing, update buffer to use the new target session/window IDs
             this._buffer.sessionId = targetSessionId
             this._buffer.windowId = properties.$window_id as string
-        } else if (this._isIdle === 'unknown') {
+        } else if (this._holdingForInteraction) {
             // held buffers don't flush on the size cap; keep them bounded instead
             this._pruneHeldBuffer(properties.$snapshot_bytes + additionalBytes)
         }
@@ -1927,10 +1957,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._buffer.data.push(properties.$snapshot_data)
         this._buffer.sizes.push(properties.$snapshot_bytes)
 
-        // Schedule the flush only once the session has seen real user interaction. While
-        // 'unknown' the buffer is held (see _flushBuffer): capturing continues so the first
-        // interaction can ship a playable prefix, but nothing leaves the tab before then.
-        if (!this._flushBufferTimer && this._isIdle === false) {
+        // Schedule the flush only once the session has ship evidence (user interaction or an
+        // event-trigger match). While holding, capturing continues so the first interaction
+        // can ship a playable prefix, but nothing leaves the tab before then.
+        if (!this._flushBufferTimer && this._isIdle !== true && !this._holdingForInteraction) {
             this._flushBufferTimer = setTimeout(() => {
                 this._flushBuffer()
             }, RECORDING_BUFFER_TIMEOUT)
