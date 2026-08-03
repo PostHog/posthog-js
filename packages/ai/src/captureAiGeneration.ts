@@ -113,6 +113,12 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
     if (httpStatus === undefined) {
       if (typeof options.error === 'object' && 'status' in options.error && typeof options.error.status === 'number') {
         httpStatus = options.error.status
+      } else if (
+        typeof options.error === 'object' &&
+        'statusCode' in options.error &&
+        typeof options.error.statusCode === 'number'
+      ) {
+        httpStatus = options.error.statusCode
       } else {
         httpStatus = 500
       }
