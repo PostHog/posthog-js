@@ -128,7 +128,7 @@ const SURVEY_TARGETING_FLAG_PREFIX = 'survey-targeting-'
 export class SurveyManager {
     private _posthog: PostHog
     private _surveyInFocus: string | null
-    private _surveyTimeouts: Map<string, NodeJS.Timeout> = new Map()
+    private _surveyTimeouts: Map<string, ReturnType<Window['setTimeout']>> = new Map()
     private _widgetSelectorListeners: Map<string, { element: Element; listener: EventListener; survey: Survey }> =
         new Map()
     private _prefillHandledSurveys: Set<string> = new Set()
@@ -242,7 +242,7 @@ export class SurveyManager {
         if (delaySeconds <= 0) {
             return render(<SurveyPopup {...surveyPopupProps} />, shadow)
         }
-        const timeoutId = setTimeout(() => {
+        const timeoutId = window.setTimeout(() => {
             // remove survey to keep `_surveyTimeouts` as a true list of "pending" surveys
             this._surveyTimeouts.delete(survey.id)
 
