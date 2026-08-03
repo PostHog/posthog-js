@@ -2,4 +2,4 @@
 'posthog-js': patch
 ---
 
-Warn with an actionable message when `init()` is called a second time with a different project token, pointing at the `name` third argument needed to capture into a second project
+Prevent duplicate snippet loaders from replacing an initialized instance or replaying queued calls more than once, and warn with actionable guidance when `init()` is called again with a different project token

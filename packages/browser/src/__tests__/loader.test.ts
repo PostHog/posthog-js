@@ -5,7 +5,7 @@
  * currently not supported in the browser lib).
  */
 
-import { PostHog } from '../posthog-core'
+import { init_from_snippet, PostHog } from '../posthog-core'
 import { defaultPostHog } from './helpers/posthog-instance'
 
 import sinon from 'sinon'
@@ -105,26 +105,128 @@ describe(`Module-based loader in Node env`, () => {
     it(`names the token mismatch when re-initializing with a different token`, () => {
         console.warn = jest.fn()
 
-        const instance = posthog.init(
-            `phc_first`,
-            { disable_surveys: true, disable_conversations: true },
-            'sdk-multi-project'
-        )
+        const instance = new PostHog()
+        instance.init(`phc_first`, { disable_surveys: true, disable_conversations: true })
         expect(instance.config.token).toBe('phc_first')
 
-        // second GTM tag pastes the snippet again and calls init() with no name - lands on the same instance
-        const second = posthog.init(
-            `phc_second`,
-            { disable_surveys: true, disable_conversations: true },
-            'sdk-multi-project'
-        )
+        const second = instance.init(`phc_second`, { disable_surveys: true, disable_conversations: true })
         expect(second).toBe(instance)
-        // still bound to the first project's token
         expect(second.config.token).toBe('phc_first')
 
         expect(console.warn).toHaveBeenCalledWith(
             '[PostHog.js]',
-            "You have already initialized PostHog with a different project token! Re-initializing is a no-op, so events will keep going to the project this instance was initialized with. To capture into a second project, give the second init a distinct instance name, e.g. posthog.init('phc_second', { ... }, 'project2')"
+            "You have already initialized PostHog with a different project token! Re-initializing is a no-op, so events will keep going to the project this instance was initialized with. To capture into a second project, load PostHog once, then initialize a named instance after the SDK has loaded, e.g. posthog.init('phc_second', { ... }, 'project2')"
         )
+    })
+})
+
+describe('Snippet loader', () => {
+    const snippetConfig = () => ({
+        advanced_disable_feature_flags: true,
+        autocapture: false,
+        capture_pageview: false,
+        disable_conversations: true,
+        disable_session_recording: true,
+        disable_surveys: true,
+    })
+
+    afterEach(() => {
+        assignableWindow.posthog = undefined as any
+        jest.restoreAllMocks()
+    })
+
+    it('preserves the loaded instance and replays a shared queue once when array.js executes twice', () => {
+        jest.spyOn(PostHog.prototype, '_send_request').mockReturnValue()
+        jest.spyOn(console, 'warn').mockImplementation()
+
+        const queuedCall = jest.fn()
+        const snippetPostHog = [queuedCall] as any
+        snippetPostHog.__SV = 1
+        snippetPostHog.people = []
+        snippetPostHog._i = [
+            ['phc_first', snippetConfig(), 'posthog'],
+            ['phc_second', snippetConfig(), 'posthog'],
+        ]
+        assignableWindow.posthog = snippetPostHog
+
+        init_from_snippet()
+
+        const loadedPostHog = assignableWindow.posthog
+        expect(loadedPostHog.__loaded).toBe(true)
+        expect(loadedPostHog.config.token).toBe('phc_first')
+        expect(queuedCall).toHaveBeenCalledTimes(1)
+
+        init_from_snippet()
+
+        expect(assignableWindow.posthog).toBe(loadedPostHog)
+        expect(assignableWindow.posthog.__loaded).toBe(true)
+        expect(assignableWindow.posthog.config.token).toBe('phc_first')
+        expect(queuedCall).toHaveBeenCalledTimes(1)
+    })
+
+    it('preserves primary and named instances when array.js executes twice', () => {
+        jest.spyOn(PostHog.prototype, '_send_request').mockReturnValue()
+
+        const primaryQueuedCall = jest.fn()
+        const namedQueuedCall = jest.fn()
+        const snippetPostHog = [primaryQueuedCall] as any
+        snippetPostHog.__SV = 1
+        snippetPostHog.people = []
+        snippetPostHog.project2 = [namedQueuedCall]
+        snippetPostHog.project2.people = []
+        snippetPostHog._i = [
+            ['phc_first', snippetConfig(), 'posthog'],
+            ['phc_second', snippetConfig(), 'project2'],
+        ]
+        assignableWindow.posthog = snippetPostHog
+
+        init_from_snippet()
+
+        const loadedPostHog = assignableWindow.posthog
+        const project2 = loadedPostHog.project2
+        expect(loadedPostHog.__SV).toBe(1)
+        expect(loadedPostHog.config.token).toBe('phc_first')
+        expect(project2.config.token).toBe('phc_second')
+        expect(primaryQueuedCall).toHaveBeenCalledTimes(1)
+        expect(namedQueuedCall).toHaveBeenCalledTimes(1)
+
+        init_from_snippet()
+
+        expect(assignableWindow.posthog).toBe(loadedPostHog)
+        expect(assignableWindow.posthog.project2).toBe(project2)
+        expect(primaryQueuedCall).toHaveBeenCalledTimes(1)
+        expect(namedQueuedCall).toHaveBeenCalledTimes(1)
+    })
+
+    it('preserves named instances when the primary instance is not initialized', () => {
+        jest.spyOn(PostHog.prototype, '_send_request').mockReturnValue()
+
+        const snippetPostHog = [] as any
+        snippetPostHog.__SV = 1
+        snippetPostHog.people = []
+        snippetPostHog.namedOnly1 = []
+        snippetPostHog.namedOnly1.people = []
+        snippetPostHog.namedOnly2 = []
+        snippetPostHog.namedOnly2.people = []
+        snippetPostHog._i = [
+            ['phc_first', snippetConfig(), 'namedOnly1'],
+            ['phc_second', snippetConfig(), 'namedOnly2'],
+        ]
+        assignableWindow.posthog = snippetPostHog
+
+        init_from_snippet()
+
+        const loadedPostHog = assignableWindow.posthog
+        const namedOnly1 = loadedPostHog.namedOnly1
+        const namedOnly2 = loadedPostHog.namedOnly2
+        expect(loadedPostHog.__loaded).toBe(false)
+        expect(namedOnly1.config.token).toBe('phc_first')
+        expect(namedOnly2.config.token).toBe('phc_second')
+
+        init_from_snippet()
+
+        expect(assignableWindow.posthog).toBe(loadedPostHog)
+        expect(assignableWindow.posthog.namedOnly1).toBe(namedOnly1)
+        expect(assignableWindow.posthog.namedOnly2).toBe(namedOnly2)
     })
 })
