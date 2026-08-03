@@ -13,7 +13,11 @@ const resolveOnErrorInput = ([message, source, lineno, colno, error]: ErrorEvent
         return error
     }
     if (isString(message) && isString(source) && source.length > 0 && typeof ErrorEvent !== 'undefined') {
-        return new ErrorEvent('error', { message, filename: source, lineno, colno })
+        try {
+            return new ErrorEvent('error', { message, filename: source, lineno, colno })
+        } catch {
+            // Some older environments expose ErrorEvent without a usable constructor.
+        }
     }
     return message
 }

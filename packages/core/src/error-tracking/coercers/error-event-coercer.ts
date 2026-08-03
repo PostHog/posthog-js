@@ -8,9 +8,24 @@ import { isErrorEvent, isString } from '@/utils'
 interface ErrorEventLike {
   message: string
   error?: unknown
-  filename?: string
-  lineno?: number
-  colno?: number
+}
+
+const hasUsableMessage = (err: ErrorEventLike): boolean => isString(err.message) && err.message.length > 0
+
+const buildStack = (err: ErrorEventLike, ctx: CoercingContext): string | undefined => {
+  // `onerror` gives us filename/lineno/colno even when it has no Error object.
+  // Encode them as a single synthetic frame so error tracking can show where
+  // the error came from (and resolve it via source maps). Keep the untrusted
+  // message out of the stack so frame-shaped message lines cannot be parsed.
+  const { filename, lineno, colno } = err as ErrorEventLike & {
+    filename?: string
+    lineno?: number
+    colno?: number
+  }
+  if (isString(filename) && filename.length > 0) {
+    return `Error\n    at ${filename}:${lineno ?? 0}:${colno ?? 0}`
+  }
+  return ctx.syntheticException?.stack
 }
 
 export class ErrorEventCoercer implements ErrorTrackingCoercer<ErrorEventLike> {
@@ -24,7 +39,7 @@ export class ErrorEventCoercer implements ErrorTrackingCoercer<ErrorEventLike> {
     // Match when the event carries a real Error to unwrap, or at least a usable
     // message we can salvage. Bare ErrorEvents with neither fall through to the
     // later EventCoercer.
-    return errorEvent.error != undefined || this._hasUsableMessage(errorEvent)
+    return errorEvent.error != undefined || hasUsableMessage(errorEvent)
   }
 
   coerce(err: ErrorEventLike, ctx: CoercingContext): ExceptionLike {
@@ -42,25 +57,8 @@ export class ErrorEventCoercer implements ErrorTrackingCoercer<ErrorEventLike> {
     return {
       type: 'Error',
       value: err.message,
-      stack: this._buildStack(err, ctx),
+      stack: buildStack(err, ctx),
       synthetic: true,
     }
-  }
-
-  private _hasUsableMessage(err: ErrorEventLike): boolean {
-    return isString(err.message) && err.message.length > 0
-  }
-
-  private _buildStack(err: ErrorEventLike, ctx: CoercingContext): string | undefined {
-    // `onerror` gives us filename/lineno/colno even when it has no Error object.
-    // Encode them as a single synthetic frame so error tracking can show where
-    // the error came from (and resolve it via source maps). Keep the untrusted
-    // message out of the stack so frame-shaped message lines cannot be parsed.
-    if (isString(err.filename) && err.filename.length > 0) {
-      const lineno = err.lineno ?? 0
-      const colno = err.colno ?? 0
-      return `Error\n    at ${err.filename}:${lineno}:${colno}`
-    }
-    return ctx.syntheticException?.stack
   }
 }

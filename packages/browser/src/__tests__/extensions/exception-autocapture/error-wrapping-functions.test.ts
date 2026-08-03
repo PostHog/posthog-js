@@ -88,6 +88,30 @@ describe('error wrapping functions', () => {
             })
         })
 
+        it('falls back without throwing when ErrorEvent is present but non-constructible', () => {
+            const errorEventDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'ErrorEvent')
+            Object.defineProperty(globalThis, 'ErrorEvent', {
+                configurable: true,
+                value: () => undefined,
+            })
+
+            try {
+                unwrap = wrapOnError(captureFn)
+
+                expect(() => win.onerror('fallback message', 'https://example.com/app.js', 73, 9)).not.toThrow()
+                expect(captureFn.mock.calls[0][0].$exception_list[0]).toMatchObject({
+                    type: 'Error',
+                    value: 'fallback message',
+                })
+            } finally {
+                if (errorEventDescriptor) {
+                    Object.defineProperty(globalThis, 'ErrorEvent', errorEventDescriptor)
+                } else {
+                    delete (globalThis as { ErrorEvent?: unknown }).ErrorEvent
+                }
+            }
+        })
+
         it('does not parse frame-shaped lines from a multiline onerror message', () => {
             unwrap = wrapOnError(captureFn)
             const message = 'oops\n    at https://example.com/injected.js:1:2'
