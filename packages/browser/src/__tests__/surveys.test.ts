@@ -1679,7 +1679,6 @@ describe('surveys', () => {
             ;(surveyManager as any)._translateSurveyForRendering = jest
                 .fn()
                 .mockReturnValue({ survey: frSurvey, language: 'fr' })
-
             ;(surveyManager as any)._surveyInFocus = frSurvey.id
             ;(surveyManager as any)._currentLanguage = 'en'
             ;(surveyManager as any)._surveyIsRendered = true
@@ -1694,7 +1693,6 @@ describe('surveys', () => {
             ;(surveyManager as any)._translateSurveyForRendering = jest
                 .fn()
                 .mockReturnValue({ survey: frSurvey, language: 'fr' })
-
             ;(surveyManager as any)._surveyInFocus = frSurvey.id
             ;(surveyManager as any)._currentLanguage = 'fr'
             ;(surveyManager as any)._surveyIsRendered = true
