@@ -1,5 +1,15 @@
 # @posthog/mcp
 
+## 0.10.3
+
+### Patch Changes
+
+- [#4355](https://github.com/PostHog/posthog-js/pull/4355) [`57f371e`](https://github.com/PostHog/posthog-js/commit/57f371e540968afaa8a0fe9aec8a53ef1db6b654) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve user-defined `context` and `conversation_id` tool arguments.
+  (2026-08-03)
+- Updated dependencies [[`7c3a9af`](https://github.com/PostHog/posthog-js/commit/7c3a9af42be80051705f7fe820623dd7e1b879d5)]:
+  - @posthog/core@1.46.2
+  - posthog-node@5.47.4
+
 ## 0.10.2
 
 ### Patch Changes
