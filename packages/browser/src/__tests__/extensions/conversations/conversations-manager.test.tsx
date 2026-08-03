@@ -523,6 +523,100 @@ describe('ConversationsManager', () => {
         })
     })
 
+    describe('request failure logging', () => {
+        beforeEach(async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+            jest.clearAllMocks()
+        })
+
+        it.each(['getMessages', 'markAsRead', 'getTickets', 'requestRestoreLink', 'restoreFromToken'] as const)(
+            'does not re-log handled status-zero failures from %s',
+            async (method) => {
+                const networkError = new TypeError('Failed to fetch')
+                ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+                    options.callback({ statusCode: 0, error: networkError })
+                })
+
+                const requests = {
+                    getMessages: () => manager.getMessages('ticket-123'),
+                    markAsRead: () => manager.markAsRead('ticket-123'),
+                    getTickets: () => manager.getTickets(),
+                    requestRestoreLink: () => manager.requestRestoreLink('person@example.com'),
+                    restoreFromToken: () => manager.restoreFromToken('restore-token'),
+                }
+
+                const previousDebug = Config.DEBUG
+                Config.DEBUG = true
+                const infoSpy = jest.spyOn(console, 'log').mockImplementation()
+                const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+                const errorSpy = jest.spyOn(console, 'error').mockImplementation()
+
+                try {
+                    await expect(requests[method]()).rejects.toMatchObject({
+                        kind: 'network',
+                        message: 'Unable to reach the server. Please check your connection and try again.',
+                    })
+                    expect(warnSpy).not.toHaveBeenCalled()
+                    expect(errorSpy).not.toHaveBeenCalled()
+                } finally {
+                    infoSpy.mockRestore()
+                    warnSpy.mockRestore()
+                    errorSpy.mockRestore()
+                    Config.DEBUG = previousDebug
+                }
+            }
+        )
+
+        it('warns once for a bare status-zero polling response', async () => {
+            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+                options.callback({ statusCode: 0 })
+            })
+
+            const previousDebug = Config.DEBUG
+            Config.DEBUG = true
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+            const errorSpy = jest.spyOn(console, 'error').mockImplementation()
+
+            try {
+                await expect(manager.getTickets()).rejects.toMatchObject({ kind: 'network' })
+                expect(warnSpy).toHaveBeenCalledTimes(1)
+                expect(warnSpy).toHaveBeenCalledWith(
+                    expect.stringContaining('[ConversationsManager]'),
+                    'Network error fetching tickets'
+                )
+                expect(errorSpy).not.toHaveBeenCalled()
+            } finally {
+                warnSpy.mockRestore()
+                errorSpy.mockRestore()
+                Config.DEBUG = previousDebug
+            }
+        })
+
+        it.each([429, 500])('logs HTTP polling status %s only once', async (statusCode) => {
+            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+                options.callback({ statusCode })
+            })
+
+            const previousDebug = Config.DEBUG
+            Config.DEBUG = true
+            const errorSpy = jest.spyOn(console, 'error').mockImplementation()
+
+            try {
+                await (manager as any)._loadTickets()
+                expect(errorSpy).toHaveBeenCalledTimes(1)
+                expect(errorSpy).toHaveBeenCalledWith(
+                    expect.stringContaining('[ConversationsManager]'),
+                    'Failed to fetch tickets',
+                    { status: statusCode }
+                )
+            } finally {
+                errorSpy.mockRestore()
+                Config.DEBUG = previousDebug
+            }
+        })
+    })
+
     describe('sendMessage', () => {
         beforeEach(async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
@@ -565,6 +659,33 @@ describe('ConversationsManager', () => {
                     message: 'Unable to reach the server. Please check your connection and try again.',
                 })
                 expect(warnSpy).not.toHaveBeenCalled()
+                expect(errorSpy).not.toHaveBeenCalled()
+            } finally {
+                warnSpy.mockRestore()
+                errorSpy.mockRestore()
+                Config.DEBUG = previousDebug
+            }
+        })
+
+        it('should keep send-message rate limits at warning severity', async () => {
+            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+                options.callback({ statusCode: 429 })
+            })
+
+            const previousDebug = Config.DEBUG
+            Config.DEBUG = true
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+            const errorSpy = jest.spyOn(console, 'error').mockImplementation()
+
+            try {
+                await expect(manager.sendMessage('Hello!')).rejects.toMatchObject({
+                    kind: 'rate_limit',
+                    message: 'Too many requests. Please wait before trying again.',
+                })
+                expect(warnSpy).toHaveBeenCalledWith(
+                    expect.stringContaining('[ConversationsManager]'),
+                    'Rate limited sending message'
+                )
                 expect(errorSpy).not.toHaveBeenCalled()
             } finally {
                 warnSpy.mockRestore()

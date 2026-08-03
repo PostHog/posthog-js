@@ -1134,10 +1134,75 @@ describe('posthog-logs', () => {
                     opts.callback?.({ statusCode: 429 })
                 )
                 logs.captureLog({ body: 'x' })
+                mockLogger.error.mockClear()
 
                 await jest.advanceTimersByTimeAsync(3000)
 
                 expect((logs as any)._queue).toHaveLength(1)
+                expect(mockLogger.error).toHaveBeenCalledWith(
+                    'PostHog logs flush failed:',
+                    expect.objectContaining({ message: 'logs request failed with status 429' })
+                )
+            })
+
+            it('does not re-log timer-driven transport failures handled by the request layer', async () => {
+                ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) =>
+                    opts.callback?.({ statusCode: 0, error: new TypeError('Failed to fetch') })
+                )
+                logs.captureLog({ body: 'x' })
+                mockLogger.warn.mockClear()
+                mockLogger.error.mockClear()
+
+                await jest.advanceTimersByTimeAsync(3000)
+
+                expect((logs as any)._queue).toHaveLength(1)
+                expect(mockLogger.warn).not.toHaveBeenCalled()
+                expect(mockLogger.error).not.toHaveBeenCalled()
+            })
+
+            it('warns once for a bare status-zero logs response', async () => {
+                ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) =>
+                    opts.callback?.({ statusCode: 0 })
+                )
+                logs.captureLog({ body: 'x' })
+                mockLogger.warn.mockClear()
+                mockLogger.error.mockClear()
+
+                await jest.advanceTimersByTimeAsync(3000)
+
+                expect(mockLogger.warn).toHaveBeenCalledTimes(1)
+                expect(mockLogger.warn).toHaveBeenCalledWith('Logs request failed before receiving an HTTP response')
+                expect(mockLogger.error).not.toHaveBeenCalled()
+            })
+
+            it.each([400, 500])('keeps HTTP status %s at error severity', async (statusCode) => {
+                ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) =>
+                    opts.callback?.({ statusCode })
+                )
+                logs.captureLog({ body: 'x' })
+                mockLogger.error.mockClear()
+
+                await jest.advanceTimersByTimeAsync(3000)
+
+                expect(mockLogger.error).toHaveBeenCalledWith(
+                    'PostHog logs flush failed:',
+                    expect.objectContaining({ message: `logs request failed with status ${statusCode}` })
+                )
+            })
+
+            it('does not re-log handled failures from an explicit flush', async () => {
+                ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) =>
+                    opts.callback?.({ statusCode: 0, error: new TypeError('Failed to fetch') })
+                )
+                logs.captureLog({ body: 'x' })
+                mockLogger.error.mockClear()
+
+                logs.flushLogs()
+                const flushPromise = (logs as any)._core._flushPromise as Promise<void>
+                await flushPromise.catch(() => {})
+                await Promise.resolve()
+
+                expect(mockLogger.error).not.toHaveBeenCalled()
             })
         })
 
