@@ -196,6 +196,7 @@ export class WebVitalsAutocapture {
 
     private _flushToCapture = () => {
         clearTimeout(this._delayedFlushTimer)
+        this._delayedFlushTimer = undefined
         if (this._buffer.metrics.length === 0) {
             return
         }
