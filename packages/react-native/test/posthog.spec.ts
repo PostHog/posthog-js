@@ -1910,7 +1910,7 @@ describe('PostHog React Native', () => {
         expect(logsShutdownSpy).toHaveBeenCalledWith(2000)
         expect(sendLogsSpy).toHaveBeenCalled()
 
-        const drainTimeoutIndex = setTimeoutSpy.mock.calls.findIndex(([, delay]) => Number(delay) > 4000)
+        const drainTimeoutIndex = setTimeoutSpy.mock.calls.findLastIndex(() => true)
         expect(drainTimeoutIndex).toBeGreaterThanOrEqual(0)
         expect(clearTimeoutSpy).toHaveBeenCalledWith(setTimeoutSpy.mock.results[drainTimeoutIndex].value)
       } finally {

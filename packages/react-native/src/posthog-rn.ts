@@ -20,7 +20,7 @@ import {
   logFlushError,
   maybeAdd,
   patchFetchForTracingHeaders,
-  safeSetTimeout,
+  raceWithTimeout,
   FeatureFlagValue,
   FeatureFlagResultOptions,
   IsFeatureEnabledOptions,
@@ -564,17 +564,7 @@ export class PostHog extends PostHogCore {
       // only bounds the await for in-flight async writes.
       const remainingMs = Math.max(0, shutdownTimeoutMs - (Date.now() - start))
       const drain = Promise.all([this._eventsStorage.waitForPersist(), this._logsStorage.waitForPersist()])
-      let timeoutHandle: ReturnType<typeof safeSetTimeout> | undefined
-      try {
-        await Promise.race([
-          drain,
-          new Promise<void>((resolve) => {
-            timeoutHandle = safeSetTimeout(resolve, remainingMs)
-          }),
-        ])
-      } finally {
-        clearTimeout(timeoutHandle)
-      }
+      await raceWithTimeout(drain, remainingMs)
     }
   }
 
