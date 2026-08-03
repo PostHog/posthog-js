@@ -2,7 +2,7 @@
   "id": "posthog-js",
   "hogRef": "0.3",
   "info": {
-    "version": "<version>",
+    "version": "1.410.0",
     "id": "posthog-js",
     "title": "PostHog JavaScript Web SDK",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
@@ -4928,7 +4928,7 @@
           "name": "linkedFlag"
         },
         {
-          "type": "Pick<SessionRecordingOptions, \"maskAllInputs\" | \"maskTextSelector\" | \"blockSelector\" | \"maskAllElementAttributes\">",
+          "type": "Pick<SessionRecordingOptions, \"maskAllInputs\" | \"maskTextSelector\" | \"blockSelector\">",
           "name": "masking"
         },
         {
