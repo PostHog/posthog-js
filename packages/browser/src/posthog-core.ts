@@ -3009,6 +3009,10 @@ export class PostHog implements PostHogInterface {
      * @param {boolean} [reset_device_id] Whether to generate a new device ID as well as a new distinct ID.
      */
     reset(reset_device_id?: boolean): void {
+        this._reset(reset_device_id)
+    }
+
+    private _reset(reset_device_id?: boolean, isConsentTransition = false): void {
         logger.info('reset')
         if (!this.__loaded) {
             return logger.uninitializedWarning('posthog.reset')
@@ -3032,7 +3036,7 @@ export class PostHog implements PostHogInterface {
 
         this.consent.reset()
 
-        if (wasCapturing && !this.is_capturing()) {
+        if (!isConsentTransition && wasCapturing && !this.is_capturing()) {
             // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
             // eslint-disable-next-line no-console
             console.warn('[PostHog.js]', RESET_CONSENT_WARN)
@@ -3967,7 +3971,7 @@ export class PostHog implements PostHogInterface {
         if (this._inCookielessMode()) {
             // If the user was being treated as rejected in on_reject mode (either explicitly opted out, or opted out by default via opt_out_capturing_by_default), then before we can start sending regular non-cookieless events
             // we need to reset the instance to ensure that there is no leaking of state or data between the cookieless and regular events
-            this.reset(true)
+            this._reset(true, true)
             this.sessionManager?.destroy()
             this.pageViewManager?.destroy()
             this.sessionManager = new SessionIdManager(this)
@@ -4041,7 +4045,7 @@ export class PostHog implements PostHogInterface {
 
         if (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isOptedIn()) {
             // If the user has opted in, we need to reset the instance to ensure that there is no leaking of state or data between the cookieless and regular events
-            this.reset(true)
+            this._reset(true, true)
         }
 
         this.consent.optInOut(false)

@@ -197,7 +197,7 @@ describe('consentManager', () => {
     })
 
     describe('reset() and consent', () => {
-        it('opts the user back out when reset() is called after opting in', async () => {
+        it('warns when a caller directly resets after opting in and capturing changes from on to off', async () => {
             const beforeSendMock = jest.fn().mockImplementation((e) => e)
             posthog = await createPostHog({ opt_out_capturing_by_default: true, before_send: beforeSendMock })
 
@@ -219,6 +219,35 @@ describe('consentManager', () => {
             posthog.capture('after-reset')
             expect(beforeSendMock).not.toHaveBeenCalled()
         })
+
+        it.each([
+            ['opt out to opt in', false, true, 'granted'],
+            ['opt in to opt out', true, false, 'denied'],
+        ] as const)(
+            'does not warn during an SDK-owned on_reject transition from %s',
+            async (_description, startsOptedIn, endsOptedIn, expectedConsentStatus) => {
+                posthog = await createPostHog({ cookieless_mode: 'on_reject' })
+                if (startsOptedIn) {
+                    posthog.opt_in_capturing({ captureEventName: false })
+                } else {
+                    posthog.opt_out_capturing()
+                }
+                ;(console.warn as jest.Mock).mockClear()
+
+                if (endsOptedIn) {
+                    posthog.opt_in_capturing({ captureEventName: false })
+                } else {
+                    posthog.opt_out_capturing()
+                }
+
+                expect(posthog.get_explicit_consent_status()).toBe(expectedConsentStatus)
+                expect(posthog.is_capturing()).toBe(true)
+                expect(console.warn).not.toHaveBeenCalledWith(
+                    '[PostHog.js]',
+                    expect.stringContaining('reset() cleared the stored consent')
+                )
+            }
+        )
 
         it('keeps capturing when reset() is called before opting in', async () => {
             const beforeSendMock = jest.fn().mockImplementation((e) => e)
