@@ -1504,11 +1504,9 @@ describe('Lazy SessionRecording', () => {
                 })
 
                 it('an event trigger match releases the hold even when its activation is a no-op', () => {
-                    // With triggerMatchType 'any', a URL trigger can satisfy the combined
-                    // trigger status long before an error event fires; the activation then
-                    // short-circuits on hasPendingTriggers. The event evidence must still
-                    // release the hold, or record-on-exception never ships from rotated
-                    // sessions in tabs the user hasn't touched.
+                    // triggerMatchType 'any': a URL trigger can satisfy the combined status
+                    // before the error fires, so the activation is a no-op except for
+                    // releasing the hold.
                     const rotationTimestamp = rotateExternallyWhileUnknown()
                     const snapshot = emitInactiveEvent(rotationTimestamp + 100, 'unknown')
 
@@ -1530,8 +1528,7 @@ describe('Lazy SessionRecording', () => {
                 })
 
                 it('a URL trigger match does not release the hold', () => {
-                    // URL triggers only scope where recording is allowed; they are not
-                    // evidence anyone touched the session, so the hold stays.
+                    // URL triggers scope where recording is allowed, not whether anyone touched the session
                     const rotationTimestamp = rotateExternallyWhileUnknown()
                     const snapshot = emitInactiveEvent(rotationTimestamp + 100, 'unknown')
 

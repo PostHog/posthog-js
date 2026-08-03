@@ -915,16 +915,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private _activateTrigger(triggerType: TriggerType, matchDetail?: string) {
-        // An event trigger is explicit "this session matters" intent (e.g. record on
-        // exception), so it releases the interaction hold. This must happen BEFORE the
-        // pending-trigger short circuit below: with triggerMatchType 'any' a URL trigger may
-        // have satisfied the combined status long ago, making the activation itself a no-op,
-        // but the event (the error) still just happened and is what makes an untouched
-        // session worth shipping. URL triggers only scope where recording is allowed and
-        // never count as ship evidence.
-        if (triggerType === 'event' && this._holdFlushUntilInteraction) {
-            this._holdFlushUntilInteraction = false
-            this._flushBuffer()
+        // Event triggers are explicit "this session matters" evidence and release the
+        // interaction hold; URL triggers only scope where recording is allowed and never do.
+        // Must run before the pending-trigger short-circuit below: with triggerMatchType
+        // 'any' a URL trigger may already have satisfied the combined status, making this
+        // activation a no-op — the hold release must still happen.
+        if (triggerType === 'event') {
+            this._releaseHoldAndFlush()
         }
 
         // V1 only: V2 uses per-group activation and never calls this method
@@ -1375,6 +1372,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this.stop()
         this.start('session_id_changed')
         this._holdFlushUntilInteraction = holdNextEpoch
+    }
+
+    private _releaseHoldAndFlush() {
+        if (!this._holdFlushUntilInteraction) {
+            return
+        }
+        this._holdFlushUntilInteraction = false
+        this._flushBuffer()
     }
 
     discard() {
@@ -2081,11 +2086,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         if (sessionIdChanged || windowIdChanged) {
             this._restartForSessionIdChange(sessionIdChanged && this._isIdle !== false)
         } else {
-            if (isUserInteraction && this._holdFlushUntilInteraction) {
-                // first interaction within the held session: release the buffer so the
-                // recording ships and is playable from the session's t=0
-                this._holdFlushUntilInteraction = false
-                this._flushBuffer()
+            if (isUserInteraction) {
+                // first interaction within a held session ships the buffer, playable from t=0
+                this._releaseHoldAndFlush()
             }
             if (returningFromIdle) {
                 this._scheduleFullSnapshot()
