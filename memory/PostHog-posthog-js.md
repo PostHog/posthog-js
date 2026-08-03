@@ -2,15 +2,7 @@
 
 ...<older entries truncated>
 
- Adding a boolean option and skipping plugin registration is mechanically small, but it breaks the reporter's need to use `usePostHog()`. Preserving that API while guaranteeing no browser or server traffic requires a deliberate disabled-mode contract rather than a speculative guard.
-
-## 2026-07-28T02:34:32.566Z
-- Item: issue #4285 — [React Native Expo] Combining PostHog and Sentry config plugins can silently ship iOS without main.jsbundle
-- Conclusion: Confirmed React Native iOS build-plugin composition bug: independent PostHog and Sentry wrappers can replace the same Expo bundle phase and produce a successful build without running the React Native bundler.
-- Labels: react-native, iOS
-- URL: https://github.com/PostHog/posthog-js/issues/4285
-- Relevant files: `packages/react-native/src/tooling/expoconfig.ts`, `packages/react-native/tooling/posthog-xcode.sh`, `packages/react-native/test/expoconfig.spec.ts`, `packages/react-native/test/posthog-xcode-parse.spec.ts`
-- Findings: `modifyExistingXcodeBuildScript` identifies the React Native bundle phase by the presence of `react-native-xcode.sh`, then replaces that invocation with `/bin/sh <posthog-xcode.sh> <original command>`.; The Expo plugin only treats scripts containing `posthog-xcode.sh` or `posthog-react-native` as already handled. It has no detection or compatibility path for a third-party bundle wrapper.; `posthog-xcode.sh` accepts a single script-path argument and subsequently runs it using `/bin/sh -c "$REACT_NATIVE_XCODE"`; it does not preserve or compose an arbitrary wrapper command and its remaining positional arguments.; Existing regression coverage for #3682 verifies that PostHog does not mistake a direct `/bin/sh` prefix for the React Native script, but does not cover composition with a second config-plugin wrapper such as Sentry.; The current source comments and tests confirm the prior Expo `/bin/sh` argument failure mode, but no repository test fixture currently validates the reported Sentry-generated bundle-phase command.
+mand.
 - Fix assessment: A narrowly targeted option to skip PostHog's iOS bundle/source-map wrapper would be localized, but an automatic fix must work regardless of Expo plugin execution order and must ensure React Native bundling runs exactly once while preserving each vendor's upload behavior. Detecting only one textual Sentry wrapper would be incomplete and brittle.
 
 ## 2026-07-29T13:18:29.697Z
@@ -87,3 +79,13 @@
 - Findings: `AnalyticsExtensions` includes `Autocapture`, so selecting only that extension bundle still executes Autocapture logic.; `Autocapture.isEnabled` directly invokes `this.instance._shouldDisableFlags()`, matching the missing-method error in the report.; `PostHog` defines `_shouldDisableFlags()` in `posthog-core.ts`; the failure is therefore an inter-bundle property-name mismatch rather than an absent source implementation.; `module.slim` and `extension-bundles` are separate Rollup outputs and property mangling is configured for them, creating a private cross-bundle ABI boundary.; `terser-cross-bundle-properties.cjs` now lists `_shouldDisableFlags` in `crossBundlePrivateProperties`, and `rollup.config.mjs` reserves that list for both relevant outputs.; `slim-bundle.spec.ts` contains a regression test explicitly stating that `AnalyticsExtensions` Autocapture accesses the mangled `_shouldDisableFlags()` method and verifies initialization does not crash.
 - Fix assessment: The failing boundary is narrowly identified and the minimal mitigation is already represented in source: preserve the one private method name across the independently emitted slim core and extension bundle, guarded by an integration regression test.
 - PR: https://github.com/PostHog/posthog-js/pull/4389
+
+## 2026-08-03T04:43:10.328Z
+- Item: issue #4391 — [react-native-plugin] posthog-ios pinned to `~> 3.64.7`, locking RN apps inside the rage-click sheet-dismissal regression (fixed in 3.68.2)
+- Conclusion: Confirmed dependency-resolution bug: the React Native plugin caps posthog-ios at 3.64.x, preventing consumers from receiving the reported 3.68.2 rage-click fix.
+- Labels: react-native, iOS, feature/replay, team/client-libraries
+- URL: https://github.com/PostHog/posthog-js/issues/4391
+- Relevant files: `packages/react-native-plugin/posthog-react-native-plugin.podspec`, `packages/react-native-plugin/package.json`, `packages/react-native-plugin/CHANGELOG.md`, `packages/react-native-plugin/ios/PosthogReactNativePlugin.swift`
+- Findings: `packages/react-native-plugin/posthog-react-native-plugin.podspec` defines `posthog_ios_version = '3.64.7'` as the shared native dependency version.; The podspec declares `s.dependency 'PostHog', "~> #{posthog_ios_version}"`; with a three-component pessimistic constraint, this is limited to versions below 3.65.0.; The optional SPM path uses `requirement: { kind: 'upToNextMinorVersion', minimumVersion: posthog_ios_version }`, likewise limiting resolution to the 3.64.x minor line.; `packages/react-native-plugin/package.json` identifies the current plugin version as `2.2.3`.; The 2.2.2 changelog entry says the native SDK floor was raised to posthog-ios 3.64.7 or later, but the checked-in CocoaPods/SPM constraints actually prevent later minor releases.; `PosthogReactNativePlugin.swift` constructs and configures `PostHogConfig` from selected SDK, replay, and error-tracking options, but does not read or assign a rage-click configuration.
+- Fix assessment: The immediate resolution cap is isolated to one shared podspec version constant. Raising that baseline to a post-fix posthog-ios release updates both CocoaPods and SPM consistently; native iOS build coverage should verify compatibility before release.
+- PR: https://github.com/PostHog/posthog-js/pull/4392
