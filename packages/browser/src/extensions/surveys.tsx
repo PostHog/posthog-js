@@ -28,7 +28,7 @@ import {
     isSurveyRunning,
     SURVEY_LOGGER as logger,
 } from '../utils/survey-utils'
-import { isArray, isNull, isUndefined } from '@posthog/core'
+import { isArray, isNull, isNumber, isUndefined } from '@posthog/core'
 import { Properties } from '../types'
 import { SURVEYS } from '../constants'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
@@ -1355,11 +1355,14 @@ export function Questions({
         if (!state) {
             return null
         }
-        // A missing index predates the persisted-index feature, so treat it as 0 (the start) —
-        // the same default the reader below applies. Only an index that is actually present and
-        // out of range signals a stale record; discard the whole thing in that case.
-        const savedIndex = state.lastQuestionIndex ?? 0
-        if (savedIndex < 0 || savedIndex >= survey.questions.length) {
+        // Only an index that is actually present and out of range signals a stale record (e.g.
+        // left over from a prior completion) whose responses should be dropped. A missing, NaN or
+        // otherwise non-numeric index just predates the persisted-index feature — keep the
+        // responses and start from question 0 (the reader below defaults to it).
+        const hasIndex = isNumber(state.lastQuestionIndex)
+        const isIndexInRange =
+            hasIndex && state.lastQuestionIndex >= 0 && state.lastQuestionIndex < survey.questions.length
+        if (hasIndex && !isIndexInRange) {
             clearInProgressSurveyState(survey)
             return null
         }
@@ -1386,7 +1389,12 @@ export function Questions({
         surveyLanguage,
     } = useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(() => {
-        return previewPageIndex || (initialInProgressState?.lastQuestionIndex ?? 0)
+        // Fall back to the first question for a missing, NaN or out-of-range persisted index so a
+        // resumed survey always renders a real question rather than an empty container.
+        const savedIndex = initialInProgressState?.lastQuestionIndex
+        const validSavedIndex =
+            isNumber(savedIndex) && savedIndex >= 0 && savedIndex < survey.questions.length ? savedIndex : 0
+        return previewPageIndex || validSavedIndex
     })
     const [visitedIndices, setVisitedIndices] = useState<number[]>(() => {
         // Drop any out-of-range visited indices so the Back button can never navigate to a
