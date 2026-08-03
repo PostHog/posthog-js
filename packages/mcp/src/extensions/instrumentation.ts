@@ -334,7 +334,10 @@ export async function isToolAdvertised(
     // Match the page the current list instrumentation can expose. Pagination
     // passthrough is handled separately from missing-capability ownership.
     return response.tools.some((tool) => tool?.name === toolName)
-  } catch {
+  } catch (error) {
+    log(
+      `Warning: PostHog MCP analytics could not determine whether "${toolName}" is advertised; delegating to the server - ${error}`
+    )
     return undefined
   }
 }

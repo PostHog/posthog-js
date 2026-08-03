@@ -273,12 +273,13 @@ describe('Low-level Server reportMissing ownership (e2e)', () => {
   })
 
   it('fails open to a colliding real handler when the ownership probe fails', async () => {
+    const logger = jest.fn()
     const { server, client, connect, cleanup } = await setupLowLevelServer('get_more_tools')
     server.setRequestHandler(ListToolsRequestSchema, async () => {
       throw new Error('listing unavailable')
     })
     try {
-      instrument(server, fakePostHog(), { reportMissing: true })
+      instrument(server, fakePostHog(), { reportMissing: true, logger })
       await connect()
 
       const result = await client.request(
@@ -286,6 +287,9 @@ describe('Low-level Server reportMissing ownership (e2e)', () => {
         CallToolResultSchema
       )
       expect((result.content as { text: string }[])[0].text).toBe('real handler: fallback')
+      expect(logger).toHaveBeenCalledWith(
+        expect.stringContaining('could not determine whether "get_more_tools" is advertised')
+      )
       await new Promise((resolve) => setTimeout(resolve, 50))
       expect(eventCapture.findCapturesByEvent('$mcp_missing_capability')).toHaveLength(0)
       expect(eventCapture.findCapturesByEvent('$mcp_tool_call')).toHaveLength(1)
