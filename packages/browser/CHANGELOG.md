@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.410.1
+
+### Patch Changes
+
+- [#4386](https://github.com/PostHog/posthog-js/pull/4386) [`0854095`](https://github.com/PostHog/posthog-js/commit/0854095ac62aa3a9b8c88514634e29f7bbbe2b16) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent the inline canvas recording worker from requesting an unusable source map from its blob URL.
+  (2026-08-03)
+- Updated dependencies [[`eb0a793`](https://github.com/PostHog/posthog-js/commit/eb0a7930eebf2474dc03846b36891dc33df112f7)]:
+    - @posthog/core@1.46.3
+
 ## 1.410.0
 
 ### Minor Changes
