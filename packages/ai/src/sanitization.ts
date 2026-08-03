@@ -14,3 +14,4 @@ export const sanitizeOpenAIResponse = (data: unknown): unknown => redactor.redac
 export const sanitizeAnthropic = (data: unknown): unknown => redactor.redact(data)
 export const sanitizeGemini = (data: unknown): unknown => redactor.redact(data)
 export const sanitizeLangChain = (data: unknown): unknown => redactor.redact(data)
+export const sanitizeVercel = (data: unknown): unknown => redactor.redact(data)

@@ -23,7 +23,7 @@ import {
   getModelParams,
 } from '../utils'
 import { captureAiGeneration } from '../captureAiGeneration'
-import { redactBase64DataUrl } from '../sanitization'
+import { redactBase64DataUrl, sanitizeVercel } from '../sanitization'
 import { isObject, isString } from '../typeGuards'
 
 // Union types for dual version support
@@ -146,7 +146,7 @@ const mapVercelPrompt = (messages: LanguageModelPrompt): PostHogInput[] => {
               type: 'tool-result',
               toolCallId: c.toolCallId,
               toolName: c.toolName,
-              output: c.output,
+              output: sanitizeVercel(c.output),
               isError: c.isError,
             }
           }

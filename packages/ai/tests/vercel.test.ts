@@ -255,6 +255,37 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       expect(JSON.stringify(properties)).toContain('[base64 image/png redacted]')
     })
 
+    it('redacts binary content nested in tool results without changing Vercel provider payloads', async () => {
+      const binary = 'U0hPUlQgVE9PTCBSRVNVTFQ='
+      const baseModel = createMockV3Model('tool-model')
+      const model = withTracing(baseModel, mockPostHogClient, { posthogDistinctId: 'test-user' })
+      const params = {
+        prompt: [
+          {
+            role: 'tool',
+            content: [
+              {
+                type: 'tool-result',
+                toolCallId: 'tool-call-id',
+                toolName: 'read-file',
+                output: {
+                  type: 'content',
+                  value: [{ type: 'media', data: binary, mediaType: 'image/png' }],
+                },
+              },
+            ],
+          },
+        ],
+      } as any
+
+      await model.doGenerate(params)
+
+      expect(baseModel.doGenerate).toHaveBeenCalledWith(params)
+      const input = JSON.stringify((mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties['$ai_input'])
+      expect(input).not.toContain(binary)
+      expect(input).toContain('[base64 image/png redacted]')
+    })
+
     it('redacts data URL objects from input while preserving HTTP URL objects', async () => {
       const binary = 'SU5QVVQgVVJMIERBVEE='
       const dataUrl = new URL(`data:audio/wav;base64,${binary}`)
