@@ -1503,6 +1503,45 @@ describe('Lazy SessionRecording', () => {
                     expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toContain(snapshot)
                 })
 
+                it('an event trigger match releases the hold even when its activation is a no-op', () => {
+                    // With triggerMatchType 'any', a URL trigger can satisfy the combined
+                    // trigger status long before an error event fires; the activation then
+                    // short-circuits on hasPendingTriggers. The event evidence must still
+                    // release the hold, or record-on-exception never ships from rotated
+                    // sessions in tabs the user hasn't touched.
+                    const rotationTimestamp = rotateExternallyWhileUnknown()
+                    const snapshot = emitInactiveEvent(rotationTimestamp + 100, 'unknown')
+
+                    jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                    expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+
+                    // no pending triggers in this setup, so this activation is a no-op beyond
+                    // releasing the hold, mirroring the already-activated-by-url case
+                    sessionRecording['_lazyLoadedSessionRecording']['_activateTrigger']('event', '$exception')
+
+                    expect(posthog.capture).toHaveBeenCalledWith(
+                        '$snapshot',
+                        expect.objectContaining({
+                            $session_id: rotatedSessionId,
+                            $snapshot_data: expect.arrayContaining([snapshot]),
+                        }),
+                        expect.any(Object)
+                    )
+                })
+
+                it('a URL trigger match does not release the hold', () => {
+                    // URL triggers only scope where recording is allowed; they are not
+                    // evidence anyone touched the session, so the hold stays.
+                    const rotationTimestamp = rotateExternallyWhileUnknown()
+                    const snapshot = emitInactiveEvent(rotationTimestamp + 100, 'unknown')
+
+                    sessionRecording['_lazyLoadedSessionRecording']['_activateTrigger']('url', 'https://example.com')
+                    jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                    expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toContain(snapshot)
+                })
+
                 it('does not hold a windowId-only restart (no session rotation)', () => {
                     const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
                     expect(lazyRecorder['_isIdle']).toEqual('unknown')

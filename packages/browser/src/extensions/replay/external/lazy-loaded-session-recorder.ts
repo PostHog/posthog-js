@@ -915,6 +915,18 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private _activateTrigger(triggerType: TriggerType, matchDetail?: string) {
+        // An event trigger is explicit "this session matters" intent (e.g. record on
+        // exception), so it releases the interaction hold. This must happen BEFORE the
+        // pending-trigger short circuit below: with triggerMatchType 'any' a URL trigger may
+        // have satisfied the combined status long ago, making the activation itself a no-op,
+        // but the event (the error) still just happened and is what makes an untouched
+        // session worth shipping. URL triggers only scope where recording is allowed and
+        // never count as ship evidence.
+        if (triggerType === 'event' && this._holdFlushUntilInteraction) {
+            this._holdFlushUntilInteraction = false
+            this._flushBuffer()
+        }
+
         // V1 only: V2 uses per-group activation and never calls this method
         // Prevent re-entry: if we're already activating a trigger, skip to avoid infinite recursion
         // This can happen when _reportStarted emits custom events that match the trigger condition
