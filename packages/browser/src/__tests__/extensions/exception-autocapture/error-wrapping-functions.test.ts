@@ -67,13 +67,18 @@ describe('error wrapping functions', () => {
 
             win.onerror('error without object', 'https://example.com/positional-fallback.js', 73, 9)
 
-            expect(captureFn.mock.calls[0][0].$exception_list[0].stacktrace?.frames).toEqual([
-                expect.objectContaining({
-                    filename: 'https://example.com/positional-fallback.js',
-                    lineno: 73,
-                    colno: 9,
-                }),
-            ])
+            expect(captureFn.mock.calls[0][0].$exception_list[0]).toMatchObject({
+                value: 'error without object',
+                stacktrace: {
+                    frames: [
+                        expect.objectContaining({
+                            filename: 'https://example.com/positional-fallback.js',
+                            lineno: 73,
+                            colno: 9,
+                        }),
+                    ],
+                },
+            })
         })
     })
 

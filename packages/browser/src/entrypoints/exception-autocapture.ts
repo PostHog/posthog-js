@@ -59,8 +59,7 @@ const wrapOnError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) 
     const originalOnError = win.onerror
 
     win.onerror = function (...args: ErrorEventArgs): boolean {
-        const error = args[4]
-        const event = args[0]
+        const [event, , , , error] = args
         const errorProperties = errorPropertiesBuilder.buildFromUnknown(error || event, {
             mechanism: { handled: false },
             syntheticException: syntheticExceptionFromOnErrorArgs(args),

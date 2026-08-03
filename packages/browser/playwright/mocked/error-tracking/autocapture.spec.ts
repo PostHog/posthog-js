@@ -209,13 +209,18 @@ test.describe('ErrorTracking autocapture', () => {
             })
 
             const exception = await events.waitForEvent('$exception')
-            expect(exception.properties.$exception_list[0].stacktrace.frames).toEqual([
-                expect.objectContaining({
-                    filename: 'https://example.com/positional-fallback.js',
-                    lineno: 73,
-                    colno: 9,
-                }),
-            ])
+            expect(exception.properties.$exception_list[0]).toMatchObject({
+                value: 'error without object',
+                stacktrace: {
+                    frames: [
+                        expect.objectContaining({
+                            filename: 'https://example.com/positional-fallback.js',
+                            lineno: 73,
+                            colno: 9,
+                        }),
+                    ],
+                },
+            })
         })
 
         test('should capture ReferenceError', async ({ posthog, network, page, events, browserName }) => {
