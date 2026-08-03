@@ -1,5 +1,22 @@
 # @posthog/mcp
 
+## 0.10.3
+
+### Patch Changes
+
+- [#4355](https://github.com/PostHog/posthog-js/pull/4355) [`57f371e`](https://github.com/PostHog/posthog-js/commit/57f371e540968afaa8a0fe9aec8a53ef1db6b654) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve user-defined `context` and `conversation_id` tool arguments.
+  (2026-08-03)
+- Updated dependencies [[`7c3a9af`](https://github.com/PostHog/posthog-js/commit/7c3a9af42be80051705f7fe820623dd7e1b879d5)]:
+  - @posthog/core@1.46.2
+  - posthog-node@5.47.4
+
+## 0.10.2
+
+### Patch Changes
+
+- [#4358](https://github.com/PostHog/posthog-js/pull/4358) [`575c5e7`](https://github.com/PostHog/posthog-js/commit/575c5e75cc4f7ad39ac41001994e76194765bdbf) Thanks [@marandaneto](https://github.com/marandaneto)! - Redact sensitive exception messages and large binary payload encodings from MCP analytics.
+  (2026-07-31)
+
 ## 0.10.1
 
 ### Patch Changes
