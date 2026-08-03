@@ -103,13 +103,14 @@ describe('PostHog Node.js metrics', () => {
     expect(metricsByName(lastMetricsBody())['jobs.processed'].sum.dataPoints[0].asDouble).toBe(2)
   })
 
-  it('flushes pending metrics on shutdown', async () => {
+  it('flushes pending metrics and clears the timeout timer when the flush finishes first', async () => {
     posthog.metrics.count('jobs.processed', 4)
 
     await posthog.shutdown()
 
     expect(metricsCalls()).toHaveLength(1)
     expect(metricsByName(lastMetricsBody())['jobs.processed'].sum.dataPoints[0].asDouble).toBe(4)
+    expect(jest.getTimerCount()).toBe(0)
   })
 
   it('is reachable through the IPostHog interface', () => {

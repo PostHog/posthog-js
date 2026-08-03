@@ -347,6 +347,7 @@ The SDK does **not**: call an LLM, inspect tool arguments, build heuristics, or 
 
 ### Known sharp edges
 
+- The MCP SDK advertises non-object Zod schemas — including refined objects such as `z.object({ context, value }).refine(...)` — as empty object schemas. Reserved-argument ownership follows that advertised schema, so a `context` declared inside one of these schemas is treated as analytics-owned and stripped before the tool callback.
 - The `get_more_tools` virtual tool emits its own `$mcp_missing_capability` event (a capability gap), **not** a `$mcp_tool_call`. Its `context` arg is recorded as `$mcp_intent` with `$mcp_intent_source = "context_parameter"`. It's defensible — the LLM did type a context string — but worth knowing if you segment by source.
 - `$mcp_intent_source` is currently **only** present when an intent was captured. Events with neither a context arg nor a fallback result have no `$mcp_intent` and no `$mcp_intent_source`. Dashboards filtering on `$mcp_intent_source = "inferred"` won't see them — that's the desired behavior; just don't expect a synthetic `"none"` value.
 

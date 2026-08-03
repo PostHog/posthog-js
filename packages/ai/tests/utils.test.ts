@@ -1,4 +1,4 @@
-import { toContentString, getTokensSource } from '../src/utils'
+import { toContentString, getTokensSource, getModelParams } from '../src/utils'
 
 describe('getTokensSource', () => {
   it.each([
@@ -199,5 +199,40 @@ describe('toContentString', () => {
       const result = toContentString(input)
       expect(result).toBe('[object Object]') // Falls back to String()
     })
+  })
+})
+
+describe('getModelParams', () => {
+  it('returns empty object for null params', () => {
+    expect(getModelParams(null)).toEqual({})
+  })
+
+  it.each([
+    ['flex', { temperature: undefined }],
+    ['auto', { temperature: undefined }],
+    ['priority', { temperature: 0.7 }],
+  ])('includes service_tier "%s" alongside other model params', (service_tier, extra) => {
+    const params = { model: 'gpt-4o', service_tier, ...extra } as any
+    const result = getModelParams(params)
+    expect(result.service_tier).toBe(service_tier)
+    if (extra.temperature !== undefined) {
+      expect(result.temperature).toBe(extra.temperature)
+    }
+  })
+
+  it('prefers the response service_tier over the requested service_tier', () => {
+    const params = { model: 'gpt-4o', service_tier: 'auto' } as any
+    expect(getModelParams(params, 'flex')).toEqual({ service_tier: 'flex' })
+  })
+
+  it.each([null, undefined])('keeps the requested service_tier when the response tier is %s', (responseTier) => {
+    const params = { model: 'gpt-4o', service_tier: 'auto' } as any
+    expect(getModelParams(params, responseTier)).toEqual({ service_tier: 'auto' })
+  })
+
+  it('omits service_tier when not provided', () => {
+    const params = { model: 'gpt-4o', temperature: 0.5 } as any
+    const result = getModelParams(params)
+    expect(result).not.toHaveProperty('service_tier')
   })
 })

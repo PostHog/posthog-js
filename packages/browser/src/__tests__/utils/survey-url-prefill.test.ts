@@ -1024,6 +1024,22 @@ describe('calculatePrefillStartIndex', () => {
             expect(result.skippedResponses).toEqual({ '$survey_response_q-end': 'No' })
         })
 
+        it('should stop after max iterations when branching creates a cycle', () => {
+            const cyclicQuestion: SurveyQuestion = {
+                ...ratingQuestionWithSkip,
+                branching: {
+                    type: SurveyQuestionBranchingType.SpecificQuestion,
+                    index: 0,
+                },
+            }
+            const responses = { '$survey_response_q-rating': 7 }
+
+            const result = calculatePrefillStartIndex(createSurvey([cyclicQuestion]), [0], responses)
+
+            expect(result.startQuestionIndex).toBe(0)
+            expect(result.skippedResponses).toEqual(responses)
+        })
+
         it('should handle specific question branching', () => {
             const questionWithSpecificBranching: SurveyQuestion = {
                 type: SurveyQuestionType.Rating,

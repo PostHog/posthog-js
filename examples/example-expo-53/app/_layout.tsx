@@ -1,6 +1,6 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native'
 import { useFonts } from 'expo-font'
-import { Stack } from 'expo-router'
+import { Stack, usePathname } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import 'react-native-reanimated'
 
@@ -11,6 +11,15 @@ import { posthog } from './posthog'
 
 export default function RootLayout() {
     const colorScheme = useColorScheme()
+
+    // Demo of deferring popover surveys via `autoPresentSurveys`. Here we defer while the
+    // Surveys screen is open so an auto-popover doesn't fight that screen's demo UI, and
+    // let it present anywhere else. Real apps wire this to whatever should hold a popover
+    // back — e.g. a native formSheet/modal being on top — and are responsible for flipping
+    // it true again (here, on route change), or the survey stays deferred and never shows.
+    const pathname = usePathname()
+    const autoPresentSurveys = pathname !== '/surveys'
+
     const [loaded] = useFonts({
          
         SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
@@ -31,7 +40,7 @@ export default function RootLayout() {
             }}
             debug={true}
         >
-            <PostHogSurveyProvider client={posthog}>
+            <PostHogSurveyProvider client={posthog} autoPresentSurveys={autoPresentSurveys}>
                 <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
                     <Stack>
                         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />

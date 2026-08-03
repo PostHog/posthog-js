@@ -92,7 +92,6 @@ describe('posthog core', () => {
         const setup = (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
             const beforeSendMock = jest.fn().mockImplementation((e) => e)
             const posthog = defaultPostHog().init(token, { ...config, before_send: beforeSendMock }, token)!
-            posthog.debug()
             return { posthog, beforeSendMock }
         }
 
@@ -383,6 +382,64 @@ describe('posthog core', () => {
                 //assert
                 expect(beforeSendMock.mock.calls[0][0].properties.utm_source).toBe('source')
                 expect(beforeSendMock.mock.calls[0][0].properties.utm_medium).toBe(null)
+            })
+
+            it('should refresh campaign params after an SPA URL change', () => {
+                // arrange
+                const token = uuidv7()
+                const { posthog, beforeSendMock } = setup({
+                    token,
+                    persistence_name: token,
+                })
+
+                // act
+                posthog.capture('$pageview')
+                const registerSpy = jest.spyOn(posthog.sessionPersistence!, 'register')
+                mockURL.mockReturnValue('https://www.example.com/some/path?gclid=abc')
+                posthog.capture('$pageview')
+                posthog.capture('$pageview')
+
+                // assert
+                expect(beforeSendMock.mock.calls[1][0].properties.gclid).toBe('abc')
+                expect(beforeSendMock.mock.calls[2][0].properties.gclid).toBe('abc')
+                expect(registerSpy.mock.calls.filter(([props]) => props.gclid === 'abc')).toHaveLength(1)
+            })
+
+            it('should replace campaign params after navigating to a new campaign URL', () => {
+                // arrange
+                const token = uuidv7()
+                mockURL.mockReturnValue('https://www.example.com/some/path?gclid=first-campaign')
+                const { posthog, beforeSendMock } = setup({
+                    token,
+                    persistence_name: token,
+                })
+                posthog.capture('$pageview')
+
+                // act
+                mockURL.mockReturnValue('https://www.example.com/another/path?utm_source=second-campaign')
+                posthog.capture('$pageview')
+
+                // assert
+                expect(beforeSendMock.mock.calls[1][0].properties.utm_source).toBe('second-campaign')
+                expect(beforeSendMock.mock.calls[1][0].properties.gclid).toBe(null)
+            })
+
+            it('should retain campaign params after navigating to a direct URL', () => {
+                // arrange
+                const token = uuidv7()
+                mockURL.mockReturnValue('https://www.example.com/some/path?utm_source=campaign')
+                const { posthog, beforeSendMock } = setup({
+                    token,
+                    persistence_name: token,
+                })
+                posthog.capture('$pageview')
+
+                // act
+                mockURL.mockReturnValue('https://www.example.com/another/path')
+                posthog.capture('$pageview')
+
+                // assert
+                expect(beforeSendMock.mock.calls[1][0].properties.utm_source).toBe('campaign')
             })
         })
 

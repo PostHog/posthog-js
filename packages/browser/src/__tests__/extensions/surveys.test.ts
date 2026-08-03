@@ -502,6 +502,46 @@ describe('SurveyManager', () => {
         })
     })
 
+    describe('respects the event trigger condition (issue #2501)', () => {
+        const EVENT_GATED_SURVEY_ID = 'event-gated-survey'
+
+        const makeEventGatedSurvey = (): Survey => ({
+            ...mockSurveys[0],
+            id: EVENT_GATED_SURVEY_ID,
+            conditions: { events: { values: [{ name: 'survey_trigger_event' }] } },
+        })
+
+        const setActivatedSurveys = (surveyIds: string[]): void => {
+            ;(mockPostHog.surveys as any)._surveyEventReceiver = { getSurveys: () => surveyIds }
+        }
+
+        it('is not renderable until the trigger event has fired', () => {
+            setActivatedSurveys([])
+            const result = surveyManager.checkSurveyRenderability(makeEventGatedSurvey())
+            expect(result.eligible).toBe(false)
+        })
+
+        it('becomes renderable once the trigger event has fired', () => {
+            setActivatedSurveys([EVENT_GATED_SURVEY_ID])
+            const result = surveyManager.checkSurveyRenderability(makeEventGatedSurvey())
+            expect(result.eligible).toBe(true)
+        })
+
+        it('is unaffected for surveys without an event/action trigger', () => {
+            setActivatedSurveys([])
+            const result = surveyManager.checkSurveyRenderability({ ...mockSurveys[0], conditions: null })
+            expect(result.eligible).toBe(true)
+        })
+
+        // Regression guard: the trigger gate must live only in checkSurveyRenderability, not in
+        // checkSurveyEligibility, so explicit displaySurvey('id') calls are not silently suppressed.
+        it('checkSurveyEligibility stays eligible for an event-gated survey whose trigger has not fired', () => {
+            setActivatedSurveys([])
+            const result = surveyManager.checkSurveyEligibility(makeEventGatedSurvey())
+            expect(result.eligible).toBe(true)
+        })
+    })
+
     test('callSurveysAndEvaluateDisplayLogic should handle popup surveys correctly', () => {
         const handlePopoverSurveyMock = jest
             .spyOn(surveyManager as any, 'handlePopoverSurvey')
@@ -761,7 +801,7 @@ describe('SurveyManager', () => {
         })
     })
 
-    describe('renderSurvey with URL prefill that completes the survey', () => {
+    describe('renderSurvey with URL prefill', () => {
         let surveyManager: SurveyManager
         let originalLocation: Location
 
@@ -848,6 +888,74 @@ describe('SurveyManager', () => {
                 expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
                 expect(surveyDiv.getElementsByClassName('thank-you-message').length).toBe(0)
             }
+        })
+
+        it('retains the auto-advanced prefilled answer through a later manual submit', async () => {
+            localStorage.clear()
+            const mockPH = createMockPostHog({
+                config: {
+                    token: 'test-token',
+                    api_host: 'https://test.com',
+                    surveys: { prefillFromUrl: true },
+                },
+                getActiveMatchingSurveys: jest.fn(),
+                get_session_replay_url: jest.fn(),
+                capture: jest.fn(),
+                featureFlags: { isFeatureEnabled: jest.fn().mockReturnValue(true) },
+            })
+            surveyManager = new SurveyManager(mockPH)
+
+            const survey: Survey = {
+                id: 'prefill-merge-survey',
+                name: 'Prefill Merge Survey',
+                type: SurveyType.Popover,
+                enable_partial_responses: true,
+                questions: [
+                    {
+                        id: 'q1',
+                        type: SurveyQuestionType.Rating,
+                        question: 'Rate the draft',
+                        scale: 2,
+                        display: 'emoji',
+                        skipSubmitButton: true,
+                    },
+                    { id: 'q2', type: SurveyQuestionType.Open, question: 'Tell us more' },
+                ],
+                appearance: {},
+                conditions: null,
+                start_date: '2021-01-01T00:00:00.000Z',
+                end_date: null,
+                current_iteration: null,
+                current_iteration_start_date: null,
+                feature_flag_keys: [],
+                linked_flag_key: null,
+                targeting_flag_key: null,
+                internal_targeting_flag_key: null,
+            } as unknown as Survey
+
+            // q0 (the rating) is prefilled and auto-advances; the open question is shown for manual submit.
+            window.location.search = '?q0=1'
+            const surveyDiv = document.createElement('div')
+            surveyManager.renderSurvey(survey, surveyDiv)
+
+            const textarea = surveyDiv.querySelector('textarea')
+            await act(async () => {
+                fireEvent.input(textarea!, { target: { value: 'because reasons' } })
+            })
+            const submitButton = surveyDiv.querySelector<HTMLButtonElement>('.form-submit')
+            await act(async () => {
+                fireEvent.click(submitButton!)
+            })
+
+            // The manual submit must still carry the prefilled rating, not just the open answer —
+            // both events share one submission id and merge server-side, so dropping it would clear it.
+            expect(mockPH.capture).toHaveBeenLastCalledWith(
+                'survey sent',
+                expect.objectContaining({
+                    $survey_response_q1: 1,
+                    $survey_response_q2: 'because reasons',
+                })
+            )
         })
     })
 
@@ -1118,6 +1226,52 @@ describe('SurveyManager', () => {
                     $survey_id: 'prefill-survey',
                     $survey_response_q1: 8,
                     $survey_completed: false,
+                })
+            )
+        })
+
+        it('should include caller-provided properties in the auto-submitted prefill event', () => {
+            const survey: Survey = {
+                id: 'prefill-survey-props',
+                name: 'Prefill Survey Props',
+                type: SurveyType.Popover,
+                enable_partial_responses: true,
+                questions: [
+                    {
+                        id: 'q1',
+                        type: SurveyQuestionType.Rating,
+                        question: 'Rate us',
+                        scale: 10,
+                        skipSubmitButton: true,
+                    },
+                    {
+                        id: 'q2',
+                        type: SurveyQuestionType.Open,
+                        question: 'Any feedback?',
+                    },
+                ],
+                appearance: {},
+                conditions: null,
+                start_date: '2021-01-01T00:00:00.000Z',
+                end_date: null,
+                current_iteration: null,
+                current_iteration_start_date: null,
+                feature_flag_keys: [],
+                linked_flag_key: null,
+                targeting_flag_key: null,
+                internal_targeting_flag_key: null,
+            }
+
+            window.location.search = '?q0=8'
+            ;(surveyManager as any)._handleUrlPrefill(survey, null, { account_number: 'A12345', month: 'January' })
+
+            expect(mockPostHog.capture).toHaveBeenCalledWith(
+                'survey sent',
+                expect.objectContaining({
+                    $survey_id: 'prefill-survey-props',
+                    $survey_response_q1: 8,
+                    account_number: 'A12345',
+                    month: 'January',
                 })
             )
         })
@@ -2052,18 +2206,12 @@ describe('preview renders', () => {
             } as Survey
 
             useEffect(() => {
-                console.log('Render effect triggered with page index:', currentPageIndex)
                 if (surveyPreviewRef.current) {
                     renderSurveysPreview({
                         survey,
                         parentElement: surveyPreviewRef.current,
                         previewPageIndex: currentPageIndex,
-                        onPreviewSubmit: () => {
-                            setCurrentPageIndex((prev) => {
-                                console.log('Setting page index from', prev, 'to', prev + 1)
-                                return prev + 1
-                            })
-                        },
+                        onPreviewSubmit: () => setCurrentPageIndex((prev) => prev + 1),
                     })
                 }
             }, [currentPageIndex])
@@ -2080,7 +2228,6 @@ describe('preview renders', () => {
 
         // Find and fill the textarea
         const textarea = container.querySelector('textarea')
-        console.log('Found textarea:', !!textarea)
 
         await act(async () => {
             // Use fireEvent.input to trigger onInput handler (change event fires on blur)
@@ -2089,9 +2236,6 @@ describe('preview renders', () => {
 
         // Find and click the submit button (using button type="button" instead of form-submit class)
         const submitButton = container.querySelectorAll('button[type="button"]')[1]
-
-        console.log('Found submit button:', !!submitButton)
-        console.log('Submit button text:', submitButton?.textContent)
 
         await act(async () => {
             fireEvent.click(submitButton!)

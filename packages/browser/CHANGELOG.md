@@ -1,5 +1,201 @@
 # posthog-js
 
+## 1.410.1
+
+### Patch Changes
+
+- [#4386](https://github.com/PostHog/posthog-js/pull/4386) [`0854095`](https://github.com/PostHog/posthog-js/commit/0854095ac62aa3a9b8c88514634e29f7bbbe2b16) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent the inline canvas recording worker from requesting an unusable source map from its blob URL.
+  (2026-08-03)
+- Updated dependencies [[`eb0a793`](https://github.com/PostHog/posthog-js/commit/eb0a7930eebf2474dc03846b36891dc33df112f7)]:
+    - @posthog/core@1.46.3
+
+## 1.410.0
+
+### Minor Changes
+
+- [#4125](https://github.com/PostHog/posthog-js/pull/4125) [`fde7145`](https://github.com/PostHog/posthog-js/commit/fde7145e59b497a76b083d9bd173648e83de0400) Thanks [@DerGeraetK](https://github.com/DerGeraetK)! - Add `session_recording.sampling` to disable or throttle mousemove capture (and optionally mouseInteraction) in session replay. Canvas recording now merges its canvas sampling with user-provided sampling instead of overwriting it.
+  (2026-08-03)
+
+### Patch Changes
+
+- [#4387](https://github.com/PostHog/posthog-js/pull/4387) [`10ef759`](https://github.com/PostHog/posthog-js/commit/10ef7594d11f805742f4dbff5e7a87f88b6352c7) Thanks [@NVolcz](https://github.com/NVolcz)! - Share extension bundle types between the slim and slim no-external entrypoints.
+  (2026-08-03)
+- Updated dependencies [[`fde7145`](https://github.com/PostHog/posthog-js/commit/fde7145e59b497a76b083d9bd173648e83de0400)]:
+    - @posthog/types@1.400.0
+
+## 1.409.6
+
+### Patch Changes
+
+- [#4299](https://github.com/PostHog/posthog-js/pull/4299) [`8a7bb3f`](https://github.com/PostHog/posthog-js/commit/8a7bb3f93412604273698149a90bbef1faff4cec) Thanks [@posthog](https://github.com/apps/posthog)! - Mark our bundles as third-party code in the source maps we publish (the `x_google_ignoreList` extension). Browser devtools now attribute `console.*` messages to the code that called them instead of to posthog-js's console wrapper, which previously showed every message as coming from `logs.ts` when `captureConsoleLogs` or session replay's `enable_recording_console_log` was enabled.
+  (2026-08-03)
+- Updated dependencies [[`7c3a9af`](https://github.com/PostHog/posthog-js/commit/7c3a9af42be80051705f7fe820623dd7e1b879d5)]:
+    - @posthog/core@1.46.2
+
+## 1.409.5
+
+### Patch Changes
+
+- [#4354](https://github.com/PostHog/posthog-js/pull/4354) [`6c500f1`](https://github.com/PostHog/posthog-js/commit/6c500f1c3165834f71e524eb500fc64eb792ec0c) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Fail open when an error tracking suppression rule cannot be evaluated, so an unknown operator or a key outside `$exception_types` / `$exception_values` no longer drops the exception.
+  (2026-07-31)
+
+## 1.409.4
+
+### Patch Changes
+
+- [#4338](https://github.com/PostHog/posthog-js/pull/4338) [`c458807`](https://github.com/PostHog/posthog-js/commit/c458807d30fae5b3adcf6be95f03b16629b0161f) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix canvases staying blank after seeking in session replay by re-sending one frame per canvas after each full snapshot
+  (2026-07-31)
+
+## 1.409.3
+
+### Patch Changes
+
+- [#4312](https://github.com/PostHog/posthog-js/pull/4312) [`4729871`](https://github.com/PostHog/posthog-js/commit/4729871f833c1f83c28e13994a97889802999708) Thanks [@darkopia](https://github.com/darkopia)! - Fix hosted (external) surveys with URL prefill: the auto-submitted response now includes caller-provided event properties (extra URL query params), and a later manual submit no longer clears the prefilled answer from the partial-response merge.
+  (2026-07-31)
+
+## 1.409.2
+
+### Patch Changes
+
+- [#4340](https://github.com/PostHog/posthog-js/pull/4340) [`4b8867c`](https://github.com/PostHog/posthog-js/commit/4b8867c1e3f752b29ae17339870bd7175d5117c5) Thanks [@marandaneto](https://github.com/marandaneto)! - Avoid redacting session replay network bodies when timestamps or UUID fragments resemble social security or credit card numbers.
+  (2026-07-31)
+- Updated dependencies [[`4b8867c`](https://github.com/PostHog/posthog-js/commit/4b8867c1e3f752b29ae17339870bd7175d5117c5)]:
+    - @posthog/browser-common@0.3.1
+
+## 1.409.1
+
+### Patch Changes
+
+- [#4301](https://github.com/PostHog/posthog-js/pull/4301) [`4b36c44`](https://github.com/PostHog/posthog-js/commit/4b36c445efec6f26849e358a43ee84ff2b8304aa) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add the browser-v1 client adapter for shared extensions, including analytics, request, persistence, replayed remote-config outcomes, and synchronous best-effort cleanup.
+  (2026-07-31)
+- Updated dependencies [[`6b48a59`](https://github.com/PostHog/posthog-js/commit/6b48a59ed096a52f720a608ce59cc81c54c2ef4d)]:
+    - @posthog/browser-common@0.3.0
+
+## 1.409.0
+
+### Minor Changes
+
+- [#4308](https://github.com/PostHog/posthog-js/pull/4308) [`6e7f3ae`](https://github.com/PostHog/posthog-js/commit/6e7f3aeaf65d66d015508aec0618c0d7fe505db5) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Emit the release id that posthog-cli injects into your bundle as `$release_id` on `$exception` events, so PostHog can attach exceptions to a release without joining through symbol sets. Adds `getInjectedReleaseId()` to `@posthog/core`. The property is only attached when an injected release id can be read.
+  (2026-07-30)
+
+### Patch Changes
+
+- Updated dependencies [[`6e7f3ae`](https://github.com/PostHog/posthog-js/commit/6e7f3aeaf65d66d015508aec0618c0d7fe505db5)]:
+    - @posthog/core@1.46.0
+
+## 1.408.3
+
+### Patch Changes
+
+- [#4327](https://github.com/PostHog/posthog-js/pull/4327) [`232b06a`](https://github.com/PostHog/posthog-js/commit/232b06ab1287dd8d4f1f5b650b9a74568d7bc81a) Thanks [@github-actions](https://github.com/apps/github-actions)! - Refresh campaign parameters after SPA URL changes.
+  (2026-07-30)
+
+- [#4328](https://github.com/PostHog/posthog-js/pull/4328) [`95a3d02`](https://github.com/PostHog/posthog-js/commit/95a3d0262712731d154ad86d792a3e05df027264) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix `identify()` creating a person profile when the supplied ID already matches an anonymously persisted distinct ID.
+  (2026-07-30)
+
+## 1.408.2
+
+### Patch Changes
+
+- [#4325](https://github.com/PostHog/posthog-js/pull/4325) [`3bd8a2d`](https://github.com/PostHog/posthog-js/commit/3bd8a2d7599c0ee089594e27be39f3af171e5371) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix dead-click false positives on WebKit when the SDK uses an iframe-sourced MutationObserver fallback.
+  (2026-07-30)
+- Updated dependencies [[`3bd8a2d`](https://github.com/PostHog/posthog-js/commit/3bd8a2d7599c0ee089594e27be39f3af171e5371)]:
+    - @posthog/browser-common@0.2.5
+    - @posthog/core@1.45.3
+
+## 1.408.1
+
+### Patch Changes
+
+- [#4226](https://github.com/PostHog/posthog-js/pull/4226) [`3b02a78`](https://github.com/PostHog/posthog-js/commit/3b02a78418685afe6c160dbc7cb5a880e1720f38) Thanks [@ksvat](https://github.com/ksvat)! - The replayer can now yield to the event loop while fast-forwarding to a seek target, via the new opt-in `seekYieldBudgetMs` player config. Seeking in a long, event-dense recording rebuilds the target frame by re-applying every event since the last full snapshot in one uninterrupted main-thread pass, which can block the page for many seconds and trigger the browser's "Page Unresponsive" dialog; when a yield budget is set, the rebuild runs in time-budgeted chunks instead, and a newer seek cancels any rebuild still in flight so rapid scrubbing only pays for the last seek. A superseded rebuild also resets the machine's `lastPlayedEvent` so the next seek performs a full rebuild rather than trusting a partially-applied history. The default (0) keeps the previous fully-synchronous behavior.
+  (2026-07-30)
+
+## 1.408.0
+
+### Minor Changes
+
+- [#4270](https://github.com/PostHog/posthog-js/pull/4270) [`92427a1`](https://github.com/PostHog/posthog-js/commit/92427a12ace70dd6ab2a1e62c88d84465edbc856) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add canvas mask regions to session replay canvas capture: `session_recording.canvasCapture.maskRegionsFn` is called once per canvas per captured frame, and the returned regions (CSS pixels, relative to the canvas) are painted black in the captured frame before it is encoded — letting apps that render into canvas (e.g. Flutter web via CanvasKit) mask content that DOM-based masking cannot see.
+
+    The return value decides what happens to that canvas's frame:
+    - `[]` — nothing to mask; the frame is recorded as is.
+    - `null` — regions could not be computed; the frame is skipped rather than recorded unmasked.
+    - `maskRegionsFn` not set — canvases are recorded unmasked and canvas capture behavior is unchanged.
+
+    Configuring `maskRegionsFn` also disables canvas pixel serialization in DOM full snapshots (`rr_dataURL`) — that path never sees the mask regions, so skipping it closes the route that could otherwise embed unmasked canvas stills in a snapshot; the canvas repaints from the masked frame stream instead. Every canvas the provider answers — with regions or `[]` — re-sends an unchanged frame as a keyframe every 30s, so after a full snapshot or a seek an idle canvas repaints within at most 30s.
+
+    An app whose real provider only exists once its runtime has booted chooses what happens in between by what it declares in `posthog.init`: a function covering the whole canvas blacks those frames out, `() => null` skips them, and declaring nothing records them. Client-side only, cannot be set via remote configuration. (2026-07-29)
+
+### Patch Changes
+
+- Updated dependencies [[`92427a1`](https://github.com/PostHog/posthog-js/commit/92427a12ace70dd6ab2a1e62c88d84465edbc856)]:
+    - @posthog/types@1.399.0
+
+## 1.407.8
+
+### Patch Changes
+
+- [#4311](https://github.com/PostHog/posthog-js/pull/4311) [`c1818e2`](https://github.com/PostHog/posthog-js/commit/c1818e2e54a3dafcdacf0c93fa20bc1b20958972) Thanks [@marandaneto](https://github.com/marandaneto)! - fix(react): restore CommonJS default import interop in UMD bundles
+
+    React hooks used without a `PostHogProvider` now receive the default PostHog instance again when the UMD build is loaded through CommonJS. (2026-07-29)
+
+## 1.407.7
+
+### Patch Changes
+
+- [#4304](https://github.com/PostHog/posthog-js/pull/4304) [`c7099e9`](https://github.com/PostHog/posthog-js/commit/c7099e9dbe58455efb0bfb47e1f211effb914a61) Thanks [@lucasheriques](https://github.com/lucasheriques)! - fix(surveys): only wait for feature flags on surveys that repeat
+
+    Surveys stopped being shown while feature flags were still loading, even when a cached
+    enabled value for their internal targeting flag was already available. Popover and widget
+    surveys recovered on the next evaluation, but a survey your own code renders (type `api`)
+    is evaluated once, so it was dropped for that page load and never reappeared.
+
+    That wait is only needed for surveys that repeat, where stored per-survey state is keyed by
+    iteration and cannot be relied on to record that someone already answered. Other surveys
+    keep one stable key that already prevents a repeat display, so they are now evaluated
+    against the cached flag right away. (2026-07-29)
+
+- Updated dependencies [[`c7099e9`](https://github.com/PostHog/posthog-js/commit/c7099e9dbe58455efb0bfb47e1f211effb914a61)]:
+    - @posthog/core@1.45.2
+
+## 1.407.6
+
+### Patch Changes
+
+- [#4305](https://github.com/PostHog/posthog-js/pull/4305) [`b4250a7`](https://github.com/PostHog/posthog-js/commit/b4250a7bacbb8494df0f383dcd6dda7f3cdb39fc) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix extension bundles when used with the slim no-external browser build.
+  (2026-07-29)
+
+## 1.407.5
+
+### Patch Changes
+
+- [#4278](https://github.com/PostHog/posthog-js/pull/4278) [`a19ba65`](https://github.com/PostHog/posthog-js/commit/a19ba65da8f2c121d54db72ab4bc42f4a027fddb) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix paused replay seeks at an exact full snapshot timestamp so the snapshot frame is rebuilt before playback pauses.
+  (2026-07-28)
+
+## 1.407.4
+
+### Patch Changes
+
+- [#4290](https://github.com/PostHog/posthog-js/pull/4290) [`a08c226`](https://github.com/PostHog/posthog-js/commit/a08c22659d52c0c58b9713e67ef0e0741e427c4e) Thanks [@marandaneto](https://github.com/marandaneto)! - Send session recording request timestamps in request bodies instead of query strings.
+  (2026-07-28)
+
+## 1.407.3
+
+### Patch Changes
+
+- [#4214](https://github.com/PostHog/posthog-js/pull/4214) [`f7399a0`](https://github.com/PostHog/posthog-js/commit/f7399a0b3ec27ea3337143b714fceaba3420371f) Thanks [@felipeatom](https://github.com/felipeatom)! - Fix `canRenderSurvey` / `canRenderSurveyAsync` reporting a survey as renderable before its event/action activation trigger has fired. Surveys gated on a "User sends events" filter are now only eligible once the trigger event is received.
+  (2026-07-27)
+
+- [#4231](https://github.com/PostHog/posthog-js/pull/4231) [`eabe2ef`](https://github.com/PostHog/posthog-js/commit/eabe2efd5efb90924dde7afe54e328d929931851) Thanks [@marandaneto](https://github.com/marandaneto)! - Send analytics request timestamps in capture bodies while retaining query timestamps for session recordings.
+  (2026-07-27)
+
+- [#4102](https://github.com/PostHog/posthog-js/pull/4102) [`fa4844b`](https://github.com/PostHog/posthog-js/commit/fa4844b5fbd2311b7bfc99e0841dffcfb0406b84) Thanks [@marandaneto](https://github.com/marandaneto)! - Send SDK library identity in feature flag person properties instead of URL query parameters.
+  (2026-07-27)
+
+- [#4220](https://github.com/PostHog/posthog-js/pull/4220) [`11330b3`](https://github.com/PostHog/posthog-js/commit/11330b3526c8193b76fc5bf47970f82ee5f40971) Thanks [@SegFaultZero](https://github.com/SegFaultZero)! - fix(replay): prevent server timings from dropped ingestion requests causing an endless capture loop
+  (2026-07-27)
+- Updated dependencies [[`7210789`](https://github.com/PostHog/posthog-js/commit/7210789efa46a6e2a1aa51b2faba4f67187f6cf6)]:
+    - @posthog/browser-common@0.2.2
+
 ## 1.407.2
 
 ### Patch Changes

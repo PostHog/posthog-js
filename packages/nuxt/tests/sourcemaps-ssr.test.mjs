@@ -4,6 +4,8 @@
 // (e.g. `nuxt generate`), causing the CLI to exit 1.
 // Covers both branches: ssr:false must skip the server inject (but still
 // upload outputDir) and ssr:true must still inject the server bundle.
+// Also covers PostHog/posthog-js#4275: public sourcemaps must be uploaded and
+// deleted before Nitro generates its public-asset manifest.
 //
 // Portability: avoids `import('../src/module.ts')` because Node 20 (declared
 // in package.json `engines`) cannot strip TS types. Instead reads module.ts
@@ -41,7 +43,7 @@ const executableSource = source
   // Turn the module's `export default` into a value the wrapper returns.
   .replace('export default defineNuxtModule(', 'return defineNuxtModule(')
 
-function loadModule() {
+function loadModule({ failPublicUpload = false } = {}) {
   const spawnCalls = []
   const stubs = {
     defineNuxtModule: config => config,
@@ -52,18 +54,22 @@ function loadModule() {
     resolveBinaryPath: () => '/fake/posthog-cli',
     spawnLocal: async (bin, args) => {
       spawnCalls.push({ bin, args: [...args] })
+      if (failPublicUpload && args.includes('upload') && args.includes('/build/.output/public')) {
+        throw new Error('public upload failed')
+      }
       return { code: 0 }
     },
     fileURLToPath: u => u,
     dirname: p => p,
+    console: { error: () => {} },
   }
   const factory = new Function(...Object.keys(stubs), executableSource)
   const mod = factory(...Object.values(stubs))
   return { mod, spawnCalls }
 }
 
-async function runLifecycle({ ssr }) {
-  const { mod, spawnCalls } = loadModule()
+async function runLifecycle({ ssr, deleteAfterUpload, failPublicUpload = false }) {
+  const { mod, spawnCalls } = loadModule({ failPublicUpload })
   const hooks = {}
   const nuxt = {
     options: {
@@ -89,6 +95,7 @@ async function runLifecycle({ ssr }) {
         enabled: true,
         personalApiKey: 'phx_test',
         projectId: '123',
+        deleteAfterUpload,
       },
     },
     nuxt,
@@ -138,11 +145,41 @@ for (const { ssr, expectInject } of cases) {
     assert.equal(injectCall, undefined, `ssr:${ssr}: expected no server inject. Got: ${dump}`)
   }
 
-  // Upload of the outputDir must always happen so public sourcemaps reach PostHog.
+  const publicUploadCall = findCall(calls, 'upload', '/build/.output/public')
+  const outputUploadCall = findCall(calls, 'upload', '/build/.output')
+
+  assert.ok(publicUploadCall, `ssr:${ssr}: expected early public sourcemap upload. Got: ${dump}`)
+  assert.ok(publicUploadCall.args.includes('--delete-after'), `ssr:${ssr}: expected public sourcemap deletion`)
+
+  // Upload of the outputDir must still happen so server and preset-specific sourcemaps reach PostHog.
+  assert.ok(outputUploadCall, `ssr:${ssr}: expected sourcemap upload against outputDir. Got: ${dump}`)
   assert.ok(
-    findCall(calls, 'upload', '/build/.output'),
-    `ssr:${ssr}: expected sourcemap upload against outputDir. Got: ${dump}`,
+    calls.indexOf(publicUploadCall) < calls.indexOf(outputUploadCall),
+    `ssr:${ssr}: expected public sourcemaps to be deleted before the final output upload. Got: ${dump}`,
   )
 }
+
+const retainedMapCalls = await runLifecycle({ ssr: true, deleteAfterUpload: false })
+const retainedMapDump = JSON.stringify(retainedMapCalls.map(c => c.args))
+assert.equal(
+  findCall(retainedMapCalls, 'upload', '/build/.output/public'),
+  undefined,
+  `deleteAfterUpload:false: expected no early public upload. Got: ${retainedMapDump}`,
+)
+const retainedMapOutputUpload = findCall(retainedMapCalls, 'upload', '/build/.output')
+assert.ok(retainedMapOutputUpload, `deleteAfterUpload:false: expected final output upload. Got: ${retainedMapDump}`)
+assert.ok(
+  !retainedMapOutputUpload.args.includes('--delete-after'),
+  `deleteAfterUpload:false: expected sourcemaps to be retained. Got: ${retainedMapDump}`,
+)
+
+const failedPublicUploadCalls = await runLifecycle({ ssr: true, failPublicUpload: true })
+const failedPublicUploadDump = JSON.stringify(failedPublicUploadCalls.map(c => c.args))
+const fallbackOutputUpload = findCall(failedPublicUploadCalls, 'upload', '/build/.output')
+assert.ok(fallbackOutputUpload, `failed public upload: expected final output upload. Got: ${failedPublicUploadDump}`)
+assert.ok(
+  !fallbackOutputUpload.args.includes('--delete-after'),
+  `failed public upload: expected final upload to retain manifest-listed maps. Got: ${failedPublicUploadDump}`,
+)
 
 console.log('ok sourcemaps-ssr.test.mjs')

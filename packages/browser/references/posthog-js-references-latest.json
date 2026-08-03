@@ -2017,7 +2017,7 @@
         {
           "category": "Lifecycle",
           "description": "Flushes any queued events and resolves once teardown is complete.",
-          "details": "This exists primarily for parity with the server-side [Node.js SDK](/docs/libraries/node), whose `shutdown()` you call once before a process exits. In the browser there is no process to exit — the SDK already flushes pending events on `pagehide`/`unload` — so this method is mostly a graceful no-op that best-effort flushes the request queues and always resolves.\nIt is safe to call in isomorphic teardown code (for example a Nuxt/Next module that calls `shutdown()` on both the server and the client) so the same symmetric cleanup works in either environment without throwing.",
+          "details": "This exists primarily for parity with the server-side [Node.js SDK](/docs/libraries/node), whose `shutdown()` you call once before a process exits. In the browser there is no process to exit, so this method performs synchronous best-effort extension cleanup, flushes the request queues, and always resolves.\nIt is safe to call in isomorphic teardown code (for example a Nuxt/Next module that calls `shutdown()` on both the server and the client) so the same symmetric cleanup works in either environment without throwing.",
           "id": "shutdown",
           "showDocs": true,
           "title": "shutdown",
@@ -2031,7 +2031,7 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "Accepted for call-site parity with the Node.js SDK. The browser flush is synchronous, so this is ignored.",
+              "description": "Retained for parity with the Node.js SDK; ignored in browsers.",
               "isOptional": true,
               "type": "number",
               "name": "_shutdownTimeoutMs"
@@ -2337,7 +2337,7 @@
       "id": "ActionStepStringMatching",
       "name": "ActionStepStringMatching",
       "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
+      "path": "../browser-common/dist/types/surveys.d.ts",
       "example": "\"contains\" | \"exact\" | \"regex\""
     },
     {
@@ -2349,7 +2349,7 @@
           "name": "event"
         },
         {
-          "description": "ActionStepStringMatching.Exact",
+          "description": "StringMatching.Exact",
           "type": "ActionStepStringMatching | null",
           "name": "href_matching"
         },
@@ -2358,12 +2358,12 @@
           "name": "href"
         },
         {
-          "description": "Property filters for action step matching",
+          "description": "Property filters for action step matching.",
           "type": "{\n        key: string;\n        value?: string | number | boolean | (string | number | boolean)[] | null;\n        operator?: PropertyMatchType;\n        type?: string;\n    }[]",
           "name": "properties"
         },
         {
-          "description": "pre-compiled regex pattern for matching selector against $elements_chain",
+          "description": "Pre-compiled regex pattern for matching selector against `$elements_chain`.",
           "type": "string | null",
           "name": "selector_regex"
         },
@@ -2396,7 +2396,7 @@
           "name": "url"
         }
       ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "path": "../browser-common/dist/types/surveys.d.ts"
     },
     {
       "id": "BasicSurveyQuestion",
@@ -2407,13 +2407,13 @@
           "name": "type"
         }
       ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "path": "../browser-common/dist/types/surveys.d.ts"
     },
     {
       "id": "Compression",
       "name": "Compression",
       "properties": [],
-      "path": "lib/src/types.d.ts",
+      "path": "../browser-common/dist/types/compression.d.ts",
       "example": "(typeof Compression)[keyof typeof Compression]"
     },
     {
@@ -2421,67 +2421,67 @@
       "name": "ConversationsRemoteConfig",
       "properties": [
         {
-          "description": "Whether to show the name field in the identification form   true (when requireEmail is true)",
+          "description": "Whether to show the name field in the identification form.",
           "type": "boolean",
           "name": "collectName"
         },
         {
-          "description": "Primary color for the widget UI",
+          "description": "Primary color for the widget UI.",
           "type": "string",
           "name": "color"
         },
         {
-          "description": "List of allowed domains where the widget should be shown. Supports wildcards like \"https://*.example.com\" Empty array or not present means show on all domains.",
+          "description": "Domains where the widget may be shown.",
           "type": "string[]",
           "name": "domains"
         },
         {
-          "description": "Whether conversations are enabled for this team When true, the conversations API is available (posthog.conversations.*)",
+          "description": "Whether conversations are enabled for this team.",
           "type": "boolean",
           "name": "enabled"
         },
         {
-          "description": "Greeting text to show when widget is first opened",
+          "description": "Greeting text to show when the widget is first opened.",
           "type": "string",
           "name": "greetingText"
         },
         {
-          "description": "Description for the identification form   \"Please provide your details so we can help you better.\"",
+          "description": "Description for the identification form.",
           "type": "string",
           "name": "identificationFormDescription"
         },
         {
-          "description": "Title for the identification form   \"Before we start...\"",
+          "description": "Title for the identification form.",
           "type": "string",
           "name": "identificationFormTitle"
         },
         {
-          "description": "Placeholder text for the message input",
+          "description": "Placeholder text for the message input.",
           "type": "string",
           "name": "placeholderText"
         },
         {
-          "description": "Whether to require email before starting a conversation   false",
+          "description": "Whether to require an email address before starting a conversation.",
           "type": "boolean",
           "name": "requireEmail"
         },
         {
-          "description": "Public token for authenticating conversations API requests This token is team-scoped and meant to be embedded in client code",
+          "description": "Public token for authenticating conversations API requests.",
           "type": "string",
           "name": "token"
         },
         {
-          "description": "Whether the widget UI (button + chat panel) should be shown Only takes effect when enabled is true   false",
+          "description": "Whether the widget UI should be shown.",
           "type": "boolean",
           "name": "widgetEnabled"
         },
         {
-          "description": "Position of the widget on the screen   'bottom_right'",
+          "description": "Position of the widget on the screen.",
           "type": "WidgetPosition",
           "name": "widgetPosition"
         }
       ],
-      "path": "lib/src/posthog-conversations-types.d.ts"
+      "path": "../browser-common/dist/types/remote-config.d.ts"
     },
     {
       "id": "ConversationsTraits",
@@ -2542,7 +2542,7 @@
       "id": "DisplaySurveyType",
       "name": "DisplaySurveyType",
       "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
+      "path": "../browser-common/dist/types/surveys.d.ts",
       "example": "(typeof DisplaySurveyType)[keyof typeof DisplaySurveyType]"
     },
     {
@@ -2565,7 +2565,7 @@
           "name": "values"
         }
       ],
-      "path": "lib/src/types.d.ts"
+      "path": "../browser-common/dist/types/remote-config.d.ts"
     },
     {
       "id": "ErrorTrackingSuppressionRuleValue",
@@ -2588,7 +2588,7 @@
           "name": "value"
         }
       ],
-      "path": "lib/src/types.d.ts"
+      "path": "../browser-common/dist/types/remote-config.d.ts"
     },
     {
       "id": "EventHandler",
@@ -2646,7 +2646,7 @@
           "name": "variant"
         }
       ],
-      "path": "lib/src/types.d.ts"
+      "path": "../browser-common/dist/types/remote-config.d.ts"
     },
     {
       "id": "GetMessagesResponse",
@@ -2759,7 +2759,7 @@
           "name": "type"
         }
       ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "path": "../browser-common/dist/types/surveys.d.ts"
     },
     {
       "id": "MarkAsReadResponse",
@@ -2852,7 +2852,7 @@
           "name": "type"
         }
       ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "path": "../browser-common/dist/types/surveys.d.ts"
     },
     {
       "id": "NetworkRecordOptions",
@@ -2904,7 +2904,7 @@
           "name": "payloadHostDenyList"
         }
       ],
-      "path": "lib/src/types.d.ts"
+      "path": "../browser-common/dist/types/network-recording.d.ts"
     },
     {
       "id": "OverrideConfig",
@@ -4453,21 +4453,21 @@
       "id": "PropertyFilters",
       "name": "PropertyFilters",
       "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
+      "path": "../browser-common/dist/types/surveys.d.ts",
       "example": "{\n    [propertyName: string]: {\n        values: string[];\n        operator: PropertyOperator;\n    };\n}"
     },
     {
       "id": "PropertyMatchType",
       "name": "PropertyMatchType",
       "properties": [],
-      "path": "lib/src/types.d.ts",
+      "path": "../browser-common/dist/types/surveys.d.ts",
       "example": "\"regex\" | \"not_regex\" | \"exact\" | \"is_not\" | \"icontains\" | \"not_icontains\""
     },
     {
       "id": "PropertyOperator",
       "name": "PropertyOperator",
       "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
+      "path": "../browser-common/dist/types/surveys.d.ts",
       "example": "\"gt\" | \"lt\""
     },
     {
@@ -4511,14 +4511,14 @@
           "name": "upperBoundLabel"
         }
       ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "path": "../browser-common/dist/types/surveys.d.ts"
     },
     {
       "id": "RemoteConfig",
       "name": "RemoteConfig",
       "properties": [
         {
-          "description": "Whether we should use a custom endpoint for analytics\nendpoint: \"/e\"",
+          "description": "Custom endpoint configuration for analytics events.",
           "type": "{\n        endpoint?: string;\n    }",
           "name": "analytics"
         },
@@ -4528,103 +4528,104 @@
           "name": "autocapture_opt_out"
         },
         {
-          "description": "This is currently in development and may have breaking changes without a major version bump",
+          "description": "Exception autocapture configuration.",
           "type": "boolean | {\n        endpoint?: string;\n    }",
           "name": "autocaptureExceptions"
         },
         {
-          "description": "Whether to capture dead clicks",
+          "description": "Whether to capture dead clicks.",
           "type": "boolean",
           "name": "captureDeadClicks"
         },
         {
-          "description": "originally capturePerformance was replay only and so boolean true is equivalent to  network_timing: true  now capture performance can be separately enabled within replay and as a standalone web vitals tracker people can have them enabled separately they work standalone but enhance each other TODO: deprecate this so we make a new config that doesn't need this explanation",
+          "description": "Performance capture configuration shared by replay and web vitals.",
           "type": "boolean | PerformanceCaptureConfig",
           "name": "capturePerformance"
         },
         {
-          "description": "Conversations widget configuration",
+          "description": "Conversations widget configuration.",
           "type": "boolean | ConversationsRemoteConfig",
           "name": "conversations"
         },
         {
-          "description": "Whether to only capture identified users by default",
+          "description": "Whether to capture only identified users by default.",
           "type": "boolean",
           "name": "defaultIdentifiedOnly"
         },
         {
-          "description": "Deprecated: renamed to toolbarParams, still present on older API responses",
+          "description": "Deprecated: Renamed to `toolbarParams`; still present on older API responses.",
           "type": "ToolbarParams",
           "name": "editorParams",
           "releaseTag": "deprecated"
         },
         {
-          "description": "Whether the `$elements_chain` property should be sent as a string or as an array\nfalse",
+          "description": "Whether `$elements_chain` is sent as a string rather than an array.",
           "type": "boolean",
           "name": "elementsChainAsString"
         },
         {
-          "description": "Error tracking configuration options",
+          "description": "Error tracking configuration.",
           "type": "{\n        autocaptureExceptions?: boolean;\n        captureExtensionExceptions?: boolean;\n        suppressionRules?: ErrorTrackingSuppressionRule[];\n    }",
           "name": "errorTracking"
         },
         {
-          "description": "Indicates if the team has any flags enabled (if not we don't need to load them)",
+          "description": "Whether the team has any feature flags enabled.",
           "type": "boolean",
           "name": "hasFeatureFlags"
         },
         {
-          "description": "Whether heatmaps are enabled",
+          "description": "Whether heatmaps are enabled.",
           "type": "boolean",
           "name": "heatmaps"
         },
         {
-          "description": "Whether the user is authenticated",
+          "description": "Whether the current user is authenticated.",
           "type": "boolean",
           "name": "isAuthenticated"
         },
         {
-          "description": "Whether capturing logs to the logs product is enabled",
+          "description": "Log capture configuration.",
           "type": "{\n        captureConsoleLogs?: boolean;\n    }",
           "name": "logs"
         },
         {
-          "description": "Whether product tours are enabled",
+          "description": "Whether product tours are enabled.",
           "type": "boolean",
           "name": "productTours"
         },
         {
-          "description": "Session recording configuration options",
+          "description": "Session recording configuration.",
           "type": "SessionRecordingRemoteConfig | false",
           "name": "sessionRecording"
         },
         {
-          "description": "List of site apps with their IDs and URLs",
+          "description": "Site apps available to the client.",
           "type": "{\n        id: string;\n        url: string;\n    }[]",
           "name": "siteApps"
         },
         {
-          "description": "Supported compression algorithms",
+          "description": "Supported compression algorithms.",
           "type": "Compression[]",
           "name": "supportedCompression"
         },
         {
-          "description": "Whether surveys are enabled",
+          "description": "Whether surveys are enabled, optionally including their definitions.",
           "type": "boolean | Survey[]",
           "name": "surveys"
         },
         {
-          "description": "Parameters for the toolbar",
+          "description": "Parameters for the toolbar.",
           "type": "ToolbarParams",
           "name": "toolbarParams"
         },
         {
-          "description": "deprecated, moved to toolbarParams",
+          "description": "Deprecated: Moved to `toolbarParams`.",
           "type": "'toolbar'",
-          "name": "toolbarVersion"
+          "name": "toolbarVersion",
+          "releaseTag": "deprecated"
         }
       ],
-      "path": "lib/src/types.d.ts"
+      "path": "../browser-common/dist/types/remote-config.d.ts"
     },
     {
       "id": "RequestRestoreLinkPayload",
@@ -4698,7 +4699,7 @@
           "name": "timeout"
         },
         {
-          "description": "Controls where the request dispatch time is sent. - `body` adds ISO `sent_at` to the existing request object (for example, flags). - `capture-body` wraps events in `{ api_key, batch, sent_at }` with an ISO timestamp. - `query` adds numeric `sent_at` to POST requests or cache-busting `_` to GET requests.",
+          "description": "Controls where the request dispatch time is sent. - `body` adds ISO `sent_at` to the request object, or every object in an array (for example, flags and recordings). - `capture-body` wraps events in `{ api_key, batch, sent_at }` with an ISO timestamp. - `query` adds numeric `sent_at` to POST requests or cache-busting `_` to GET requests.",
           "type": "'body' | 'capture-body' | 'query'",
           "name": "timestampMode"
         },
@@ -4903,14 +4904,14 @@
           "name": "properties"
         }
       ],
-      "path": "lib/src/types.d.ts"
+      "path": "../browser-common/dist/types/remote-config.d.ts"
     },
     {
       "id": "SessionRecordingPersistedConfig",
       "name": "SessionRecordingPersistedConfig",
       "properties": [
         {
-          "description": "Config version - defaults to 1 (legacy)\nWhen version is 2, triggerGroups is used instead of individual trigger fields",
+          "description": "Config version - defaults to 1 (legacy).\nWhen version is 2, triggerGroups is used instead of individual trigger fields.",
           "type": "1 | 2",
           "name": "version"
         },
@@ -4947,12 +4948,12 @@
           "name": "eventTriggers"
         },
         {
-          "description": "Controls how event, url, sampling, and linked flag triggers are combined\n\n`any` means that if any of the triggers match, the session will be recorded\n`all` means that all the triggers must match for the session to be recorded\n\noriginally it was (event || url) && (sampling || linked flag)\nwhich nobody wanted, now the default is all",
+          "description": "Controls how event, URL, sampling, and linked flag triggers are combined.\n\n`any` means that if any of the triggers match, the session will be recorded.\n`all` means that all the triggers must match for the session to be recorded.",
           "type": "\"any\" | \"all\"",
           "name": "triggerMatchType"
         },
         {
-          "description": "V2 Trigger Groups - multiple named trigger groups with their own conditions and sample rates\nOnly used when version === 2",
+          "description": "V2 Trigger Groups - multiple named trigger groups with their own conditions and sample rates.\nOnly used when version === 2.",
           "type": "SessionRecordingTriggerGroup[]",
           "name": "triggerGroups"
         },
@@ -5048,22 +5049,22 @@
           "name": "eventTriggers"
         },
         {
-          "description": "Controls how event, url, sampling, and linked flag triggers are combined\n\n`any` means that if any of the triggers match, the session will be recorded\n`all` means that all the triggers must match for the session to be recorded\n\noriginally it was (event || url) && (sampling || linked flag)\nwhich nobody wanted, now the default is all",
+          "description": "Controls how event, URL, sampling, and linked flag triggers are combined.\n\n`any` means that if any of the triggers match, the session will be recorded.\n`all` means that all the triggers must match for the session to be recorded.",
           "type": "\"any\" | \"all\"",
           "name": "triggerMatchType"
         },
         {
-          "description": "Config version - defaults to 1 (legacy)\nWhen version is 2, triggerGroups is used instead of individual trigger fields",
+          "description": "Config version - defaults to 1 (legacy).\nWhen version is 2, triggerGroups is used instead of individual trigger fields.",
           "type": "1 | 2",
           "name": "version"
         },
         {
-          "description": "V2 Trigger Groups - multiple named trigger groups with their own conditions and sample rates\nOnly used when version === 2",
+          "description": "V2 Trigger Groups - multiple named trigger groups with their own conditions and sample rates.\nOnly used when version === 2.",
           "type": "SessionRecordingTriggerGroup[]",
           "name": "triggerGroups"
         }
       ],
-      "path": "lib/src/types.d.ts"
+      "path": "../browser-common/dist/types/remote-config.d.ts"
     },
     {
       "id": "SessionRecordingTriggerGroup",
@@ -5090,7 +5091,7 @@
           "name": "sampleRate"
         }
       ],
-      "path": "lib/src/types.d.ts"
+      "path": "../browser-common/dist/types/remote-config.d.ts"
     },
     {
       "id": "SessionRecordingTriggerPropertyFilter",
@@ -5113,7 +5114,7 @@
           "name": "value"
         }
       ],
-      "path": "lib/src/types.d.ts"
+      "path": "../browser-common/dist/types/remote-config.d.ts"
     },
     {
       "id": "SessionRecordingUrlTrigger",
@@ -5128,7 +5129,7 @@
           "name": "url"
         }
       ],
-      "path": "lib/src/types.d.ts"
+      "path": "../browser-common/dist/types/remote-config.d.ts"
     },
     {
       "id": "SessionStartReason",
@@ -5297,7 +5298,7 @@
           "name": "type"
         }
       ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "path": "../browser-common/dist/types/surveys.d.ts"
     },
     {
       "id": "SurveyActionType",
@@ -5316,7 +5317,7 @@
           "name": "steps"
         }
       ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "path": "../browser-common/dist/types/surveys.d.ts"
     },
     {
       "id": "SurveyAppearance",
@@ -5327,7 +5328,7 @@
           "name": "boxPadding"
         },
         {
-          "description": "Deprecated: - not currently used",
+          "description": "Deprecated: Not currently used.",
           "type": "string",
           "name": "descriptionTextColor",
           "releaseTag": "deprecated"
@@ -5349,7 +5350,7 @@
           "name": "hideCancelButton"
         },
         {
-          "description": "Deprecated: Use inputBackground instead (inherited from core)",
+          "description": "Deprecated: Use `inputBackground` instead.",
           "type": "string",
           "name": "inputBackgroundColor",
           "releaseTag": "deprecated"
@@ -5383,7 +5384,7 @@
           "name": "zIndex"
         }
       ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "path": "../browser-common/dist/types/surveys.d.ts"
     },
     {
       "id": "SurveyCallback",
@@ -5475,21 +5476,21 @@
       "id": "SurveyEventName",
       "name": "SurveyEventName",
       "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
+      "path": "../browser-common/dist/types/surveys.d.ts",
       "example": "(typeof SurveyEventName)[keyof typeof SurveyEventName]"
     },
     {
       "id": "SurveyEventProperties",
       "name": "SurveyEventProperties",
       "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
+      "path": "../browser-common/dist/types/surveys.d.ts",
       "example": "(typeof SurveyEventProperties)[keyof typeof SurveyEventProperties]"
     },
     {
       "id": "SurveyEventType",
       "name": "SurveyEventType",
       "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
+      "path": "../browser-common/dist/types/surveys.d.ts",
       "example": "(typeof SurveyEventType)[keyof typeof SurveyEventType]"
     },
     {
@@ -5505,41 +5506,41 @@
           "name": "propertyFilters"
         }
       ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "path": "../browser-common/dist/types/surveys.d.ts"
     },
     {
       "id": "SurveyPosition",
       "name": "SurveyPosition",
       "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
+      "path": "../browser-common/dist/types/surveys.d.ts",
       "example": "(typeof SurveyPosition)[keyof typeof SurveyPosition]"
     },
     {
       "id": "SurveyQuestion",
       "name": "SurveyQuestion",
       "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
+      "path": "../browser-common/dist/types/surveys.d.ts",
       "example": "BasicSurveyQuestion | LinkSurveyQuestion | RatingSurveyQuestion | MultipleSurveyQuestion"
     },
     {
       "id": "SurveyQuestionBranchingType",
       "name": "SurveyQuestionBranchingType",
       "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
+      "path": "../browser-common/dist/types/surveys.d.ts",
       "example": "(typeof SurveyQuestionBranchingType)[keyof typeof SurveyQuestionBranchingType]"
     },
     {
       "id": "SurveyQuestionDescriptionContentType",
       "name": "SurveyQuestionDescriptionContentType",
       "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
+      "path": "../browser-common/dist/types/surveys.d.ts",
       "example": "\"html\" | \"text\""
     },
     {
       "id": "SurveyQuestionType",
       "name": "SurveyQuestionType",
       "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
+      "path": "../browser-common/dist/types/surveys.d.ts",
       "example": "(typeof SurveyQuestionType)[keyof typeof SurveyQuestionType]"
     },
     {
@@ -5552,28 +5553,28 @@
       "id": "SurveySchedule",
       "name": "SurveySchedule",
       "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
+      "path": "../browser-common/dist/types/surveys.d.ts",
       "example": "(typeof SurveySchedule)[keyof typeof SurveySchedule]"
     },
     {
       "id": "SurveyTabPosition",
       "name": "SurveyTabPosition",
       "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
+      "path": "../browser-common/dist/types/surveys.d.ts",
       "example": "(typeof SurveyTabPosition)[keyof typeof SurveyTabPosition]"
     },
     {
       "id": "SurveyType",
       "name": "SurveyType",
       "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
+      "path": "../browser-common/dist/types/surveys.d.ts",
       "example": "(typeof SurveyType)[keyof typeof SurveyType]"
     },
     {
       "id": "SurveyWidgetType",
       "name": "SurveyWidgetType",
       "properties": [],
-      "path": "lib/src/posthog-surveys-types.d.ts",
+      "path": "../browser-common/dist/types/surveys.d.ts",
       "example": "(typeof SurveyWidgetType)[keyof typeof SurveyWidgetType]"
     },
     {
@@ -5593,7 +5594,7 @@
           "name": "appearance"
         }
       ],
-      "path": "lib/src/posthog-surveys-types.d.ts"
+      "path": "../browser-common/dist/types/surveys.d.ts"
     },
     {
       "id": "Ticket",
@@ -5725,7 +5726,7 @@
       "id": "WidgetPosition",
       "name": "WidgetPosition",
       "properties": [],
-      "path": "lib/src/posthog-conversations-types.d.ts",
+      "path": "../browser-common/dist/types/remote-config.d.ts",
       "example": "\"bottom_left\" | \"bottom_right\" | \"top_left\" | \"top_right\""
     }
   ],

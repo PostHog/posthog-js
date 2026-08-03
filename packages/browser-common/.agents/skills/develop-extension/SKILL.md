@@ -8,19 +8,15 @@ description:
 
 # Authoring a browser extension
 
-A browser extension is an opt-in feature (autocapture, replay, surveys, …) that plugs into a host SDK through one
-contract: it implements `Extension` and talks to the host only through the `Client` it is handed. The same extension
-runs on both posthog-js v1 (synchronous, statically registered) and v2 (asynchronous, dynamically loaded) — you write it
-once, against `Client`.
-
-The package is source-only: there is no emitted JS build to import. Consumers are responsible for bundling/transpiling
-the TypeScript sources they use.
+A browser extension is an opt-in feature that implements `Extension` and talks to its host SDK exclusively through the
+single `Client` adapter passed to `setup` and shared by extensions on that SDK instance. The contract is designed for
+extensions shared across browser generations; concrete host adapters and loading integrations remain owned by their SDK
+packages.
 
 ## The shape
 
-Prefer a class when porting a posthog-js v1 extension that is already a class. Retaining the original method boundaries
-(`startIfEnabled`, `stop`, `monitor...`, private capture helpers, etc.) makes the port easier to review and keeps future
-fixes easy to compare with v1. Don't flatten a good class into a bag of closures.
+Prefer a class when porting a posthog-js v1 extension that is already a class. Retaining its method boundaries makes the
+port easier to review and keeps future fixes comparable with v1.
 
 ```ts
 import type { Client, Extension } from '@posthog/browser-common'
@@ -31,7 +27,6 @@ export interface MyExtensionOptions {
 
 export class MyExtension implements Extension {
     readonly name = 'myExtension'
-
     private _client: Client | undefined
 
     constructor(private readonly _options: MyExtensionOptions = {}) {}
@@ -42,168 +37,109 @@ export class MyExtension implements Extension {
     }
 
     startIfEnabled(): void {
-        // wire up capabilities here; keep any Disposables you create
+        // Install listeners and patches here; retain every Disposable.
     }
 
     stop(): void {
-        // tear down listeners/timers/patches owned by this instance
+        // Release resources owned by this instance.
     }
 
-    dispose(): void | Promise<void> {
+    dispose(): void {
         this.stop()
         this._client = undefined
     }
 }
 ```
 
-- `name` — unique; used for de-duplication and diagnostics.
-- `setup(client)` — may be `async` so you can read async state (kv, remote config) before the extension is ready; the
-  host awaits it.
-- `dispose()` — may be `async` (final flush, etc.); the host awaits it on teardown.
-- Extensions should define their own static configuration derived from the SDK's initialization configuration, and
-  accept it via the **constructor**. This keeps the configuration contract explicit and avoids the need for handling
-  generic configuration types.
-- Once `setup()` runs, the extension will not be called again until `dispose()`. Use `setup()` to initialize listeners
-  to react to changes.
+- `name` is unique within one client and is used for diagnostics and de-duplication.
+- `setup(client)` may be async when it needs KV or other asynchronous state.
+- `dispose()` is optional, synchronous, idempotent, and best-effort.
+- Static SDK configuration belongs in explicit constructor options, not in `Client`.
 
-## `Client` — what you get, and when to use it
+## Client capabilities
 
-| Need                                                        | Use                                                                               |
-| ----------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| current identity                                            | `client.distinctId`, `client.anonymousId`, `client.groups` (sync reads)           |
-| current session                                             | `client.session` (sync; `{ sessionId, windowId, sessionStartTimestamp }`)         |
-| record an event                                             | `await client.capture(event, properties?, options?)`                              |
-| add properties to **every** event                           | `client.registerDynamicEventProperties(() => ({ … }))`                            |
-| **react** to events others capture                          | `client.onEvent(({ event, properties }) => …)`                                    |
-| call a PostHog endpoint (`/s/`, `/flags/`, `/api/surveys/`) | `await client.apiRequest(path, init?)`                                            |
-| server config (decide/flags response)                       | `await client.getRemoteConfig()` (current) / `client.onRemoteConfig(…)` (changes) |
-| react to a new session / reset                              | `client.onNewSession(({ reason, … }) => …)`                                       |
-| use another extension                                       | `client.getExtension(SomeToken)`                                                  |
-| persist small state                                         | `client.kv` (async `get`/`set`/`remove`, namespaced to you)                       |
-| log                                                         | `client.logger`                                                                   |
+| Need                          | Use                                                        |
+| ----------------------------- | ---------------------------------------------------------- |
+| current identity              | `client.distinctId`, `client.anonymousId`, `client.groups` |
+| current session               | `client.session`                                           |
+| record an event               | `await client.capture(event, properties?, options?)`       |
+| add properties to every event | `client.registerDynamicEventProperties(() => ({ … }))`     |
+| react to finalized events     | `client.onEvent(({ event, properties }) => …)`             |
+| call a PostHog endpoint       | `await client.sendRequest(path, init?)`                    |
+| react to server config        | `client.onRemoteConfig(…)`                                 |
+| persist small state           | `client.kv`                                                |
+| log                           | `client.logger`                                            |
+
+Create an extension-named child logger with `client.logger.createLogger('[myExtension]')` when its messages need a
+prefix. `onRemoteConfig` immediately replays the latest known outcome; narrow on `result.ok` before reading
+`result.config` and define safe behavior for `{ ok: false }`.
+
+`sendRequest` is a low-level transport bridge. Select the configured origin with `target` (`api`, `flags`, or
+`assets`) and construct endpoint authentication using `client.projectToken` in the required query parameter, body,
+header, or path.
 
 ## Hard rules
 
-- **Enrichers are synchronous.** `registerDynamicEventProperties(producer)` runs inline while the host builds an event —
-  it must not `await`. If you need persisted/async data, read it in `setup` and close over the result.
-- **Enrich = add; observe = react.** `registerDynamicEventProperties` _contributes_ properties to events. `onEvent`
-  _watches_ finalized events and reacts (it can't change them). Dropping/rewriting whole events is the host's
-  `beforeSend`, not an extension's job.
-- **Do not drop disposables.** Anything returned from `onEvent`, `registerDynamicEventProperties`, `onNewSession`,
-  another `Listener`, or a timer wrapper must be stored and disposed in your `dispose()`.
-- **Reads are sync, I/O is async.** Identity and session are synchronous in-memory reads. `capture`, `apiRequest`, `kv`,
-  `getRemoteConfig` are async.
-- **Design for async readiness.** Your extension may be set up _after_ events have already been captured (dynamic
-  loading) or before flags/remote-config have loaded. Never assume you saw the first event or that data is present at
-  `setup`; `await client.getRemoteConfig()` / the providing extension's reads resolve once ready.
-- **Persist through `client.kv`, not globals.** It is namespaced to your extension; JSON-serializable values only;
-  `null`/`undefined` removes a key.
-- **browser-common owns shared extensions outright.** SDKs must not wrap, subclass, or re-export per-extension
-  adapter classes. An SDK may construct the shared extension with SDK-derived constructor options, but the only
-  extension method the SDK calls directly is `setup(clientAdapter)`. After that, interaction goes through the generic
-  `Client` adapter. If an extension needs controls (`start`, `stop`, etc.), expose them on the shared extension itself,
-  not through SDK-specific wrappers.
+- **Enrichers are synchronous.** `registerDynamicEventProperties` runs inline while the host builds an event. Read any
+  async state during setup and close over it.
+- **Enrich = add; observe = react.** Dynamic properties contribute to events; `onEvent` observes finalized events and
+  cannot mutate them.
+- **Keep disposables.** Store and release values returned by listeners, dynamic-property registration, and timer or
+  patch wrappers. Use `createDisposable(teardown)` for idempotent synchronous cleanup.
+- **Reads are sync; I/O is awaitable.** Identity, session, and `projectToken` are synchronous. Capture, requests, and
+  KV are awaitable; remote-config outcomes are delivered through `onRemoteConfig`.
+- **Design for async readiness.** Setup may occur before remote config loads or after events have already been captured.
+  Guard work after each `await` so disposal cannot be followed by late installation.
+- **Persist through `client.kv`, not globals.** Browser-v1 keys are passed verbatim to persistence. Unknown keys may be
+  captured as event properties, collisions can overwrite SDK state, and reset clears them. Use stable extension-owned
+  keys and define their exposure policy.
+- **browser-common owns shared extensions outright.** SDKs construct shared extensions and call `setup(client)` and
+  optional `dispose()`; they do not wrap or subclass extension implementations.
 
-## Providing a capability to other extensions
+## Event streams
 
-If your extension exposes something others depend on (e.g. feature flags), declare a token + interface and list it in
-`provides`. Use `Publisher` for any event stream you expose: keep the publisher private, expose its `listener`.
+Use `Publisher` for an event stream exposed by an extension. Keep the publisher private and expose only its listener:
 
 ```ts
-// flags/token.ts — implementation-free, importable without pulling flags' code
-import type { Extension, ExtensionToken, Listener } from '@posthog/browser-common'
+import { Publisher, type Extension, type Listener } from '@posthog/browser-common'
 
-export interface FeatureFlagsChange {
+interface FeatureFlagsChange {
     flag: string
     value: string | boolean | undefined
 }
 
-export interface FeatureFlagsExtension extends Extension {
-    getFeatureFlag(key: string): Promise<string | boolean | undefined>
-    onChange: Listener<FeatureFlagsChange>
-}
+export class FeatureFlagsExtension implements Extension {
+    readonly name = 'featureFlags'
+    private readonly _changes = new Publisher<FeatureFlagsChange>()
+    readonly onChange: Listener<FeatureFlagsChange> = this._changes.listener
 
-export const FeatureFlags = 'posthog.featureFlags' as ExtensionToken<FeatureFlagsExtension>
-```
+    setup(): void {}
 
-```ts
-// flags/index.ts
-import { Publisher } from '@posthog/browser-common'
-import { FeatureFlags, type FeatureFlagsChange, type FeatureFlagsExtension } from './token'
-
-export function featureFlags(): FeatureFlagsExtension {
-    const changes = new Publisher<FeatureFlagsChange>()
-
-    return {
-        name: 'featureFlags',
-        provides: [FeatureFlags],
-        onChange: changes.listener,
-        setup() {},
-        dispose() {
-            changes.dispose()
-        },
-        async getFeatureFlag(key) {
-            // read flag state from this extension's internals
-            return undefined
-        },
+    dispose(): void {
+        this._changes.dispose()
     }
 }
 ```
 
-The extension must be assignable to each token's type (the registry casts on lookup — the compiler does not check this
-for you). A token is a branded runtime string, so use a package-qualified value that is globally unique and stable across
-separately compiled scripts (for example, `posthog.featureFlags`).
+## Porting from browser-v1
 
-## Depending on another extension
-
-Resolve by token; handle absence (it may not be installed or loaded yet):
-
-```ts
-import { FeatureFlags } from './flags/token'
-
-setup(client) {
-    const flags = client.getExtension(FeatureFlags)
-    if (flags && (await flags.getFeatureFlag('my-flag'))) { … }
-}
-```
-
-Import the **token** (and the interface type), never the providing extension's implementation — that keeps your chunk
-free of its code and keeps it lazily loadable.
-
-## Tree-shaking
-
-- Keep token modules implementation-free.
-- Where extension subpath exports exist, expose one subpath per extension.
-- Cross-extension references go through token modules only.
-- Don't statically import another extension's implementation.
-
-## Porting from v1
-
-Map v1's reach-into-`this._instance` calls onto `Client`:
-
-| v1                                                            | Client                                                 |
-| ------------------------------------------------------------- | ------------------------------------------------------ |
-| `instance.capture(e, p)`                                      | `client.capture(e, p)`                                 |
-| `instance.get_distinct_id()`                                  | `client.distinctId` (sync)                             |
-| `instance.get_property(k)` / `persistence`                    | `client.kv.get(k)` (async)                             |
-| `instance.config.X` (static)                                  | constructor                                            |
-| `instance.config.X` (server-driven)                           | `client.getRemoteConfig()` / `onRemoteConfig`          |
-| `instance.sessionManager.checkAndGetSessionAndWindowId(true)` | `client.session` (sync)                                |
-| `_addCaptureHook` / observing events                          | `client.onEvent(...)`                                  |
-| returned unregister / subscription disposables                | store and dispose in `dispose()`                       |
-| `instance.onFeatureFlags(cb)`                                 | `client.getExtension(FeatureFlags)?.onChange(cb)`      |
-| `instance.featureFlags.getFeatureFlag(k)`                     | `client.getExtension(FeatureFlags)?.getFeatureFlag(k)` |
-| registering an enricher                                       | `client.registerDynamicEventProperties(fn)`            |
-| `requestRouter.endpointFor(...)` + `_send_request`            | `client.apiRequest(path, init?)`                       |
-| snapshot/keepalive send on unload                             | `client.apiRequest(path, { unload: true })`            |
+| v1                                                            | Shared extension                                        |
+| ------------------------------------------------------------- | ------------------------------------------------------- |
+| `instance.capture(e, p)`                                      | `client.capture(e, p)`                                  |
+| `instance.get_distinct_id()`                                  | `client.distinctId`                                     |
+| `instance.get_property(k)` / `persistence`                    | `client.kv.get(k)`                                      |
+| `instance.config.X` (static)                                  | constructor option                                      |
+| `instance.config.X` (server-driven)                           | `client.onRemoteConfig(...)`                            |
+| `instance.sessionManager.checkAndGetSessionAndWindowId(true)` | `client.session`                                        |
+| `_addCaptureHook` / observing events                          | `client.onEvent(...)`                                   |
+| registering an enricher                                       | `client.registerDynamicEventProperties(fn)`             |
+| `requestRouter.endpointFor(...)` + `_send_request`            | `client.sendRequest(path, init?)`                       |
+| snapshot/keepalive send on unload                             | `client.sendRequest(path, { transport: 'sendBeacon' })` |
 
 ## Checklist
 
-- [ ] All disposables are properly disposed in `dispose()`.
-- [ ] Enrichers are synchronous; async data read in `setup`.
-- [ ] Cross-extension deps via `getExtension(token)`, undefined handled.
-- [ ] If you provide a capability: token + interface defined, listed in `provides`.
-- [ ] If you expose an event stream: private `Publisher`, public `publisher.listener`.
-- [ ] No static import of another extension's implementation.
-- [ ] Own subpath export added when the package has a public extension entrypoint.
-- [ ] Tests cover setup, teardown, behavior, and any shared global patching/multi-instance behavior.
+- [ ] All disposables are released in `dispose()`.
+- [ ] Enrichers are synchronous; async data is read during setup.
+- [ ] Static configuration is passed through constructor options.
+- [ ] Event streams keep publishers private and expose listeners.
+- [ ] Tests cover setup, teardown, behavior, and shared global patching or multi-instance behavior.

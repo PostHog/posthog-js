@@ -77,6 +77,15 @@ describe('conversation-id', () => {
       expect(schema.properties.conversation_id.description).toBe('preexisting')
     })
 
+    it('preserves a conversation_id property declared with a false schema', () => {
+      const result = addConversationIdToTool({
+        name: 'tool',
+        inputSchema: { type: 'object', properties: { conversation_id: false } },
+      })
+
+      expect(result.inputSchema?.properties?.conversation_id).toBe(false)
+    })
+
     it('skips complex schemas (oneOf/allOf/anyOf)', () => {
       for (const key of ['oneOf', 'allOf', 'anyOf']) {
         const result = addConversationIdToTool({
