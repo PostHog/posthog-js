@@ -1808,8 +1808,16 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // Prefix-pruning only helps while the periodic full snapshot keeps creating new prune
         // points. If events pile up behind a single snapshot (a mutation-heavy page, or the
         // snapshot interval not firing), reset the hold and request a fresh snapshot so the
-        // playable prefix re-establishes at a bounded size.
-        if (this._buffer.size + incomingBytes > 2 * RECORDING_MAX_EVENT_SIZE) {
+        // playable prefix re-establishes at a bounded size. Key the reset on the TAIL (events
+        // after the last snapshot), which is the unbounded part: a total-size condition would
+        // re-trigger on every capture when the snapshot itself is huge, and each reset takes
+        // another full snapshot, so a heavy DOM would pay a snapshot storm in a parked tab.
+        const snapshotIndexAfterPrune = keepFrom > 0 ? lastFullSnapshotIndex - keepFrom : lastFullSnapshotIndex
+        let tailSize = 0
+        for (let i = snapshotIndexAfterPrune + 1; i < this._buffer.sizes.length; i++) {
+            tailSize += this._buffer.sizes[i]
+        }
+        if (tailSize > 2 * RECORDING_MAX_EVENT_SIZE) {
             logger.info('held buffer for uninteracted session exceeded the hard cap; resetting it', {
                 sessionId: this._buffer.sessionId,
                 bufferSize: this._buffer.size,

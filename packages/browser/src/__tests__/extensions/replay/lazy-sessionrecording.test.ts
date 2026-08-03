@@ -1468,7 +1468,11 @@ describe('Lazy SessionRecording', () => {
                 )
                 sessionRecording.onRRwebEmit(createFullSnapshot() as eventWithTime)
                 sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
-                recorder['_buffer'].size = 2 * RECORDING_MAX_EVENT_SIZE + 1
+                // fake a runaway TAIL: the reset keys on events after the last snapshot, so a
+                // merely-huge snapshot prefix must not trigger it (that would loop, since each
+                // reset takes another equally huge snapshot)
+                recorder['_buffer'].sizes[2] = 2 * RECORDING_MAX_EVENT_SIZE + 1
+                recorder['_buffer'].size = recorder['_buffer'].sizes.reduce((a: number, b: number) => a + b, 0)
 
                 recorder['_pruneHeldBuffer']()
 
@@ -1481,6 +1485,29 @@ describe('Lazy SessionRecording', () => {
                 ])
                 expect(recorder['_buffer'].data[0].data.href).toEqual('https://runaway.example.com')
                 expect(assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot).toHaveBeenCalled()
+            })
+
+            it('does not hard-reset a held buffer whose bulk is the snapshot itself', () => {
+                // Resetting can't shrink a huge snapshot: takeFullSnapshot would produce an
+                // equally huge one, and re-triggering per capture becomes a snapshot storm.
+                const recorder = sessionRecording['_lazyLoadedSessionRecording']
+                expect(recorder['_isIdle']).toEqual('unknown')
+
+                sessionRecording.onRRwebEmit(createMetaSnapshot({ data: { href: 'https://a.b' } }) as eventWithTime)
+                sessionRecording.onRRwebEmit(createFullSnapshot() as eventWithTime)
+                sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
+                recorder['_buffer'].sizes[1] = 2 * RECORDING_MAX_EVENT_SIZE + 1
+                recorder['_buffer'].size = recorder['_buffer'].sizes.reduce((a: number, b: number) => a + b, 0)
+                const snapshotCallsBefore = (
+                    assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock
+                ).mock.calls.length
+
+                recorder['_pruneHeldBuffer']()
+
+                expect(recorder['_buffer'].data).toHaveLength(3)
+                expect(
+                    (assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock).mock.calls.length
+                ).toEqual(snapshotCallsBefore)
             })
 
             it('holds the buffer while _isIdle is unknown and ships it on the first user interaction', () => {
