@@ -1,8 +1,14 @@
-import { CoercingContext } from '../types'
+import { ErrorPropertiesBuilder } from '../error-properties-builder'
+import { createDefaultStackParser } from '../parsers'
+import { Exception } from '../types'
+import { ErrorCoercer } from './error-coercer'
 import { ErrorEventCoercer } from './error-event-coercer'
+import { EventCoercer } from './event-coercer'
+import { ObjectCoercer } from './object-coercer'
+import { PrimitiveCoercer } from './primitive-coercer'
+import { StringCoercer } from './string-coercer'
 
-// `ErrorEvent` is a web-only global and isn't defined in the Node test env, so
-// fake it structurally. `isErrorEvent` matches on the object's toStringTag.
+// `ErrorEvent` is not available in the Node test environment, so use its runtime brand.
 class FakeErrorEvent {
   message?: string
   error?: unknown
@@ -18,99 +24,86 @@ class FakeErrorEvent {
 
 describe('ErrorEventCoercer', () => {
   const coercer = new ErrorEventCoercer()
+  const errorPropertiesBuilder = new ErrorPropertiesBuilder(
+    [coercer, new ErrorCoercer(), new EventCoercer(), new ObjectCoercer(), new StringCoercer(), new PrimitiveCoercer()],
+    createDefaultStackParser()
+  )
 
-  const buildCtx = (syntheticException?: Error): CoercingContext =>
-    ({
-      apply: jest.fn((err: any) => ({
-        type: err.name,
-        value: err.message,
-        stack: err.stack,
-        synthetic: false,
-      })),
-      next: jest.fn(),
-      syntheticException,
-    }) as unknown as CoercingContext
+  function buildException(input: unknown, syntheticException?: Error): Exception {
+    return errorPropertiesBuilder.buildFromUnknown(input, { syntheticException }).$exception_list[0]
+  }
 
-  describe('match', () => {
-    it('matches an ErrorEvent carrying an Error', () => {
-      expect(coercer.match(new FakeErrorEvent({ error: new Error('boom') }))).toBe(true)
-    })
+  it.each([
+    {
+      name: 'an ErrorEvent carrying an Error',
+      input: new FakeErrorEvent({ error: new Error('boom') }),
+      expected: true,
+    },
+    {
+      name: 'an ErrorEvent carrying a message',
+      input: new FakeErrorEvent({ message: 'Script error.' }),
+      expected: true,
+    },
+    { name: 'an ErrorEvent without an error or message', input: new FakeErrorEvent(), expected: false },
+    { name: 'an ErrorEvent with an empty message', input: new FakeErrorEvent({ message: '' }), expected: false },
+    { name: 'a non-ErrorEvent', input: { message: 'not an ErrorEvent' }, expected: false },
+  ])('matches $name: $expected', ({ input, expected }) => {
+    expect(coercer.match(input)).toBe(expected)
+  })
 
-    it('matches an ErrorEvent with a usable message but no Error', () => {
-      expect(coercer.match(new FakeErrorEvent({ message: 'Script error.' }))).toBe(true)
-    })
+  it('unwraps the Error carried by the ErrorEvent', () => {
+    const error = new Error('Something broke')
+    error.name = 'CustomTestError'
 
-    it('does not match a bare ErrorEvent with no message and no Error', () => {
-      expect(coercer.match(new FakeErrorEvent())).toBe(false)
-      expect(coercer.match(new FakeErrorEvent({ message: '' }))).toBe(false)
-    })
-
-    it('does not match non-ErrorEvents', () => {
-      expect(coercer.match(new Error('nope'))).toBe(false)
-      expect(coercer.match({ message: 'still nope' })).toBe(false)
+    expect(buildException(new FakeErrorEvent({ message: 'ignored', error }))).toMatchObject({
+      type: 'CustomTestError',
+      value: 'Something broke',
+      mechanism: { synthetic: false },
     })
   })
 
-  describe('coerce', () => {
-    it('unwraps the Error carried by the ErrorEvent', () => {
-      const buriedError = new Error('Something broke')
-      buriedError.name = 'CustomTestError'
-      const event = new FakeErrorEvent({ message: 'ignored when error is present', error: buriedError })
-
-      expect(coercer.coerce(event as any, buildCtx())).toMatchObject({
-        type: 'CustomTestError',
-        value: 'Something broke',
-        stack: buriedError.stack,
-        synthetic: false,
-      })
-    })
-
-    it('salvages a message + location into an exception with a synthetic frame', () => {
-      const event = new FakeErrorEvent({
+  it('preserves the message and location when there is no Error object', () => {
+    const exception = buildException(
+      new FakeErrorEvent({
         message: 'Uncaught TypeError: x is not a function',
         filename: 'https://example.com/app.js',
         lineno: 42,
         colno: 13,
       })
+    )
 
-      expect(coercer.coerce(event as any, buildCtx())).toEqual({
-        type: 'Error',
-        value: 'Uncaught TypeError: x is not a function',
-        stack: 'Error: Uncaught TypeError: x is not a function\n    at https://example.com/app.js:42:13',
-        synthetic: true,
-      })
+    expect(exception).toMatchObject({
+      type: 'TypeError',
+      value: 'x is not a function',
+      mechanism: { synthetic: true },
+      stacktrace: {
+        frames: [
+          expect.objectContaining({
+            filename: 'https://example.com/app.js',
+            lineno: 42,
+            colno: 13,
+          }),
+        ],
+      },
     })
+  })
 
-    it('defaults missing lineno/colno to 0 in the synthetic frame', () => {
-      const event = new FakeErrorEvent({ message: 'oops', filename: 'https://example.com/app.js' })
-
-      expect(coercer.coerce(event as any, buildCtx())).toMatchObject({
-        stack: 'Error: oops\n    at https://example.com/app.js:0:0',
+  it('does not parse frame-shaped lines from a multiline message', () => {
+    const exception = buildException(
+      new FakeErrorEvent({
+        message: 'Something broke\n    at injected (https://example.com/injected.js:1:2)',
+        filename: 'https://example.com/app.js',
+        lineno: 42,
+        colno: 13,
       })
-    })
+    )
 
-    it('falls back to the synthetic exception stack when there is no location', () => {
-      const syntheticException = new Error()
-      const event = new FakeErrorEvent({ message: 'Script error.' })
-
-      expect(coercer.coerce(event as any, buildCtx(syntheticException))).toEqual({
-        type: 'Error',
-        value: 'Script error.',
-        stack: syntheticException.stack,
-        synthetic: true,
-      })
-    })
-
-    it('salvages the message when the carried error cannot be coerced', () => {
-      const ctx = buildCtx()
-      ;(ctx.apply as jest.Mock).mockReturnValueOnce(undefined)
-      const event = new FakeErrorEvent({ message: 'Script error.', error: {} })
-
-      expect(coercer.coerce(event as any, ctx)).toMatchObject({
-        type: 'Error',
-        value: 'Script error.',
-        synthetic: true,
-      })
-    })
+    expect(exception.stacktrace?.frames).toEqual([
+      expect.objectContaining({
+        filename: 'https://example.com/app.js',
+        lineno: 42,
+        colno: 13,
+      }),
+    ])
   })
 })

@@ -48,7 +48,8 @@ describe('error wrapping functions', () => {
 
             expect(captureFn).toHaveBeenCalledTimes(1)
             const exception = captureFn.mock.calls[0][0].$exception_list[0]
-            expect(exception.value).toBe('Uncaught TypeError: x is not a function')
+            expect(exception.type).toBe('TypeError')
+            expect(exception.value).toBe('x is not a function')
             expect(exception.stacktrace?.frames?.[0]).toMatchObject({
                 filename: 'https://example.com/app.js',
                 lineno: 42,
