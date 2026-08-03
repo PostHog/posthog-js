@@ -1456,60 +1456,6 @@ describe('Lazy SessionRecording', () => {
                 expect(bufferData[0].type).toEqual(FULL_SNAPSHOT_EVENT_TYPE)
             })
 
-            it('hard-resets a runaway held buffer but keeps the newest Meta', () => {
-                // Prefix-pruning can't bound a buffer whose tail piles up behind one snapshot;
-                // past twice the cap the hold resets, carrying the Meta over (takeFullSnapshot
-                // emits none) and requesting a fresh snapshot for a new playable prefix.
-                const recorder = sessionRecording['_lazyLoadedSessionRecording']
-                expect(recorder['_isIdle']).toEqual('unknown')
-
-                sessionRecording.onRRwebEmit(
-                    createMetaSnapshot({ data: { href: 'https://runaway.example.com' } }) as eventWithTime
-                )
-                sessionRecording.onRRwebEmit(createFullSnapshot() as eventWithTime)
-                sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
-                // fake a runaway TAIL: the reset keys on events after the last snapshot, so a
-                // merely-huge snapshot prefix must not trigger it (that would loop, since each
-                // reset takes another equally huge snapshot)
-                recorder['_buffer'].sizes[2] = 2 * RECORDING_MAX_EVENT_SIZE + 1
-                recorder['_buffer'].size = recorder['_buffer'].sizes.reduce((a: number, b: number) => a + b, 0)
-
-                recorder['_pruneHeldBuffer']()
-
-                expect(posthog.capture).not.toHaveBeenCalled()
-                // the reset kept the Meta and the requested fresh snapshot re-established the
-                // playable prefix (the harness's takeFullSnapshot emits synchronously)
-                expect(recorder['_buffer'].data.map((e: any) => e.type)).toEqual([
-                    META_EVENT_TYPE,
-                    FULL_SNAPSHOT_EVENT_TYPE,
-                ])
-                expect(recorder['_buffer'].data[0].data.href).toEqual('https://runaway.example.com')
-                expect(assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot).toHaveBeenCalled()
-            })
-
-            it('does not hard-reset a held buffer whose bulk is the snapshot itself', () => {
-                // Resetting can't shrink a huge snapshot: takeFullSnapshot would produce an
-                // equally huge one, and re-triggering per capture becomes a snapshot storm.
-                const recorder = sessionRecording['_lazyLoadedSessionRecording']
-                expect(recorder['_isIdle']).toEqual('unknown')
-
-                sessionRecording.onRRwebEmit(createMetaSnapshot({ data: { href: 'https://a.b' } }) as eventWithTime)
-                sessionRecording.onRRwebEmit(createFullSnapshot() as eventWithTime)
-                sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
-                recorder['_buffer'].sizes[1] = 2 * RECORDING_MAX_EVENT_SIZE + 1
-                recorder['_buffer'].size = recorder['_buffer'].sizes.reduce((a: number, b: number) => a + b, 0)
-                const snapshotCallsBefore = (
-                    assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock
-                ).mock.calls.length
-
-                recorder['_pruneHeldBuffer']()
-
-                expect(recorder['_buffer'].data).toHaveLength(3)
-                expect(
-                    (assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock).mock.calls.length
-                ).toEqual(snapshotCallsBefore)
-            })
-
             it('holds the buffer while _isIdle is unknown and ships it on the first user interaction', () => {
                 jest.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
 
@@ -1538,17 +1484,13 @@ describe('Lazy SessionRecording', () => {
             })
 
             it("ships the interacted session's trailing buffer when it rotates while idle", () => {
-                // stop() runs during rotation under the OLD session's ship evidence: an
-                // interacted-then-idle session must ship its tail (the $session_ending
-                // breadcrumb that session linking needs), not have it discarded by the new
-                // session's 'unknown' state being set too early. The ordering only matters on
-                // the callback's restart path, reached when the $session_id_change emit is
-                // throttled away from the session check, so refresh the idle-check stamp
-                // shortly before rotating.
+                // Rotation while confirmed idle must ship the interacted session's tail (the
+                // $session_ending breadcrumb that session linking needs) under the old
+                // session's own ship evidence, never hold-and-discard it as if it were the
+                // new session's data.
                 const firstActivityTimestamp = startingTimestamp + 100
                 const idleTriggerTimestamp = startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000
                 const rotationTimestamp = sessionManager['_sessionTimeoutMs'] + startingTimestamp + 1000
-                const throttleRefreshTimestamp = rotationTimestamp - 30_000
 
                 // deliver custom events through the real emit path so $session_ending is buffered
                 _addCustomEvent.mockImplementation((tag: string, payload: any) => {
@@ -1557,9 +1499,6 @@ describe('Lazy SessionRecording', () => {
                 try {
                     emitActiveEvent(firstActivityTimestamp)
                     emitInactiveEvent(idleTriggerTimestamp, true)
-                    // this idle-state emit runs a session check and stamps the throttle, so the
-                    // rotation's own $session_id_change emit 30s later is throttled
-                    emitInactiveEvent(throttleRefreshTimestamp, true)
                     const firstSessionId = sessionRecording['_lazyLoadedSessionRecording']['_sessionId']
                     ;(posthog.capture as Mock).mockClear()
 

@@ -479,7 +479,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // trigger activation) holds its buffer until the next interaction even though the user was
     // active earlier; any ACTIVE_SOURCES event (mouse move, scroll, touch) clears it.
     private _isIdle: boolean | 'unknown' = 'unknown'
-    private _lastIdleSessionCheckTimestamp = 0
     // An event-trigger match (V1) counts as ship evidence even without interaction; see
     // _holdingForInteraction. V2 trigger groups activate inside the strategy and don't set
     // this yet, so V2 event-trigger sessions hold until interaction (known follow-up).
@@ -1777,8 +1776,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     // Bound a held (never-interacted) buffer by keeping only the newest playable prefix:
     // the most recent FullSnapshot, its preceding Meta, and everything after them. Events
-    // older than that snapshot can't be replayed without it, so they carry no value once a
-    // newer snapshot exists, so dropping them keeps an indefinitely-held tab at a bounded size.
+    // older than that snapshot can't be replayed without it, so dropping them costs nothing.
+    // Boundedness relies on the periodic full snapshot creating new prune points, which is
+    // guaranteed here: its interval only stops on confirmed idle, and a session stays
+    // 'unknown' (never confirmed idle) for as long as it is held.
     private _pruneHeldBuffer(incomingBytes: number = 0): void {
         if (this._buffer.size + incomingBytes <= RECORDING_MAX_EVENT_SIZE) {
             return
@@ -1803,43 +1804,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             }
             this._buffer.data = this._buffer.data.slice(keepFrom)
             this._buffer.sizes = this._buffer.sizes.slice(keepFrom)
-        }
-
-        // Prefix-pruning only helps while the periodic full snapshot keeps creating new prune
-        // points. If events pile up behind a single snapshot (a mutation-heavy page, or the
-        // snapshot interval not firing), reset the hold and request a fresh snapshot so the
-        // playable prefix re-establishes at a bounded size. Key the reset on the TAIL (events
-        // after the last snapshot), which is the unbounded part: a total-size condition would
-        // re-trigger on every capture when the snapshot itself is huge, and each reset takes
-        // another full snapshot, so a heavy DOM would pay a snapshot storm in a parked tab.
-        const snapshotIndexAfterPrune = keepFrom > 0 ? lastFullSnapshotIndex - keepFrom : lastFullSnapshotIndex
-        let tailSize = 0
-        for (let i = snapshotIndexAfterPrune + 1; i < this._buffer.sizes.length; i++) {
-            tailSize += this._buffer.sizes[i]
-        }
-        if (tailSize > 2 * RECORDING_MAX_EVENT_SIZE) {
-            logger.info('held buffer for uninteracted session exceeded the hard cap; resetting it', {
-                sessionId: this._buffer.sessionId,
-                bufferSize: this._buffer.size,
-            })
-            // takeFullSnapshot() emits no Meta, so carry the newest Meta over or the rebuilt
-            // prefix ships without href/viewport and the recording loses its URL.
-            let lastMetaIndex = -1
-            for (let i = this._buffer.data.length - 1; i >= 0; i--) {
-                if ((this._buffer.data[i] as eventWithTime | undefined)?.type === EventType.Meta) {
-                    lastMetaIndex = i
-                    break
-                }
-            }
-            const metaEvent = lastMetaIndex >= 0 ? this._buffer.data[lastMetaIndex] : null
-            const metaSize = lastMetaIndex >= 0 ? this._buffer.sizes[lastMetaIndex] : 0
-            this._clearBuffer()
-            if (metaEvent) {
-                this._buffer.data.push(metaEvent)
-                this._buffer.sizes.push(metaSize)
-                this._buffer.size += metaSize
-            }
-            this._tryTakeFullSnapshot()
         }
     }
 
@@ -2153,21 +2117,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             }
         }
 
-        // The session check runs in every idle state. While 'unknown' the recorder still
-        // captures, so it must keep checking or its events are stamped with a stale session id.
-        // While confirmed idle, the readOnly check below still enforces the 24-hour session
-        // cap (sessionPastMaximumLength rotates even on readOnly calls) and hears cross-tab
+        // The session check runs in every idle state (it only reads in-memory persistence
+        // props, so it is cheap). While 'unknown' the recorder still captures, so it must keep
+        // checking or its events are stamped with a stale session id. While confirmed idle,
+        // the readOnly check below still enforces the 24-hour session cap
+        // (sessionPastMaximumLength rotates even on readOnly calls) and hears cross-tab
         // rotations. Skipping it here is how idle tabs used to accrete multi-day sessions
         // that blew straight through SESSION_LENGTH_LIMIT.
-        if (this._isIdle === true) {
-            // Neither of those outcomes needs per-event precision, and the check reads
-            // persistence, so a mutation storm in an idle tab shouldn't pay for it per event.
-            if (event.timestamp - this._lastIdleSessionCheckTimestamp < 60_000) {
-                return
-            }
-            this._lastIdleSessionCheckTimestamp = event.timestamp
-        }
-
         // We only want to extend the session if it is an interactive event.
         const { windowId, sessionId } = this._sessionManager.checkAndGetSessionAndWindowId(
             !isUserInteraction,
