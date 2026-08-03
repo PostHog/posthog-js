@@ -1,4 +1,4 @@
-import { clearLoggerMocks, mockLogger } from './helpers/mock-logger'
+import { clearLoggerMocks } from './helpers/mock-logger'
 
 import { PostHog } from '../posthog-core'
 import { defaultPostHog } from './helpers/posthog-instance'
@@ -210,7 +210,10 @@ describe('consentManager', () => {
 
             expect(posthog.has_opted_in_capturing()).toBe(false)
             expect(posthog.get_explicit_consent_status()).toBe('pending')
-            expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('reset() cleared the stored consent'))
+            expect(console.warn).toHaveBeenCalledWith(
+                '[PostHog.js]',
+                expect.stringContaining('reset() cleared the stored consent')
+            )
 
             beforeSendMock.mockClear()
             posthog.capture('after-reset')
@@ -225,7 +228,8 @@ describe('consentManager', () => {
             posthog.opt_in_capturing({ captureEventName: false })
 
             expect(posthog.has_opted_in_capturing()).toBe(true)
-            expect(mockLogger.warn).not.toHaveBeenCalledWith(
+            expect(console.warn).not.toHaveBeenCalledWith(
+                '[PostHog.js]',
                 expect.stringContaining('reset() cleared the stored consent')
             )
 
@@ -241,7 +245,22 @@ describe('consentManager', () => {
             posthog.reset()
 
             expect(posthog.has_opted_in_capturing()).toBe(true)
-            expect(mockLogger.warn).not.toHaveBeenCalledWith(
+            expect(console.warn).not.toHaveBeenCalledWith(
+                '[PostHog.js]',
+                expect.stringContaining('reset() cleared the stored consent')
+            )
+        })
+
+        it.each(['always', 'on_reject'] as const)('does not warn in cookieless %s mode', async (cookieless_mode) => {
+            posthog = await createPostHog({ cookieless_mode, opt_out_capturing_by_default: true })
+            posthog.opt_in_capturing({ captureEventName: false })
+            ;(console.warn as jest.Mock).mockClear()
+
+            posthog.reset()
+
+            expect(posthog.is_capturing()).toBe(true)
+            expect(console.warn).not.toHaveBeenCalledWith(
+                '[PostHog.js]',
                 expect.stringContaining('reset() cleared the stored consent')
             )
         })

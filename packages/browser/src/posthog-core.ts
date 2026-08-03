@@ -172,6 +172,9 @@ let _executeArrayDepth = 0
 
 const __NOOP = () => {}
 const CONSENT_COOKIELESS_WARN = 'Consent opt in/out is not valid with cookieless_mode="always" and will be ignored'
+const RESET_CONSENT_WARN =
+    'reset() cleared the stored consent, and capturing is now off because of `opt_out_capturing_by_default`. ' +
+    'Call opt_in_capturing() again, and prefer calling reset() before opting in rather than after.'
 const SURVEYS_NOT_AVAILABLE = 'Surveys module not available'
 const SANITIZE_DEPRECATED = 'sanitize_properties is deprecated. Use before_send instead'
 const DENYLIST_INVALID = 'Invalid value for property_denylist config: '
@@ -3030,10 +3033,9 @@ export class PostHog implements PostHogInterface {
         this.consent.reset()
 
         if (wasCapturing && !this.is_capturing()) {
-            logger.warn(
-                'reset() cleared the stored consent, and capturing is now off because of `opt_out_capturing_by_default`. ' +
-                    'Call opt_in_capturing() again, and prefer calling reset() before opting in rather than after.'
-            )
+            // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
+            // eslint-disable-next-line no-console
+            console.warn('[PostHog.js]', RESET_CONSENT_WARN)
         }
 
         this.persistence?.clear()
