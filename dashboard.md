@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4405](https://github.com/PostHog/posthog-js/issues/4405) | Confirmed bug in the shared AI generation error-status fallback. | team/llm-analytics | https://github.com/PostHog/posthog-js/pull/4406 | no | 2026-08-03T19:32:17.533Z |
 | PostHog/posthog-js | [issue 4391](https://github.com/PostHog/posthog-js/issues/4391) | Confirmed dependency-resolution bug: the React Native plugin caps posthog-ios at 3.64.x, preventing consumers from receiving the reported 3.68.2 rage-click fix. | react-native, iOS, feature/replay, team/client-libraries | https://github.com/PostHog/posthog-js/pull/4392 | no | 2026-08-03T04:43:06.898Z |
 | PostHog/posthog-js | [issue 4388](https://github.com/PostHog/posthog-js/issues/4388) | Confirmed slim-bundle/extension-bundle private-property mangling regression; the current source already contains the targeted mitigation and regression coverage. | web, feature/autocapture | https://github.com/PostHog/posthog-js/pull/4389 | no | 2026-08-02T16:41:28.115Z |
 | PostHog/posthog-js | [issue 4385](https://github.com/PostHog/posthog-js/issues/4385) | Confirmed likely build-artifact bug in the inline rrweb canvas worker sourcemap handling. | feature/replay |  | no | 2026-08-02T05:05:51.116Z |
