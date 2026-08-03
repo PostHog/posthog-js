@@ -2,16 +2,7 @@
 
 ...<older entries truncated>
 
-mand.
-- Fix assessment: A narrowly targeted option to skip PostHog's iOS bundle/source-map wrapper would be localized, but an automatic fix must work regardless of Expo plugin execution order and must ensure React Native bundling runs exactly once while preserving each vendor's upload behavior. Detecting only one textual Sentry wrapper would be incomplete and brittle.
-
-## 2026-07-29T13:18:29.697Z
-- Item: issue #4310 — UMD build's react bindings pass unwrapped CJS namespace to setDefaultPostHogInstance since 1.407.3
-- Conclusion: Confirmed likely UMD/CJS interop regression in the React bindings' default-instance fallback.
-- Labels: web
-- URL: https://github.com/PostHog/posthog-js/issues/4310
-- Relevant files: `packages/react/src/index.ts`, `packages/react/src/context/posthog-default.ts`, `packages/react/src/context/PostHogContext.ts`, `packages/react/src/hooks/usePostHog.ts`, `packages/react/src/hooks/useFeatureFlagEnabled.ts`, `packages/react/rollup.config.mjs`, `packages/react/package.json`, `packages/react/src/__tests__/slim-bundle.test.ts`, `packages/browser/package.json`
-- Findings: `packages/react/src/index.ts` default-imports `posthog-js` and immediately passes that value to `setDefaultPostHogInstance`.; `setDefaultPostHogInstance` stores its argument without runtime normalization, so a CommonJS module namespace remains the context fallback.; `PostHogContext` retrieves that stored fallback lazily, and `usePostHog` returns it directly.; `useFeatureFlagEnabled` invokes `client.isFeatureEnabled(flag)` during its initial state calculation, which matches the reported failure when `client` is a module namespace rather than a PostHog instance.; `packages/react/package.json` sets `main` to `dist/umd/index.js`, sets `module` to the ESM build, and has no `exports` field.; `packages/react/rollup.config.mjs` marks `posthog-js` external for the UMD build but does not set `output.interop`; this leaves default-import handling dependent on Rollup's behavior.; The existing generated-bundle test only asserts that the slim UMD build has no `posthog-js` runtime import; there is no regression coverage for the full UMD bundle's CommonJS default-import semantics.; `packages/browser/package.json` packages the React distribution under `react/dist/**`, making this UMD binding path part of the published posthog-js package.
+ed-bundle test only asserts that the slim UMD build has no `posthog-js` runtime import; there is no regression coverage for the full UMD bundle's CommonJS default-import semantics.; `packages/browser/package.json` packages the React distribution under `react/dist/**`, making this UMD binding path part of the published posthog-js package.
 - Fix assessment: The failing boundary is narrowly identified: UMD external default-import interop for `posthog-js`. The source fallback mechanism itself need not be redesigned.
 
 ## 2026-07-29T20:31:24.830Z
@@ -89,3 +80,13 @@ mand.
 - Findings: `packages/react-native-plugin/posthog-react-native-plugin.podspec` defines `posthog_ios_version = '3.64.7'` as the shared native dependency version.; The podspec declares `s.dependency 'PostHog', "~> #{posthog_ios_version}"`; with a three-component pessimistic constraint, this is limited to versions below 3.65.0.; The optional SPM path uses `requirement: { kind: 'upToNextMinorVersion', minimumVersion: posthog_ios_version }`, likewise limiting resolution to the 3.64.x minor line.; `packages/react-native-plugin/package.json` identifies the current plugin version as `2.2.3`.; The 2.2.2 changelog entry says the native SDK floor was raised to posthog-ios 3.64.7 or later, but the checked-in CocoaPods/SPM constraints actually prevent later minor releases.; `PosthogReactNativePlugin.swift` constructs and configures `PostHogConfig` from selected SDK, replay, and error-tracking options, but does not read or assign a rage-click configuration.
 - Fix assessment: The immediate resolution cap is isolated to one shared podspec version constant. Raising that baseline to a post-fix posthog-ios release updates both CocoaPods and SPM consistently; native iOS build coverage should verify compatibility before release.
 - PR: https://github.com/PostHog/posthog-js/pull/4392
+
+## 2026-08-03T19:32:20.940Z
+- Item: issue #4405 — @posthog/ai: $ai_http_status is always 500 for Vercel AI SDK provider errors
+- Conclusion: Confirmed bug in the shared AI generation error-status fallback.
+- Labels: team/llm-analytics
+- URL: https://github.com/PostHog/posthog-js/issues/4405
+- Relevant files: `packages/ai/src/captureAiGeneration.ts`, `packages/ai/src/vercel/middleware.ts`, `packages/ai/tests/captureAiGeneration.test.ts`, `packages/ai/src/langchain/callbacks.ts`, `packages/ai/package.json`
+- Findings: `captureAiGeneration` initializes `httpStatus` from the caller, then for errors only accepts a numeric `options.error.status`; all other errors are assigned status 500 before the final defaulting logic.; `withTracing` in `packages/ai/src/vercel/middleware.ts` supplies `httpStatus: 200` on successful `doGenerate` and `doStream` captures, but its two catch paths pass only `error`, leaving status derivation to `captureAiGeneration`.; The current shared-helper tests cover `error.status`, no status, and an explicitly supplied status. A later serialization test constructs an error with `statusCode: 502`, but does not assert the generated `$ai_http_status`, so it currently permits the reported regression.; `@posthog/ai` currently declares optional `@ai-sdk/provider` peer support for `^2.0.0 || ^3.0.0`, matching the affected integration range described in the report.; LangChain has a separate implementation that assigns `(output as any).status || 500` directly rather than calling `captureAiGeneration`; no evidence in this report or the inspected code establishes a LangChain `statusCode`-only provider error, so it should not be bundled into this focused fix.
+- Fix assessment: The faulty decision point is a single shared status-extraction branch. Adding a numeric `statusCode` fallback after the established `status` check preserves existing integration behavior and directly covers the Vercel wrapper's error paths.
+- PR: https://github.com/PostHog/posthog-js/pull/4406
