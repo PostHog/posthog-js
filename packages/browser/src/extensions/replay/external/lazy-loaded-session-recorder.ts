@@ -2065,12 +2065,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             }
         }
 
-        // Only bail on confirmed idle: while 'unknown' the recorder still captures, so it must
-        // also keep checking for session changes or its events are stamped with a stale session id.
-        if (this._isIdle === true) {
-            return
-        }
-
+        // The session check runs in every idle state (it only reads in-memory persistence
+        // props, so it is cheap). While 'unknown' the recorder still captures, so it must keep
+        // checking or its events are stamped with a stale session id. While confirmed idle,
+        // the readOnly check below still enforces the 24-hour session cap
+        // (sessionPastMaximumLength rotates even on readOnly calls) and hears cross-tab
+        // rotations. Bailing here is how idle tabs used to accrete multi-day recordings that
+        // blew straight through SESSION_LENGTH_LIMIT under one session id.
         // We only want to extend the session if it is an interactive event.
         const { windowId, sessionId } = this._sessionManager.checkAndGetSessionAndWindowId(
             !isUserInteraction,
@@ -2084,7 +2085,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._sessionId = sessionId
 
         if (sessionIdChanged || windowIdChanged) {
-            this._restartForSessionIdChange(sessionIdChanged && this._isIdle !== false)
+            const holdNextEpoch = sessionIdChanged && this._isIdle !== false
+            if (holdNextEpoch) {
+                // same idle bookkeeping as the session-manager callback path: a rotation born
+                // without interaction starts its epoch in the 'unknown' state (this path can
+                // adopt a rotation with _isIdle === true now that confirmed-idle emits still
+                // run the session check for the 24-hour cap)
+                this._isIdle = 'unknown'
+            }
+            this._restartForSessionIdChange(holdNextEpoch)
         } else {
             if (isUserInteraction) {
                 // first interaction within a held session ships the buffer, playable from t=0

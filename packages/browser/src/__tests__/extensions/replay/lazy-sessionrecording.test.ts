@@ -1429,6 +1429,34 @@ describe('Lazy SessionRecording', () => {
                     expect(_addCustomEvent).toHaveBeenCalledWith('sessionIdle', expect.anything())
                 })
 
+                it('rotates a confirmed-idle session at the 24 hour session cap, into a held epoch', () => {
+                    // An idle tab must keep consulting the session manager: bailing on the
+                    // check is how idle sessions used to blow through SESSION_LENGTH_LIMIT
+                    // into multi-day recordings under one session id.
+                    const firstActivityTimestamp = startingTimestamp + 100
+                    jest.useFakeTimers().setSystemTime(new Date(firstActivityTimestamp))
+                    emitActiveEvent(firstActivityTimestamp)
+
+                    const idleTimestamp = firstActivityTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000
+                    jest.setSystemTime(new Date(idleTimestamp))
+                    emitInactiveEvent(idleTimestamp, true)
+                    const idleSessionId = sessionRecording['_lazyLoadedSessionRecording']['_sessionId']
+
+                    // a day later the still-idle tab emits a non-interactive event; the session
+                    // is past the maximum length and must rotate even though the tab stayed
+                    // idle, and the rotation-born epoch must be held (nobody has interacted)
+                    sessionIdGeneratorMock.mockImplementation(() => 'past-cap-rotated-session-id')
+                    const pastCapTimestamp = startingTimestamp + 24 * 60 * 60 * 1000 + 1000
+                    jest.setSystemTime(new Date(pastCapTimestamp))
+                    emitInactiveEvent(pastCapTimestamp, 'unknown')
+
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionId']).toEqual(
+                        'past-cap-rotated-session-id'
+                    )
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionId']).not.toEqual(idleSessionId)
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_holdFlushUntilInteraction']).toEqual(true)
+                })
+
                 it('does not hold a rotation that happens while the user is active', () => {
                     emitActiveEvent(startingTimestamp + 100)
 
