@@ -44,15 +44,6 @@ describe('reset()', () => {
         expect(instance.persistence!.get_property(USER_STATE)).toEqual('anonymous')
     })
 
-    it('reports the user as no longer identified', () => {
-        instance.persistence!.set_property(USER_STATE, 'identified')
-        expect(instance.isIdentified()).toBe(true)
-
-        instance.reset()
-
-        expect(instance.isIdentified()).toBe(false)
-    })
-
     it('warns through the real console path when reset opts out with debug disabled', async () => {
         instance = await createPosthogInstance(uuidv7(), {
             api_host: 'https://test.com',

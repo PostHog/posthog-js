@@ -185,13 +185,6 @@ export interface PostHog {
     get_distinct_id(): string
 
     /**
-     * Whether `identify()` has been called for the currently stored distinct ID.
-     *
-     * @returns Whether the current user is identified
-     */
-    isIdentified(): boolean
-
-    /**
      * Reset the user's identity and start a new session.
      *
      * @remarks

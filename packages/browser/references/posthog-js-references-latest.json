@@ -1240,28 +1240,6 @@
           "path": "lib/src/posthog-core.d.ts"
         },
         {
-          "category": "Identification",
-          "description": "Whether the current user has been identified, i.e. whether `identify()` has been called for the distinct ID currently stored in persistence.",
-          "details": "Useful when a page is reached with an identity already restored from persistence, and you need to decide whether to keep it or `reset()` first — e.g. on a shared machine where a different user may be about to log in. This can be done in the `loaded` callback, which runs before the initial `$pageview` is captured.",
-          "id": "isIdentified",
-          "showDocs": true,
-          "title": "isIdentified",
-          "examples": [
-            {
-              "id": "on_a_shared_machine,_drop_any_identity_restored_from_a_previous_user",
-              "name": "on a shared machine, drop any identity restored from a previous user",
-              "code": "\n\n// on a shared machine, drop any identity restored from a previous user\nposthog.init('token', {\n    loaded: (posthog) => {\n        if (posthog.isIdentified() && posthog.get_distinct_id() !== currentUserId) {\n            posthog.reset()\n        }\n    }\n})\n\n\n\n"
-            }
-          ],
-          "releaseTag": "public",
-          "params": [],
-          "returnType": {
-            "id": "boolean",
-            "name": "boolean"
-          },
-          "path": "lib/src/posthog-core.d.ts"
-        },
-        {
           "category": "Toolbar",
           "description": "returns a boolean indicating whether the [toolbar](/docs/toolbar) loaded",
           "details": null,
@@ -3408,11 +3386,6 @@
           "description": "Get the current distinct ID.",
           "type": "() => string",
           "name": "get_distinct_id"
-        },
-        {
-          "description": "Whether `identify()` has been called for the currently stored distinct ID.",
-          "type": "() => boolean",
-          "name": "isIdentified"
         },
         {
           "description": "Reset the user's identity and start a new session.",

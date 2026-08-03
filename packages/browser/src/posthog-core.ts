@@ -3217,38 +3217,6 @@ export class PostHog implements PostHogInterface {
     }
 
     /**
-     * Whether the current user has been identified, i.e. whether `identify()` has been called
-     * for the distinct ID currently stored in persistence.
-     *
-     * @remarks
-     * Useful when a page is reached with an identity already restored from persistence, and you
-     * need to decide whether to keep it or `reset()` first — e.g. on a shared machine where a
-     * different user may be about to log in. This can be done in the `loaded` callback, which
-     * runs before the initial `$pageview` is captured.
-     *
-     * {@label Identification}
-     *
-     * @example
-     * ```js
-     * // on a shared machine, drop any identity restored from a previous user
-     * posthog.init('token', {
-     *     loaded: (posthog) => {
-     *         if (posthog.isIdentified() && posthog.get_distinct_id() !== currentUserId) {
-     *             posthog.reset()
-     *         }
-     *     }
-     * })
-     * ```
-     *
-     * @public
-     *
-     * @returns Whether the current user is identified
-     */
-    isIdentified(): boolean {
-        return this._isIdentified()
-    }
-
-    /**
      * Returns the current groups.
      *
      * {@label Identification}
