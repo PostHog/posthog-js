@@ -19,6 +19,11 @@ export const compatSkips: { range: string; test: string; reason: string }[] = [
         test: 'web_vitals_attribution: true includes attribution data',
         reason: 'web_vitals_attribution option added in #2953',
     },
+    {
+        range: '<1.410.3',
+        test: 'does not request a recorder script',
+        reason: 'full bundles before #4309 intentionally fetched lazy-recorder.js',
+    },
 ]
 
 export function shouldSkipForVersion(testTitle: string, npmVersion: string | undefined): string | null {

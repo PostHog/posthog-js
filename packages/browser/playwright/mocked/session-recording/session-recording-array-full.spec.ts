@@ -19,7 +19,7 @@ const startOptions = {
 }
 
 test.describe('session recording in array.full.js', () => {
-    test('captures session events', async ({ page, context }) => {
+    test('does not request a recorder script', async ({ page, context }) => {
         // array.full.js exists so that ad blockers - which match on the `/static/<script>.js` path
         // regardless of the host - can't stop replay by blocking a second script request
         const recorderScriptRequests: string[] = []
@@ -33,6 +33,11 @@ test.describe('session recording in array.full.js', () => {
         await waitForSessionRecordingToStart(page)
 
         expect(recorderScriptRequests).toEqual([])
+    })
+
+    test('captures session events', async ({ page, context }) => {
+        await start(startOptions, page, context)
+        await waitForSessionRecordingToStart(page)
 
         await page.waitingForNetworkCausedBy({
             urlPatternsToWaitFor: ['**/ses/*'],
