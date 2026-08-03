@@ -86,15 +86,17 @@ describe('LangChainCallbackHandler', () => {
       runId: 'run_ai_message_metadata',
       model: 'gpt-4',
       provider: 'openai',
-      message: new AIMessage({
-        content: 'Test response',
-        usage_metadata: {
-          input_tokens: 12,
-          output_tokens: 4,
-          total_tokens: 16,
-        },
-        response_metadata: { finish_reason: 'stop' },
-      }),
+      generation: {
+        message: new AIMessage({
+          content: 'Test response',
+          usage_metadata: {
+            input_tokens: 12,
+            output_tokens: 4,
+            total_tokens: 16,
+          },
+          response_metadata: { finish_reason: 'stop' },
+        }),
+      },
       expectedInputTokens: 12,
       expectedOutputTokens: 4,
       expectedStopReason: 'stop',
@@ -105,18 +107,103 @@ describe('LangChainCallbackHandler', () => {
       runId: 'run_ai_message_response_metadata',
       model: 'claude-3',
       provider: 'anthropic',
-      message: new AIMessage({
-        content: 'Test response',
-        response_metadata: {
-          stop_reason: 'end_turn',
-          usage: {
-            input_tokens: 15,
-            output_tokens: 5,
+      generation: {
+        message: new AIMessage({
+          content: 'Test response',
+          response_metadata: {
+            stop_reason: 'end_turn',
+            usage: {
+              input_tokens: 15,
+              output_tokens: 5,
+            },
           },
-        },
-      }),
+        }),
+      },
       expectedInputTokens: 15,
       expectedOutputTokens: 5,
+      expectedStopReason: 'end_turn',
+    },
+    {
+      name: 'generationInfo usage_metadata and finish_reason',
+      serializedId: ['langchain', 'chat_models', 'openai', 'ChatOpenAI'],
+      runId: 'run_generation_info_usage_metadata',
+      model: 'gpt-4',
+      provider: 'openai',
+      generation: {
+        generationInfo: {
+          usage_metadata: {
+            input_tokens: 18,
+            output_tokens: 6,
+          },
+          finish_reason: 'length',
+        },
+      },
+      expectedInputTokens: 18,
+      expectedOutputTokens: 6,
+      expectedStopReason: 'length',
+    },
+    {
+      name: 'generationInfo response_metadata usage and stop_reason',
+      serializedId: ['langchain', 'chat_models', 'anthropic', 'ChatAnthropic'],
+      runId: 'run_generation_info_response_metadata',
+      model: 'claude-3',
+      provider: 'anthropic',
+      generation: {
+        generationInfo: {
+          response_metadata: {
+            usage: {
+              input_tokens: 21,
+              output_tokens: 7,
+            },
+            stop_reason: 'end_turn',
+          },
+        },
+      },
+      expectedInputTokens: 21,
+      expectedOutputTokens: 7,
+      expectedStopReason: 'end_turn',
+    },
+    {
+      name: 'response_metadata Bedrock invocation metrics',
+      serializedId: ['langchain', 'chat_models', 'bedrock', 'ChatBedrock'],
+      runId: 'run_message_bedrock_invocation_metrics',
+      model: 'anthropic.claude-3',
+      provider: 'bedrock',
+      generation: {
+        message: new AIMessage({
+          content: 'Test response',
+          response_metadata: {
+            finish_reason: 'stop',
+            'amazon-bedrock-invocationMetrics': {
+              inputTokenCount: 24,
+              outputTokenCount: 8,
+            },
+          },
+        }),
+      },
+      expectedInputTokens: 24,
+      expectedOutputTokens: 8,
+      expectedStopReason: 'stop',
+    },
+    {
+      name: 'generationInfo response_metadata Bedrock invocation metrics',
+      serializedId: ['langchain', 'chat_models', 'bedrock', 'ChatBedrock'],
+      runId: 'run_generation_info_bedrock_invocation_metrics',
+      model: 'anthropic.claude-3',
+      provider: 'bedrock',
+      generation: {
+        generationInfo: {
+          response_metadata: {
+            stop_reason: 'end_turn',
+            'amazon-bedrock-invocationMetrics': {
+              inputTokenCount: 27,
+              outputTokenCount: 9,
+            },
+          },
+        },
+      },
+      expectedInputTokens: 27,
+      expectedOutputTokens: 9,
       expectedStopReason: 'end_turn',
     },
   ])(
@@ -126,7 +213,7 @@ describe('LangChainCallbackHandler', () => {
       runId,
       model,
       provider,
-      message,
+      generation,
       expectedInputTokens,
       expectedOutputTokens,
       expectedStopReason,
@@ -147,7 +234,7 @@ describe('LangChainCallbackHandler', () => {
           [
             {
               text: 'Test response',
-              message,
+              ...generation,
             },
           ],
         ],
