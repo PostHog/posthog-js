@@ -1,7 +1,7 @@
 ---
-'posthog-js': minor
+'posthog-js': patch
 ---
 
-feat: warn when `reset()` silently opts the user back out
+fix: warn when `reset()` silently opts the user back out
 
-`reset()` clears the stored consent along with the rest of the user's state. With `opt_out_capturing_by_default` that returns the instance to the opted-out default, so calling `reset()` after `opt_in_capturing()` stopped capturing with no error. It now logs a warning when that happens, and the ordering requirement is documented on `reset()`.
+`reset()` clears stored consent along with the rest of the user's state. With `opt_out_capturing_by_default`, this returns the instance to the opted-out default, so calling `reset()` after `opt_in_capturing()` would stop capturing without warning. It now logs a warning when that happens and documents the required ordering.
