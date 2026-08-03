@@ -3,7 +3,7 @@
 import { expect } from '@jest/globals'
 import { TextDecoder as NodeTextDecoder, TextEncoder as NodeTextEncoder } from 'util'
 import { buildNetworkRequestOptions } from '../../../../extensions/replay/external/config'
-import { NetworkRecordOptions } from '../../../../types'
+import { CapturedNetworkRequest, NetworkRecordOptions } from '../../../../types'
 import { defaultConfig } from '../../../../posthog-core'
 import {
     _contentLengthExceedsLimit,
@@ -318,6 +318,51 @@ describe('network plugin', () => {
     })
 
     describe('network observer lifecycle', () => {
+        it('emits URL-less initial timing metadata when a method-gated mask filters it', () => {
+            jest.isolateModules(() => {
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
+                const { mockWindow, performanceEntries } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+
+                const entry = createResourceTimingEntry(
+                    'https://example.com/page?token=secret',
+                    'application',
+                    5
+                ) as PerformanceEntry
+                performanceEntries.push(entry)
+                const callback = jest.fn()
+                const posthogConfig = defaultConfig()
+                const maskCapturedNetworkRequestFn = jest.fn((request: CapturedNetworkRequest) =>
+                    request.method === 'GET' ? request : undefined
+                )
+                posthogConfig.session_recording.maskCapturedNetworkRequestFn = maskCapturedNetworkRequestFn
+                const networkOptions = buildNetworkRequestOptions(posthogConfig, { recordPerformance: true })
+                const plugin = getRecordNetworkPlugin(networkOptions)
+                const cleanup = plugin.observer(callback, mockWindow, networkOptions)
+
+                expect(maskCapturedNetworkRequestFn).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        name: 'https://example.com/page?token=secret',
+                        method: undefined,
+                        isInitial: true,
+                    })
+                )
+                expect(callback).toHaveBeenCalledWith({
+                    isInitial: true,
+                    requests: [
+                        expect.objectContaining({
+                            name: undefined,
+                            entryType: 'resource',
+                            method: undefined,
+                            isInitial: true,
+                        }),
+                    ],
+                })
+                cleanup()
+            })
+        })
+
         it('drops server timings derived from a masked PostHog ingestion request', () => {
             jest.isolateModules(() => {
                 // eslint-disable-next-line @typescript-eslint/no-require-imports

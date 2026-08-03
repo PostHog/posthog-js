@@ -3,6 +3,6 @@
 '@posthog/types': patch
 ---
 
-fix(replay): stop `maskCapturedNetworkRequestFn` from dropping initial navigation/performance metadata
+fix(replay): preserve privacy masking for initial network metadata
 
-Initial navigation and performance-timing entries are captured before fetch/XHR wrapping, so they arrive with `method === undefined`. A user mask function keyed on the method (e.g. `data => data.method === 'GET' ? data : undefined`) would silently drop these metadata entries and produce a black-screen recording. These `isInitial` entries are now exempted from the user mask function (enforced cleaning still runs), and the config docs call out that entries can arrive without a method.
+Initial navigation and performance-timing entries are now passed through `maskCapturedNetworkRequestFn`, including when they have no method. URL rewrites are respected. When the callback returns nullish for an initial entry, replay-required timing metadata is retained without its URL, headers, or body so method-gated callbacks do not drop the metadata or expose deliberately filtered customer data. Enforced PostHog filtering and payload cleaning still run first.

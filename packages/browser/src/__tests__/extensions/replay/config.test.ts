@@ -466,52 +466,122 @@ describe('config', () => {
             })
         })
 
-        it('does not let a user mask fn drop isInitial metadata entries', () => {
+        it('applies initial URL rewrites from the user mask fn', () => {
             const posthogConfig = defaultConfig()
-            // a mask fn keyed on method drops the initial navigation/perf entries which have method === undefined
-            posthogConfig.session_recording.maskCapturedNetworkRequestFn = (data) =>
-                data.method === 'GET' ? data : undefined
+            posthogConfig.session_recording.maskCapturedNetworkRequestFn = (data) => ({
+                ...data,
+                name: data.name.replace('token=secret', 'token=[MASKED]'),
+            })
             const networkOptions = buildNetworkRequestOptions(posthogConfig, {})
 
             const cleaned = networkOptions.maskRequestFn!({
-                name: 'https://example.com/page',
+                name: 'https://example.com/page?token=secret',
                 method: undefined,
                 isInitial: true,
             } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
 
-            // the entry survives untouched by the user fn (enforced cleaning still runs) so playback can render
             expect(cleaned).toEqual({
-                name: 'https://example.com/page',
+                name: 'https://example.com/page?token=[MASKED]',
                 method: undefined,
                 isInitial: true,
             })
         })
 
-        it('still applies the user mask fn to non-initial requests', () => {
+        it('retains URL-less required metadata when the user intentionally filters an initial entry', () => {
             const posthogConfig = defaultConfig()
-            posthogConfig.session_recording.maskCapturedNetworkRequestFn = (data) =>
-                data.method === 'GET' ? data : undefined
+            posthogConfig.session_recording.maskCapturedNetworkRequestFn = () => null
             const networkOptions = buildNetworkRequestOptions(posthogConfig, {})
 
-            const dropped = networkOptions.maskRequestFn!({
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'https://example.com/page?token=secret',
+                entryType: 'navigation',
+                startTime: 10,
+                duration: 20,
+                isInitial: true,
+                requestHeaders: { 'x-customer-secret': 'secret' },
+                requestBody: 'secret request',
+                responseHeaders: { 'x-customer-secret': 'secret' },
+                responseBody: 'secret response',
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+
+            expect(cleaned).toEqual({
+                name: undefined,
+                entryType: 'navigation',
+                startTime: 10,
+                duration: 20,
+                isInitial: true,
+                requestHeaders: undefined,
+                requestBody: undefined,
+                responseHeaders: undefined,
+                responseBody: undefined,
+            })
+        })
+
+        it('does not treat initial methodless metadata as a GET request', () => {
+            const posthogConfig = defaultConfig()
+            const maskCapturedNetworkRequestFn = jest.fn((data: CapturedNetworkRequest) =>
+                data.method === 'GET' ? data : undefined
+            )
+            posthogConfig.session_recording.maskCapturedNetworkRequestFn = maskCapturedNetworkRequestFn
+            const networkOptions = buildNetworkRequestOptions(posthogConfig, {})
+
+            const initial = networkOptions.maskRequestFn!({
+                name: 'https://example.com/page?token=secret',
+                method: undefined,
+                isInitial: true,
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+            const nonInitial = networkOptions.maskRequestFn!({
                 name: 'https://example.com/api',
                 method: 'POST',
             } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
-            expect(dropped).toBeUndefined()
 
-            const kept = networkOptions.maskRequestFn!({
-                name: 'https://example.com/api',
-                method: 'GET',
-            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
-            expect(kept).toEqual({
-                name: 'https://example.com/api',
-                method: 'GET',
+            expect(maskCapturedNetworkRequestFn).toHaveBeenCalledTimes(2)
+            expect(initial).toEqual({
+                name: undefined,
+                method: undefined,
+                isInitial: true,
+                requestHeaders: undefined,
+                requestBody: undefined,
+                responseHeaders: undefined,
+                responseBody: undefined,
+            })
+            expect(nonInitial).toBeUndefined()
+        })
+
+        it('applies the deprecated URL mask adapter to initial entries', () => {
+            const posthogConfig = defaultConfig()
+            posthogConfig.session_recording.maskNetworkRequestFn = ({ url }) => ({
+                url: url.replace('token=secret', 'token=[MASKED]'),
+            })
+            const networkOptions = buildNetworkRequestOptions(posthogConfig, {})
+
+            expect(
+                networkOptions.maskRequestFn!({
+                    name: 'https://example.com/page?token=secret',
+                    isInitial: true,
+                } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+            ).toEqual({
+                name: 'https://example.com/page?token=[MASKED]',
+                isInitial: true,
+            })
+
+            posthogConfig.session_recording.maskNetworkRequestFn = () => null
+            const filteredOptions = buildNetworkRequestOptions(posthogConfig, {})
+            expect(
+                filteredOptions.maskRequestFn!({
+                    name: 'https://example.com/page?token=secret',
+                    isInitial: true,
+                } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+            ).toEqual({
+                name: undefined,
+                isInitial: true,
             })
         })
 
-        it('still runs enforced cleaning on isInitial entries', () => {
+        it('runs enforced cleaning before the user mask fn for initial entries', () => {
             const posthogConfig = defaultConfig()
-            posthogConfig.session_recording.maskCapturedNetworkRequestFn = (data) => data
+            const maskCapturedNetworkRequestFn = jest.fn((data: CapturedNetworkRequest) => data)
+            posthogConfig.session_recording.maskCapturedNetworkRequestFn = maskCapturedNetworkRequestFn
             const networkOptions = buildNetworkRequestOptions(posthogConfig, {})
 
             const cleaned = networkOptions.maskRequestFn!({
@@ -520,17 +590,49 @@ describe('config', () => {
                 requestHeaders: {
                     Authorization: 'Bearer 123',
                     'content-type': 'application/json',
+                    'content-length': '1000001',
                 },
+                requestBody: 'secret request',
+                responseHeaders: {
+                    'set-cookie': 'session=secret',
+                    'content-type': 'application/json',
+                    'content-length': '1000001',
+                },
+                responseBody: 'secret response',
             } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
 
-            expect(cleaned).toEqual({
+            expect(maskCapturedNetworkRequestFn).toHaveBeenCalledWith({
                 name: 'something',
                 isInitial: true,
                 requestHeaders: {
                     Authorization: 'redacted',
                     'content-type': 'application/json',
+                    'content-length': '1000001',
                 },
+                requestBody: '[SessionRecording] Request body too large to record (1000001 bytes)',
+                responseHeaders: {
+                    'set-cookie': 'redacted',
+                    'content-type': 'application/json',
+                    'content-length': '1000001',
+                },
+                responseBody: '[SessionRecording] Response body too large to record (1000001 bytes)',
             })
+            expect(cleaned).toEqual(maskCapturedNetworkRequestFn.mock.calls[0][0])
+        })
+
+        it('does not preserve an initial PostHog ingestion request', () => {
+            const posthogConfig = { ...defaultConfig(), api_host: 'https://example.com/ingest' }
+            const maskCapturedNetworkRequestFn = jest.fn((data: CapturedNetworkRequest) => data)
+            posthogConfig.session_recording.maskCapturedNetworkRequestFn = maskCapturedNetworkRequestFn
+            const networkOptions = buildNetworkRequestOptions(posthogConfig, {})
+
+            const cleaned = networkOptions.maskRequestFn!({
+                name: 'https://example.com/ingest/s/?token=secret',
+                isInitial: true,
+            } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+
+            expect(cleaned).toBeUndefined()
+            expect(maskCapturedNetworkRequestFn).not.toHaveBeenCalled()
         })
     })
 })

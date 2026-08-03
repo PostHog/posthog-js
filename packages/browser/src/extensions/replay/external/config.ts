@@ -311,17 +311,24 @@ export const buildNetworkRequestOptions = (
               if (!cleanedRequest) {
                   return undefined
               }
-              // `isInitial` entries are the navigation and performance-timing "metadata" events that
-              // carry the page URLs playback needs to render. They are captured before fetch/XHR
-              // wrapping so they never have a method/status/headers/body. A user mask function keyed
-              // on one of those (e.g. `data => data.method === 'GET' ? data : undefined`) would drop
-              // them entirely, silently producing an unrecoverable black-screen recording. Since these
-              // entries carry no request headers or bodies, there is nothing for a user mask to redact,
-              // so we exempt them from it while still applying the enforced cleaning above.
-              if (cleanedRequest.isInitial) {
-                  return cleanedRequest
-              }
-              return instanceConfig.session_recording.maskCapturedNetworkRequestFn?.(cleanedRequest) ?? undefined
+
+              // Initial entries are required performance metadata, but their URL is still customer data.
+              // Keep a URL-less copy before invoking the callback because callbacks may mutate their argument.
+              const requiredInitialMetadata = cleanedRequest.isInitial
+                  ? ({
+                        ...cleanedRequest,
+                        name: undefined,
+                        requestHeaders: undefined,
+                        requestBody: undefined,
+                        responseHeaders: undefined,
+                        responseBody: undefined,
+                    } as unknown as CapturedNetworkRequest)
+                  : undefined
+              const maskedRequest = instanceConfig.session_recording.maskCapturedNetworkRequestFn?.(cleanedRequest)
+
+              // A nullish result normally drops the request. Initial timing metadata must remain for replay,
+              // so retain it without the URL or any network content rather than exposing deliberately filtered data.
+              return maskedRequest ?? requiredInitialMetadata
           }
         : (data) => scrubPayloads(enforcedCleaningFn(data))
 

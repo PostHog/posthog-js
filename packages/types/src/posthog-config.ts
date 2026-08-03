@@ -673,12 +673,10 @@ export interface SessionRecordingOptions {
     /**
      * Modify the network request before it is captured. Returning null or undefined stops it being captured.
      *
-     * NOTE: entries can arrive with `method === undefined` (and no status/headers/body). These are the
-     * initial navigation and performance-timing "metadata" entries captured before fetch/XHR wrapping –
-     * they carry the page URLs that playback needs to render. A function that keys on `method`
-     * (e.g. `data => data.method === 'GET' ? data : undefined`) would drop them and produce a
-     * black-screen recording. Such `isInitial` entries are exempted from this function so it cannot
-     * suppress recording metadata; you only need to handle the requests you actually want to mask.
+     * Initial navigation and performance-timing entries are also passed to this function. They have
+     * `isInitial === true`, can have `method === undefined`, and contain the page URL in `name`. If the
+     * function returns null or undefined for an initial entry, PostHog retains the replay-required timing
+     * metadata but omits its URL, headers, and body. Return a modified entry to retain a redacted URL.
      */
     maskCapturedNetworkRequestFn?: ((data: CapturedNetworkRequest) => CapturedNetworkRequest | null | undefined) | null
 
