@@ -1355,8 +1355,11 @@ export function Questions({
         if (!state) {
             return null
         }
-        const isIndexInRange = state.lastQuestionIndex >= 0 && state.lastQuestionIndex < survey.questions.length
-        if (!isIndexInRange) {
+        // A missing index predates the persisted-index feature, so treat it as 0 (the start) —
+        // the same default the reader below applies. Only an index that is actually present and
+        // out of range signals a stale record; discard the whole thing in that case.
+        const savedIndex = state.lastQuestionIndex ?? 0
+        if (savedIndex < 0 || savedIndex >= survey.questions.length) {
             clearInProgressSurveyState(survey)
             return null
         }
