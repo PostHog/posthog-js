@@ -502,18 +502,18 @@ describe('config', () => {
                 requestBody: 'secret request',
                 responseHeaders: { 'x-customer-secret': 'secret' },
                 responseBody: 'secret response',
+                serverTiming: [{ name: 'customer-secret', description: 'customer-secret', duration: 1 }],
             } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
 
             expect(cleaned).toEqual({
-                name: undefined,
+                name: '',
                 entryType: 'navigation',
                 startTime: 10,
                 duration: 20,
+                endTime: undefined,
+                timeOrigin: undefined,
+                timestamp: undefined,
                 isInitial: true,
-                requestHeaders: undefined,
-                requestBody: undefined,
-                responseHeaders: undefined,
-                responseBody: undefined,
             })
         })
 
@@ -537,13 +537,14 @@ describe('config', () => {
 
             expect(maskCapturedNetworkRequestFn).toHaveBeenCalledTimes(2)
             expect(initial).toEqual({
-                name: undefined,
-                method: undefined,
+                name: '',
+                entryType: undefined,
+                startTime: undefined,
+                duration: undefined,
+                endTime: undefined,
+                timeOrigin: undefined,
+                timestamp: undefined,
                 isInitial: true,
-                requestHeaders: undefined,
-                requestBody: undefined,
-                responseHeaders: undefined,
-                responseBody: undefined,
             })
             expect(nonInitial).toBeUndefined()
         })

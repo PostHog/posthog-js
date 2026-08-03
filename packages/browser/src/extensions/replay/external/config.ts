@@ -313,16 +313,19 @@ export const buildNetworkRequestOptions = (
               }
 
               // Initial entries are required performance metadata, but their URL is still customer data.
-              // Keep a URL-less copy before invoking the callback because callbacks may mutate their argument.
-              const requiredInitialMetadata = cleanedRequest.isInitial
-                  ? ({
-                        ...cleanedRequest,
-                        name: undefined,
-                        requestHeaders: undefined,
-                        requestBody: undefined,
-                        responseHeaders: undefined,
-                        responseBody: undefined,
-                    } as unknown as CapturedNetworkRequest)
+              // Keep only required, non-content fields before invoking the callback because callbacks may
+              // mutate their argument. In particular, do not copy customer-controlled server timing data.
+              const requiredInitialMetadata: CapturedNetworkRequest | undefined = cleanedRequest.isInitial
+                  ? {
+                        name: '',
+                        entryType: cleanedRequest.entryType,
+                        startTime: cleanedRequest.startTime,
+                        duration: cleanedRequest.duration,
+                        endTime: cleanedRequest.endTime,
+                        timeOrigin: cleanedRequest.timeOrigin,
+                        timestamp: cleanedRequest.timestamp,
+                        isInitial: true,
+                    }
                   : undefined
               const maskedRequest = instanceConfig.session_recording.maskCapturedNetworkRequestFn?.(cleanedRequest)
 

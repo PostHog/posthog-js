@@ -352,9 +352,8 @@ describe('network plugin', () => {
                     isInitial: true,
                     requests: [
                         expect.objectContaining({
-                            name: undefined,
+                            name: '',
                             entryType: 'resource',
-                            method: undefined,
                             isInitial: true,
                         }),
                     ],
