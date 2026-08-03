@@ -189,35 +189,7 @@ export const flagDetailsToResults = (flagDetails: Record<string, FeatureFlagDeta
  * The list is the union across client and server SDKs; entries are inert where an
  * SDK never sets them.
  */
-export const MINIMAL_FLAG_CALLED_EVENT_PROPERTIES: readonly string[] = [
-  // Flag identity
-  '$feature_flag',
-  '$feature_flag_response',
-  '$feature_flag_has_experiment',
-  // Evaluation debug
-  '$feature_flag_id',
-  '$feature_flag_version',
-  '$feature_flag_reason',
-  '$feature_flag_request_id',
-  '$feature_flag_evaluated_at',
-  '$feature_flag_error',
-  'locally_evaluated',
-  // Correctness-required processing controls
-  '$groups',
-  '$process_person_profile',
-  '$geoip_disable',
-  // Debug location
-  '$current_url',
-  '$pathname',
-  // Session-level attribution (referrer + campaign params). The server session table
-  // derives session-initial UTM and channel type from whichever event lands first in a
-  // session, so if a minimal `$feature_flag_called` event arrives first these keys must
-  // survive minimization — otherwise the whole session's attribution is set to NULL.
-  '$referrer',
-  '$referring_domain',
-  // Campaign params are stored as super properties under their bare names (no `$`
-  // prefix) and must be kept in sync with the browser SDK's `CAMPAIGN_PARAMS` and the
-  // server-side session table. Entries are inert on SDKs that never set them.
+export const MINIMAL_FLAG_CALLED_EVENT_CAMPAIGN_PROPERTIES = [
   'utm_source',
   'utm_medium',
   'utm_campaign',
@@ -242,6 +214,36 @@ export const MINIMAL_FLAG_CALLED_EVENT_PROPERTIES: readonly string[] = [
   'sccid',
   'irclid',
   '_kx',
+] as const
+
+export const MINIMAL_FLAG_CALLED_EVENT_PROPERTIES: readonly string[] = [
+  // Flag identity
+  '$feature_flag',
+  '$feature_flag_response',
+  '$feature_flag_has_experiment',
+  // Evaluation debug
+  '$feature_flag_id',
+  '$feature_flag_version',
+  '$feature_flag_reason',
+  '$feature_flag_request_id',
+  '$feature_flag_evaluated_at',
+  '$feature_flag_error',
+  'locally_evaluated',
+  // Correctness-required processing controls
+  '$groups',
+  '$process_person_profile',
+  '$geoip_disable',
+  // Debug location
+  '$current_url',
+  '$pathname',
+  // Session-level attribution. The server session table derives session-initial UTM
+  // and channel type from whichever event lands first in a session, so these keys must
+  // survive minimization. The full `$referrer` URL is intentionally excluded.
+  '$referring_domain',
+  // Campaign params are stored as super properties under their bare names (no `$`
+  // prefix). This list is kept in sync with the browser SDK's canonical `CAMPAIGN_PARAMS`
+  // by an exhaustive browser regression test. Entries are inert on SDKs that never set them.
+  ...MINIMAL_FLAG_CALLED_EVENT_CAMPAIGN_PROPERTIES,
   // Linkage / SDK identity
   '$session_id',
   '$window_id',

@@ -8,11 +8,12 @@ import {
 } from '../posthog-featureflags'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
-import { isUndefined } from '@posthog/core'
+import { isUndefined, MINIMAL_FLAG_CALLED_EVENT_CAMPAIGN_PROPERTIES } from '@posthog/core'
 import { PostHogConfig } from '../types'
 import { createMockPostHog, createPosthogInstance } from './helpers/posthog-instance'
 import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
+import { CAMPAIGN_PARAMS } from '@posthog/browser-common/utils/event-utils'
 
 jest.useFakeTimers()
 jest.spyOn(global, 'setTimeout')
@@ -4584,7 +4585,6 @@ describe('minimal $feature_flag_called events', () => {
                 '$pathname',
                 // session-level attribution props survive minimization so a flag-called
                 // event firing first doesn't null out the session's UTM/channel
-                '$referrer',
                 '$referring_domain',
                 '$session_id',
                 '$window_id',
@@ -4606,20 +4606,19 @@ describe('minimal $feature_flag_called events', () => {
         expect(event.$set_once).toBeUndefined()
     })
 
-    it('keeps session-attribution campaign params so a first-in-session flag event does not null out UTM', async () => {
+    it('keeps every canonical session-attribution campaign param without widening the minimal event', async () => {
         const { posthog, events } = await createInstanceWithCapturedEvents()
-        // Campaign params are stored as bare-named super properties (see posthog-persistence
-        // update_campaign_params -> register). They feed the server session table's
-        // session-initial UTM, so they must survive minimization.
+        const campaignProperties = Object.fromEntries(CAMPAIGN_PARAMS.map((key) => [key, `value-for-${key}`]))
+
+        // Keep the shared minimal-event set exhaustively synchronized with the canonical
+        // browser campaign set without copying that list into this test.
+        expect(MINIMAL_FLAG_CALLED_EVENT_CAMPAIGN_PROPERTIES).toEqual(CAMPAIGN_PARAMS)
+
         posthog.register({
-            utm_source: 'newsletter',
-            utm_medium: 'email',
-            utm_campaign: 'summer_sale',
-            utm_content: 'cta_button',
-            utm_term: 'analytics',
-            gclid: 'abc123',
-            // a non-attribution super property that must still be stripped
-            super_prop: 'super_value',
+            ...campaignProperties,
+            $referring_domain: 'referring.example',
+            $referrer: 'https://referring.example/path?private=value',
+            unrelated_superproperty: 'must-be-stripped',
         })
         posthog.featureFlags.receivedFeatureFlags(
             gatedFlagsResponse({ minimalFlagCalledEvents: true, hasExperiment: false })
@@ -4630,15 +4629,11 @@ describe('minimal $feature_flag_called events', () => {
         const event = findFlagCalledEvent(events)
         expect(event).toBeDefined()
         expect(event.properties).toMatchObject({
-            utm_source: 'newsletter',
-            utm_medium: 'email',
-            utm_campaign: 'summer_sale',
-            utm_content: 'cta_button',
-            utm_term: 'analytics',
-            gclid: 'abc123',
+            ...campaignProperties,
+            $referring_domain: 'referring.example',
         })
-        // non-attribution super properties are still structurally excluded
-        expect(event.properties).not.toHaveProperty('super_prop')
+        expect(event.properties).not.toHaveProperty('$referrer')
+        expect(event.properties).not.toHaveProperty('unrelated_superproperty')
     })
 
     it('strips the timestamp-override props when captured with an explicit timestamp', async () => {
@@ -4668,7 +4663,6 @@ describe('minimal $feature_flag_called events', () => {
                 '$feature_flag_request_id',
                 '$current_url',
                 '$pathname',
-                '$referrer',
                 '$referring_domain',
                 '$session_id',
                 '$window_id',

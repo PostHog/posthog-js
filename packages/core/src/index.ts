@@ -4,6 +4,7 @@ export {
   getVariantFromValue,
   parsePayload,
   flagDetailsToResults,
+  MINIMAL_FLAG_CALLED_EVENT_CAMPAIGN_PROPERTIES,
   minimizeFlagCalledEventProperties,
 } from './featureFlagUtils'
 export {
