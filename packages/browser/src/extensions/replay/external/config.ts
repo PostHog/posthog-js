@@ -296,6 +296,11 @@ export const buildNetworkRequestOptions = (
     if (hasDeprecatedMaskFunction) {
         instanceConfig.session_recording.maskCapturedNetworkRequestFn = (data: CapturedNetworkRequest) => {
             const cleanedURL = instanceConfig.session_recording.maskNetworkRequestFn!({ url: data.name })
+            // Preserve the nullish signal for initial entries so the required-metadata fallback below can
+            // remove all customer-controlled content. Keep the deprecated URL-only behavior otherwise.
+            if (!cleanedURL && data.isInitial) {
+                return cleanedURL
+            }
             // the deprecated mask fn can suppress the URL, leaving `name` undefined on purpose
             // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
             return {

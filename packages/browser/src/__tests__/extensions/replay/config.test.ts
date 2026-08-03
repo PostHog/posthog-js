@@ -571,11 +571,31 @@ describe('config', () => {
             expect(
                 filteredOptions.maskRequestFn!({
                     name: 'https://example.com/page?token=secret',
+                    entryType: 'navigation',
+                    startTime: 10,
+                    duration: 20,
                     isInitial: true,
+                    requestBody: 'customer-secret',
+                    serverTiming: [{ name: 'customer-secret', description: 'customer-secret', duration: 1 }],
+                } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
+            ).toEqual({
+                name: '',
+                entryType: 'navigation',
+                startTime: 10,
+                duration: 20,
+                endTime: undefined,
+                timeOrigin: undefined,
+                timestamp: undefined,
+                isInitial: true,
+            })
+            expect(
+                filteredOptions.maskRequestFn!({
+                    name: 'https://example.com/api?token=secret',
+                    method: 'GET',
                 } as Partial<CapturedNetworkRequest> as CapturedNetworkRequest)
             ).toEqual({
                 name: undefined,
-                isInitial: true,
+                method: 'GET',
             })
         })
 
