@@ -1,5 +1,56 @@
 # @posthog/core
 
+## 1.46.3
+
+### Patch Changes
+
+- [#4155](https://github.com/PostHog/posthog-js/pull/4155) [`eb0a793`](https://github.com/PostHog/posthog-js/commit/eb0a7930eebf2474dc03846b36891dc33df112f7) Thanks [@ATKasem](https://github.com/ATKasem)! - fix: `personProperties` and `groupProperties` on the feature flag methods are no longer typed as `Record<string, string>`, so numeric and boolean values type-check without a cast. Local evaluation already handled them — `matchProperty` takes `Record<string, any>` and compares numerically for `gt`/`gte`/`lt`/`lte` — only the public types disagreed. These now use the shared `Properties` type (`personProperties?: Properties`, `groupProperties?: Record<string, Properties>`), matching `setPersonPropertiesForFlags`/`setGroupPropertiesForFlags` so the `any` can be narrowed later. Types only, no runtime change.
+  (2026-08-03)
+
+## 1.46.2
+
+### Patch Changes
+
+- [#4347](https://github.com/PostHog/posthog-js/pull/4347) [`7c3a9af`](https://github.com/PostHog/posthog-js/commit/7c3a9af42be80051705f7fe820623dd7e1b879d5) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve events added to a full queue while an earlier batch is being flushed.
+  (2026-08-03)
+
+## 1.46.1
+
+### Patch Changes
+
+- [#4332](https://github.com/PostHog/posthog-js/pull/4332) [`b9a241e`](https://github.com/PostHog/posthog-js/commit/b9a241ec862ba5b753ef34d94c856257bdff2a2f) Thanks [@ioannisj](https://github.com/ioannisj)! - Fix `identify()` leaving a user anonymous when the supplied ID already matches the persisted distinct ID (for example after a non-identified bootstrap seeded the same ID). The user is now marked identified and a person-processed `$set` event is captured. Ports the same fix from posthog-js (browser) to the shared core used by React Native, Node, and posthog-js-lite.
+  (2026-07-31)
+
+## 1.46.0
+
+### Minor Changes
+
+- [#4308](https://github.com/PostHog/posthog-js/pull/4308) [`6e7f3ae`](https://github.com/PostHog/posthog-js/commit/6e7f3aeaf65d66d015508aec0618c0d7fe505db5) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Emit the release id that posthog-cli injects into your bundle as `$release_id` on `$exception` events, so PostHog can attach exceptions to a release without joining through symbol sets. Adds `getInjectedReleaseId()` to `@posthog/core`. The property is only attached when an injected release id can be read.
+  (2026-07-30)
+
+## 1.45.3
+
+### Patch Changes
+
+- [#4325](https://github.com/PostHog/posthog-js/pull/4325) [`3bd8a2d`](https://github.com/PostHog/posthog-js/commit/3bd8a2d7599c0ee089594e27be39f3af171e5371) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix dead-click false positives on WebKit when the SDK uses an iframe-sourced MutationObserver fallback.
+  (2026-07-30)
+
+## 1.45.2
+
+### Patch Changes
+
+- [#4304](https://github.com/PostHog/posthog-js/pull/4304) [`c7099e9`](https://github.com/PostHog/posthog-js/commit/c7099e9dbe58455efb0bfb47e1f211effb914a61) Thanks [@lucasheriques](https://github.com/lucasheriques)! - fix(surveys): only wait for feature flags on surveys that repeat
+
+  Surveys stopped being shown while feature flags were still loading, even when a cached
+  enabled value for their internal targeting flag was already available. Popover and widget
+  surveys recovered on the next evaluation, but a survey your own code renders (type `api`)
+  is evaluated once, so it was dropped for that page load and never reappeared.
+
+  That wait is only needed for surveys that repeat, where stored per-survey state is keyed by
+  iteration and cannot be relied on to record that someone already answered. Other surveys
+  keep one stable key that already prevents a repeat display, so they are now evaluated
+  against the cached flag right away. (2026-07-29)
+
 ## 1.45.1
 
 ### Patch Changes

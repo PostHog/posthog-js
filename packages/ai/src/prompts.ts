@@ -27,6 +27,19 @@ function normalizeHost(value?: unknown): string {
   return (normalizedHost || DEFAULT_PROMPTS_HOST).replace(/\/+$/, '')
 }
 
+/** Reads config from an API response, tolerating servers that don't send it. */
+function extractConfig(value: unknown): Record<string, unknown> | null {
+  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    return value as Record<string, unknown>
+  }
+  return null
+}
+
+/** Copied so a caller mutating result.config can't pollute the cache entry later reads are served from. */
+function cloneConfig(config: Record<string, unknown> | null): Record<string, unknown> | null {
+  return config === null ? null : structuredClone(config)
+}
+
 function isPromptApiResponse(data: unknown): data is PromptApiResponse {
   if (typeof data !== 'object' || data === null) {
     return false
@@ -140,7 +153,9 @@ export class Prompts {
    * Fetch a prompt by name from the PostHog API.
    *
    * Returns a `PromptResult` object carrying the prompt text alongside `source`,
-   * `name`, and `version` metadata. Read `result.prompt` for the template string.
+   * `name`, `version`, and `config` metadata. Read `result.prompt` for the
+   * template string and `result.config ?? {}` for model parameters or agent
+   * configuration stored with the version.
    */
   async get(name: string, options?: GetPromptOptions): Promise<PromptResult> {
     if (options?.version !== undefined && options?.label !== undefined) {
@@ -162,6 +177,7 @@ export class Prompts {
           name: undefined,
           version: undefined,
           label: undefined,
+          config: undefined,
         } satisfies PromptCodeFallbackResult
       }
 
@@ -189,7 +205,7 @@ export class Prompts {
 
       if (isFresh) {
         const { fetchedAt: _, ...cachedResult } = cached
-        return { source: 'cache', ...cachedResult }
+        return { source: 'cache', ...cachedResult, config: cloneConfig(cached.config) }
       }
     }
 
@@ -210,13 +226,13 @@ export class Prompts {
       // Update cache
       this.getOrCreatePromptCache(name).set(cacheEntryKey, { ...fetched, fetchedAt: Date.now() })
 
-      return { source: 'api', ...fetched }
+      return { source: 'api', ...fetched, config: cloneConfig(fetched.config) }
     } catch (error) {
       // Return stale cache (with warning)
       if (cached) {
         const { fetchedAt: _, ...cachedResult } = cached
         console.warn(`[PostHog Prompts] Failed to fetch prompt ${promptReference}, using stale cache:`, error)
-        return { source: 'stale_cache', ...cachedResult }
+        return { source: 'stale_cache', ...cachedResult, config: cloneConfig(cached.config) }
       }
 
       throw error
@@ -325,6 +341,12 @@ export class Prompts {
       throw new Error(`[PostHog Prompts] Invalid response format for prompt ${promptReference}`)
     }
 
-    return { prompt: data.prompt, name: data.name, version: data.version, label: data.label }
+    return {
+      prompt: data.prompt,
+      name: data.name,
+      version: data.version,
+      label: data.label,
+      config: extractConfig(data.config),
+    }
   }
 }

@@ -30,6 +30,53 @@ test.describe('Dead clicks', () => {
         expect(deadClick.properties.$dead_click_absolute_timeout).toBe(true)
     })
 
+    test('does not capture a dead click when a fallback observer sees a DOM update', async ({ page, context }) => {
+        await context.addInitScript(() => {
+            // Force getNativeMutationObserverImplementation through its iframe fallback.
+            ;(window as any).Zone = {}
+        })
+        await start(
+            {
+                options: {
+                    capture_dead_clicks: {
+                        mutation_threshold_ms: 300,
+                    },
+                },
+                url: '/playground/cypress/index.html',
+            },
+            page,
+            context
+        )
+
+        await page.waitForFunction(() => {
+            const win = window as any
+            return !!win.posthog?.deadClicksAutocapture?.lazyLoadedDeadClicksAutocapture
+        })
+
+        await page.evaluate(() => {
+            const button = document.createElement('button')
+            button.id = 'mutating-button'
+            button.textContent = 'Next day'
+            const label = document.createElement('span')
+            label.id = 'mutating-label'
+            label.textContent = 'Day 1'
+            button.onclick = () => {
+                label.textContent = 'Day 2'
+            }
+            document.body.append(button, label)
+        })
+
+        await page.waitForTimeout(100)
+        await page.resetCapturedEvents()
+
+        await page.locator('#mutating-button').click()
+        await expect(page.locator('#mutating-label')).toHaveText('Day 2')
+        await page.waitForTimeout(1500)
+
+        const deadClicks = (await page.capturedEvents()).filter((event) => event.event === '$dead_click')
+        expect(deadClicks).toHaveLength(0)
+    })
+
     test('captures dead swipes when configured to', async ({ page, context }) => {
         await start(startOptions, page, context)
 

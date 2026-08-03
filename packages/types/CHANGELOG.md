@@ -1,5 +1,27 @@
 # @posthog/types
 
+## 1.400.0
+
+### Minor Changes
+
+- [#4125](https://github.com/PostHog/posthog-js/pull/4125) [`fde7145`](https://github.com/PostHog/posthog-js/commit/fde7145e59b497a76b083d9bd173648e83de0400) Thanks [@DerGeraetK](https://github.com/DerGeraetK)! - Add `session_recording.sampling` to disable or throttle mousemove capture (and optionally mouseInteraction) in session replay. Canvas recording now merges its canvas sampling with user-provided sampling instead of overwriting it.
+  (2026-08-03)
+
+## 1.399.0
+
+### Minor Changes
+
+- [#4270](https://github.com/PostHog/posthog-js/pull/4270) [`92427a1`](https://github.com/PostHog/posthog-js/commit/92427a12ace70dd6ab2a1e62c88d84465edbc856) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Add canvas mask regions to session replay canvas capture: `session_recording.canvasCapture.maskRegionsFn` is called once per canvas per captured frame, and the returned regions (CSS pixels, relative to the canvas) are painted black in the captured frame before it is encoded — letting apps that render into canvas (e.g. Flutter web via CanvasKit) mask content that DOM-based masking cannot see.
+
+    The return value decides what happens to that canvas's frame:
+    - `[]` — nothing to mask; the frame is recorded as is.
+    - `null` — regions could not be computed; the frame is skipped rather than recorded unmasked.
+    - `maskRegionsFn` not set — canvases are recorded unmasked and canvas capture behavior is unchanged.
+
+    Configuring `maskRegionsFn` also disables canvas pixel serialization in DOM full snapshots (`rr_dataURL`) — that path never sees the mask regions, so skipping it closes the route that could otherwise embed unmasked canvas stills in a snapshot; the canvas repaints from the masked frame stream instead. Every canvas the provider answers — with regions or `[]` — re-sends an unchanged frame as a keyframe every 30s, so after a full snapshot or a seek an idle canvas repaints within at most 30s.
+
+    An app whose real provider only exists once its runtime has booted chooses what happens in between by what it declares in `posthog.init`: a function covering the whole canvas blacks those frames out, `() => null` skips them, and declaring nothing records them. Client-side only, cannot be set via remote configuration. (2026-07-29)
+
 ## 1.398.0
 
 ### Minor Changes

@@ -39,13 +39,36 @@ jobs:
             - name: Setup Node.js
               uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
               with:
-                node-version: 24
+                  node-version: 24
 
             - name: Setup pnpm
               uses: pnpm/setup@5d160c5bc68a09337ad0d5654e237e03253b5879 # v1
               with:
-                cache: false
-                install: false
+                  cache: false
+                  install: false
+
+            - name: Wait for package to become available on npm
+              shell: bash
+              timeout-minutes: 16
+              env:
+                  PACKAGE_NAME: ${{ github.event.inputs.package_name }}
+                  PACKAGE_VERSION: ${{ github.event.inputs.package_version }}
+              run: |
+                  for attempt in $(seq 1 30); do
+                      published_version=$(pnpm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version 2>/dev/null || true)
+                      if [ "$published_version" = "$PACKAGE_VERSION" ]; then
+                          echo "$PACKAGE_NAME@$PACKAGE_VERSION is available on npm."
+                          exit 0
+                      fi
+
+                      if [ "$attempt" -eq 30 ]; then
+                          echo "::error::$PACKAGE_NAME@$PACKAGE_VERSION did not become available on npm within 15 minutes."
+                          exit 1
+                      fi
+
+                      echo "$PACKAGE_NAME@$PACKAGE_VERSION is not available on npm yet (attempt $attempt/30). Retrying in 30 seconds..."
+                      sleep 30
+                  done
 
             - name: Install new package version in main repo
               id: pnpm-upgrade

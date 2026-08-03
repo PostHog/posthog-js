@@ -117,6 +117,20 @@ describe('PostHogExceptions', () => {
             expect(captureMock).toBeCalledWith('$exception', { custom_property: true }, expect.anything())
         })
 
+        it('attaches the injected release id when present', () => {
+            ;(globalThis as any)._posthogReleaseId = 'release-row-id'
+            try {
+                exceptions.sendExceptionEvent({ custom_property: true })
+                expect(captureMock).toBeCalledWith(
+                    '$exception',
+                    { custom_property: true, $release_id: 'release-row-id' },
+                    expect.anything()
+                )
+            } finally {
+                delete (globalThis as any)._posthogReleaseId
+            }
+        })
+
         it('fails gracefully with a warning when capture throws', () => {
             captureMock.mockImplementationOnce(() => {
                 throw new Error('capture failed')
@@ -150,6 +164,39 @@ describe('PostHogExceptions', () => {
 
         it('captures an exception if all rule conditions do not match', () => {
             const suppressionRule = createSuppressionRule('AND')
+            exceptions.onRemoteConfig({
+                ok: true,
+                config: { errorTracking: { suppressionRules: [suppressionRule] } } as RemoteConfig,
+            })
+            exceptions.sendExceptionEvent({ $exception_list: [{ type: 'TypeError', value: 'This is a type error' }] })
+            expect(captureMock).toBeCalled()
+        })
+
+        test.each([
+            [
+                'an operator the SDK does not implement',
+                createSuppressionRule('AND', [
+                    {
+                        key: '$lib',
+                        value: 'is_not_set',
+                        operator: 'is_not_set',
+                        type: 'event_property',
+                    } as unknown as ErrorTrackingSuppressionRuleValue,
+                ]),
+            ],
+            [
+                'a negative operator on a key the SDK cannot resolve',
+                createSuppressionRule('OR', [
+                    {
+                        key: '$host',
+                        value: '(\\.|^)posthog\\.com$',
+                        operator: 'not_regex',
+                        type: 'event_property',
+                    } as unknown as ErrorTrackingSuppressionRuleValue,
+                ]),
+            ],
+            ['values that are not an array', { type: 'AND', values: null } as unknown as ErrorTrackingSuppressionRule],
+        ])('captures the exception when a rule uses %s', (_description, suppressionRule) => {
             exceptions.onRemoteConfig({
                 ok: true,
                 config: { errorTracking: { suppressionRules: [suppressionRule] } } as RemoteConfig,

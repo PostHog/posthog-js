@@ -3,7 +3,7 @@
 // Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
-import type { Event, McpEvent } from '../types'
+import type { ErrorProperties, Event, McpEvent } from '../types'
 import { sanitizeCapturedValue } from './mcp-payloads'
 
 type SanitizedRecord = Record<string, unknown>
@@ -39,7 +39,29 @@ export function sanitizeEvent<T extends Event | McpEvent>(event: T): T {
     result.userIntent = sanitizeCapturedValue(result.userIntent) as string
   }
 
+  if (result.error != null) {
+    result.error = sanitizeExceptionValues(result.error)
+  }
+
   return result
+}
+
+/**
+ * Sanitizes exception messages before they fan out to both the primary MCP
+ * event's error-message property and the `$exception` sibling.
+ */
+function sanitizeExceptionValues(error: ErrorProperties): ErrorProperties {
+  if (!Array.isArray(error.$exception_list)) {
+    return error
+  }
+
+  return {
+    ...error,
+    $exception_list: error.$exception_list.map((exception) => ({
+      ...exception,
+      value: sanitizeCapturedValue(exception.value) as string,
+    })),
+  }
 }
 
 /**

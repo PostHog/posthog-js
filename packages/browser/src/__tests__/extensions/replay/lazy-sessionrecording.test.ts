@@ -3837,6 +3837,124 @@ describe('Lazy SessionRecording', () => {
         })
     })
 
+    describe('sampling passthrough', () => {
+        it('passes user sampling for mousemove and mouseInteraction to rrweb.record', () => {
+            posthog.config.session_recording.sampling = { mousemove: false, mouseInteraction: false }
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    sampling: { mousemove: false, mouseInteraction: false },
+                })
+            )
+        })
+
+        it('passes a falsy numeric mousemove value of 0 to rrweb.record', () => {
+            posthog.config.session_recording.sampling = { mousemove: 0 }
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    sampling: { mousemove: 0 },
+                })
+            )
+        })
+
+        it('passes a numeric mousemove throttle to rrweb.record', () => {
+            posthog.config.session_recording.sampling = { mousemove: 250 }
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    sampling: { mousemove: 250 },
+                })
+            )
+        })
+
+        it('merges user sampling with canvas sampling', () => {
+            posthog.config.session_recording.sampling = { mousemove: false }
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        canvasQuality: '0.2',
+                        canvasFps: 6,
+                        recordCanvas: true,
+                    },
+                })
+            )
+
+            sessionRecording['_onScriptLoaded']()
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    recordCanvas: true,
+                    sampling: { mousemove: false, canvas: 6 },
+                })
+            )
+        })
+
+        it('ignores sampling keys that are not allowlisted', () => {
+            posthog.config.session_recording.sampling = {
+                canvas: 1,
+                scroll: 100,
+                mousemove: false,
+            } as any
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    sampling: { mousemove: false },
+                })
+            )
+        })
+
+        it('does not set sampling when not configured', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    sampling: undefined,
+                })
+            )
+        })
+    })
+
     describe('console logs', () => {
         it('if not enabled, plugin is not used', () => {
             posthog.config.enable_recording_console_log = false
@@ -4453,6 +4571,120 @@ describe('Lazy SessionRecording', () => {
             expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
                 expect.objectContaining({ canvasResolutionScale: expected })
             )
+        })
+
+        it('passes a regions provider that reads the live config', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', canvasQuality: '0.2', canvasFps: 6, recordCanvas: true },
+                })
+            )
+
+            sessionRecording['_onScriptLoaded']()
+
+            const mockParams = assignableWindow.__PosthogExtensions__.rrweb.record.mock.calls[0][0]
+            const canvas = {} as HTMLCanvasElement
+
+            // no provider configured, so the canvas records unmasked
+            expect(mockParams.canvasMasking.regionsFn(canvas)).toBeUndefined()
+
+            const regions = [{ x: 1, y: 2, width: 3, height: 4 }]
+            const regionsFn = jest.fn(() => regions)
+            config.session_recording.canvasCapture = { maskRegionsFn: regionsFn }
+            expect(mockParams.canvasMasking.regionsFn(canvas)).toBe(regions)
+            expect(regionsFn).toHaveBeenCalledWith(canvas)
+        })
+
+        it('marks canvasMasking configured when maskRegionsFn is set at record start', () => {
+            config.session_recording.canvasCapture = { maskRegionsFn: jest.fn(() => []) }
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', canvasQuality: '0.2', canvasFps: 6, recordCanvas: true },
+                })
+            )
+
+            sessionRecording['_onScriptLoaded']()
+
+            const mockParams = assignableWindow.__PosthogExtensions__.rrweb.record.mock.calls[0][0]
+            expect(mockParams.canvasMasking.configured()).toBe(true)
+        })
+
+        it('does not mark canvasMasking configured when only recordCanvas is on', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', canvasQuality: '0.2', canvasFps: 6, recordCanvas: true },
+                })
+            )
+
+            sessionRecording['_onScriptLoaded']()
+
+            const mockParams = assignableWindow.__PosthogExtensions__.rrweb.record.mock.calls[0][0]
+            expect(mockParams.canvasMasking.configured()).toBe(false)
+        })
+
+        it('reads canvasMasking configured from the live config', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', canvasQuality: '0.2', canvasFps: 6, recordCanvas: true },
+                })
+            )
+
+            sessionRecording['_onScriptLoaded']()
+
+            const mockParams = assignableWindow.__PosthogExtensions__.rrweb.record.mock.calls[0][0]
+            expect(mockParams.canvasMasking.configured()).toBe(false)
+
+            config.session_recording.canvasCapture = { maskRegionsFn: jest.fn(() => []) }
+            expect(mockParams.canvasMasking.configured()).toBe(true)
+        })
+
+        it.each([
+            ['null', null],
+            ['undefined', undefined],
+        ])('reports null when a configured provider returns %s', (_name, returned) => {
+            config.session_recording.canvasCapture = { maskRegionsFn: jest.fn(() => returned) }
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', canvasQuality: '0.2', canvasFps: 6, recordCanvas: true },
+                })
+            )
+
+            sessionRecording['_onScriptLoaded']()
+
+            const mockParams = assignableWindow.__PosthogExtensions__.rrweb.record.mock.calls[0][0]
+            expect(mockParams.canvasMasking.regionsFn({} as HTMLCanvasElement)).toBe(null)
+        })
+
+        it('reports null and warns once when a configured provider throws', () => {
+            assignableWindow.POSTHOG_DEBUG = true
+            const logSpy = jest.spyOn(window!.console, 'log').mockImplementation(() => {})
+            const warnSpy = jest.spyOn(window!.console, 'warn').mockImplementation(() => {})
+            const regionsFn = jest.fn(() => {
+                throw new Error('boom')
+            })
+            config.session_recording.canvasCapture = { maskRegionsFn: regionsFn }
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', canvasQuality: '0.2', canvasFps: 6, recordCanvas: true },
+                })
+            )
+
+            sessionRecording['_onScriptLoaded']()
+
+            const mockParams = assignableWindow.__PosthogExtensions__.rrweb.record.mock.calls[0][0]
+            expect(mockParams.canvasMasking.regionsFn({} as HTMLCanvasElement)).toBe(null)
+            expect(mockParams.canvasMasking.regionsFn({} as HTMLCanvasElement)).toBe(null)
+
+            expect(regionsFn).toHaveBeenCalledTimes(2)
+            expect(
+                warnSpy.mock.calls.filter(
+                    (call) => typeof call[1] === 'string' && call[1].includes('maskRegionsFn threw')
+                )
+            ).toHaveLength(1)
+
+            logSpy.mockRestore()
+            warnSpy.mockRestore()
+            assignableWindow.POSTHOG_DEBUG = undefined
         })
 
         it('skips when any config variable is missing', () => {

@@ -4,7 +4,7 @@ import type { Properties } from '@posthog/types'
 import type { Disposable } from './disposable'
 import type { KeyValueStore } from './persistence'
 import type { Listener } from './pubsub'
-import type { RemoteConfig } from './types/remote-config'
+import type { RemoteConfigResult } from './types/remote-config'
 
 /** Recursively marks object properties as readonly while preserving callable values. */
 export type DeepReadonly<T> = T extends (...args: never[]) => unknown
@@ -103,10 +103,8 @@ export interface Client {
     /** Fires for every captured event through a deeply readonly view. */
     readonly onEvent: Listener<CapturedEventInfo>
 
-    /** Resolves with the current remote config, awaiting the first outcome when necessary. */
-    getRemoteConfig(): Promise<DeepReadonly<RemoteConfig> | undefined>
-    /** Fires when server-provided config arrives or changes successfully. */
-    readonly onRemoteConfig: Listener<DeepReadonly<RemoteConfig>>
+    /** Replays the latest remote-config outcome on subscription and fires for subsequent outcomes. */
+    readonly onRemoteConfig: Listener<DeepReadonly<RemoteConfigResult>>
 
     /** Public project token used to authenticate endpoint-specific requests. */
     readonly projectToken: string

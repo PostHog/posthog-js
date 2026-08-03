@@ -148,6 +148,7 @@ describe('SessionRecording', () => {
                 },
             } as unknown as ConsentManager,
             register_for_session: registerForSessionMock,
+            _onRemoteConfig: jest.fn(),
             _internalEventEmitter: simpleEventEmitter,
             on: jest.fn().mockImplementation((event, cb) => {
                 const unsubscribe = simpleEventEmitter.on(event, cb)
