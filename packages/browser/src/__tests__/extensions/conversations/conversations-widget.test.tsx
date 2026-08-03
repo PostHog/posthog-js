@@ -2,8 +2,10 @@ import { render, fireEvent, waitFor } from '@testing-library/preact'
 import '@testing-library/jest-dom'
 import { ConversationsWidget } from '../../../extensions/conversations/external/components/ConversationsWidget'
 import { ConversationsRemoteConfig } from '../../../posthog-conversations-types'
+import { createConversationsSendError } from '../../../extensions/conversations/external/errors'
+import Config from '../../../config'
 
-describe('ConversationsWidget restore request UI', () => {
+describe('ConversationsWidget', () => {
     const config: ConversationsRemoteConfig = {
         enabled: true,
         token: 'test-token',
@@ -105,5 +107,71 @@ describe('ConversationsWidget restore request UI', () => {
         )
 
         expect(queryByText('Recover them here')).not.toBeInTheDocument()
+    })
+
+    it('should render handled send failures without logging them again', async () => {
+        const error = createConversationsSendError(
+            'network',
+            'Unable to reach the server. Please check your connection and try again.'
+        )
+        const previousDebug = Config.DEBUG
+        Config.DEBUG = true
+        const errorSpy = jest.spyOn(console, 'error').mockImplementation()
+
+        try {
+            const { getByPlaceholderText, getByLabelText, findByText, queryByText } = render(
+                <ConversationsWidget
+                    config={config}
+                    initialState="open"
+                    onSendMessage={jest.fn().mockRejectedValue(error)}
+                    onRequestRestoreLink={jest.fn().mockResolvedValue({ ok: true })}
+                />
+            )
+
+            fireEvent.input(getByPlaceholderText('Type your message...'), {
+                target: { value: 'A message that should be removed' },
+            })
+            fireEvent.click(getByLabelText('Send message'))
+
+            expect(await findByText(error.message)).toBeInTheDocument()
+            expect(queryByText('A message that should be removed')).not.toBeInTheDocument()
+            expect(errorSpy).not.toHaveBeenCalled()
+        } finally {
+            errorSpy.mockRestore()
+            Config.DEBUG = previousDebug
+        }
+    })
+
+    it('should log unexpected send failures at error', async () => {
+        const error = new Error('Unexpected send failure')
+        const previousDebug = Config.DEBUG
+        Config.DEBUG = true
+        const errorSpy = jest.spyOn(console, 'error').mockImplementation()
+
+        try {
+            const { getByPlaceholderText, getByLabelText, findByText } = render(
+                <ConversationsWidget
+                    config={config}
+                    initialState="open"
+                    onSendMessage={jest.fn().mockRejectedValue(error)}
+                    onRequestRestoreLink={jest.fn().mockResolvedValue({ ok: true })}
+                />
+            )
+
+            fireEvent.input(getByPlaceholderText('Type your message...'), {
+                target: { value: 'Trigger an unexpected failure' },
+            })
+            fireEvent.click(getByLabelText('Send message'))
+
+            expect(await findByText(error.message)).toBeInTheDocument()
+            expect(errorSpy).toHaveBeenCalledWith(
+                expect.stringContaining('[ConversationsWidget]'),
+                'Failed to send message',
+                error
+            )
+        } finally {
+            errorSpy.mockRestore()
+            Config.DEBUG = previousDebug
+        }
     })
 })
