@@ -738,6 +738,7 @@ function serializeElementNode(
   } = options;
   const needBlock = _isBlockedElement(n, blockClass, blockSelector);
   const tagName = getValidTagName(n);
+  const generatedAttributeNames = new Set<string>();
   let attributes: attributes = {};
   const len = n.attributes.length;
   for (let i = 0; i < len; i++) {
@@ -842,6 +843,7 @@ function serializeElementNode(
       attributes.rr_open_mode = 'modal';
       attributes.ph_rr_could_not_detect_modal = true;
     }
+    generatedAttributeNames.add('rr_open_mode');
   }
 
   // canvas image data
@@ -950,6 +952,7 @@ function serializeElementNode(
     mediaAttributes.rr_mediaState = (n as HTMLMediaElement).paused
       ? 'paused'
       : 'played';
+    generatedAttributeNames.add('rr_mediaState');
     mediaAttributes.rr_mediaCurrentTime = (n as HTMLMediaElement).currentTime;
     mediaAttributes.rr_mediaPlaybackRate = (n as HTMLMediaElement).playbackRate;
     mediaAttributes.rr_mediaMuted = (n as HTMLMediaElement).muted;
@@ -980,19 +983,26 @@ function serializeElementNode(
       rr_left: `${Math.floor(left + (doc.defaultView?.scrollX || 0))}px`,
       rr_top: `${Math.floor(top + (doc.defaultView?.scrollY || 0))}px`,
     };
+    generatedAttributeNames.add('rr_width');
+    generatedAttributeNames.add('rr_height');
+    generatedAttributeNames.add('rr_left');
+    generatedAttributeNames.add('rr_top');
     // Captured so rebuild can keep originally-in-flow placeholders in flow
     // instead of forcing `position: absolute` and collapsing sibling layout.
     if (computed) {
       // JSDOM-style envs return '' for unset computed values; normalize to the CSS default.
       attributes.rr_position = computed.position || 'static';
+      generatedAttributeNames.add('rr_position');
       if (computed.transform && computed.transform !== 'none') {
         attributes.rr_transform = computed.transform;
+        generatedAttributeNames.add('rr_transform');
       }
       // Any inline-level box has its in-flow slot rebuilt as the tag's default
       // display once style is stripped, which collapses width/height. Capture
       // so rebuild can restore (promote plain `inline` → `inline-block`).
       if (computed.display && computed.display.startsWith('inline')) {
         attributes.rr_display = computed.display;
+        generatedAttributeNames.add('rr_display');
       }
     }
   }
@@ -1017,11 +1027,7 @@ function serializeElementNode(
           value,
           maskAllElementAttributes,
           maskAttributeFn,
-          isGenerated:
-            (needBlock && name.startsWith('rr_')) ||
-            ((tagName === 'audio' || tagName === 'video') &&
-              name === 'rr_mediaState') ||
-            (tagName === 'dialog' && name === 'rr_open_mode'),
+          isGenerated: generatedAttributeNames.has(name),
         });
       }
     }

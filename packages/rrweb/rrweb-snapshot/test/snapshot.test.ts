@@ -290,6 +290,7 @@ describe('form', () => {
 describe('attribute masking', () => {
   type AttributeMaskingOptions = {
     maskAllElementAttributes?: boolean;
+    newlyAddedElement?: boolean;
     maskAttributeFn?: (
       name: string,
       value: string,
@@ -372,6 +373,47 @@ describe('attribute masking', () => {
       input,
     );
   });
+
+  it.each([
+    ['full snapshots', false],
+    ['newly added nodes', true],
+  ])(
+    'masks source rr_open_mode on closed dialogs in %s',
+    (_path, newlyAddedElement) => {
+      const dialog = document.createElement('dialog');
+      dialog.setAttribute('rr_open_mode', 'alice@example.com');
+
+      const sn = serializeElement(dialog, {
+        maskAllElementAttributes: true,
+        newlyAddedElement,
+      });
+
+      expect(sn.attributes.rr_open_mode).toMatch(/^\*+$/);
+      expect(sn.attributes.rr_open_mode).not.toContain('alice@example.com');
+    },
+  );
+
+  it.each([
+    ['modal', 'full snapshots', false],
+    ['non-modal', 'full snapshots', false],
+    ['modal', 'newly added nodes', true],
+    ['non-modal', 'newly added nodes', true],
+  ] as const)(
+    'preserves generated %s dialog mode in %s',
+    (openMode, _path, newlyAddedElement) => {
+      const dialog = document.createElement('dialog');
+      dialog.setAttribute('open', '');
+      dialog.setAttribute('rr_open_mode', 'alice@example.com');
+      vi.spyOn(dialog, 'matches').mockReturnValue(openMode === 'modal');
+
+      const sn = serializeElement(dialog, {
+        maskAllElementAttributes: true,
+        newlyAddedElement,
+      });
+
+      expect(sn.attributes.rr_open_mode).toBe(openMode);
+    },
+  );
 
   it('maskAttributeFn takes precedence over maskAllElementAttributes', () => {
     const maskAttributeFn = vi.fn((name: string, value: string) =>
