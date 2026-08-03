@@ -44,6 +44,15 @@ export class CanvasManager {
   private rafIdFlush: number | null = null;
   private refCount = 0;
   private torndown = false;
+  private resetFrameDedup: (() => void) | null = null;
+
+  // Node ids are reused across full snapshots, so the encode worker's dedup
+  // map would otherwise keep suppressing an idle canvas forever — leaving the
+  // new snapshot's epoch without any frame to repaint that canvas from after
+  // a seek. Called after each full snapshot so every canvas re-emits one frame.
+  public onFullSnapshot() {
+    this.resetFrameDedup?.();
+  }
 
   // Shared by the main document and every iframe/shadow-root observer, so reference-count
   // teardown: a single root cleaning up must not unpatch getContext / stop the FPS loop globally.
@@ -208,6 +217,10 @@ export class CanvasManager {
       // stop the capture loop; nothing can be encoded without the worker.
       cancelAnimationFrame(rafId);
       worker.terminate?.();
+      this.resetFrameDedup = null;
+    };
+    this.resetFrameDedup = () => {
+      worker.postMessage({ resetFrameDedup: true });
     };
     worker.onmessage = (e) => {
       const { id } = e.data;
@@ -396,6 +409,7 @@ export class CanvasManager {
       // this, every recorder restart leaks a worker thread plus its
       // capture-resolution OffscreenCanvas
       worker.terminate?.();
+      this.resetFrameDedup = null;
     };
   }
 
