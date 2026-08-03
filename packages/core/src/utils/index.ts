@@ -93,6 +93,32 @@ export function safeSetTimeout(fn: () => void, timeout: number): any {
   return t
 }
 
+export async function raceWithTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  onTimeout?: () => void
+): Promise<T | void> {
+  let timeoutHandle: ReturnType<typeof safeSetTimeout> | undefined
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<void>((resolve, reject) => {
+        timeoutHandle = safeSetTimeout(() => {
+          try {
+            onTimeout?.()
+            resolve()
+          } catch (error) {
+            reject(error)
+          }
+        }, timeoutMs)
+      }),
+    ])
+  } finally {
+    clearTimeout(timeoutHandle)
+  }
+}
+
 // NOTE: We opt for this slightly imperfect check as the global "Promise" object can get mutated in certain environments
 export const isPromise = (obj: any): obj is Promise<any> => {
   return obj && typeof obj.then === 'function'

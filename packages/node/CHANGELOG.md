@@ -1,5 +1,21 @@
 # posthog-node
 
+## 5.47.7
+
+### Patch Changes
+
+- [#4352](https://github.com/PostHog/posthog-js/pull/4352) [`1cf9c6d`](https://github.com/PostHog/posthog-js/commit/1cf9c6d555b3a774bfa0bd109de290656e64d662) Thanks [@marandaneto](https://github.com/marandaneto)! - Bound stack source context reads and skip non-regular or oversized files.
+  (2026-08-03)
+
+## 5.47.6
+
+### Patch Changes
+
+- [#4381](https://github.com/PostHog/posthog-js/pull/4381) [`f3a71a1`](https://github.com/PostHog/posthog-js/commit/f3a71a1f462384543de5f39762c3c1ed7b532be8) Thanks [@marandaneto](https://github.com/marandaneto)! - Clear completed lifecycle timeout handles so successful shutdowns do not leave timers running.
+  (2026-08-03)
+- Updated dependencies [[`f3a71a1`](https://github.com/PostHog/posthog-js/commit/f3a71a1f462384543de5f39762c3c1ed7b532be8)]:
+  - @posthog/core@1.46.4
+
 ## 5.47.5
 
 ### Patch Changes
