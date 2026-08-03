@@ -1006,6 +1006,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return
         }
 
+        // a fresh start is never held — only rotation-born epochs are (re-set in
+        // _restartForSessionIdChange after this returns). Guarded on isStarted so a
+        // re-entrant start() on a live held recorder (e.g. a remote-config refresh)
+        // cannot release a hold that only a user interaction should release.
+        if (!this.isStarted) {
+            this._holdFlushUntilInteraction = false
+        }
+
         // Invalidate any in-flight async cleanup queued by a prior stop(). On a session-id
         // rotation, _updateWindowAndSessionIds calls stop() then start() synchronously; if
         // stop() took the _stopAfterCompressionQueueDrains path (non-empty compression queue),
@@ -1225,8 +1233,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         ) {
             // rotation while not confirmed-active: hold the new epoch's buffer until the
             // user actually interacts, so idle tabs don't ship one recording per rotation.
-            // the hold must be read before _isIdle is overwritten with 'unknown'
-            const holdNextEpoch = this._isIdle !== false
+            // gated on a real session-id change (a windowId-only restart is not rotation-born)
+            // and read before _isIdle is overwritten with 'unknown'
+            const holdNextEpoch = this._sessionId !== sessionId && this._isIdle !== false
             this._isIdle = 'unknown'
             this._restartForSessionIdChange(holdNextEpoch)
         }
@@ -1347,12 +1356,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         logger.info('stopped')
     }
 
-    // ordering matters: the hold is set after stop() so the stop discards or ships the
-    // old epoch per its own flag, and before start() so the new epoch starts held
+    // ordering matters: the hold is set after stop() (so the stop discards or ships the
+    // old epoch per its own flag) and after start() (whose fresh-start reset would
+    // otherwise clobber it); no flush can run synchronously in between
     private _restartForSessionIdChange(holdNextEpoch: boolean) {
         this.stop()
-        this._holdFlushUntilInteraction = holdNextEpoch
         this.start('session_id_changed')
+        this._holdFlushUntilInteraction = holdNextEpoch
     }
 
     discard() {
@@ -2057,7 +2067,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._sessionId = sessionId
 
         if (sessionIdChanged || windowIdChanged) {
-            this._restartForSessionIdChange(this._isIdle !== false)
+            this._restartForSessionIdChange(sessionIdChanged && this._isIdle !== false)
         } else {
             if (isUserInteraction && this._holdFlushUntilInteraction) {
                 // first interaction within the held session: release the buffer so the

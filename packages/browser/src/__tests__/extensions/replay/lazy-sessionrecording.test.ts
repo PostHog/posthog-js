@@ -1472,6 +1472,56 @@ describe('Lazy SessionRecording', () => {
                     expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
                 })
 
+                it('clears the hold on a fresh start after stop, so the next session ships without interaction', () => {
+                    const rotationTimestamp = rotateExternallyWhileUnknown()
+                    emitInactiveEvent(rotationTimestamp + 100, 'unknown')
+
+                    const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+                    lazyRecorder.stop()
+                    expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+
+                    lazyRecorder.start()
+                    const snapshot = emitInactiveEvent(rotationTimestamp + 200, 'unknown')
+                    jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                    expect(posthog.capture).toHaveBeenCalledWith(
+                        '$snapshot',
+                        expect.objectContaining({ $snapshot_data: expect.arrayContaining([snapshot]) }),
+                        expect.any(Object)
+                    )
+                })
+
+                it('does not clear the hold on a re-entrant start() while a held epoch is live', () => {
+                    const rotationTimestamp = rotateExternallyWhileUnknown()
+                    const snapshot = emitInactiveEvent(rotationTimestamp + 100, 'unknown')
+
+                    // e.g. a remote-config refresh calling start() again on the live recorder
+                    sessionRecording['_lazyLoadedSessionRecording'].start()
+
+                    jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                    expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toContain(snapshot)
+                })
+
+                it('does not hold a windowId-only restart (no session rotation)', () => {
+                    const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+                    expect(lazyRecorder['_isIdle']).toEqual('unknown')
+                    jest.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                    ;(posthog.capture as Mock).mockClear()
+
+                    lazyRecorder['_windowId'] = 'stale-window-id'
+                    emitInactiveEvent(startingTimestamp + 100, 'unknown')
+
+                    const snapshot = emitInactiveEvent(startingTimestamp + 200, 'unknown')
+                    jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                    expect(posthog.capture).toHaveBeenCalledWith(
+                        '$snapshot',
+                        expect.objectContaining({ $snapshot_data: expect.arrayContaining([snapshot]) }),
+                        expect.any(Object)
+                    )
+                })
+
                 it('ships nothing when recording is stopped (opt-out) with a held epoch', () => {
                     const rotationTimestamp = rotateExternallyWhileUnknown()
                     emitInactiveEvent(rotationTimestamp + 100, 'unknown')
