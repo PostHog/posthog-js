@@ -14,6 +14,7 @@ concurrency:
 
 jobs:
   check:
-    uses: PostHog/.github/.github/workflows/changeset-hygiene.yml@99fddf69d1191099028fcb33a328d7eb61272341
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    uses: PostHog/.github/.github/workflows/changeset-hygiene.yml@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1
     with:
-      script-ref: 99fddf69d1191099028fcb33a328d7eb61272341
+      script-ref: 836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1

@@ -12,7 +12,9 @@ import postcssNesting from 'postcss-nesting'
 import cssnano from 'cssnano'
 import fs from 'fs'
 import path from 'path'
+import crossBundlePropertyConfig from './terser-cross-bundle-properties.cjs'
 
+const { crossBundlePrivateProperties, globallyReservedPrivateProperties } = crossBundlePropertyConfig
 const WRITE_MANGLED_PROPERTIES = process.env.WRITE_MANGLED_PROPERTIES
 const nameCachePath = './terser-mangled-names.json'
 let nameCache = {}
@@ -22,7 +24,7 @@ let nameCache = {}
 // Only property names (props) are shared; top-level variable names (vars) are
 // reset per-entry by the plugin below since each module has its own scope.
 
-const plugins = (es5, noExternal) => [
+const plugins = (es5, noExternal, preserveCrossBundleProperties) => [
     {
         name: 'reset-vars-name-cache',
         buildStart() {
@@ -177,13 +179,14 @@ const plugins = (es5, noExternal) => [
                               // we don't mangle _surveyManager as it's used by external surveys to paint them on the dom directly
                               '_surveyManager',
 
+                              // private ABI between independently emitted slim cores and extension bundles
+                              ...(preserveCrossBundleProperties
+                                  ? crossBundlePrivateProperties
+                                  : globallyReservedPrivateProperties),
+
                               // used in conversations - external bundle needs to access these on the posthog instance
                               '_conversationsManager',
                               '_conversations',
-                              '_send_request', // called by conversations external bundle
-
-                              // used in product-tours - external bundle needs to access this on the posthog instance
-                              '_addCaptureHook',
 
                               // part of setup/teardown code, preserve these out of caution
                               '_init',
@@ -346,9 +349,7 @@ const plugins = (es5, noExternal) => [
 
 const entryFilter = process.env.ENTRY
 const allEntrypoints = fs.readdirSync('./src/entrypoints')
-const entrypoints = entryFilter
-    ? allEntrypoints.filter((file) => file.startsWith(entryFilter))
-    : allEntrypoints
+const entrypoints = entryFilter ? allEntrypoints.filter((file) => file.startsWith(entryFilter)) : allEntrypoints
 
 const entrypointTargets = entrypoints.map((file) => {
     const fileParts = file.split('.')
@@ -365,7 +366,12 @@ const entrypointTargets = entrypoints.map((file) => {
 
     const fileName = fileParts.join('.')
 
-    const pluginsForThisFile = plugins(fileName.includes('es5'), fileName.includes('no-external'))
+    const preserveCrossBundleProperties = ['extension-bundles', 'module.slim'].includes(fileName)
+    const pluginsForThisFile = plugins(
+        fileName.includes('es5'),
+        fileName.includes('no-external'),
+        preserveCrossBundleProperties
+    )
 
     // we're allowed to console log in this file :)
     // eslint-disable-next-line no-console
@@ -378,6 +384,13 @@ const entrypointTargets = entrypoints.map((file) => {
             {
                 file: `dist/${fileName}.js`,
                 sourcemap: true,
+                // Mark every source in our bundles as third-party so devtools skip our frames.
+                // Without this, wrappers we install on globals (most visibly the console capture
+                // in entrypoints/logs.ts and rrweb's console plugin) become the reported location
+                // of the caller's own `console.*` calls (e.g. everything blamed on `logs.ts`).
+                // Rollup's default only ignore-lists paths containing node_modules, which misses
+                // both our `src/` and workspace packages (they resolve through symlinks).
+                sourcemapIgnoreList: () => true,
                 format,
                 ...(format === 'iife'
                     ? {
@@ -412,6 +425,7 @@ const typeTargets = entrypoints
     .map((file) => {
         const source = `./lib/src/entrypoints/${file.replace('.ts', '.d.ts')}`
         const isExtensionBundles = file === 'extension-bundles.es.ts'
+        const isSlimModule = file === 'module.slim.es.ts'
         // customizations types must reference the main module for the PostHog class —
         // an inlined duplicate would be nominally incompatible with the consumer's
         // `posthog` instance (same private-fields problem as extension-bundles).
@@ -423,8 +437,12 @@ const typeTargets = entrypoints
             input: source,
             // extension-bundles types must reference module.slim rather than inlining
             // their own copies — classes with private fields are nominally typed, so
-            // duplicate declarations across .d.ts files are incompatible.
+            // duplicate declarations across .d.ts files are incompatible. For the same
+            // reason, module.slim must use a source-level re-export from
+            // module.slim.no-external and keep that module external here, so dts preserves
+            // the reference instead of inlining a second declaration graph.
             ...(isExtensionBundles ? { external: [/module\.slim/] } : {}),
+            ...(isSlimModule ? { external: [/module\.slim\.no-external/] } : {}),
             ...(isCustomizations ? { external: [/posthog-core$/] } : {}),
             output: [
                 {
@@ -438,14 +456,19 @@ const typeTargets = entrypoints
                     exclude: [],
                     ...(inlineExternalTypes ? { respectExternal: true } : {}),
                 }),
-                // dts preserves the tsc-era path (e.g. './module.slim.es') but the
-                // output has been renamed to module.slim.d.ts — fix the reference.
-                ...(isExtensionBundles
+                // dts preserves tsc-era paths ending in `.es`, but the output files
+                // omit that segment — fix references between the generated declarations.
+                ...(isExtensionBundles || isSlimModule
                     ? [
                           {
                               name: 'fix-dts-external-paths',
                               renderChunk(code) {
-                                  return code.replace(/\.\/module\.slim\.es(?=['"])/g, './module.slim')
+                                  return code
+                                      .replace(/\.\/module\.slim\.es(?=['"])/g, './module.slim')
+                                      .replace(
+                                          /\.\/module\.slim\.no-external\.es(?=['"])/g,
+                                          './module.slim.no-external'
+                                      )
                               },
                           },
                       ]

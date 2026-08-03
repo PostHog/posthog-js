@@ -8,10 +8,12 @@ import type {
   IWindow,
   listenerHandler,
   CanvasArg,
+  CanvasMasking,
   DataURLOptions,
 } from '@posthog/rrweb-types';
 import { isBlocked } from '../../../utils';
 import { CanvasContext } from '@posthog/rrweb-types';
+import { computeFrameMaskRegions, SKIP_FRAME } from './canvas-mask';
 import initCanvas2DMutationObserver from './2d';
 import initCanvasContextObserver from './canvas';
 import initCanvasWebGLMutationObserver from './webgl';
@@ -42,6 +44,15 @@ export class CanvasManager {
   private rafIdFlush: number | null = null;
   private refCount = 0;
   private torndown = false;
+  private resetFrameDedup: (() => void) | null = null;
+
+  // Node ids are reused across full snapshots, so the encode worker's dedup
+  // map would otherwise keep suppressing an idle canvas forever — leaving the
+  // new snapshot's epoch without any frame to repaint that canvas from after
+  // a seek. Called after each full snapshot so every canvas re-emits one frame.
+  public onFullSnapshot() {
+    this.resetFrameDedup?.();
+  }
 
   // Shared by the main document and every iframe/shadow-root observer, so reference-count
   // teardown: a single root cleaning up must not unpatch getContext / stop the FPS loop globally.
@@ -106,6 +117,7 @@ export class CanvasManager {
     // so playback dimensions/aspect are unchanged, just softer. invalid/unset defaults to 1
     // (full resolution).
     resolutionScale?: number;
+    canvasMasking?: CanvasMasking;
   }) {
     const {
       sampling = 'all',
@@ -115,6 +127,7 @@ export class CanvasManager {
       recordCanvas,
       dataURLOptions,
       resolutionScale,
+      canvasMasking,
     } = options;
     this.mutationCb = options.mutationCb;
     this.mirror = options.mirror;
@@ -130,6 +143,7 @@ export class CanvasManager {
       this.initCanvasFPSObserver(sampling, win, blockClass, blockSelector, {
         dataURLOptions,
         resolutionScale,
+        canvasMasking,
       });
   }
 
@@ -158,6 +172,7 @@ export class CanvasManager {
     options: {
       dataURLOptions: DataURLOptions;
       resolutionScale?: number;
+      canvasMasking?: CanvasMasking;
     },
   ) {
     if (!('OffscreenCanvas' in win)) {
@@ -202,6 +217,10 @@ export class CanvasManager {
       // stop the capture loop; nothing can be encoded without the worker.
       cancelAnimationFrame(rafId);
       worker.terminate?.();
+      this.resetFrameDedup = null;
+    };
+    this.resetFrameDedup = () => {
+      worker.postMessage({ resetFrameDedup: true });
     };
     worker.onmessage = (e) => {
       const { id } = e.data;
@@ -333,6 +352,20 @@ export class CanvasManager {
             // display size, so playback dimensions/aspect are unchanged, just softer.
             const captureWidth = Math.max(1, Math.round(displayWidth * scale));
             const captureHeight = Math.max(1, Math.round(displayHeight * scale));
+            // computed before the await so regions and display dims describe
+            // the same frame even if the canvas resizes mid-snapshot
+            const maskRegions = computeFrameMaskRegions(
+              options.canvasMasking,
+              canvas,
+              captureWidth,
+              captureHeight,
+              displayWidth,
+              displayHeight,
+            );
+            if (maskRegions === SKIP_FRAME) {
+              snapshotInProgressMap.set(id, false);
+              return;
+            }
             const bitmap = await createImageBitmap(
               canvas,
               // only ask for a quality resampling filter when we're actually downscaling;
@@ -356,6 +389,7 @@ export class CanvasManager {
                 displayWidth,
                 displayHeight,
                 dataURLOptions: options.dataURLOptions,
+                maskRegions,
               },
               [bitmap],
             );
@@ -375,6 +409,7 @@ export class CanvasManager {
       // this, every recorder restart leaks a worker thread plus its
       // capture-resolution OffscreenCanvas
       worker.terminate?.();
+      this.resetFrameDedup = null;
     };
   }
 

@@ -86,7 +86,57 @@ describe('local evaluation', () => {
           latestBuildVersionMajor: undefined,
           latestBuildVersionMinor: undefined,
           latestBuildVersionPatch: undefined,
-        } as unknown as Record<string, string>,
+        },
+      })
+    ).toEqual(false)
+
+    expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+  })
+
+  it('evaluates numeric person properties with comparison operators', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Beta Feature',
+          key: 'numeric-person-flag',
+          active: true,
+          filters: {
+            groups: [
+              {
+                variant: null,
+                properties: [
+                  {
+                    key: 'age',
+                    type: 'person',
+                    value: 21,
+                    operator: 'gt',
+                  },
+                ],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+      ],
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    expect(
+      await posthog.getFeatureFlag('numeric-person-flag', 'some-distinct-id', {
+        personProperties: { age: 30 },
+      })
+    ).toEqual(true)
+
+    expect(
+      await posthog.getFeatureFlag('numeric-person-flag', 'some-distinct-id', {
+        personProperties: { age: 18 },
       })
     ).toEqual(false)
 
@@ -6172,6 +6222,214 @@ describe('fetch context handling', () => {
     await posthog.reloadFeatureFlags()
     expect(mockFetch).toHaveBeenCalled()
     expect(fetchContext).toBeUndefined()
+  })
+})
+
+describe('feature flag definition request timeout', () => {
+  let posthog: PostHog
+
+  jest.useFakeTimers()
+
+  afterEach(async () => {
+    jest.useRealTimers()
+    await posthog.shutdown()
+    jest.useFakeTimers()
+  })
+
+  const successfulFlagDefinitions = {
+    flags: [
+      {
+        id: 1,
+        key: 'body-timeout-flag',
+        active: true,
+        filters: { groups: [{ properties: [], rollout_percentage: 100 }] },
+      },
+    ],
+    group_type_mapping: {},
+    cohorts: {},
+  }
+
+  it('aborts a stalled 200 response body without pinning reload, local evaluation, or polling', async () => {
+    const signals: AbortSignal[] = []
+    const fetchDefinitions = jest.fn((_url: string, options: { signal?: AbortSignal }) => {
+      const signal = options.signal
+      if (!signal) {
+        throw new Error('Expected feature flag definition request to include an AbortSignal')
+      }
+      signals.push(signal)
+
+      return Promise.resolve({
+        status: 200,
+        headers: { get: () => null },
+        text: () => Promise.resolve(''),
+        json: () => {
+          if (signals.length === 3) {
+            return Promise.resolve(successfulFlagDefinitions)
+          }
+
+          return new Promise((_resolve, reject) => {
+            signal.addEventListener('abort', () => {
+              const error = new Error('The operation was aborted')
+              error.name = 'AbortError'
+              reject(error)
+            })
+          })
+        },
+      })
+    })
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: fetchDefinitions as any,
+      requestTimeout: 10,
+      featureFlagsPollingInterval: 100,
+      ...posthogImmediateResolveOptions,
+    })
+
+    const reloadPromise = posthog.reloadFeatureFlags()
+    expect(signals).toHaveLength(1)
+
+    await jest.advanceTimersByTimeAsync(10)
+
+    expect(signals[0].aborted).toBe(true)
+    await expect(reloadPromise).resolves.toBeUndefined()
+
+    const evaluationPromise = posthog.getFeatureFlag('body-timeout-flag', 'distinct-id', {
+      onlyEvaluateLocally: true,
+      sendFeatureFlagEvents: false,
+    })
+    expect(signals).toHaveLength(2)
+
+    await jest.advanceTimersByTimeAsync(10)
+
+    expect(signals[1].aborted).toBe(true)
+    await expect(evaluationPromise).resolves.toBeUndefined()
+
+    await jest.advanceTimersByTimeAsync(90)
+
+    expect(fetchDefinitions).toHaveBeenCalledTimes(3)
+    await expect(
+      posthog.getFeatureFlag('body-timeout-flag', 'distinct-id', {
+        onlyEvaluateLocally: true,
+        sendFeatureFlagEvents: false,
+      })
+    ).resolves.toBe(true)
+  })
+
+  it('allows a slow 200 response body to complete before the deadline and clears its timer', async () => {
+    let signal: AbortSignal | undefined
+    const fetchDefinitions = jest.fn((_url: string, options: { signal?: AbortSignal }) => {
+      signal = options.signal
+      if (!signal) {
+        throw new Error('Expected feature flag definition request to include an AbortSignal')
+      }
+
+      return Promise.resolve({
+        status: 200,
+        headers: { get: () => null },
+        text: () => Promise.resolve(''),
+        json: () =>
+          new Promise((resolve, reject) => {
+            const bodyTimer = setTimeout(() => resolve(successfulFlagDefinitions), 5)
+            signal?.addEventListener('abort', () => {
+              clearTimeout(bodyTimer)
+              const error = new Error('The operation was aborted')
+              error.name = 'AbortError'
+              reject(error)
+            })
+          }),
+      })
+    })
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: fetchDefinitions as any,
+      requestTimeout: 10,
+      featureFlagsPollingInterval: 60000,
+      ...posthogImmediateResolveOptions,
+    })
+
+    const reloadPromise = posthog.reloadFeatureFlags()
+    await jest.advanceTimersByTimeAsync(5)
+
+    await expect(reloadPromise).resolves.toBeUndefined()
+    expect(signal?.aborted).toBe(false)
+    await expect(
+      posthog.getFeatureFlag('body-timeout-flag', 'distinct-id', {
+        onlyEvaluateLocally: true,
+        sendFeatureFlagEvents: false,
+      })
+    ).resolves.toBe(true)
+
+    await jest.advanceTimersByTimeAsync(5)
+
+    expect(signal?.aborted).toBe(false)
+  })
+
+  it('clears the request timer after consuming a 200 response as text and preserves its body', async () => {
+    const signals: AbortSignal[] = []
+    const body = { cancel: jest.fn() } as unknown as ReadableStream<Uint8Array>
+    const fetchDefinitions = jest.fn((_url: string, options: { signal?: AbortSignal }) => {
+      if (!options.signal) {
+        throw new Error('Expected feature flag definition request to include an AbortSignal')
+      }
+      signals.push(options.signal)
+      return Promise.resolve({
+        status: 200,
+        headers: { get: () => null },
+        body,
+        text: () => Promise.resolve('response body'),
+        json: () => Promise.resolve(successfulFlagDefinitions),
+      })
+    })
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: fetchDefinitions as any,
+      requestTimeout: 10,
+      featureFlagsPollingInterval: 60000,
+      ...posthogImmediateResolveOptions,
+    })
+
+    const response = await (posthog as any).featureFlagsPoller._requestFeatureFlagDefinitions()
+
+    expect(response.body).toBe(body)
+    await expect(response.text()).resolves.toBe('response body')
+    await jest.advanceTimersByTimeAsync(10)
+
+    expect(signals[0].aborted).toBe(false)
+  })
+
+  it.each([304, 500])('clears the request timer for a %i response without consuming its body', async (status) => {
+    let signal: AbortSignal | undefined
+    const json = jest.fn()
+    const fetchDefinitions = jest.fn((_url: string, options: { signal?: AbortSignal }) => {
+      signal = options.signal
+      return Promise.resolve({
+        status,
+        headers: { get: () => (status === 304 ? 'etag' : null) },
+        text: () => Promise.resolve(''),
+        json,
+      })
+    })
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: fetchDefinitions as any,
+      requestTimeout: 10,
+      featureFlagsPollingInterval: 60000,
+      ...posthogImmediateResolveOptions,
+    })
+
+    await posthog.reloadFeatureFlags()
+    await jest.advanceTimersByTimeAsync(10)
+
+    expect(json).not.toHaveBeenCalled()
+    expect(signal?.aborted).toBe(false)
   })
 })
 

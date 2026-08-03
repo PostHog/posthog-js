@@ -516,6 +516,7 @@ function serializeNode(
     dataURLOptions?: DataURLOptions;
     inlineImages: boolean;
     recordCanvas: boolean;
+    canvasMaskingConfigured: (() => boolean) | undefined;
     keepIframeSrcFn: KeepIframeSrcFn;
     /**
      * `newlyAddedElement: true` skips scrollTop and scrollLeft check
@@ -536,6 +537,7 @@ function serializeNode(
     dataURLOptions = {},
     inlineImages,
     recordCanvas,
+    canvasMaskingConfigured,
     keepIframeSrcFn,
     newlyAddedElement = false,
   } = options;
@@ -574,6 +576,7 @@ function serializeNode(
         dataURLOptions,
         inlineImages,
         recordCanvas,
+        canvasMaskingConfigured,
         keepIframeSrcFn,
         newlyAddedElement,
         rootId,
@@ -697,6 +700,7 @@ function serializeElementNode(
     dataURLOptions?: DataURLOptions;
     inlineImages: boolean;
     recordCanvas: boolean;
+    canvasMaskingConfigured: (() => boolean) | undefined;
     keepIframeSrcFn: KeepIframeSrcFn;
     /**
      * `newlyAddedElement: true` skips scrollTop and scrollLeft check
@@ -715,6 +719,7 @@ function serializeElementNode(
     dataURLOptions = {},
     inlineImages,
     recordCanvas,
+    canvasMaskingConfigured,
     keepIframeSrcFn,
     newlyAddedElement = false,
     rootId,
@@ -828,7 +833,10 @@ function serializeElementNode(
   }
 
   // canvas image data
-  if (tagName === 'canvas' && recordCanvas) {
+  // when a canvas mask provider is configured, canvas pixels only ever reach
+  // the payload through the masked frame stream — serializing them here would
+  // bypass the masking
+  if (tagName === 'canvas' && recordCanvas && !canvasMaskingConfigured?.()) {
     if ((n as ICanvas).__context === '2d') {
       // only record this on 2d canvas
       if (!is2DCanvasBlank(n as HTMLCanvasElement)) {
@@ -1119,6 +1127,7 @@ export function serializeNodeWithId(
     keepIframeSrcFn?: KeepIframeSrcFn;
     inlineImages?: boolean;
     recordCanvas?: boolean;
+    canvasMaskingConfigured?: () => boolean;
     preserveWhiteSpace?: boolean;
     onSerialize?: (n: Node) => unknown;
     onIframeLoad?: (
@@ -1156,6 +1165,7 @@ export function serializeNodeWithId(
     dataURLOptions = {},
     inlineImages = false,
     recordCanvas = false,
+    canvasMaskingConfigured,
     onSerialize,
     onIframeLoad,
     iframeLoadTimeout = 5000,
@@ -1207,6 +1217,7 @@ export function serializeNodeWithId(
     dataURLOptions,
     inlineImages,
     recordCanvas,
+    canvasMaskingConfigured,
     keepIframeSrcFn,
     newlyAddedElement,
   });
@@ -1283,6 +1294,7 @@ export function serializeNodeWithId(
       dataURLOptions,
       inlineImages,
       recordCanvas,
+      canvasMaskingConfigured,
       preserveWhiteSpace,
       onSerialize,
       onIframeLoad,
@@ -1354,6 +1366,7 @@ export function serializeNodeWithId(
             dataURLOptions,
             inlineImages,
             recordCanvas,
+            canvasMaskingConfigured,
             preserveWhiteSpace,
             onSerialize,
             onIframeLoad,
@@ -1406,6 +1419,7 @@ export function serializeNodeWithId(
             dataURLOptions,
             inlineImages,
             recordCanvas,
+            canvasMaskingConfigured,
             preserveWhiteSpace,
             onSerialize,
             onIframeLoad,
@@ -1472,6 +1486,7 @@ function snapshot(
     dataURLOptions?: DataURLOptions;
     inlineImages?: boolean;
     recordCanvas?: boolean;
+    canvasMaskingConfigured?: () => boolean;
     preserveWhiteSpace?: boolean;
     onSerialize?: (n: Node) => unknown;
     onIframeLoad?: (
@@ -1501,6 +1516,7 @@ function snapshot(
     inlineStylesheet = true,
     inlineImages = false,
     recordCanvas = false,
+    canvasMaskingConfigured,
     maskAllInputs = false,
     maskTextFn,
     maskInputFn,
@@ -1558,6 +1574,7 @@ function snapshot(
     dataURLOptions,
     inlineImages,
     recordCanvas,
+    canvasMaskingConfigured,
     preserveWhiteSpace,
     onSerialize,
     onIframeLoad,

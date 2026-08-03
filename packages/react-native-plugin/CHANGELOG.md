@@ -1,5 +1,12 @@
 # @posthog/react-native-plugin
 
+## 2.2.4
+
+### Patch Changes
+
+- [#4392](https://github.com/PostHog/posthog-js/pull/4392) [`3d48c4b`](https://github.com/PostHog/posthog-js/commit/3d48c4bce2f44a5e9ec776b0f3ea2da19254cd27) Thanks [@github-actions](https://github.com/apps/github-actions)! - Raise the minimum posthog-ios dependency to 3.69.0 to include the rage-click sheet dismissal fix.
+  (2026-08-03)
+
 ## 2.2.3
 
 ### Patch Changes

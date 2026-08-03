@@ -1,6 +1,7 @@
 import { FetchLike } from '../types'
 
 export * from './bot-detection'
+export * from './browser-utils'
 export * from './bucketed-rate-limiter'
 export * from './number-utils'
 export * from './string-utils'
@@ -90,6 +91,32 @@ export function safeSetTimeout(fn: () => void, timeout: number): any {
   // We unref if available to prevent Node.js hanging on exit
   t?.unref && t?.unref()
   return t
+}
+
+export async function raceWithTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  onTimeout?: () => void
+): Promise<T | void> {
+  let timeoutHandle: ReturnType<typeof safeSetTimeout> | undefined
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<void>((resolve, reject) => {
+        timeoutHandle = safeSetTimeout(() => {
+          try {
+            onTimeout?.()
+            resolve()
+          } catch (error) {
+            reject(error)
+          }
+        }, timeoutMs)
+      }),
+    ])
+  } finally {
+    clearTimeout(timeoutHandle)
+  }
 }
 
 // NOTE: We opt for this slightly imperfect check as the global "Promise" object can get mutated in certain environments

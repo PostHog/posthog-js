@@ -26,3 +26,15 @@ export function canSurveyActivateRepeatedly(survey: SurveyForRepeatActivation): 
     survey.schedule === SurveySchedule.Always
   )
 }
+
+type SurveyForIterationCheck = Pick<Survey, 'schedule' | 'current_iteration'>
+
+/**
+ * True when a survey is meant to come back around on its own: a recurring schedule, or an
+ * iteration already under way. Stored display state is keyed by iteration
+ * (see `getSurveyIterationKey`), so for these surveys it rolls over and stops being a
+ * dependable "already answered" record; other surveys keep one stable key for good.
+ */
+export function isSurveyIterationBased(survey: SurveyForIterationCheck): boolean {
+  return survey.schedule === SurveySchedule.Recurring || (survey.current_iteration ?? 0) > 0
+}

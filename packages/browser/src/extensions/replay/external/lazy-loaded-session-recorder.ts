@@ -73,6 +73,7 @@ import {
     Properties,
     SessionIdChangedCallback,
     SessionRecordingOptions,
+    SessionRecordingSamplingConfig,
     SessionRecordingPersistedConfig,
     SessionStartReason,
 } from '../../../types'
@@ -480,6 +481,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _maxDepthExceeded = false
     // only warn once per recorder instance that client-side masking is shadowing the project setting
     private _hasWarnedClientMaskingOverride = false
+    private _maskRegionsFnFailed = false
 
     private _linkedFlagMatching: LinkedFlagMatching
     private _urlTriggerMatching: URLTriggerMatching
@@ -2084,6 +2086,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             collectFonts: false,
             inlineStylesheet: true,
             recordCrossOriginIframes: false,
+            sampling: undefined,
             attributeFilter: undefined,
         }
 
@@ -2094,6 +2097,18 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 if (key === 'maskInputOptions') {
                     // ensure password config is set if not included
                     sessionRecordingOptions.maskInputOptions = { password: true, ...value }
+                } else if (key === 'sampling') {
+                    // only allow a narrow subset of rrweb's sampling options;
+                    // canvas sampling is owned by the canvas recording config
+                    const userSampling = (value ?? {}) as SessionRecordingSamplingConfig
+                    const sampling: recordOptions['sampling'] = {}
+                    if (!isUndefined(userSampling.mousemove)) {
+                        sampling.mousemove = userSampling.mousemove
+                    }
+                    if (!isUndefined(userSampling.mouseInteraction)) {
+                        sampling.mouseInteraction = userSampling.mouseInteraction
+                    }
+                    sessionRecordingOptions.sampling = sampling
                 } else {
                     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                     // @ts-ignore
@@ -2104,9 +2119,40 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         if (this._canvasRecording && this._canvasRecording.enabled) {
             sessionRecordingOptions.recordCanvas = true
-            sessionRecordingOptions.sampling = { canvas: this._canvasRecording.fps }
+            // canvas fps is owned by the canvas recording config; merge so that
+            // user-provided sampling (e.g. mousemove) survives
+            sessionRecordingOptions.sampling = {
+                ...sessionRecordingOptions.sampling,
+                canvas: this._canvasRecording.fps,
+            }
             sessionRecordingOptions.dataURLOptions = { type: 'image/webp', quality: this._canvasRecording.quality }
             sessionRecordingOptions.canvasResolutionScale = this._canvasResolutionScale
+            sessionRecordingOptions.canvasMasking = {
+                // read live like regionsFn below: when true, rrweb skips canvas pixels
+                // in DOM full snapshots, and it is re-evaluated at each snapshot so a
+                // provider registered after recording started (via set_config) is
+                // honored without a recorder restart
+                configured: () => isFunction(this._instance.config.session_recording?.canvasCapture?.maskRegionsFn),
+                // read live so a provider registered after recording started (e.g. by
+                // a plugin that boots later than posthog-js) takes effect immediately.
+                // undefined must stay distinct from null, or every canvas without a
+                // provider would fail closed
+                regionsFn: (canvas) => {
+                    const fn = this._instance.config.session_recording?.canvasCapture?.maskRegionsFn
+                    if (!isFunction(fn)) {
+                        return undefined
+                    }
+                    try {
+                        return fn(canvas) ?? null
+                    } catch (e) {
+                        if (!this._maskRegionsFnFailed) {
+                            this._maskRegionsFnFailed = true
+                            logger.warn('canvasCapture.maskRegionsFn threw, canvas frames will be skipped', e)
+                        }
+                        return null
+                    }
+                },
+            }
         }
 
         if (this._masking) {

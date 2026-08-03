@@ -206,3 +206,6 @@ export interface RemoteConfig {
     /** Conversations widget configuration. */
     conversations?: boolean | ConversationsRemoteConfig
 }
+
+/** The latest outcome of loading remote configuration from PostHog. */
+export type RemoteConfigResult = { ok: true; config: RemoteConfig } | { ok: false }
