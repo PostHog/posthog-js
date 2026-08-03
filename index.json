@@ -1,4 +1,20 @@
 {
+  "PostHog/posthog-js/issue/4391": {
+    "key": "PostHog/posthog-js/issue/4391",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4391",
+    "url": "https://github.com/PostHog/posthog-js/issues/4391",
+    "conclusion": "Confirmed dependency-resolution bug: the React Native plugin caps posthog-ios at 3.64.x, preventing consumers from receiving the reported 3.68.2 rage-click fix.",
+    "labels": [
+      "react-native",
+      "iOS",
+      "feature/replay",
+      "team/client-libraries"
+    ],
+    "prUrl": "https://github.com/PostHog/posthog-js/pull/4392",
+    "closed": false,
+    "updatedAt": "2026-08-03T04:43:06.898Z"
+  },
   "PostHog/posthog-js/issue/4388": {
     "key": "PostHog/posthog-js/issue/4388",
     "repo": "PostHog/posthog-js",
