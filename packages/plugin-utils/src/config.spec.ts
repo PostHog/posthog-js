@@ -31,6 +31,39 @@ describe('resolveConfig', () => {
         expect(config.host).toBe(expectedHost)
     })
 
+    it.each([
+        { name: 'defaults to false', option: undefined, env: undefined, expected: false },
+        { name: 'reads the option', option: true, env: undefined, expected: true },
+        { name: 'falls back to the env var', option: undefined, env: '1', expected: true },
+        { name: 'treats boolish-false env values as false', option: undefined, env: 'off', expected: false },
+        { name: 'lets an explicit option override the env var', option: false, env: 'true', expected: false },
+    ])('resolves sourcemaps.noReleaseBind: $name', ({ option, env, expected }) => {
+        const previous = process.env.POSTHOG_NO_RELEASE_BIND
+        if (env === undefined) {
+            delete process.env.POSTHOG_NO_RELEASE_BIND
+        } else {
+            process.env.POSTHOG_NO_RELEASE_BIND = env
+        }
+        try {
+            const config = resolveConfig(
+                {
+                    personalApiKey: 'phx_personal_key',
+                    projectId: 'project-id',
+                    cliBinaryPath: '/tmp/posthog-cli',
+                    sourcemaps: { noReleaseBind: option },
+                },
+                { defaultEnabled: false }
+            )
+            expect(config.sourcemaps.noReleaseBind).toBe(expected)
+        } finally {
+            if (previous === undefined) {
+                delete process.env.POSTHOG_NO_RELEASE_BIND
+            } else {
+                process.env.POSTHOG_NO_RELEASE_BIND = previous
+            }
+        }
+    })
+
     it('rejects a blank personalApiKey after trimming whitespace when sourcemaps are enabled', () => {
         expect(() =>
             resolveConfig({

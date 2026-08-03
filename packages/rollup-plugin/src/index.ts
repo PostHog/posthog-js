@@ -12,6 +12,18 @@ type PostHogRollupPlugin = Plugin & {
     config: () => { build: { sourcemap: boolean | 'hidden' } } | undefined
 }
 
+// `output.sourcemapDebugIds` landed in rollup 4.28.0; older versions warn on unknown options.
+export function rollupSupportsDebugIds(rollupVersion: string | undefined): boolean {
+    if (!rollupVersion) {
+        return true
+    }
+    const [major, minor] = rollupVersion.split('.').map(Number)
+    if (Number.isNaN(major) || Number.isNaN(minor)) {
+        return true
+    }
+    return major > 4 || (major === 4 && minor >= 28)
+}
+
 export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOptions): Plugin {
     const posthogOptions = resolveConfig(userOptions)
     const plugin: PostHogRollupPlugin = {
@@ -32,10 +44,17 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
             handler(options: OutputOptions) {
                 if (!posthogOptions.sourcemaps.enabled) return options
 
-                return {
+                const next: OutputOptions = {
                     ...options,
                     sourcemap: posthogOptions.sourcemaps.deleteAfterUpload ? 'hidden' : true,
                 }
+                // The CLI adopts bundler-emitted debug ids as chunk ids under --no-release-bind.
+                // Gated on the flag: older CLI versions mishandle maps that carry a debugId.
+                const rollupVersion = (this as { meta?: { rollupVersion?: string } } | undefined)?.meta?.rollupVersion
+                if (posthogOptions.sourcemaps.noReleaseBind && rollupSupportsDebugIds(rollupVersion)) {
+                    next.sourcemapDebugIds = true
+                }
+                return next
             },
         },
 
