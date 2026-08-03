@@ -12,7 +12,6 @@ describe('PostHog Core', () => {
         flushAt: 5,
         fetchRetryCount: 3,
         fetchRetryDelay: 100,
-        requestTimeout: 1000,
         preloadFeatureFlags: false,
       })
     })
@@ -178,129 +177,224 @@ describe('PostHog Core', () => {
       }
     })
 
-    it('does not retry capture after a successful response body cancellation stalls', async () => {
-      const cancel = jest.fn<Promise<void>, []>(() => new Promise<void>(() => {}))
-      mocks.fetch.mockResolvedValue({
-        status: 200,
-        text: () => Promise.resolve('ok'),
-        json: () => Promise.resolve({ status: 'ok' }),
-        body: { cancel } as any,
+    describe('response body deadlines', () => {
+      beforeEach(() => {
+        ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+          flushAt: 5,
+          fetchRetryCount: 3,
+          fetchRetryDelay: 100,
+          requestTimeout: 1000,
+          preloadFeatureFlags: false,
+        })
       })
 
-      posthog.capture('test-event-1')
-      const flushPromise = posthog.flush()
-      await jest.advanceTimersByTimeAsync(1000)
+      it('does not retry capture after a successful response body cancellation stalls', async () => {
+        const cancel = jest.fn<Promise<void>, []>(() => new Promise<void>(() => {}))
+        mocks.fetch.mockResolvedValue({
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve({ status: 'ok' }),
+          body: { cancel } as any,
+        })
 
-      await expect(flushPromise).resolves.toBeUndefined()
-      expect(mocks.fetch).toHaveBeenCalledTimes(1)
-      expect(cancel).toHaveBeenCalledTimes(1)
-      expect(jest.getTimerCount()).toBe(0)
-    })
+        posthog.capture('test-event-1')
+        const flushPromise = posthog.flush()
+        await jest.advanceTimersByTimeAsync(1000)
 
-    it('does not retry logs after a successful response body cancellation stalls', async () => {
-      const cancel = jest.fn<Promise<void>, []>(() => new Promise<void>(() => {}))
-      mocks.fetch.mockResolvedValue({
-        status: 200,
-        text: () => Promise.resolve('ok'),
-        json: () => Promise.resolve({ status: 'ok' }),
-        body: { cancel } as any,
+        await expect(flushPromise).resolves.toBeUndefined()
+        expect(mocks.fetch).toHaveBeenCalledTimes(1)
+        expect(cancel).toHaveBeenCalledTimes(1)
+        expect(jest.getTimerCount()).toBe(0)
       })
 
-      const sendPromise = posthog._sendLogsBatch({ resourceLogs: [] })
-      await jest.advanceTimersByTimeAsync(1000)
+      it('does not retry logs after a successful response body cancellation stalls', async () => {
+        const cancel = jest.fn<Promise<void>, []>(() => new Promise<void>(() => {}))
+        mocks.fetch.mockResolvedValue({
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve({ status: 'ok' }),
+          body: { cancel } as any,
+        })
 
-      await expect(sendPromise).resolves.toEqual({ kind: 'ok' })
-      expect(mocks.fetch).toHaveBeenCalledTimes(1)
-      expect(cancel).toHaveBeenCalledTimes(1)
-      expect(jest.getTimerCount()).toBe(0)
-    })
+        const sendPromise = posthog._sendLogsBatch({ resourceLogs: [] })
+        await jest.advanceTimersByTimeAsync(1000)
 
-    it('does not retry metrics after a successful response body cancellation stalls', async () => {
-      const cancel = jest.fn<Promise<void>, []>(() => new Promise<void>(() => {}))
-      mocks.fetch.mockResolvedValue({
-        status: 200,
-        text: () => Promise.resolve('ok'),
-        json: () => Promise.resolve({ status: 'ok' }),
-        body: { cancel } as any,
+        await expect(sendPromise).resolves.toEqual({ kind: 'ok' })
+        expect(mocks.fetch).toHaveBeenCalledTimes(1)
+        expect(cancel).toHaveBeenCalledTimes(1)
+        expect(jest.getTimerCount()).toBe(0)
       })
 
-      const sendPromise = posthog._sendMetricsBatch({ resourceMetrics: [] })
-      await jest.advanceTimersByTimeAsync(1000)
+      it('does not retry metrics after a successful response body cancellation stalls', async () => {
+        const cancel = jest.fn<Promise<void>, []>(() => new Promise<void>(() => {}))
+        mocks.fetch.mockResolvedValue({
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve({ status: 'ok' }),
+          body: { cancel } as any,
+        })
 
-      await expect(sendPromise).resolves.toEqual({ kind: 'ok' })
-      expect(mocks.fetch).toHaveBeenCalledTimes(1)
-      expect(cancel).toHaveBeenCalledTimes(1)
-      expect(jest.getTimerCount()).toBe(0)
-    })
+        const sendPromise = posthog._sendMetricsBatch({ resourceMetrics: [] })
+        await jest.advanceTimersByTimeAsync(1000)
 
-    it('preserves terminal HTTP status when the error response body stalls', async () => {
-      const cancel = jest.fn<Promise<void>, []>().mockResolvedValue(undefined)
-      mocks.fetch.mockResolvedValue({
-        status: 400,
-        text: () => new Promise<string>(() => {}),
-        json: () => new Promise(() => {}),
-        body: { cancel } as any,
+        await expect(sendPromise).resolves.toEqual({ kind: 'ok' })
+        expect(mocks.fetch).toHaveBeenCalledTimes(1)
+        expect(cancel).toHaveBeenCalledTimes(1)
+        expect(jest.getTimerCount()).toBe(0)
       })
 
-      posthog.capture('test-event-1')
-      const flushPromise = posthog.flush()
-      await jest.advanceTimersByTimeAsync(1000)
+      it('preserves terminal HTTP status and reports when the error response body stalls', async () => {
+        const cancel = jest.fn<Promise<void>, []>().mockResolvedValue(undefined)
+        const text = jest.fn(() => new Promise<string>(() => {}))
+        mocks.fetch.mockResolvedValue({
+          status: 400,
+          text,
+          json: () => new Promise(() => {}),
+          body: { cancel } as any,
+        })
 
-      await expect(flushPromise).rejects.toMatchObject({ name: 'PostHogFetchHttpError', status: 400 })
-      expect(mocks.fetch).toHaveBeenCalledTimes(1)
-      expect(cancel).toHaveBeenCalledTimes(1)
-      expect(jest.getTimerCount()).toBe(0)
-    })
+        posthog.capture('test-event-1')
+        const error = await posthog.flush().catch((error) => error)
 
-    it('bounds an injected fetch that ignores abort and cancels its late response', async () => {
-      let resolveFetch!: (response: any) => void
-      const cancel = jest.fn<Promise<void>, []>().mockResolvedValue(undefined)
-      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
-        flushAt: 5,
-        fetchRetryCount: 0,
-        requestTimeout: 1000,
-        preloadFeatureFlags: false,
-      })
-      mocks.fetch.mockImplementation(
-        () =>
-          new Promise((resolve) => {
-            resolveFetch = resolve
-          })
-      )
+        expect(error).toMatchObject({ name: 'PostHogFetchHttpError', status: 400, bodyReadTimedOut: false })
+        expect(text).not.toHaveBeenCalled()
+        expect(cancel).not.toHaveBeenCalled()
 
-      posthog.capture('test-event-1')
-      const flushPromise = posthog.flush()
-      await jest.advanceTimersByTimeAsync(1000)
+        const textExpectation = expect(error.text).rejects.toHaveProperty('name', 'AbortError')
+        await jest.advanceTimersByTimeAsync(1000)
+        await textExpectation
 
-      await expect(flushPromise).rejects.toHaveProperty('name', 'PostHogFetchNetworkError')
-      expect(jest.getTimerCount()).toBe(0)
-
-      resolveFetch({
-        status: 200,
-        text: () => Promise.resolve('ok'),
-        json: () => Promise.resolve({ status: 'ok' }),
-        body: { cancel },
-      })
-      await Promise.resolve()
-      await Promise.resolve()
-
-      expect(cancel).toHaveBeenCalledTimes(1)
-    })
-
-    it('clears the request deadline after successful response consumption', async () => {
-      const cancel = jest.fn<Promise<void>, []>().mockResolvedValue(undefined)
-      mocks.fetch.mockResolvedValue({
-        status: 200,
-        text: () => Promise.resolve('ok'),
-        json: () => Promise.resolve({ status: 'ok' }),
-        body: { cancel } as any,
+        expect(error.bodyReadTimedOut).toBe(true)
+        await expect(error.json).rejects.toHaveProperty('name', 'AbortError')
+        expect(text).toHaveBeenCalledTimes(1)
+        expect(cancel).toHaveBeenCalledTimes(1)
+        expect(jest.getTimerCount()).toBe(0)
       })
 
-      posthog.capture('test-event-1')
-      await expect(posthog.flush()).resolves.toBeUndefined()
+      it('caches the error response body across text and JSON access', async () => {
+        const text = jest.fn().mockResolvedValue('{"error":"bad request"}')
+        const json = jest.fn().mockResolvedValue({ error: 'bad request' })
+        mocks.fetch.mockResolvedValue({ status: 400, text, json })
 
-      expect(cancel).toHaveBeenCalledTimes(1)
-      expect(jest.getTimerCount()).toBe(0)
+        posthog.capture('test-event-1')
+        const error = await posthog.flush().catch((error) => error)
+
+        expect(text).not.toHaveBeenCalled()
+        await expect(error.text).resolves.toBe('{"error":"bad request"}')
+        await expect(error.json).resolves.toEqual({ error: 'bad request' })
+        expect(text).toHaveBeenCalledTimes(1)
+        expect(json).not.toHaveBeenCalled()
+      })
+
+      it('cancels stalled retryable HTTP error bodies without waiting for them', async () => {
+        const text = jest.fn(() => new Promise<string>(() => {}))
+        const cancel = jest.fn<Promise<void>, []>().mockResolvedValue(undefined)
+        mocks.fetch.mockImplementation(async () => ({
+          status: 500,
+          text,
+          json: () => new Promise(() => {}),
+          body: { cancel } as any,
+        }))
+
+        posthog.capture('test-event-1')
+        const errorPromise = posthog.flush().catch((error) => error)
+        await jest.advanceTimersByTimeAsync(300)
+
+        const error = await errorPromise
+        expect(error).toMatchObject({ name: 'PostHogFetchHttpError', status: 500, bodyReadTimedOut: false })
+        expect(mocks.fetch).toHaveBeenCalledTimes(4)
+        expect(text).not.toHaveBeenCalled()
+        expect(cancel).toHaveBeenCalledTimes(3)
+        expect(jest.getTimerCount()).toBe(1)
+
+        await jest.advanceTimersByTimeAsync(1000)
+        expect(error.bodyReadTimedOut).toBe(true)
+        expect(cancel).toHaveBeenCalledTimes(4)
+        expect(jest.getTimerCount()).toBe(0)
+      })
+
+      it('bounds an injected fetch that ignores abort and cancels its late response', async () => {
+        let resolveFetch!: (response: any) => void
+        const cancel = jest.fn<Promise<void>, []>().mockResolvedValue(undefined)
+        ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+          flushAt: 5,
+          fetchRetryCount: 0,
+          requestTimeout: 1000,
+          preloadFeatureFlags: false,
+        })
+        mocks.fetch.mockImplementation(
+          () =>
+            new Promise((resolve) => {
+              resolveFetch = resolve
+            })
+        )
+
+        posthog.capture('test-event-1')
+        const flushPromise = posthog.flush()
+        await jest.advanceTimersByTimeAsync(1000)
+
+        await expect(flushPromise).rejects.toHaveProperty('name', 'PostHogFetchNetworkError')
+        expect(jest.getTimerCount()).toBe(0)
+
+        resolveFetch({
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve({ status: 'ok' }),
+          body: { cancel },
+        })
+        await Promise.resolve()
+        await Promise.resolve()
+
+        expect(cancel).toHaveBeenCalledTimes(1)
+      })
+
+      it('clears the request deadline after successful response consumption', async () => {
+        const cancel = jest.fn<Promise<void>, []>().mockResolvedValue(undefined)
+        mocks.fetch.mockResolvedValue({
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => Promise.resolve({ status: 'ok' }),
+          body: { cancel } as any,
+        })
+
+        posthog.capture('test-event-1')
+        await expect(posthog.flush()).resolves.toBeUndefined()
+
+        expect(cancel).toHaveBeenCalledTimes(1)
+        expect(jest.getTimerCount()).toBe(0)
+      })
+
+      it.each([
+        ['remote config', (client: PostHogCoreTestClient) => (client as any).getRemoteConfig()],
+        ['feature flags', (client: PostHogCoreTestClient) => client.getFlags('distinct-id')],
+        ['surveys', (client: PostHogCoreTestClient) => client.getSurveysStateless()],
+      ])('bounds a stalled body for required %s responses', async (_name, request) => {
+        const cancel = jest.fn<Promise<void>, []>().mockResolvedValue(undefined)
+        ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+          requestTimeout: 1000,
+          fetchRetryCount: 0,
+          remoteConfigRequestTimeoutMs: 1000,
+          featureFlagsRequestTimeoutMs: 1000,
+          featureFlagsRequestMaxRetries: 0,
+          preloadFeatureFlags: false,
+        })
+        mocks.fetch.mockResolvedValue({
+          status: 200,
+          text: () => Promise.resolve('ok'),
+          json: () => new Promise(() => {}),
+          body: { cancel } as any,
+        })
+
+        const requestPromise = request(posthog)
+        await jest.advanceTimersByTimeAsync(0)
+        await jest.advanceTimersByTimeAsync(1000)
+
+        await requestPromise
+        expect(mocks.fetch).toHaveBeenCalledTimes(1)
+        expect(mocks.fetch.mock.calls[0][1].signal?.aborted).toBe(true)
+        expect(cancel).toHaveBeenCalledTimes(1)
+        expect(jest.getTimerCount()).toBe(0)
+      })
     })
 
     it.each([400, 401, 403])('responds with an error without retries with %s error', async (status) => {

@@ -49,31 +49,69 @@ import {
 
 class PostHogFetchHttpError extends Error {
   name = 'PostHogFetchHttpError'
-  private responseBodyText: string | undefined
+  private responseBodyTextPromise?: Promise<string>
+  private responseBodyTimeout: Promise<never>
+  private responseBodyTimer!: ReturnType<typeof safeSetTimeout>
+  private _bodyReadTimedOut = false
 
   constructor(
     public response: PostHogFetchResponse,
-    public reqByteLength: number
+    public reqByteLength: number,
+    responseBodyDeadline: number,
+    private abortController: AbortController
   ) {
     super('HTTP error while fetching PostHog: status=' + response.status + ', reqByteLength=' + reqByteLength)
+
+    this.responseBodyTimeout = new Promise<never>((_resolve, reject) => {
+      this.responseBodyTimer = safeSetTimeout(
+        () => {
+          this._bodyReadTimedOut = true
+          const timeoutError = new Error('Response body read timed out')
+          timeoutError.name = 'AbortError'
+          // Reject first so the timeout remains the diagnostic if abort rejects the body read synchronously.
+          reject(timeoutError)
+          this.cancelResponseBody(timeoutError)
+        },
+        Math.max(0, responseBodyDeadline - Date.now())
+      )
+    })
+    // The response may never be inspected, so handle the deadline rejection at creation time.
+    void this.responseBodyTimeout.catch(() => {})
   }
 
   get status(): number {
     return this.response.status
   }
 
+  get bodyReadTimedOut(): boolean {
+    return this._bodyReadTimedOut
+  }
+
   get text(): Promise<string> {
-    return this.responseBodyText === undefined ? this.response.text() : Promise.resolve(this.responseBodyText)
+    if (!this.responseBodyTextPromise) {
+      this.responseBodyTextPromise = this._bodyReadTimedOut
+        ? this.responseBodyTimeout
+        : Promise.race([Promise.resolve().then(() => this.response.text()), this.responseBodyTimeout]).finally(() =>
+            clearTimeout(this.responseBodyTimer)
+          )
+    }
+    return this.responseBodyTextPromise
   }
 
   get json(): Promise<any> {
-    return this.responseBodyText === undefined
-      ? this.response.json()
-      : Promise.resolve().then(() => JSON.parse(this.responseBodyText as string))
+    return this.text.then((text) => JSON.parse(text))
   }
 
-  setResponseBodyText(text: string): void {
-    this.responseBodyText = text
+  cancelResponseBody(reason?: unknown): void {
+    clearTimeout(this.responseBodyTimer)
+    if (!this.abortController.signal.aborted) {
+      this.abortController.abort(reason)
+    }
+    void (async () => {
+      try {
+        await this.response.body?.cancel()
+      } catch {}
+    })()
   }
 }
 
@@ -116,7 +154,11 @@ export async function logFlushError(err: any): Promise<void> {
     let text = ''
     try {
       text = await err.text
-    } catch {}
+    } catch {
+      if (err.bodyReadTimedOut) {
+        text = '<response body read timed out>'
+      }
+    }
 
     console.error(`Error while flushing PostHog: message=${err.message}, response body=${text}`, err)
   } else {
@@ -1691,10 +1733,15 @@ export abstract class PostHogCoreStateless {
       }
     }
 
+    const retriableOptions = { ...this._retryOptions, ...retryOptions }
+    let attempt = 0
+
     return await retriable(
       async () => {
+        attempt++
         const ctrl = new AbortController()
         const timeoutMs = requestTimeout ?? this.requestTimeout
+        const requestDeadline = Date.now() + timeoutMs
         let timer: ReturnType<typeof safeSetTimeout>
         // `fetch` is SDK-injectable, so it may ignore abort while resolving headers or
         // consuming the body. Race both phases against one request deadline rather than
@@ -1752,23 +1799,15 @@ export abstract class PostHogCoreStateless {
           // https://developer.mozilla.org/en-US/docs/Web/API/Request/mode#no-cors
           const isNoCors = options.mode === 'no-cors'
           if (!isNoCors && (res.status < 200 || res.status >= 400)) {
-            const httpError = new PostHogFetchHttpError(res, reqByteLength)
-            try {
-              httpError.setResponseBodyText(await Promise.race([res.text(), deadline]))
-            } catch {
-              // A stalled error body must not replace its HTTP status classification.
-              httpError.setResponseBodyText('')
-            }
-            throw httpError
+            // Read error bodies lazily so retryable statuses are retried immediately. The
+            // getter still uses this attempt's deadline when diagnostics request the body.
+            throw new PostHogFetchHttpError(res, reqByteLength, requestDeadline, ctrl)
           }
 
           if (responseHandling.type === 'successful-write') {
             try {
               await Promise.race([cancelBody(), deadline])
-            } catch (e) {
-              if (!ctrl.signal.aborted) {
-                throw e
-              }
+            } catch {
               // Once a write endpoint has returned success, a stalled body cancellation
               // must not retry the accepted payload. Cancellation was attempted for the
               // full remaining deadline and continues best-effort in `finally`.
@@ -1792,7 +1831,17 @@ export abstract class PostHogCoreStateless {
           }
         }
       },
-      { ...this._retryOptions, ...retryOptions }
+      {
+        ...retriableOptions,
+        retryCheck: (error) => {
+          const shouldRetry = retriableOptions.retryCheck(error)
+          if (shouldRetry && attempt <= retriableOptions.retryCount && error instanceof PostHogFetchHttpError) {
+            // This response will not be surfaced, so release its body without delaying the retry.
+            error.cancelResponseBody()
+          }
+          return shouldRetry
+        },
+      }
     )
   }
 
