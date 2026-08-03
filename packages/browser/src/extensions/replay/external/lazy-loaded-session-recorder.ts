@@ -1249,10 +1249,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             (this._isIdle !== false || !this.isStarted) &&
             (this._sessionId !== sessionId || this._windowId !== windowId)
         ) {
-            this._isIdle = 'unknown'
-            // ship evidence is per session: the new session's event trigger must match again
-            this._eventTriggerActivated = false
+            // stop() flushes the OLD session's trailing buffer (e.g. its $session_ending
+            // breadcrumb, which session linking needs), so it must run under the old
+            // session's ship evidence: an interacted-then-idle session ships its tail, a
+            // never-interacted one holds and discards. Only then reset state for the new
+            // session, whose evidence (interaction, event trigger) must be earned again.
             this.stop()
+            this._isIdle = 'unknown'
+            this._eventTriggerActivated = false
             this.start('session_id_changed')
         }
 
@@ -1810,7 +1814,23 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 sessionId: this._buffer.sessionId,
                 bufferSize: this._buffer.size,
             })
+            // takeFullSnapshot() emits no Meta, so carry the newest Meta over or the rebuilt
+            // prefix ships without href/viewport and the recording loses its URL.
+            let lastMetaIndex = -1
+            for (let i = this._buffer.data.length - 1; i >= 0; i--) {
+                if ((this._buffer.data[i] as eventWithTime | undefined)?.type === EventType.Meta) {
+                    lastMetaIndex = i
+                    break
+                }
+            }
+            const metaEvent = lastMetaIndex >= 0 ? this._buffer.data[lastMetaIndex] : null
+            const metaSize = lastMetaIndex >= 0 ? this._buffer.sizes[lastMetaIndex] : 0
             this._clearBuffer()
+            if (metaEvent) {
+                this._buffer.data.push(metaEvent)
+                this._buffer.sizes.push(metaSize)
+                this._buffer.size += metaSize
+            }
             this._tryTakeFullSnapshot()
         }
     }

@@ -1483,6 +1483,49 @@ describe('Lazy SessionRecording', () => {
                 )
             })
 
+            it("ships the interacted session's trailing buffer when it rotates while idle", () => {
+                // stop() runs during rotation under the OLD session's ship evidence: an
+                // interacted-then-idle session must ship its tail (the $session_ending
+                // breadcrumb that session linking needs), not have it discarded by the new
+                // session's 'unknown' state being set too early. The ordering only matters on
+                // the callback's restart path, reached when the $session_id_change emit is
+                // throttled away from the session check, so refresh the idle-check stamp
+                // shortly before rotating.
+                const firstActivityTimestamp = startingTimestamp + 100
+                const idleTriggerTimestamp = startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000
+                const rotationTimestamp = sessionManager['_sessionTimeoutMs'] + startingTimestamp + 1000
+                const throttleRefreshTimestamp = rotationTimestamp - 30_000
+
+                // deliver custom events through the real emit path so $session_ending is buffered
+                _addCustomEvent.mockImplementation((tag: string, payload: any) => {
+                    _emit({ type: EventType.Custom, data: { tag, payload }, timestamp: Date.now() })
+                })
+                try {
+                    emitActiveEvent(firstActivityTimestamp)
+                    emitInactiveEvent(idleTriggerTimestamp, true)
+                    // this idle-state emit runs a session check and stamps the throttle, so the
+                    // rotation's own $session_id_change emit 30s later is throttled
+                    emitInactiveEvent(throttleRefreshTimestamp, true)
+                    const firstSessionId = sessionRecording['_lazyLoadedSessionRecording']['_sessionId']
+                    ;(posthog.capture as Mock).mockClear()
+
+                    sessionIdGeneratorMock.mockImplementation(() => 'idle-rotation-session-id')
+                    jest.useFakeTimers().setSystemTime(new Date(rotationTimestamp))
+                    sessionManager.checkAndGetSessionAndWindowId(false, rotationTimestamp)
+
+                    const shippedForOldSession = (posthog.capture as Mock).mock.calls.filter(
+                        ([name, props]) => name === '$snapshot' && props.$session_id === firstSessionId
+                    )
+                    expect(shippedForOldSession.length).toBeGreaterThan(0)
+                    const shippedTags = shippedForOldSession
+                        .flatMap(([, props]) => props.$snapshot_data)
+                        .map((e: any) => e?.data?.tag)
+                    expect(shippedTags).toContain('$session_ending')
+                } finally {
+                    _addCustomEvent.mockReset()
+                }
+            })
+
             it('an event trigger match releases the hold even when its activation is a no-op', () => {
                 // With triggerMatchType 'any', a URL trigger can satisfy the combined trigger
                 // status long before an error event fires; the activation then short-circuits
