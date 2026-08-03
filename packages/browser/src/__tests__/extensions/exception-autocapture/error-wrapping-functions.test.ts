@@ -3,6 +3,13 @@ import { ErrorTracking } from '@posthog/core'
 
 const { wrapOnError, wrapUnhandledRejection, wrapConsoleError } = posthogErrorWrappingFunctions
 
+const createPromiseRejectionEvent = (reason: unknown): PromiseRejectionEvent => {
+    const event = new Event('unhandledrejection')
+    Object.defineProperty(event, 'reason', { value: reason })
+    Object.defineProperty(event, Symbol.toStringTag, { value: 'PromiseRejectionEvent' })
+    return event as PromiseRejectionEvent
+}
+
 describe('error wrapping functions', () => {
     const captureFn = jest.fn<void, [ErrorTracking.ErrorProperties]>()
     const win = window as any
@@ -80,6 +87,23 @@ describe('error wrapping functions', () => {
                 },
             })
         })
+
+        it('does not parse frame-shaped lines from a multiline onerror message', () => {
+            unwrap = wrapOnError(captureFn)
+            const message = 'oops\n    at https://example.com/injected.js:1:2'
+
+            win.onerror(message, 'https://example.com/genuine.js', 73, 9)
+
+            const exception = captureFn.mock.calls[0][0].$exception_list[0]
+            expect(exception.value).toBe(message)
+            expect(exception.stacktrace?.frames).toEqual([
+                expect.objectContaining({
+                    filename: 'https://example.com/genuine.js',
+                    lineno: 73,
+                    colno: 9,
+                }),
+            ])
+        })
     })
 
     describe('wrapUnhandledRejection', () => {
@@ -93,7 +117,7 @@ describe('error wrapping functions', () => {
             win.onunhandledrejection = 'not a function' as any
             unwrap = wrapUnhandledRejection(captureFn)
 
-            const ev = { reason: new Error('boom') } as any
+            const ev = createPromiseRejectionEvent(new Error('boom'))
             expect(() => win.onunhandledrejection(ev)).not.toThrow()
             expect(win.onunhandledrejection(ev)).toBe(false)
             expect(captureFn).toHaveBeenCalled()
@@ -104,7 +128,7 @@ describe('error wrapping functions', () => {
             win.onunhandledrejection = original
             unwrap = wrapUnhandledRejection(captureFn)
 
-            const ev = { reason: new Error('boom') } as any
+            const ev = createPromiseRejectionEvent(new Error('boom'))
             const result = win.onunhandledrejection(ev)
 
             expect(original).toHaveBeenCalledWith(ev)
@@ -121,7 +145,7 @@ describe('error wrapping functions', () => {
             expect(crossRealmError).not.toBeInstanceOf(Error)
             unwrap = wrapUnhandledRejection(captureFn)
 
-            win.onunhandledrejection({ reason: crossRealmError })
+            win.onunhandledrejection(createPromiseRejectionEvent(crossRealmError))
 
             expect(captureFn.mock.calls[0][0].$exception_list[0].stacktrace?.frames).toEqual([
                 expect.objectContaining({
@@ -137,7 +161,7 @@ describe('error wrapping functions', () => {
         it('does not attach the wrapper stack to a primitive rejection', () => {
             unwrap = wrapUnhandledRejection(captureFn)
 
-            win.onunhandledrejection({ reason: 'primitive rejection' })
+            win.onunhandledrejection(createPromiseRejectionEvent('primitive rejection'))
 
             expect(captureFn.mock.calls[0][0].$exception_list[0].stacktrace).toBeUndefined()
         })

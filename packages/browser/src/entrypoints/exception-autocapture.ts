@@ -2,53 +2,20 @@ import { window } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from '../utils/globals'
 import { ErrorEventArgs } from '../types'
 import { createLogger } from '@posthog/browser-common/utils/logger'
-import { isFunction, isObject, isString, type ErrorTracking } from '@posthog/core'
+import { isFunction, isString, type ErrorTracking } from '@posthog/core'
 import { buildErrorPropertiesBuilder } from '../posthog-exceptions'
 
 const logger = createLogger('[ExceptionAutocapture]')
 const errorPropertiesBuilder = buildErrorPropertiesBuilder()
 
-const syntheticExceptionFromStack = (stack: string): Error => {
-    const syntheticException = new Error('PostHog syntheticException')
-    syntheticException.stack = stack
-    return syntheticException
-}
-
-const syntheticExceptionFromErrorLike = (candidate: unknown): Error | undefined => {
-    if (!isObject(candidate)) {
-        return undefined
+const resolveOnErrorInput = ([message, source, lineno, colno, error]: ErrorEventArgs): unknown => {
+    if (error != null) {
+        return error
     }
-
-    try {
-        const stack = candidate.stack
-        return isString(stack) && stack.trim().length > 0 ? syntheticExceptionFromStack(stack) : undefined
-    } catch {
-        return undefined
+    if (isString(message) && isString(source) && source.length > 0 && typeof ErrorEvent !== 'undefined') {
+        return new ErrorEvent('error', { message, filename: source, lineno, colno })
     }
-}
-
-const syntheticExceptionFromRejection = (event: PromiseRejectionEvent): Error | undefined => {
-    try {
-        return syntheticExceptionFromErrorLike(event.reason)
-    } catch {
-        return undefined
-    }
-}
-
-const syntheticExceptionFromOnErrorArgs = ([message, source, lineno, colno, error]: ErrorEventArgs):
-    | Error
-    | undefined => {
-    const errorLikeStack = syntheticExceptionFromErrorLike(error)
-    if (errorLikeStack) {
-        return errorLikeStack
-    }
-
-    if (!isString(source) || source.length === 0) {
-        return undefined
-    }
-
-    const stackMessage = isString(message) ? message : 'Error'
-    return syntheticExceptionFromStack(`${stackMessage}\n    at ${source}:${lineno ?? 0}:${colno ?? 0}`)
+    return message
 }
 
 const wrapOnError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) => {
@@ -59,12 +26,8 @@ const wrapOnError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) 
     const originalOnError = win.onerror
 
     win.onerror = function (...args: ErrorEventArgs): boolean {
-        const [event, , , , error] = args
-        const errorProperties = errorPropertiesBuilder.buildFromUnknown(error || event, {
+        const errorProperties = errorPropertiesBuilder.buildFromUnknown(resolveOnErrorInput(args), {
             mechanism: { handled: false },
-            syntheticException: syntheticExceptionFromOnErrorArgs(args),
-            // Preserved error-like stacks and positional fallbacks contain no wrapper frames.
-            // Keeping all lines also preserves the sole location frame produced by #4235.
             skipFirstLines: 0,
         })
         captureFn(errorProperties)
@@ -89,7 +52,6 @@ const wrapUnhandledRejection = (captureFn: (props: ErrorTracking.ErrorProperties
     win.onunhandledrejection = function (ev: PromiseRejectionEvent): boolean {
         const errorProperties = errorPropertiesBuilder.buildFromUnknown(ev, {
             mechanism: { handled: false },
-            syntheticException: syntheticExceptionFromRejection(ev),
             skipFirstLines: 0,
         })
         captureFn(errorProperties)

@@ -145,7 +145,7 @@ test.describe('ErrorTracking autocapture', () => {
                 const crossRealmError = new iframe.contentWindow!.TypeError('cross-realm rejection')
                 crossRealmError.stack =
                     'TypeError: cross-realm rejection\n    at rejectionOrigin (https://example.com/rejection-origin.js:51:7)'
-                window.onunhandledrejection?.({ reason: crossRealmError } as PromiseRejectionEvent)
+                Promise.reject(crossRealmError)
                 iframe.remove()
             })
 
@@ -194,7 +194,7 @@ test.describe('ErrorTracking autocapture', () => {
             ])
         })
 
-        test('should use the positional onerror location when there is no Error object', async ({
+        test('should use only the positional onerror location when there is no Error object', async ({
             posthog,
             network,
             page,
@@ -204,23 +204,20 @@ test.describe('ErrorTracking autocapture', () => {
                 capture_exceptions: true,
             })
             await network.waitForFlags()
-            await page.evaluate(() => {
-                window.onerror?.('error without object', 'https://example.com/positional-fallback.js', 73, 9)
-            })
+            const message = 'error without object\n    at https://example.com/injected.js:1:2'
+            await page.evaluate((message) => {
+                window.onerror?.(message, 'https://example.com/positional-fallback.js', 73, 9)
+            }, message)
 
             const exception = await events.waitForEvent('$exception')
-            expect(exception.properties.$exception_list[0]).toMatchObject({
-                value: 'error without object',
-                stacktrace: {
-                    frames: [
-                        expect.objectContaining({
-                            filename: 'https://example.com/positional-fallback.js',
-                            lineno: 73,
-                            colno: 9,
-                        }),
-                    ],
-                },
-            })
+            expect(exception.properties.$exception_list[0].value).toBe(message)
+            expect(exception.properties.$exception_list[0].stacktrace.frames).toEqual([
+                expect.objectContaining({
+                    filename: 'https://example.com/positional-fallback.js',
+                    lineno: 73,
+                    colno: 9,
+                }),
+            ])
         })
 
         test('should capture ReferenceError', async ({ posthog, network, page, events, browserName }) => {
