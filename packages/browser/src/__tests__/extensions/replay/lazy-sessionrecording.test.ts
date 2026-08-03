@@ -1343,6 +1343,145 @@ describe('Lazy SessionRecording', () => {
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].sessionId).toEqual(rotatedSessionId)
             })
 
+            describe('holding rotation-born sessions until interaction', () => {
+                // Rotation-born sessions that never see user interaction must not ship a
+                // billable recording per rotation — a background tab would otherwise produce
+                // one recording every ~30 minutes forever. The recorder still restarts and
+                // re-syncs ids on rotation (#4202), but holds the buffer until interaction.
+                const rotatedSessionId = 'rotation-born-session-id'
+
+                function rotateExternallyWhileUnknown(newSessionId: string = rotatedSessionId): number {
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual('unknown')
+                    sessionIdGeneratorMock.mockClear()
+                    sessionIdGeneratorMock.mockImplementation(() => newSessionId)
+
+                    const rotationTimestamp = sessionManager['_sessionTimeoutMs'] + startingTimestamp + 1000
+                    jest.useFakeTimers().setSystemTime(new Date(rotationTimestamp))
+                    const { sessionId: newId } = sessionManager.checkAndGetSessionAndWindowId(false, rotationTimestamp)
+                    expect(newId).toEqual(newSessionId)
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionId']).toEqual(newSessionId)
+                    ;(posthog.capture as Mock).mockClear()
+                    return rotationTimestamp
+                }
+
+                it('does not flush a rotation-born session on the timer without interaction', () => {
+                    const rotationTimestamp = rotateExternallyWhileUnknown()
+                    const snapshot = emitInactiveEvent(rotationTimestamp + 100, 'unknown')
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toContain(snapshot)
+
+                    jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                    expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+                    // the data stays buffered rather than being dropped
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toContain(snapshot)
+                })
+
+                it('flushes the held buffer on the first interaction, playable from the session start', () => {
+                    const rotationTimestamp = rotateExternallyWhileUnknown()
+                    const meta = createMetaSnapshot({ timestamp: rotationTimestamp + 10 })
+                    const fullSnapshot = createFullSnapshot({ timestamp: rotationTimestamp + 20 })
+                    _emit(meta)
+                    _emit(fullSnapshot)
+
+                    jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                    expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+
+                    const interaction = emitActiveEvent(rotationTimestamp + 1000)
+
+                    // the held Meta -> FullSnapshot ships under the rotated session id
+                    expect(posthog.capture).toHaveBeenCalledWith(
+                        '$snapshot',
+                        expect.objectContaining({
+                            $session_id: rotatedSessionId,
+                            $snapshot_data: [meta, fullSnapshot],
+                        }),
+                        expect.any(Object)
+                    )
+                    // the interaction itself lands in the next buffer under the same session
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toContain(interaction)
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].sessionId).toEqual(
+                        rotatedSessionId
+                    )
+                })
+
+                it('discards a held session that rotates again without interaction', () => {
+                    const firstRotationTimestamp = rotateExternallyWhileUnknown()
+                    emitInactiveEvent(firstRotationTimestamp + 100, 'unknown')
+
+                    sessionIdGeneratorMock.mockImplementation(() => 'second-rotated-session-id')
+                    const secondRotationTimestamp = firstRotationTimestamp + sessionManager['_sessionTimeoutMs'] + 1000
+                    jest.useFakeTimers().setSystemTime(new Date(secondRotationTimestamp))
+                    sessionManager.checkAndGetSessionAndWindowId(false, secondRotationTimestamp)
+
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionId']).toEqual(
+                        'second-rotated-session-id'
+                    )
+                    // nothing from the held epoch shipped, and no stale data survives into the new epoch
+                    expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([])
+                })
+
+                it("transitions from 'unknown' to idle after the threshold with no interaction", () => {
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual('unknown')
+
+                    emitInactiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000, true)
+
+                    expect(_addCustomEvent).toHaveBeenCalledWith('sessionIdle', expect.anything())
+                })
+
+                it('does not hold a rotation that happens while the user is active', () => {
+                    emitActiveEvent(startingTimestamp + 100)
+
+                    sessionIdGeneratorMock.mockImplementation(() => 'active-rotated-session-id')
+                    const rotationTimestamp = sessionManager['_sessionTimeoutMs'] + startingTimestamp + 1000
+                    jest.useFakeTimers().setSystemTime(new Date(rotationTimestamp))
+                    ;(posthog.capture as Mock).mockClear()
+                    const interaction = emitActiveEvent(rotationTimestamp)
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionId']).toEqual(
+                        'active-rotated-session-id'
+                    )
+
+                    jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                    expect(posthog.capture).toHaveBeenCalledWith(
+                        '$snapshot',
+                        expect.objectContaining({
+                            $session_id: 'active-rotated-session-id',
+                            $snapshot_data: [interaction],
+                        }),
+                        expect.any(Object)
+                    )
+                })
+
+                it('discards a held buffer on stop() instead of shipping it', () => {
+                    const rotationTimestamp = rotateExternallyWhileUnknown()
+                    emitInactiveEvent(rotationTimestamp + 100, 'unknown')
+
+                    sessionRecording['_lazyLoadedSessionRecording'].stop()
+
+                    expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([])
+                })
+
+                it('discards a held buffer on unload instead of shipping it', () => {
+                    const rotationTimestamp = rotateExternallyWhileUnknown()
+                    emitInactiveEvent(rotationTimestamp + 100, 'unknown')
+
+                    sessionRecording['_lazyLoadedSessionRecording']['_onBeforeUnload']()
+
+                    expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+                })
+
+                it('ships nothing when recording is stopped (opt-out) with a held epoch', () => {
+                    const rotationTimestamp = rotateExternallyWhileUnknown()
+                    emitInactiveEvent(rotationTimestamp + 100, 'unknown')
+
+                    sessionRecording.stopRecording()
+
+                    expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+                })
+            })
+
             it('takes a full snapshot for the new session on a second idle rotation without user interaction', () => {
                 // Regression test for #4202, reported production sequence: interaction, idle,
                 // rotation (restart leaves _isIdle 'unknown'), no further interaction, second

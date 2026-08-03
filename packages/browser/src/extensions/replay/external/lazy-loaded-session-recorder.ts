@@ -476,6 +476,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
      */
     private _queuedRRWebEvents: QueuedRRWebEvent[] = []
     private _isIdle: boolean | 'unknown' = 'unknown'
+    // true while a rotation-born session has had no user interaction; a held epoch is
+    // discarded (not shipped) by stop, unload, or a subsequent rotation
+    private _holdFlushUntilInteraction = false
     private _rrwebError = false
     private _rrwebStartAttempted = false
     private _maxDepthExceeded = false
@@ -1220,9 +1223,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             (this._isIdle !== false || !this.isStarted) &&
             (this._sessionId !== sessionId || this._windowId !== windowId)
         ) {
+            // rotation while not confirmed-active: hold the new epoch's buffer until the
+            // user actually interacts, so idle tabs don't ship one recording per rotation.
+            // the hold must be read before _isIdle is overwritten with 'unknown'
+            const holdNextEpoch = this._isIdle !== false
             this._isIdle = 'unknown'
-            this.stop()
-            this.start('session_id_changed')
+            this._restartForSessionIdChange(holdNextEpoch)
         }
 
         if (shouldLinkSessions) {
@@ -1333,10 +1339,20 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return
         }
 
+        // for a held (interaction-less) epoch the flush is suppressed, so this
+        // flush-then-clear discards it — correct for rotation restarts and opt-out alike
         this._flushBuffer()
         this._clearBuffer()
         this._teardown()
         logger.info('stopped')
+    }
+
+    // ordering matters: the hold is set after stop() so the stop discards or ships the
+    // old epoch per its own flag, and before start() so the new epoch starts held
+    private _restartForSessionIdChange(holdNextEpoch: boolean) {
+        this.stop()
+        this._holdFlushUntilInteraction = holdNextEpoch
+        this.start('session_id_changed')
     }
 
     discard() {
@@ -1734,6 +1750,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _flushBuffer(): SnapshotBuffer {
         this._clearFlushBufferTimer()
 
+        // hold the buffer rather than ship a billable recording for an epoch nobody touched
+        if (this._holdFlushUntilInteraction) {
+            return this._buffer
+        }
+
         // never flush while a sampling decision is missing (e.g. wiped by posthog.reset()) — an
         // undecided session reads as ACTIVE and would leak a batch it then decides not to record
         this._strategy?.ensureSamplingDecision(this.sessionId)
@@ -1839,11 +1860,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             sessionChanged ||
             // we never want to flush a healthy same-session buffer while confirmed idle, but
             // 'unknown' still captures so its buffer must respect the size cap or it grows unbounded
+            // (while held the cap flush is suppressed — growth is bounded because 'unknown'
+            // transitions to confirmed idle after the idle threshold and capture stops)
             (this._isIdle !== true &&
                 this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE)
         ) {
             this._buffer = this._flushBuffer()
-            // A suppressed flush (e.g. buffering, paused, below minimum duration) returns the buffer un-drained, and relabeling the prior session's events would mis-attribute them, so discard them instead.
+            // A suppressed flush (e.g. buffering, paused, held, below minimum duration) returns the buffer un-drained, and relabeling the prior session's events would mis-attribute them, so discard them instead.
             if (sessionChanged && this._buffer.data.length > 0) {
                 this._buffer = this._clearBuffer()
             }
@@ -1971,7 +1994,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         const isUserInteraction = this._isInteractiveEvent(event)
 
-        if (!isUserInteraction && !this._isIdle) {
+        if (!isUserInteraction && this._isIdle !== true) {
             // We check if the lastActivityTimestamp is old enough to go idle
             const timeSinceLastActivity = event.timestamp - this._lastActivityTimestamp
             if (timeSinceLastActivity > this._sessionIdleThresholdMilliseconds) {
@@ -2034,10 +2057,17 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._sessionId = sessionId
 
         if (sessionIdChanged || windowIdChanged) {
-            this.stop()
-            this.start('session_id_changed')
-        } else if (returningFromIdle) {
-            this._scheduleFullSnapshot()
+            this._restartForSessionIdChange(this._isIdle !== false)
+        } else {
+            if (isUserInteraction && this._holdFlushUntilInteraction) {
+                // first interaction within the held session: release the buffer so the
+                // recording ships and is playable from the session's t=0
+                this._holdFlushUntilInteraction = false
+                this._flushBuffer()
+            }
+            if (returningFromIdle) {
+                this._scheduleFullSnapshot()
+            }
         }
     }
 
