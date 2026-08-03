@@ -76,11 +76,13 @@ export const getBotDetectionReason = function (
     try {
         // eslint-disable-next-line compat/compat
         const uaData = navigator?.userAgentData as NavigatorUAData
-        const brandMatch = uaData?.brands
-            ?.map((brandObj) => getBlockedUAMatch(brandObj?.brand, customBlockedUserAgents))
-            .find(Boolean)
-        if (brandMatch) {
-            return `userAgentData brand matched blocklist entry "${brandMatch}"`
+        const brands = uaData?.brands
+        // can't use Array.find here because IE 11 :/
+        for (let i = 0; brands && i < brands.length; i++) {
+            const brandMatch = getBlockedUAMatch(brands[i]?.brand, customBlockedUserAgents)
+            if (brandMatch) {
+                return `userAgentData brand matched blocklist entry "${brandMatch}"`
+            }
         }
     } catch {
         // ignore the error, we were using experimental browser features

@@ -109,11 +109,15 @@ export const getBlockedUAMatch = function (
   }
 
   const uaLower = ua.toLowerCase()
-  return DEFAULT_BLOCKED_UA_STRS.concat(customBlockedUserAgents).find((blockedUA) => {
-    const blockedUaLower = blockedUA.toLowerCase()
-    // can't use includes because IE 11 :/
-    return uaLower.indexOf(blockedUaLower) !== -1
-  })
+  const blockedUAs = DEFAULT_BLOCKED_UA_STRS.concat(customBlockedUserAgents)
+  // can't use Array.find/includes because IE 11 :/
+  for (let i = 0; i < blockedUAs.length; i++) {
+    const blockedUA = blockedUAs[i]
+    if (uaLower.indexOf(blockedUA.toLowerCase()) !== -1) {
+      return blockedUA
+    }
+  }
+  return undefined
 }
 
 /**
