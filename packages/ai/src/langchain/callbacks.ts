@@ -13,9 +13,13 @@ import { sanitizeLangChain } from '../sanitization'
 import { stringifyError } from '../serializeError'
 import { warnIfPostHogAiGateway } from '../gatewayWarning'
 
-// Mirror LangGraph's cross-package-safe guard without adding LangGraph as a dependency.
-const isLangGraphInterrupt = (error: Error): boolean =>
-  error.name === 'GraphInterrupt' || error.name === 'NodeInterrupt'
+// Mirror LangGraph's isGraphBubbleUp guard without adding LangGraph as a dependency. Every
+// LangGraph control-flow exception (GraphInterrupt, NodeInterrupt, ParentCommand, GraphDrained,
+// and future subclasses) exposes a prototype getter `is_bubble_up` that returns true, which the
+// LangGraph runtime itself uses to distinguish control flow from real failures. The getter reads
+// as undefined on ordinary Errors and works across duplicated LangGraph package copies.
+const isLangGraphControlFlow = (error: Error): boolean =>
+  (error as Error & { is_bubble_up?: boolean }).is_bubble_up === true
 
 interface SpanMetadata {
   /** Name of the trace/span (e.g. chain name) */
@@ -428,7 +432,19 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       eventProperties['$process_person_profile'] = false
     }
     if (outputs instanceof Error) {
-      if (!isLangGraphInterrupt(outputs)) {
+      if (isLangGraphControlFlow(outputs)) {
+        // GraphInterrupt carries the pending interrupts (e.g. the question posed to a human).
+        // Surface them under the same `__interrupt__` key LangGraph hands back to the caller,
+        // so an interrupted span stays distinguishable from a node that returned nothing.
+        const interrupts = (outputs as Error & { interrupts?: unknown }).interrupts
+        if (interrupts !== undefined) {
+          eventProperties['$ai_output_state'] = withPrivacyMode(
+            this.client,
+            this.privacyMode,
+            sanitizeLangChain({ __interrupt__: interrupts })
+          )
+        }
+      } else {
         eventProperties['$ai_error'] = stringifyError(outputs)
         eventProperties['$ai_is_error'] = true
       }
