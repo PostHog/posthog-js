@@ -196,6 +196,10 @@ describe('Vercel AI SDK - Dual Version Support', () => {
     mockPostHogClient = new (PostHog as any)()
   })
 
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
   describe('V3 Model (AI SDK 6)', () => {
     it('should wrap a V3 model and track generation', async () => {
       const baseModel = createMockV3Model('gpt-4')
@@ -815,6 +819,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
 
     it.each(['v2', 'v3'] as const)('should not fail %s streams when immediate telemetry rejects', async (version) => {
       const telemetryError = new Error('telemetry delivery failed')
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
       ;(mockPostHogClient.captureImmediate as jest.Mock).mockRejectedValue(telemetryError)
       const streamParts = [{ type: 'text-delta' as const, id: 'text-1', delta: 'unchanged' }]
       const baseModel = createMockStreamingModel(version, streamParts as any)
@@ -828,9 +833,11 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       const reader = result.stream.getReader()
       await expect(reader.read()).resolves.toEqual({ done: false, value: streamParts[0] })
       await expect(reader.read()).resolves.toEqual({ done: true, value: undefined })
+      await flushPromises()
 
       expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
       expect(mockPostHogClient.capture).not.toHaveBeenCalled()
+      expect(warnSpy).toHaveBeenCalledWith('[PostHog AI] Failed to capture Vercel stream telemetry:', telemetryError)
     })
 
     it.each([

@@ -633,8 +633,9 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
         ): Promise<void> => {
           try {
             await captureAiGeneration(phClient, captureOptions)
-          } catch {
+          } catch (error: unknown) {
             // Telemetry must never change the provider stream's behavior.
+            console.warn('[PostHog AI] Failed to capture Vercel stream telemetry:', error)
           }
         }
 
@@ -786,8 +787,9 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
                 error,
                 tools: availableTools,
               })
-            })().catch(() => {
+            })().catch((error: unknown) => {
               // Building telemetry must not change the provider stream's behavior.
+              console.warn('[PostHog AI] Failed to capture Vercel stream telemetry:', error)
             })
 
             return finalizationPromise
