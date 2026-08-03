@@ -149,7 +149,7 @@ export type MaskInputFn = (text: string, element: HTMLElement) => string;
 export type MaskAttributeFn = (
   name: string,
   value: string,
-  element: HTMLElement,
+  element: Element,
 ) => string;
 
 export type KeepIframeSrcFn = (src: string) => boolean;

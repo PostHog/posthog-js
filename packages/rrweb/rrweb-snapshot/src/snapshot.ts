@@ -46,7 +46,7 @@ export function genId(): number {
   return _id++;
 }
 
-function getValidTagName(element: HTMLElement): Lowercase<string> {
+function getValidTagName(element: Element): Lowercase<string> {
   if (element instanceof HTMLFormElement) {
     return 'form';
   }
@@ -191,7 +191,7 @@ export function transformAttribute(
   tagName: Lowercase<string>,
   name: Lowercase<string>,
   value: string | null,
-  element?: HTMLElement,
+  element?: Element,
   dataURLOptions?: DataURLOptions,
 ): string | null {
   if (!value) {
@@ -268,7 +268,7 @@ export function ignoreAttribute(
 }
 
 export function _isBlockedElement(
-  element: HTMLElement,
+  element: Element,
   blockClass: string | RegExp,
   blockSelector: string | null,
 ): boolean {
@@ -572,7 +572,7 @@ function serializeNode(
         rootId,
       };
     case n.ELEMENT_NODE:
-      return serializeElementNode(n as HTMLElement, {
+      return serializeElementNode(n as Element, {
         doc,
         blockClass,
         blockSelector,
@@ -697,7 +697,7 @@ function hrefFrom(n: unknown): string | undefined {
 }
 
 function serializeElementNode(
-  n: HTMLElement,
+  n: Element,
   options: {
     doc: Document;
     blockClass: string | RegExp;
@@ -743,7 +743,7 @@ function serializeElementNode(
   for (let i = 0; i < len; i++) {
     const attr = n.attributes[i];
     if (!ignoreAttribute(tagName, attr.name, attr.value)) {
-      const transformedValue = transformAttribute(
+      attributes[attr.name] = transformAttribute(
         doc,
         tagName,
         toLowerCase(attr.name),
@@ -751,13 +751,6 @@ function serializeElementNode(
         n,
         dataURLOptions,
       );
-      attributes[attr.name] = maskAttributeValue({
-        element: n,
-        name: attr.name,
-        value: transformedValue,
-        maskAllElementAttributes,
-        maskAttributeFn,
-      });
     }
   }
   // remote css
@@ -792,7 +785,7 @@ function serializeElementNode(
     tagName === 'style' &&
     (n as HTMLStyleElement).sheet &&
     // TODO: Currently we only try to get dynamic stylesheet when it is an empty style element
-    !(n.innerText || dom.textContent(n) || '').trim().length
+    !((n as HTMLElement).innerText || dom.textContent(n) || '').trim().length
   ) {
     const cssText = stringifyStylesheet(
       (n as HTMLStyleElement).sheet as CSSStyleSheet,
@@ -813,8 +806,8 @@ function serializeElementNode(
       value
     ) {
       attributes.value = maskInputValue({
-        element: n,
-        type: getInputType(n),
+        element: n as HTMLElement,
+        type: getInputType(n as HTMLElement),
         tagName,
         value,
         maskInputOptions,
@@ -887,6 +880,7 @@ function serializeElementNode(
     }
   }
   // save image offline
+  let serializationComplete = false;
   if (tagName === 'img' && inlineImages) {
     if (!canvasService) {
       canvasService = doc.createElement('canvas');
@@ -902,10 +896,21 @@ function serializeElementNode(
         canvasService!.width = image.naturalWidth;
         canvasService!.height = image.naturalHeight;
         canvasCtx!.drawImage(image, 0, 0);
-        attributes.rr_dataURL = canvasService!.toDataURL(
+        const dataURL = canvasService!.toDataURL(
           dataURLOptions.type,
           dataURLOptions.quality,
         );
+        attributes.rr_dataURL =
+          serializationComplete &&
+          (maskAllElementAttributes || maskAttributeFn)
+            ? maskAttributeValue({
+                element: n,
+                name: 'rr_dataURL',
+                value: dataURL,
+                maskAllElementAttributes,
+                maskAttributeFn,
+              })
+            : dataURL;
       } catch (err) {
         if (image.crossOrigin !== 'anonymous') {
           image.crossOrigin = 'anonymous';
@@ -921,7 +926,17 @@ function serializeElementNode(
       }
       if (image.crossOrigin === 'anonymous') {
         priorCrossOrigin
-          ? (attributes.crossOrigin = priorCrossOrigin)
+          ? (attributes.crossOrigin =
+              serializationComplete &&
+              (maskAllElementAttributes || maskAttributeFn)
+                ? maskAttributeValue({
+                    element: n,
+                    name: 'crossOrigin',
+                    value: priorCrossOrigin,
+                    maskAllElementAttributes,
+                    maskAttributeFn,
+                  })
+                : priorCrossOrigin)
           : image.removeAttribute('crossorigin');
       }
     };
@@ -990,6 +1005,28 @@ function serializeElementNode(
     }
     delete attributes.src; // prevent auto loading
   }
+
+  // Mask the final serialized representation after synthesized values and
+  // rrweb keys have been applied, so later serialization cannot restore PII.
+  if (maskAllElementAttributes || maskAttributeFn) {
+    for (const [name, value] of Object.entries(attributes)) {
+      if (typeof value === 'string' || value === null) {
+        attributes[name] = maskAttributeValue({
+          element: n,
+          name,
+          value,
+          maskAllElementAttributes,
+          maskAttributeFn,
+          isGenerated:
+            (needBlock && name.startsWith('rr_')) ||
+            ((tagName === 'audio' || tagName === 'video') &&
+              name === 'rr_mediaState') ||
+            (tagName === 'dialog' && name === 'rr_open_mode'),
+        });
+      }
+    }
+  }
+  serializationComplete = true;
 
   let isCustomElement: true | undefined;
   try {
@@ -1142,7 +1179,7 @@ export function serializeNodeWithId(
     maskTextFn: MaskTextFn | undefined;
     maskInputFn: MaskInputFn | undefined;
     maskAllElementAttributes?: boolean;
-    maskAttributeFn: MaskAttributeFn | undefined;
+    maskAttributeFn?: MaskAttributeFn;
     slimDOMOptions: SlimDOMOptions;
     dataURLOptions?: DataURLOptions;
     keepIframeSrcFn?: KeepIframeSrcFn;

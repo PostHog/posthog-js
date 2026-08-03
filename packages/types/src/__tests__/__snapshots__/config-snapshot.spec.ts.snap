@@ -465,7 +465,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "maskAttributeFn": [
       "undefined",
       "null",
-      "(name: string, value: string, element?: HTMLElement | undefined) => string"
+      "(name: string, value: string, element?: Element | undefined) => string"
     ],
     "slimDOMOptions": [
       "undefined",

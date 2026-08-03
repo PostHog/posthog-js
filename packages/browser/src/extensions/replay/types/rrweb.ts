@@ -43,7 +43,7 @@ type MaskInputFn = (text: string, element: HTMLElement) => string
 type MaskTextFn = (text: string, element: HTMLElement | null) => string
 
 // Replication of `MaskAttributeFn` from inside `@posthog/rrweb-record`/`@posthog/rrweb-snapshot`
-type MaskAttributeFn = (name: string, value: string, element: HTMLElement) => string
+type MaskAttributeFn = (name: string, value: string, element: Element) => string
 
 // Replication of `CanvasMasking` from inside `@posthog/rrweb-types`
 type CanvasMasking = {

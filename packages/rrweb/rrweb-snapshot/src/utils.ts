@@ -315,19 +315,20 @@ export function toLowerCase<T extends string>(str: T): Lowercase<T> {
   return str.toLowerCase() as unknown as Lowercase<T>;
 }
 
-// attributes the replayer relies on to render the page at all - masking these
-// wouldn't protect PII, it would just break the recording, so `maskAllElementAttributes`
-// leaves them alone. `maskAttributeFn` is unrestricted, since the caller owns that decision.
-const UNMASKABLE_ATTRIBUTES = new Set([
-  'id',
-  'class',
-  'style',
-  'src',
-  'srcset',
-  'href',
-  'rel',
-  'type',
-  'value',
+// Minimum rrweb-generated layout metadata that must retain its value for replay.
+// Unlike source DOM attributes, these values cannot contain application strings.
+const RENDERING_METADATA_ATTRIBUTES = new Set([
+  'rr_width',
+  'rr_height',
+  'rr_left',
+  'rr_top',
+  'rr_position',
+  'rr_transform',
+  'rr_display',
+  'rr_scrollleft',
+  'rr_scrolltop',
+  'rr_mediastate',
+  'rr_open_mode',
 ]);
 
 export function maskAttributeValue({
@@ -336,20 +337,26 @@ export function maskAttributeValue({
   value,
   maskAllElementAttributes,
   maskAttributeFn,
+  isGenerated = false,
 }: {
-  element: HTMLElement;
+  element: Element;
   name: string;
   value: string | null;
   maskAllElementAttributes: boolean;
   maskAttributeFn: MaskAttributeFn | undefined;
+  isGenerated?: boolean;
 }): string | null {
   if (!value) {
     return value;
   }
+  // A custom callback takes precedence so callers can choose a stable mask.
   if (maskAttributeFn) {
     return maskAttributeFn(name, value, element);
   }
-  if (maskAllElementAttributes && !UNMASKABLE_ATTRIBUTES.has(toLowerCase(name))) {
+  if (
+    maskAllElementAttributes &&
+    !(isGenerated && RENDERING_METADATA_ATTRIBUTES.has(toLowerCase(name)))
+  ) {
     return '*'.repeat(value.length);
   }
   return value;
