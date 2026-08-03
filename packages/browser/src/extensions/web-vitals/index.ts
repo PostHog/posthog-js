@@ -156,9 +156,10 @@ export class WebVitalsAutocapture {
     private _loadScript(cb: () => void): void {
         const posthogExtensions = assignableWindow.__PosthogExtensions__
         const flavor = this._callbackFlavor
+        const callbacksByFlavor = posthogExtensions?.postHogWebVitalsCallbacksByFlavor
         if (
-            posthogExtensions?.postHogWebVitalsCallbacksByFlavor?.[flavor] ||
-            (flavor === 'web-vitals' && posthogExtensions?.postHogWebVitalsCallbacks)
+            callbacksByFlavor?.[flavor] ||
+            (flavor === 'web-vitals' && isUndefined(callbacksByFlavor) && posthogExtensions?.postHogWebVitalsCallbacks)
         ) {
             cb()
             return
@@ -308,9 +309,12 @@ export class WebVitalsAutocapture {
         let onINP: WebVitalsMetricCallback | undefined
 
         const posthogExtensions = assignableWindow.__PosthogExtensions__
+        const callbacksByFlavor = posthogExtensions?.postHogWebVitalsCallbacksByFlavor
         const callbacks =
-            posthogExtensions?.postHogWebVitalsCallbacksByFlavor?.[this._callbackFlavor] ||
-            (this._callbackFlavor === 'web-vitals' ? posthogExtensions?.postHogWebVitalsCallbacks : undefined)
+            callbacksByFlavor?.[this._callbackFlavor] ||
+            (this._callbackFlavor === 'web-vitals' && isUndefined(callbacksByFlavor)
+                ? posthogExtensions?.postHogWebVitalsCallbacks
+                : undefined)
         if (!isUndefined(callbacks)) {
             ;({ onLCP, onCLS, onFCP, onINP } = callbacks)
         }

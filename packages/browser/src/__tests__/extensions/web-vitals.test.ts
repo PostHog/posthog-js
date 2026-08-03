@@ -621,6 +621,43 @@ describe('web vitals', () => {
             expect(stableOnLCP).not.toHaveBeenCalled()
         })
 
+        it('loads default callbacks when a non-default flavor overwrote the legacy callback slot', async () => {
+            const softAttributionOnLCP = jest.fn()
+            const stableOnLCP = jest.fn()
+            const softAttributionCallbacks = {
+                onLCP: softAttributionOnLCP,
+                onCLS: jest.fn(),
+                onFCP: jest.fn(),
+                onINP: jest.fn(),
+            }
+            const stableCallbacks = {
+                onLCP: stableOnLCP,
+                onCLS: jest.fn(),
+                onFCP: jest.fn(),
+                onINP: jest.fn(),
+            }
+            const loadExternalDependency = jest.fn((_ph, kind, callback) => {
+                assignableWindow.__PosthogExtensions__!.postHogWebVitalsCallbacksByFlavor![kind] = stableCallbacks
+                callback()
+            })
+            assignableWindow.__PosthogExtensions__ = {
+                postHogWebVitalsCallbacks: softAttributionCallbacks,
+                postHogWebVitalsCallbacksByFlavor: {
+                    'web-vitals-with-attribution-soft-navs': softAttributionCallbacks,
+                },
+                loadExternalDependency,
+            }
+
+            posthog = await createPosthogInstance(uuidv7(), {
+                capture_performance: { web_vitals: true },
+                capture_pageview: false,
+            })
+
+            expect(loadExternalDependency).toHaveBeenCalledWith(expect.anything(), 'web-vitals', expect.any(Function))
+            expect(stableOnLCP).toHaveBeenCalledWith(expect.any(Function), { reportSoftNavs: false })
+            expect(softAttributionOnLCP).not.toHaveBeenCalled()
+        })
+
         it('uses the requested preloaded callback flavor without loading another bundle', async () => {
             const stableOnLCP = jest.fn()
             const softOnLCP = jest.fn()
