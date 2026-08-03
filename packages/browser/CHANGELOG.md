@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.410.3
+
+### Patch Changes
+
+- [#4399](https://github.com/PostHog/posthog-js/pull/4399) [`662fb4c`](https://github.com/PostHog/posthog-js/commit/662fb4c62d6cd653c51455f79ae90dc0faed8fde) Thanks [@christiaan-ph](https://github.com/christiaan-ph)! - Conversations widget: bullet and numbered lists in a support reply now keep their markers on host pages with an aggressive CSS reset (for example Tailwind preflight's `ol, ul { list-style: none }`). The widget renders into the host page's DOM, so the list style is now set inline on `<ul>`, `<ol>`, and `<li>` rather than left to the page's own styles.
+  (2026-08-03)
+
 ## 1.410.2
 
 ### Patch Changes
