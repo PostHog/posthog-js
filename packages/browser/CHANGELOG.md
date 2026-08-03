@@ -1,5 +1,47 @@
 # posthog-js
 
+## 1.410.2
+
+### Patch Changes
+
+- [#4334](https://github.com/PostHog/posthog-js/pull/4334) [`bd93230`](https://github.com/PostHog/posthog-js/commit/bd932302f493924f1607429194918da23f2d67c9) Thanks [@posthog](https://github.com/apps/posthog)! - Conversations widget: treat a network-level message send failure (ad blocker, offline, CORS, page teardown) as transient — the widget now shows a "check your connection" message and logs at `warn` instead of `error`, so these benign failures no longer show up as captured exceptions in error tracking.
+  (2026-08-03)
+
+- [#4341](https://github.com/PostHog/posthog-js/pull/4341) [`d68e607`](https://github.com/PostHog/posthog-js/commit/d68e607b14cc5defd1e56f92fc598cd2872d00d2) Thanks [@posthog](https://github.com/apps/posthog)! - Prevent duplicate snippet loaders from replacing an initialized instance or replaying queued calls more than once, and warn with actionable guidance when `init()` is called again with a different project token
+  (2026-08-03)
+
+## 1.410.1
+
+### Patch Changes
+
+- [#4386](https://github.com/PostHog/posthog-js/pull/4386) [`0854095`](https://github.com/PostHog/posthog-js/commit/0854095ac62aa3a9b8c88514634e29f7bbbe2b16) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent the inline canvas recording worker from requesting an unusable source map from its blob URL.
+  (2026-08-03)
+- Updated dependencies [[`eb0a793`](https://github.com/PostHog/posthog-js/commit/eb0a7930eebf2474dc03846b36891dc33df112f7)]:
+    - @posthog/core@1.46.3
+
+## 1.410.0
+
+### Minor Changes
+
+- [#4125](https://github.com/PostHog/posthog-js/pull/4125) [`fde7145`](https://github.com/PostHog/posthog-js/commit/fde7145e59b497a76b083d9bd173648e83de0400) Thanks [@DerGeraetK](https://github.com/DerGeraetK)! - Add `session_recording.sampling` to disable or throttle mousemove capture (and optionally mouseInteraction) in session replay. Canvas recording now merges its canvas sampling with user-provided sampling instead of overwriting it.
+  (2026-08-03)
+
+### Patch Changes
+
+- [#4387](https://github.com/PostHog/posthog-js/pull/4387) [`10ef759`](https://github.com/PostHog/posthog-js/commit/10ef7594d11f805742f4dbff5e7a87f88b6352c7) Thanks [@NVolcz](https://github.com/NVolcz)! - Share extension bundle types between the slim and slim no-external entrypoints.
+  (2026-08-03)
+- Updated dependencies [[`fde7145`](https://github.com/PostHog/posthog-js/commit/fde7145e59b497a76b083d9bd173648e83de0400)]:
+    - @posthog/types@1.400.0
+
+## 1.409.6
+
+### Patch Changes
+
+- [#4299](https://github.com/PostHog/posthog-js/pull/4299) [`8a7bb3f`](https://github.com/PostHog/posthog-js/commit/8a7bb3f93412604273698149a90bbef1faff4cec) Thanks [@posthog](https://github.com/apps/posthog)! - Mark our bundles as third-party code in the source maps we publish (the `x_google_ignoreList` extension). Browser devtools now attribute `console.*` messages to the code that called them instead of to posthog-js's console wrapper, which previously showed every message as coming from `logs.ts` when `captureConsoleLogs` or session replay's `enable_recording_console_log` was enabled.
+  (2026-08-03)
+- Updated dependencies [[`7c3a9af`](https://github.com/PostHog/posthog-js/commit/7c3a9af42be80051705f7fe820623dd7e1b879d5)]:
+    - @posthog/core@1.46.2
+
 ## 1.409.5
 
 ### Patch Changes

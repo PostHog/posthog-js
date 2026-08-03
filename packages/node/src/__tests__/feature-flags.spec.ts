@@ -86,7 +86,57 @@ describe('local evaluation', () => {
           latestBuildVersionMajor: undefined,
           latestBuildVersionMinor: undefined,
           latestBuildVersionPatch: undefined,
-        } as unknown as Record<string, string>,
+        },
+      })
+    ).toEqual(false)
+
+    expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
+  })
+
+  it('evaluates numeric person properties with comparison operators', async () => {
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Beta Feature',
+          key: 'numeric-person-flag',
+          active: true,
+          filters: {
+            groups: [
+              {
+                variant: null,
+                properties: [
+                  {
+                    key: 'age',
+                    type: 'person',
+                    value: 21,
+                    operator: 'gt',
+                  },
+                ],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+      ],
+    }
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    expect(
+      await posthog.getFeatureFlag('numeric-person-flag', 'some-distinct-id', {
+        personProperties: { age: 30 },
+      })
+    ).toEqual(true)
+
+    expect(
+      await posthog.getFeatureFlag('numeric-person-flag', 'some-distinct-id', {
+        personProperties: { age: 18 },
       })
     ).toEqual(false)
 

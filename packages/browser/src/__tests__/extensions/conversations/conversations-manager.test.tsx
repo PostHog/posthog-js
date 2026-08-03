@@ -9,6 +9,7 @@ import {
 import { PostHog } from '../../../posthog-core'
 import '@testing-library/jest-dom'
 import { act, fireEvent, screen } from '@testing-library/preact'
+import Config from '../../../config'
 
 // Mock the persistence layer
 jest.mock('../../../extensions/conversations/external/persistence', () => {
@@ -545,6 +546,59 @@ describe('ConversationsManager', () => {
                     }),
                 })
             )
+        })
+
+        it('should reject with a handled network error without relogging the transport failure', async () => {
+            const networkError = new TypeError('Failed to fetch')
+            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+                options.callback({ statusCode: 0, error: networkError })
+            })
+
+            const previousDebug = Config.DEBUG
+            Config.DEBUG = true
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+            const errorSpy = jest.spyOn(console, 'error').mockImplementation()
+
+            try {
+                await expect(manager.sendMessage('Hello!')).rejects.toMatchObject({
+                    kind: 'network',
+                    message: 'Unable to reach the server. Please check your connection and try again.',
+                })
+                expect(warnSpy).not.toHaveBeenCalled()
+                expect(errorSpy).not.toHaveBeenCalled()
+            } finally {
+                warnSpy.mockRestore()
+                errorSpy.mockRestore()
+                Config.DEBUG = previousDebug
+            }
+        })
+
+        it('should log and reject with a handled HTTP error for a server failure', async () => {
+            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+                options.callback({ statusCode: 500, json: { detail: 'Server unavailable' } })
+            })
+
+            const previousDebug = Config.DEBUG
+            Config.DEBUG = true
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+            const errorSpy = jest.spyOn(console, 'error').mockImplementation()
+
+            try {
+                await expect(manager.sendMessage('Hello!')).rejects.toMatchObject({
+                    kind: 'http',
+                    message: 'Server unavailable',
+                })
+                expect(errorSpy).toHaveBeenCalledWith(
+                    expect.stringContaining('[ConversationsManager]'),
+                    'Failed to send message',
+                    { status: 500 }
+                )
+                expect(warnSpy).not.toHaveBeenCalled()
+            } finally {
+                warnSpy.mockRestore()
+                errorSpy.mockRestore()
+                Config.DEBUG = previousDebug
+            }
         })
 
         it('should track message sent event', async () => {
