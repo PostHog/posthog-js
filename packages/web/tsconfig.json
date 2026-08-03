@@ -1,7 +1,6 @@
 {
   "extends": "@posthog-tooling/tsconfig-base",
   "compilerOptions": {
-    "outDir": "./dist",
     "rootDir": ".",
     "incremental": false,
     "lib": ["DOM", "ES2020", "ES2022.Error"]
