@@ -39,6 +39,42 @@ describe('error wrapping functions', () => {
             expect(result).toBe(true)
             expect(captureFn).toHaveBeenCalled()
         })
+
+        it('preserves a cross-realm error stack', () => {
+            const iframe = document.createElement('iframe')
+            document.body.appendChild(iframe)
+            const crossRealmError = new iframe.contentWindow!.TypeError('cross-realm onerror')
+            crossRealmError.stack =
+                'TypeError: cross-realm onerror\n    at crossRealmOrigin (https://example.com/cross-realm.js:42:13)'
+            expect(crossRealmError).not.toBeInstanceOf(Error)
+            unwrap = wrapOnError(captureFn)
+
+            win.onerror('cross-realm onerror', 'https://example.com/fallback.js', 1, 2, crossRealmError)
+
+            expect(captureFn.mock.calls[0][0].$exception_list[0].stacktrace?.frames).toEqual([
+                expect.objectContaining({
+                    filename: 'https://example.com/cross-realm.js',
+                    function: 'crossRealmOrigin',
+                    lineno: 42,
+                    colno: 13,
+                }),
+            ])
+            iframe.remove()
+        })
+
+        it('uses positional location when onerror has no Error object', () => {
+            unwrap = wrapOnError(captureFn)
+
+            win.onerror('error without object', 'https://example.com/positional-fallback.js', 73, 9)
+
+            expect(captureFn.mock.calls[0][0].$exception_list[0].stacktrace?.frames).toEqual([
+                expect.objectContaining({
+                    filename: 'https://example.com/positional-fallback.js',
+                    lineno: 73,
+                    colno: 9,
+                }),
+            ])
+        })
     })
 
     describe('wrapUnhandledRejection', () => {
@@ -69,6 +105,36 @@ describe('error wrapping functions', () => {
             expect(original).toHaveBeenCalledWith(ev)
             expect(result).toBe(true)
             expect(captureFn).toHaveBeenCalled()
+        })
+
+        it('preserves a cross-realm rejection stack', () => {
+            const iframe = document.createElement('iframe')
+            document.body.appendChild(iframe)
+            const crossRealmError = new iframe.contentWindow!.TypeError('cross-realm rejection')
+            crossRealmError.stack =
+                'TypeError: cross-realm rejection\n    at rejectionOrigin (https://example.com/rejection.js:51:7)'
+            expect(crossRealmError).not.toBeInstanceOf(Error)
+            unwrap = wrapUnhandledRejection(captureFn)
+
+            win.onunhandledrejection({ reason: crossRealmError })
+
+            expect(captureFn.mock.calls[0][0].$exception_list[0].stacktrace?.frames).toEqual([
+                expect.objectContaining({
+                    filename: 'https://example.com/rejection.js',
+                    function: 'rejectionOrigin',
+                    lineno: 51,
+                    colno: 7,
+                }),
+            ])
+            iframe.remove()
+        })
+
+        it('does not attach the wrapper stack to a primitive rejection', () => {
+            unwrap = wrapUnhandledRejection(captureFn)
+
+            win.onunhandledrejection({ reason: 'primitive rejection' })
+
+            expect(captureFn.mock.calls[0][0].$exception_list[0].stacktrace).toBeUndefined()
         })
     })
 

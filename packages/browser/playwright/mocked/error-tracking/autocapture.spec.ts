@@ -131,12 +131,93 @@ test.describe('ErrorTracking autocapture', () => {
             expect(exception.properties.$exception_list[0].value).toBe(
                 'Non-Error promise rejection captured with value: An unknown error occured'
             )
-            const stacktrace = exception.properties.$exception_list[0].stacktrace
-            expect(stacktrace).toBeDefined()
+            expect(exception.properties.$exception_list[0].stacktrace).toBeUndefined()
+        })
+
+        test('should preserve a cross-realm rejection origin', async ({ posthog, page, network, events }) => {
+            await posthog.init({
+                capture_exceptions: true,
+            })
+            await network.waitForFlags()
+            await page.evaluate(() => {
+                const iframe = document.createElement('iframe')
+                document.body.appendChild(iframe)
+                const crossRealmError = new iframe.contentWindow!.TypeError('cross-realm rejection')
+                crossRealmError.stack =
+                    'TypeError: cross-realm rejection\n    at rejectionOrigin (https://example.com/rejection-origin.js:51:7)'
+                window.onunhandledrejection?.({ reason: crossRealmError } as PromiseRejectionEvent)
+                iframe.remove()
+            })
+
+            const exception = await events.waitForEvent('$exception')
+            expect(exception.properties.$exception_list[0].stacktrace.frames).toEqual([
+                expect.objectContaining({
+                    filename: 'https://example.com/rejection-origin.js',
+                    function: 'rejectionOrigin',
+                    lineno: 51,
+                    colno: 7,
+                }),
+            ])
         })
     })
 
     test.describe('unhandled errors', () => {
+        test('should preserve a cross-realm onerror origin', async ({ posthog, network, page, events }) => {
+            await posthog.init({
+                capture_exceptions: true,
+            })
+            await network.waitForFlags()
+            await page.evaluate(() => {
+                const iframe = document.createElement('iframe')
+                document.body.appendChild(iframe)
+                const crossRealmError = new iframe.contentWindow!.TypeError('cross-realm onerror')
+                crossRealmError.stack =
+                    'TypeError: cross-realm onerror\n    at crossRealmOrigin (https://example.com/cross-realm-origin.js:42:13)'
+                window.onerror?.(
+                    'cross-realm onerror',
+                    'https://example.com/positional-should-not-win.js',
+                    1,
+                    2,
+                    crossRealmError
+                )
+                iframe.remove()
+            })
+
+            const exception = await events.waitForEvent('$exception')
+            expect(exception.properties.$exception_list[0].stacktrace.frames).toEqual([
+                expect.objectContaining({
+                    filename: 'https://example.com/cross-realm-origin.js',
+                    function: 'crossRealmOrigin',
+                    lineno: 42,
+                    colno: 13,
+                }),
+            ])
+        })
+
+        test('should use the positional onerror location when there is no Error object', async ({
+            posthog,
+            network,
+            page,
+            events,
+        }) => {
+            await posthog.init({
+                capture_exceptions: true,
+            })
+            await network.waitForFlags()
+            await page.evaluate(() => {
+                window.onerror?.('error without object', 'https://example.com/positional-fallback.js', 73, 9)
+            })
+
+            const exception = await events.waitForEvent('$exception')
+            expect(exception.properties.$exception_list[0].stacktrace.frames).toEqual([
+                expect.objectContaining({
+                    filename: 'https://example.com/positional-fallback.js',
+                    lineno: 73,
+                    colno: 9,
+                }),
+            ])
+        })
+
         test('should capture ReferenceError', async ({ posthog, network, page, events, browserName }) => {
             await posthog.init({
                 capture_exceptions: true,

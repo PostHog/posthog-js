@@ -19,11 +19,6 @@ export const compatSkips: { range: string; test: string; reason: string }[] = [
         test: 'web_vitals_attribution: true includes attribution data',
         reason: 'web_vitals_attribution option added in #2953',
     },
-    {
-        range: '<1.410.0',
-        test: 'should capture with string',
-        reason: 'unhandled promise rejections with a string reason now get a synthetic stacktrace, added in #4382',
-    },
 ]
 
 export function shouldSkipForVersion(testTitle: string, npmVersion: string | undefined): string | null {

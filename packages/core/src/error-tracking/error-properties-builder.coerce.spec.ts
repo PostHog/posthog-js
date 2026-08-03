@@ -1,3 +1,5 @@
+import { runInNewContext } from 'node:vm'
+
 import {
   DOMExceptionCoercer,
   ErrorEventCoercer,
@@ -107,6 +109,30 @@ describe('ErrorPropertiesBuilder', () => {
         type: 'CustomTestError',
         value: 'My special error',
         stack: errorObject.stack,
+      })
+    })
+
+    it('should preserve a cross-realm error stack', () => {
+      const crossRealmError = runInNewContext(
+        `new TypeError('cross-realm error', {
+          cause: new Error('cross-realm cause')
+        })`
+      )
+      expect(crossRealmError).not.toBeInstanceOf(Error)
+
+      const exception = coerceInput(crossRealmError)
+
+      expect(exception).toMatchObject({
+        type: 'TypeError',
+        value: 'cross-realm error',
+        stack: crossRealmError.stack,
+        synthetic: false,
+        cause: {
+          type: 'Error',
+          value: 'cross-realm cause',
+          stack: crossRealmError.cause.stack,
+          synthetic: false,
+        },
       })
     })
 
