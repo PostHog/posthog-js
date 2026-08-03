@@ -1,4 +1,4 @@
-import './helpers/mock-logger'
+import { clearLoggerMocks, mockLogger } from './helpers/mock-logger'
 
 import { PostHog } from '../posthog-core'
 import { defaultPostHog } from './helpers/posthog-instance'
@@ -32,6 +32,7 @@ describe('bot detection and pageview collection', () => {
     beforeEach(async () => {
         // Store original user agent
         originalUserAgent = navigator!.userAgent
+        clearLoggerMocks()
     })
 
     afterEach(() => {
@@ -98,6 +99,31 @@ describe('bot detection and pageview collection', () => {
             expect(beforeSendMock.mock.calls[0][0].event).toBe('$pageview')
             const properties = beforeSendMock.mock.calls[0][0].properties
             expect(properties.$browser_type).toBeUndefined()
+        })
+
+        it('should log the reason and increment botEventsDropped when dropping a bot event', async () => {
+            setBotUserAgent('Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)')
+            posthog = await createPostHog()
+
+            expect(posthog.botEventsDropped).toBe(0)
+
+            posthog.capture('$pageview')
+
+            expect(beforeSendMock).not.toHaveBeenCalled()
+            expect(posthog.botEventsDropped).toBe(1)
+            expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('matched blocklist entry'))
+
+            posthog.capture('$pageview')
+            expect(posthog.botEventsDropped).toBe(2)
+        })
+
+        it('should log navigator.webdriver as the reason for webdriver-detected bots', async () => {
+            setWebdriver(true)
+            posthog = await createPostHog()
+
+            posthog.capture('$pageview')
+
+            expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('navigator.webdriver'))
         })
     })
 

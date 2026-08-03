@@ -1,5 +1,5 @@
 // Re-export shared bot detection logic from @posthog/core
-import { isBlockedUA as isBlockedUACore } from '@posthog/core'
+import { isBlockedUA as isBlockedUACore, getBlockedUAMatch } from '@posthog/core'
 export { DEFAULT_BLOCKED_UA_STRS, isBlockedUA } from '@posthog/core'
 
 // There's more in the type, but this is all we use. It's currently experimental, see
@@ -54,4 +54,41 @@ export const isLikelyBot = function (navigator: Navigator | undefined, customBlo
     // prompt; access is gated by the `ch-ua-high-entropy-values` Permissions-Policy and a blocked
     // call rejects with NotAllowedError.
     // See https://developer.mozilla.org/en-US/docs/Web/API/NavigatorUAData/getHighEntropyValues
+}
+
+/**
+ * Explains why `isLikelyBot` returned true, so callers can log something more useful than a boolean.
+ * Returns undefined if the navigator isn't recognised as a bot.
+ */
+export const getBotDetectionReason = function (
+    navigator: Navigator | undefined,
+    customBlockedUserAgents: string[]
+): string | undefined {
+    if (!navigator) {
+        return undefined
+    }
+
+    const uaMatch = getBlockedUAMatch(navigator.userAgent, customBlockedUserAgents)
+    if (uaMatch) {
+        return `user agent matched blocklist entry "${uaMatch}"`
+    }
+
+    try {
+        // eslint-disable-next-line compat/compat
+        const uaData = navigator?.userAgentData as NavigatorUAData
+        const brandMatch = uaData?.brands
+            ?.map((brandObj) => getBlockedUAMatch(brandObj?.brand, customBlockedUserAgents))
+            .find(Boolean)
+        if (brandMatch) {
+            return `userAgentData brand matched blocklist entry "${brandMatch}"`
+        }
+    } catch {
+        // ignore the error, we were using experimental browser features
+    }
+
+    if (navigator.webdriver) {
+        return 'navigator.webdriver is true'
+    }
+
+    return undefined
 }
