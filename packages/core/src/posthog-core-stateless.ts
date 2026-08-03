@@ -31,6 +31,7 @@ import {
   removeTrailingSlash,
   retriable,
   RetriableOptions,
+  raceWithTimeout,
   safeSetTimeout,
   STRING_FORMAT,
   createLogger,
@@ -1724,21 +1725,11 @@ export abstract class PostHogCoreStateless {
       }
     }
 
-    let timeoutHandle: ReturnType<typeof safeSetTimeout> | undefined
-    try {
-      return await Promise.race([
-        new Promise<void>((_, reject) => {
-          timeoutHandle = safeSetTimeout(() => {
-            this._logger.error('Timed out while shutting down PostHog')
-            hasTimedOut = true
-            reject('Timeout while shutting down PostHog. Some events may not have been sent.')
-          }, shutdownTimeoutMs)
-        }),
-        doShutdown(),
-      ])
-    } finally {
-      clearTimeout(timeoutHandle)
-    }
+    return raceWithTimeout(doShutdown(), shutdownTimeoutMs, () => {
+      this._logger.error('Timed out while shutting down PostHog')
+      hasTimedOut = true
+      throw 'Timeout while shutting down PostHog. Some events may not have been sent.'
+    })
   }
 
   /**
