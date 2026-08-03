@@ -1013,6 +1013,28 @@ describe('PostHogLogs', () => {
     })
   })
 
+  describe('flushWithTimeout', () => {
+    beforeEach(() => jest.useFakeTimers())
+    afterEach(() => jest.useRealTimers())
+
+    it('clears the timeout timer when the flush finishes first', async () => {
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest(),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      mockInstance.setPersistedProperty(PostHogPersistedProperty.LogsQueue, [
+        { record: { body: { stringValue: 'a' } } },
+      ])
+
+      await logs.flushWithTimeout(5000)
+
+      expect(jest.getTimerCount()).toBe(0)
+    })
+  })
+
   describe('shutdown', () => {
     beforeEach(() => jest.useFakeTimers())
     afterEach(() => jest.useRealTimers())
@@ -1035,6 +1057,21 @@ describe('PostHogLogs', () => {
       // Advancing past the original interval must not produce a second flush.
       jest.advanceTimersByTime(10000)
       expect(mockInstance._sendLogsBatch).toHaveBeenCalledTimes(1)
+    })
+
+    it('clears the timeout timer when the final flush finishes first', async () => {
+      const logs = new PostHogLogs(
+        mockInstance,
+        resolveForTest({ flushIntervalMs: 5000 }),
+        logger,
+        getContextFor(mockInstance),
+        immediateOnReady
+      )
+      logs.captureLog({ body: 'a' })
+
+      await logs.shutdown(5000)
+
+      expect(jest.getTimerCount()).toBe(0)
     })
 
     it('swallows flush errors so shutdown can complete', async () => {

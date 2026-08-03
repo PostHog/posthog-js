@@ -52,26 +52,27 @@ export class MyExtension implements Extension {
 ```
 
 - `name` is unique within one client and is used for diagnostics and de-duplication.
-- `setup(client)` may be async when it needs KV or remote-config state.
+- `setup(client)` may be async when it needs KV or other asynchronous state.
 - `dispose()` is optional, synchronous, idempotent, and best-effort.
 - Static SDK configuration belongs in explicit constructor options, not in `Client`.
 
 ## Client capabilities
 
-| Need                           | Use                                                           |
-| ------------------------------ | ------------------------------------------------------------- |
-| current identity               | `client.distinctId`, `client.anonymousId`, `client.groups`    |
-| current session                | `client.session`                                              |
-| record an event                | `await client.capture(event, properties?, options?)`          |
-| add properties to every event  | `client.registerDynamicEventProperties(() => ({ … }))`        |
-| react to finalized events      | `client.onEvent(({ event, properties }) => …)`                |
-| call a PostHog endpoint        | `await client.sendRequest(path, init?)`                       |
-| read or react to server config | `await client.getRemoteConfig()` / `client.onRemoteConfig(…)` |
-| persist small state            | `client.kv`                                                   |
-| log                            | `client.logger`                                               |
+| Need                          | Use                                                        |
+| ----------------------------- | ---------------------------------------------------------- |
+| current identity              | `client.distinctId`, `client.anonymousId`, `client.groups` |
+| current session               | `client.session`                                           |
+| record an event               | `await client.capture(event, properties?, options?)`       |
+| add properties to every event | `client.registerDynamicEventProperties(() => ({ … }))`     |
+| react to finalized events     | `client.onEvent(({ event, properties }) => …)`             |
+| call a PostHog endpoint       | `await client.sendRequest(path, init?)`                    |
+| react to server config        | `client.onRemoteConfig(…)`                                 |
+| persist small state           | `client.kv`                                                |
+| log                           | `client.logger`                                            |
 
 Create an extension-named child logger with `client.logger.createLogger('[myExtension]')` when its messages need a
-prefix.
+prefix. `onRemoteConfig` immediately replays the latest known outcome; narrow on `result.ok` before reading
+`result.config` and define safe behavior for `{ ok: false }`.
 
 `sendRequest` is a low-level transport bridge. Select the configured origin with `target` (`api`, `flags`, or
 `assets`) and construct endpoint authentication using `client.projectToken` in the required query parameter, body,
@@ -85,8 +86,8 @@ header, or path.
   cannot mutate them.
 - **Keep disposables.** Store and release values returned by listeners, dynamic-property registration, and timer or
   patch wrappers. Use `createDisposable(teardown)` for idempotent synchronous cleanup.
-- **Reads are sync; I/O is awaitable.** Identity, session, and `projectToken` are synchronous. Capture, requests, KV,
-  and remote config are awaitable.
+- **Reads are sync; I/O is awaitable.** Identity, session, and `projectToken` are synchronous. Capture, requests, and
+  KV are awaitable; remote-config outcomes are delivered through `onRemoteConfig`.
 - **Design for async readiness.** Setup may occur before remote config loads or after events have already been captured.
   Guard work after each `await` so disposal cannot be followed by late installation.
 - **Persist through `client.kv`, not globals.** Browser-v1 keys are passed verbatim to persistence. Unknown keys may be
@@ -128,7 +129,7 @@ export class FeatureFlagsExtension implements Extension {
 | `instance.get_distinct_id()`                                  | `client.distinctId`                                     |
 | `instance.get_property(k)` / `persistence`                    | `client.kv.get(k)`                                      |
 | `instance.config.X` (static)                                  | constructor option                                      |
-| `instance.config.X` (server-driven)                           | `client.getRemoteConfig()` / `onRemoteConfig`           |
+| `instance.config.X` (server-driven)                           | `client.onRemoteConfig(...)`                            |
 | `instance.sessionManager.checkAndGetSessionAndWindowId(true)` | `client.session`                                        |
 | `_addCaptureHook` / observing events                          | `client.onEvent(...)`                                   |
 | registering an enricher                                       | `client.registerDynamicEventProperties(fn)`             |

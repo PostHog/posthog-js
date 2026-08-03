@@ -801,7 +801,7 @@ describe('SurveyManager', () => {
         })
     })
 
-    describe('renderSurvey with URL prefill that completes the survey', () => {
+    describe('renderSurvey with URL prefill', () => {
         let surveyManager: SurveyManager
         let originalLocation: Location
 
@@ -888,6 +888,74 @@ describe('SurveyManager', () => {
                 expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
                 expect(surveyDiv.getElementsByClassName('thank-you-message').length).toBe(0)
             }
+        })
+
+        it('retains the auto-advanced prefilled answer through a later manual submit', async () => {
+            localStorage.clear()
+            const mockPH = createMockPostHog({
+                config: {
+                    token: 'test-token',
+                    api_host: 'https://test.com',
+                    surveys: { prefillFromUrl: true },
+                },
+                getActiveMatchingSurveys: jest.fn(),
+                get_session_replay_url: jest.fn(),
+                capture: jest.fn(),
+                featureFlags: { isFeatureEnabled: jest.fn().mockReturnValue(true) },
+            })
+            surveyManager = new SurveyManager(mockPH)
+
+            const survey: Survey = {
+                id: 'prefill-merge-survey',
+                name: 'Prefill Merge Survey',
+                type: SurveyType.Popover,
+                enable_partial_responses: true,
+                questions: [
+                    {
+                        id: 'q1',
+                        type: SurveyQuestionType.Rating,
+                        question: 'Rate the draft',
+                        scale: 2,
+                        display: 'emoji',
+                        skipSubmitButton: true,
+                    },
+                    { id: 'q2', type: SurveyQuestionType.Open, question: 'Tell us more' },
+                ],
+                appearance: {},
+                conditions: null,
+                start_date: '2021-01-01T00:00:00.000Z',
+                end_date: null,
+                current_iteration: null,
+                current_iteration_start_date: null,
+                feature_flag_keys: [],
+                linked_flag_key: null,
+                targeting_flag_key: null,
+                internal_targeting_flag_key: null,
+            } as unknown as Survey
+
+            // q0 (the rating) is prefilled and auto-advances; the open question is shown for manual submit.
+            window.location.search = '?q0=1'
+            const surveyDiv = document.createElement('div')
+            surveyManager.renderSurvey(survey, surveyDiv)
+
+            const textarea = surveyDiv.querySelector('textarea')
+            await act(async () => {
+                fireEvent.input(textarea!, { target: { value: 'because reasons' } })
+            })
+            const submitButton = surveyDiv.querySelector<HTMLButtonElement>('.form-submit')
+            await act(async () => {
+                fireEvent.click(submitButton!)
+            })
+
+            // The manual submit must still carry the prefilled rating, not just the open answer —
+            // both events share one submission id and merge server-side, so dropping it would clear it.
+            expect(mockPH.capture).toHaveBeenLastCalledWith(
+                'survey sent',
+                expect.objectContaining({
+                    $survey_response_q1: 1,
+                    $survey_response_q2: 'because reasons',
+                })
+            )
         })
     })
 
@@ -1158,6 +1226,52 @@ describe('SurveyManager', () => {
                     $survey_id: 'prefill-survey',
                     $survey_response_q1: 8,
                     $survey_completed: false,
+                })
+            )
+        })
+
+        it('should include caller-provided properties in the auto-submitted prefill event', () => {
+            const survey: Survey = {
+                id: 'prefill-survey-props',
+                name: 'Prefill Survey Props',
+                type: SurveyType.Popover,
+                enable_partial_responses: true,
+                questions: [
+                    {
+                        id: 'q1',
+                        type: SurveyQuestionType.Rating,
+                        question: 'Rate us',
+                        scale: 10,
+                        skipSubmitButton: true,
+                    },
+                    {
+                        id: 'q2',
+                        type: SurveyQuestionType.Open,
+                        question: 'Any feedback?',
+                    },
+                ],
+                appearance: {},
+                conditions: null,
+                start_date: '2021-01-01T00:00:00.000Z',
+                end_date: null,
+                current_iteration: null,
+                current_iteration_start_date: null,
+                feature_flag_keys: [],
+                linked_flag_key: null,
+                targeting_flag_key: null,
+                internal_targeting_flag_key: null,
+            }
+
+            window.location.search = '?q0=8'
+            ;(surveyManager as any)._handleUrlPrefill(survey, null, { account_number: 'A12345', month: 'January' })
+
+            expect(mockPostHog.capture).toHaveBeenCalledWith(
+                'survey sent',
+                expect.objectContaining({
+                    $survey_id: 'prefill-survey-props',
+                    $survey_response_q1: 8,
+                    account_number: 'A12345',
+                    month: 'January',
                 })
             )
         })

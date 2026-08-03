@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   CanvasMaskRegion,
-  ImageBitmapDataURLWorkerParams,
+  ImageBitmapDataURLWorkerMessage,
 } from '@posthog/rrweb-types';
 
 type MessageHandler = (e: {
-  data: ImageBitmapDataURLWorkerParams;
+  data: ImageBitmapDataURLWorkerMessage;
 }) => Promise<void>;
 
 const convertToBlob = vi.fn(
@@ -74,7 +74,7 @@ function frame(
   width = WIDTH,
   height = HEIGHT,
   maskRegions?: CanvasMaskRegion[],
-): { data: ImageBitmapDataURLWorkerParams } {
+): { data: ImageBitmapDataURLWorkerMessage } {
   const bitmap: FakeBitmap = { pixels, close: () => {} };
   return {
     data: {
@@ -86,7 +86,7 @@ function frame(
       displayHeight: 4,
       dataURLOptions: { type: 'image/webp', quality: 0.4 },
       maskRegions,
-    } as unknown as ImageBitmapDataURLWorkerParams,
+    } as unknown as ImageBitmapDataURLWorkerMessage,
   };
 }
 
@@ -339,6 +339,124 @@ describe('image-bitmap-data-url-worker', () => {
 
       expect(postMessage).toHaveBeenLastCalledWith({ id: 1 });
       expect(convertToBlob).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('re-encodes an unchanged canvas after a dedup reset', async () => {
+    const onmessage = await loadWorker();
+
+    await onmessage(frame(1, CONTENT_A));
+    await onmessage(frame(1, CONTENT_A));
+    expect(postMessage).toHaveBeenLastCalledWith({ id: 1 });
+    expect(convertToBlob).toHaveBeenCalledTimes(1);
+
+    postMessage.mockClear();
+    await onmessage({
+      data: { resetFrameDedup: true } as ImageBitmapDataURLWorkerMessage,
+    });
+    // a reset has no in-flight snapshot to clear, so no reply
+    expect(postMessage).not.toHaveBeenCalled();
+
+    await onmessage(frame(1, CONTENT_A));
+    expect(postMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 1, base64: expect.any(String) }),
+    );
+    expect(convertToBlob).toHaveBeenCalledTimes(2);
+  });
+
+  it('resets dedup for every canvas, not just one', async () => {
+    const onmessage = await loadWorker();
+
+    await onmessage(frame(1, CONTENT_A));
+    await onmessage(frame(2, CONTENT_B));
+    await onmessage({
+      data: { resetFrameDedup: true } as ImageBitmapDataURLWorkerMessage,
+    });
+    postMessage.mockClear();
+
+    await onmessage(frame(1, CONTENT_A));
+    await onmessage(frame(2, CONTENT_B));
+
+    expect(postMessage.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ id: 1, base64: expect.any(String) }),
+    );
+    expect(postMessage.mock.calls[1][0]).toEqual(
+      expect.objectContaining({ id: 2, base64: expect.any(String) }),
+    );
+  });
+
+  it('still skips a blank canvas after a dedup reset', async () => {
+    const onmessage = await loadWorker();
+
+    await onmessage(frame(1, BLANK));
+    await onmessage({
+      data: { resetFrameDedup: true } as ImageBitmapDataURLWorkerMessage,
+    });
+    await onmessage(frame(1, BLANK));
+
+    expect(postMessage).toHaveBeenLastCalledWith({ id: 1 });
+    expect(convertToBlob).not.toHaveBeenCalled();
+  });
+
+  it('keeps an in-flight frame as the new epoch repaint source when a reset interleaves mid-encode', async () => {
+    const onmessage = await loadWorker();
+    let release!: () => void;
+    convertToBlob.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () =>
+            resolve({
+              type: 'image/webp',
+              arrayBuffer: () => Promise.resolve(new ArrayBuffer(4)),
+            });
+        }),
+    );
+
+    // the handler yields at convertToBlob, so the reset runs mid-encode and
+    // the continuation restores the pre-reset fingerprint afterwards
+    const inflight = onmessage(frame(1, CONTENT_A));
+    await onmessage({
+      data: { resetFrameDedup: true } as ImageBitmapDataURLWorkerMessage,
+    });
+    release();
+    await inflight;
+    expect(postMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 1, base64: expect.any(String) }),
+    );
+
+    // the restored fingerprint dedupes the next tick — correct, because the
+    // in-flight reply above is already the new epoch's frame for this canvas
+    await onmessage(frame(1, CONTENT_A));
+    expect(postMessage).toHaveBeenLastCalledWith({ id: 1 });
+    expect(convertToBlob).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the keyframe clock across a dedup reset for a canvas that went blank', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const onmessage = await loadWorker();
+
+      await onmessage(frame(1, CONTENT_A, WIDTH, HEIGHT, []));
+      await onmessage(frame(1, BLANK, WIDTH, HEIGHT, []));
+      expect(convertToBlob).toHaveBeenCalledTimes(2);
+
+      await onmessage({
+        data: { resetFrameDedup: true } as ImageBitmapDataURLWorkerMessage,
+      });
+      await onmessage(frame(1, BLANK, WIDTH, HEIGHT, []));
+      expect(postMessage).toHaveBeenLastCalledWith({ id: 1 });
+      expect(convertToBlob).toHaveBeenCalledTimes(2);
+
+      // fires only because lastSentAtMap survived the reset — a reset that
+      // cleared it would leave keyframeDue permanently false for this canvas
+      vi.advanceTimersByTime(30_000);
+      await onmessage(frame(1, BLANK, WIDTH, HEIGHT, []));
+      expect(postMessage).toHaveBeenLastCalledWith(
+        expect.objectContaining({ id: 1, base64: expect.any(String) }),
+      );
+      expect(convertToBlob).toHaveBeenCalledTimes(3);
     } finally {
       vi.useRealTimers();
     }

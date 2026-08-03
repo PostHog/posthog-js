@@ -349,6 +349,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       }
 
       const previousDistinctId = this.getDistinctId()
+      // Whether the caller passed an id at all — a bare identify() must not upgrade an anonymous
+      // user to identified (browser rejects it in _validateIdentifyId; core has no such guard and
+      // would otherwise fall into the matching-id transition below).
+      const idWasSupplied = !!distinctId
       distinctId = distinctId || previousDistinctId
 
       if (properties?.$groups) {
@@ -372,7 +376,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       const userPropsObj = isObject(userProps) ? (userProps as { [key: string]: JsonType }) : undefined
       const userPropsOnceObj = isObject(userPropsOnce) ? (userPropsOnce as { [key: string]: JsonType }) : undefined
 
-      if (distinctId !== previousDistinctId) {
+      const identityChanged = distinctId !== previousDistinctId
+      const shouldTransitionToIdentified = idWasSupplied && !identityChanged && !this._isIdentified()
+
+      if (identityChanged) {
         // We keep the AnonymousId to be used by flags calls and identify to link the previousId
         this.setPersistedProperty(PostHogPersistedProperty.AnonymousId, previousDistinctId)
         this.setPersistedProperty(PostHogPersistedProperty.DistinctId, distinctId)
@@ -384,6 +391,26 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
         // Update the cached person properties hash
         this._cachedPersonProperties = getPersonPropertiesHash(distinctId, userPropsObj, userPropsOnceObj)
+      } else if (shouldTransitionToIdentified) {
+        // Matching id while still anonymous (e.g. a non-identified bootstrap seeded the same id):
+        // upgrade to identified and emit one person-processed $set. There is no anonymous id to
+        // merge, so no $identify. Mirrors posthog-js (browser).
+        this.setPersistedProperty(PostHogPersistedProperty.PersonMode, 'identified')
+
+        const setProps = userPropsObj || {}
+        const setOnceProps = userPropsOnceObj || {}
+        this.setPersonPropertiesForFlags({ $set: setProps, $set_once: setOnceProps }, false)
+        this.capture('$set', { $set: setProps, $set_once: setOnceProps })
+
+        // The transition event must fire even when an identical property call was cached earlier;
+        // cache only after capture so deduplication cannot suppress it.
+        this._cachedPersonProperties = getPersonPropertiesHash(distinctId, userPropsObj, userPropsOnceObj)
+
+        // The identified state itself is not part of the flags request; reload only when the
+        // caller supplied properties that can affect flag evaluation.
+        if (userPropsObj || userPropsOnceObj) {
+          this.reloadFeatureFlags()
+        }
       } else if (userPropsObj || userPropsOnceObj) {
         // If the distinct_id is not changing, but we have user properties to set, we can check if they have changed
         // and if so, send a $set event
