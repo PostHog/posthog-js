@@ -582,15 +582,6 @@ export default class MutationBuffer {
     if (isIgnored(m.target, this.mirror, this.slimDOMOptions)) {
       return;
     }
-    // Reading a native accessor (tagName/getAttribute/style/textContent) on a
-    // non-native `this` — e.g. a proxy, custom element, or cross-realm object —
-    // throws 'Illegal invocation'. Bail out unless the target is a genuine
-    // node in this document's realm, mirroring the input-observer guard in
-    // `initInputObserver`.
-    const view = this.doc.defaultView;
-    if (view && !(m.target instanceof view.Node)) {
-      return;
-    }
     switch (m.type) {
       case 'characterData': {
         const value = dom.textContent(m.target);

@@ -2139,6 +2139,35 @@ describe('Lazy SessionRecording', () => {
             })
         })
 
+        it('contains and logs recorder-owned callback failures once without swallowing host failures', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            const previousDebug = assignableWindow.POSTHOG_DEBUG
+            assignableWindow.POSTHOG_DEBUG = true
+            const errorSpy = jest.spyOn(window!.console, 'error').mockImplementation(() => {})
+
+            try {
+                const recordMock = assignableWindow.__PosthogExtensions__.rrweb.record as jest.Mock
+                const errorHandler = recordMock.mock.calls[0][0].errorHandler
+                const recorderError = new TypeError('recorder callback failed')
+
+                expect(errorHandler(new DOMException('invalid index', 'IndexSizeError'), 'host')).toBe(false)
+                expect(errorSpy).not.toHaveBeenCalled()
+                expect(errorHandler(recorderError, 'rrweb')).toBe(true)
+                expect(errorHandler(recorderError, 'rrweb')).toBe(true)
+                expect(errorSpy).toHaveBeenCalledTimes(1)
+            } finally {
+                assignableWindow.POSTHOG_DEBUG = previousDebug
+                errorSpy.mockRestore()
+            }
+        })
+
         it('passes a configured attributeFilter through to rrweb.record', () => {
             posthog.config.session_recording.attributeFilter = ['class', 'value']
 

@@ -2175,15 +2175,17 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 this.onRRwebEmit(event)
             },
             plugins: activePlugins,
-            // Without this, an uncaught throw from any wrapped recorder callback
-            // (mutation processing, observers, etc.) escapes into the host page
-            // instead of being contained here.
-            errorHandler: (error) => {
+            errorHandler: (error, context) => {
+                // A host API patch shares its callback boundary with the native
+                // operation. Preserve the application's exception semantics when
+                // rrweb cannot reliably distinguish where that error originated.
+                if (context !== 'rrweb') {
+                    return false
+                }
                 if (!this._hasLoggedRecorderCallbackError) {
                     this._hasLoggedRecorderCallbackError = true
                     logger.error('rrweb internal error - recording will continue but may be incomplete', error)
                 }
-                // returning true tells rrweb's callbackWrapper to swallow the error
                 return true
             },
             ...sessionRecordingOptions,
