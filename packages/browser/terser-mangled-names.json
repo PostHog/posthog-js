@@ -140,6 +140,7 @@
         "_delayedFlushTimer",
         "_deleteProp",
         "_destroyed",
+        "_detachWidgetSelectorListener",
         "_determineInitialView",
         "_disabled",
         "_discardRecording",
