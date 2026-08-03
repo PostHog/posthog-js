@@ -65,5 +65,7 @@ export function getResponseFailure(
     return undefined
   }
 
-  return response.error ?? new Error(`OpenAI response ${response.id} failed without error details`)
+  return response.error
+    ? { ...response.error }
+    : new Error(`OpenAI response ${response.id} failed without error details`)
 }

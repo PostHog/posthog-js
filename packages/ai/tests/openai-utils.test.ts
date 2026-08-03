@@ -1,4 +1,4 @@
-import { extractRequestId, buildProviderMetadata } from '../src/openai/utils'
+import { extractRequestId, buildProviderMetadata, getResponseFailure } from '../src/openai/utils'
 
 describe('extractRequestId', () => {
   it.each<[name: string, input: unknown, expected: string | undefined]>([
@@ -11,6 +11,18 @@ describe('extractRequestId', () => {
     ['returns undefined for numeric input', 42, undefined],
   ])('%s', (_name, input, expected) => {
     expect(extractRequestId(input)).toBe(expected)
+  })
+})
+
+describe('getResponseFailure', () => {
+  it('returns a copy of the provider error', () => {
+    const error = { code: 'server_error', message: 'provider response failed' }
+    const response = { id: 'resp_failed', status: 'failed', error } as Parameters<typeof getResponseFailure>[0]
+
+    const failure = getResponseFailure(response)
+
+    expect(failure).toEqual(error)
+    expect(failure).not.toBe(error)
   })
 })
 
