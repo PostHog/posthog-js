@@ -1456,6 +1456,33 @@ describe('Lazy SessionRecording', () => {
                 expect(bufferData[0].type).toEqual(FULL_SNAPSHOT_EVENT_TYPE)
             })
 
+            it('hard-resets a runaway held buffer but keeps the newest Meta', () => {
+                // Prefix-pruning can't bound a buffer whose tail piles up behind one snapshot;
+                // past twice the cap the hold resets, carrying the Meta over (takeFullSnapshot
+                // emits none) and requesting a fresh snapshot for a new playable prefix.
+                const recorder = sessionRecording['_lazyLoadedSessionRecording']
+                expect(recorder['_isIdle']).toEqual('unknown')
+
+                sessionRecording.onRRwebEmit(
+                    createMetaSnapshot({ data: { href: 'https://runaway.example.com' } }) as eventWithTime
+                )
+                sessionRecording.onRRwebEmit(createFullSnapshot() as eventWithTime)
+                sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
+                recorder['_buffer'].size = 2 * RECORDING_MAX_EVENT_SIZE + 1
+
+                recorder['_pruneHeldBuffer']()
+
+                expect(posthog.capture).not.toHaveBeenCalled()
+                // the reset kept the Meta and the requested fresh snapshot re-established the
+                // playable prefix (the harness's takeFullSnapshot emits synchronously)
+                expect(recorder['_buffer'].data.map((e: any) => e.type)).toEqual([
+                    META_EVENT_TYPE,
+                    FULL_SNAPSHOT_EVENT_TYPE,
+                ])
+                expect(recorder['_buffer'].data[0].data.href).toEqual('https://runaway.example.com')
+                expect(assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot).toHaveBeenCalled()
+            })
+
             it('holds the buffer while _isIdle is unknown and ships it on the first user interaction', () => {
                 jest.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
 
