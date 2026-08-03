@@ -972,13 +972,27 @@ describe('web vitals', () => {
         it('separates buffers by navigation identity even when the navigation URL is unchanged', async () => {
             await initializeWebVitals()
 
-            onLCPCallback?.({ name: 'LCP', value: 100, navigationId: 10, navigationURL: 'http://localhost/route' })
-            onCLSCallback?.({ name: 'CLS', value: 0.1, navigationId: 11, navigationURL: 'http://localhost/route' })
+            onLCPCallback?.({
+                name: 'LCP',
+                value: 100,
+                navigationId: 'soft-navigation-10',
+                navigationURL: 'http://localhost/route',
+            })
+            onCLSCallback?.({
+                name: 'CLS',
+                value: 0.1,
+                navigationId: 'soft-navigation-11',
+                navigationURL: 'http://localhost/route',
+            })
             jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
 
             expect(beforeSendMock).toHaveBeenCalledTimes(2)
-            expect(beforeSendMock.mock.calls[0][0].properties.$web_vitals_LCP_event.navigationId).toBe(10)
-            expect(beforeSendMock.mock.calls[1][0].properties.$web_vitals_CLS_event.navigationId).toBe(11)
+            expect(beforeSendMock.mock.calls[0][0].properties.$web_vitals_LCP_event.navigationId).toBe(
+                'soft-navigation-10'
+            )
+            expect(beforeSendMock.mock.calls[1][0].properties.$web_vitals_CLS_event.navigationId).toBe(
+                'soft-navigation-11'
+            )
         })
     })
 

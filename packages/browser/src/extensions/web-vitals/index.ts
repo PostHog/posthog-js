@@ -233,7 +233,8 @@ export class WebVitalsAutocapture {
         if (isUndefined($currentUrl)) {
             return
         }
-        const navigationKey = isNumber(metric.navigationId) ? `navigation:${metric.navigationId}` : `url:${$currentUrl}`
+        const hasNavigationId = isNumber(metric.navigationId) || typeof metric.navigationId === 'string'
+        const navigationKey = hasNavigationId ? `navigation:${metric.navigationId}` : `url:${$currentUrl}`
 
         // we observe some very large values sometimes, we'll ignore them
         // since the likelihood of LCP > 1 hour being correct is very low
