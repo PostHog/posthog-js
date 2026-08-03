@@ -1,5 +1,6 @@
 ---
 'posthog-js': patch
+'@posthog/types': patch
 ---
 
 fix: warn when `reset()` silently opts the user back out
