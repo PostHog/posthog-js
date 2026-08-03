@@ -1437,40 +1437,102 @@ describe('Lazy SessionRecording', () => {
                 }
             })
 
-            it('flushes the buffer while _isIdle is unknown when it exceeds the max event size', () => {
+            it('prunes the held buffer instead of flushing while _isIdle is unknown when it exceeds the max event size', () => {
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual('unknown')
 
+                // an old event that predates the newest full snapshot is unreplayable once the
+                // buffer is pruned down to that snapshot, so it's the one that gets dropped
                 sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
+                sessionRecording.onRRwebEmit(createFullSnapshot() as eventWithTime)
 
                 // fake having a large buffer, as the idle === true counterpart test does
                 sessionRecording['_lazyLoadedSessionRecording']['_buffer'].size = RECORDING_MAX_EVENT_SIZE - 1
                 sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
 
-                // unlike confirmed idle, the unknown state must respect the size cap and flush
-                expect(posthog.capture).toHaveBeenCalledWith(
-                    '$snapshot',
-                    expect.objectContaining({ $session_id: sessionId }),
-                    expect.any(Object)
-                )
+                // a session with no user interaction never ships on the size cap — it prunes to
+                // the newest playable prefix so a parked tab's hold stays bounded
+                expect(posthog.capture).not.toHaveBeenCalled()
+                const bufferData = sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data
+                expect(bufferData[0].type).toEqual(FULL_SNAPSHOT_EVENT_TYPE)
             })
 
-            it('schedules a buffer flush while _isIdle is unknown so background tabs ship their data', () => {
+            it('holds the buffer while _isIdle is unknown and ships it on the first user interaction', () => {
                 jest.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
 
                 const snapshot = emitInactiveEvent(startingTimestamp + 100, 'unknown')
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toContain(snapshot)
                 expect(posthog.capture).not.toHaveBeenCalled()
 
+                // no interaction yet: the flush timer must not be armed, or every parked tab
+                // ships a recording nobody interacted with
+                jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                expect(posthog.capture).not.toHaveBeenCalled()
+
+                // the first user interaction releases the held buffer so the recording is
+                // playable from before the interaction
+                const activeSnapshot = emitActiveEvent(startingTimestamp + 200)
                 jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
 
                 expect(posthog.capture).toHaveBeenCalledWith(
                     '$snapshot',
                     expect.objectContaining({
                         $session_id: sessionId,
-                        $snapshot_data: [snapshot],
+                        $snapshot_data: [snapshot, activeSnapshot],
                     }),
                     expect.any(Object)
                 )
+            })
+
+            it('ships nothing when a session rotates away without ever seeing interaction', () => {
+                // The billing regression this policy exists for: a parked tab whose session
+                // rotates on activity timeout must not ship a recording per rotation.
+                jest.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+
+                const heldSnapshot = emitInactiveEvent(startingTimestamp + 100, 'unknown')
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toContain(heldSnapshot)
+
+                // an analytics event elsewhere in the app rotates the session
+                sessionIdGeneratorMock.mockImplementation(() => 'untouched-rotated-session-id')
+                const rotationTimestamp = startingTimestamp + sessionManager['_sessionTimeoutMs'] + 1000
+                jest.setSystemTime(new Date(rotationTimestamp))
+                sessionManager.checkAndGetSessionAndWindowId(false, rotationTimestamp)
+
+                const rotatedSessionId = sessionRecording['_lazyLoadedSessionRecording']['_sessionId']
+                expect(rotatedSessionId).toEqual('untouched-rotated-session-id')
+
+                // the untouched session's held buffer is discarded, not shipped, and the new
+                // session holds too, so no amount of timer time produces a $snapshot
+                jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT * 5)
+                const snapshotCalls = (posthog.capture as Mock).mock.calls.filter(([name]) => name === '$snapshot')
+                expect(snapshotCalls).toEqual([])
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).not.toContain(heldSnapshot)
+            })
+
+            it('rotates a confirmed-idle session at the 24 hour session cap', () => {
+                // An idle tab must keep consulting the session manager: skipping the check is
+                // how idle sessions used to blow through SESSION_LENGTH_LIMIT into multi-day
+                // recordings under one session id.
+                const firstActivityTimestamp = startingTimestamp + 100
+                jest.useFakeTimers().setSystemTime(new Date(firstActivityTimestamp))
+                emitActiveEvent(firstActivityTimestamp)
+
+                const idleTimestamp = firstActivityTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000
+                jest.setSystemTime(new Date(idleTimestamp))
+                emitInactiveEvent(idleTimestamp, true)
+                const idleSessionId = sessionRecording['_lazyLoadedSessionRecording']['_sessionId']
+
+                // a day later the still-idle tab emits a non-interactive event; the session is
+                // past the maximum length and must rotate even though the tab stayed idle
+                // (the rotation restart resets the idle state to 'unknown')
+                sessionIdGeneratorMock.mockImplementation(() => 'past-cap-rotated-session-id')
+                const pastCapTimestamp = startingTimestamp + 24 * 60 * 60 * 1000 + 1000
+                jest.setSystemTime(new Date(pastCapTimestamp))
+                emitInactiveEvent(pastCapTimestamp, 'unknown')
+
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionId']).toEqual(
+                    'past-cap-rotated-session-id'
+                )
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionId']).not.toEqual(idleSessionId)
             })
 
             it('recorder follows an adopted sibling-tab session id (does not record under the stale id)', () => {
@@ -4741,6 +4803,9 @@ describe('Lazy SessionRecording', () => {
             // Emit the $session_ending event
             _emit(sessionEndingEvent)
 
+            // buffers only ship for sessions with user interaction; this test exercises routing
+            sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = false
+
             // Flush to capture
             sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
 
@@ -4873,6 +4938,8 @@ describe('Lazy SessionRecording', () => {
                     data: { href: 'https://example.com/?gclid=secret123&other=value#section' },
                 })
             )
+            // buffers only ship for sessions with user interaction; this test exercises masking
+            sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = false
             sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
 
             expect(posthog.capture).toHaveBeenCalledWith(
@@ -4915,6 +4982,8 @@ describe('Lazy SessionRecording', () => {
                     data: { href: 'https://example.com/?token=secret123&other=value' },
                 })
             )
+            // buffers only ship for sessions with user interaction; this test exercises masking
+            sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = false
             sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
 
             // Verify the masking function was called with 'name' property
@@ -4964,6 +5033,8 @@ describe('Lazy SessionRecording', () => {
                     data: { href: 'https://example.com/?token=secret123' },
                 })
             )
+            // buffers only ship for sessions with user interaction; this test exercises masking
+            sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = false
             sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
 
             // Verify the deprecated masking function was called
@@ -5009,6 +5080,8 @@ describe('Lazy SessionRecording', () => {
                     data: { href: 'https://example.com/?token=secret' },
                 })
             )
+            // buffers only ship for sessions with user interaction; this test exercises masking
+            sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = false
             sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
 
             // Should only call the new function, not the deprecated one
@@ -5055,6 +5128,8 @@ describe('Lazy SessionRecording', () => {
                     data: { href: 'https://example.com/?token=secret123' },
                 })
             )
+            // buffers only ship for sessions with user interaction; this test exercises masking
+            sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = false
             sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
 
             // Verify the masking function was called with 'name' property

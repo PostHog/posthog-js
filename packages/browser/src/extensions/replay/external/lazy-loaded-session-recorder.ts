@@ -1729,8 +1729,54 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
     }
 
-    private _flushBuffer(): SnapshotBuffer {
+    // Bound a held (never-interacted) buffer by keeping only the newest playable prefix:
+    // the most recent FullSnapshot, its preceding Meta, and everything after them. Events
+    // older than that snapshot can't be replayed without it, so they carry no value once a
+    // newer snapshot exists, so dropping them keeps an indefinitely-held tab at a bounded size.
+    private _pruneHeldBuffer(incomingBytes: number = 0): void {
+        if (this._buffer.size + incomingBytes <= RECORDING_MAX_EVENT_SIZE) {
+            return
+        }
+
+        let lastFullSnapshotIndex = -1
+        for (let i = this._buffer.data.length - 1; i >= 0; i--) {
+            if ((this._buffer.data[i] as eventWithTime | undefined)?.type === EventType.FullSnapshot) {
+                lastFullSnapshotIndex = i
+                break
+            }
+        }
+        if (lastFullSnapshotIndex <= 0) {
+            // no snapshot, or it's already the head: nothing older than it to drop
+            return
+        }
+
+        const precedingIsMeta =
+            (this._buffer.data[lastFullSnapshotIndex - 1] as eventWithTime | undefined)?.type === EventType.Meta
+        const keepFrom = precedingIsMeta ? lastFullSnapshotIndex - 1 : lastFullSnapshotIndex
+        if (keepFrom === 0) {
+            return
+        }
+
+        for (let i = 0; i < keepFrom; i++) {
+            this._buffer.size -= this._buffer.sizes[i]
+        }
+        this._buffer.data = this._buffer.data.slice(keepFrom)
+        this._buffer.sizes = this._buffer.sizes.slice(keepFrom)
+    }
+
+    private _flushBuffer(force = false): SnapshotBuffer {
         this._clearFlushBufferTimer()
+
+        // A recorder that has never seen user interaction (_isIdle === 'unknown') holds its
+        // buffer instead of shipping. Without this, every activity-timeout rotation in a parked
+        // tab ships a Meta + FullSnapshot recording nobody interacted with, and each one bills
+        // as a full recording. The held buffer ships on the first user interaction (which flips
+        // _isIdle to false and arms the flush timer), or on unload via force; a rotation's
+        // stop() finds it held and clears it, so a session nobody ever touched ships nothing.
+        if (this._isIdle === 'unknown' && !force) {
+            this._pruneHeldBuffer()
+            return this._buffer
+        }
 
         // never flush while a sampling decision is missing (e.g. wiped by posthog.reset()) — an
         // undecided session reads as ACTIVE and would leak a batch it then decides not to record
@@ -1835,29 +1881,33 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         if (
             sessionChanged ||
-            // we never want to flush a healthy same-session buffer while confirmed idle, but
-            // 'unknown' still captures so its buffer must respect the size cap or it grows unbounded
-            (this._isIdle !== true &&
+            // we never want to flush a healthy same-session buffer while confirmed idle
+            (this._isIdle === false &&
                 this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE)
         ) {
             this._buffer = this._flushBuffer()
-            // A suppressed flush (e.g. buffering, paused, below minimum duration) returns the buffer un-drained, and relabeling the prior session's events would mis-attribute them, so discard them instead.
+            // A suppressed flush (buffering, paused, below minimum duration, or held because the
+            // session never saw interaction) returns the buffer un-drained, and relabeling the
+            // prior session's events would mis-attribute them, so discard them instead.
             if (sessionChanged && this._buffer.data.length > 0) {
                 this._buffer = this._clearBuffer()
             }
             // After flushing, update buffer to use the new target session/window IDs
             this._buffer.sessionId = targetSessionId
             this._buffer.windowId = properties.$window_id as string
+        } else if (this._isIdle === 'unknown') {
+            // held buffers don't flush on the size cap; keep them bounded instead
+            this._pruneHeldBuffer(properties.$snapshot_bytes + additionalBytes)
         }
 
         this._buffer.size += properties.$snapshot_bytes
         this._buffer.data.push(properties.$snapshot_data)
         this._buffer.sizes.push(properties.$snapshot_bytes)
 
-        // Schedule the flush unless confirmed idle: a tab that never sees user interaction stays
-        // 'unknown' indefinitely, and without a timer its captured events (including the initial
-        // full snapshot after a session rotation) would never ship until the next rotation or unload.
-        if (!this._flushBufferTimer && this._isIdle !== true) {
+        // Schedule the flush only once the session has seen real user interaction. While
+        // 'unknown' the buffer is held (see _flushBuffer): capturing continues so the first
+        // interaction can ship a playable prefix, but nothing leaves the tab before then.
+        if (!this._flushBufferTimer && this._isIdle === false) {
             this._flushBufferTimer = setTimeout(() => {
                 this._flushBuffer()
             }, RECORDING_BUFFER_TIMEOUT)
@@ -1924,7 +1974,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // beforeunload cannot wait for async CompressionStream work. Synchronously
         // compress any queued events so sendBeacon can include them in this flush.
         this._drainCompressionQueueSync()
-        this._flushBuffer()
+        // force: unload is the last chance to ship, and a single recording per never-interacted
+        // pageview on unload is the long-standing pre-hold behavior (bounded, unlike rotation chains)
+        this._flushBuffer(true)
     }
 
     private _onOffline = (): void => {
@@ -2009,16 +2061,23 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                         type: event.type,
                     })
                     returningFromIdle = true
+                } else if (this._buffer.data.length > 0 && !this._flushBufferTimer) {
+                    // first interaction of this recorder run: the buffer held while 'unknown'
+                    // (Meta + FullSnapshot prefix) can now ship, making the recording playable
+                    // from before the interaction
+                    this._flushBufferTimer = setTimeout(() => {
+                        this._flushBuffer()
+                    }, RECORDING_BUFFER_TIMEOUT)
                 }
             }
         }
 
-        // Only bail on confirmed idle: while 'unknown' the recorder still captures, so it must
-        // also keep checking for session changes or its events are stamped with a stale session id.
-        if (this._isIdle === true) {
-            return
-        }
-
+        // The session check runs in every idle state. While 'unknown' the recorder still
+        // captures, so it must keep checking or its events are stamped with a stale session id.
+        // While confirmed idle, the readOnly check below still enforces the 24-hour session
+        // cap (sessionPastMaximumLength rotates even on readOnly calls) and hears cross-tab
+        // rotations. Skipping it here is how idle tabs used to accrete multi-day sessions
+        // that blew straight through SESSION_LENGTH_LIMIT.
         // We only want to extend the session if it is an interactive event.
         const { windowId, sessionId } = this._sessionManager.checkAndGetSessionAndWindowId(
             !isUserInteraction,

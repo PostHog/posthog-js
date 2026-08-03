@@ -173,6 +173,9 @@ describe('LazyLoadedSessionRecording compression paths', () => {
             gzipCompress,
         })
 
+        // buffers only ship for sessions with user interaction; these tests exercise compression
+        lazyLoadedSessionRecording['_isIdle'] = false
+
         emit(createFullSnapshot({ content: testCase.content }))
         if (testCase.shouldQueueCustomEvent) {
             emit(createCustomSnapshot())
@@ -223,6 +226,9 @@ describe('LazyLoadedSessionRecording compression paths', () => {
             gzipSupported: true,
             gzipCompress,
         })
+
+        // buffers only ship for sessions with user interaction; this test exercises stop teardown
+        lazyLoadedSessionRecording['_isIdle'] = false
 
         emit(createFullSnapshot({ content: 'stop waits for compression' }))
         lazyLoadedSessionRecording.stop()
@@ -287,6 +293,14 @@ describe('LazyLoadedSessionRecording compression paths', () => {
 
         emit(createFullSnapshot({ content: 'post-rotation snapshot' }))
         await lazyLoadedSessionRecording['_compressionQueue']
+
+        // a rotated session that has still seen no interaction holds its buffer: parked tabs
+        // must not ship a recording chain nobody can watch
+        lazyLoadedSessionRecording['_flushBuffer']()
+        expect(posthog.capture).not.toHaveBeenCalled()
+
+        // first user interaction releases the hold
+        lazyLoadedSessionRecording['_isIdle'] = false
         lazyLoadedSessionRecording['_flushBuffer']()
 
         // the full snapshot must be attributed to the rotated session, not the buffer's stale one
@@ -319,6 +333,8 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         await lazyLoadedSessionRecording['_compressionQueue']
 
         strategy.getStatus = originalGetStatus
+        // the hold applies until interaction; release it so the flush exercises the discard path
+        lazyLoadedSessionRecording['_isIdle'] = false
         lazyLoadedSessionRecording['_flushBuffer']()
 
         // only the new session's full snapshot ships; the undrained old-session event is discarded, not relabeled

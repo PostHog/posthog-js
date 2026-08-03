@@ -424,13 +424,16 @@ test.describe('Session rotation scenarios', () => {
 })
 
 test.describe('Session rotation without user interaction', () => {
-    // Regression test for #4202: a tab with no user interaction keeps the recorder in the
-    // 'unknown' idle state. An analytics-driven activity-timeout rotation must still restart
-    // the recorder and ship a full snapshot under the new session id, with no interaction at all.
+    // Covers both #4202 and the billing regression its first fix caused: a tab with no user
+    // interaction keeps the recorder in the 'unknown' idle state. An analytics-driven
+    // activity-timeout rotation must restart the recorder and capture a full snapshot under
+    // the new session id — but HOLD it. Shipping it immediately turned every parked tab into
+    // an unbounded chain of billable zero-interaction recordings. The held snapshot ships on
+    // the first user interaction, making the recording playable from before that interaction.
     // Runs in both compression modes: the restart happens mid-stream, so it exercises the
     // rotation + compression-queue interaction as well.
     for (const compressEvents of [false, true]) {
-        test(`ships a full snapshot for the new session after rotation with no user interaction (compress_events: ${compressEvents})`, async ({
+        test(`holds the new session's full snapshot after rotation and ships it on first interaction (compress_events: ${compressEvents})`, async ({
             page,
             context,
         }) => {
@@ -466,7 +469,18 @@ test.describe('Session rotation without user interaction', () => {
             const backgroundEvent = capturedAnalytics.find((e) => e.event === 'background_tab_event')
             expect(backgroundEvent?.properties.$session_id).toEqual(newSessionId)
 
-            // without any further interaction, replay data for the new session must still flush
+            // without user interaction nothing may ship: a parked tab's rotation chain must
+            // not produce billable recordings. Give the flush cadence time to (not) fire.
+            await page.waitForTimeout(2500)
+            const heldSnapshots = (await page.capturedEvents()).filter(
+                (e) => e.event === '$snapshot' && e.properties.$session_id === newSessionId
+            )
+            expect(heldSnapshots).toEqual([])
+
+            // the first real interaction releases the held buffer
+            await page.mouse.move(200, 200)
+            await page.mouse.down()
+            await page.mouse.up()
             await expect
                 .poll(
                     async () => {
