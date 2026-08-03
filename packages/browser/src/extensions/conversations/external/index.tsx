@@ -32,6 +32,7 @@ import {
 } from '@posthog/browser-common/utils/request-utils'
 import { isCurrentDomainAllowed, getRestoreTokenFromUrl, clearRestoreTokenFromUrl } from './url-utils'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
+import { createConversationsSendError } from './errors'
 
 const logger = createLogger('[ConversationsManager]')
 
@@ -196,28 +197,43 @@ export class ConversationsManager implements ConversationsManagerInterface {
                 },
                 callback: (response) => {
                     if (response.statusCode === 429) {
-                        reject(new Error('Too many requests. Please wait before trying again.'))
+                        logger.warn('Rate limited sending message')
+                        reject(
+                            createConversationsSendError(
+                                'rate_limit',
+                                'Too many requests. Please wait before trying again.'
+                            )
+                        )
                         return
                     }
 
                     if (response.statusCode === 0) {
                         // The request never reached the API - ad blocker, offline, CORS, page teardown.
-                        // `_send_request` already downgrades these to `logger.warn` on purpose so they
-                        // stay out of error tracking, so we do the same rather than logging an error.
-                        logger.warn('Network error sending message', response.error)
-                        reject(new Error('Unable to reach the server. Please check your connection and try again.'))
+                        // `_send_request` owns logging when it provides an error. XHR reports status 0
+                        // without one, so keep a warning here for that otherwise-unlogged path.
+                        if (!response.error) {
+                            logger.warn('Network error sending message')
+                        }
+                        reject(
+                            createConversationsSendError(
+                                'network',
+                                'Unable to reach the server. Please check your connection and try again.'
+                            )
+                        )
                         return
                     }
 
                     if (response.statusCode !== 200 && response.statusCode !== 201) {
                         const errorMsg = response.json?.detail || response.json?.message || 'Failed to send message'
                         logger.error('Failed to send message', { status: response.statusCode })
-                        reject(new Error(errorMsg))
+                        reject(createConversationsSendError('http', errorMsg))
                         return
                     }
 
                     if (!response.json) {
-                        reject(new Error('Invalid response from server'))
+                        const errorMsg = 'Invalid response from server'
+                        logger.error(errorMsg)
+                        reject(createConversationsSendError('invalid_response', errorMsg))
                         return
                     }
 
