@@ -3,4 +3,12 @@
 "@posthog/react-native-plugin": minor
 ---
 
-Add push notification support so PostHog Workflows can target React Native apps: with `@posthog/react-native-plugin` installed, device tokens register automatically on iOS and Android, notification opens are captured as `$push_notification_opened`, and `registerPushNotificationToken`, `unregisterPushNotificationToken`, and `capturePushNotificationOpened` cover the refresh and warm-start paths auto-detection cannot see. Both behaviors are enabled by default; set `capturePushNotificationSubscriptions: false` or `capturePushNotificationOpened: false` to opt out, and supply `pushIdentityProvider` for projects that require identity-verified subscriptions. Push respects opt-out: an opted-out user registers no token, and the opt-out state is forwarded to the native SDK. Because push is on by default the native plugin now initializes for any app that has it installed, so when push is the only reason to initialize it the native SDK skips its own feature-flag preload, which the JS SDK already performs. `reset()` now propagates to the native SDK, unregistering the logged-out user's push subscription and re-registering it under the new anonymous ID.
+Add push notification support, so PostHog Workflows can target React Native apps.
+
+With `@posthog/react-native-plugin` installed, device tokens register automatically on iOS and Android, and notification opens are captured as `$push_notification_opened`. Both are on by default; opt out with `capturePushNotificationSubscriptions: false` or `capturePushNotificationOpened: false`.
+
+- `registerPushNotificationToken` and `unregisterPushNotificationToken` handle token refreshes and manual control.
+- `capturePushNotificationOpened` covers the warm-start opens that auto-detection cannot see.
+- `pushIdentityProvider` mints a signed token for projects that require identity-verified subscriptions.
+- An opted-out user registers no token, and the opt-out state is forwarded to the native SDK.
+- `reset()` now propagates to the native SDK: it unregisters the logged-out user's subscription and re-registers under the new anonymous ID.
