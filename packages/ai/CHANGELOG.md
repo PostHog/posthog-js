@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.6.6
+
+### Patch Changes
+
+- [#4365](https://github.com/PostHog/posthog-js/pull/4365) [`63d87d8`](https://github.com/PostHog/posthog-js/commit/63d87d8d970c69d0974f5034590a244c22dfb4bb) Thanks [@marandaneto](https://github.com/marandaneto)! - Track OpenAI and Azure background Responses through their terminal state.
+  (2026-08-04)
+
 ## 8.6.5
 
 ### Patch Changes
