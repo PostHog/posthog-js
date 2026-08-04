@@ -1,5 +1,13 @@
 # @posthog/types
 
+## 1.400.1
+
+### Patch Changes
+
+- [#4314](https://github.com/PostHog/posthog-js/pull/4314) [`feb9e2a`](https://github.com/PostHog/posthog-js/commit/feb9e2a101c234ebacbe920d03a317e61dcf2a18) Thanks [@posthog](https://github.com/apps/posthog)! - fix: warn when `reset()` silently opts the user back out
+
+    `reset()` clears stored consent along with the rest of the user's state. With `opt_out_capturing_by_default`, this returns the instance to the opted-out default, so calling `reset()` after `opt_in_capturing()` would stop capturing without warning. It now logs a warning when that happens and documents the required ordering. (2026-08-04)
+
 ## 1.400.0
 
 ### Minor Changes
