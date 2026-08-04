@@ -66,6 +66,7 @@ const LEGACY_RESERVED_PERSISTENCE_KEYS = new Set([
     '$feature_flag_evaluated_at',
     '$minimal_flag_called_events',
     '$client_session_props',
+    '$session_registered_properties',
     '$capture_rate_limit',
     '$initial_campaign_params',
     '$initial_referrer_info',

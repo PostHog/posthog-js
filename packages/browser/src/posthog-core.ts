@@ -21,6 +21,7 @@ import {
     PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
     SDK_DEBUG_EXTENSIONS_INIT_METHOD,
     SDK_DEBUG_EXTENSIONS_INIT_TIME_MS,
+    SESSION_REGISTERED_PROPERTIES,
     SESSION_RECORDING_REMOTE_CONFIG,
     SURVEYS_REQUEST_TIMEOUT_MS,
     USER_STATE,
@@ -713,6 +714,15 @@ export class PostHog implements PostHogInterface {
                 : // sessionStorage sibling shares the primary's storage name; it must not own/clean the split group entries
                   new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' }, persistenceDisabled, false)
 
+        const sessionRegisteredPropKeys = this.sessionPersistence.get_property(SESSION_REGISTERED_PROPERTIES)
+        if (isArray(sessionRegisteredPropKeys)) {
+            sessionRegisteredPropKeys.forEach((key) => {
+                if (isString(key)) {
+                    this._sessionRegisteredPropKeys.add(key)
+                }
+            })
+        }
+
         // should I store the initial person profiles config in persistence?
         const initialPersistenceProps = { ...this.persistence.props }
         const initialSessionProps = { ...this.sessionPersistence.props }
@@ -731,12 +741,14 @@ export class PostHog implements PostHogInterface {
         if (!startInCookielessMode) {
             this.sessionManager = new SessionIdManager(this)
             this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager, this.persistence)
-            // Clear user-registered session properties when a new PostHog session starts due to
-            // idle timeout or hitting the max session length. Properties registered via
-            // register_for_session are meant to be session-scoped, but sessionStorage persists
-            // until the browser tab closes — without this they leak into the next session.
+            // Clear user-registered session properties when the current PostHog session is replaced.
+            // Browser sessionStorage can outlive multiple PostHog sessions in the same tab.
             this.sessionManager.onSessionId((_sessionId, _windowId, changeReason) => {
-                if (changeReason?.activityTimeout || changeReason?.sessionPastMaximumLength) {
+                if (
+                    changeReason?.activityTimeout ||
+                    changeReason?.sessionPastMaximumLength ||
+                    changeReason?.crossTabAdoption
+                ) {
                     this._clearSessionRegisteredProps()
                 }
             })
@@ -1907,8 +1919,11 @@ export class PostHog implements PostHogInterface {
      * @param {Object} properties An associative array of properties to store about the user
      */
     register_for_session(properties: Properties): void {
-        this.sessionPersistence?.register(properties)
         Object.keys(properties).forEach((key) => this._sessionRegisteredPropKeys.add(key))
+        this.sessionPersistence?.register({
+            ...properties,
+            [SESSION_REGISTERED_PROPERTIES]: Array.from(this._sessionRegisteredPropKeys),
+        })
     }
 
     /**
@@ -1956,6 +1971,9 @@ export class PostHog implements PostHogInterface {
     unregister_for_session(property: string): void {
         this.sessionPersistence?.unregister(property)
         this._sessionRegisteredPropKeys.delete(property)
+        this.sessionPersistence?.register({
+            [SESSION_REGISTERED_PROPERTIES]: Array.from(this._sessionRegisteredPropKeys),
+        })
     }
 
     _register_single(prop: string, value: Property) {
@@ -1963,10 +1981,11 @@ export class PostHog implements PostHogInterface {
     }
 
     _clearSessionRegisteredProps(): void {
-        this._sessionRegisteredPropKeys.forEach((key) => {
-            this.sessionPersistence?.unregister(key)
+        this._sessionRegisteredPropKeys.forEach((property) => {
+            this.sessionPersistence?.unregister(property)
         })
         this._sessionRegisteredPropKeys.clear()
+        this.sessionPersistence?.unregister(SESSION_REGISTERED_PROPERTIES)
     }
 
     /**

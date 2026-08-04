@@ -1,10 +1,12 @@
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
-import type { PostHogConfig } from '../types'
+import { PostHog } from '../posthog-core'
+import type { PostHogConfig, SessionIdChangedCallback } from '../types'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { SurveyEventName, SurveyEventProperties } from '../posthog-surveys-types'
 import { ProductTourEventName, ProductTourEventProperties } from '../posthog-product-tours-types'
 import { SURVEY_SEEN_PREFIX } from '../utils/survey-utils'
 import { beforeEach } from '@jest/globals'
+import { SESSION_REGISTERED_PROPERTIES } from '../constants'
 
 jest.mock('@posthog/browser-common/utils/globals', () => {
     const orig = jest.requireActual('@posthog/browser-common/utils/globals')
@@ -754,26 +756,82 @@ describe('posthog core', () => {
     })
 
     describe('register_for_session()', () => {
+        const emitSessionChange = (
+            posthog: PostHog,
+            changeReason: NonNullable<Parameters<SessionIdChangedCallback>[2]>
+        ): void => {
+            const handlers = (posthog.sessionManager as any)._sessionIdChangedHandlers as SessionIdChangedCallback[]
+            handlers.forEach((handler) => handler('new-session-id', 'window-id', changeReason))
+        }
+
+        const createReloadedPosthogInstance = (token: string): Promise<PostHog> =>
+            new Promise((resolve) => {
+                const posthog = new PostHog()
+                posthog._init(
+                    token,
+                    {
+                        persistence: 'localStorage',
+                        request_batching: false,
+                        api_host: 'http://localhost',
+                        disable_surveys: true,
+                        disable_conversations: true,
+                        before_send: () => null,
+                        loaded: (instance) => resolve(instance as PostHog),
+                    },
+                    `reload-${token}`
+                )
+            })
+
         it('clears session-registered props when PostHog session rotates due to activity timeout', async () => {
             const posthog = await createPosthogInstance(uuidv7(), { persistence: 'localStorage' })
 
             posthog.register_for_session({ link_id: 'abc123', flow: 'signup' })
             expect(posthog.sessionPersistence?.props['link_id']).toBe('abc123')
             expect(posthog.sessionPersistence?.props['flow']).toBe('signup')
+            expect(posthog.sessionPersistence?.properties()).not.toHaveProperty(SESSION_REGISTERED_PROPERTIES)
 
-            // Simulate a session rotation caused by activity timeout
-            const handlers: any[] = []
-            const realOnSessionId = posthog.sessionManager!.onSessionId.bind(posthog.sessionManager)
-            jest.spyOn(posthog.sessionManager!, 'onSessionId').mockImplementation((cb) => {
-                handlers.push(cb)
-                return realOnSessionId(cb)
+            emitSessionChange(posthog, {
+                noSessionId: false,
+                activityTimeout: true,
+                sessionPastMaximumLength: false,
+                crossTabAdoption: false,
             })
-
-            // Fire the change handler directly as if a session timed out
-            ;(posthog as any)._clearSessionRegisteredProps()
 
             expect(posthog.sessionPersistence?.props['link_id']).toBeUndefined()
             expect(posthog.sessionPersistence?.props['flow']).toBeUndefined()
+            expect(posthog.sessionPersistence?.props[SESSION_REGISTERED_PROPERTIES]).toBeUndefined()
+        })
+
+        it('clears session-registered props after a page reload and later session rotation', async () => {
+            const token = uuidv7()
+            const posthog = await createPosthogInstance(token, { persistence: 'localStorage' })
+            posthog.register_for_session({ link_id: 'abc123' })
+
+            const reloadedPosthog = await createReloadedPosthogInstance(token)
+            expect(reloadedPosthog.sessionPersistence?.props['link_id']).toBe('abc123')
+
+            emitSessionChange(reloadedPosthog, {
+                noSessionId: false,
+                activityTimeout: true,
+                sessionPastMaximumLength: false,
+                crossTabAdoption: false,
+            })
+
+            expect(reloadedPosthog.sessionPersistence?.props['link_id']).toBeUndefined()
+        })
+
+        it('clears session-registered props when adopting another tab session', async () => {
+            const posthog = await createPosthogInstance(uuidv7(), { persistence: 'localStorage' })
+            posthog.register_for_session({ link_id: 'abc123' })
+
+            emitSessionChange(posthog, {
+                noSessionId: false,
+                activityTimeout: false,
+                sessionPastMaximumLength: false,
+                crossTabAdoption: true,
+            })
+
+            expect(posthog.sessionPersistence?.props['link_id']).toBeUndefined()
         })
 
         it('does not clear session-registered props on initial session creation', async () => {
@@ -782,23 +840,13 @@ describe('posthog core', () => {
             posthog.register_for_session({ link_id: 'abc123' })
             expect(posthog.sessionPersistence?.props['link_id']).toBe('abc123')
 
-            // Simulate a session change with noSessionId (first ever session) — should NOT clear
-            const sessionIdChangedHandlers = (posthog.sessionManager as any)._sessionIdChangedHandlers as ((
-                sessionId: string,
-                windowId: string,
-                changeReason: any
-            ) => void)[]
+            emitSessionChange(posthog, {
+                noSessionId: true,
+                activityTimeout: false,
+                sessionPastMaximumLength: false,
+                crossTabAdoption: false,
+            })
 
-            sessionIdChangedHandlers.forEach((handler) =>
-                handler('new-session-id', 'window-id', {
-                    noSessionId: true,
-                    activityTimeout: false,
-                    sessionPastMaximumLength: false,
-                    crossTabAdoption: false,
-                })
-            )
-
-            // Props should still be present — noSessionId is first-ever init, not a rotation
             expect(posthog.sessionPersistence?.props['link_id']).toBe('abc123')
         })
 
@@ -806,13 +854,16 @@ describe('posthog core', () => {
             const posthog = await createPosthogInstance(uuidv7(), { persistence: 'localStorage' })
 
             posthog.register_for_session({ my_prop: 'user-value' })
-            // Simulate a system-managed prop being written to sessionPersistence
             posthog.sessionPersistence?.register({ $referring_domain: 'google.com' })
 
-            ;(posthog as any)._clearSessionRegisteredProps()
+            emitSessionChange(posthog, {
+                noSessionId: false,
+                activityTimeout: true,
+                sessionPastMaximumLength: false,
+                crossTabAdoption: false,
+            })
 
             expect(posthog.sessionPersistence?.props['my_prop']).toBeUndefined()
-            // System-managed prop should be untouched
             expect(posthog.sessionPersistence?.props['$referring_domain']).toBe('google.com')
         })
 
@@ -822,11 +873,14 @@ describe('posthog core', () => {
             posthog.register_for_session({ link_id: 'abc123', flow: 'signup' })
             posthog.unregister_for_session('flow')
 
-            ;(posthog as any)._clearSessionRegisteredProps()
+            emitSessionChange(posthog, {
+                noSessionId: false,
+                activityTimeout: true,
+                sessionPastMaximumLength: false,
+                crossTabAdoption: false,
+            })
 
-            // 'flow' was unregistered before rotation — should already be gone
             expect(posthog.sessionPersistence?.props['flow']).toBeUndefined()
-            // 'link_id' was still registered — cleared on rotation
             expect(posthog.sessionPersistence?.props['link_id']).toBeUndefined()
         })
     })
