@@ -107,6 +107,7 @@ class FeatureFlagsPoller {
   onLoad?: (count: number) => void
   private cacheProvider?: FlagDefinitionCacheProvider
   private loadingPromise?: Promise<void>
+  private pollerStopped: boolean = false
   private flagsEtag?: string
   private nextFetchAllowedAt?: number
   private strictLocalEvaluation: boolean
@@ -823,8 +824,6 @@ class FeatureFlagsPoller {
       this.poller = undefined
     }
 
-    this.poller = setTimeout(() => this.loadFeatureFlags(true), this.getPollingInterval())
-
     try {
       let shouldFetch = true
       if (this.cacheProvider) {
@@ -975,6 +974,10 @@ class FeatureFlagsPoller {
       if (err instanceof ClientError) {
         this.onError?.(err)
       }
+    } finally {
+      if (!this.pollerStopped) {
+        this.poller = setTimeout(() => this.loadFeatureFlags(true), this.getPollingInterval())
+      }
     }
   }
 
@@ -1052,7 +1055,9 @@ class FeatureFlagsPoller {
   }
 
   async stopPoller(timeoutMs: number = 30000): Promise<void> {
+    this.pollerStopped = true
     clearTimeout(this.poller)
+    this.poller = undefined
 
     if (this.cacheProvider) {
       try {

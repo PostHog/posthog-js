@@ -271,15 +271,23 @@ export interface SessionInfo {
   serverVersion?: string
 }
 
+export interface AnalyticsParameterOwnership {
+  context: boolean
+  conversationId: boolean
+}
+
 export interface MCPAnalyticsData {
   sink: McpEventSink | undefined
   identifiedSessions: IdentityCache
+  /** Safe logger bound to this server; a no-op when no logger was configured. */
+  logger: LoggerFn
   lastActivity: Date
   options: MCPAnalyticsOptions
   sessionId: string
   sessionInfo: SessionInfo
   /** `token` = recovered from a self-encoded `Mcp-Session-Id` token (see session-token.ts). */
   sessionSource: 'generated' | 'mcp' | 'token'
+  toolAnalyticsParameterOwnership: Map<string, AnalyticsParameterOwnership>
   toolCategories: Map<string, string>
   toolDescriptions: Map<string, string>
 }

@@ -9,10 +9,10 @@ import type {
   MCPRequestLike,
   MCPServerLike,
   McpEvent,
+  SessionInfo,
   UserIdentity,
 } from '../types'
 import { MCPAnalyticsEventType } from './event-types'
-import { log } from './logger'
 import { captureEvent } from './capture'
 import { stampMetaClientInfo } from './client-identity'
 
@@ -129,10 +129,13 @@ export async function handleIdentify(
   data: MCPAnalyticsData,
   sessionId: string,
   request: MCPRequestLike,
+  requestAttribution: SessionInfo,
   extra?: CompatibleRequestHandlerExtra
-): Promise<void> {
+): Promise<UserIdentity | undefined> {
+  const identityBeforeRequest = data.identifiedSessions.get(sessionId)
+  const sessionSourceBeforeIdentify = data.sessionSource
   if (!data.options.identify) {
-    return
+    return identityBeforeRequest
   }
 
   const identifyEvent: McpEvent = {
@@ -163,20 +166,33 @@ export async function handleIdentify(
       // announced); revisit with the stateless-by-default rework.
       const changed = previousIdentity !== undefined && !areIdentitiesEqual(previousIdentity, mergedIdentity)
       const firstSeen = previousIdentity === undefined
-      const announcedAtInitialize = data.sessionSource === 'token' && request.method !== 'initialize'
+      const announcedAtInitialize = sessionSourceBeforeIdentify === 'token' && request.method !== 'initialize'
       const shouldPublish = changed || (firstSeen && !announcedAtInitialize)
 
       data.identifiedSessions.set(sessionId, mergedIdentity)
 
       if (shouldPublish) {
-        log(`Identified session ${sessionId} with identity: ${JSON.stringify(mergedIdentity)}`)
-        captureEvent(server, identifyEvent)
+        data.logger(`Identified session ${sessionId}`)
+        captureEvent(server, identifyEvent, data.logger, withIdentity(requestAttribution, mergedIdentity))
       }
-    } else {
-      log(`Warning: Supplied identify function returned null for session ${sessionId}`)
+      return mergedIdentity
     }
+
+    data.logger(`Warning: Supplied identify function returned null for session ${sessionId}`)
   } catch (error) {
-    log(`Error: User supplied identify function threw an error while identifying session ${sessionId} - ${error}`)
+    data.logger(
+      `Error: User supplied identify function threw an error while identifying session ${sessionId} - ${error}`
+    )
+  }
+  return identityBeforeRequest
+}
+
+export function withIdentity(sessionInfo: SessionInfo, identity: UserIdentity | undefined): SessionInfo {
+  return {
+    ...sessionInfo,
+    identifyActorGivenId: identity?.distinctId,
+    identifyActorData: identity?.properties || {},
+    identifyActorGroups: identity?.groups,
   }
 }
 
@@ -196,7 +212,7 @@ export async function resolveEventProperties(
   try {
     return (await data.options.eventProperties(request, extra)) ?? null
   } catch (e) {
-    log(`eventProperties callback error: ${e}`)
+    data.logger(`eventProperties callback error: ${e}`)
     return null
   }
 }
