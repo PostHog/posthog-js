@@ -18,7 +18,12 @@ type ChildResult = {
   stderr: string
 }
 
-type ChildScenario = 'no-application-listener' | 'unhandled-rejection-listener' | 'uncaught-exception-listener'
+type ChildScenario =
+  | 'no-application-listener'
+  | 'unhandled-rejection-listener'
+  | 'uncaught-exception-listener'
+  | 'mutated-node-options'
+  | 'mutated-exec-argv'
 
 function runUnhandledRejectionChild({
   mode,
@@ -98,15 +103,38 @@ describe('exception autocapture', () => {
     }
   }
 
-  it('should install an uncaught-exception listener', () => {
+  it('should install an uncaught-exception listener outside strict mode', () => {
     const onSpy = jest.spyOn(global.process, 'on').mockReturnValue(global.process)
 
     addUncaughtExceptionListener(
       () => {},
-      () => {}
+      () => {},
+      'throw'
     )
 
     expect(onSpy).toHaveBeenCalledWith('uncaughtException', expect.any(Function))
+  })
+
+  it('should monitor uncaught exceptions without handling them in strict mode', () => {
+    const capture = jest.fn()
+    const onFatal = jest.fn()
+    const onSpy = jest.spyOn(global.process, 'on').mockReturnValue(global.process)
+    addUncaughtExceptionListener(capture, onFatal, 'strict')
+    const handler = onSpy.mock.calls.find(([event]) => event === 'uncaughtExceptionMonitor')?.[1] as
+      | NodeJS.UncaughtExceptionListener
+      | undefined
+    const reason = new Error('promoted rejection')
+
+    handler?.(reason, 'unhandledRejection')
+
+    expect(capture).toHaveBeenCalledWith(reason, {
+      mechanism: {
+        type: 'onunhandledrejection',
+        handled: false,
+      },
+    })
+    expect(onFatal).not.toHaveBeenCalled()
+    expect(onSpy).not.toHaveBeenCalledWith('uncaughtException', expect.any(Function))
   })
 
   it.each(['throw', 'strict', 'warn-with-error-code'] as const)(
@@ -224,7 +252,6 @@ describe('exception autocapture', () => {
   it.each([
     ['default', undefined],
     ['throw', 'throw' as const],
-    ['strict', 'strict' as const],
   ])('should capture a fatal rejection once in %s mode', async (_name, mode) => {
     const [withoutSdk, withSdk] = await Promise.all([
       runUnhandledRejectionChild({ mode, withSdk: false }),
@@ -241,6 +268,40 @@ describe('exception autocapture', () => {
     expect(captureCount(withSdk)).toBe(1)
     expect(withSdk.stdout).toContain('posthog-capture:onunhandledrejection:Child process rejection')
   })
+
+  it('should preserve strict mode before application unhandled-rejection listeners run', async () => {
+    const [withoutSdk, withSdk] = await Promise.all([
+      runUnhandledRejectionChild({
+        mode: 'strict',
+        scenario: 'unhandled-rejection-listener',
+        withSdk: false,
+      }),
+      runUnhandledRejectionChild({ mode: 'strict', scenario: 'unhandled-rejection-listener' }),
+    ])
+
+    for (const result of [withoutSdk, withSdk]) {
+      expect(result.signal).toBeNull()
+      expect(result.code).toBe(1)
+      expect(result.stdout).not.toContain('unhandled-listener')
+      expect(result.stdout).not.toContain('completed')
+      expect(result.stderr).toContain('Child process rejection')
+    }
+    expect(captureCount(withoutSdk)).toBe(0)
+    expect(captureCount(withSdk)).toBe(0)
+  })
+
+  it.each(['mutated-node-options', 'mutated-exec-argv'] as const)(
+    'should use snapshotted startup options after %s',
+    async (scenario) => {
+      const result = await runUnhandledRejectionChild({ scenario })
+
+      expect(result.signal).toBeNull()
+      expect(result.code).toBe(1)
+      expect(captureCount(result)).toBe(1)
+      expect(result.stdout).not.toContain('completed')
+      expect(result.stderr).toContain('Child process rejection')
+    }
+  )
 
   it('should preserve application uncaught-exception handling', async () => {
     const [withoutSdk, withSdk] = await Promise.all([

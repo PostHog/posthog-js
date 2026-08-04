@@ -15,6 +15,8 @@ const UNHANDLED_REJECTION_MODES = new Set<UnhandledRejectionMode>([
   'warn-with-error-code',
   'none',
 ])
+const STARTUP_EXEC_ARGV = [...(globalThis.process?.execArgv ?? [])]
+const STARTUP_NODE_OPTIONS = globalThis.process?.env?.NODE_OPTIONS
 
 function splitNodeOptions(nodeOptions: string): string[] {
   const args: string[] = []
@@ -67,13 +69,28 @@ function findUnhandledRejectionMode(args: string[]): UnhandledRejectionMode | un
 }
 
 export function getUnhandledRejectionMode(
-  execArgv: string[] = globalThis.process?.execArgv ?? [],
-  nodeOptions: string | undefined = globalThis.process?.env.NODE_OPTIONS
+  execArgv: string[] = STARTUP_EXEC_ARGV,
+  nodeOptions: string | undefined = STARTUP_NODE_OPTIONS
 ): UnhandledRejectionMode {
   // Command-line arguments take precedence over NODE_OPTIONS, and the last occurrence wins within each source.
   return (
     findUnhandledRejectionMode(execArgv) ?? findUnhandledRejectionMode(splitNodeOptions(nodeOptions ?? '')) ?? 'throw'
   )
+}
+
+const STARTUP_UNHANDLED_REJECTION_MODE = getUnhandledRejectionMode()
+
+function captureUncaughtException(
+  captureFn: (exception: Error, hint: CoreErrorTracking.EventHint) => void,
+  error: Error,
+  origin: NodeJS.UncaughtExceptionOrigin
+): void {
+  captureFn(error, {
+    mechanism: {
+      type: origin === 'unhandledRejection' ? 'onunhandledrejection' : 'onuncaughtexception',
+      handled: false,
+    },
+  })
 }
 
 function makeUncaughtExceptionHandler(
@@ -93,12 +110,7 @@ function makeUncaughtExceptionHandler(
         )
       }).length
 
-      captureFn(error, {
-        mechanism: {
-          type: origin === 'unhandledRejection' ? 'onunhandledrejection' : 'onuncaughtexception',
-          handled: false,
-        },
-      })
+      captureUncaughtException(captureFn, error, origin)
 
       if (!calledFatalError && userProvidedListenersCount === 0) {
         calledFatalError = true
@@ -111,14 +123,25 @@ function makeUncaughtExceptionHandler(
 
 export function addUncaughtExceptionListener(
   captureFn: (exception: Error, hint: CoreErrorTracking.EventHint) => void,
-  onFatalFn: (exception: Error) => void
+  onFatalFn: (exception: Error) => void,
+  mode: UnhandledRejectionMode = STARTUP_UNHANDLED_REJECTION_MODE
 ): void {
-  globalThis.process?.on('uncaughtException', makeUncaughtExceptionHandler(captureFn, onFatalFn))
+  const process = globalThis.process
+  if (!process) {
+    return
+  }
+
+  if (mode === 'strict') {
+    process.on('uncaughtExceptionMonitor', (error, origin) => captureUncaughtException(captureFn, error, origin))
+    return
+  }
+
+  process.on('uncaughtException', makeUncaughtExceptionHandler(captureFn, onFatalFn))
 }
 
 export function addUnhandledRejectionListener(
   captureFn: (exception: unknown, hint: CoreErrorTracking.EventHint) => void,
-  mode: UnhandledRejectionMode = getUnhandledRejectionMode()
+  mode: UnhandledRejectionMode = STARTUP_UNHANDLED_REJECTION_MODE
 ): void {
   const process = globalThis.process
 

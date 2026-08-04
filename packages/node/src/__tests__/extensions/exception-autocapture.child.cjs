@@ -11,6 +11,10 @@ if (scenario === 'unhandled-rejection-listener') {
   process.on('uncaughtException', (error, origin) => {
     process.stdout.write(`uncaught-listener:${origin}:${error.message}\n`)
   })
+} else if (scenario === 'mutated-node-options') {
+  process.env.NODE_OPTIONS = '--unhandled-rejections=warn'
+} else if (scenario === 'mutated-exec-argv') {
+  process.execArgv.push('--unhandled-rejections=warn')
 }
 
 const posthog = withSdk
