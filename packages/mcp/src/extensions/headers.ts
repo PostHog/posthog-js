@@ -30,6 +30,19 @@ export function readHeaderValue(headers: unknown, name: string): string | undefi
     const key = Object.keys(record).find((k) => k.toLowerCase() === name)
     value = key === undefined ? undefined : record[key]
   }
+  return normalizeHeaderString(value)
+}
+
+/**
+ * Coerces one raw header value into a clean string, or `undefined`.
+ *
+ * Exported so the custom-dispatcher path can apply the same rules to values a host
+ * read off the request itself. Without it the two integration paths emit different
+ * properties for the *same* request: a whitespace-only header would survive as a junk
+ * value, and a repeated header would reach the wire as an array, because the
+ * downstream length cap passes non-strings through untouched.
+ */
+export function normalizeHeaderString(value: unknown): string | undefined {
   const first = Array.isArray(value) ? value[0] : value
   if (typeof first !== 'string') {
     return undefined

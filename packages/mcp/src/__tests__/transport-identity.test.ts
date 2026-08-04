@@ -327,5 +327,33 @@ describe('transport-identity (HTTP request headers)', () => {
       expect(properties).not.toHaveProperty(PostHogMCPAnalyticsProperty.ClientUserAgent)
       expect(properties).not.toHaveProperty(PostHogMCPAnalyticsProperty.VendorClient)
     })
+
+    // A host on this path reads the header itself, so it can hand us any raw shape a
+    // client produced. Normalizing here keeps one request yielding one set of properties
+    // whichever path captured it: untrimmed and array-valued input used to reach the
+    // wire, because the downstream length cap passes non-strings through untouched.
+    it.each([
+      ['whitespace-only', '   ', undefined],
+      ['untrimmed', `  ${CLI_USER_AGENT}\n`, CLI_USER_AGENT],
+      ['repeated header', [CLI_USER_AGENT, VSCODE_USER_AGENT], CLI_USER_AGENT],
+      ['empty array', [], undefined],
+      ['non-string', 42, undefined],
+    ])('normalizes a %s value the host supplied', async (_name, supplied, expected) => {
+      posthog.captureToolCall({
+        toolName: 'execute-sql',
+        clientUserAgent: supplied as string | undefined,
+        vendorClient: supplied as string | undefined,
+      })
+      await flushCaptures()
+
+      const properties = capture.findCapturesByEvent(PostHogMCPAnalyticsEvent.ToolCall)[0]?.properties
+      if (expected === undefined) {
+        expect(properties).not.toHaveProperty(PostHogMCPAnalyticsProperty.ClientUserAgent)
+        expect(properties).not.toHaveProperty(PostHogMCPAnalyticsProperty.VendorClient)
+      } else {
+        expect(properties?.[PostHogMCPAnalyticsProperty.ClientUserAgent]).toBe(expected)
+        expect(properties?.[PostHogMCPAnalyticsProperty.VendorClient]).toBe(expected)
+      }
+    })
   })
 })
