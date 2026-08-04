@@ -70,9 +70,8 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
     const { providerParams: anthropicParams, posthogParams } = extractPosthogParams(body)
     const startTime = Date.now()
 
-    const parentPromise = super.create(anthropicParams, options)
-
     if (anthropicParams.stream) {
+      const parentPromise = super.create(anthropicParams, options)
       const wrappedPromise = parentPromise.then((value) => {
         let accumulatedContent = ''
         const contentBlocks: FormattedContentItem[] = []
@@ -278,8 +277,9 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
         return value
       })
 
-      return preserveProviderPromise(parentPromise, wrappedPromise) as APIPromise<Stream<RawMessageStreamEvent>>
+      return preserveProviderPromise(parentPromise, wrappedPromise, { requestIdHeader: 'request-id' })
     } else {
+      const parentPromise = super.create(anthropicParams, options)
       const wrappedPromise = parentPromise.then(
         async (result) => {
           if ('content' in result) {
@@ -330,9 +330,9 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
           })
           throw error
         }
-      ) as APIPromise<Message>
+      )
 
-      return preserveProviderPromise(parentPromise, wrappedPromise) as APIPromise<Message>
+      return preserveProviderPromise(parentPromise, wrappedPromise, { requestIdHeader: 'request-id' })
     }
   }
 }

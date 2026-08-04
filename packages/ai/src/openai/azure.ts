@@ -18,7 +18,7 @@ import type { FormattedMessage, FormattedContent } from '../types'
 import { sanitizeOpenAI } from '../sanitization'
 import { extractPosthogParams } from '../utils'
 import { isResponseTokenChunk, extractRequestId, buildProviderMetadata } from './utils'
-import { preserveProviderPromise } from '../providerPromise'
+import { callWithOriginalCreate, preserveProviderPromise } from '../providerPromise'
 
 type ChatCompletion = OpenAIOrignal.ChatCompletion
 type ChatCompletionChunk = OpenAIOrignal.ChatCompletionChunk
@@ -292,7 +292,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
         return value
       })
 
-      return preserveProviderPromise(parentPromise, wrappedPromise) as APIPromise<Stream<ChatCompletionChunk>>
+      return preserveProviderPromise(parentPromise, wrappedPromise)
     } else {
       const wrappedPromise = parentPromise.then(
         async (result) => {
@@ -347,9 +347,9 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
           })
           throw error
         }
-      ) as APIPromise<ChatCompletion>
+      )
 
-      return preserveProviderPromise(parentPromise, wrappedPromise) as APIPromise<ChatCompletion>
+      return preserveProviderPromise(parentPromise, wrappedPromise)
     }
   }
 }
@@ -495,9 +495,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
         return value
       })
 
-      return preserveProviderPromise(parentPromise, wrappedPromise) as APIPromise<
-        Stream<OpenAIOrignal.Responses.ResponseStreamEvent>
-      >
+      return preserveProviderPromise(parentPromise, wrappedPromise)
     } else {
       const wrappedPromise = parentPromise.then(
         async (result) => {
@@ -549,9 +547,9 @@ export class WrappedResponses extends AzureOpenAI.Responses {
           })
           throw error
         }
-      ) as APIPromise<OpenAIOrignal.Responses.Response>
+      )
 
-      return preserveProviderPromise(parentPromise, wrappedPromise) as APIPromise<OpenAIOrignal.Responses.Response>
+      return preserveProviderPromise(parentPromise, wrappedPromise)
     }
   }
 
@@ -562,63 +560,56 @@ export class WrappedResponses extends AzureOpenAI.Responses {
     const { providerParams: openAIParams, posthogParams } = extractPosthogParams(body)
     const startTime = Date.now()
 
-    const originalCreate = super.create.bind(this)
-    const originalSelfRecord = this as Record<string, unknown>
-    const tempCreate = originalSelfRecord['create']
-    originalSelfRecord['create'] = originalCreate
+    const parentPromise = callWithOriginalCreate(this, super.create.bind(this), () =>
+      super.parse<Params, ParsedT>(openAIParams, options)
+    )
 
-    try {
-      const parentPromise = super.parse(openAIParams, options)
+    const wrappedPromise = parentPromise.then(
+      async (result) => {
+        const latency = (Date.now() - startTime) / 1000
+        await captureAiGeneration(this.phClient, {
+          ...posthogParams,
+          model: openAIParams.model ?? result.model,
+          provider: 'azure',
+          input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
+          output: result.output,
+          latency,
+          baseURL: this.baseURL,
+          modelParameters: getModelParams(body, result.service_tier),
+          httpStatus: 200,
+          usage: {
+            inputTokens: result.usage?.input_tokens ?? 0,
+            outputTokens: result.usage?.output_tokens ?? 0,
+            reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
+            cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
+          },
+          completionId: result.id,
+          providerMetadata: buildProviderMetadata({ requestId: extractRequestId(result) }),
+        })
+        return result
+      },
+      async (error: any) => {
+        await captureAiGeneration(this.phClient, {
+          ...posthogParams,
+          model: openAIParams.model,
+          provider: 'azure',
+          input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
+          output: [],
+          latency: 0,
+          baseURL: this.baseURL,
+          modelParameters: getModelParams(body),
+          httpStatus: error?.status ? error.status : 500,
+          usage: {
+            inputTokens: 0,
+            outputTokens: 0,
+          },
+          error,
+        })
+        throw error
+      }
+    )
 
-      const wrappedPromise = parentPromise.then(
-        async (result) => {
-          const latency = (Date.now() - startTime) / 1000
-          await captureAiGeneration(this.phClient, {
-            ...posthogParams,
-            model: openAIParams.model ?? result.model,
-            provider: 'azure',
-            input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
-            output: result.output,
-            latency,
-            baseURL: this.baseURL,
-            modelParameters: getModelParams(body, result.service_tier),
-            httpStatus: 200,
-            usage: {
-              inputTokens: result.usage?.input_tokens ?? 0,
-              outputTokens: result.usage?.output_tokens ?? 0,
-              reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
-              cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
-            },
-            completionId: result.id,
-            providerMetadata: buildProviderMetadata({ requestId: extractRequestId(result) }),
-          })
-          return result
-        },
-        async (error: any) => {
-          await captureAiGeneration(this.phClient, {
-            ...posthogParams,
-            model: openAIParams.model,
-            provider: 'azure',
-            input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
-            output: [],
-            latency: 0,
-            baseURL: this.baseURL,
-            modelParameters: getModelParams(body),
-            httpStatus: error?.status ? error.status : 500,
-            usage: {
-              inputTokens: 0,
-              outputTokens: 0,
-            },
-            error,
-          })
-          throw error
-        }
-      )
-
-      return preserveProviderPromise(parentPromise, wrappedPromise) as APIPromise<ParsedResponse<ParsedT>>
-    } finally {
-      originalSelfRecord['create'] = tempCreate
-    }
+    return preserveProviderPromise(parentPromise, wrappedPromise)
   }
 }
 
@@ -682,9 +673,9 @@ export class WrappedEmbeddings extends AzureOpenAI.Embeddings {
         })
         throw error
       }
-    ) as APIPromise<CreateEmbeddingResponse>
+    )
 
-    return preserveProviderPromise(parentPromise, wrappedPromise) as APIPromise<CreateEmbeddingResponse>
+    return preserveProviderPromise(parentPromise, wrappedPromise)
   }
 }
 

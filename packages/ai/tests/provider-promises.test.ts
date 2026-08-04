@@ -126,6 +126,8 @@ describe('provider promise compatibility with real SDK resources', () => {
     const { data, request_id } = await promise.withResponse()
 
     expect(data.choices[0]?.message.parsed).toEqual({ city: 'Paris' })
+    expect((data as { _request_id?: string })._request_id).toBe('req_provider_promise')
+    expect(Object.keys(data)).not.toContain('_request_id')
     expect(request_id).toBe('req_provider_promise')
     expect(fetch).toHaveBeenCalledTimes(1)
     expect(posthog.capture).toHaveBeenCalledTimes(1)
@@ -150,12 +152,14 @@ describe('provider promise compatibility with real SDK resources', () => {
       response_format: chatResponseFormat,
       posthogDistinctId: 'test-id',
     })
+    expect(Object.prototype.hasOwnProperty.call(client.responses, 'create')).toBe(false)
     const responsePromise = client.responses.parse({
       model: 'gpt-4o-mini',
       input: 'Where?',
       text: { format: responsesFormat },
       posthogDistinctId: 'test-id',
     })
+    expect(Object.prototype.hasOwnProperty.call(client.responses, 'create')).toBe(false)
 
     expect(typeof chatPromise.withResponse).toBe('function')
     expect(typeof responsePromise.asResponse).toBe('function')
@@ -165,7 +169,11 @@ describe('provider promise compatibility with real SDK resources', () => {
     ])
 
     expect(chat.choices[0]?.message.parsed).toEqual({ city: 'Paris' })
+    expect((chat as { _request_id?: string })._request_id).toBe('req_provider_promise')
+    expect(Object.keys(chat)).not.toContain('_request_id')
     expect(response.output_parsed).toEqual({ city: 'Paris' })
+    expect((response as { _request_id?: string })._request_id).toBe('req_provider_promise')
+    expect(Object.keys(response)).not.toContain('_request_id')
     expect(fetch).toHaveBeenCalledTimes(2)
     expect(posthog.capture).toHaveBeenCalledTimes(2)
   })
@@ -190,8 +198,10 @@ describe('provider promise compatibility with real SDK resources', () => {
 
     expect(typeof chatPromise.asResponse).toBe('function')
     expect(typeof responsePromise.withResponse).toBe('function')
+    const statusPromise = chatPromise._thenUnwrap((_data, props) => props.response.status)
     expect((await chatPromise.withResponse()).data.id).toBe(chatCompletion.id)
     expect((await responsePromise.withResponse()).data.id).toBe(responsesResult.id)
+    expect(await statusPromise).toBe(200)
   })
 
   test('Anthropic create promises retain raw-response helpers and transformed data', async () => {
@@ -210,6 +220,9 @@ describe('provider promise compatibility with real SDK resources', () => {
     const { data, request_id } = await promise.withResponse()
 
     expect(rawResponse.status).toBe(200)
+    expect(rawResponse.headers.get('request-id')).toBe('req_provider_promise')
+    expect(rawResponse.bodyUsed).toBe(true)
+    await expect(rawResponse.json()).rejects.toThrow()
     expect(data.id).toBe(anthropicMessage.id)
     expect(request_id).toBe('req_provider_promise')
     expect(fetch).toHaveBeenCalledTimes(1)
