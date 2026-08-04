@@ -56,12 +56,7 @@ export async function resolveToolCallIntent(
   extra?: CompatibleRequestHandlerExtra
 ): Promise<ResolvedIntent | null> {
   const contextArgument = getContextArgument(request)
-  if (
-    analyticsOwnsContext &&
-    isContextEnabled(data.options.context) &&
-    request.params?.name !== 'get_more_tools' &&
-    contextArgument
-  ) {
+  if (analyticsOwnsContext && isContextEnabled(data.options.context) && contextArgument) {
     return { intent: contextArgument, source: 'context_parameter' }
   }
 

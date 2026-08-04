@@ -148,13 +148,13 @@ describe('addContextParameterToTool', () => {
 })
 
 describe('addContextParameterToTools (batch)', () => {
-  it('skips the get_more_tools virtual tool', () => {
+  it('treats get_more_tools like a normal tool when it is already in the batch', () => {
     const result = addContextParameterToTools([
       { name: 'get_more_tools', inputSchema: {} },
       { name: 'other-tool', inputSchema: {} },
     ])
 
-    expect(result[0].inputSchema?.properties).toBeUndefined()
+    expect(result[0].inputSchema?.properties?.context).toBeDefined()
     expect(result[1].inputSchema?.properties?.context).toBeDefined()
   })
 

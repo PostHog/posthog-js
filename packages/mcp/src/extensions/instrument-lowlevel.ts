@@ -14,6 +14,7 @@ import {
   handleListToolsRequest,
   patchRequestHandlers,
   captureToolCall,
+  isToolAdvertised,
   type HandlerPatch,
 } from './instrumentation'
 import { getContextArgument } from './tracing-helpers'
@@ -32,19 +33,25 @@ type MCPRequestExtra = Parameters<MCPRequestHandler>[1]
 export function instrumentLowLevelServer(server: MCPServerLike, logger: LoggerFn): void {
   try {
     // Patch already existing handlers, and patch setRequestHandler to capture dynamically created handlers.
+    const hadCallToolHandler = server._requestHandlers.has('tools/call')
     const handlers: Record<string, HandlerPatch> = {
       initialize: (server, originalHandler, request, extra) =>
         handleInitializeRequest(server, originalHandler, request, extra, logger),
       'tools/list': (server, originalHandler, request, extra) =>
         handleListToolsRequest(server, originalHandler, request, extra, logger),
+      'tools/call': (server, originalHandler, request, extra) =>
+        handleToolCallRequest(server, originalHandler, request, extra, logger),
     }
     patchRequestHandlers(server, handlers)
 
-    const originalCallToolHandler = server._requestHandlers.get('tools/call')
-    server.setRequestHandler(
-      CallToolRequestSchema,
-      async (request, extra) => await handleToolCallRequest(server, originalCallToolHandler, request, extra, logger)
-    )
+    if (!hadCallToolHandler) {
+      // Register a raw fallback through the patched setter so reportMissing works
+      // even before an application dispatcher is attached. A later registration
+      // replaces it and is wrapped by patchRequestHandlers.
+      server.setRequestHandler(CallToolRequestSchema, async (request) => {
+        throw new Error(`Unknown tool: ${request.params?.name || 'unknown'}`)
+      })
+    }
   } catch (error) {
     logger(`Warning: Failed to setup tool call instrumentation - ${error}`)
     throw error
@@ -66,7 +73,11 @@ async function handleToolCallRequest(
     return await originalCallToolHandler?.(request, extra)
   }
 
-  if (request.params?.name === resolveMissingCapabilityToolName(data.options)) {
+  const toolName = request.params?.name
+  const isMissingCapabilityCandidate =
+    data.options.reportMissing && toolName === resolveMissingCapabilityToolName(data.options)
+
+  if (isMissingCapabilityCandidate && (await isToolAdvertised(server, toolName, extra, data.logger)) === false) {
     const context = getContextArgument(request) || ''
     return await captureToolCall({
       server,

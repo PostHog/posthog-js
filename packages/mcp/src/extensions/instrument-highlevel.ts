@@ -27,6 +27,7 @@ import {
   handleListToolsRequest,
   patchRequestHandlers,
   captureToolCall,
+  isToolAdvertised,
   readToolMetaCategory,
   type HandlerPatch,
 } from './instrumentation'
@@ -162,8 +163,6 @@ function addTracingToToolCallbackInternal(
 ): RegisteredTool {
   const originalCallback = getToolFunction(tool)
   const options = getServerTrackingData(server.server as MCPServerLike)?.options
-  const missingToolName = resolveMissingCapabilityToolName(options)
-
   if (wrappedCallbacks.has(originalCallback)) {
     logger(`Tool ${toolName} callback already wrapped, skipping re-wrap`)
     return tool
@@ -188,16 +187,9 @@ function addTracingToToolCallbackInternal(
 
     const inputSchema = getCurrentInputSchema()
     const cleanedArgs = stripOwnedAnalyticsArguments(args, {
-      context:
-        toolName !== missingToolName &&
-        isContextEnabled(options?.context) &&
-        analyticsOwnsParameter(inputSchema, 'context'),
-      conversationId:
-        toolName !== missingToolName &&
-        options?.enableConversationId === true &&
-        analyticsOwnsParameter(inputSchema, 'conversation_id'),
+      context: isContextEnabled(options?.context) && analyticsOwnsParameter(inputSchema, 'context'),
+      conversationId: options?.enableConversationId === true && analyticsOwnsParameter(inputSchema, 'conversation_id'),
     })
-
     try {
       if (cleanedArgs === undefined) {
         const handler = originalCallback as (extra: CompatibleRequestHandlerExtra) => Promise<CallToolResult>
@@ -242,7 +234,11 @@ async function handleToolCallRequest(
     return await originalCallToolHandler(request, extra)
   }
 
-  if (request.params?.name === resolveMissingCapabilityToolName(data.options)) {
+  const toolName = request.params?.name
+  const isMissingCapabilityCandidate =
+    data.options.reportMissing && toolName === resolveMissingCapabilityToolName(data.options)
+
+  if (isMissingCapabilityCandidate && (await isToolAdvertised(server, toolName, extra, data.logger)) === false) {
     const context = getContextArgument(request) || ''
     return await captureToolCall({
       server,
@@ -255,7 +251,6 @@ async function handleToolCallRequest(
     })
   }
 
-  const toolName = request.params?.name
   const registeredTool = toolName ? highLevelServer._registeredTools[toolName] : undefined
 
   // Strip SDK-owned arguments before the MCP SDK validates the registered Zod

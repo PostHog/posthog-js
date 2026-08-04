@@ -98,13 +98,20 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     explicitContextIntent,
     takeCapturedError,
   } = params
-
-  const ownership = getActiveAnalyticsParameterOwnership(data, request.params?.name, parameterOwnership)
+  const resolvedEventType = eventType ?? MCPAnalyticsEventType.mcpToolsCall
+  const ownership = getActiveAnalyticsParameterOwnership(
+    data,
+    request.params?.name,
+    parameterOwnership,
+    resolvedEventType === MCPAnalyticsEventType.mcpMissingCapability
+  )
   const conversation = resolveConversationId(
     ownership.conversationId,
     request.params?.arguments,
     request.params?.name,
-    resolveMissingCapabilityToolName(data.options)
+    resolvedEventType === MCPAnalyticsEventType.mcpMissingCapability
+      ? resolveMissingCapabilityToolName(data.options)
+      : ''
   )
   const downstreamRequest = cloneRequestWithoutOwnedAnalyticsArguments(request, ownership)
 
@@ -120,7 +127,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     startTime,
     conversation,
     ownership,
-    eventType ?? MCPAnalyticsEventType.mcpToolsCall
+    resolvedEventType
   )
   if (event && explicitContextIntent) {
     setExplicitContextIntent(event, explicitContextIntent)
@@ -142,10 +149,10 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
 function getActiveAnalyticsParameterOwnership(
   data: MCPAnalyticsData,
   toolName: string | undefined,
-  override?: AnalyticsParameterOwnership
+  override: AnalyticsParameterOwnership | undefined,
+  isMissingCapabilityTool: boolean
 ): AnalyticsParameterOwnership {
   const ownership = override ?? (toolName ? data.toolAnalyticsParameterOwnership.get(toolName) : undefined)
-  const isMissingCapabilityTool = toolName === resolveMissingCapabilityToolName(data.options)
   return {
     context: !isMissingCapabilityTool && isContextEnabled(data.options.context) && ownership?.context === true,
     conversationId:
@@ -307,11 +314,27 @@ export type HandlerPatch = (
  * that register handlers post-construction work — e.g. `@rekog/mcp-nest` hands a
  * bare server to instrument() and only then registers its handlers.
  */
+const originalRequestHandlers = new WeakMap<MCPServerLike, Map<string, MCPRequestHandler>>()
+
+function rememberOriginalRequestHandler(
+  server: MCPServerLike,
+  handlerName: string,
+  originalHandler: MCPRequestHandler
+): void {
+  let handlers = originalRequestHandlers.get(server)
+  if (!handlers) {
+    handlers = new Map()
+    originalRequestHandlers.set(server, handlers)
+  }
+  handlers.set(handlerName, originalHandler)
+}
+
 export function patchRequestHandlers(server: MCPServerLike, patches: Record<string, HandlerPatch>): void {
   // Monkey patch existing handlers.
   for (const [handlerName, patch] of Object.entries(patches)) {
     const originalHandler = server._requestHandlers.get(handlerName)
     if (originalHandler) {
+      rememberOriginalRequestHandler(server, handlerName, originalHandler)
       server._requestHandlers.set(handlerName, (request, extra) => patch(server, originalHandler, request, extra))
     }
   }
@@ -322,12 +345,53 @@ export function patchRequestHandlers(server: MCPServerLike, patches: Record<stri
     const shape = getObjectShape(requestSchema)
     const handlerName = shape?.method ? getLiteralValue(shape.method) : undefined
     const patch = typeof handlerName === 'string' ? patches[handlerName] : undefined
-    if (!patch) {
+    if (!patch || typeof handlerName !== 'string') {
       return originalSetRequestHandler(requestSchema, originalHandler)
     }
 
-    return originalSetRequestHandler(requestSchema, (request, extra) => patch(server, originalHandler, request, extra))
+    // Register first so the MCP SDK's request/result validation stays inside
+    // our analytics wrapper, matching handlers that existed before instrument().
+    const result = originalSetRequestHandler(requestSchema, originalHandler)
+    const registeredHandler = server._requestHandlers.get(handlerName)
+    if (registeredHandler) {
+      rememberOriginalRequestHandler(server, handlerName, registeredHandler)
+      server._requestHandlers.set(handlerName, (request, extra) => patch(server, registeredHandler, request, extra))
+    }
+    return result
   }) as MCPServerLike['setRequestHandler']
+}
+
+/**
+ * Checks the server's raw listing for a real owner of a candidate virtual tool.
+ * This does not depend on a previous client request and does not call the
+ * instrumented list wrapper, so it neither injects PostHog tools nor captures a
+ * synthetic tools/list event. `undefined` fails open to the real dispatcher.
+ */
+export async function isToolAdvertised(
+  server: MCPServerLike,
+  toolName: string,
+  extra: CompatibleRequestHandlerExtra | undefined,
+  logger: LoggerFn
+): Promise<boolean | undefined> {
+  const listHandler = originalRequestHandlers.get(server)?.get('tools/list')
+  if (!listHandler || !server._requestHandlers.has('tools/list')) {
+    return undefined
+  }
+
+  try {
+    const response = (await listHandler({ method: 'tools/list', params: {} }, extra)) as ListToolsResult
+    if (!response || !Array.isArray(response.tools)) {
+      return undefined
+    }
+    // Match the page the current list instrumentation can expose. Pagination
+    // passthrough is handled separately from missing-capability ownership.
+    return response.tools.some((tool) => tool?.name === toolName)
+  } catch (error) {
+    logger(
+      `Warning: PostHog MCP analytics could not determine whether "${toolName}" is advertised; delegating to the server - ${error}`
+    )
+    return undefined
+  }
 }
 
 /**
@@ -414,25 +478,33 @@ async function getTracedToolsList(
   try {
     const data = getServerTrackingData(server)
     const originalResponse = (await originalListToolsHandler(request, extra)) as ListToolsResult
-    let tools = originalResponse.tools || []
+    // Injection must not mutate arrays reused or frozen by the server.
+    let tools = [...(originalResponse.tools || [])]
 
     if (data) {
       cacheToolAnalyticsParameterOwnership(data.toolAnalyticsParameterOwnership, tools)
     }
-
     if (data && isContextEnabled(data.options.context)) {
       tools = addContextParameterToTools(tools, getContextDescription(data.options.context), data.logger)
     }
 
-    if (data?.options.enableConversationId) {
-      tools = addConversationIdToTools(tools, resolveMissingCapabilityToolName(data.options), data.logger)
-    }
-
-    if (data?.options.reportMissing) {
+    if (data) {
       const missingToolName = resolveMissingCapabilityToolName(data.options)
-      const alreadyPresent = tools.some((tool) => tool?.name === missingToolName)
-      if (!alreadyPresent) {
-        tools.push(getReportMissingToolDescriptor(missingToolName))
+      let injectedMissingCapabilityTool = false
+      if (data.options.reportMissing) {
+        const alreadyPresent = tools.some((tool) => tool?.name === missingToolName)
+        if (alreadyPresent) {
+          data.logger(
+            `Warning: Cannot inject missing-capability tool "${missingToolName}" because a real tool already uses that name. The real tool will not be intercepted.`
+          )
+        } else {
+          tools.push(getReportMissingToolDescriptor(missingToolName))
+          injectedMissingCapabilityTool = true
+        }
+      }
+
+      if (data.options.enableConversationId) {
+        tools = addConversationIdToTools(tools, missingToolName, injectedMissingCapabilityTool, data.logger)
       }
     }
 
