@@ -790,9 +790,14 @@ export class PostHog extends PostHogCore {
     // Native holds its own identity and a registered push token is bound to it, so without this
     // Workflows keep delivering to the logged-out user. identify() only writes native
     // preferences; reset() is what unregisters and re-registers the subscription.
-    if (this._isNativePluginInitialized() && OptionalReactNativePlugin?.reset) {
-      void OptionalReactNativePlugin.reset(String(this.getDistinctId()), String(this.getAnonymousId())).catch((e) =>
-        this._logger.error(`Native PostHog failed to reset: ${e}.`)
+    if (OptionalReactNativePlugin?.reset) {
+      // Snapshot now: native must converge on the post-reset identity even if an identify()
+      // lands while this waits for native setup.
+      const distinctId = String(this.getDistinctId())
+      const anonymousId = String(this.getAnonymousId())
+      this._queueNativeCall(
+        () => OptionalReactNativePlugin?.reset?.(distinctId, anonymousId),
+        (e) => this._logger.error(`Native PostHog failed to reset: ${e}.`)
       )
     }
 
@@ -2175,18 +2180,38 @@ export class PostHog extends PostHogCore {
       this._logger.warn(`${method} requires @posthog/react-native-plugin; install or update it.`)
       return
     }
-    // ready() doesn't cover native setup — it's kicked off fire-and-forget. Queue behind the
-    // init chain, or the native SDK drops the call for not being initialized yet and still
-    // resolves, so the caller sees a success that never registered anything. _initPromise comes
-    // first because it is what assigns the chain: until then the chain is still its initial
-    // resolved value and awaiting it alone passes straight through.
-    await this._initPromise.catch(() => {})
-    await this._sessionReplayEvalChain.catch(() => {})
+    await this._awaitNativeInitChains()
+    // Re-check consent: it may have been withdrawn while this call waited on native init.
+    if (this.optedOut && !behavior.allowWhenOptedOut) {
+      this._logger.warn(`${method} skipped: the user is opted out; ${behavior.noop}.`)
+      return
+    }
     try {
       await invoke(OptionalReactNativePlugin)
     } catch (e) {
       this._logger.warn(`${method} failed: ${e}.`)
     }
+  }
+
+  // ready() doesn't cover native setup — it's kicked off fire-and-forget. Queue behind the
+  // init chain, or the native SDK drops the call for not being initialized yet and still
+  // resolves, so the caller sees a success that never registered anything. _initPromise comes
+  // first because it is what assigns the chain: until then the chain is still its initial
+  // resolved value and awaiting it alone passes straight through.
+  private async _awaitNativeInitChains(): Promise<void> {
+    await this._initPromise.catch(() => {})
+    await this._sessionReplayEvalChain.catch(() => {})
+  }
+
+  // Fire-and-forget native call queued behind init: racing an in-flight setup() would
+  // otherwise drop the call silently. Skipped when native never set up.
+  private _queueNativeCall(invoke: () => Promise<void> | undefined, onError: (e: unknown) => void): void {
+    void (async () => {
+      await this._awaitNativeInitChains()
+      if (this._isNativePluginInitialized()) {
+        await invoke()
+      }
+    })().catch(onError)
   }
 
   private _isAutocaptureNativeErrors(options?: PostHogOptions): boolean {

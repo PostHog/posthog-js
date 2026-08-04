@@ -41,6 +41,18 @@ const createPostHog = async (options?: { [key: string]: any }): Promise<PostHog>
   return posthog
 }
 
+// Holds native setup() in flight so tests can race calls against it.
+const createPostHogWithPendingSetup = async (): Promise<{ posthog: PostHog; resolveSetup: () => void }> => {
+  let resolveSetup: () => void = () => {}
+  mockPlugin.setup.mockImplementationOnce(() => new Promise<void>((resolve) => (resolveSetup = resolve)))
+  const posthog = new PostHog('test-token', { persistence: 'memory', flushInterval: 0 })
+  await posthog.ready()
+  await waitForExpect(1000, () => {
+    expect(mockPlugin.setup).toHaveBeenCalledTimes(1)
+  })
+  return { posthog, resolveSetup: () => resolveSetup() }
+}
+
 describe('push notifications', () => {
   const pluginMethods = { ...mockPlugin }
 
@@ -145,7 +157,25 @@ describe('push notifications', () => {
       posthog.reset()
 
       // identify() only writes native preferences; reset() is what moves the subscription.
-      expect(mockPlugin.reset).toHaveBeenCalledTimes(1)
+      await waitForExpect(1000, () => {
+        expect(mockPlugin.reset).toHaveBeenCalledTimes(1)
+      })
+
+      await posthog.shutdown()
+    })
+
+    it('queues reset() behind an in-flight native setup instead of dropping it', async () => {
+      const { posthog, resolveSetup } = await createPostHogWithPendingSetup()
+
+      // A reset fired while setup() is still in flight must reach native once it completes,
+      // or push stays bound to the stale pre-reset identity.
+      posthog.reset()
+      expect(mockPlugin.reset).not.toHaveBeenCalled()
+
+      resolveSetup()
+      await waitForExpect(1000, () => {
+        expect(mockPlugin.reset).toHaveBeenCalledTimes(1)
+      })
 
       await posthog.shutdown()
     })
@@ -248,6 +278,22 @@ describe('push notifications', () => {
       await waitForExpect(1000, () => {
         expect(mockPlugin.unregisterPushNotificationToken).toHaveBeenCalledTimes(1)
       })
+
+      await posthog.shutdown()
+    })
+
+    it('blocks a queued register when consent is withdrawn while native setup is in flight', async () => {
+      const { posthog, resolveSetup } = await createPostHogWithPendingSetup()
+
+      // The consent check runs before the init await; withdrawing consent in that window must
+      // not let the queued call register after opt-out.
+      const registerPromise = posthog.registerPushNotificationToken('a-token')
+      await posthog.optOut()
+
+      resolveSetup()
+      await registerPromise
+
+      expect(mockPlugin.registerPushNotificationToken).not.toHaveBeenCalled()
 
       await posthog.shutdown()
     })
