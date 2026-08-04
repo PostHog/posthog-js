@@ -18,7 +18,13 @@ import type { ResponseCreateParamsWithTools, ExtractParsedContentFromParams } fr
 import type { FormattedMessage, FormattedContent } from '../types'
 import { sanitizeOpenAI, sanitizeOpenAIResponse } from '../sanitization'
 import { extractPosthogParams } from '../utils'
-import { isResponseTokenChunk, extractRequestId, buildProviderMetadata } from './utils'
+import {
+  isResponseTokenChunk,
+  extractRequestId,
+  buildProviderMetadata,
+  isTerminalResponse,
+  getResponseFailure,
+} from './utils'
 import { callWithOriginalCreate, preserveProviderPromise } from '../providerPromise'
 import { monitoredStreamTee } from '../stream'
 
@@ -62,18 +68,11 @@ async function captureAiGenerationAfterSuccess(...args: Parameters<typeof captur
   }
 }
 
-const TERMINAL_RESPONSE_STATUSES = new Set(['completed', 'failed', 'cancelled', 'incomplete'])
-
 function isPendingBackgroundResponse(
   params: { background?: boolean | null },
   response: { status?: string | null; usage?: unknown | null }
 ): boolean {
-  return (
-    params.background === true &&
-    !response.usage &&
-    !!response.status &&
-    !TERMINAL_RESPONSE_STATUSES.has(response.status)
-  )
+  return params.background === true && !response.usage && !!response.status && !isTerminalResponse(response)
 }
 
 export class PostHogOpenAI extends OpenAIOrignal {
@@ -498,6 +497,7 @@ export class WrappedResponses extends Responses {
                 webSearchCount: 0,
               }
               let rawUsageData: unknown
+              let terminalResponse: OpenAIOrignal.Responses.Response | undefined
 
               for await (const chunk of stream1) {
                 // Track first token time on content delta events
@@ -521,16 +521,10 @@ export class WrappedResponses extends Responses {
                   if (chunkWebSearchCount > 0 && chunkWebSearchCount > (usage.webSearchCount ?? 0)) {
                     usage.webSearchCount = chunkWebSearchCount
                   }
-                }
 
-                if (
-                  chunk.type === 'response.completed' &&
-                  'response' in chunk &&
-                  chunk.response?.output &&
-                  chunk.response.output.length > 0
-                ) {
-                  finalContent = chunk.response.output
-                  if (chunk.response.status) {
+                  if (isTerminalResponse(chunk.response)) {
+                    terminalResponse = chunk.response
+                    finalContent = chunk.response.output ?? []
                     stopReason = chunk.response.status
                   }
                 }
@@ -574,6 +568,10 @@ export class WrappedResponses extends Responses {
                 stopReason,
                 tools: availableTools,
                 completionId: completionIdFromResponse,
+                providerMetadata: buildProviderMetadata({
+                  incompleteDetails: terminalResponse?.incomplete_details,
+                }),
+                error: getResponseFailure(terminalResponse),
               })
             } catch (error: unknown) {
               await captureAiGeneration(this.phClient, {
@@ -639,7 +637,11 @@ export class WrappedResponses extends Responses {
               stopReason: result.status ?? undefined,
               tools: availableTools,
               completionId: result.id,
-              providerMetadata: buildProviderMetadata({ requestId: extractRequestId(result) }),
+              providerMetadata: buildProviderMetadata({
+                requestId: extractRequestId(result),
+                incompleteDetails: result.incomplete_details,
+              }),
+              error: getResponseFailure(result),
             })
           }
           return result
@@ -711,7 +713,11 @@ export class WrappedResponses extends Responses {
           },
           stopReason: result.status ?? undefined,
           completionId: result.id,
-          providerMetadata: buildProviderMetadata({ requestId: extractRequestId(result) }),
+          providerMetadata: buildProviderMetadata({
+            requestId: extractRequestId(result),
+            incompleteDetails: result.incomplete_details,
+          }),
+          error: getResponseFailure(result),
         })
         return result
       },
