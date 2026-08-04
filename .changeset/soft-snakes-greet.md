@@ -10,5 +10,5 @@ With `@posthog/react-native-plugin` installed, device tokens register automatica
 - `registerPushNotificationToken` and `unregisterPushNotificationToken` handle token refreshes and manual control.
 - `capturePushNotificationOpened` covers the warm-start opens that auto-detection cannot see.
 - `pushIdentityProvider` mints a signed token for projects that require identity-verified subscriptions.
-- An opted-out user registers no token, and the opt-out state is forwarded to the native SDK.
+- An opted-out user registers no token, the opt-out state is forwarded to the native SDK, and calling `optOut()` unregisters a subscription that was already registered.
 - `reset()` now propagates to the native SDK: it unregisters the logged-out user's subscription and re-registers under the new anonymous ID.
