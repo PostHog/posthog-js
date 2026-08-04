@@ -486,7 +486,9 @@ export class PostHogTracingProcessor implements TracingProcessor {
     // OpenAI Agents 0.8 stores the raw Chat Completions response in output[0].
     // Canonical generation fields take precedence when the SDK provides them.
     const rawResponse = spanData.output?.[0]
-    const usage = spanData.usage ?? rawResponse?.usage ?? {}
+    const rawResponseUsage = rawResponse?.usage
+    const usage = spanData.usage ?? rawResponseUsage ?? {}
+    const usesRawResponseUsage = spanData.usage === undefined && rawResponseUsage !== undefined
     const model = spanData.model ?? (rawResponse?.model as string | undefined)
     const inputTokens = (usage.input_tokens as number) || (usage as any).prompt_tokens || 0
     const outputTokens = (usage.output_tokens as number) || (usage as any).completion_tokens || 0
@@ -515,6 +517,11 @@ export class PostHogTracingProcessor implements TracingProcessor {
       $ai_input_tokens: inputTokens,
       $ai_output_tokens: outputTokens,
       $ai_total_tokens: inputTokens + outputTokens,
+    }
+
+    if (usesRawResponseUsage) {
+      // Chat Completions prompt tokens include cached tokens rather than reporting them exclusively.
+      properties.$ai_cache_reporting_exclusive = false
     }
 
     // Raw Chat Completions usage keeps token details under provider-specific fields.

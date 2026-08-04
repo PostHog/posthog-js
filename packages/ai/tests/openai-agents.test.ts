@@ -311,6 +311,7 @@ describe('PostHogTracingProcessor', () => {
       expect(properties.$ai_output_tokens).toBe(7)
       expect(properties.$ai_total_tokens).toBe(19)
       expect(properties.$ai_cache_read_input_tokens).toBe(5)
+      expect(properties.$ai_cache_reporting_exclusive).toBe(false)
       expect(properties.$ai_reasoning_tokens).toBe(3)
     })
 
@@ -375,6 +376,7 @@ describe('PostHogTracingProcessor', () => {
       expect(properties.$ai_reasoning_tokens).toBe(2)
       expect(properties.$ai_cache_read_input_tokens).toBe(3)
       expect(properties.$ai_cache_creation_input_tokens).toBe(1)
+      expect(properties).not.toHaveProperty('$ai_cache_reporting_exclusive')
     })
 
     it('defaults $ai_base_url to empty when model_config has no base_url', async () => {
