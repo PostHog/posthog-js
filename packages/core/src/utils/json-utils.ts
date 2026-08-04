@@ -35,8 +35,8 @@ function sanitizeString(value: string): string {
 }
 
 /**
- * Converts an arbitrary value without invoking `toJSON`. The limits keep
- * pathological values from causing unbounded recursion or traversal.
+ * Converts an arbitrary value, sanitizing `toJSON` results when available.
+ * The limits keep pathological values from causing unbounded recursion or traversal.
  */
 export function toJsonSafeValue(value: unknown): unknown {
   const state: JsonSafeValueConversionState = {
@@ -81,6 +81,21 @@ export function toJsonSafeValue(value: unknown): unknown {
       try {
         if (current instanceof Date) {
           return Number.isFinite(dateGetTime.call(current)) ? dateToISOString.call(current) : null
+        }
+
+        let hasToJSONResult = false
+        let toJSONResult: unknown
+        try {
+          const toJSON = (current as { toJSON?: unknown }).toJSON
+          if (typeof toJSON === 'function') {
+            toJSONResult = toJSON.call(current)
+            hasToJSONResult = true
+          }
+        } catch {
+          hasToJSONResult = false
+        }
+        if (hasToJSONResult) {
+          return convert(toJSONResult, depth + 1)
         }
 
         if (Array.isArray(current)) {

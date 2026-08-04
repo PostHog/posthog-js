@@ -28,10 +28,15 @@ describe('toJsonSafeValue', () => {
     })
   })
 
-  it('does not invoke toJSON or overridden Date methods', () => {
+  it('sanitizes toJSON results and falls back when toJSON throws', () => {
+    const serializableToJSON = jest.fn(() => ({ count: BigInt(2) }))
+    const serializable = Object.create({ toJSON: serializableToJSON })
     const throwingToJSON = jest.fn(() => {
-      throw new Error('toJSON must not be called')
+      throw new Error('cannot serialize')
     })
+    const selfReturningValue: { toJSON: () => unknown } = {
+      toJSON: () => selfReturningValue,
+    }
     const getTimeOverride = jest.fn(() => 0)
     const toISOStringOverride = jest.fn(() => BigInt(2))
     const date = new Date('2025-01-02T03:04:05.000Z')
@@ -40,12 +45,21 @@ describe('toJsonSafeValue', () => {
       toISOString: { value: toISOStringOverride },
     })
 
-    expect(toJsonSafeValue({ value: 'kept', toJSON: throwingToJSON, date })).toEqual({
-      value: 'kept',
-      toJSON: '[Function]',
+    expect(
+      toJsonSafeValue({
+        serializable,
+        throwing: { value: 'kept', toJSON: throwingToJSON },
+        selfReturningValue,
+        date,
+      })
+    ).toEqual({
+      serializable: { count: '2' },
+      throwing: { value: 'kept', toJSON: '[Function]' },
+      selfReturningValue: '[Circular]',
       date: '2025-01-02T03:04:05.000Z',
     })
-    expect(throwingToJSON).not.toHaveBeenCalled()
+    expect(serializableToJSON).toHaveBeenCalledTimes(1)
+    expect(throwingToJSON).toHaveBeenCalledTimes(1)
     expect(getTimeOverride).not.toHaveBeenCalled()
     expect(toISOStringOverride).not.toHaveBeenCalled()
   })

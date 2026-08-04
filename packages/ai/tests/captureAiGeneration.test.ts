@@ -149,7 +149,7 @@ describe('captureAiGeneration', () => {
   it('converts circular, BigInt, function, and throwing-toJSON input/output to JSON-safe values', async () => {
     const client = buildClient()
     const throwingToJSON = jest.fn(() => {
-      throw new Error('toJSON must not be called')
+      throw new Error('cannot serialize')
     })
     const input: Record<string, unknown> = {
       count: 42n,
@@ -170,7 +170,7 @@ describe('captureAiGeneration', () => {
       self: '[Circular]',
     })
     expect(properties.$ai_output_choices).toEqual(['7', '[Function]', '[Circular]'])
-    expect(throwingToJSON).not.toHaveBeenCalled()
+    expect(throwingToJSON).toHaveBeenCalledTimes(1)
     expect(() => JSON.stringify(properties.$ai_input)).not.toThrow()
     expect(() => JSON.stringify(properties.$ai_output_choices)).not.toThrow()
   })
