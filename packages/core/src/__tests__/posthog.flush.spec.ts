@@ -271,6 +271,27 @@ describe('PostHog Core', () => {
         expect(jest.getTimerCount()).toBe(0)
       })
 
+      it('does not read an error response body after its absolute deadline', async () => {
+        const cancel = jest.fn<Promise<void>, []>().mockResolvedValue(undefined)
+        const text = jest.fn().mockResolvedValue('too late')
+        mocks.fetch.mockResolvedValue({
+          status: 400,
+          text,
+          json: () => Promise.resolve({ error: 'bad request' }),
+          body: { cancel } as any,
+        })
+
+        posthog.capture('test-event-1')
+        const error = await posthog.flush().catch((error) => error)
+        await jest.advanceTimersByTimeAsync(1000)
+
+        await expect(error.text).rejects.toHaveProperty('name', 'AbortError')
+        expect(error.bodyReadTimedOut).toBe(true)
+        expect(text).not.toHaveBeenCalled()
+        expect(cancel).toHaveBeenCalledTimes(1)
+        expect(jest.getTimerCount()).toBe(0)
+      })
+
       it('caches the error response body across text and JSON access', async () => {
         const text = jest.fn().mockResolvedValue('{"error":"bad request"}')
         const json = jest.fn().mockResolvedValue({ error: 'bad request' })
@@ -305,9 +326,12 @@ describe('PostHog Core', () => {
         expect(mocks.fetch).toHaveBeenCalledTimes(4)
         expect(text).not.toHaveBeenCalled()
         expect(cancel).toHaveBeenCalledTimes(3)
-        expect(jest.getTimerCount()).toBe(1)
+        expect(jest.getTimerCount()).toBe(0)
 
+        const textExpectation = expect(error.text).rejects.toHaveProperty('name', 'AbortError')
+        expect(jest.getTimerCount()).toBe(1)
         await jest.advanceTimersByTimeAsync(1000)
+        await textExpectation
         expect(error.bodyReadTimedOut).toBe(true)
         expect(cancel).toHaveBeenCalledTimes(4)
         expect(jest.getTimerCount()).toBe(0)

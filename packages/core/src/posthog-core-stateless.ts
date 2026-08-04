@@ -51,33 +51,16 @@ import {
 class PostHogFetchHttpError extends Error {
   name = 'PostHogFetchHttpError'
   private responseBodyTextPromise?: Promise<string>
-  private responseBodyTimeout: Promise<never>
-  private responseBodyTimer!: ReturnType<typeof safeSetTimeout>
+  private responseBodyTimer?: ReturnType<typeof safeSetTimeout>
   private _bodyReadTimedOut = false
 
   constructor(
     public response: PostHogFetchResponse,
     public reqByteLength: number,
-    responseBodyDeadline: number,
+    private responseBodyDeadline: number,
     private abortController: AbortController
   ) {
     super('HTTP error while fetching PostHog: status=' + response.status + ', reqByteLength=' + reqByteLength)
-
-    this.responseBodyTimeout = new Promise<never>((_resolve, reject) => {
-      this.responseBodyTimer = safeSetTimeout(
-        () => {
-          this._bodyReadTimedOut = true
-          const timeoutError = new Error('Response body read timed out')
-          timeoutError.name = 'AbortError'
-          // Reject first so the timeout remains the diagnostic if abort rejects the body read synchronously.
-          reject(timeoutError)
-          this.cancelResponseBody(timeoutError)
-        },
-        Math.max(0, responseBodyDeadline - Date.now())
-      )
-    })
-    // The response may never be inspected, so handle the deadline rejection at creation time.
-    void this.responseBodyTimeout.catch(() => {})
   }
 
   get status(): number {
@@ -90,11 +73,33 @@ class PostHogFetchHttpError extends Error {
 
   get text(): Promise<string> {
     if (!this.responseBodyTextPromise) {
-      this.responseBodyTextPromise = this._bodyReadTimedOut
-        ? this.responseBodyTimeout
-        : Promise.race([Promise.resolve().then(() => this.response.text()), this.responseBodyTimeout]).finally(() =>
-            clearTimeout(this.responseBodyTimer)
-          )
+      if (Date.now() >= this.responseBodyDeadline) {
+        this._bodyReadTimedOut = true
+        const timeoutError = new Error('Response body read timed out')
+        timeoutError.name = 'AbortError'
+        this.cancelResponseBody(timeoutError)
+        this.responseBodyTextPromise = Promise.reject(timeoutError)
+      } else {
+        const responseBodyTimeout = new Promise<never>((_resolve, reject) => {
+          this.responseBodyTimer = safeSetTimeout(() => {
+            this._bodyReadTimedOut = true
+            const timeoutError = new Error('Response body read timed out')
+            timeoutError.name = 'AbortError'
+            // Reject first so the timeout remains the diagnostic if abort rejects the body read synchronously.
+            reject(timeoutError)
+            this.cancelResponseBody(timeoutError)
+          }, this.responseBodyDeadline - Date.now())
+        })
+        let responseBodyText: Promise<string>
+        try {
+          responseBodyText = Promise.resolve(this.response.text())
+        } catch (error) {
+          responseBodyText = Promise.reject(error)
+        }
+        this.responseBodyTextPromise = Promise.race([responseBodyText, responseBodyTimeout]).finally(() =>
+          clearTimeout(this.responseBodyTimer)
+        )
+      }
     }
     return this.responseBodyTextPromise
   }
