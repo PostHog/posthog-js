@@ -182,19 +182,19 @@ describe('identify option', () => {
     await capture.stop()
   })
 
-  it('populates session info with the resolved identity (distinctId, properties)', async () => {
-    instrument(server, fakePostHog(), {
-      identify: async () => ({
-        distinctId: 'session-user',
-        properties: { name: 'Session Alice', role: 'admin', team: 'platform' },
-      }),
-    })
+  it('stores the resolved identity without mutating shared session metadata', async () => {
+    const identity = {
+      distinctId: 'session-user',
+      properties: { name: 'Session Alice', role: 'admin', team: 'platform' },
+    }
+    instrument(server, fakePostHog(), { identify: async () => identity })
 
     await callAddTodo(client)
 
+    expectIdentityStored(server, identity)
     const sessionInfo = getServerTrackingData(server.server)?.sessionInfo
-    expect(sessionInfo?.identifyActorGivenId).toBe('session-user')
-    expect(sessionInfo?.identifyActorData).toEqual({ name: 'Session Alice', role: 'admin', team: 'platform' })
+    expect(sessionInfo?.identifyActorGivenId).toBeUndefined()
+    expect(sessionInfo?.identifyActorData).toEqual({})
   })
 
   it('stamps $groups on events when identify returns groups', async () => {

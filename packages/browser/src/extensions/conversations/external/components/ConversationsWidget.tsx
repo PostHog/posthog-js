@@ -15,7 +15,7 @@ import { TicketListView } from './TicketListView'
 import { IdentificationFormView } from './IdentificationFormView'
 import { RestoreRequestView } from './RestoreRequestView'
 import { MessagesView } from './MessagesView'
-import { isConversationsSendError } from '../errors'
+import { isConversationsError } from '../errors'
 
 const logger = createLogger('[ConversationsWidget]')
 
@@ -345,7 +345,9 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
                 restoreRequestSuccess: true,
             })
         } catch (error) {
-            logger.error('Failed to request restore link', error)
+            if (!isConversationsError(error)) {
+                logger.error('Failed to request restore link', error)
+            }
             this.setState({
                 restoreRequestLoading: false,
                 restoreEmailError: error instanceof Error ? error.message : 'Failed to request restore link',
@@ -385,7 +387,7 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
         } catch (error) {
             // Known failures are logged once by the manager (or request layer). Only surface
             // unexpected callback failures here so handled errors are not captured twice.
-            if (!isConversationsSendError(error)) {
+            if (!isConversationsError(error)) {
                 logger.error('Failed to send message', error)
             }
             this.setState((prevState) => ({

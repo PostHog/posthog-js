@@ -5,7 +5,7 @@ import { CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotoc
 import { z } from 'zod'
 import { DEFAULT_CONTEXT_PARAMETER_DESCRIPTION, DEFAULT_CONVERSATION_ID_DESCRIPTION } from '../extensions/constants'
 import { instrument } from '../index'
-import { fakePostHog } from './test-utils'
+import { EventCapture, fakePostHog } from './test-utils'
 
 async function connect(server: McpServer) {
   const client = new Client({ name: 'reserved-argument-test-client', version: '1.0.0' })
@@ -100,6 +100,94 @@ describe('high-level reserved analytics arguments', () => {
       await cleanup()
     }
   })
+
+  it('strips analytics-owned arguments before strict Zod validation', async () => {
+    const server = new McpServer({ name: 'strict-reserved-arguments', version: '1.0.0' })
+    let receivedArgs: Record<string, unknown> | undefined
+    const capture = new EventCapture()
+    await capture.start()
+
+    server.registerTool('strict_schema', { inputSchema: z.object({ value: z.string() }).strict() }, async (args) => {
+      receivedArgs = { ...args }
+      return { content: [{ type: 'text', text: 'ok' }] }
+    })
+
+    const { client, cleanup } = await connect(server)
+    try {
+      instrument(server, fakePostHog(), { context: true, enableConversationId: true })
+
+      const response = await client.request(
+        {
+          method: 'tools/call',
+          params: {
+            name: 'strict_schema',
+            arguments: { context: 'analytics context', conversation_id: 'analytics conversation', value: 'kept' },
+          },
+        },
+        CallToolResultSchema
+      )
+
+      expect(response.isError).not.toBe(true)
+      expect(receivedArgs).toEqual({ value: 'kept' })
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const event = capture.getEvents().find((candidate) => candidate.resourceName === 'strict_schema')
+      expect(event?.userIntent).toBe('analytics context')
+      expect(event?.conversationId).toBe('analytics conversation')
+    } finally {
+      await capture.stop()
+      await cleanup()
+    }
+  })
+
+  it.each(['context', 'conversation_id'] as const)(
+    'does not consume a tool-owned %s argument as analytics metadata',
+    async (reservedArgument) => {
+      const server = new McpServer({ name: 'tool-owned-analytics-arguments', version: '1.0.0' })
+      const toolName = `tool_owned_${reservedArgument}`
+      let receivedArgs: Record<string, unknown> | undefined
+      const capture = new EventCapture()
+      await capture.start()
+
+      server.registerTool(
+        toolName,
+        { inputSchema: z.object({ [reservedArgument]: z.string(), value: z.string() }).strict() },
+        async (args) => {
+          receivedArgs = { ...args }
+          return { content: [{ type: 'text', text: 'ok' }] }
+        }
+      )
+
+      const { client, cleanup } = await connect(server)
+      try {
+        instrument(server, fakePostHog(), {
+          context: reservedArgument === 'context',
+          enableConversationId: reservedArgument === 'conversation_id',
+        })
+
+        const suppliedArguments = { [reservedArgument]: 'application value', value: 'kept' }
+        const result = await client.request(
+          {
+            method: 'tools/call',
+            params: { name: toolName, arguments: suppliedArguments },
+          },
+          CallToolResultSchema
+        )
+        expect(result.content).not.toEqual(
+          expect.arrayContaining([expect.objectContaining({ text: expect.stringContaining('conversation_id=') })])
+        )
+
+        expect(receivedArgs).toEqual(suppliedArguments)
+        await new Promise((resolve) => setTimeout(resolve, 50))
+        const events = capture.getEvents().filter((candidate) => candidate.resourceName === toolName)
+        expect(events).toHaveLength(1)
+        expect(events[0].userIntent).toBeUndefined()
+        expect(events[0].conversationId).toBeUndefined()
+      } finally {
+        await capture.stop()
+        await cleanup()
+      }
+    }
+  )
 
   it('preserves pre-existing reserved fields and strips only fields injected by analytics', async () => {
     const server = new McpServer({ name: 'owned-reserved-arguments', version: '1.0.0' })

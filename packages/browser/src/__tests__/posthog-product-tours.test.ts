@@ -1,13 +1,31 @@
+jest.mock('@posthog/browser-common/utils/logger', () => {
+    const childLogger: Record<string, jest.Mock> = {
+        debug: jest.fn(),
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+        critical: jest.fn(),
+    }
+    childLogger.createLogger = jest.fn().mockReturnValue(childLogger)
+    return {
+        createLogger: childLogger.createLogger,
+        logger: childLogger,
+    }
+})
+
 import { PostHog } from '../posthog-core'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { PRODUCT_TOURS, PRODUCT_TOURS_ENABLED_SERVER_SIDE } from '../constants'
 import { RemoteConfig } from '../types'
 
+const mockLogger = jest.requireMock('@posthog/browser-common/utils/logger').createLogger.mock.results[0].value
+
 describe('PostHogProductTours', () => {
     let instance: PostHog
 
     beforeEach(async () => {
+        jest.clearAllMocks()
         instance = await createPosthogInstance(uuidv7(), {
             api_host: 'https://test.com',
             token: 'testtoken',
@@ -113,6 +131,45 @@ describe('PostHogProductTours', () => {
 
             expect(instance.persistence?.props[PRODUCT_TOURS]).toBeUndefined()
             expect(consumer).toHaveBeenCalledWith([], { isLoaded: true })
+        })
+
+        it('does not re-log status-zero failures already handled by the request layer', () => {
+            instance.persistence?.register({ [PRODUCT_TOURS_ENABLED_SERVER_SIDE]: true })
+            instance._send_request = jest.fn(({ callback }) =>
+                callback({ statusCode: 0, error: new TypeError('Failed to fetch') })
+            ) as any
+
+            const consumer = jest.fn()
+            jest.clearAllMocks()
+            instance.productTours.getProductTours(consumer, true)
+
+            expect(consumer).toHaveBeenCalledWith([], {
+                isLoaded: false,
+                error: 'Product Tours API could not be loaded, status: 0',
+            })
+            expect(mockLogger.warn).not.toHaveBeenCalled()
+            expect(mockLogger.error).not.toHaveBeenCalled()
+        })
+
+        it('warns once for a bare status-zero response', () => {
+            instance.persistence?.register({ [PRODUCT_TOURS_ENABLED_SERVER_SIDE]: true })
+            instance._send_request = jest.fn(({ callback }) => callback({ statusCode: 0 })) as any
+
+            jest.clearAllMocks()
+            instance.productTours.getProductTours(jest.fn(), true)
+
+            expect(mockLogger.warn).toHaveBeenCalledWith('Product Tours API could not be loaded, status: 0')
+            expect(mockLogger.error).not.toHaveBeenCalled()
+        })
+
+        it('keeps HTTP failures at error severity', () => {
+            instance.persistence?.register({ [PRODUCT_TOURS_ENABLED_SERVER_SIDE]: true })
+            instance._send_request = jest.fn(({ callback }) => callback({ statusCode: 500 })) as any
+
+            jest.clearAllMocks()
+            instance.productTours.getProductTours(jest.fn(), true)
+
+            expect(mockLogger.error).toHaveBeenCalledWith('Product Tours API could not be loaded, status: 500')
         })
 
         it('stops a running tour manager when product tours is disabled mid-session', () => {

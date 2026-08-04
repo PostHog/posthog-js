@@ -1,5 +1,42 @@
 # posthog-js
 
+## 1.410.8
+
+### Patch Changes
+
+- [#4402](https://github.com/PostHog/posthog-js/pull/4402) [`a31bd1e`](https://github.com/PostHog/posthog-js/commit/a31bd1e006d6a6f7e5d6ba37019bb00fb180c4f3) Thanks [@NVolcz](https://github.com/NVolcz)! - Publish TypeScript declarations for browser extension entrypoints under their public `dist` paths.
+  (2026-08-04)
+
+## 1.410.7
+
+### Patch Changes
+
+- [#4400](https://github.com/PostHog/posthog-js/pull/4400) [`9811a43`](https://github.com/PostHog/posthog-js/commit/9811a43d11a1e994f4ab394bd1699daa1ee082d2) Thanks [@marandaneto](https://github.com/marandaneto)! - Avoid promoting handled transport failures to error logs in surveys, product tours, remote config, conversations, and logs while preserving error severity for HTTP and unexpected failures.
+  (2026-08-04)
+
+## 1.410.6
+
+### Patch Changes
+
+- [#4407](https://github.com/PostHog/posthog-js/pull/4407) [`6d5e314`](https://github.com/PostHog/posthog-js/commit/6d5e314c1e1b2ee493edb1f96a7e3779d75852e4) Thanks [@ioannisj](https://github.com/ioannisj)! - Fix session replay shipping one billable recording per session rotation for tabs the user never interacts with. A session born from an idle rotation now holds its buffer until the first user interaction, then ships a recording playable from the session's start; without interaction nothing is sent — a further rotation, stop, opt-out, or page unload discards the held data instead of shipping it. An event trigger match (for example record-on-exception) also releases the hold, since it is explicit intent to record the session.
+  (2026-08-03)
+
+## 1.410.5
+
+### Patch Changes
+
+- [#4273](https://github.com/PostHog/posthog-js/pull/4273) [`8ec3499`](https://github.com/PostHog/posthog-js/commit/8ec349949fdf0b8ea667219ce4ad021c9493e0eb) Thanks [@felipeatom](https://github.com/felipeatom)! - Fix selector-widget surveys being abruptly removed while open when their trigger element is unmounted from the DOM (e.g. a dropdown or menu that hosts the trigger closes). The survey is now kept in place while open and only torn down once the user has closed it. Also fixes a related leak where, if the selector resolved to a different element while the survey was open, the old element's click listener was never removed and kept dispatching the show-widget event for the lifetime of the page.
+  (2026-08-03)
+
+## 1.410.4
+
+### Patch Changes
+
+- [#4235](https://github.com/PostHog/posthog-js/pull/4235) [`7db0e8c`](https://github.com/PostHog/posthog-js/commit/7db0e8c2a46edfc180b1d13d3b23fbcac867e552) Thanks [@hpouillot](https://github.com/hpouillot)! - Preserve messages, source locations, and existing stacks from browser errors that do not provide a same-realm `Error` object.
+  (2026-08-03)
+- Updated dependencies [[`7db0e8c`](https://github.com/PostHog/posthog-js/commit/7db0e8c2a46edfc180b1d13d3b23fbcac867e552)]:
+    - @posthog/core@1.46.5
+
 ## 1.410.3
 
 ### Patch Changes
