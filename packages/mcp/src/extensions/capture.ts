@@ -6,7 +6,7 @@
 import type { MCPServerLike, McpEvent, SessionInfo } from '../types'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
-import { log } from './logger'
+import type { LoggerFn } from './logger'
 import { getSessionInfo } from './session'
 
 /**
@@ -22,11 +22,12 @@ import { getSessionInfo } from './session'
 export function captureEvent(
   server: MCPServerLike,
   eventInput: McpEvent,
+  logger: LoggerFn,
   requestAttribution?: SessionInfo
 ): Promise<void> | undefined {
   const data = getServerTrackingData(server)
   if (!data) {
-    log('Warning: Server tracking data not found. Event will not be published.')
+    logger('Warning: Server tracking data not found. Event will not be published.')
     return
   }
 
@@ -55,14 +56,13 @@ export function captureEvent(
     sdkVersion: sessionInfo.sdkVersion,
     serverName: sessionInfo.serverName,
     serverVersion: sessionInfo.serverVersion,
-    // Prefer identity the event captured for *this* request (from `_meta`, see
-    // stampMetaClientInfo) over the server-wide sessionInfo, so a concurrent
-    // request from another client can't misattribute this one.
+    // Prefer client metadata stamped onto this event from the request's `_meta`
+    // over sessionInfo, so concurrent stateless requests stay isolated.
     clientName: eventInput.clientName ?? sessionInfo.clientName,
     clientVersion: eventInput.clientVersion ?? sessionInfo.clientVersion,
-    identifyActorGivenId: eventInput.identifyActorGivenId ?? sessionInfo.identifyActorGivenId,
-    identifyActorData: eventInput.identifyActorData ?? sessionInfo.identifyActorData,
-    groups: eventInput.groups ?? sessionInfo.identifyActorGroups,
+    identifyActorGivenId: sessionInfo.identifyActorGivenId,
+    identifyActorData: sessionInfo.identifyActorData,
+    groups: sessionInfo.identifyActorGroups,
     resourceName: eventInput.resourceName,
     // The `initialize` event sets the negotiated version directly; every other
     // event inherits it from sessionInfo (persisted at initialize, recovered

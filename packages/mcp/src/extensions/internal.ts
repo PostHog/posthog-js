@@ -13,7 +13,6 @@ import type {
   UserIdentity,
 } from '../types'
 import { MCPAnalyticsEventType } from './event-types'
-import { log } from './logger'
 import { captureEvent } from './capture'
 import { stampMetaClientInfo } from './client-identity'
 
@@ -173,25 +172,27 @@ export async function handleIdentify(
       data.identifiedSessions.set(sessionId, mergedIdentity)
 
       if (shouldPublish) {
-        log(`Identified session ${sessionId} with identity: ${JSON.stringify(mergedIdentity)}`)
-        captureEvent(server, identifyEvent, withIdentity(requestAttribution, mergedIdentity))
+        data.logger(`Identified session ${sessionId}`)
+        captureEvent(server, identifyEvent, data.logger, withIdentity(requestAttribution, mergedIdentity))
       }
       return mergedIdentity
     }
 
-    log(`Warning: Supplied identify function returned null for session ${sessionId}`)
+    data.logger(`Warning: Supplied identify function returned null for session ${sessionId}`)
   } catch (error) {
-    log(`Error: User supplied identify function threw an error while identifying session ${sessionId} - ${error}`)
+    data.logger(
+      `Error: User supplied identify function threw an error while identifying session ${sessionId} - ${error}`
+    )
   }
   return identityBeforeRequest
 }
 
-function withIdentity(sessionInfo: SessionInfo, identity: UserIdentity): SessionInfo {
+export function withIdentity(sessionInfo: SessionInfo, identity: UserIdentity | undefined): SessionInfo {
   return {
     ...sessionInfo,
-    identifyActorGivenId: identity.distinctId,
-    identifyActorData: identity.properties || {},
-    identifyActorGroups: identity.groups,
+    identifyActorGivenId: identity?.distinctId,
+    identifyActorData: identity?.properties || {},
+    identifyActorGroups: identity?.groups,
   }
 }
 
@@ -211,7 +212,7 @@ export async function resolveEventProperties(
   try {
     return (await data.options.eventProperties(request, extra)) ?? null
   } catch (e) {
-    log(`eventProperties callback error: ${e}`)
+    data.logger(`eventProperties callback error: ${e}`)
     return null
   }
 }

@@ -19,6 +19,10 @@ function deferred<T = void>(): Deferred<T> {
   return { promise, resolve }
 }
 
+function flushCaptures(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 50))
+}
+
 function createServer(options: MCPAnalyticsOptions): MCPServerLike {
   const server = new Server({ name: 'concurrency-test', version: '1.0.0' }, { capabilities: { tools: {} } })
   server.setRequestHandler(CallToolRequestSchema, async (request) => ({
@@ -108,7 +112,7 @@ describe('concurrent request attribution', () => {
     await requestB
     releaseMetadataA.resolve()
     await requestA
-    await Promise.resolve()
+    await flushCaptures()
 
     const toolCalls = capture.findCapturesByEvent('$mcp_tool_call')
     const captureA = toolCalls.find((event) => event.properties.requestLabel === 'A')
@@ -156,7 +160,7 @@ describe('concurrent request attribution', () => {
     })
     releaseIdentifyA.resolve()
     await requestA
-    await Promise.resolve()
+    await flushCaptures()
 
     const toolCalls = capture.findCapturesByEvent('$mcp_tool_call')
     const captureA = toolCalls.find((event) => event.distinct_id === 'user-A')
@@ -215,7 +219,7 @@ describe('concurrent request attribution', () => {
     await requestA
     releaseListMetadata.resolve()
     await listRequestB
-    await Promise.resolve()
+    await flushCaptures()
 
     const listings = capture.findCapturesByEvent('$mcp_tools_list')
     expect(listings).toHaveLength(1)
@@ -251,7 +255,7 @@ describe('concurrent request attribution', () => {
     })
     releaseIdentifyA.resolve()
     await requestA
-    await Promise.resolve()
+    await flushCaptures()
 
     const identifyCaptures = capture.findCapturesByEvent('$identify')
     expect(identifyCaptures).toHaveLength(1)
@@ -297,7 +301,7 @@ describe('concurrent request attribution', () => {
     })
     releaseInitializeMetadata.resolve()
     await initializeA
-    await Promise.resolve()
+    await flushCaptures()
 
     const upgradedToken = decodeSessionId(transport.sessionId)
     expect(upgradedToken).toMatchObject({
@@ -362,7 +366,7 @@ describe('concurrent request attribution', () => {
     await requestB
     releaseMetadataA.resolve()
     await requestA
-    await Promise.resolve()
+    await flushCaptures()
 
     const toolCalls = capture.findCapturesByEvent('$mcp_tool_call')
     const captureA = toolCalls.find((event) => event.properties.requestLabel === 'A')
@@ -379,6 +383,103 @@ describe('concurrent request attribution', () => {
       $mcp_client_name: 'client-b',
       $mcp_client_version: '2.0.0',
       $mcp_protocol_version: '2025-06-18',
+    })
+  })
+
+  it('keeps failed tool events attributed to the request that threw', async () => {
+    const toolAStarted = deferred()
+    const releaseToolA = deferred()
+    const server = createServer({
+      identify: async (request) => ({
+        distinctId: `user-${request.params?.arguments?.requestLabel}`,
+      }),
+    })
+    server.setRequestHandler(CallToolRequestSchema, async (request) => {
+      const requestLabel = String(request.params.arguments?.requestLabel)
+      if (requestLabel === 'A') {
+        toolAStarted.resolve()
+        await releaseToolA.promise
+        throw new Error('tool A failed')
+      }
+      return { content: [{ type: 'text', text: requestLabel }] }
+    })
+    const tokenA = encodeSessionId({
+      sessionId: 'ses_a',
+      clientName: 'client-a',
+      clientVersion: '1.0.0',
+      protocolVersion: '2025-03-26',
+    })
+    const tokenB = encodeSessionId({
+      sessionId: 'ses_b',
+      clientName: 'client-b',
+      clientVersion: '2.0.0',
+      protocolVersion: '2025-06-18',
+    })
+
+    const requestA = invokeTool(server, 'A', {
+      requestInfo: { headers: { 'mcp-session-id': tokenA } },
+    })
+    await toolAStarted.promise
+    await invokeTool(server, 'B', {
+      requestInfo: { headers: { 'mcp-session-id': tokenB } },
+    })
+    releaseToolA.resolve()
+    await expect(requestA).rejects.toThrow('tool A failed')
+    await flushCaptures()
+
+    const failedToolCall = capture
+      .findCapturesByEvent('$mcp_tool_call')
+      .find((event) => event.properties.$mcp_is_error === true)
+    expect(failedToolCall?.distinct_id).toBe('user-A')
+    expect(failedToolCall?.properties).toMatchObject({
+      $session_id: 'ses_a',
+      $mcp_client_name: 'client-a',
+      $mcp_client_version: '1.0.0',
+      $mcp_protocol_version: '2025-03-26',
+    })
+  })
+
+  it('keeps failed tools/list events attributed to the request that failed', async () => {
+    const listAStarted = deferred()
+    const releaseListA = deferred()
+    const server = createServer({})
+    server.setRequestHandler(ListToolsRequestSchema, async () => {
+      listAStarted.resolve()
+      await releaseListA.promise
+      throw new Error('list A failed')
+    })
+    const tokenA = encodeSessionId({
+      sessionId: 'ses_a',
+      clientName: 'client-a',
+      clientVersion: '1.0.0',
+      protocolVersion: '2025-03-26',
+    })
+    const tokenB = encodeSessionId({
+      sessionId: 'ses_b',
+      clientName: 'client-b',
+      clientVersion: '2.0.0',
+      protocolVersion: '2025-06-18',
+    })
+
+    const listA = invokeListTools(server, {
+      requestInfo: { headers: { 'mcp-session-id': tokenA } },
+    })
+    await listAStarted.promise
+    await invokeTool(server, 'B', {
+      requestInfo: { headers: { 'mcp-session-id': tokenB } },
+    })
+    releaseListA.resolve()
+    await expect(listA).rejects.toThrow('list A failed')
+    await flushCaptures()
+
+    const failedList = capture.findCapturesByEvent('$mcp_tools_list')[0]
+    expect(failedList?.distinct_id).toBe('ses_a')
+    expect(failedList?.properties).toMatchObject({
+      $session_id: 'ses_a',
+      $mcp_client_name: 'client-a',
+      $mcp_client_version: '1.0.0',
+      $mcp_protocol_version: '2025-03-26',
+      $mcp_is_error: true,
     })
   })
 })
