@@ -1,23 +1,18 @@
-const HANDLED_CONVERSATIONS_SEND_ERROR = '__posthogHandledConversationsSendError' as const
+const HANDLED_CONVERSATIONS_ERROR = '__posthogHandledConversationsError' as const
 
-export type ConversationsSendErrorKind = 'network' | 'rate_limit' | 'http' | 'invalid_response'
+export type ConversationsErrorKind = 'network' | 'rate_limit' | 'http' | 'invalid_response'
 
-export type ConversationsSendError = Error & {
-    [HANDLED_CONVERSATIONS_SEND_ERROR]: true
-    kind: ConversationsSendErrorKind
+export type ConversationsError = Error & {
+    [HANDLED_CONVERSATIONS_ERROR]: true
+    kind: ConversationsErrorKind
 }
 
-export const createConversationsSendError = (
-    kind: ConversationsSendErrorKind,
-    message: string
-): ConversationsSendError => {
-    const error = new Error(message) as ConversationsSendError
-    error[HANDLED_CONVERSATIONS_SEND_ERROR] = true
+export const createConversationsError = (kind: ConversationsErrorKind, message: string): ConversationsError => {
+    const error = new Error(message) as ConversationsError
+    error[HANDLED_CONVERSATIONS_ERROR] = true
     error.kind = kind
     return error
 }
 
-export const isConversationsSendError = (error: unknown): error is ConversationsSendError =>
-    !!error &&
-    typeof error === 'object' &&
-    (error as Partial<ConversationsSendError>)[HANDLED_CONVERSATIONS_SEND_ERROR] === true
+export const isConversationsError = (error: unknown): error is ConversationsError =>
+    !!error && typeof error === 'object' && (error as Partial<ConversationsError>)[HANDLED_CONVERSATIONS_ERROR] === true
