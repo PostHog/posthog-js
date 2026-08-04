@@ -19,11 +19,11 @@
 // internally) is evaluated, so the bundle doesn't throw on browsers that predate `.at()`.
 import '@posthog/browser-common/utils/array-at-polyfill'
 
-import { assignableWindow } from '../utils/globals'
+import { assignableWindow, type WebVitalsCallbacks } from '../utils/globals'
 
 import { onINP, onLCP, onCLS, onFCP } from 'web-vitals-soft-navs'
 
-const postHogWebVitalsCallbacks = {
+const postHogWebVitalsCallbacks: WebVitalsCallbacks = {
     onLCP,
     onCLS,
     onFCP,
