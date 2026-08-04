@@ -892,6 +892,18 @@ function serializeElementNode(
     const imageSrc: string =
       image.currentSrc || image.getAttribute('src') || '<unknown-src>';
     const priorCrossOrigin = image.crossOrigin;
+    // recordInlineImage can fire after the masking pass at the end of this
+    // function, in which case the values it assigns must be masked here.
+    const maskLateAttribute = (name: string, value: string) =>
+      serializationComplete
+        ? maskAttributeValue({
+            element: n,
+            name,
+            value,
+            maskAllElementAttributes,
+            maskAttributeFn,
+          })
+        : value;
     const recordInlineImage = () => {
       removeEventListenerSafely(image, 'load', recordInlineImage);
       try {
@@ -902,17 +914,7 @@ function serializeElementNode(
           dataURLOptions.type,
           dataURLOptions.quality,
         );
-        attributes.rr_dataURL =
-          serializationComplete &&
-          (maskAllElementAttributes || maskAttributeFn)
-            ? maskAttributeValue({
-                element: n,
-                name: 'rr_dataURL',
-                value: dataURL,
-                maskAllElementAttributes,
-                maskAttributeFn,
-              })
-            : dataURL;
+        attributes.rr_dataURL = maskLateAttribute('rr_dataURL', dataURL);
       } catch (err) {
         if (image.crossOrigin !== 'anonymous') {
           image.crossOrigin = 'anonymous';
@@ -927,19 +929,14 @@ function serializeElementNode(
         }
       }
       if (image.crossOrigin === 'anonymous') {
-        priorCrossOrigin
-          ? (attributes.crossOrigin =
-              serializationComplete &&
-              (maskAllElementAttributes || maskAttributeFn)
-                ? maskAttributeValue({
-                    element: n,
-                    name: 'crossOrigin',
-                    value: priorCrossOrigin,
-                    maskAllElementAttributes,
-                    maskAttributeFn,
-                  })
-                : priorCrossOrigin)
-          : image.removeAttribute('crossorigin');
+        if (priorCrossOrigin) {
+          attributes.crossOrigin = maskLateAttribute(
+            'crossOrigin',
+            priorCrossOrigin,
+          );
+        } else {
+          image.removeAttribute('crossorigin');
+        }
       }
     };
     // The image content may not have finished loading yet.
