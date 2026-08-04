@@ -1,5 +1,12 @@
 # @posthog/types
 
+## 1.400.2
+
+### Patch Changes
+
+- [#4339](https://github.com/PostHog/posthog-js/pull/4339) [`f865818`](https://github.com/PostHog/posthog-js/commit/f8658186617a922ffd633428b20da330fd856138) Thanks [@posthog](https://github.com/apps/posthog)! - Report privacy-aware dropped-event count, page and session context in the client rate limit warning
+  (2026-08-04)
+
 ## 1.400.1
 
 ### Patch Changes
