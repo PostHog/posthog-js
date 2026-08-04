@@ -29,6 +29,17 @@ jobs:
           # this commits to the branch so we can't use the default GITHUB_TOKEN, otherwise Actions won't trigger
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
 
+      # The action leaves a local commit behind that it could not push. ghcommit
+      # sends `git rev-parse HEAD` as the mutation's expectedHeadOid, so HEAD has
+      # to be rewound onto the remote branch tip or the commit below is rejected.
+      # --mixed keeps the generated changeset file in the working tree.
+      - name: Rewind the failed local commit
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          git fetch origin "+refs/heads/$HEAD_REF:refs/remotes/origin/$HEAD_REF"
+          git reset --mixed "refs/remotes/origin/$HEAD_REF"
+
       - name: Check for a generated changeset
         id: changes
         run: |
