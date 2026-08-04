@@ -1,5 +1,15 @@
 # posthog-ai
 
+## 8.6.3
+
+### Patch Changes
+
+- [#4361](https://github.com/PostHog/posthog-js/pull/4361) [`0d79b00`](https://github.com/PostHog/posthog-js/commit/0d79b00404f1884ce8c9b17f496dd99d4a81bf40) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve stream cancellation and backpressure while monitoring AI responses.
+  (2026-08-04)
+
+- [#4362](https://github.com/PostHog/posthog-js/pull/4362) [`cd4da1b`](https://github.com/PostHog/posthog-js/commit/cd4da1b373967541d1f3be0a73d45eba74f1e69b) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent telemetry failures from affecting provider calls and errors.
+  (2026-08-04)
+
 ## 8.6.2
 
 ### Patch Changes

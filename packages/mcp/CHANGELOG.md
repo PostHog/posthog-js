@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.10.5
+
+### Patch Changes
+
+- [#4359](https://github.com/PostHog/posthog-js/pull/4359) [`d2f5041`](https://github.com/PostHog/posthog-js/commit/d2f504156faee7fe008388c70ec451339002cd3a) Thanks [@marandaneto](https://github.com/marandaneto)! - Isolate logger configuration per instrumented MCP server.
+  (2026-08-04)
+
 ## 0.10.4
 
 ### Patch Changes
