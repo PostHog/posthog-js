@@ -7,7 +7,12 @@ import type { LogAttributes, BeforeSendLogFn } from './capture-log'
 import type { MetricAttributes, BeforeSendMetricFn } from './capture-metric'
 import type { BeforeSendFn, CaptureResult } from './capture'
 import type { RequestResponse } from './request'
-import type { CapturedNetworkRequest, NetworkRequest, SessionRecordingCanvasOptions } from './session-recording'
+import type {
+    CanvasMaskRegion,
+    CapturedNetworkRequest,
+    NetworkRequest,
+    SessionRecordingCanvasOptions,
+} from './session-recording'
 import type { SegmentAnalytics } from './segment'
 import type { PostHog } from './posthog'
 
@@ -525,6 +530,27 @@ export interface SlimDOMOptions {
     headTitleMutations?: boolean
 }
 
+/**
+ * Sampling options for session recording, a subset of rrweb's sampling strategy
+ */
+export interface SessionRecordingSamplingConfig {
+    /**
+     * Controls capture of mouse movement within a recorded session.
+     * `false` disables capture entirely; NB this also disables touchmove and drag capture.
+     * A number throttles capture so that positions are captured at most once every N milliseconds.
+     * When `undefined` (or `true`), rrweb's default applies: capture throttled to every 50ms.
+     * @default undefined
+     */
+    mousemove?: boolean | number
+    /**
+     * When `false`, disables capture of mouse interaction events
+     * (click, mouse up/down, hover, and touch start/end).
+     * NB replays will not show clicks when this is disabled.
+     * @default undefined
+     */
+    mouseInteraction?: boolean
+}
+
 export interface SessionRecordingOptions {
     /**
      * Derived from `rrweb.record` options
@@ -651,7 +677,8 @@ export interface SessionRecordingOptions {
     streamNetworkBody?: boolean
 
     /**
-     * Allows local config to override remote canvas recording settings from the flags response
+     * Allows local config to override remote canvas recording settings from the flags response.
+     * To mask content inside a recorded canvas, see `canvasCapture.maskRegionsFn`.
      */
     captureCanvas?: SessionRecordingCanvasOptions
 
@@ -665,9 +692,57 @@ export interface SessionRecordingOptions {
      *   preserved and replay upscales the frame back to the original display size, so playback
      *   dimensions are unchanged, just softer. Resolution is the highest-leverage lever for canvas
      *   byte size, since bytes scale with pixel area.
+     * - `maskRegionsFn`: mask regions of a recorded canvas — see its doc comment.
      */
     canvasCapture?: {
         resolutionScale?: number
+
+        /**
+         * If set, called once per canvas per captured frame; the returned regions
+         * (CSS pixels, relative to the canvas element) are painted black before the
+         * frame is encoded. Lets apps that render into canvas (e.g. Flutter web)
+         * mask content that DOM-based masking cannot see. Re-read from config on
+         * every frame, so the real provider can be swapped in after recording has
+         * started.
+         *
+         * Return `[]` for a frame with nothing to mask (recorded as is), or `null`
+         * if regions could not be computed — that frame is skipped rather than
+         * recorded unmasked. Anything other than an array — `null`, a thrown error,
+         * or an implicit `undefined` from an untyped caller — skips that frame.
+         * Not setting this at all records the canvas unmasked.
+         *
+         * The provider is called for every canvas on the page, including
+         * canvases inside shadow DOM. For a canvas it does not manage, return
+         * `[]` ("nothing to mask") — returning `null` skips that canvas's
+         * frames entirely.
+         *
+         * Called synchronously on the main thread for every captured frame (canvas
+         * FPS is 4 by default, 12 max), so keep it cheap — avoid forcing layout,
+         * and return few regions.
+         *
+         * Setting this also changes DOM full snapshots (taken at recording start and
+         * at each `full_snapshot_interval_millis`): they normally serialize canvas
+         * pixels on a separate path (`rr_dataURL`) that never sees these regions, so
+         * when this option is set that serialization is skipped entirely. Whether
+         * to skip is re-evaluated at each snapshot, so a provider installed via
+         * `set_config` after recording started is honored at the next snapshot
+         * without a recorder restart. A canvas appears blank in a snapshot until
+         * the next canvas frame paints it — ~250ms at the default 4 fps while its
+         * pixels are changing, and at most 30s otherwise, because every canvas
+         * the provider answers (with regions or `[]`) re-sends an unchanged frame
+         * as a keyframe every 30s; a canvas whose frames are skipped (`null`)
+         * stays blank. Without this option, snapshot behavior is unchanged.
+         *
+         * An app whose real provider only exists once its runtime has booted picks
+         * what happens in between by what it declares in `posthog.init`: a function
+         * covering the whole canvas blacks those frames out, `() => null` skips
+         * them, and declaring nothing records them.
+         *
+         * Client-side only, cannot be set via remote configuration.
+         *
+         * @default undefined
+         */
+        maskRegionsFn?: ((canvas: HTMLCanvasElement) => CanvasMaskRegion[] | null | undefined) | null
     }
 
     /**
@@ -749,6 +824,23 @@ export interface SessionRecordingOptions {
      * @default false
      */
     strictMinimumDuration?: boolean
+
+    /**
+     * Derived from `rrweb.record` options. Controls how often certain event types are captured
+     * within an already-recorded session, e.g. `{ mousemove: false }` stops recording mouse movement.
+     *
+     * Not to be confused with `sampleRate` below, which controls whether a session is recorded
+     * at all, or with `posthog.startSessionRecording({ sampling: true })`, which overrides that
+     * session-level sample rate.
+     *
+     * NB disabled event types no longer count as user activity for replay idle detection
+     * (`session_idle_threshold_ms`). For example, with `mousemove: false` pure mouse movement
+     * no longer keeps a session active, while clicks, scrolls, and inputs still do.
+     *
+     * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     * @default undefined
+     */
+    sampling?: SessionRecordingSamplingConfig
 
     /**
      * The sample rate for session recordings, a number between 0 and 1.

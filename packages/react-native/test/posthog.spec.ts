@@ -340,10 +340,10 @@ describe('PostHog React Native', () => {
       })
 
       onCapture.mockClear()
-      // The first instance's app-version write is debounced; drain it so the
-      // second instance reads it on preload and detects an update (not a fresh
-      // install).
-      await (posthog as any)._eventsStorage.waitForPersist()
+      // Shut down the first instance so its app-version write is persisted
+      // before the second instance checks for an update.
+      await posthog.shutdown()
+
       // act
       posthog = new PostHog('1', {
         customStorage: mockStorage,
@@ -398,10 +398,9 @@ describe('PostHog React Native', () => {
 
       onCapture.mockClear()
 
-      // The first instance's app-version write is debounced; drain it so the
-      // second instance reads it on preload and fires only "Opened" (not a
-      // fresh-install pair).
-      await (posthog as any)._eventsStorage.waitForPersist()
+      // Shut down the first instance so its app-version write is persisted
+      // before the second instance checks the stored version.
+      await posthog.shutdown()
 
       posthog = new PostHog('1', {
         customStorage: mockStorage,
@@ -547,6 +546,7 @@ describe('PostHog React Native', () => {
     it('should allow immediate calls without delay for stored values', async () => {
       posthog = new PostHog('1', {
         customStorage: storage,
+        captureAppLifecycleEvents: false,
       })
 
       // Sync-storage init: feature flags should be readable immediately without
@@ -558,14 +558,15 @@ describe('PostHog React Native', () => {
       })
       expect(posthog.getFeatureFlag('flag')).toEqual(true)
 
-      // The override write is debounced; drain it so the second instance reads
-      // it from `storage` without preload.
-      await (posthog as any)._eventsStorage.waitForPersist()
+      // Shut down the first instance to persist the override and clear its
+      // timers before replacing it.
+      await posthog.shutdown()
 
       // New instance but same sync storage — the override persisted via
       // the first instance is visible to the second without preload.
       posthog = new PostHog('1', {
         customStorage: storage,
+        captureAppLifecycleEvents: false,
       })
 
       expect(posthog.getFeatureFlag('flag')).toEqual(true)
@@ -1140,6 +1141,7 @@ describe('PostHog React Native', () => {
       })
 
       it('should reload flags once when identify() is called with same distinctId and new properties', async () => {
+        await posthog.shutdown()
         ;(globalThis as any).window.fetch = jest.fn().mockResolvedValue({ status: 200 })
         posthog = new PostHog('test-api-key', {
           setDefaultPersonProperties: false,
@@ -1162,6 +1164,7 @@ describe('PostHog React Native', () => {
       })
 
       it('should reload flags once when identify() is called with different distinctId', async () => {
+        await posthog.shutdown()
         ;(globalThis as any).window.fetch = jest.fn().mockResolvedValue({ status: 200 })
         posthog = new PostHog('test-api-key', {
           setDefaultPersonProperties: false,
@@ -1892,20 +1895,30 @@ describe('PostHog React Native', () => {
       const logsShutdownSpy = jest.spyOn((posthog as any)._logs, 'shutdown')
       const sendLogsSpy = jest.spyOn(posthog as any, '_sendLogsBatch').mockResolvedValue({ kind: 'ok' } as never)
 
-      // Queue a log and fire a single capture so both pipelines have work.
-      ;(posthog as any)._logs.captureLog({ body: 'terminal' })
-      posthog.capture('terminal-event', {})
+      const setTimeoutSpy = jest.spyOn(global, 'setTimeout')
+      const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout')
+      try {
+        // Queue a log and fire a single capture so both pipelines have work.
+        ;(posthog as any)._logs.captureLog({ body: 'terminal' })
+        posthog.capture('terminal-event', {})
 
-      await posthog.shutdown(5000)
+        await posthog.shutdown(5000)
 
-      // Both pipelines drained through the shared shutdown path. Logs use
-      // the smaller of the caller's shutdown budget and the configured
-      // `terminationFlushBudgetMs` (default 2000ms) — see _shutdown.
-      expect(logsShutdownSpy).toHaveBeenCalledWith(2000)
-      expect(sendLogsSpy).toHaveBeenCalled()
+        // Both pipelines drained through the shared shutdown path. Logs use
+        // the smaller of the caller's shutdown budget and the configured
+        // `terminationFlushBudgetMs` (default 2000ms) — see _shutdown.
+        expect(logsShutdownSpy).toHaveBeenCalledWith(2000)
+        expect(sendLogsSpy).toHaveBeenCalled()
 
-      logsShutdownSpy.mockRestore()
-      sendLogsSpy.mockRestore()
+        const drainTimeoutIndex = setTimeoutSpy.mock.calls.findLastIndex(() => true)
+        expect(drainTimeoutIndex).toBeGreaterThanOrEqual(0)
+        expect(clearTimeoutSpy).toHaveBeenCalledWith(setTimeoutSpy.mock.results[drainTimeoutIndex].value)
+      } finally {
+        setTimeoutSpy.mockRestore()
+        clearTimeoutSpy.mockRestore()
+        logsShutdownSpy.mockRestore()
+        sendLogsSpy.mockRestore()
+      }
     })
 
     it('pre-init captureLog is drained on flush once init completes', async () => {

@@ -1,5 +1,36 @@
 # @posthog/browser-common
 
+## 0.3.1
+
+### Patch Changes
+
+- [#4340](https://github.com/PostHog/posthog-js/pull/4340) [`4b8867c`](https://github.com/PostHog/posthog-js/commit/4b8867c1e3f752b29ae17339870bd7175d5117c5) Thanks [@marandaneto](https://github.com/marandaneto)! - Avoid redacting session replay network bodies when timestamps or UUID fragments resemble social security or credit card numbers.
+  (2026-07-31)
+
+## 0.3.0
+
+### Minor Changes
+
+- [#4300](https://github.com/PostHog/posthog-js/pull/4300) [`6b48a59`](https://github.com/PostHog/posthog-js/commit/6b48a59ed096a52f720a608ce59cc81c54c2ef4d) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Stream replayable remote config outcomes through shared browser extension clients.
+  (2026-07-31)
+
+## 0.2.5
+
+### Patch Changes
+
+- [#4325](https://github.com/PostHog/posthog-js/pull/4325) [`3bd8a2d`](https://github.com/PostHog/posthog-js/commit/3bd8a2d7599c0ee089594e27be39f3af171e5371) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix dead-click false positives on WebKit when the SDK uses an iframe-sourced MutationObserver fallback.
+  (2026-07-30)
+- Updated dependencies [[`3bd8a2d`](https://github.com/PostHog/posthog-js/commit/3bd8a2d7599c0ee089594e27be39f3af171e5371)]:
+    - @posthog/core@1.45.3
+
+## 0.2.4
+
+### Patch Changes
+
+- [#4284](https://github.com/PostHog/posthog-js/pull/4284) [`fbd457f`](https://github.com/PostHog/posthog-js/commit/fbd457fbba704e9b42ff02728eae42ea844c7fd7) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Reduce extension runtime and contract overhead by replacing the `CoreExtension` and capability-token registry with one host-provided `Client`. Extensions now access analytics, identity, session, events, remote config, transport, persistence, and logging directly from that client.
+
+    Cross-extension `getExtension`/`provides` lookup and session lifecycle observation are no longer part of the shared contract. Extension cleanup is synchronous and best-effort: resources are released in reverse registration order, and Promise-returning legacy cleanup is not awaited but rejected Promises are contained. (2026-07-28)
+
 ## 0.2.3
 
 ### Patch Changes

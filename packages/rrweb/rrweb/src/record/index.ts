@@ -107,6 +107,7 @@ function record<T = eventWithTime>(
     sampling = {},
     dataURLOptions: _dataURLOptions = {},
     canvasResolutionScale,
+    canvasMasking,
     mousemoveWait,
     recordDOM = true,
     recordCanvas = false,
@@ -374,6 +375,8 @@ function record<T = eventWithTime>(
 
   const processedNodeManager = new ProcessedNodeManager();
 
+  const canvasMaskingConfigured = canvasMasking?.configured;
+
   canvasManager = new CanvasManager({
     recordCanvas,
     mutationCb: wrappedCanvasMutationEmit,
@@ -384,6 +387,7 @@ function record<T = eventWithTime>(
     sampling: sampling.canvas,
     dataURLOptions,
     resolutionScale: canvasResolutionScale,
+    canvasMasking,
   });
 
   const shadowDomManager = new ShadowDomManager({
@@ -400,6 +404,7 @@ function record<T = eventWithTime>(
       maskTextFn,
       maskInputFn,
       recordCanvas,
+      canvasMaskingConfigured,
       inlineImages,
       sampling,
       slimDOMOptions,
@@ -448,6 +453,7 @@ function record<T = eventWithTime>(
       slimDOM: slimDOMOptions,
       dataURLOptions,
       recordCanvas,
+      canvasMaskingConfigured,
       inlineImages,
       onSerialize: (n) => {
         if (isSerializedIframe(n, mirror)) {
@@ -492,6 +498,7 @@ function record<T = eventWithTime>(
       isCheckout,
     );
     mutationBuffers.forEach((buf) => buf.unlock()); // generate & emit any mutations that happened during snapshotting, as can now apply against the newly built mirror
+    canvasManager.onFullSnapshot();
 
     if (recordCrossOriginIframes) {
       iframeManager.reattachIframes();
@@ -635,6 +642,7 @@ function record<T = eventWithTime>(
           sampling,
           recordDOM,
           recordCanvas,
+          canvasMaskingConfigured,
           inlineImages,
           userTriggeredOnInput,
           collectFonts,

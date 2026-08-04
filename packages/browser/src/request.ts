@@ -414,6 +414,17 @@ const _fetch = (options: RequestWithOptions & { _keepaliveDisabled?: boolean }) 
 // below this size a rejection means the shared quota is exhausted, not that the payload is too big
 const BEACON_SPLIT_FLOOR_BYTES = 16 * 1024
 
+const addSentAtToBody = (
+    data: NonNullable<RequestWithOptions['data']>,
+    sentAt = new Date().toISOString()
+): NonNullable<RequestWithOptions['data']> => {
+    if (!isArray(data)) {
+        return { ...data, sent_at: sentAt }
+    }
+
+    return data.map((item) => ({ ...item, sent_at: sentAt }))
+}
+
 const _sendBeacon = (options: RequestWithOptions) => {
     // beacon documentation https://w3c.github.io/beacon/
     // beacons format the message and use the type property
@@ -522,8 +533,8 @@ export const request = (_options: RequestWithOptions) => {
     if (options.method === 'POST' && options.data) {
         if (options.timestampMode === 'capture-body') {
             options.data = addSentAtToCaptureBody(options.data)
-        } else if (options.timestampMode === 'body' && !isArray(options.data)) {
-            options.data = { ...options.data, sent_at: new Date().toISOString() }
+        } else if (options.timestampMode === 'body') {
+            options.data = addSentAtToBody(options.data)
         }
     }
 

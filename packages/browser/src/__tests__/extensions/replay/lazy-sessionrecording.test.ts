@@ -1343,6 +1343,259 @@ describe('Lazy SessionRecording', () => {
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].sessionId).toEqual(rotatedSessionId)
             })
 
+            describe('holding rotation-born sessions until interaction', () => {
+                // Rotation-born sessions that never see user interaction must not ship a
+                // billable recording per rotation — a background tab would otherwise produce
+                // one recording every ~30 minutes forever. The recorder still restarts and
+                // re-syncs ids on rotation (#4202), but holds the buffer until interaction.
+                const rotatedSessionId = 'rotation-born-session-id'
+
+                function rotateExternallyWhileUnknown(newSessionId: string = rotatedSessionId): number {
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual('unknown')
+                    sessionIdGeneratorMock.mockClear()
+                    sessionIdGeneratorMock.mockImplementation(() => newSessionId)
+
+                    const rotationTimestamp = sessionManager['_sessionTimeoutMs'] + startingTimestamp + 1000
+                    jest.useFakeTimers().setSystemTime(new Date(rotationTimestamp))
+                    const { sessionId: newId } = sessionManager.checkAndGetSessionAndWindowId(false, rotationTimestamp)
+                    expect(newId).toEqual(newSessionId)
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionId']).toEqual(newSessionId)
+                    ;(posthog.capture as Mock).mockClear()
+                    return rotationTimestamp
+                }
+
+                it('does not flush a rotation-born session on the timer without interaction', () => {
+                    const rotationTimestamp = rotateExternallyWhileUnknown()
+                    const snapshot = emitInactiveEvent(rotationTimestamp + 100, 'unknown')
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toContain(snapshot)
+
+                    jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                    expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+                    // the data stays buffered rather than being dropped
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toContain(snapshot)
+                })
+
+                it('flushes the held buffer on the first interaction, playable from the session start', () => {
+                    const rotationTimestamp = rotateExternallyWhileUnknown()
+                    const meta = createMetaSnapshot({ timestamp: rotationTimestamp + 10 })
+                    const fullSnapshot = createFullSnapshot({ timestamp: rotationTimestamp + 20 })
+                    _emit(meta)
+                    _emit(fullSnapshot)
+
+                    jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                    expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+
+                    const interaction = emitActiveEvent(rotationTimestamp + 1000)
+
+                    // the held Meta -> FullSnapshot ships under the rotated session id
+                    expect(posthog.capture).toHaveBeenCalledWith(
+                        '$snapshot',
+                        expect.objectContaining({
+                            $session_id: rotatedSessionId,
+                            $snapshot_data: [meta, fullSnapshot],
+                        }),
+                        expect.any(Object)
+                    )
+                    // the interaction itself lands in the next buffer under the same session
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toContain(interaction)
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].sessionId).toEqual(
+                        rotatedSessionId
+                    )
+                })
+
+                it('discards a held session that rotates again without interaction', () => {
+                    const firstRotationTimestamp = rotateExternallyWhileUnknown()
+                    emitInactiveEvent(firstRotationTimestamp + 100, 'unknown')
+
+                    sessionIdGeneratorMock.mockImplementation(() => 'second-rotated-session-id')
+                    const secondRotationTimestamp = firstRotationTimestamp + sessionManager['_sessionTimeoutMs'] + 1000
+                    jest.useFakeTimers().setSystemTime(new Date(secondRotationTimestamp))
+                    sessionManager.checkAndGetSessionAndWindowId(false, secondRotationTimestamp)
+
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionId']).toEqual(
+                        'second-rotated-session-id'
+                    )
+                    // nothing from the held epoch shipped, and no stale data survives into the new epoch
+                    expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([])
+                })
+
+                it("transitions from 'unknown' to idle after the threshold with no interaction", () => {
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual('unknown')
+
+                    emitInactiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000, true)
+
+                    expect(_addCustomEvent).toHaveBeenCalledWith('sessionIdle', expect.anything())
+                })
+
+                it('rotates a confirmed-idle session at the 24 hour session cap, into a held epoch', () => {
+                    // An idle tab must keep consulting the session manager: bailing on the
+                    // check is how idle sessions used to blow through SESSION_LENGTH_LIMIT
+                    // into multi-day recordings under one session id.
+                    const firstActivityTimestamp = startingTimestamp + 100
+                    jest.useFakeTimers().setSystemTime(new Date(firstActivityTimestamp))
+                    emitActiveEvent(firstActivityTimestamp)
+
+                    const idleTimestamp = firstActivityTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000
+                    jest.setSystemTime(new Date(idleTimestamp))
+                    emitInactiveEvent(idleTimestamp, true)
+                    const idleSessionId = sessionRecording['_lazyLoadedSessionRecording']['_sessionId']
+
+                    // a day later the still-idle tab emits a non-interactive event; the session
+                    // is past the maximum length and must rotate even though the tab stayed
+                    // idle, and the rotation-born epoch must be held (nobody has interacted)
+                    sessionIdGeneratorMock.mockImplementation(() => 'past-cap-rotated-session-id')
+                    const pastCapTimestamp = startingTimestamp + 24 * 60 * 60 * 1000 + 1000
+                    jest.setSystemTime(new Date(pastCapTimestamp))
+                    emitInactiveEvent(pastCapTimestamp, 'unknown')
+
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionId']).toEqual(
+                        'past-cap-rotated-session-id'
+                    )
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionId']).not.toEqual(idleSessionId)
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_holdFlushUntilInteraction']).toEqual(true)
+                })
+
+                it('does not hold a rotation that happens while the user is active', () => {
+                    emitActiveEvent(startingTimestamp + 100)
+
+                    sessionIdGeneratorMock.mockImplementation(() => 'active-rotated-session-id')
+                    const rotationTimestamp = sessionManager['_sessionTimeoutMs'] + startingTimestamp + 1000
+                    jest.useFakeTimers().setSystemTime(new Date(rotationTimestamp))
+                    ;(posthog.capture as Mock).mockClear()
+                    const interaction = emitActiveEvent(rotationTimestamp)
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_sessionId']).toEqual(
+                        'active-rotated-session-id'
+                    )
+
+                    jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                    expect(posthog.capture).toHaveBeenCalledWith(
+                        '$snapshot',
+                        expect.objectContaining({
+                            $session_id: 'active-rotated-session-id',
+                            $snapshot_data: [interaction],
+                        }),
+                        expect.any(Object)
+                    )
+                })
+
+                it('discards a held buffer on stop() instead of shipping it', () => {
+                    const rotationTimestamp = rotateExternallyWhileUnknown()
+                    emitInactiveEvent(rotationTimestamp + 100, 'unknown')
+
+                    sessionRecording['_lazyLoadedSessionRecording'].stop()
+
+                    expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([])
+                })
+
+                it('discards a held buffer on unload instead of shipping it', () => {
+                    const rotationTimestamp = rotateExternallyWhileUnknown()
+                    emitInactiveEvent(rotationTimestamp + 100, 'unknown')
+
+                    sessionRecording['_lazyLoadedSessionRecording']['_onBeforeUnload']()
+
+                    expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+                })
+
+                it('clears the hold on a fresh start after stop, so the next session ships without interaction', () => {
+                    const rotationTimestamp = rotateExternallyWhileUnknown()
+                    emitInactiveEvent(rotationTimestamp + 100, 'unknown')
+
+                    const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+                    lazyRecorder.stop()
+                    expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+
+                    lazyRecorder.start()
+                    const snapshot = emitInactiveEvent(rotationTimestamp + 200, 'unknown')
+                    jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                    expect(posthog.capture).toHaveBeenCalledWith(
+                        '$snapshot',
+                        expect.objectContaining({ $snapshot_data: expect.arrayContaining([snapshot]) }),
+                        expect.any(Object)
+                    )
+                })
+
+                it('does not clear the hold on a re-entrant start() while a held epoch is live', () => {
+                    const rotationTimestamp = rotateExternallyWhileUnknown()
+                    const snapshot = emitInactiveEvent(rotationTimestamp + 100, 'unknown')
+
+                    // e.g. a remote-config refresh calling start() again on the live recorder
+                    sessionRecording['_lazyLoadedSessionRecording'].start()
+
+                    jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                    expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toContain(snapshot)
+                })
+
+                it('an event trigger match releases the hold even when its activation is a no-op', () => {
+                    // triggerMatchType 'any': a URL trigger can satisfy the combined status
+                    // before the error fires, so the activation is a no-op except for
+                    // releasing the hold.
+                    const rotationTimestamp = rotateExternallyWhileUnknown()
+                    const snapshot = emitInactiveEvent(rotationTimestamp + 100, 'unknown')
+
+                    jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                    expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+
+                    // no pending triggers in this setup, so this activation is a no-op beyond
+                    // releasing the hold, mirroring the already-activated-by-url case
+                    sessionRecording['_lazyLoadedSessionRecording']['_activateTrigger']('event', '$exception')
+
+                    expect(posthog.capture).toHaveBeenCalledWith(
+                        '$snapshot',
+                        expect.objectContaining({
+                            $session_id: rotatedSessionId,
+                            $snapshot_data: expect.arrayContaining([snapshot]),
+                        }),
+                        expect.any(Object)
+                    )
+                })
+
+                it('a URL trigger match does not release the hold', () => {
+                    // URL triggers scope where recording is allowed, not whether anyone touched the session
+                    const rotationTimestamp = rotateExternallyWhileUnknown()
+                    const snapshot = emitInactiveEvent(rotationTimestamp + 100, 'unknown')
+
+                    sessionRecording['_lazyLoadedSessionRecording']['_activateTrigger']('url', 'https://example.com')
+                    jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                    expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toContain(snapshot)
+                })
+
+                it('does not hold a windowId-only restart (no session rotation)', () => {
+                    const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+                    expect(lazyRecorder['_isIdle']).toEqual('unknown')
+                    jest.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                    ;(posthog.capture as Mock).mockClear()
+
+                    lazyRecorder['_windowId'] = 'stale-window-id'
+                    emitInactiveEvent(startingTimestamp + 100, 'unknown')
+
+                    const snapshot = emitInactiveEvent(startingTimestamp + 200, 'unknown')
+                    jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                    expect(posthog.capture).toHaveBeenCalledWith(
+                        '$snapshot',
+                        expect.objectContaining({ $snapshot_data: expect.arrayContaining([snapshot]) }),
+                        expect.any(Object)
+                    )
+                })
+
+                it('ships nothing when recording is stopped (opt-out) with a held epoch', () => {
+                    const rotationTimestamp = rotateExternallyWhileUnknown()
+                    emitInactiveEvent(rotationTimestamp + 100, 'unknown')
+
+                    sessionRecording.stopRecording()
+
+                    expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+                })
+            })
+
             it('takes a full snapshot for the new session on a second idle rotation without user interaction', () => {
                 // Regression test for #4202, reported production sequence: interaction, idle,
                 // rotation (restart leaves _isIdle 'unknown'), no further interaction, second
@@ -3837,6 +4090,124 @@ describe('Lazy SessionRecording', () => {
         })
     })
 
+    describe('sampling passthrough', () => {
+        it('passes user sampling for mousemove and mouseInteraction to rrweb.record', () => {
+            posthog.config.session_recording.sampling = { mousemove: false, mouseInteraction: false }
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    sampling: { mousemove: false, mouseInteraction: false },
+                })
+            )
+        })
+
+        it('passes a falsy numeric mousemove value of 0 to rrweb.record', () => {
+            posthog.config.session_recording.sampling = { mousemove: 0 }
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    sampling: { mousemove: 0 },
+                })
+            )
+        })
+
+        it('passes a numeric mousemove throttle to rrweb.record', () => {
+            posthog.config.session_recording.sampling = { mousemove: 250 }
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    sampling: { mousemove: 250 },
+                })
+            )
+        })
+
+        it('merges user sampling with canvas sampling', () => {
+            posthog.config.session_recording.sampling = { mousemove: false }
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        canvasQuality: '0.2',
+                        canvasFps: 6,
+                        recordCanvas: true,
+                    },
+                })
+            )
+
+            sessionRecording['_onScriptLoaded']()
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    recordCanvas: true,
+                    sampling: { mousemove: false, canvas: 6 },
+                })
+            )
+        })
+
+        it('ignores sampling keys that are not allowlisted', () => {
+            posthog.config.session_recording.sampling = {
+                canvas: 1,
+                scroll: 100,
+                mousemove: false,
+            } as any
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    sampling: { mousemove: false },
+                })
+            )
+        })
+
+        it('does not set sampling when not configured', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    sampling: undefined,
+                })
+            )
+        })
+    })
+
     describe('console logs', () => {
         it('if not enabled, plugin is not used', () => {
             posthog.config.enable_recording_console_log = false
@@ -4453,6 +4824,120 @@ describe('Lazy SessionRecording', () => {
             expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
                 expect.objectContaining({ canvasResolutionScale: expected })
             )
+        })
+
+        it('passes a regions provider that reads the live config', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', canvasQuality: '0.2', canvasFps: 6, recordCanvas: true },
+                })
+            )
+
+            sessionRecording['_onScriptLoaded']()
+
+            const mockParams = assignableWindow.__PosthogExtensions__.rrweb.record.mock.calls[0][0]
+            const canvas = {} as HTMLCanvasElement
+
+            // no provider configured, so the canvas records unmasked
+            expect(mockParams.canvasMasking.regionsFn(canvas)).toBeUndefined()
+
+            const regions = [{ x: 1, y: 2, width: 3, height: 4 }]
+            const regionsFn = jest.fn(() => regions)
+            config.session_recording.canvasCapture = { maskRegionsFn: regionsFn }
+            expect(mockParams.canvasMasking.regionsFn(canvas)).toBe(regions)
+            expect(regionsFn).toHaveBeenCalledWith(canvas)
+        })
+
+        it('marks canvasMasking configured when maskRegionsFn is set at record start', () => {
+            config.session_recording.canvasCapture = { maskRegionsFn: jest.fn(() => []) }
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', canvasQuality: '0.2', canvasFps: 6, recordCanvas: true },
+                })
+            )
+
+            sessionRecording['_onScriptLoaded']()
+
+            const mockParams = assignableWindow.__PosthogExtensions__.rrweb.record.mock.calls[0][0]
+            expect(mockParams.canvasMasking.configured()).toBe(true)
+        })
+
+        it('does not mark canvasMasking configured when only recordCanvas is on', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', canvasQuality: '0.2', canvasFps: 6, recordCanvas: true },
+                })
+            )
+
+            sessionRecording['_onScriptLoaded']()
+
+            const mockParams = assignableWindow.__PosthogExtensions__.rrweb.record.mock.calls[0][0]
+            expect(mockParams.canvasMasking.configured()).toBe(false)
+        })
+
+        it('reads canvasMasking configured from the live config', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', canvasQuality: '0.2', canvasFps: 6, recordCanvas: true },
+                })
+            )
+
+            sessionRecording['_onScriptLoaded']()
+
+            const mockParams = assignableWindow.__PosthogExtensions__.rrweb.record.mock.calls[0][0]
+            expect(mockParams.canvasMasking.configured()).toBe(false)
+
+            config.session_recording.canvasCapture = { maskRegionsFn: jest.fn(() => []) }
+            expect(mockParams.canvasMasking.configured()).toBe(true)
+        })
+
+        it.each([
+            ['null', null],
+            ['undefined', undefined],
+        ])('reports null when a configured provider returns %s', (_name, returned) => {
+            config.session_recording.canvasCapture = { maskRegionsFn: jest.fn(() => returned) }
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', canvasQuality: '0.2', canvasFps: 6, recordCanvas: true },
+                })
+            )
+
+            sessionRecording['_onScriptLoaded']()
+
+            const mockParams = assignableWindow.__PosthogExtensions__.rrweb.record.mock.calls[0][0]
+            expect(mockParams.canvasMasking.regionsFn({} as HTMLCanvasElement)).toBe(null)
+        })
+
+        it('reports null and warns once when a configured provider throws', () => {
+            assignableWindow.POSTHOG_DEBUG = true
+            const logSpy = jest.spyOn(window!.console, 'log').mockImplementation(() => {})
+            const warnSpy = jest.spyOn(window!.console, 'warn').mockImplementation(() => {})
+            const regionsFn = jest.fn(() => {
+                throw new Error('boom')
+            })
+            config.session_recording.canvasCapture = { maskRegionsFn: regionsFn }
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { endpoint: '/s/', canvasQuality: '0.2', canvasFps: 6, recordCanvas: true },
+                })
+            )
+
+            sessionRecording['_onScriptLoaded']()
+
+            const mockParams = assignableWindow.__PosthogExtensions__.rrweb.record.mock.calls[0][0]
+            expect(mockParams.canvasMasking.regionsFn({} as HTMLCanvasElement)).toBe(null)
+            expect(mockParams.canvasMasking.regionsFn({} as HTMLCanvasElement)).toBe(null)
+
+            expect(regionsFn).toHaveBeenCalledTimes(2)
+            expect(
+                warnSpy.mock.calls.filter(
+                    (call) => typeof call[1] === 'string' && call[1].includes('maskRegionsFn threw')
+                )
+            ).toHaveLength(1)
+
+            logSpy.mockRestore()
+            warnSpy.mockRestore()
+            assignableWindow.POSTHOG_DEBUG = undefined
         })
 
         it('skips when any config variable is missing', () => {

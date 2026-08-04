@@ -1,20 +1,18 @@
 import type { Logger } from '@posthog/core'
 import type { Properties } from '@posthog/types'
 
-import type { ApiResponse, Client, SendRequestInit } from '../../src/client'
-import { CoreExtension as CoreExtensionToken } from '../../src/core-extension'
 import type {
+    ApiResponse,
     CaptureOptions,
     CapturedEventInfo,
-    CoreExtension,
-    NewSessionInfo,
+    Client,
+    SendRequestInit,
     SessionContext,
-} from '../../src/core-extension'
+} from '../../src/client'
 import { createDisposable, type Disposable } from '../../src/disposable'
 import type { KeyValueStore } from '../../src/persistence'
 import { Publisher } from '../../src/pubsub'
-import type { RemoteConfig } from '../../src/types/remote-config'
-import type { ExtensionToken } from '../../src/token'
+import type { RemoteConfig, RemoteConfigResult } from '../../src/types/remote-config'
 
 export interface TestCapturedEvent {
     event: string
@@ -69,27 +67,35 @@ function createDefaultApiResponse(): ApiResponse {
     return { statusCode: 200 }
 }
 
-export class TestCoreExtension implements CoreExtension {
-    readonly name = 'core'
-    readonly provides = [CoreExtensionToken]
+export class TestClient implements Client {
+    readonly projectToken: string
     readonly capturedEvents: TestCapturedEvent[] = []
+    readonly sentRequests: TestSentRequest[] = []
+    readonly kv: KeyValueStore = new InMemoryKeyValueStore()
+    readonly logger: Logger
 
     distinctId: string
     anonymousId: string
     groups: Record<string, string>
     session: SessionContext
 
-    private _remoteConfig: RemoteConfig | undefined
+    private _remoteConfigResult: RemoteConfigResult | undefined
+    private _requestResponse: ApiResponse
     private _dynamicEventPropertyProducers: Array<() => Record<string, unknown>> = []
     private _eventPublisher = new Publisher<CapturedEventInfo>()
-    private _newSessionPublisher = new Publisher<NewSessionInfo>()
-    private _remoteConfigPublisher = new Publisher<RemoteConfig>()
+    private _remoteConfigPublisher = new Publisher<RemoteConfigResult>()
 
     readonly onEvent = this._eventPublisher.listener
-    readonly onNewSession = this._newSessionPublisher.listener
-    readonly onRemoteConfig = this._remoteConfigPublisher.listener
+    readonly onRemoteConfig: Client['onRemoteConfig'] = (handler) => {
+        const subscription = this._remoteConfigPublisher.listener(handler)
+        if (this._remoteConfigResult) {
+            handler(this._remoteConfigResult)
+        }
+        return subscription
+    }
 
     constructor(options: TestClientOptions = {}) {
+        this.projectToken = options.projectToken ?? 'test-project-token'
         this.distinctId = options.distinctId ?? 'test-distinct-id'
         this.anonymousId = options.anonymousId ?? 'test-anonymous-id'
         this.groups = options.groups ?? {}
@@ -98,10 +104,10 @@ export class TestCoreExtension implements CoreExtension {
             windowId: 'test-window-id',
             sessionStartTimestamp: 0,
         }
-        this._remoteConfig = options.remoteConfig
+        this._remoteConfigResult = options.remoteConfig ? { ok: true, config: options.remoteConfig } : undefined
+        this.logger = options.logger ?? noopLogger
+        this._requestResponse = options.requestResponse ?? createDefaultApiResponse()
     }
-
-    setup(): void {}
 
     async capture(event: string, properties?: Properties | null, options?: CaptureOptions): Promise<void> {
         const dynamicProperties = this._dynamicEventPropertyProducers.reduce(
@@ -125,88 +131,28 @@ export class TestCoreExtension implements CoreExtension {
         })
     }
 
-    async getRemoteConfig(): Promise<RemoteConfig | undefined> {
-        return this._remoteConfig
+    async sendRequest(path: string, init?: SendRequestInit): Promise<ApiResponse> {
+        this.sentRequests.push({ path, init })
+        return this._requestResponse
     }
 
     setRemoteConfig(remoteConfig: RemoteConfig): void {
-        this._remoteConfig = remoteConfig
-        this._remoteConfigPublisher.publish(remoteConfig)
+        this.setRemoteConfigResult({ ok: true, config: remoteConfig })
+    }
+
+    setRemoteConfigResult(result: RemoteConfigResult): void {
+        this._remoteConfigResult = result
+        this._remoteConfigPublisher.publish(result)
     }
 
     publishEvent(event: string, properties: Record<string, unknown> = {}): void {
         this._eventPublisher.publish({ event, properties })
     }
 
-    startNewSession(session: NewSessionInfo): void {
-        this.session = {
-            sessionId: session.sessionId,
-            windowId: session.windowId,
-            sessionStartTimestamp: session.sessionStartTimestamp,
-        }
-        this._newSessionPublisher.publish(session)
-    }
-
     dispose(): void {
         this._eventPublisher.dispose()
-        this._newSessionPublisher.dispose()
         this._remoteConfigPublisher.dispose()
         this._dynamicEventPropertyProducers = []
-    }
-}
-
-export class TestClient implements Client {
-    readonly projectToken: string
-    readonly sentRequests: TestSentRequest[] = []
-    readonly core: TestCoreExtension
-    readonly kv: KeyValueStore = new InMemoryKeyValueStore()
-    readonly logger: Logger
-
-    private _requestResponse: ApiResponse
-    private _extensions = new Map<string, unknown>()
-
-    constructor(options: TestClientOptions = {}) {
-        this.projectToken = options.projectToken ?? 'test-project-token'
-        this.core = new TestCoreExtension(options)
-        this._extensions.set(CoreExtensionToken, this.core)
-        this.logger = options.logger ?? noopLogger
-        this._requestResponse = options.requestResponse ?? createDefaultApiResponse()
-    }
-
-    get capturedEvents(): TestCapturedEvent[] {
-        return this.core.capturedEvents
-    }
-
-    async sendRequest(path: string, init?: SendRequestInit): Promise<ApiResponse> {
-        this.sentRequests.push({ path, init })
-        return this._requestResponse
-    }
-
-    getExtension<T>(token: ExtensionToken<T>): T | undefined {
-        return this._extensions.get(token) as T | undefined
-    }
-
-    registerExtension<T>(token: ExtensionToken<T>, extension: T): Disposable {
-        this._extensions.set(token, extension)
-
-        return createDisposable(() => this._extensions.delete(token))
-    }
-
-    setRemoteConfig(remoteConfig: RemoteConfig): void {
-        this.core.setRemoteConfig(remoteConfig)
-    }
-
-    publishEvent(event: string, properties: Record<string, unknown> = {}): void {
-        this.core.publishEvent(event, properties)
-    }
-
-    startNewSession(session: NewSessionInfo): void {
-        this.core.startNewSession(session)
-    }
-
-    dispose(): void {
-        this.core.dispose()
-        this._extensions.clear()
     }
 }
 

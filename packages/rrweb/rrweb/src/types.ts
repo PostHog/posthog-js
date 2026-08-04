@@ -12,6 +12,7 @@ import type { RRNode } from '@posthog/rrdom';
 import type { CanvasManager } from './record/observers/canvas/canvas-manager';
 import type { StylesheetManager } from './record/stylesheet-manager';
 import type {
+  CanvasMasking,
   DataURLOptions,
   addedNodeMutation,
   blockClass,
@@ -79,6 +80,7 @@ export type recordOptions<T> = {
   // (0,1] fraction of canvas display size to capture FPS-snapshot frames at; replay upscales
   // back to display size, so playback dimensions are unchanged, just softer. defaults to 1.
   canvasResolutionScale?: number;
+  canvasMasking?: CanvasMasking;
   recordDOM?: boolean;
   recordCanvas?: boolean;
   recordCrossOriginIframes?: boolean;
@@ -121,6 +123,7 @@ export type observerParam = {
   sampling: SamplingStrategy;
   recordDOM: boolean;
   recordCanvas: boolean;
+  canvasMaskingConfigured: (() => boolean) | undefined;
   inlineImages: boolean;
   userTriggeredOnInput: boolean;
   collectFonts: boolean;
@@ -159,6 +162,7 @@ export type MutationBufferParam = Pick<
   | 'maskInputFn'
   | 'keepIframeSrcFn'
   | 'recordCanvas'
+  | 'canvasMaskingConfigured'
   | 'inlineImages'
   | 'slimDOMOptions'
   | 'dataURLOptions'
@@ -210,6 +214,18 @@ export type playerConfig = {
       };
   unpackFn?: UnpackFn;
   useVirtualDom: boolean;
+  /**
+   * Maximum milliseconds of continuous main-thread work while fast-forwarding
+   * to a seek target before yielding to the event loop; long, event-dense
+   * recordings can otherwise block the page for many seconds on a seek.
+   * 0 (default) keeps the whole rebuild synchronous, so the target frame is
+   * fully rendered when pause(t)/play(t) return.
+   *
+   * While a chunked rebuild is still applying, getCurrentTime() already
+   * reports the seek target, but the rendered frame lags until the rebuild's
+   * Flush — don't read the iframe DOM right after a seek with a budget set.
+   */
+  seekYieldBudgetMs?: number;
   logger: {
     log: (...args: Parameters<typeof console.log>) => void;
     warn: (...args: Parameters<typeof console.warn>) => void;

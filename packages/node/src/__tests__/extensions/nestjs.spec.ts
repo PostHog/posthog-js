@@ -1,5 +1,5 @@
 import type { IncomingHttpHeaders } from 'node:http'
-import { of, throwError, lastValueFrom } from 'rxjs'
+import { defer, of, throwError, lastValueFrom } from 'rxjs'
 
 import { PostHog } from '@/entrypoints/index.node'
 import { PostHogInterceptor } from '@/extensions/nestjs'
@@ -229,6 +229,100 @@ describe('PostHogInterceptor', () => {
       expect(event).toBeDefined()
       expect(event.distinct_id).toBe('user-xyz')
       expect(event.properties.$session_id).toBe('session-abc')
+    })
+
+    it('should isolate request contexts when observables are created before subscription', async () => {
+      const interceptor = new PostHogInterceptor(posthog)
+      const capturedContexts: Record<string, any> = {}
+      const createHandler = (request: string) => ({
+        handle: () =>
+          defer(() => {
+            capturedContexts[request] = posthog.getContext()
+            return of(request)
+          }),
+      })
+
+      const firstRequest = interceptor.intercept(
+        createMockContext({
+          headers: {
+            'x-posthog-session-id': 'session-first',
+            'x-posthog-distinct-id': 'user-first',
+          },
+          path: '/first',
+        }),
+        createHandler('first')
+      )
+      const secondRequest = interceptor.intercept(
+        createMockContext({
+          headers: {
+            'x-posthog-session-id': 'session-second',
+            'x-posthog-distinct-id': 'user-second',
+          },
+          path: '/second',
+        }),
+        createHandler('second')
+      )
+
+      await lastValueFrom(firstRequest)
+      await lastValueFrom(secondRequest)
+
+      expect(capturedContexts.first).toMatchObject({
+        sessionId: 'session-first',
+        distinctId: 'user-first',
+        properties: { $request_path: '/first' },
+      })
+      expect(capturedContexts.second).toMatchObject({
+        sessionId: 'session-second',
+        distinctId: 'user-second',
+        properties: { $request_path: '/second' },
+      })
+    })
+
+    it('should give headerless requests a fresh context at subscription', async () => {
+      const interceptor = new PostHogInterceptor(posthog)
+      const capturedContexts: Record<string, any> = {}
+      const createHandler = (request: string) => ({
+        handle: () =>
+          defer(() => {
+            capturedContexts[request] = posthog.getContext()
+            return of(request)
+          }),
+      })
+
+      posthog.enterContext({
+        sessionId: 'ambient-session',
+        distinctId: 'ambient-user',
+        properties: { ambient: true },
+      })
+
+      const headerRequest = interceptor.intercept(
+        createMockContext({
+          headers: {
+            'x-posthog-session-id': 'request-session',
+            'x-posthog-distinct-id': 'request-user',
+          },
+        }),
+        createHandler('with-headers')
+      )
+      const headerlessRequest = interceptor.intercept(
+        createMockContext({ headers: {}, path: '/headerless' }),
+        createHandler('headerless')
+      )
+
+      await lastValueFrom(headerRequest)
+      await lastValueFrom(headerlessRequest)
+
+      expect(capturedContexts['with-headers']).toMatchObject({
+        sessionId: 'request-session',
+        distinctId: 'request-user',
+      })
+      expect(capturedContexts['with-headers'].properties.ambient).toBeUndefined()
+      expect(capturedContexts.headerless).toMatchObject({
+        properties: { $request_path: '/headerless' },
+      })
+      expect(capturedContexts.headerless.sessionId).toBeUndefined()
+      expect(capturedContexts.headerless.distinctId).toBeUndefined()
+      expect(capturedContexts.headerless.properties.ambient).toBeUndefined()
     })
 
     it('should pass through successful responses', async () => {

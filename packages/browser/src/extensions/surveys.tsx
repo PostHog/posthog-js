@@ -24,6 +24,7 @@ import {
     doesSurveyActivateByAction,
     doesSurveyActivateByEvent,
     IN_APP_SURVEY_TYPES,
+    isSurveyIterationBased,
     isSurveyRunning,
     SURVEY_LOGGER as logger,
 } from '../utils/survey-utils'
@@ -127,7 +128,7 @@ const SURVEY_TARGETING_FLAG_PREFIX = 'survey-targeting-'
 export class SurveyManager {
     private _posthog: PostHog
     private _surveyInFocus: string | null
-    private _surveyTimeouts: Map<string, NodeJS.Timeout> = new Map()
+    private _surveyTimeouts: Map<string, ReturnType<Window['setTimeout']>> = new Map()
     private _widgetSelectorListeners: Map<string, { element: Element; listener: EventListener; survey: Survey }> =
         new Map()
     private _prefillHandledSurveys: Set<string> = new Set()
@@ -241,7 +242,7 @@ export class SurveyManager {
         if (delaySeconds <= 0) {
             return render(<SurveyPopup {...surveyPopupProps} />, shadow)
         }
-        const timeoutId = setTimeout(() => {
+        const timeoutId = window.setTimeout(() => {
             // remove survey to keep `_surveyTimeouts` as a true list of "pending" surveys
             this._surveyTimeouts.delete(survey.id)
 
@@ -292,14 +293,39 @@ export class SurveyManager {
         )
     }
 
-    private _removeWidgetSelectorListener = (survey: Pick<Survey, 'id' | 'type' | 'appearance'>): void => {
-        this._removeSurveyFromDom(survey)
-        const existing = this._widgetSelectorListeners.get(survey.id)
+    // Detach the tracked click listener (and its marker attribute) from the trigger element for a
+    // survey, without touching the rendered survey DOM. Safe to call while a survey is open — it
+    // only cleans up the trigger wiring, which is what an element swap needs.
+    private _detachWidgetSelectorListener = (surveyId: string): void => {
+        const existing = this._widgetSelectorListeners.get(surveyId)
         if (existing) {
             existing.element.removeEventListener('click', existing.listener)
             existing.element.removeAttribute(WIDGET_LISTENER_ATTRIBUTE)
-            this._widgetSelectorListeners.delete(survey.id)
-            logger.info(`Removed click listener for survey ${survey.id}`)
+            this._widgetSelectorListeners.delete(surveyId)
+            logger.info(`Removed click listener for survey ${surveyId}`)
+        }
+    }
+
+    private _removeWidgetSelectorListener = (survey: Pick<Survey, 'id' | 'type' | 'appearance'>): void => {
+        // Defer teardown while the survey is open (issue #2036). The trigger element may have
+        // been unmounted mid-survey — e.g. a dropdown/menu that hosts it was closed — and tearing
+        // the survey down here would make the open survey abruptly vanish. Keep it in place; the
+        // next display poll retries this cleanup once the user has closed the survey.
+        if (this._isWidgetSurveyOpen(survey)) {
+            return
+        }
+        this._removeSurveyFromDom(survey)
+        this._detachWidgetSelectorListener(survey.id)
+    }
+
+    private _isWidgetSurveyOpen = (survey: Pick<Survey, 'id' | 'type' | 'appearance'>): boolean => {
+        try {
+            // The survey popup (`.ph-survey`) is only present in the shadow root while the survey
+            // is actually open; when only the widget/trigger is mounted it is absent.
+            const shadowContainer = document.querySelector(getSurveyContainerClass(survey, true))
+            return !!shadowContainer?.shadowRoot?.querySelector('.ph-survey')
+        } catch {
+            return false
         }
     }
 
@@ -320,7 +346,12 @@ export class SurveyManager {
             // Listener exists, check if element changed
             if (currentElement !== existingListenerData.element) {
                 logger.info(`Selector element changed for survey ${survey.id}. Re-attaching listener.`)
-                this._removeWidgetSelectorListener(survey)
+                // Detach the *old* element's listener directly. Routing this through
+                // _removeWidgetSelectorListener would defer while the survey is open (to avoid
+                // tearing down the open survey's DOM), leaking the old element's listener — and the
+                // map entry that tracks it is overwritten just below, losing the only reference
+                // needed to ever clean it up.
+                this._detachWidgetSelectorListener(survey.id)
                 // Continue to attach listener to the new element below
             } else {
                 // Element is the same, listener already attached, do nothing
@@ -403,7 +434,7 @@ export class SurveyManager {
         const { survey: translatedSurvey, language: surveyLanguage } = this._translateSurveyForRendering(survey)
         let isSurveyCompleted = false
         if (this._posthog.config?.surveys?.prefillFromUrl) {
-            isSurveyCompleted = this._handleUrlPrefill(translatedSurvey, surveyLanguage)
+            isSurveyCompleted = this._handleUrlPrefill(translatedSurvey, surveyLanguage, properties)
         }
 
         render(
@@ -426,7 +457,7 @@ export class SurveyManager {
         return applySurveyTranslationForUser(survey, this._posthog)
     }
 
-    private _handleUrlPrefill(survey: Survey, surveyLanguage?: string | null): boolean {
+    private _handleUrlPrefill(survey: Survey, surveyLanguage?: string | null, properties?: Properties): boolean {
         // Only handle prefill once per survey session to avoid overwriting in-progress responses
         if (this._prefillHandledSurveys.has(survey.id)) {
             return false
@@ -460,6 +491,7 @@ export class SurveyManager {
                 surveySubmissionId: submissionId,
                 posthog: this._posthog,
                 isSurveyCompleted,
+                properties,
                 surveyLanguage,
             })
         }
@@ -533,7 +565,7 @@ export class SurveyManager {
 
             // calculate which question to start at based on prefilled questions
             const prefilledIndices = Object.keys(prefillParams).map((k) => parseInt(k, 10))
-            const { startQuestionIndex, skippedResponses } = calculatePrefillStartIndex(
+            const { startQuestionIndex, skippedResponses, skippedIndices } = calculatePrefillStartIndex(
                 survey,
                 prefilledIndices,
                 responses
@@ -544,6 +576,8 @@ export class SurveyManager {
                 surveySubmissionId: submissionId,
                 responses: responses,
                 lastQuestionIndex: startQuestionIndex,
+                // Mark auto-advanced questions visited so a manual submit doesn't prune their answers.
+                visitedIndices: skippedIndices,
                 surveyLanguage,
             })
 
@@ -593,7 +627,23 @@ export class SurveyManager {
         // SDK serves the previous value from cache until the next /flags load. Trusting that stale
         // value on a revisit re-displays the survey and records a duplicate response, so wait until
         // flags have actually (re)loaded this session before relying on the internal targeting flag.
-        if (survey.internal_targeting_flag_key && !this._posthog.featureFlags?.hasLoadedFlags) {
+        //
+        // Only iteration-based surveys need that wait: their stored seen state is keyed by iteration
+        // and rolls over, leaving the flag as the sole duplicate gate. Any other survey keeps one
+        // stable seen key that already blocks re-display, and waiting there costs real eligibility,
+        // permanently so for a caller that asks once and never asks again.
+        //
+        // The gap this accepts: a response recorded on another device, or a cleared localStorage,
+        // leaves no seen key here while this browser can still hold a cached enabled flag, so the
+        // survey can display once more before the next /flags load corrects it. A zero-delay popover
+        // is already rendered by then and no later evaluation withdraws it. Waiting on flags closes
+        // that gap but drops every impression in the pre-flags window, which is the larger loss, so
+        // do not widen this condition back out without replacing what it costs.
+        if (
+            survey.internal_targeting_flag_key &&
+            isSurveyIterationBased(survey) &&
+            !this._posthog.featureFlags?.hasLoadedFlags
+        ) {
             return {
                 satisfied: false,
                 reason: 'Feature flags have not loaded yet; deferring internal targeting flag check',
