@@ -152,6 +152,7 @@
         "_discardRecording",
         "_disposeExtension",
         "_disposed",
+        "_documentWasEverVisible",
         "_doFlush",
         "_doInitializeWidget",
         "_doesEventMatchFilter",

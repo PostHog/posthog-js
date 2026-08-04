@@ -289,7 +289,7 @@ interface PostHogExtensions {
     integrations?: {
         [K in ExternalIntegrationKind]?: { start: (posthog: PostHog) => void; stop: () => void }
     }
-    initSessionRecording?: (ph: PostHog) => LazyLoadedSessionRecordingInterface
+    initSessionRecording?: (ph: PostHog, documentWasEverVisible?: boolean) => LazyLoadedSessionRecordingInterface
     initConversations?: (config: ConversationsRemoteConfig, posthog: PostHog) => LazyLoadedConversationsInterface
 }
 

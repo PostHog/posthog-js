@@ -22,7 +22,8 @@ import { type eventWithTime } from './types/rrweb-types'
 
 import { isNullish, isNumber, isUndefined, isValidSampleRate } from '@posthog/core'
 import { createLogger } from '@posthog/browser-common/utils/logger'
-import { window } from '@posthog/browser-common/utils/globals'
+import { document, window } from '@posthog/browser-common/utils/globals'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { assignableWindow, LazyLoadedSessionRecordingInterface, PostHogExtensionKind } from '../../utils/globals'
 import { RECORDING_REMOTE_CONFIG_TTL_MS } from './external/lazy-loaded-session-recorder'
 import {
@@ -53,6 +54,13 @@ export class SessionRecording implements Extension {
 
     private _persistFlagsOnSessionListener: (() => void) | undefined = undefined
     private _lazyLoadedSessionRecording: LazyLoadedSessionRecordingInterface | undefined
+    private _documentWasEverVisible = !document?.visibilityState || document.visibilityState === 'visible'
+
+    private _onVisibilityChange = (): void => {
+        if (document?.visibilityState === 'visible') {
+            this._documentWasEverVisible = true
+        }
+    }
 
     public get started(): boolean {
         return !!this._lazyLoadedSessionRecording?.isStarted
@@ -74,6 +82,10 @@ export class SessionRecording implements Extension {
         if (this._config.cookieless_mode === COOKIELESS_ALWAYS) {
             throw new Error(LOGGER_PREFIX + ' cannot be used with cookieless_mode="always"')
         }
+
+        // Start before the recorder chunk loads so a visible -> hidden transition during
+        // lazy loading is not mistaken for a document that was never foregrounded.
+        addEventListener(document, 'visibilitychange', this._onVisibilityChange)
     }
 
     initialize() {
@@ -308,8 +320,12 @@ export class SessionRecording implements Extension {
 
         if (!this._lazyLoadedSessionRecording) {
             this._lazyLoadedSessionRecording = assignableWindow.__PosthogExtensions__?.initSessionRecording(
-                this._instance
+                this._instance,
+                this._documentWasEverVisible
             )
+            if (this._lazyLoadedSessionRecording) {
+                document?.removeEventListener('visibilitychange', this._onVisibilityChange)
+            }
             ;(this._lazyLoadedSessionRecording as any)._forceAllowLocalhostNetworkCapture =
                 this._forceAllowLocalhostNetworkCapture
         }
