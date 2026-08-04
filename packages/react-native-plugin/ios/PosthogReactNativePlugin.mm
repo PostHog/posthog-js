@@ -1,6 +1,7 @@
 #import <React/RCTBridgeModule.h>
+#import <React/RCTEventEmitter.h>
 
-@interface RCT_EXTERN_MODULE(PosthogReactNativePlugin, NSObject)
+@interface RCT_EXTERN_MODULE(PosthogReactNativePlugin, RCTEventEmitter)
 
 RCT_EXTERN_METHOD(setup:(NSString)sessionId
                  withSdkOptions:(NSDictionary)sdkOptions
@@ -39,6 +40,28 @@ RCT_EXTERN_METHOD(stopRecording:(RCTPromiseResolveBlock)resolve
 
 RCT_EXTERN_METHOD(addExceptionStep:(NSString)message
                  withProperties:(NSDictionary)properties
+                 withResolver:(RCTPromiseResolveBlock)resolve
+                 withRejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(reset:(NSString)distinctId
+                 withAnonymousId:(NSString)anonymousId
+                 withResolver:(RCTPromiseResolveBlock)resolve
+                 withRejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(registerPushNotificationToken:(NSString)deviceToken
+                 withAppId:(NSString)appId
+                 withResolver:(RCTPromiseResolveBlock)resolve
+                 withRejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(unregisterPushNotificationToken:(RCTPromiseResolveBlock)resolve
+                 withRejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(capturePushNotificationOpened:(NSDictionary)properties
+                 withResolver:(RCTPromiseResolveBlock)resolve
+                 withRejecter:(RCTPromiseRejectBlock)reject)
+
+RCT_EXTERN_METHOD(providePushIdentityToken:(NSString)requestId
+                 withToken:(NSString)token
                  withResolver:(RCTPromiseResolveBlock)resolve
                  withRejecter:(RCTPromiseRejectBlock)reject)
 
