@@ -88,6 +88,7 @@ describe('captureAiGeneration', () => {
 
     const event = (client.capture as jest.Mock).mock.calls[0][0]
     expect(event.properties.$ai_trace_id).toEqual(expect.any(String))
+    expect(event.properties).not.toHaveProperty('$ai_latency')
     expect(event.distinctId).toBe(event.properties.$ai_trace_id)
     // Anonymous events disable person processing
     expect(event.properties.$process_person_profile).toBe(false)
