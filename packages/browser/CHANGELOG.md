@@ -1,5 +1,27 @@
 # posthog-js
 
+## 1.410.10
+
+### Patch Changes
+
+- [#4271](https://github.com/PostHog/posthog-js/pull/4271) [`3d4e2fd`](https://github.com/PostHog/posthog-js/commit/3d4e2fd566df1ac630a40bc8d0acc615e6bf3bba) Thanks [@felipeatom](https://github.com/felipeatom)! - Fix inline surveys rendering an empty container when a stale persisted question index (left over from a prior completion) points past the last question. When the persisted index is out of range the whole in-progress record is now discarded and the survey starts fresh, instead of clamping the index while keeping the equally-stale responses and visited indices. Restored visited indices are also filtered to valid questions so the Back button can never navigate to a non-existent question and re-empty the container.
+  (2026-08-04)
+
+- [#4412](https://github.com/PostHog/posthog-js/pull/4412) [`5f2b78a`](https://github.com/PostHog/posthog-js/commit/5f2b78af317266502754f91bff0192ab5ef36ba6) Thanks [@TueHaulund](https://github.com/TueHaulund)! - fix(replay): hold fresh interaction-less session recordings until there is evidence someone cares
+
+    A tab that loads but never sees any user interaction (prefetched pages, background tabs, in-app browser preloads) no longer ships a billable recording while it sits untouched. Like rotation-born sessions, a fresh recording epoch is held until there is evidence someone cares about it: a user interaction, an event trigger match, or an explicit override (`posthog.startSessionRecording(...)`) releases the hold and ships the buffer on the normal flush cadence, so released recordings are playable from the session's start. A clean unload also ships a fresh-start hold, so passive visits (reading, watching a video) are still captured exactly as before; rotation-born holds are discarded on unload as before. A held buffer that reaches the size cap is dropped to bound memory, and a later release takes a fresh full snapshot so the recording resumes playable. (2026-08-04)
+
+- [#4410](https://github.com/PostHog/posthog-js/pull/4410) [`064874a`](https://github.com/PostHog/posthog-js/commit/064874a62ea23d200ef2b7741820998638474576) Thanks [@ioannisj](https://github.com/ioannisj)! - Fix held rotation-born session replay buffers not flushing when a V2 event trigger matches
+  (2026-08-04)
+
+- [#4343](https://github.com/PostHog/posthog-js/pull/4343) [`83a9b67`](https://github.com/PostHog/posthog-js/commit/83a9b67b1985d76eb6b780cf550bfb3b223a01d8) Thanks [@arnohillen](https://github.com/arnohillen)! - Session replay no longer freezes the page re-encoding base64 images that are already small. When canvas recording is enabled, every `<img>` with a `data:` URL was synchronously redrawn and re-encoded through `canvas.toDataURL` during full snapshots and attribute mutations. The encode cost scales with pixel dimensions, not payload size, so a page of base64 lazy-load placeholders (measured: 18 images of 4096x3072 at ~33KB each) blocked the main thread for 7+ seconds to produce outputs that were larger than the inputs. Recompression now skips data URLs under 100KB (where it cannot save meaningful payload), keeps the original when the re-encoded output is not smaller, and memoizes by input so repeated snapshots and src-swapping mutations never pay for the same image twice. Genuinely large base64 images are still recompressed as before.
+  (2026-08-04)
+
+- [#4339](https://github.com/PostHog/posthog-js/pull/4339) [`f865818`](https://github.com/PostHog/posthog-js/commit/f8658186617a922ffd633428b20da330fd856138) Thanks [@posthog](https://github.com/apps/posthog)! - Report privacy-aware dropped-event count, page and session context in the client rate limit warning
+  (2026-08-04)
+- Updated dependencies [[`f865818`](https://github.com/PostHog/posthog-js/commit/f8658186617a922ffd633428b20da330fd856138)]:
+    - @posthog/types@1.400.2
+
 ## 1.410.9
 
 ### Patch Changes
