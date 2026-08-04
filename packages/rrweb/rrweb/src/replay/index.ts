@@ -2056,6 +2056,21 @@ export class Replayer {
                 if (tn) {
                   textarea.appendChild(tn as TNode);
                 }
+              } else if (
+                attributeName === 'xlink:href' &&
+                (
+                  mirror.getMeta(target as Node & RRNode) as
+                    | serializedElementNodeWithId
+                    | null
+                )?.isSVG
+              ) {
+                // without its namespace the attribute is inert on SVG elements;
+                // mirrors rebuild and rrdom's diffProps
+                (target as Element | RRElement).setAttributeNS(
+                  'http://www.w3.org/1999/xlink',
+                  attributeName,
+                  value,
+                );
               } else {
                 (target as Element | RRElement).setAttribute(
                   attributeName,
