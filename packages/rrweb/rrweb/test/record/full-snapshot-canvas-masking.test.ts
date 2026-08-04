@@ -29,6 +29,10 @@ vi.mock('../../src/record/observers/canvas/webgl', () => ({
   default: () => () => {},
 }));
 
+const workerInstances = vi.hoisted(
+  () => [] as Array<{ postMessage: ReturnType<typeof vi.fn> }>,
+);
+
 vi.mock(
   '../../src/record/workers/image-bitmap-data-url-worker?worker&inline',
   () => ({
@@ -37,6 +41,9 @@ vi.mock(
       onerror: ((e: ErrorEvent) => void) | null = null;
       postMessage = vi.fn();
       terminate = vi.fn();
+      constructor() {
+        workerInstances.push(this);
+      }
     },
   }),
 );
@@ -51,6 +58,8 @@ describe('full snapshot canvas masking flag', () => {
     stop?.();
     stop = undefined;
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
+    workerInstances.length = 0;
   });
 
   it('passes the configured thunk itself to the full snapshot', () => {
@@ -114,5 +123,24 @@ describe('full snapshot canvas masking flag', () => {
     expect(JSON.stringify(fullSnapshots[1])).not.toContain('rr_dataURL');
 
     canvas.remove();
+  });
+
+  it('resets canvas frame dedup on each full snapshot so idle canvases re-emit', () => {
+    vi.stubGlobal('OffscreenCanvas', class {});
+
+    stop = record({
+      emit: vi.fn(),
+      recordCanvas: true,
+      sampling: { canvas: 4 },
+    });
+
+    expect(workerInstances).toHaveLength(1);
+    const worker = workerInstances[0];
+    // the initial full snapshot inside record() already resets once
+    worker.postMessage.mockClear();
+
+    record.takeFullSnapshot(true);
+
+    expect(worker.postMessage).toHaveBeenCalledWith({ resetFrameDedup: true });
   });
 });

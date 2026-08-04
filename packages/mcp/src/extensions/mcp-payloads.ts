@@ -5,7 +5,12 @@
 
 const CONTEXT_ARGUMENT_NAME = 'context'
 const REDACTED_VALUE = '[redacted]'
+const BINARY_REDACTED_VALUE = '[binary data redacted - not supported by PostHog MCP analytics]'
 const BASE64_PATTERN = /^[A-Za-z0-9+/\n\r]+=*$/
+const BASE64URL_PATTERN = /^[A-Za-z0-9_-]+={0,2}$/
+const BASE64URL_SPECIFIC_CHAR_PATTERN = /[-_]/
+const BASE64_DATA_URL_PREFIX_PATTERN = /^data:[^,\s]*;base64,/i
+const BASE64_DATA_URL_PAYLOAD_PATTERN = /^[A-Za-z0-9+/_-]+={0,2}$/
 const SIZE_GATE = 10_240
 const POSTHOG_TOKEN_PATTERN = /\bph[a-z]_[A-Za-z0-9_-]{20,}\b/g
 const SENSITIVE_KEY_PATTERN =
@@ -21,9 +26,30 @@ function shouldRedactKey(key: string): boolean {
   return SENSITIVE_KEY_PATTERN.test(key)
 }
 
+function isBase64DataUrl(value: string): boolean {
+  const prefix = BASE64_DATA_URL_PREFIX_PATTERN.exec(value)
+  if (!prefix) {
+    return false
+  }
+
+  let payload: string
+  try {
+    payload = decodeURIComponent(value.slice(prefix[0].length))
+  } catch {
+    return false
+  }
+
+  return BASE64_DATA_URL_PAYLOAD_PATTERN.test(payload.replace(/[\r\n]/g, ''))
+}
+
 function sanitizeString(value: string): string {
-  if (value.length >= SIZE_GATE && BASE64_PATTERN.test(value)) {
-    return '[binary data redacted - not supported by PostHog MCP analytics]'
+  if (
+    value.length >= SIZE_GATE &&
+    (BASE64_PATTERN.test(value) ||
+      isBase64DataUrl(value) ||
+      (BASE64URL_SPECIFIC_CHAR_PATTERN.test(value) && BASE64URL_PATTERN.test(value)))
+  ) {
+    return BINARY_REDACTED_VALUE
   }
   return value.replace(POSTHOG_TOKEN_PATTERN, REDACTED_VALUE)
 }

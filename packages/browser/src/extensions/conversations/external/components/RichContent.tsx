@@ -251,21 +251,37 @@ function renderNode(
 
         case 'bulletList':
             return (
-                <ul key={key} style={{ margin: '8px 0', paddingLeft: '24px' }}>
+                <ul
+                    key={key}
+                    style={{
+                        margin: '8px 0',
+                        paddingLeft: '24px',
+                        listStyleType: 'disc',
+                        listStylePosition: 'outside',
+                    }}
+                >
                     {children}
                 </ul>
             )
 
         case 'orderedList':
             return (
-                <ol key={key} style={{ margin: '8px 0', paddingLeft: '24px' }}>
+                <ol
+                    key={key}
+                    style={{
+                        margin: '8px 0',
+                        paddingLeft: '24px',
+                        listStyleType: 'decimal',
+                        listStylePosition: 'outside',
+                    }}
+                >
                     {children}
                 </ol>
             )
 
         case 'listItem':
             return (
-                <li key={key} style={{ margin: '4px 0' }}>
+                <li key={key} style={{ margin: '4px 0', listStyleType: 'inherit' }}>
                     {children}
                 </li>
             )

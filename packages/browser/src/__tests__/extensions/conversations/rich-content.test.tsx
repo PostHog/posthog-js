@@ -715,7 +715,9 @@ describe('RichContent', () => {
 
             const { container } = render(<RichContent {...defaultProps} richContent={doc} />)
 
-            expect(container.querySelector('ul')).not.toBeNull()
+            const ul = container.querySelector('ul')
+            expect(ul).not.toBeNull()
+            expect(ul?.style.listStyleType).toBe('disc')
             expect(container.querySelectorAll('li')).toHaveLength(2)
         })
 
@@ -741,7 +743,9 @@ describe('RichContent', () => {
 
             const { container } = render(<RichContent {...defaultProps} richContent={doc} />)
 
-            expect(container.querySelector('ol')).not.toBeNull()
+            const ol = container.querySelector('ol')
+            expect(ol).not.toBeNull()
+            expect(ol?.style.listStyleType).toBe('decimal')
             expect(container.querySelectorAll('li')).toHaveLength(2)
         })
 
