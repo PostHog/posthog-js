@@ -52,6 +52,16 @@ export function buildProviderMetadata(fields: {
   return Object.keys(metadata).length > 0 ? metadata : undefined
 }
 
+const TERMINAL_RESPONSE_STATUSES = new Set(['completed', 'failed', 'cancelled', 'incomplete'])
+
+/**
+ * Checks whether a Responses API response has reached a status that should
+ * produce a final `$ai_generation` event.
+ */
+export function isTerminalResponse(response: { status?: string | null } | null | undefined): boolean {
+  return !!response?.status && TERMINAL_RESPONSE_STATUSES.has(response.status)
+}
+
 /**
  * Returns an isolated copy of a failed Responses API error for `$ai_error`, or
  * creates a fallback error when the provider omitted failure details.

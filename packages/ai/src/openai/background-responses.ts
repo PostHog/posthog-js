@@ -1,17 +1,12 @@
 import { Stream } from 'openai/streaming'
 import type { Response, ResponseStreamEvent } from 'openai/resources/responses/responses'
-
-const TERMINAL_RESPONSE_STATUSES = new Set(['completed', 'failed', 'cancelled', 'incomplete'])
+import { isTerminalResponse } from './utils'
 
 export function isPendingBackgroundResponse(
   params: { background?: boolean | null },
   response: { status?: string | null }
 ): boolean {
-  return params.background === true && !!response.status && !TERMINAL_RESPONSE_STATUSES.has(response.status)
-}
-
-export function isTerminalResponse(response: { status?: string | null }): boolean {
-  return !!response.status && TERMINAL_RESPONSE_STATUSES.has(response.status)
+  return params.background === true && !!response.status && !isTerminalResponse(response)
 }
 
 /**

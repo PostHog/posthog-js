@@ -23,13 +23,18 @@ import type { ResponseCreateParamsWithTools, ExtractParsedContentFromParams } fr
 import type { FormattedMessage, FormattedContent } from '../types'
 import { sanitizeOpenAI, sanitizeOpenAIResponse } from '../sanitization'
 import { extractPosthogParams } from '../utils'
-import { isResponseTokenChunk, extractRequestId, buildProviderMetadata, getResponseFailure } from './utils'
+import {
+  isResponseTokenChunk,
+  extractRequestId,
+  buildProviderMetadata,
+  isTerminalResponse,
+  getResponseFailure,
+} from './utils'
 import type { MonitoringEventPropertiesWithDefaults } from '../utils'
 import {
   BackgroundResponseTracker,
   getBackgroundResponseLatency,
   isPendingBackgroundResponse,
-  isTerminalResponse,
   wrapBackgroundResponseStream,
 } from './background-responses'
 import { callWithOriginalCreate, preserveProviderPromise } from '../providerPromise'
@@ -314,7 +319,7 @@ export class WrappedCompletions extends Completions {
                 model: openAIParams.model ?? modelFromResponse,
                 provider: 'openai',
                 input: sanitizeOpenAI(openAIParams.messages),
-                output: formattedOutput,
+                output: sanitizeOpenAIResponse(formattedOutput),
                 latency,
                 timeToFirstToken,
                 baseURL: this.baseURL,
@@ -377,7 +382,7 @@ export class WrappedCompletions extends Completions {
               model: openAIParams.model ?? result.model,
               provider: 'openai',
               input: sanitizeOpenAI(openAIParams.messages),
-              output: formattedOutput,
+              output: sanitizeOpenAIResponse(formattedOutput),
               latency,
               baseURL: this.baseURL,
               modelParameters: getModelParams(body, result.service_tier),
@@ -556,9 +561,6 @@ export class WrappedResponses extends Responses {
                   if (openAIParams.background === true && !this.backgroundResponses.get(chunk.response.id)) {
                     this.backgroundResponses.set(chunk.response.id, { openAIParams, posthogParams })
                   }
-                  if (isTerminalResponse(chunk.response)) {
-                    terminalResponse = chunk.response
-                  }
                   if (chunk.response.service_tier != null) {
                     serviceTierFromResponse = chunk.response.service_tier
                   }
@@ -567,16 +569,10 @@ export class WrappedResponses extends Responses {
                   if (chunkWebSearchCount > 0 && chunkWebSearchCount > (usage.webSearchCount ?? 0)) {
                     usage.webSearchCount = chunkWebSearchCount
                   }
-                }
 
-                if (
-                  chunk.type === 'response.completed' &&
-                  'response' in chunk &&
-                  chunk.response?.output &&
-                  chunk.response.output.length > 0
-                ) {
-                  finalContent = chunk.response.output
-                  if (chunk.response.status) {
+                  if (isTerminalResponse(chunk.response)) {
+                    terminalResponse = chunk.response
+                    finalContent = chunk.response.output ?? []
                     stopReason = chunk.response.status
                   }
                 }
@@ -613,7 +609,7 @@ export class WrappedResponses extends Responses {
                   sanitizeOpenAIResponse(openAIParams.input),
                   openAIParams.instructions
                 ),
-                output: finalContent,
+                output: sanitizeOpenAIResponse(finalContent),
                 latency,
                 timeToFirstToken,
                 baseURL: this.baseURL,
@@ -630,6 +626,10 @@ export class WrappedResponses extends Responses {
                 stopReason,
                 tools: availableTools,
                 completionId: completionIdFromResponse,
+                providerMetadata: buildProviderMetadata({
+                  incompleteDetails: terminalResponse?.incomplete_details,
+                }),
+                error: getResponseFailure(terminalResponse),
               })
             } catch (error: unknown) {
               if (
@@ -688,7 +688,7 @@ export class WrappedResponses extends Responses {
               model: openAIParams.model ?? result.model,
               provider: 'openai',
               input: formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions),
-              output: formattedOutput,
+              output: sanitizeOpenAIResponse(formattedOutput),
               latency,
               baseURL: this.baseURL,
               modelParameters: getModelParams(body, result.service_tier),
@@ -846,7 +846,7 @@ export class WrappedResponses extends Responses {
           model: openAIParams.model ?? result.model,
           provider: 'openai',
           input: formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions),
-          output: result.output,
+          output: sanitizeOpenAIResponse(result.output),
           latency,
           baseURL: this.baseURL,
           modelParameters: getModelParams(body, result.service_tier),
@@ -1099,7 +1099,7 @@ export class WrappedTranscriptions extends Transcriptions {
                 model: openAIParams.model,
                 provider: 'openai',
                 input: openAIParams.prompt,
-                output: finalContent,
+                output: sanitizeOpenAIResponse(finalContent),
                 latency,
                 timeToFirstToken,
                 baseURL: this.baseURL,
@@ -1147,7 +1147,7 @@ export class WrappedTranscriptions extends Transcriptions {
               model: openAIParams.model,
               provider: 'openai',
               input: openAIParams.prompt,
-              output: result.text,
+              output: sanitizeOpenAIResponse(result.text),
               latency,
               baseURL: this.baseURL,
               modelParameters: getModelParams(body),

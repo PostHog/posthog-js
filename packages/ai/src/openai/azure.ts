@@ -20,15 +20,20 @@ import type {
 } from 'openai/resources/responses/responses'
 import type { ResponseCreateParamsWithTools, ExtractParsedContentFromParams } from 'openai/lib/ResponsesParser'
 import type { FormattedMessage, FormattedContent } from '../types'
-import { sanitizeOpenAI } from '../sanitization'
+import { sanitizeOpenAI, sanitizeOpenAIResponse } from '../sanitization'
 import { extractPosthogParams } from '../utils'
-import { isResponseTokenChunk, extractRequestId, buildProviderMetadata, getResponseFailure } from './utils'
+import {
+  isResponseTokenChunk,
+  extractRequestId,
+  buildProviderMetadata,
+  isTerminalResponse,
+  getResponseFailure,
+} from './utils'
 import type { MonitoringEventPropertiesWithDefaults } from '../utils'
 import {
   BackgroundResponseTracker,
   getBackgroundResponseLatency,
   isPendingBackgroundResponse,
-  isTerminalResponse,
   wrapBackgroundResponseStream,
 } from './background-responses'
 import { callWithOriginalCreate, preserveProviderPromise } from '../providerPromise'
@@ -273,7 +278,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 model: openAIParams.model ?? modelFromResponse,
                 provider: 'azure',
                 input: sanitizeOpenAI(openAIParams.messages),
-                output: formattedOutput,
+                output: sanitizeOpenAIResponse(formattedOutput),
                 latency,
                 timeToFirstToken,
                 baseURL: this.baseURL,
@@ -324,8 +329,8 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
               ...posthogParams,
               model: openAIParams.model ?? result.model,
               provider: 'azure',
-              input: openAIParams.messages,
-              output: formatResponseOpenAI(result),
+              input: sanitizeOpenAI(openAIParams.messages),
+              output: sanitizeOpenAIResponse(formatResponseOpenAI(result)),
               latency,
               baseURL: this.baseURL,
               modelParameters: getModelParams(body, result.service_tier),
@@ -355,7 +360,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
             ...posthogParams,
             model: openAIParams.model,
             provider: 'azure',
-            input: openAIParams.messages,
+            input: sanitizeOpenAI(openAIParams.messages),
             output: [],
             latency: 0,
             baseURL: this.baseURL,
@@ -494,20 +499,13 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                   if (openAIParams.background === true && !this.backgroundResponses.get(chunk.response.id)) {
                     this.backgroundResponses.set(chunk.response.id, { openAIParams, posthogParams })
                   }
-                  if (isTerminalResponse(chunk.response)) {
-                    terminalResponse = chunk.response
-                  }
                   if (chunk.response.service_tier != null) {
                     serviceTierFromResponse = chunk.response.service_tier
                   }
-                }
-                if (
-                  chunk.type === 'response.completed' &&
-                  'response' in chunk &&
-                  chunk.response?.output &&
-                  chunk.response.output.length > 0
-                ) {
-                  finalContent = chunk.response.output
+                  if (isTerminalResponse(chunk.response)) {
+                    terminalResponse = chunk.response
+                    finalContent = chunk.response.output ?? []
+                  }
                 }
                 if ('response' in chunk && chunk.response?.usage) {
                   usage = {
@@ -535,15 +533,23 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 ...posthogParams,
                 model: openAIParams.model ?? modelFromResponse,
                 provider: 'azure',
-                input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
-                output: finalContent,
+                input: formatOpenAIResponsesInput(
+                  sanitizeOpenAIResponse(openAIParams.input),
+                  openAIParams.instructions
+                ),
+                output: sanitizeOpenAIResponse(finalContent),
                 latency,
                 timeToFirstToken,
                 baseURL: this.baseURL,
                 modelParameters: getModelParams(body, serviceTierFromResponse),
                 httpStatus: 200,
                 usage,
+                stopReason: terminalResponse?.status ?? undefined,
                 completionId: completionIdFromResponse,
+                providerMetadata: buildProviderMetadata({
+                  incompleteDetails: terminalResponse?.incomplete_details,
+                }),
+                error: getResponseFailure(terminalResponse),
               })
             } catch (error: unknown) {
               if (
@@ -558,7 +564,10 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 ...posthogParams,
                 model: openAIParams.model,
                 provider: 'azure',
-                input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
+                input: formatOpenAIResponsesInput(
+                  sanitizeOpenAIResponse(openAIParams.input),
+                  openAIParams.instructions
+                ),
                 output: [],
                 latency: 0,
                 baseURL: this.baseURL,
@@ -596,8 +605,8 @@ export class WrappedResponses extends AzureOpenAI.Responses {
               ...posthogParams,
               model: openAIParams.model ?? result.model,
               provider: 'azure',
-              input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
-              output: result.output,
+              input: formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions),
+              output: sanitizeOpenAIResponse(result.output),
               latency,
               baseURL: this.baseURL,
               modelParameters: getModelParams(body, result.service_tier),
@@ -630,7 +639,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
             ...posthogParams,
             model: openAIParams.model,
             provider: 'azure',
-            input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
+            input: formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions),
             output: [],
             latency: 0,
             baseURL: this.baseURL,
@@ -752,8 +761,8 @@ export class WrappedResponses extends AzureOpenAI.Responses {
           ...posthogParams,
           model: openAIParams.model ?? result.model,
           provider: 'azure',
-          input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
-          output: result.output,
+          input: formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions),
+          output: sanitizeOpenAIResponse(result.output),
           latency,
           baseURL: this.baseURL,
           modelParameters: getModelParams(body, result.service_tier),
@@ -780,7 +789,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
           ...posthogParams,
           model: openAIParams.model,
           provider: 'azure',
-          input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
+          input: formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions),
           output: [],
           latency: 0,
           baseURL: this.baseURL,

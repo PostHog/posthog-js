@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.47.9
+
+### Patch Changes
+
+- [#4350](https://github.com/PostHog/posthog-js/pull/4350) [`facb4c1`](https://github.com/PostHog/posthog-js/commit/facb4c1e173c0afc6b4c14154a0e65ed239d43f4) Thanks [@marandaneto](https://github.com/marandaneto)! - Fix `enableExceptionAutocapture` suppressing Node's default crash on unhandled promise rejections; fatal rejections in `strict` or `warn-with-error-code` mode and rejections handled by another `unhandledRejection` listener are no longer captured.
+  (2026-08-04)
+
 ## 5.47.8
 
 ### Patch Changes
