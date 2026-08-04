@@ -28,7 +28,7 @@ import {
     isSurveyRunning,
     SURVEY_LOGGER as logger,
 } from '../utils/survey-utils'
-import { isArray, isNull, isUndefined } from '@posthog/core'
+import { isArray, isNull, isNumber, isUndefined } from '@posthog/core'
 import { Properties } from '../types'
 import { SURVEYS } from '../constants'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
@@ -181,7 +181,17 @@ export class SurveyManager {
         }
     }
 
-    public handlePopoverSurvey = (surveyParam: Survey, options?: DisplaySurveyPopoverOptions): void => {
+    /**
+     * `resumeDelayFromActivation` is internal to the display loop: a survey armed by an
+     * event/action trigger resumes its popup delay from when the trigger fired, so navigating
+     * mid-delay does not restart the countdown. An explicit `displaySurvey()` call carries its own
+     * `ignoreDelay` option instead, so it must always honor the full configured delay.
+     */
+    public handlePopoverSurvey = (
+        surveyParam: Survey,
+        options?: DisplaySurveyPopoverOptions,
+        { resumeDelayFromActivation = false }: { resumeDelayFromActivation?: boolean } = {}
+    ): void => {
         const { survey: translatedSurvey, language: surveyLanguage } = this._translateSurveyForRendering(surveyParam)
 
         // apply overrides for position / selector (needed for thumb surveys)
@@ -242,19 +252,9 @@ export class SurveyManager {
         if (delaySeconds <= 0) {
             return render(<SurveyPopup {...surveyPopupProps} />, shadow)
         }
-        const timeoutId = window.setTimeout(() => {
-            // remove survey to keep `_surveyTimeouts` as a true list of "pending" surveys
-            this._surveyTimeouts.delete(survey.id)
 
-            // Re-check the full display predicate, not just the URL: eligibility can change
-            // during the delay (e.g. identify() reloads flags and the internal targeting flag
-            // flips to false), and we must not show a survey that is no longer eligible by the
-            // time the delay elapses.
-            if (!this._shouldDisplaySurvey(survey)) {
-                logger.info(`Survey ${survey.id} no longer eligible when its display delay elapsed; not displaying`)
-                return this._removeSurveyFromFocus(survey)
-            }
-            // rendering with surveyPopupDelaySeconds = 0 because we're already handling the timeout here
+        // rendering with surveyPopupDelaySeconds = 0 because the delay is handled here, not in the popup
+        const renderAfterDelay = () =>
             render(
                 <SurveyPopup
                     {...surveyPopupProps}
@@ -268,7 +268,44 @@ export class SurveyManager {
                 />,
                 shadow
             )
-        }, delaySeconds * 1000)
+
+        // Re-check the full display predicate, not just the URL: eligibility can change
+        // while the delay runs down (e.g. identify() reloads flags and the internal targeting flag
+        // flips to false), and we must not show a survey that is no longer eligible by the
+        // time the delay elapses.
+        const renderIfStillEligible = () => {
+            if (!this._shouldDisplaySurvey(survey)) {
+                logger.info(`Survey ${survey.id} no longer eligible when its display delay elapsed; not displaying`)
+                return this._removeSurveyFromFocus(survey)
+            }
+            renderAfterDelay()
+        }
+
+        // Resume the delay across navigations. An event/action trigger records when it fired
+        // (persisted, session-scoped), so the remaining wait is measured from that instead of
+        // restarting a fresh countdown on every page load — otherwise a user who keeps navigating
+        // never lets the delay elapse and never sees the survey. Without a recorded activation
+        // (e.g. a survey shown on an `always`/wait-period basis rather than a trigger) we fall
+        // back to the full delay, matching the previous behaviour.
+        const activatedAt = resumeDelayFromActivation
+            ? this._posthog.surveys?._surveyEventReceiver?.getActivationTimestamp?.(survey.id)
+            : undefined
+        // Clamp the elapsed time at 0 so a clock that moved backwards after the activation was
+        // stamped (NTP correction, VM suspend/resume) cannot stretch the wait past the delay.
+        const elapsedMs = isNumber(activatedAt) ? Math.max(0, Date.now() - activatedAt) : 0
+        const remainingMs = Math.max(0, delaySeconds * 1000 - elapsedMs)
+
+        if (remainingMs <= 0) {
+            // The delay already elapsed on an earlier page load; show now, if still eligible.
+            return renderIfStillEligible()
+        }
+
+        const timeoutId = window.setTimeout(() => {
+            // remove survey to keep `_surveyTimeouts` as a true list of "pending" surveys
+            this._surveyTimeouts.delete(survey.id)
+
+            renderIfStillEligible()
+        }, remainingMs)
         this._surveyTimeouts.set(survey.id, timeoutId)
     }
 
@@ -825,7 +862,7 @@ export class SurveyManager {
 
                 // Popover Type Logic (only one shown at a time)
                 if (isNull(this._surveyInFocus) && survey.type === SurveyType.Popover) {
-                    this.handlePopoverSurvey(survey)
+                    this.handlePopoverSurvey(survey, undefined, { resumeDelayFromActivation: true })
                 }
             })
 
