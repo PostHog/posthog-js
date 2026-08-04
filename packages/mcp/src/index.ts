@@ -8,7 +8,7 @@ import { isCompatibleServerType, isHighLevelServer } from './extensions/compatib
 import { McpEventSink } from './extensions/sink'
 import { MCPAnalyticsEventType } from './extensions/event-types'
 import { IdentityCache, getServerTrackingData, setServerTrackingData } from './extensions/internal'
-import { log, setLogger } from './extensions/logger'
+import { createLogger } from './extensions/logger'
 import { captureEvent } from './extensions/capture'
 import { applyMcpLibIdentity } from './extensions/lib-identity'
 import { deriveSessionIdFromMCPSession, getSessionInfo, newSessionId } from './extensions/session'
@@ -51,19 +51,18 @@ import type {
  * ```
  */
 function instrument(server: unknown, posthog: PostHog, options: MCPAnalyticsOptions = {}): McpAnalytics {
+  const logger = createLogger(options?.logger)
   try {
-    if (options.logger) {
-      setLogger(options.logger)
-    }
     if (!posthog) {
-      log('Warning: No PostHog client passed to instrument(). Events will not be sent anywhere.')
+      logger('Warning: No PostHog client passed to instrument(). Events will not be sent anywhere.')
     }
 
-    const validatedServer = isCompatibleServerType(server)
+    const validatedServer = isCompatibleServerType(server, logger)
     const lowLevelServer = getLowLevelServer(validatedServer)
+    const existingData = getServerTrackingData(lowLevelServer)
 
-    if (getServerTrackingData(lowLevelServer)) {
-      log('instrument() - Server already instrumented, skipping initialization')
+    if (existingData) {
+      existingData.logger('instrument() - Server already instrumented, skipping initialization')
       return createAnalyticsHandle(lowLevelServer)
     }
 
@@ -72,15 +71,15 @@ function instrument(server: unknown, posthog: PostHog, options: MCPAnalyticsOpti
       // inherited `posthog-node`. Relabels every event the client sends.
       applyMcpLibIdentity(posthog)
     }
-    const sink = posthog ? new McpEventSink(posthog) : undefined
-    const mcpAnalyticsData = buildTrackingData(lowLevelServer, options, sink)
+    const sink = posthog ? new McpEventSink(posthog, logger) : undefined
+    const mcpAnalyticsData = buildTrackingData(lowLevelServer, options, sink, logger)
 
     setServerTrackingData(lowLevelServer, mcpAnalyticsData)
-    setupTrackedServer(validatedServer, lowLevelServer)
+    setupTrackedServer(validatedServer, lowLevelServer, logger)
 
     return createAnalyticsHandle(lowLevelServer)
   } catch (error) {
-    log(`Warning: Failed to instrument server - ${error}`)
+    logger(`Warning: Failed to instrument server - ${error}`)
     // Degrade gracefully: a no-op handle so the host app keeps working.
     return { capture: async () => undefined }
   }
@@ -136,13 +135,16 @@ const DEFAULT_OPTIONS = {
 function buildTrackingData(
   lowLevelServer: MCPServerLike,
   options: MCPAnalyticsOptions,
-  sink: McpEventSink | undefined
+  sink: McpEventSink | undefined,
+  logger: MCPAnalyticsData['logger']
 ): MCPAnalyticsData {
   return {
     sink,
+    logger,
     sessionId: newSessionId(),
     lastActivity: new Date(),
     identifiedSessions: new IdentityCache(),
+    toolAnalyticsParameterOwnership: new Map(),
     toolCategories: new Map<string, string>(),
     toolDescriptions: new Map<string, string>(),
     sessionInfo: getSessionInfo(lowLevelServer, undefined),
@@ -153,18 +155,19 @@ function buildTrackingData(
 
 function setupTrackedServer(
   validatedServer: MCPServerLike | HighLevelMCPServerLike,
-  lowLevelServer: MCPServerLike
+  lowLevelServer: MCPServerLike,
+  logger: MCPAnalyticsData['logger']
 ): void {
   if (isHighLevelServer(validatedServer)) {
     const highLevelServer = validatedServer as HighLevelMCPServerLike
-    instrumentHighLevelServer(highLevelServer)
+    instrumentHighLevelServer(highLevelServer, logger)
     return
   }
 
   try {
-    instrumentLowLevelServer(lowLevelServer)
+    instrumentLowLevelServer(lowLevelServer, logger)
   } catch (error) {
-    log(`Warning: Failed to setup tool call instrumentation - ${error}`)
+    logger(`Warning: Failed to setup tool call instrumentation - ${error}`)
   }
 }
 
@@ -188,8 +191,8 @@ async function captureCustomEvent(lowLevelServer: MCPServerLike, eventData: Capt
 
   // Re-use the same per-server publish path so the event picks up session info,
   // identity, sdk metadata, etc. Awaited so callers know the event was processed.
-  await captureEvent(lowLevelServer, event)
-  log(`Captured event "${eventData.event}" for session ${trackingData.sessionId}`)
+  await captureEvent(lowLevelServer, event, trackingData.logger)
+  trackingData.logger(`Captured event "${eventData.event}" for session ${trackingData.sessionId}`)
 }
 
 export { deriveSessionIdFromMCPSession, newSessionId }

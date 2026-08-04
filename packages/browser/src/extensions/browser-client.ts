@@ -28,19 +28,19 @@ import type {
     RemoteConfigResult,
 } from '../types'
 
-class BrowserExtensionKeyValueStore implements KeyValueStore {
+class BrowserClientKeyValueStore implements KeyValueStore {
     constructor(private readonly _instance: PostHog) {}
 
-    get<T = unknown>(prop: string): T | undefined {
-        return this._instance.persistence?.get_property(prop) as T | undefined
+    get<T = unknown>(key: string): T | undefined {
+        return this._instance.persistence?.get_property(key) as T | undefined
     }
 
-    set(prop: string, value: unknown): void {
-        this._instance.persistence?.set_property(prop, value as Property)
+    set(key: string, value: unknown): void {
+        this._instance.persistence?.set_property(key, value as Property)
     }
 
-    remove(prop: string): void {
-        this._instance.persistence?.unregister(prop)
+    remove(key: string): void {
+        this._instance.persistence?.unregister(key)
     }
 }
 
@@ -60,7 +60,7 @@ export class BrowserClientAdapter implements Client, Disposable {
     constructor(readonly instance: PostHog) {
         this._logger = logger.createLogger('[BrowserExtensions]')
         this._latestRemoteConfigResult = instance._lastRemoteConfig
-        this.kv = new BrowserExtensionKeyValueStore(instance)
+        this.kv = new BrowserClientKeyValueStore(instance)
         this.onEvent = (handler) => {
             const unsubscribe = this.instance.on('eventCaptured', (event) => {
                 try {

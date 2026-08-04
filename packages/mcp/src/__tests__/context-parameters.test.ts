@@ -8,6 +8,7 @@ import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
 
 jest.mock('../extensions/logger', () => ({
+  createLogger: (logger?: (message: string) => void) => logger ?? (() => undefined),
   log: jest.fn(),
   setLogger: jest.fn(),
 }))
@@ -103,6 +104,16 @@ describe('addContextParameterToTool', () => {
         "already has 'context' parameter",
       ],
       [
+        'tool declares context with a false schema',
+        { name: 'has-false-context', inputSchema: { type: 'object', properties: { context: false } } },
+        "already has 'context' parameter",
+      ],
+      [
+        'schema uses a root $ref',
+        { name: 'referenced-tool', inputSchema: { $ref: '#/$defs/Input' } },
+        'complex schema',
+      ],
+      [
         'schema uses oneOf',
         { name: 'union-tool', inputSchema: { oneOf: [{ type: 'object', properties: {} }] } },
         'complex schema',
@@ -137,13 +148,13 @@ describe('addContextParameterToTool', () => {
 })
 
 describe('addContextParameterToTools (batch)', () => {
-  it('skips the get_more_tools virtual tool', () => {
+  it('treats get_more_tools like a normal tool when it is already in the batch', () => {
     const result = addContextParameterToTools([
       { name: 'get_more_tools', inputSchema: {} },
       { name: 'other-tool', inputSchema: {} },
     ])
 
-    expect(result[0].inputSchema?.properties).toBeUndefined()
+    expect(result[0].inputSchema?.properties?.context).toBeDefined()
     expect(result[1].inputSchema?.properties?.context).toBeDefined()
   })
 
