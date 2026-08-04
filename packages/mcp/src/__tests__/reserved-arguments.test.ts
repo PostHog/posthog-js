@@ -139,70 +139,55 @@ describe('high-level reserved analytics arguments', () => {
     }
   })
 
-  it('does not consume tool-owned reserved arguments as analytics metadata', async () => {
-    const server = new McpServer({ name: 'tool-owned-analytics-arguments', version: '1.0.0' })
-    const receivedArgs: Record<string, unknown>[] = []
-    const capture = new EventCapture()
-    await capture.start()
+  it.each(['context', 'conversation_id'] as const)(
+    'does not consume a tool-owned %s argument as analytics metadata',
+    async (reservedArgument) => {
+      const server = new McpServer({ name: 'tool-owned-analytics-arguments', version: '1.0.0' })
+      const toolName = `tool_owned_${reservedArgument}`
+      let receivedArgs: Record<string, unknown> | undefined
+      const capture = new EventCapture()
+      await capture.start()
 
-    server.registerTool(
-      'tool_owned',
-      {
-        inputSchema: z
-          .object({ context: z.string(), conversation_id: z.string().optional(), value: z.string() })
-          .strict(),
-      },
-      async (args) => {
-        receivedArgs.push({ ...args })
-        return { content: [{ type: 'text', text: 'ok' }] }
-      }
-    )
-
-    const { client, cleanup } = await connect(server)
-    try {
-      instrument(server, fakePostHog(), { context: true, enableConversationId: true })
-
-      const withoutConversationId = await client.request(
-        {
-          method: 'tools/call',
-          params: { name: 'tool_owned', arguments: { context: 'application state', value: 'first' } },
-        },
-        CallToolResultSchema
-      )
-      expect(withoutConversationId.content).not.toEqual(
-        expect.arrayContaining([expect.objectContaining({ text: expect.stringContaining('conversation_id=') })])
+      server.registerTool(
+        toolName,
+        { inputSchema: z.object({ [reservedArgument]: z.string(), value: z.string() }).strict() },
+        async (args) => {
+          receivedArgs = { ...args }
+          return { content: [{ type: 'text', text: 'ok' }] }
+        }
       )
 
-      const withConversationId = await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'tool_owned',
-            arguments: { context: 'application state', conversation_id: 'application conversation', value: 'second' },
+      const { client, cleanup } = await connect(server)
+      try {
+        instrument(server, fakePostHog(), {
+          context: reservedArgument === 'context',
+          enableConversationId: reservedArgument === 'conversation_id',
+        })
+
+        const suppliedArguments = { [reservedArgument]: 'application value', value: 'kept' }
+        const result = await client.request(
+          {
+            method: 'tools/call',
+            params: { name: toolName, arguments: suppliedArguments },
           },
-        },
-        CallToolResultSchema
-      )
-      expect(withConversationId.content).not.toEqual(
-        expect.arrayContaining([expect.objectContaining({ text: expect.stringContaining('conversation_id=') })])
-      )
+          CallToolResultSchema
+        )
+        expect(result.content).not.toEqual(
+          expect.arrayContaining([expect.objectContaining({ text: expect.stringContaining('conversation_id=') })])
+        )
 
-      expect(receivedArgs).toEqual([
-        { context: 'application state', value: 'first' },
-        { context: 'application state', conversation_id: 'application conversation', value: 'second' },
-      ])
-      await new Promise((resolve) => setTimeout(resolve, 50))
-      const events = capture.getEvents().filter((candidate) => candidate.resourceName === 'tool_owned')
-      expect(events).toHaveLength(2)
-      for (const event of events) {
-        expect(event.userIntent).toBeUndefined()
-        expect(event.conversationId).toBeUndefined()
+        expect(receivedArgs).toEqual(suppliedArguments)
+        await new Promise((resolve) => setTimeout(resolve, 50))
+        const events = capture.getEvents().filter((candidate) => candidate.resourceName === toolName)
+        expect(events).toHaveLength(1)
+        expect(events[0].userIntent).toBeUndefined()
+        expect(events[0].conversationId).toBeUndefined()
+      } finally {
+        await capture.stop()
+        await cleanup()
       }
-    } finally {
-      await capture.stop()
-      await cleanup()
     }
-  })
+  )
 
   it('preserves pre-existing reserved fields and strips only fields injected by analytics', async () => {
     const server = new McpServer({ name: 'owned-reserved-arguments', version: '1.0.0' })

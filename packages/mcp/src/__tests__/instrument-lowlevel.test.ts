@@ -209,69 +209,39 @@ describe('Low-level Server tracing (e2e)', () => {
     }
   })
 
-  it('preserves tool-owned reserved arguments without consuming them as analytics metadata', async () => {
-    const { server, client, receivedCalls, connect, cleanup } = await setupLowLevelServer()
-    try {
-      instrument(server, fakePostHog(), { context: true, enableConversationId: true })
-      await connect()
-      await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+  it.each(['context', 'conversation_id'] as const)(
+    'preserves a tool-owned %s argument without consuming it as analytics metadata',
+    async (reservedArgument) => {
+      const { server, client, receivedCalls, connect, cleanup } = await setupLowLevelServer()
+      try {
+        instrument(server, fakePostHog(), { context: true, enableConversationId: true })
+        await connect()
+        await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
 
-      const suppliedResult = await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'owned_reserved',
-            arguments: {
-              context: 'application state',
-              conversation_id: 'application conversation',
-              value: 'first',
-            },
+        const suppliedArguments = { [reservedArgument]: 'application value', value: 'kept' }
+        const result = await client.request(
+          {
+            method: 'tools/call',
+            params: { name: 'owned_reserved', arguments: suppliedArguments },
           },
-        },
-        CallToolResultSchema
-      )
-      const omittedResult = await client.request(
-        {
-          method: 'tools/call',
-          params: {
-            name: 'owned_reserved',
-            arguments: { context: 'application state', value: 'second' },
-          },
-        },
-        CallToolResultSchema
-      )
+          CallToolResultSchema
+        )
 
-      expect(receivedCalls.slice(-2)).toEqual([
-        {
-          name: 'owned_reserved',
-          arguments: {
-            context: 'application state',
-            conversation_id: 'application conversation',
-            value: 'first',
-          },
-        },
-        {
-          name: 'owned_reserved',
-          arguments: { context: 'application state', value: 'second' },
-        },
-      ])
-      for (const result of [suppliedResult, omittedResult]) {
+        expect(receivedCalls.at(-1)).toEqual({ name: 'owned_reserved', arguments: suppliedArguments })
         expect(
           (result.content as { text?: string }[]).some((content) => content.text?.includes('conversation_id='))
         ).toBe(false)
-      }
 
-      await new Promise((resolve) => setTimeout(resolve, 50))
-      const events = eventCapture.getEvents().filter((event) => event.resourceName === 'owned_reserved')
-      expect(events).toHaveLength(2)
-      for (const event of events) {
-        expect(event.userIntent).toBeUndefined()
-        expect(event.conversationId).toBeUndefined()
+        await new Promise((resolve) => setTimeout(resolve, 50))
+        const events = eventCapture.getEvents().filter((event) => event.resourceName === 'owned_reserved')
+        expect(events).toHaveLength(1)
+        expect(events[0].userIntent).toBeUndefined()
+        expect(events[0].conversationId).toBeUndefined()
+      } finally {
+        await cleanup()
       }
-    } finally {
-      await cleanup()
     }
-  })
+  )
 
   it('strips and captures analytics-owned reserved arguments on the low-level path', async () => {
     const { server, client, receivedCalls, connect, cleanup } = await setupLowLevelServer()
