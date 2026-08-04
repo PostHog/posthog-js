@@ -1,5 +1,15 @@
 # posthog-ai
 
+## 8.6.4
+
+### Patch Changes
+
+- [#4406](https://github.com/PostHog/posthog-js/pull/4406) [`e2e88f6`](https://github.com/PostHog/posthog-js/commit/e2e88f662d38385359d5021bf30d61b119644951) Thanks [@github-actions](https://github.com/apps/github-actions)! - Capture Vercel AI SDK provider error status codes in `$ai_http_status`.
+  (2026-08-04)
+
+- [#4360](https://github.com/PostHog/posthog-js/pull/4360) [`98bd34b`](https://github.com/PostHog/posthog-js/commit/98bd34b0589083a2afe6f0dd8b95dcdafffa999d) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve provider SDK promise helpers when instrumenting requests, and accept the full Anthropic and Azure OpenAI client options, including custom fetch, timeout, and retry settings.
+  (2026-08-04)
+
 ## 8.6.3
 
 ### Patch Changes
