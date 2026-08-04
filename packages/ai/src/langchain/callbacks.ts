@@ -13,6 +13,14 @@ import { sanitizeLangChain } from '../sanitization'
 import { stringifyError } from '../serializeError'
 import { warnIfPostHogAiGateway } from '../gatewayWarning'
 
+// Mirror LangGraph's isGraphBubbleUp guard without adding LangGraph as a dependency. Every
+// LangGraph control-flow exception (GraphInterrupt, NodeInterrupt, ParentCommand, GraphDrained,
+// and future subclasses) exposes a prototype getter `is_bubble_up` that returns true, which the
+// LangGraph runtime itself uses to distinguish control flow from real failures. The getter reads
+// as undefined on ordinary Errors and works across duplicated LangGraph package copies.
+const isLangGraphControlFlow = (error: Error): boolean =>
+  (error as Error & { is_bubble_up?: boolean }).is_bubble_up === true
+
 interface SpanMetadata {
   /** Name of the trace/span (e.g. chain name) */
   name: string
@@ -432,8 +440,22 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       eventProperties['$process_person_profile'] = false
     }
     if (outputs instanceof Error) {
-      eventProperties['$ai_error'] = stringifyError(outputs)
-      eventProperties['$ai_is_error'] = true
+      if (isLangGraphControlFlow(outputs)) {
+        // GraphInterrupt carries the pending interrupts (e.g. the question posed to a human).
+        // Surface them under the same `__interrupt__` key LangGraph hands back to the caller,
+        // so an interrupted span stays distinguishable from a node that returned nothing.
+        const interrupts = (outputs as Error & { interrupts?: unknown }).interrupts
+        if (interrupts !== undefined) {
+          eventProperties['$ai_output_state'] = withPrivacyMode(
+            this.client,
+            this.privacyMode,
+            sanitizeLangChain({ __interrupt__: interrupts })
+          )
+        }
+      } else {
+        eventProperties['$ai_error'] = stringifyError(outputs)
+        eventProperties['$ai_is_error'] = true
+      }
     } else if (outputs !== undefined) {
       eventProperties['$ai_output_state'] = withPrivacyMode(this.client, this.privacyMode, sanitizeLangChain(outputs))
     }
@@ -667,28 +689,17 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       return undefined
     }
     const gen = lastGeneration[0]
+    const messageResponseMetadata = (gen as any).message?.response_metadata
+    const generationResponseMetadata = gen.generationInfo?.response_metadata
+    const stopReason =
+      messageResponseMetadata?.finish_reason ||
+      messageResponseMetadata?.stop_reason ||
+      gen.generationInfo?.finish_reason ||
+      generationResponseMetadata?.stop_reason ||
+      generationResponseMetadata?.finish_reason ||
+      gen.generationInfo?.stop_reason
 
-    // Check generationInfo for finish_reason (OpenAI format)
-    if (gen.generationInfo?.finish_reason) {
-      return String(gen.generationInfo.finish_reason)
-    }
-
-    // Check generationInfo for response_metadata.stop_reason (Anthropic format)
-    if (gen.generationInfo?.response_metadata?.stop_reason) {
-      return String(gen.generationInfo.response_metadata.stop_reason)
-    }
-
-    // Check message response_metadata for finish_reason (common LangChain format)
-    if (gen.generationInfo?.response_metadata?.finish_reason) {
-      return String(gen.generationInfo.response_metadata.finish_reason)
-    }
-
-    // Check for stop_reason directly in generationInfo
-    if (gen.generationInfo?.stop_reason) {
-      return String(gen.generationInfo.stop_reason)
-    }
-
-    return undefined
+    return stopReason != null ? String(stopReason) : undefined
   }
 
   private _parseUsageModel(usage: any, provider?: string, model?: string): [number, number, Record<string, any>] {
@@ -831,18 +842,17 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     if (llmUsage[0] === 0 && llmUsage[1] === 0 && response.generations) {
       for (const generation of response.generations) {
         for (const genChunk of generation) {
-          // Check other paths for usage information
-          if (genChunk.generationInfo?.usage_metadata) {
-            llmUsage = this._parseUsageModel(genChunk.generationInfo.usage_metadata, provider, model)
-            return llmUsage
-          }
-
-          const messageChunk = genChunk.generationInfo ?? {}
-          const responseMetadata = messageChunk.response_metadata ?? {}
+          const message = (genChunk as any).message ?? {}
+          const messageResponseMetadata = message.response_metadata ?? {}
+          const generationInfo = genChunk.generationInfo ?? {}
+          const generationResponseMetadata = generationInfo.response_metadata ?? {}
           const chunkUsage =
-            responseMetadata['usage'] ??
-            responseMetadata['amazon-bedrock-invocationMetrics'] ??
-            messageChunk.usage_metadata
+            message.usage_metadata ??
+            messageResponseMetadata['usage'] ??
+            messageResponseMetadata['amazon-bedrock-invocationMetrics'] ??
+            generationInfo.usage_metadata ??
+            generationResponseMetadata['usage'] ??
+            generationResponseMetadata['amazon-bedrock-invocationMetrics']
           if (chunkUsage) {
             llmUsage = this._parseUsageModel(chunkUsage, provider, model)
             return llmUsage

@@ -125,6 +125,175 @@ describe('LangChainCallbackHandler', () => {
     expect(capture).toHaveBeenCalledTimes(1)
   })
 
+  it.each([
+    {
+      name: 'usage_metadata and finish_reason',
+      serializedId: ['langchain', 'chat_models', 'openai', 'ChatOpenAI'],
+      runId: 'run_ai_message_metadata',
+      model: 'gpt-4',
+      provider: 'openai',
+      generation: {
+        message: new AIMessage({
+          content: 'Test response',
+          usage_metadata: {
+            input_tokens: 12,
+            output_tokens: 4,
+            total_tokens: 16,
+          },
+          response_metadata: { finish_reason: 'stop' },
+        }),
+      },
+      expectedInputTokens: 12,
+      expectedOutputTokens: 4,
+      expectedStopReason: 'stop',
+    },
+    {
+      name: 'response_metadata usage and stop_reason',
+      serializedId: ['langchain', 'chat_models', 'anthropic', 'ChatAnthropic'],
+      runId: 'run_ai_message_response_metadata',
+      model: 'claude-3',
+      provider: 'anthropic',
+      generation: {
+        message: new AIMessage({
+          content: 'Test response',
+          response_metadata: {
+            stop_reason: 'end_turn',
+            usage: {
+              input_tokens: 15,
+              output_tokens: 5,
+            },
+          },
+        }),
+      },
+      expectedInputTokens: 15,
+      expectedOutputTokens: 5,
+      expectedStopReason: 'end_turn',
+    },
+    {
+      name: 'generationInfo usage_metadata and finish_reason',
+      serializedId: ['langchain', 'chat_models', 'openai', 'ChatOpenAI'],
+      runId: 'run_generation_info_usage_metadata',
+      model: 'gpt-4',
+      provider: 'openai',
+      generation: {
+        generationInfo: {
+          usage_metadata: {
+            input_tokens: 18,
+            output_tokens: 6,
+          },
+          finish_reason: 'length',
+        },
+      },
+      expectedInputTokens: 18,
+      expectedOutputTokens: 6,
+      expectedStopReason: 'length',
+    },
+    {
+      name: 'generationInfo response_metadata usage and stop_reason',
+      serializedId: ['langchain', 'chat_models', 'anthropic', 'ChatAnthropic'],
+      runId: 'run_generation_info_response_metadata',
+      model: 'claude-3',
+      provider: 'anthropic',
+      generation: {
+        generationInfo: {
+          response_metadata: {
+            usage: {
+              input_tokens: 21,
+              output_tokens: 7,
+            },
+            stop_reason: 'end_turn',
+          },
+        },
+      },
+      expectedInputTokens: 21,
+      expectedOutputTokens: 7,
+      expectedStopReason: 'end_turn',
+    },
+    {
+      name: 'response_metadata Bedrock invocation metrics',
+      serializedId: ['langchain', 'chat_models', 'bedrock', 'ChatBedrock'],
+      runId: 'run_message_bedrock_invocation_metrics',
+      model: 'anthropic.claude-3',
+      provider: 'bedrock',
+      generation: {
+        message: new AIMessage({
+          content: 'Test response',
+          response_metadata: {
+            finish_reason: 'stop',
+            'amazon-bedrock-invocationMetrics': {
+              inputTokenCount: 24,
+              outputTokenCount: 8,
+            },
+          },
+        }),
+      },
+      expectedInputTokens: 24,
+      expectedOutputTokens: 8,
+      expectedStopReason: 'stop',
+    },
+    {
+      name: 'generationInfo response_metadata Bedrock invocation metrics',
+      serializedId: ['langchain', 'chat_models', 'bedrock', 'ChatBedrock'],
+      runId: 'run_generation_info_bedrock_invocation_metrics',
+      model: 'anthropic.claude-3',
+      provider: 'bedrock',
+      generation: {
+        generationInfo: {
+          response_metadata: {
+            stop_reason: 'end_turn',
+            'amazon-bedrock-invocationMetrics': {
+              inputTokenCount: 27,
+              outputTokenCount: 9,
+            },
+          },
+        },
+      },
+      expectedInputTokens: 27,
+      expectedOutputTokens: 9,
+      expectedStopReason: 'end_turn',
+    },
+  ])(
+    'should extract usage and stop reason from AIMessage $name without llmOutput',
+    ({
+      serializedId,
+      runId,
+      model,
+      provider,
+      generation,
+      expectedInputTokens,
+      expectedOutputTokens,
+      expectedStopReason,
+    }) => {
+      const serialized = {
+        lc: 1,
+        type: 'constructor' as const,
+        id: serializedId,
+        kwargs: {},
+      }
+
+      handler.handleLLMStart(serialized, ['Test prompt'], runId, undefined, { invocation_params: {} }, undefined, {
+        ls_model_name: model,
+        ls_provider: provider,
+      })
+      const llmResult = {
+        generations: [
+          [
+            {
+              text: 'Test response',
+              ...generation,
+            },
+          ],
+        ],
+      }
+      handler.handleLLMEnd(llmResult, runId)
+
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      expect(captureCall[0].properties['$ai_input_tokens']).toBe(expectedInputTokens)
+      expect(captureCall[0].properties['$ai_output_tokens']).toBe(expectedOutputTokens)
+      expect(captureCall[0].properties['$ai_stop_reason']).toBe(expectedStopReason)
+    }
+  )
+
   it('should convert AIMessage with tool calls to dict format', () => {
     const toolCalls = [
       {
@@ -799,5 +968,134 @@ describe('LangChainCallbackHandler trace/span state sanitization', () => {
     expect(outputState).toContain('ok')
     expect(outputState).toContain('[base64 image/jpeg redacted]')
     expect(outputState).not.toContain('AAAAAAAA')
+  })
+})
+
+describe('LangChainCallbackHandler LangGraph interrupts', () => {
+  const serializedChain = {
+    lc: 1,
+    type: 'constructor' as const,
+    id: ['langgraph', 'pregel', 'CompiledStateGraph'],
+    kwargs: {},
+  }
+  const serializedTool = {
+    lc: 1,
+    type: 'constructor' as const,
+    id: ['langchain', 'tools', 'DynamicStructuredTool'],
+    kwargs: {},
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  // Mirror LangGraph's error hierarchy: control-flow exceptions expose `is_bubble_up` as a
+  // prototype getter (class getters compile to the prototype), and GraphInterrupt carries the
+  // pending interrupts as an own property.
+  class FakeGraphBubbleUp extends Error {
+    constructor(name: string) {
+      super('LangGraph control flow')
+      this.name = name
+    }
+    get is_bubble_up(): boolean {
+      return true
+    }
+  }
+
+  class FakeGraphInterrupt extends FakeGraphBubbleUp {
+    interrupts: { value: unknown; id: string }[]
+    constructor(name: 'GraphInterrupt' | 'NodeInterrupt') {
+      super(name)
+      this.interrupts = [{ value: 'Approve the plan?', id: 'interrupt-1' }]
+    }
+  }
+
+  it('captures a GraphInterrupt chain without error properties, keeping the interrupt payload', () => {
+    const handler = new LangChainCallbackHandler({ client: mockPostHogClient })
+    const runId = 'graph-interrupt-chain'
+    const interrupt = new FakeGraphInterrupt('GraphInterrupt')
+
+    handler.handleChainStart(serializedChain, { messages: [] }, runId)
+    handler.handleChainError(interrupt, runId)
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    expect(captureCall[0]).toMatchObject({
+      event: '$ai_trace',
+      properties: {
+        $ai_span_id: runId,
+      },
+    })
+    expect(captureCall[0].properties).not.toHaveProperty('$ai_error')
+    expect(captureCall[0].properties).not.toHaveProperty('$ai_is_error')
+    expect(captureCall[0].properties['$ai_output_state']).toEqual({ __interrupt__: interrupt.interrupts })
+    expect(captureCall[0].properties['$ai_input_state']).toEqual({ messages: [] })
+    expect(captureCall[0].properties['$ai_span_name']).toBe('CompiledStateGraph')
+    expect(captureCall[0].properties['$ai_latency']).toBeGreaterThanOrEqual(0)
+  })
+
+  it('captures a GraphInterrupt tool without error properties, keeping the interrupt payload', () => {
+    const handler = new LangChainCallbackHandler({ client: mockPostHogClient })
+    const runId = 'graph-interrupt-tool'
+    const interrupt = new FakeGraphInterrupt('GraphInterrupt')
+
+    handler.handleToolStart(serializedTool, '{"action":"approve"}', runId, 'parent-run')
+    handler.handleToolError(interrupt, runId, 'parent-run')
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    expect(captureCall[0]).toMatchObject({
+      event: '$ai_span',
+      properties: {
+        $ai_span_id: runId,
+      },
+    })
+    expect(captureCall[0].properties).not.toHaveProperty('$ai_error')
+    expect(captureCall[0].properties).not.toHaveProperty('$ai_is_error')
+    expect(captureCall[0].properties['$ai_output_state']).toEqual({ __interrupt__: interrupt.interrupts })
+    expect(captureCall[0].properties['$ai_input_state']).toEqual('{"action":"approve"}')
+    expect(captureCall[0].properties['$ai_span_name']).toBe('DynamicStructuredTool')
+    expect(captureCall[0].properties['$ai_latency']).toBeGreaterThanOrEqual(0)
+  })
+
+  it('captures a legacy NodeInterrupt without error properties', () => {
+    const handler = new LangChainCallbackHandler({ client: mockPostHogClient })
+    const runId = 'node-interrupt-chain'
+
+    handler.handleChainStart(serializedChain, { messages: [] }, runId)
+    handler.handleChainError(new FakeGraphInterrupt('NodeInterrupt'), runId)
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    expect(captureCall[0].properties).not.toHaveProperty('$ai_error')
+    expect(captureCall[0].properties).not.toHaveProperty('$ai_is_error')
+  })
+
+  it('captures other bubble-up control flow (e.g. ParentCommand) without error properties', () => {
+    const handler = new LangChainCallbackHandler({ client: mockPostHogClient })
+    const runId = 'parent-command-chain'
+
+    handler.handleChainStart(serializedChain, { messages: [] }, runId)
+    handler.handleChainError(new FakeGraphBubbleUp('ParentCommand'), runId)
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    expect(captureCall[0].properties).not.toHaveProperty('$ai_error')
+    expect(captureCall[0].properties).not.toHaveProperty('$ai_is_error')
+    expect(captureCall[0].properties).not.toHaveProperty('$ai_output_state')
+  })
+
+  it('preserves ordinary chain errors', () => {
+    const handler = new LangChainCallbackHandler({ client: mockPostHogClient })
+    const runId = 'failed-chain'
+
+    handler.handleChainStart(serializedChain, { messages: [] }, runId)
+    handler.handleChainError(new Error('model invocation failed'), runId)
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    expect(captureCall[0].properties['$ai_is_error']).toBe(true)
+    expect(captureCall[0].properties['$ai_error']).toContain('model invocation failed')
+    expect(captureCall[0].properties).not.toHaveProperty('$ai_output_state')
   })
 })

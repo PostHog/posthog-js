@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.6.1
+
+### Patch Changes
+
+- [#4345](https://github.com/PostHog/posthog-js/pull/4345) [`484c482`](https://github.com/PostHog/posthog-js/commit/484c482975d3d14ae37d6b5e0ef87622683be26c) Thanks [@willwearing](https://github.com/willwearing)! - Treat LangGraph control-flow exceptions (`GraphInterrupt`, `NodeInterrupt`, `ParentCommand`, and other `is_bubble_up` errors) as non-error trace and span completions in the LangChain callback, surfacing pending interrupts as `$ai_output_state` under the `__interrupt__` key.
+  (2026-08-03)
+
 ## 8.6.0
 
 ### Minor Changes

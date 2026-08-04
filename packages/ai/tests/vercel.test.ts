@@ -40,6 +40,21 @@ const v3TokenUsage = (input: number, output: number, reasoning?: number) => ({
   outputTokens: { total: output, text: output - (reasoning ?? 0), reasoning: reasoning },
 })
 
+const settlePromptly = async <T>(promise: Promise<T>): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('Operation did not settle promptly')), 250)
+  })
+
+  try {
+    return await Promise.race([promise, timeout])
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId)
+    }
+  }
+}
+
 // Create a mock V3 model (AI SDK 6)
 const createMockV3Model = (modelId: string): LanguageModelV3 => {
   const mockResponses = {
@@ -179,6 +194,10 @@ describe('Vercel AI SDK - Dual Version Support', () => {
   beforeEach(async () => {
     jest.clearAllMocks()
     mockPostHogClient = new (PostHog as any)()
+  })
+
+  afterEach(() => {
+    jest.restoreAllMocks()
   })
 
   describe('V3 Model (AI SDK 6)', () => {
@@ -585,6 +604,278 @@ describe('Vercel AI SDK - Dual Version Support', () => {
           $ai_provider: 'openai',
         })
       )
+    })
+
+    it.each(['v2', 'v3'] as const)(
+      'should capture in-band error chunks with partial output in %s streams',
+      async (version) => {
+        const streamError = new Error('provider error chunk')
+        const streamParts = [
+          { type: 'text-delta' as const, id: 'text-1', delta: 'partial response' },
+          { type: 'error' as const, error: streamError },
+        ]
+        const baseModel = createMockStreamingModel(version, streamParts as any)
+        const model = withTracing(baseModel, mockPostHogClient, {
+          posthogDistinctId: 'test-user',
+          posthogTraceId: `test-${version}-error-chunk`,
+        })
+
+        const result = await model.doStream({ prompt: [] })
+        const receivedParts: unknown[] = []
+        const reader = result.stream.getReader()
+        for (;;) {
+          const readResult = await reader.read()
+          if (readResult.done) {
+            break
+          }
+          receivedParts.push(readResult.value)
+        }
+
+        expect(receivedParts).toEqual(streamParts)
+        expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+        const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+        expect(captureCall[0].properties).toEqual(
+          expect.objectContaining({
+            $ai_is_error: true,
+            $ai_error: expect.stringContaining('provider error chunk'),
+            $ai_output_choices: [{ role: 'assistant', content: 'partial response' }],
+          })
+        )
+      }
+    )
+
+    it.each(['v2', 'v3'] as const)(
+      'should capture error finish reasons with partial output in %s streams',
+      async (version) => {
+        const finishPart =
+          version === 'v2'
+            ? {
+                type: 'finish' as const,
+                usage: { inputTokens: 4, outputTokens: 2, totalTokens: 6 },
+                finishReason: 'error' as const,
+              }
+            : {
+                type: 'finish' as const,
+                usage: v3TokenUsage(4, 2),
+                finishReason: { unified: 'error' as const, raw: 'provider_error' },
+              }
+        const streamParts = [{ type: 'text-delta' as const, id: 'text-1', delta: 'partial response' }, finishPart]
+        const baseModel = createMockStreamingModel(version, streamParts as any)
+        const model = withTracing(baseModel, mockPostHogClient, {
+          posthogDistinctId: 'test-user',
+          posthogTraceId: `test-${version}-error-finish`,
+        })
+
+        const result = await model.doStream({ prompt: [] })
+        const receivedParts: unknown[] = []
+        const reader = result.stream.getReader()
+        for (;;) {
+          const readResult = await reader.read()
+          if (readResult.done) {
+            break
+          }
+          receivedParts.push(readResult.value)
+        }
+
+        expect(receivedParts).toEqual(streamParts)
+        expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+        const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+        expect(captureCall[0].properties).toEqual(
+          expect.objectContaining({
+            $ai_is_error: true,
+            $ai_error: expect.stringContaining('stream finished with an error'),
+            $ai_stop_reason: 'error',
+            $ai_output_choices: [{ role: 'assistant', content: 'partial response' }],
+          })
+        )
+      }
+    )
+
+    it.each(['v2', 'v3'] as const)(
+      'should preserve source errors and capture partial output once in %s streams',
+      async (version) => {
+        const sourceError = new Error('source stream failed')
+        let pullCount = 0
+        const sourceStream = new ReadableStream({
+          pull(controller) {
+            if (pullCount++ === 0) {
+              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'partial response' })
+            } else {
+              controller.error(sourceError)
+            }
+          },
+        })
+        const baseModel = createMockStreamingModel(version, [] as any) as any
+        baseModel.doStream = jest.fn().mockResolvedValue({ stream: sourceStream })
+        const model = withTracing(baseModel, mockPostHogClient, {
+          posthogDistinctId: 'test-user',
+          posthogTraceId: `test-${version}-source-error`,
+        })
+
+        const result = await model.doStream({ prompt: [] })
+        const reader = result.stream.getReader()
+        expect(await reader.read()).toEqual({
+          done: false,
+          value: { type: 'text-delta', id: 'text-1', delta: 'partial response' },
+        })
+        await expect(reader.read()).rejects.toBe(sourceError)
+
+        expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+        const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+        expect(captureCall[0].properties).toEqual(
+          expect.objectContaining({
+            $ai_is_error: true,
+            $ai_error: expect.stringContaining('source stream failed'),
+            $ai_output_choices: [{ role: 'assistant', content: 'partial response' }],
+          })
+        )
+      }
+    )
+
+    it.each(['v2', 'v3'] as const)(
+      'should propagate cancellation and capture partial output once in %s streams',
+      async (version) => {
+        const cancelSource = jest.fn()
+        const sourceStream = new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'partial response' })
+          },
+          cancel: cancelSource,
+        })
+        const baseModel = createMockStreamingModel(version, [] as any) as any
+        baseModel.doStream = jest.fn().mockResolvedValue({ stream: sourceStream })
+        const model = withTracing(baseModel, mockPostHogClient, {
+          posthogDistinctId: 'test-user',
+          posthogTraceId: `test-${version}-cancel`,
+        })
+        const cancelReason = new Error('consumer cancelled')
+
+        const result = await model.doStream({ prompt: [] })
+        const reader = result.stream.getReader()
+        expect((await reader.read()).done).toBe(false)
+        await reader.cancel(cancelReason)
+
+        expect(cancelSource).toHaveBeenCalledTimes(1)
+        expect(cancelSource).toHaveBeenCalledWith(cancelReason)
+        expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+        const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+        expect(captureCall[0].properties).toEqual(
+          expect.objectContaining({
+            $ai_is_error: true,
+            $ai_error: expect.stringContaining('consumer cancelled'),
+            $ai_output_choices: [{ role: 'assistant', content: 'partial response' }],
+          })
+        )
+      }
+    )
+
+    it.each(['v2', 'v3'] as const)(
+      'should close promptly when immediate telemetry never settles in %s streams',
+      async (version) => {
+        const streamParts = [{ type: 'text-delta' as const, id: 'text-1', delta: 'complete response' }]
+        const baseModel = createMockStreamingModel(version, streamParts as any)
+        ;(mockPostHogClient.captureImmediate as jest.Mock).mockReturnValue(new Promise<void>(() => undefined))
+        const model = withTracing(baseModel, mockPostHogClient, {
+          posthogDistinctId: 'test-user',
+          posthogTraceId: `test-${version}-nonblocking-completion`,
+          posthogCaptureImmediate: true,
+        })
+
+        const result = await model.doStream({ prompt: [] })
+        const reader = (
+          result.stream as ReadableStream<LanguageModelV2StreamPart | LanguageModelV3StreamPart>
+        ).getReader()
+        await expect(reader.read()).resolves.toEqual({ done: false, value: streamParts[0] })
+        await expect(settlePromptly(reader.read())).resolves.toEqual({ done: true, value: undefined })
+        await flushPromises()
+
+        expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
+        expect(mockPostHogClient.capture).not.toHaveBeenCalled()
+      }
+    )
+
+    it.each(['v2', 'v3'] as const)(
+      'should reject reads promptly when immediate telemetry never settles in %s streams',
+      async (version) => {
+        const sourceError = new Error('source stream failed')
+        const sourceStream = new ReadableStream({
+          pull(controller) {
+            controller.error(sourceError)
+          },
+        })
+        const baseModel = createMockStreamingModel(version, [] as any) as any
+        baseModel.doStream = jest.fn().mockResolvedValue({ stream: sourceStream })
+        ;(mockPostHogClient.captureImmediate as jest.Mock).mockReturnValue(new Promise<void>(() => undefined))
+        const model = withTracing(baseModel, mockPostHogClient, {
+          posthogDistinctId: 'test-user',
+          posthogTraceId: `test-${version}-nonblocking-source-error`,
+          posthogCaptureImmediate: true,
+        })
+
+        const result = await model.doStream({ prompt: [] })
+        const reader = result.stream.getReader()
+        await expect(settlePromptly(reader.read())).rejects.toBe(sourceError)
+        await flushPromises()
+
+        expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
+        expect(mockPostHogClient.capture).not.toHaveBeenCalled()
+      }
+    )
+
+    it.each(['v2', 'v3'] as const)(
+      'should cancel promptly when immediate telemetry never settles in %s streams',
+      async (version) => {
+        const cancelSource = jest.fn()
+        const sourceStream = new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'partial response' })
+          },
+          cancel: cancelSource,
+        })
+        const baseModel = createMockStreamingModel(version, [] as any) as any
+        baseModel.doStream = jest.fn().mockResolvedValue({ stream: sourceStream })
+        ;(mockPostHogClient.captureImmediate as jest.Mock).mockReturnValue(new Promise<void>(() => undefined))
+        const model = withTracing(baseModel, mockPostHogClient, {
+          posthogDistinctId: 'test-user',
+          posthogTraceId: `test-${version}-nonblocking-cancel`,
+          posthogCaptureImmediate: true,
+        })
+        const cancelReason = new Error('consumer cancelled')
+
+        const result = await model.doStream({ prompt: [] })
+        const reader = result.stream.getReader()
+        expect((await reader.read()).done).toBe(false)
+        await expect(settlePromptly(reader.cancel(cancelReason))).resolves.toBeUndefined()
+        await flushPromises()
+
+        expect(cancelSource).toHaveBeenCalledTimes(1)
+        expect(cancelSource).toHaveBeenCalledWith(cancelReason)
+        expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
+        expect(mockPostHogClient.capture).not.toHaveBeenCalled()
+      }
+    )
+
+    it.each(['v2', 'v3'] as const)('should not fail %s streams when immediate telemetry rejects', async (version) => {
+      const telemetryError = new Error('telemetry delivery failed')
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+      ;(mockPostHogClient.captureImmediate as jest.Mock).mockRejectedValue(telemetryError)
+      const streamParts = [{ type: 'text-delta' as const, id: 'text-1', delta: 'unchanged' }]
+      const baseModel = createMockStreamingModel(version, streamParts as any)
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: `test-${version}-telemetry-error`,
+        posthogCaptureImmediate: true,
+      })
+
+      const result = await model.doStream({ prompt: [] })
+      const reader = result.stream.getReader()
+      await expect(reader.read()).resolves.toEqual({ done: false, value: streamParts[0] })
+      await expect(reader.read()).resolves.toEqual({ done: true, value: undefined })
+      await flushPromises()
+
+      expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
+      expect(mockPostHogClient.capture).not.toHaveBeenCalled()
+      expect(warnSpy).toHaveBeenCalledWith('[PostHog AI] Failed to capture generation telemetry:', telemetryError)
     })
 
     it.each([
