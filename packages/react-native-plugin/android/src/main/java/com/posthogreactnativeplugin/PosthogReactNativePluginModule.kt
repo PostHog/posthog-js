@@ -269,7 +269,9 @@ class PosthogReactNativePluginModule(
       PostHog.reset()
       // Native reset() mints its own anonymous id; overwrite it with the JS one so the two
       // SDKs stay on the same identity. Must run after reset(), which needs the pre-reset
-      // distinctId to know which subscription to unregister.
+      // distinctId to know which subscription to unregister. Known gap (as on iOS): native's
+      // async push re-registration can read the identity before this write lands and register
+      // under a throwaway id; retryPending() converges it on the next flush.
       setIdentify(PostHog.getConfig<PostHogConfig>()?.cachePreferences, distinctId, anonymousId)
     } catch (e: Throwable) {
       logError("reset", e)
