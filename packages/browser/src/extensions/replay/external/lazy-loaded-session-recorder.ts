@@ -565,8 +565,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         private readonly _instance: PostHog,
         documentWasEverVisible?: boolean
     ) {
-        this._documentWasEverVisible =
-            documentWasEverVisible ?? (!document?.visibilityState || document.visibilityState === 'visible')
+        // An older core does not provide visibility history. Preserve its unload behavior
+        // rather than treating a currently hidden document as one that was never visible.
+        this._documentWasEverVisible = documentWasEverVisible ?? true
 
         // we know there's a sessionManager, so don't need to start without a session id
         const { sessionId, windowId } = this._sessionManager.checkAndGetSessionAndWindowId()
