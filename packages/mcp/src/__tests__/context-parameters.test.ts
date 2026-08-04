@@ -108,6 +108,11 @@ describe('addContextParameterToTool', () => {
         "already has 'context' parameter",
       ],
       [
+        'schema uses a root $ref',
+        { name: 'referenced-tool', inputSchema: { $ref: '#/$defs/Input' } },
+        'complex schema',
+      ],
+      [
         'schema uses oneOf',
         { name: 'union-tool', inputSchema: { oneOf: [{ type: 'object', properties: {} }] } },
         'complex schema',
