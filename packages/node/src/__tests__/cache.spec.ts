@@ -459,6 +459,25 @@ describe('FlagDefinitionCacheProvider Integration', () => {
       expect(mockCacheProvider.shutdown).toHaveBeenCalled()
     })
 
+    it('clears the cache shutdown timeout when async shutdown resolves first', async () => {
+      mockCacheProvider.getFlagDefinitions.mockReturnValue(testFlagData)
+      mockCacheProvider.shouldFetchFlagDefinitions.mockResolvedValue(false)
+      mockCacheProvider.shutdown.mockResolvedValue(undefined)
+
+      posthog = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        personalApiKey: 'TEST_PERSONAL_API_KEY',
+        flagDefinitionCacheProvider: mockCacheProvider,
+        fetchRetryCount: 0,
+      })
+
+      await jest.runOnlyPendingTimersAsync()
+      await posthog.shutdown()
+
+      expect(mockCacheProvider.shutdown).toHaveBeenCalled()
+      expect(jest.getTimerCount()).toBe(0)
+    })
+
     it('works with sync shutdown', async () => {
       mockCacheProvider.getFlagDefinitions.mockReturnValue(testFlagData)
       mockCacheProvider.shouldFetchFlagDefinitions.mockResolvedValue(false)
