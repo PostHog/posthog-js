@@ -7,7 +7,11 @@ import {
     useHideSurveyOnURLChange,
     usePopupVisibility,
 } from '../../extensions/surveys'
-import { getSurveyContainerClass, retrieveSurveyShadow } from '../../extensions/surveys/surveys-extension-utils'
+import {
+    getSurveyContainerClass,
+    retrieveSurveyShadow,
+    setInProgressSurveyState,
+} from '../../extensions/surveys/surveys-extension-utils'
 import {
     Survey,
     SurveyQuestionBranchingType,
@@ -1036,6 +1040,76 @@ describe('SurveyManager', () => {
             expect(surveyDiv.getElementsByClassName('survey-question').length).toBe(1)
             const descriptionElement = surveyDiv.querySelector('.survey-question-description')
             expect(descriptionElement).not.toBeNull()
+        })
+
+        it('still renders the form when a stale persisted index points past the last question (issue #3575)', () => {
+            // A prior completion/interaction can leave an in-progress index beyond the questions
+            // array. Without clamping, the question renderer bails and the survey container is
+            // injected but empty — the exact symptom reported in #3575.
+            const staleSurvey = { ...mockSurvey, id: 'stale-index-survey' } as unknown as Survey
+            setInProgressSurveyState(staleSurvey, {
+                surveySubmissionId: 'stale',
+                responses: {},
+                lastQuestionIndex: staleSurvey.questions.length, // out of range (only 0..length-1 are valid)
+                visitedIndices: [0],
+            } as any)
+
+            const surveyDiv = document.createElement('div')
+            surveyManager.renderSurvey(staleSurvey, surveyDiv)
+
+            expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
+            expect(surveyDiv.querySelector('.survey-box')?.getAttribute('data-question-index')).toBe('0')
+
+            localStorage.clear()
+        })
+
+        it('does not navigate Back to a stale out-of-range visited index (issue #3575)', async () => {
+            // A corrupt/stale persisted blob can carry a valid current index but a visitedIndices
+            // array that points past the end of the questions array. Popping such an entry on Back
+            // would send the renderer to a non-existent question and re-empty the container. The
+            // restored visited indices must be filtered so Back always lands on a real question.
+            //
+            // Open questions schedule a 100ms autofocus setTimeout on mount. Unlike the
+            // @testing-library render() tests (which auto-unmount in afterEach and clear it),
+            // renderSurvey mounts Preact directly with no teardown, so that timer would outlive
+            // the test as an orphan and trip CI's "worker failed to exit gracefully" guard. Fake
+            // timers keep it from ever becoming a real pending handle.
+            jest.useFakeTimers()
+            const backSurvey = {
+                ...mockSurvey,
+                id: 'stale-visited-indices-survey',
+                appearance: { ...(mockSurvey.appearance ?? {}), allowGoBack: true },
+                questions: [
+                    { id: 'q1', question: 'Question 1', type: SurveyQuestionType.Open, optional: true },
+                    { id: 'q2', question: 'Question 2', type: SurveyQuestionType.Open, optional: true },
+                ],
+            } as unknown as Survey
+            setInProgressSurveyState(backSurvey, {
+                surveySubmissionId: 'stale',
+                responses: {},
+                lastQuestionIndex: 1, // in range, so the whole blob is kept
+                visitedIndices: [0, backSurvey.questions.length], // trailing entry is out of range
+            } as any)
+
+            const surveyDiv = document.createElement('div')
+            document.body.appendChild(surveyDiv)
+            surveyManager.renderSurvey(backSurvey, surveyDiv)
+
+            expect(surveyDiv.querySelector('.survey-box')?.getAttribute('data-question-index')).toBe('1')
+
+            const backButton = surveyDiv.querySelector<HTMLButtonElement>('.form-back')
+            expect(backButton).not.toBeNull()
+            await act(async () => {
+                fireEvent.click(backButton!)
+            })
+
+            // Back must land on the real first question, not the stale out-of-range index.
+            expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
+            expect(surveyDiv.querySelector('.survey-box')?.getAttribute('data-question-index')).toBe('0')
+
+            document.body.removeChild(surveyDiv)
+            localStorage.clear()
+            jest.useRealTimers()
         })
 
         it('exposes the current question index on .survey-box for embedders', () => {

@@ -6,6 +6,7 @@ import { SurveyEventName, SurveyEventProperties } from '../posthog-surveys-types
 import { ProductTourEventName, ProductTourEventProperties } from '../posthog-product-tours-types'
 import { SURVEY_SEEN_PREFIX } from '../utils/survey-utils'
 import { beforeEach } from '@jest/globals'
+import { RateLimiter } from '../rate-limiter'
 
 jest.mock('@posthog/browser-common/utils/globals', () => {
     const orig = jest.requireActual('@posthog/browser-common/utils/globals')
@@ -28,9 +29,12 @@ jest.mock('@posthog/browser-common/utils/globals', () => {
             },
         },
         get location() {
+            const url = new URL(mockURL())
             return {
-                href: mockURL(),
-                toString: () => mockURL(),
+                href: url.href,
+                origin: url.origin,
+                pathname: url.pathname,
+                toString: () => url.href,
                 hostname: mockHostName(),
             }
         },
@@ -159,6 +163,94 @@ describe('posthog core', () => {
                     '[PostHog.js]',
                     'This capture call is ignored due to client rate limiting.'
                 )
+            })
+
+            it('does not reintroduce denylisted page or session context into a warning', () => {
+                jest.useFakeTimers()
+                jest.setSystemTime(Date.now())
+                mockURL.mockReturnValue('https://example.com/users/alice@example.com/private?token=secret#private')
+                const { posthog, beforeSendMock } = setup({
+                    rate_limiting: { events_per_second: 1, events_burst_limit: 1 },
+                    property_denylist: ['$current_url', '$pathname', '$session_id'],
+                })
+
+                posthog.capture(eventName, eventProperties)
+                posthog.capture(eventName, eventProperties)
+
+                const warning = beforeSendMock.mock.calls.find(
+                    ([event]) => event.event === '$$client_ingestion_warning'
+                )[0]
+                expect(warning.properties.$$client_ingestion_warning_message).toBe(
+                    'posthog-js client rate limited: 1 event(s) dropped since the last warning. Config is set to 1 events per second and 1 events burst limit.'
+                )
+                expect(warning.properties).not.toHaveProperty('$$client_ingestion_warning_page')
+                expect(warning.properties).not.toHaveProperty('$$client_ingestion_warning_session_id')
+                expect(warning.properties).not.toHaveProperty('$current_url')
+                expect(warning.properties).not.toHaveProperty('$pathname')
+                expect(warning.properties).not.toHaveProperty('$session_id')
+            })
+
+            it('keeps the persisted tally across a rate limiter reload', () => {
+                jest.useFakeTimers()
+                const now = Date.now()
+                jest.setSystemTime(now)
+                console.error = jest.fn()
+                const { posthog, beforeSendMock } = setup({
+                    rate_limiting: { events_per_second: 1, events_burst_limit: 1 },
+                })
+
+                posthog.capture(eventName, eventProperties)
+                posthog.capture(eventName, eventProperties) // accepted warning resets the tally
+                for (let i = 0; i < 19; i++) {
+                    posthog.capture(eventName, eventProperties)
+                }
+                expect(posthog.persistence?.get_property('$capture_rate_limit').dropped).toBe(19)
+
+                beforeSendMock.mockClear()
+                posthog.rateLimiter = new RateLimiter(posthog)
+                jest.setSystemTime(now + 1000)
+                posthog.capture(eventName, eventProperties)
+                posthog.capture(eventName, eventProperties)
+
+                const warning = beforeSendMock.mock.calls.find(
+                    ([event]) => event.event === '$$client_ingestion_warning'
+                )[0]
+                expect(warning.properties.$$client_ingestion_warning_message).toContain(
+                    '20 event(s) dropped since the last warning'
+                )
+            })
+
+            it('resets the tally only after before_send accepts the warning', () => {
+                jest.useFakeTimers()
+                const now = Date.now()
+                jest.setSystemTime(now)
+                const { posthog, beforeSendMock } = setup({
+                    rate_limiting: { events_per_second: 1, events_burst_limit: 1 },
+                })
+                let rejectWarning = true
+                beforeSendMock.mockImplementation((event) => {
+                    if (event.event === '$$client_ingestion_warning' && rejectWarning) {
+                        rejectWarning = false
+                        return null
+                    }
+                    return event
+                })
+
+                posthog.capture(eventName, eventProperties)
+                posthog.capture(eventName, eventProperties) // warning rejected, dropped tally is 1
+                posthog.capture(eventName, eventProperties) // another drop, tally is 2
+                jest.setSystemTime(now + 1000)
+                posthog.capture(eventName, eventProperties) // token refilled
+                posthog.capture(eventName, eventProperties) // accepted warning reports all 3 drops
+
+                const warningMessages = beforeSendMock.mock.calls
+                    .filter(([event]) => event.event === '$$client_ingestion_warning')
+                    .map(([event]) => event.properties.$$client_ingestion_warning_message)
+                expect(warningMessages).toEqual([
+                    expect.stringContaining('1 event(s) dropped since the last warning'),
+                    expect.stringContaining('3 event(s) dropped since the last warning'),
+                ])
+                expect(posthog.persistence?.get_property('$capture_rate_limit').dropped).toBe(0)
             })
         })
 
