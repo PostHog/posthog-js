@@ -166,6 +166,38 @@ describe('SurveyPopup', () => {
         expect(mockedUuidv7).not.toHaveBeenCalled()
     })
 
+    // A persisted index that is absent or non-numeric predates the persisted-index feature and
+    // must keep the restored responses, while an index that is present but out of range means the
+    // record is stale (e.g. left over from a completion) and its responses should be dropped.
+    test.each([
+        { label: 'missing index', lastQuestionIndex: undefined, keepsResponses: true },
+        { label: 'NaN index', lastQuestionIndex: NaN, keepsResponses: true },
+        { label: 'negative index', lastQuestionIndex: -1, keepsResponses: false },
+        { label: 'index at questions.length', lastQuestionIndex: mockSurvey.questions.length, keepsResponses: false },
+        {
+            label: 'index past questions.length',
+            lastQuestionIndex: mockSurvey.questions.length + 10,
+            keepsResponses: false,
+        },
+    ])('restores responses only for an absent or in-range index ($label)', ({ lastQuestionIndex, keepsResponses }) => {
+        mockedGetInProgressSurveyState.mockReturnValue({
+            surveySubmissionId: 'existing-uuid-range',
+            lastQuestionIndex,
+            responses: { $survey_response_q1: 'Previous answer' },
+        } as any)
+        render(
+            <SurveyPopup
+                survey={mockSurvey}
+                removeSurveyFromFocus={mockRemoveSurveyFromFocus}
+                isPopup={true}
+                posthog={mockPosthog as any}
+            />
+        )
+        // Either way the first question renders (never an empty container).
+        expect(screen.getByText('Question 1')).toBeVisible()
+        expect(screen.getByRole('textbox')).toHaveValue(keepsResponses ? 'Previous answer' : '')
+    })
+
     test('saves partial response to localStorage when moving to next question', () => {
         const initialState = null
         const generatedId = 'newly-generated-id'
