@@ -29,7 +29,10 @@ export class ObjectCoercer implements ErrorTrackingCoercer<ObjectLike> {
   }
 
   getType(err: Record<string, unknown>): string {
-    return isEvent(err) ? err.constructor.name : 'Error'
+    if (isEvent(err)) {
+      return err.constructor.name
+    }
+    return 'name' in err && isString(err.name) && !isEmptyString(err.name) ? err.name : 'Error'
   }
 
   getValue(err: object) {
