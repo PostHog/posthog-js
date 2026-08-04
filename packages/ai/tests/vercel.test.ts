@@ -538,6 +538,44 @@ describe('Vercel AI SDK - Dual Version Support', () => {
     it.each([
       ['v2', createMockV2Model],
       ['v3', createMockV3Model],
+    ])('preserves the provider result when captureImmediate rejects in %s models', async (_version, createModel) => {
+      const baseModel = createModel('gpt-4')
+      const providerResult = await (baseModel.doGenerate as any)({ prompt: [] })
+      baseModel.doGenerate = jest.fn().mockResolvedValue(providerResult) as any
+      ;(mockPostHogClient.captureImmediate as jest.Mock).mockRejectedValue(new Error('telemetry failed'))
+
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogCaptureImmediate: true,
+      })
+      const result = await (model.doGenerate as any)({ prompt: [] })
+
+      expect(result).toBe(providerResult)
+      expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
+    })
+
+    it.each([
+      ['v2', createMockV2Model],
+      ['v3', createMockV3Model],
+    ])('preserves the provider error when captureImmediate rejects in %s models', async (_version, createModel) => {
+      const providerError = new Error('provider failed')
+      const baseModel = createModel('gpt-4')
+      baseModel.doGenerate = jest.fn().mockRejectedValue(providerError) as any
+      ;(mockPostHogClient.captureImmediate as jest.Mock).mockRejectedValue(new Error('telemetry failed'))
+
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogCaptureImmediate: true,
+      })
+      const rejection = await (model.doGenerate as any)({ prompt: [] }).catch((error: unknown) => error)
+
+      expect(rejection).toBe(providerError)
+      expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
+    })
+
+    it.each([
+      ['v2', createMockV2Model],
+      ['v3', createMockV3Model],
     ])('should handle errors in %s models', async (_version, createModel) => {
       const baseModel = createModel('gpt-4')
       baseModel.doGenerate = jest.fn().mockRejectedValue(new Error('API Error'))
@@ -837,7 +875,7 @@ describe('Vercel AI SDK - Dual Version Support', () => {
 
       expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
       expect(mockPostHogClient.capture).not.toHaveBeenCalled()
-      expect(warnSpy).toHaveBeenCalledWith('[PostHog AI] Failed to capture Vercel stream telemetry:', telemetryError)
+      expect(warnSpy).toHaveBeenCalledWith('[PostHog AI] Failed to capture generation telemetry:', telemetryError)
     })
 
     it.each([

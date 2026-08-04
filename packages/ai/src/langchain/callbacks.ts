@@ -1,4 +1,4 @@
-import { PostHog } from 'posthog-node'
+import { EventMessage, PostHog } from 'posthog-node'
 import { withPrivacyMode, getModelParams, toContentString } from '../utils'
 import { BaseCallbackHandler } from '@langchain/core/callbacks/base'
 import { version } from '../../package.json'
@@ -385,6 +385,14 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     return parentRunId
   }
 
+  private _safeCapture(message: EventMessage): void {
+    try {
+      this.client.capture(message)
+    } catch {
+      // Telemetry delivery must never affect the LangChain callback lifecycle.
+    }
+  }
+
   private _popRunAndCaptureTraceOrSpan(
     runId: string,
     parentRunId: string | undefined,
@@ -451,7 +459,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     } else if (outputs !== undefined) {
       eventProperties['$ai_output_state'] = withPrivacyMode(this.client, this.privacyMode, sanitizeLangChain(outputs))
     }
-    this.client.capture({
+    this._safeCapture({
       distinctId: this.distinctId ? this.distinctId.toString() : runId,
       event: eventName,
       properties: eventProperties,
@@ -567,7 +575,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       eventProperties['$process_person_profile'] = false
     }
 
-    this.client.capture({
+    this._safeCapture({
       distinctId: this.distinctId ? this.distinctId.toString() : traceId,
       event: '$ai_generation',
       properties: eventProperties,

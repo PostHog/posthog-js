@@ -79,6 +79,52 @@ describe('LangChainCallbackHandler', () => {
     expect(captureCall[0].properties.$ai_provider).toBe('openai')
   })
 
+  it('does not throw when generation capture fails', () => {
+    const capture = mockPostHogClient.capture as jest.Mock
+    capture.mockImplementationOnce(() => {
+      throw new Error('telemetry failed')
+    })
+    const runId = 'run_capture_failure'
+
+    handler.handleLLMStart(
+      { lc: 1, type: 'constructor', id: ['langchain', 'llms', 'openai', 'OpenAI'], kwargs: {} },
+      ['Hello'],
+      runId,
+      undefined,
+      { invocation_params: {} },
+      undefined,
+      { ls_model_name: 'gpt-4', ls_provider: 'openai' }
+    )
+
+    expect(() =>
+      handler.handleLLMEnd(
+        {
+          generations: [[{ text: 'Hello back' }]],
+          llmOutput: {},
+        },
+        runId
+      )
+    ).not.toThrow()
+    expect(capture).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not throw when trace capture fails', () => {
+    const capture = mockPostHogClient.capture as jest.Mock
+    capture.mockImplementationOnce(() => {
+      throw new Error('telemetry failed')
+    })
+    const runId = 'chain_capture_failure'
+
+    handler.handleChainStart(
+      { lc: 1, type: 'constructor', id: ['langchain', 'chains', 'TestChain'], kwargs: {} },
+      { input: 'Hello' },
+      runId
+    )
+
+    expect(() => handler.handleChainEnd({ output: 'Hello back' }, runId)).not.toThrow()
+    expect(capture).toHaveBeenCalledTimes(1)
+  })
+
   it.each([
     {
       name: 'usage_metadata and finish_reason',

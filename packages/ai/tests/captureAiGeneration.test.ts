@@ -25,6 +25,10 @@ const lastCaptureProperties = (client: jest.Mocked<PostHog>) =>
   (client.capture as jest.Mock).mock.calls[0][0].properties as Record<string, any>
 
 describe('captureAiGeneration', () => {
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
   it('emits a $ai_generation event with the canonical property shape', async () => {
     const client = buildClient()
 
@@ -96,6 +100,67 @@ describe('captureAiGeneration', () => {
 
     expect(client.capture).not.toHaveBeenCalled()
     expect(client.captureImmediate).toHaveBeenCalledTimes(1)
+  })
+
+  it('swallows synchronous capture delivery failures', async () => {
+    const client = buildClient()
+    const captureError = new Error('capture failed')
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    client.capture.mockImplementation(() => {
+      throw captureError
+    })
+
+    await expect(captureAiGeneration(client, baseRequiredOptions)).resolves.toBeUndefined()
+    expect(client.capture).toHaveBeenCalledTimes(1)
+    expect(warnSpy).toHaveBeenCalledWith('[PostHog AI] Failed to capture generation telemetry:', captureError)
+  })
+
+  it('awaits the immediate delivery attempt but swallows its rejection', async () => {
+    const client = buildClient()
+    const captureError = new Error('captureImmediate failed')
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    client.captureImmediate.mockRejectedValue(captureError)
+
+    await expect(
+      captureAiGeneration(client, { ...baseRequiredOptions, captureImmediate: true })
+    ).resolves.toBeUndefined()
+    expect(client.captureImmediate).toHaveBeenCalledTimes(1)
+    expect(client.capture).not.toHaveBeenCalled()
+    expect(warnSpy).toHaveBeenCalledWith('[PostHog AI] Failed to capture generation telemetry:', captureError)
+  })
+
+  it('swallows exception autocapture failures', async () => {
+    const client = buildClient({ enableExceptionAutocapture: true })
+    const captureError = new Error('captureException failed')
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    client.captureException.mockImplementation(() => {
+      throw captureError
+    })
+
+    await expect(
+      captureAiGeneration(client, { ...baseRequiredOptions, error: new Error('provider failed') })
+    ).resolves.toBeUndefined()
+    expect(client.captureException).toHaveBeenCalledTimes(1)
+    expect(client.capture).not.toHaveBeenCalled()
+    expect(warnSpy).toHaveBeenCalledWith('[PostHog AI] Failed to capture generation telemetry:', captureError)
+  })
+
+  it('swallows event construction failures', async () => {
+    const client = buildClient()
+    const constructionError = new Error('properties failed')
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const properties = new Proxy<Record<string, unknown>>(
+      {},
+      {
+        ownKeys: () => {
+          throw constructionError
+        },
+      }
+    )
+
+    await expect(captureAiGeneration(client, { ...baseRequiredOptions, properties })).resolves.toBeUndefined()
+    expect(client.capture).not.toHaveBeenCalled()
+    expect(warnSpy).toHaveBeenCalledWith('[PostHog AI] Failed to capture generation telemetry:', constructionError)
   })
 
   it('redacts input and output when privacyMode is true', async () => {
