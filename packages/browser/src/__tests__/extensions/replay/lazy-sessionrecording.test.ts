@@ -203,6 +203,11 @@ describe('Lazy SessionRecording', () => {
     let windowIdGeneratorMock: Mock
     let onFeatureFlagsCallback: ((flags: string[], variants: Record<string, string | boolean>) => void) | null
     let removePageviewCaptureHookMock: Mock
+
+    // staging for tests that are not about hold semantics: drop the fresh-start interaction hold
+    function releaseInteractionHold(): void {
+        sessionRecording['_lazyLoadedSessionRecording']['_holdFlushUntilInteraction'] = false
+    }
     let simpleEventEmitter: SimpleEventEmitter
 
     const addRRwebToWindow = () => {
@@ -1545,29 +1550,19 @@ describe('Lazy SessionRecording', () => {
                     expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
                 })
 
-                it('overrideSampling releases the fresh-start hold and ships', () => {
+                // an explicit override is intent to record, so it releases the fresh-start hold —
+                // including overrideTrigger('url'), unlike an organic URL trigger match
+                it.each([
+                    ['overrideSampling', (r: any) => r.overrideSampling()],
+                    ['overrideLinkedFlag', (r: any) => r.overrideLinkedFlag()],
+                    ["overrideTrigger('url')", (r: any) => r.overrideTrigger('url')],
+                ])('%s releases the fresh-start hold and ships', (_name, release) => {
                     jest.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
                     const snapshot = emitInactiveEvent(startingTimestamp + 100, 'unknown')
                     jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
                     expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
 
-                    sessionRecording['_lazyLoadedSessionRecording'].overrideSampling()
-
-                    jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
-                    expect(posthog.capture).toHaveBeenCalledWith(
-                        '$snapshot',
-                        expect.objectContaining({ $snapshot_data: expect.arrayContaining([snapshot]) }),
-                        expect.any(Object)
-                    )
-                })
-
-                it("an explicit overrideTrigger('url') releases the hold, unlike an organic URL match", () => {
-                    jest.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
-                    const snapshot = emitInactiveEvent(startingTimestamp + 100, 'unknown')
-                    jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
-                    expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
-
-                    sessionRecording['_lazyLoadedSessionRecording'].overrideTrigger('url')
+                    release(sessionRecording['_lazyLoadedSessionRecording'])
 
                     jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
                     expect(posthog.capture).toHaveBeenCalledWith(
@@ -5282,8 +5277,7 @@ describe('Lazy SessionRecording', () => {
             const captureSpy = jest.spyOn(posthog, 'capture')
             captureSpy.mockClear()
 
-            // release the fresh-start interaction hold; this test is about routing, not hold semantics
-            sessionRecording['_lazyLoadedSessionRecording']['_releaseHoldAndFlush']()
+            releaseInteractionHold()
 
             // Create a $session_ending event with payload containing session IDs
             const sessionEndingEvent = createCustomSnapshot(
@@ -5427,8 +5421,7 @@ describe('Lazy SessionRecording', () => {
                 })
             )
             sessionRecording['_onScriptLoaded']()
-            // release the fresh-start interaction hold; this test is about masking, not hold semantics
-            sessionRecording['_lazyLoadedSessionRecording']['_releaseHoldAndFlush']()
+            releaseInteractionHold()
 
             _emit(
                 createMetaSnapshot({
@@ -5470,8 +5463,7 @@ describe('Lazy SessionRecording', () => {
                 })
             )
             sessionRecording['_onScriptLoaded']()
-            // release the fresh-start interaction hold; this test is about masking, not hold semantics
-            sessionRecording['_lazyLoadedSessionRecording']['_releaseHoldAndFlush']()
+            releaseInteractionHold()
 
             // Emit a meta event with a URL containing a sensitive token
             _emit(
@@ -5521,8 +5513,7 @@ describe('Lazy SessionRecording', () => {
                 })
             )
             sessionRecording['_onScriptLoaded']()
-            // release the fresh-start interaction hold; this test is about masking, not hold semantics
-            sessionRecording['_lazyLoadedSessionRecording']['_releaseHoldAndFlush']()
+            releaseInteractionHold()
 
             // Emit a meta event with a URL containing a sensitive token
             _emit(
@@ -5569,8 +5560,7 @@ describe('Lazy SessionRecording', () => {
                 })
             )
             sessionRecording['_onScriptLoaded']()
-            // release the fresh-start interaction hold; this test is about masking, not hold semantics
-            sessionRecording['_lazyLoadedSessionRecording']['_releaseHoldAndFlush']()
+            releaseInteractionHold()
 
             _emit(
                 createMetaSnapshot({
@@ -5617,8 +5607,7 @@ describe('Lazy SessionRecording', () => {
                 })
             )
             sessionRecording['_onScriptLoaded']()
-            // release the fresh-start interaction hold; this test is about masking, not hold semantics
-            sessionRecording['_lazyLoadedSessionRecording']['_releaseHoldAndFlush']()
+            releaseInteractionHold()
 
             _emit(
                 createMetaSnapshot({

@@ -1377,19 +1377,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._holdFlushUntilInteraction = holdNextEpoch
     }
 
+    // releases run on evidence someone cares about the session: a user interaction, an event
+    // trigger match, or an explicit override. Scheduling instead of flushing synchronously keeps
+    // the release batched on the normal cadence and re-passes _flushBuffer's gates.
     private _releaseHoldAndFlush() {
         if (!this._holdFlushUntilInteraction) {
             return
         }
         this._holdFlushUntilInteraction = false
-        // schedule rather than flush synchronously: an immediate flush would split
-        // batches (an extra network request per released epoch) and can run before
-        // the sampling decision applies; the timer path re-checks _flushBuffer's gates
-        if (!this._flushBufferTimer) {
-            this._flushBufferTimer = setTimeout(() => {
-                this._flushBuffer()
-            }, RECORDING_BUFFER_TIMEOUT)
-        }
+        this._scheduleFlushBuffer()
     }
 
     discard() {
@@ -1728,7 +1724,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     public overrideLinkedFlag() {
         this._linkedFlagMatching.linkedFlagSeen = true
         this._tryTakeFullSnapshot()
-        // an override is explicit intent to record, so an interaction-less hold must not swallow it
         this._releaseHoldAndFlush()
         this._reportStarted('linked_flag_overridden')
     }
@@ -1746,7 +1741,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             [SESSION_RECORDING_SAMPLE_RATE]: null,
         })
         this._tryTakeFullSnapshot()
-        // an override is explicit intent to record, so an interaction-less hold must not swallow it
         this._releaseHoldAndFlush()
         this._reportStarted('sampling_overridden')
     }
@@ -1758,10 +1752,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
      * instead call `posthog.startSessionRecording({trigger: 'url' | 'event'})`
      * */
     public overrideTrigger(triggerType: TriggerType) {
-        // unlike an organic URL trigger match, an explicit override is intent to record,
-        // so it releases the interaction-less hold for both trigger types
-        this._releaseHoldAndFlush()
         this._activateTrigger(triggerType)
+        // unlike an organic URL trigger match, an explicit override releases the hold for both trigger types
+        this._releaseHoldAndFlush()
     }
 
     private _currentMaskedHostname(): string | undefined {
@@ -1791,6 +1784,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
     }
 
+    private _scheduleFlushBuffer() {
+        if (!this._flushBufferTimer) {
+            this._flushBufferTimer = setTimeout(() => {
+                this._flushBuffer()
+            }, RECORDING_BUFFER_TIMEOUT)
+        }
+    }
+
     private _flushBuffer(): SnapshotBuffer {
         this._clearFlushBufferTimer()
 
@@ -1806,9 +1807,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         const isBelowMinimumDuration = this._isBelowMinimumDuration()
 
         if (this.status === BUFFERING || this.status === PAUSED || this.status === DISABLED || isBelowMinimumDuration) {
-            this._flushBufferTimer = setTimeout(() => {
-                this._flushBuffer()
-            }, RECORDING_BUFFER_TIMEOUT)
+            this._scheduleFlushBuffer()
             return this._buffer
         }
 
@@ -1904,9 +1903,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             sessionChanged ||
             // we never want to flush a healthy same-session buffer while confirmed idle, but
             // 'unknown' still captures so its buffer must respect the size cap or it grows unbounded
-            // (while held the cap flush is suppressed — growth is bounded because 'unknown'
+            // (a held epoch skips the cap flush — growth is bounded because 'unknown'
             // transitions to confirmed idle after the idle threshold and capture stops)
             (this._isIdle !== true &&
+                !this._holdFlushUntilInteraction &&
                 this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE)
         ) {
             this._buffer = this._flushBuffer()
@@ -1923,13 +1923,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._buffer.data.push(properties.$snapshot_data)
         this._buffer.sizes.push(properties.$snapshot_bytes)
 
-        // Schedule the flush unless confirmed idle: a tab that never sees user interaction stays
-        // 'unknown' indefinitely, and without a timer its captured events (including the initial
-        // full snapshot after a session rotation) would never ship until the next rotation or unload.
-        if (!this._flushBufferTimer && this._isIdle !== true) {
-            this._flushBufferTimer = setTimeout(() => {
-                this._flushBuffer()
-            }, RECORDING_BUFFER_TIMEOUT)
+        // Schedule the flush unless confirmed idle or held — a held epoch can't ship anyway
+        // (scheduling would just churn a no-op timer every cycle) and every release path
+        // schedules its own flush.
+        if (this._isIdle !== true && !this._holdFlushUntilInteraction) {
+            this._scheduleFlushBuffer()
         }
     }
 
