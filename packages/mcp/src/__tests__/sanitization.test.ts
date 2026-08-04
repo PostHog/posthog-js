@@ -5,6 +5,16 @@ function makeLargeBase64(sizeInChars = 12_000): string {
   return `${'A'.repeat(sizeInChars - 1)}=`
 }
 
+function makeLargeBase64Url(sizeInBytes = 9_000): string {
+  return Buffer.from(Array.from({ length: sizeInBytes }, (_, index) => index % 256)).toString('base64url')
+}
+
+function makeLargeBase64DataUrl(sizeInChars = 12_000, lineEnding?: '\n' | '\r\n'): string {
+  const payload = makeLargeBase64(sizeInChars)
+  const encodedPayload = lineEnding ? payload.match(/.{1,76}/g)!.join(lineEnding) : payload
+  return `data:image/png;base64,${encodedPayload}`
+}
+
 function makeLargeNonBase64(sizeInChars = 12_000): string {
   return 'Hello, world! This is NOT base64. '.repeat(Math.ceil(sizeInChars / 34))
 }
@@ -233,6 +243,82 @@ describe('sanitizeEvent - parameter scanning', () => {
     expect(result.parameters.imageData).toBe('[binary data redacted - not supported by PostHog MCP analytics]')
   })
 
+  it('should redact large base64url strings (>10KB)', () => {
+    const largeBase64Url = makeLargeBase64Url()
+
+    const event = makeEvent({
+      parameters: { imageData: largeBase64Url },
+    })
+
+    const result = sanitizeEvent(event)
+
+    expect(result.parameters.imageData).toBe('[binary data redacted - not supported by PostHog MCP analytics]')
+  })
+
+  it('should redact valid low-entropy base64url strings', () => {
+    const largeBase64Url = Buffer.alloc(9_000, 0xff).toString('base64url')
+
+    const event = makeEvent({
+      parameters: { imageData: largeBase64Url },
+    })
+
+    const result = sanitizeEvent(event)
+
+    expect(result.parameters.imageData).toBe('[binary data redacted - not supported by PostHog MCP analytics]')
+  })
+
+  it('should redact large base64 data URLs (>10KB)', () => {
+    const largeDataUrl = makeLargeBase64DataUrl()
+
+    const event = makeEvent({
+      parameters: { imageData: largeDataUrl },
+    })
+
+    const result = sanitizeEvent(event)
+
+    expect(result.parameters.imageData).toBe('[binary data redacted - not supported by PostHog MCP analytics]')
+  })
+
+  it.each([
+    ['LF', '\n'],
+    ['CRLF', '\r\n'],
+  ] as const)('should redact large base64 data URLs with %s-wrapped payloads', (_name, lineEnding) => {
+    const wrappedDataUrl = makeLargeBase64DataUrl(12_000, lineEnding)
+
+    const event = makeEvent({
+      parameters: { imageData: wrappedDataUrl },
+    })
+
+    const result = sanitizeEvent(event)
+
+    expect(result.parameters.imageData).toBe('[binary data redacted - not supported by PostHog MCP analytics]')
+  })
+
+  it('should redact large base64 data URLs with percent-encoded payload characters', () => {
+    const payload = Buffer.from(Array.from({ length: 9_000 }, (_, index) => index % 256)).toString('base64')
+    const encodedPayload = payload.replace(/[+/=]/g, (character) => `%${character.charCodeAt(0).toString(16)}`)
+    const dataUrl = `data:application/octet-stream;base64,${encodedPayload}`
+
+    const result = sanitizeEvent(makeEvent({ parameters: { dataUrl } }))
+
+    expect(result.parameters.dataUrl).toBe('[binary data redacted - not supported by PostHog MCP analytics]')
+  })
+
+  it('should leave long non-base64 data URLs and CRLF-wrapped ordinary text unchanged', () => {
+    const dataUrlWithoutBase64 = `data:text/plain,${'ordinary text payload!'.repeat(600)}`
+    const invalidBase64DataUrl = `data:text/plain;base64,${'ordinary text payload!'.repeat(600)}`
+    const malformedDataUrl = `data:application/octet-stream;base64,${'AAAA%ZZ'.repeat(1_500)}`
+    const ordinaryText = `${'This is ordinary prose, not encoded data. '.repeat(150)}\r\n${'More ordinary prose. '.repeat(300)}`
+
+    const event = makeEvent({
+      parameters: { dataUrlWithoutBase64, invalidBase64DataUrl, malformedDataUrl, ordinaryText },
+    })
+
+    const result = sanitizeEvent(event)
+
+    expect(result.parameters).toEqual({ dataUrlWithoutBase64, invalidBase64DataUrl, malformedDataUrl, ordinaryText })
+  })
+
   it('should leave large non-base64 strings unchanged', () => {
     const largeText = makeLargeNonBase64()
 
@@ -326,6 +412,37 @@ describe('sanitizeEvent - parameter scanning', () => {
 
     expect(resultNull.parameters).toBeNull()
     expect(resultUndef.parameters).toBeUndefined()
+  })
+})
+
+describe('sanitizeEvent - exception values', () => {
+  it('should redact PostHog tokens from every exception value without mutating the original', () => {
+    const event = makeEvent({
+      isError: true,
+      error: {
+        $exception_list: [
+          {
+            type: 'Error',
+            value: 'Project token phc_123456789012345678901234567890',
+            mechanism: { type: 'generic', handled: true },
+          },
+          {
+            type: 'Error',
+            value: 'Personal token phx_abcdefghijklmnopqrstuvwxyz1234',
+            mechanism: { type: 'generic', handled: true },
+          },
+        ],
+        $exception_level: 'error',
+      },
+    })
+
+    const result = sanitizeEvent(event)
+
+    expect(result.error?.$exception_list.map((exception) => exception.value)).toEqual([
+      'Project token [redacted]',
+      'Personal token [redacted]',
+    ])
+    expect(event.error?.$exception_list[0].value).toContain('phc_')
   })
 })
 

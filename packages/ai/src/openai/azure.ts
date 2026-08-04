@@ -1,4 +1,5 @@
 import OpenAIOrignal, { AzureOpenAI } from 'openai'
+import type { AzureClientOptions } from 'openai/azure'
 import { PostHog } from 'posthog-node'
 import {
   AIEvent,
@@ -10,7 +11,7 @@ import {
 } from '../utils'
 import { captureAiGeneration } from './capture'
 import type { APIPromise } from 'openai'
-import type { Stream } from 'openai/streaming'
+import { Stream } from 'openai/streaming'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
 import type { ResponseCreateParamsWithTools, ExtractParsedContentFromParams } from 'openai/lib/ResponsesParser'
 import type { FormattedMessage, FormattedContent } from '../types'
@@ -23,6 +24,8 @@ import {
   isTerminalResponse,
   getResponseFailure,
 } from './utils'
+import { callWithOriginalCreate, preserveProviderPromise } from '../providerPromise'
+import { monitoredStreamTee } from '../stream'
 
 type ChatCompletion = OpenAIOrignal.ChatCompletion
 type ChatCompletionChunk = OpenAIOrignal.ChatCompletionChunk
@@ -35,10 +38,9 @@ type ResponsesCreateParamsStreaming = OpenAIOrignal.Responses.ResponseCreatePara
 type CreateEmbeddingResponse = OpenAIOrignal.CreateEmbeddingResponse
 type EmbeddingCreateParams = OpenAIOrignal.EmbeddingCreateParams
 
-interface MonitoringOpenAIConfig {
+interface MonitoringOpenAIConfig extends AzureClientOptions {
   apiKey: string
   posthog: PostHog
-  baseURL?: string
 }
 
 type RequestOptions = Record<string, any>
@@ -107,9 +109,12 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
     const parentPromise = super.create(openAIParams, options)
 
     if (openAIParams.stream) {
-      return parentPromise.then((value) => {
-        if ('tee' in value) {
-          const [stream1, stream2] = value.tee()
+      const wrappedPromise = parentPromise.then((value) => {
+        if (Symbol.asyncIterator in value) {
+          const [stream1, stream2] = monitoredStreamTee<ChatCompletionChunk, Stream<ChatCompletionChunk>>(
+            value as Stream<ChatCompletionChunk>,
+            (iterator, controller) => new Stream(iterator, controller)
+          )
           ;(async () => {
             // Hoisted so the catch block can surface whatever was accumulated
             // from the streamed chunks before the failure.
@@ -295,7 +300,9 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
           return stream2
         }
         return value
-      }) as APIPromise<Stream<ChatCompletionChunk>>
+      })
+
+      return preserveProviderPromise(parentPromise, wrappedPromise)
     } else {
       const wrappedPromise = parentPromise.then(
         async (result) => {
@@ -350,9 +357,9 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
           })
           throw error
         }
-      ) as APIPromise<ChatCompletion>
+      )
 
-      return wrappedPromise
+      return preserveProviderPromise(parentPromise, wrappedPromise)
     }
   }
 }
@@ -396,9 +403,15 @@ export class WrappedResponses extends AzureOpenAI.Responses {
     const parentPromise = super.create(openAIParams, options)
 
     if (openAIParams.stream) {
-      return parentPromise.then((value) => {
-        if ('tee' in value && typeof (value as any).tee === 'function') {
-          const [stream1, stream2] = (value as any).tee()
+      const wrappedPromise = parentPromise.then((value) => {
+        if (Symbol.asyncIterator in value) {
+          const [stream1, stream2] = monitoredStreamTee<
+            OpenAIOrignal.Responses.ResponseStreamEvent,
+            Stream<OpenAIOrignal.Responses.ResponseStreamEvent>
+          >(
+            value as Stream<OpenAIOrignal.Responses.ResponseStreamEvent>,
+            (iterator, controller) => new Stream(iterator, controller)
+          )
           ;(async () => {
             // Hoisted so the catch block can surface the completion ID that
             // was accumulated from the streamed chunks before the failure.
@@ -436,25 +449,17 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                   if (chunk.response.service_tier != null) {
                     serviceTierFromResponse = chunk.response.service_tier
                   }
-                  if (chunk.response.usage) {
-                    usage = {
-                      inputTokens: chunk.response.usage.input_tokens ?? 0,
-                      outputTokens: chunk.response.usage.output_tokens ?? 0,
-                      reasoningTokens: chunk.response.usage.output_tokens_details?.reasoning_tokens ?? 0,
-                      cacheReadInputTokens: chunk.response.usage.input_tokens_details?.cached_tokens ?? 0,
-                    }
-                  }
                   if (isTerminalResponse(chunk.response)) {
                     terminalResponse = chunk.response
                     finalContent = chunk.response.output ?? []
                   }
                 }
-                if ('usage' in chunk && chunk.usage) {
+                if ('response' in chunk && chunk.response?.usage) {
                   usage = {
-                    inputTokens: chunk.usage.input_tokens ?? 0,
-                    outputTokens: chunk.usage.output_tokens ?? 0,
-                    reasoningTokens: chunk.usage.output_tokens_details?.reasoning_tokens ?? 0,
-                    cacheReadInputTokens: chunk.usage.input_tokens_details?.cached_tokens ?? 0,
+                    inputTokens: chunk.response.usage.input_tokens ?? 0,
+                    outputTokens: chunk.response.usage.output_tokens ?? 0,
+                    reasoningTokens: chunk.response.usage.output_tokens_details?.reasoning_tokens ?? 0,
+                    cacheReadInputTokens: chunk.response.usage.input_tokens_details?.cached_tokens ?? 0,
                   }
                 }
               }
@@ -506,7 +511,9 @@ export class WrappedResponses extends AzureOpenAI.Responses {
           return stream2
         }
         return value
-      }) as APIPromise<Stream<OpenAIOrignal.Responses.ResponseStreamEvent>>
+      })
+
+      return preserveProviderPromise(parentPromise, wrappedPromise)
     } else {
       const wrappedPromise = parentPromise.then(
         async (result) => {
@@ -563,9 +570,9 @@ export class WrappedResponses extends AzureOpenAI.Responses {
           })
           throw error
         }
-      ) as APIPromise<OpenAIOrignal.Responses.Response>
+      )
 
-      return wrappedPromise
+      return preserveProviderPromise(parentPromise, wrappedPromise)
     }
   }
 
@@ -576,7 +583,9 @@ export class WrappedResponses extends AzureOpenAI.Responses {
     const { providerParams: openAIParams, posthogParams } = extractPosthogParams(body)
     const startTime = Date.now()
 
-    const parentPromise = super.parse(openAIParams, options)
+    const parentPromise = callWithOriginalCreate(this, super.create.bind(this), () =>
+      super.parse<Params, ParsedT>(openAIParams, options)
+    )
 
     const wrappedPromise = parentPromise.then(
       async (result) => {
@@ -628,7 +637,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
       }
     )
 
-    return wrappedPromise as APIPromise<ParsedResponse<ParsedT>>
+    return preserveProviderPromise(parentPromise, wrappedPromise)
   }
 }
 
@@ -692,9 +701,9 @@ export class WrappedEmbeddings extends AzureOpenAI.Embeddings {
         })
         throw error
       }
-    ) as APIPromise<CreateEmbeddingResponse>
+    )
 
-    return wrappedPromise
+    return preserveProviderPromise(parentPromise, wrappedPromise)
   }
 }
 

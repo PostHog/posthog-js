@@ -15,8 +15,10 @@ import {
   PostHogFlagsResponse,
   PostHogMetrics,
   PostHogPersistedProperty,
+  Properties,
   resolveMetricsConfig,
   RetriableOptions,
+  raceWithTimeout,
   safeSetTimeout,
   uuidv7,
 } from '@posthog/core'
@@ -1076,8 +1078,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     distinctId: string,
     options: {
       groups?: Record<string, string>
-      personProperties?: Record<string, string>
-      groupProperties?: Record<string, Record<string, string>>
+      personProperties?: Properties
+      groupProperties?: Record<string, Properties>
       onlyEvaluateLocally?: boolean
       sendFeatureFlagEvents?: boolean
       disableGeoip?: boolean
@@ -1343,8 +1345,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     distinctId: string,
     options?: {
       groups?: Record<string, string>
-      personProperties?: Record<string, string>
-      groupProperties?: Record<string, Record<string, string>>
+      personProperties?: Properties
+      groupProperties?: Record<string, Properties>
       onlyEvaluateLocally?: boolean
       sendFeatureFlagEvents?: boolean
       disableGeoip?: boolean
@@ -1414,8 +1416,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     matchValue?: FeatureFlagValue,
     options?: {
       groups?: Record<string, string>
-      personProperties?: Record<string, string>
-      groupProperties?: Record<string, Record<string, string>>
+      personProperties?: Properties
+      groupProperties?: Record<string, Properties>
       onlyEvaluateLocally?: boolean
       /** @deprecated THIS OPTION HAS NO EFFECT, kept here for backwards compatibility reasons. */
       sendFeatureFlagEvents?: boolean
@@ -1601,8 +1603,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     distinctId: string,
     options?: {
       groups?: Record<string, string>
-      personProperties?: Record<string, string>
-      groupProperties?: Record<string, Record<string, string>>
+      personProperties?: Properties
+      groupProperties?: Record<string, Properties>
       onlyEvaluateLocally?: boolean
       sendFeatureFlagEvents?: boolean
       disableGeoip?: boolean
@@ -2461,10 +2463,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       // this flush runs before super._shutdown starts its own timeout, so an
       // unresponsive transport must not be able to hold shutdown past the
       // caller's deadline (its retry stack alone can take ~49s).
-      await Promise.race([
+      await raceWithTimeout(
         this._metrics.flush().catch(() => {}),
-        new Promise<void>((resolve) => safeSetTimeout(resolve, Math.max(0, shutdownDeadlineMs - Date.now()))),
-      ])
+        Math.max(0, shutdownDeadlineMs - Date.now())
+      )
       // reset() also invalidates a flush that lost the race above: when its
       // send finally settles, the stale window is discarded instead of being
       // merged back onto a re-armed timer after teardown.
@@ -2620,12 +2622,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private addLocalPersonAndGroupProperties(
     distinctId: string,
     groups?: Record<string, string>,
-    personProperties?: Record<string, string>,
-    groupProperties?: Record<string, Record<string, string>>
-  ): { allPersonProperties: Record<string, string>; allGroupProperties: Record<string, Record<string, string>> } {
+    personProperties?: Properties,
+    groupProperties?: Record<string, Properties>
+  ): { allPersonProperties: Properties; allGroupProperties: Record<string, Properties> } {
     const allPersonProperties = { ...(personProperties || {}) }
 
-    const allGroupProperties: Record<string, Record<string, string>> = {}
+    const allGroupProperties: Record<string, Properties> = {}
     if (groups) {
       for (const groupName of Object.keys(groups)) {
         allGroupProperties[groupName] = {
@@ -2638,18 +2640,15 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     return { allPersonProperties, allGroupProperties }
   }
 
-  private personPropertiesForLocalEvaluation(
-    distinctId: string,
-    personProperties?: Record<string, any>
-  ): Record<string, any> {
+  private personPropertiesForLocalEvaluation(distinctId: string, personProperties?: Properties): Record<string, any> {
     return { distinct_id: distinctId, ...(personProperties || {}) }
   }
 
   private createFeatureFlagEvaluationContext(
     distinctId: string,
     groups?: Record<string, string>,
-    personProperties?: Record<string, any>,
-    groupProperties?: Record<string, Record<string, any>>
+    personProperties?: Properties,
+    groupProperties?: Record<string, Properties>
   ): FeatureFlagEvaluationContext {
     return {
       distinctId,

@@ -242,10 +242,7 @@ describe('$ai_stop_reason extraction', () => {
 
       const ChatMock: any = openaiModule.Chat
       ;(ChatMock.Completions as any).prototype.create = jest.fn().mockImplementation(() => {
-        const mockStream = {
-          tee: jest.fn().mockReturnValue([createMockAsyncIterator(chunks), createMockAsyncIterator(chunks)]),
-        }
-        return Promise.resolve(mockStream)
+        return Promise.resolve(createMockAsyncIterator(chunks))
       })
 
       const stream = await client.chat.completions.create({
@@ -348,10 +345,7 @@ describe('$ai_stop_reason extraction', () => {
 
       const ResponsesMock: any = openaiModule.Responses
       ResponsesMock.prototype.create = jest.fn().mockImplementation(() => {
-        const mockStream = {
-          tee: jest.fn().mockReturnValue([createMockAsyncIterator(chunks), createMockAsyncIterator(chunks)]),
-        }
-        return Promise.resolve(mockStream)
+        return Promise.resolve(createMockAsyncIterator(chunks))
       })
 
       const stream = await client.responses.create({
@@ -467,10 +461,7 @@ describe('$ai_stop_reason extraction', () => {
 
       const MessagesMock = AnthropicOriginal.Messages as jest.MockedClass<typeof AnthropicOriginal.Messages>
       ;(MessagesMock.prototype.create as jest.Mock) = jest.fn().mockImplementation(() => {
-        const mockStream = {
-          tee: jest.fn().mockReturnValue([createMockAsyncIterator(chunks), createMockAsyncIterator(chunks)]),
-        }
-        return Promise.resolve(mockStream)
+        return Promise.resolve(createMockAsyncIterator(chunks))
       })
 
       const stream = await client.messages.create({

@@ -6,7 +6,7 @@
 import type { MCPServerLike, McpEvent } from '../types'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
-import { log } from './logger'
+import type { LoggerFn } from './logger'
 import { getSessionInfo } from './session'
 
 /**
@@ -19,10 +19,10 @@ import { getSessionInfo } from './session'
  * Auto-capture callers (tool calls, listings, identify) intentionally ignore the
  * return value, keeping the tool path isolated from analytics latency/errors.
  */
-export function captureEvent(server: MCPServerLike, eventInput: McpEvent): Promise<void> | undefined {
+export function captureEvent(server: MCPServerLike, eventInput: McpEvent, logger: LoggerFn): Promise<void> | undefined {
   const data = getServerTrackingData(server)
   if (!data) {
-    log('Warning: Server tracking data not found. Event will not be published.')
+    logger('Warning: Server tracking data not found. Event will not be published.')
     return
   }
 

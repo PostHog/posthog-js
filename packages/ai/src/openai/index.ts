@@ -12,7 +12,7 @@ import {
 } from '../utils'
 import { captureAiGeneration } from './capture'
 import type { APIPromise } from 'openai'
-import type { Stream } from 'openai/streaming'
+import { Stream } from 'openai/streaming'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
 import type { ResponseCreateParamsWithTools, ExtractParsedContentFromParams } from 'openai/lib/ResponsesParser'
 import type { FormattedMessage, FormattedContent } from '../types'
@@ -25,6 +25,8 @@ import {
   isTerminalResponse,
   getResponseFailure,
 } from './utils'
+import { callWithOriginalCreate, preserveProviderPromise } from '../providerPromise'
+import { monitoredStreamTee } from '../stream'
 
 const Chat = OpenAIOrignal.Chat
 const Completions = Chat.Completions
@@ -51,7 +53,6 @@ interface MonitoringOpenAIConfig extends ClientOptions {
 }
 
 type RequestOptions = Record<string, unknown>
-type APIPromiseWithResponse<T> = Awaited<ReturnType<APIPromise<T>['withResponse']>>
 
 function captureAiGenerationInBackground(...args: Parameters<typeof captureAiGeneration>): void {
   void captureAiGeneration(...args).catch(() => undefined)
@@ -65,29 +66,6 @@ async function captureAiGenerationAfterSuccess(...args: Parameters<typeof captur
   } else {
     captureAiGenerationInBackground(...args)
   }
-}
-
-function preserveAPIPromiseHelpers<Input, Output>(
-  parentPromise: APIPromise<Input>,
-  wrappedPromise: Promise<Output>
-): APIPromise<Output> {
-  const apiPromise = wrappedPromise as APIPromise<Output>
-
-  if (typeof parentPromise.asResponse === 'function') {
-    apiPromise.asResponse = () => parentPromise.asResponse()
-  }
-
-  if (typeof parentPromise.withResponse === 'function') {
-    apiPromise.withResponse = async () => {
-      const [response, data] = await Promise.all([parentPromise.withResponse(), wrappedPromise])
-      // swaps the `data` payload inside the SDK's generic withResponse shape; the compiler
-      // cannot relate the Input- and Output-instantiated conditional types
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-      return { ...response, data } as APIPromiseWithResponse<Output>
-    }
-  }
-
-  return apiPromise
 }
 
 function isPendingBackgroundResponse(
@@ -164,8 +142,11 @@ export class WrappedCompletions extends Completions {
 
     if (openAIParams.stream) {
       const wrappedPromise = parentPromise.then((value) => {
-        if ('tee' in value) {
-          const [stream1, stream2] = value.tee()
+        if (Symbol.asyncIterator in value) {
+          const [stream1, stream2] = monitoredStreamTee<ChatCompletionChunk, Stream<ChatCompletionChunk>>(
+            value as Stream<ChatCompletionChunk>,
+            (iterator, controller) => new Stream(iterator, controller)
+          )
           ;(async () => {
             // Hoisted so the catch block can surface whatever was accumulated
             // from the streamed chunks before the failure.
@@ -378,7 +359,7 @@ export class WrappedCompletions extends Completions {
         return value
       })
 
-      return preserveAPIPromiseHelpers(parentPromise, wrappedPromise)
+      return preserveProviderPromise(parentPromise, wrappedPromise)
     } else {
       const wrappedPromise = parentPromise.then(
         async (result) => {
@@ -441,7 +422,7 @@ export class WrappedCompletions extends Completions {
         }
       )
 
-      return preserveAPIPromiseHelpers(parentPromise, wrappedPromise)
+      return preserveProviderPromise(parentPromise, wrappedPromise)
     }
   }
 }
@@ -486,8 +467,14 @@ export class WrappedResponses extends Responses {
 
     if (openAIParams.stream) {
       const wrappedPromise = parentPromise.then((value) => {
-        if ('tee' in value && typeof value.tee === 'function') {
-          const [stream1, stream2] = value.tee()
+        if (Symbol.asyncIterator in value) {
+          const [stream1, stream2] = monitoredStreamTee<
+            OpenAIOrignal.Responses.ResponseStreamEvent,
+            Stream<OpenAIOrignal.Responses.ResponseStreamEvent>
+          >(
+            value as Stream<OpenAIOrignal.Responses.ResponseStreamEvent>,
+            (iterator, controller) => new Stream(iterator, controller)
+          )
           ;(async () => {
             // Hoisted so the catch block can surface the completion ID that
             // was accumulated from the streamed chunks before the failure.
@@ -617,7 +604,7 @@ export class WrappedResponses extends Responses {
         return value
       })
 
-      return preserveAPIPromiseHelpers(parentPromise, wrappedPromise)
+      return preserveProviderPromise(parentPromise, wrappedPromise)
     } else {
       const wrappedPromise = parentPromise.then(
         async (result) => {
@@ -685,7 +672,7 @@ export class WrappedResponses extends Responses {
         }
       )
 
-      return preserveAPIPromiseHelpers(parentPromise, wrappedPromise)
+      return preserveProviderPromise(parentPromise, wrappedPromise)
     }
   }
 
@@ -696,73 +683,65 @@ export class WrappedResponses extends Responses {
     const { providerParams: openAIParams, posthogParams } = extractPosthogParams(body)
     const startTime = Date.now()
 
-    const originalCreate = super.create.bind(this)
-    const originalSelfRecord = this as Record<string, unknown>
-    const tempCreate = originalSelfRecord['create']
-    originalSelfRecord['create'] = originalCreate
+    const parentPromise = callWithOriginalCreate(this, super.create.bind(this), () =>
+      super.parse<Params, ParsedT>(openAIParams, options)
+    )
 
-    try {
-      const parentPromise = super.parse(openAIParams, options)
-
-      const wrappedPromise = parentPromise.then(
-        async (result) => {
-          if (isPendingBackgroundResponse(openAIParams, result)) {
-            return result
-          }
-
-          const latency = (Date.now() - startTime) / 1000
-          await captureAiGeneration(this.phClient, {
-            ...posthogParams,
-            model: openAIParams.model ?? result.model,
-            provider: 'openai',
-            input: formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions),
-            output: result.output,
-            latency,
-            baseURL: this.baseURL,
-            modelParameters: getModelParams(body, result.service_tier),
-            httpStatus: 200,
-            usage: {
-              inputTokens: result.usage?.input_tokens ?? 0,
-              outputTokens: result.usage?.output_tokens ?? 0,
-              reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
-              cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
-              rawUsage: result.usage,
-            },
-            stopReason: result.status ?? undefined,
-            completionId: result.id,
-            providerMetadata: buildProviderMetadata({
-              requestId: extractRequestId(result),
-              incompleteDetails: result.incomplete_details,
-            }),
-            error: getResponseFailure(result),
-          })
+    const wrappedPromise = parentPromise.then(
+      async (result) => {
+        if (isPendingBackgroundResponse(openAIParams, result)) {
           return result
-        },
-        async (error: Error) => {
-          await captureAiGeneration(this.phClient, {
-            ...posthogParams,
-            model: openAIParams.model,
-            provider: 'openai',
-            input: formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions),
-            output: [],
-            latency: 0,
-            baseURL: this.baseURL,
-            modelParameters: getModelParams(body),
-            usage: {
-              inputTokens: 0,
-              outputTokens: 0,
-            },
-            error,
-          })
-          throw error
         }
-      )
 
-      return preserveAPIPromiseHelpers(parentPromise, wrappedPromise) as APIPromise<ParsedResponse<ParsedT>>
-    } finally {
-      // Restore our wrapped create method
-      originalSelfRecord['create'] = tempCreate
-    }
+        const latency = (Date.now() - startTime) / 1000
+        await captureAiGeneration(this.phClient, {
+          ...posthogParams,
+          model: openAIParams.model ?? result.model,
+          provider: 'openai',
+          input: formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions),
+          output: result.output,
+          latency,
+          baseURL: this.baseURL,
+          modelParameters: getModelParams(body, result.service_tier),
+          httpStatus: 200,
+          usage: {
+            inputTokens: result.usage?.input_tokens ?? 0,
+            outputTokens: result.usage?.output_tokens ?? 0,
+            reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
+            cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
+            rawUsage: result.usage,
+          },
+          stopReason: result.status ?? undefined,
+          completionId: result.id,
+          providerMetadata: buildProviderMetadata({
+            requestId: extractRequestId(result),
+            incompleteDetails: result.incomplete_details,
+          }),
+          error: getResponseFailure(result),
+        })
+        return result
+      },
+      async (error: Error) => {
+        await captureAiGeneration(this.phClient, {
+          ...posthogParams,
+          model: openAIParams.model,
+          provider: 'openai',
+          input: formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions),
+          output: [],
+          latency: 0,
+          baseURL: this.baseURL,
+          modelParameters: getModelParams(body),
+          usage: {
+            inputTokens: 0,
+            outputTokens: 0,
+          },
+          error,
+        })
+        throw error
+      }
+    )
+
+    return preserveProviderPromise(parentPromise, wrappedPromise)
   }
 }
 
@@ -830,7 +809,7 @@ export class WrappedEmbeddings extends Embeddings {
       }
     )
 
-    return preserveAPIPromiseHelpers(parentPromise, wrappedPromise)
+    return preserveProviderPromise(parentPromise, wrappedPromise)
   }
 }
 
@@ -924,8 +903,14 @@ export class WrappedTranscriptions extends Transcriptions {
 
     if (openAIParams.stream) {
       const wrappedPromise = parentPromise.then((value) => {
-        if ('tee' in value && typeof (value as any).tee === 'function') {
-          const [stream1, stream2] = (value as any).tee()
+        if (Symbol.asyncIterator in value) {
+          const [stream1, stream2] = monitoredStreamTee<
+            OpenAIOrignal.Audio.Transcriptions.TranscriptionStreamEvent,
+            Stream<OpenAIOrignal.Audio.Transcriptions.TranscriptionStreamEvent>
+          >(
+            value as Stream<OpenAIOrignal.Audio.Transcriptions.TranscriptionStreamEvent>,
+            (iterator, controller) => new Stream(iterator, controller)
+          )
           ;(async () => {
             try {
               let finalContent: string = ''
@@ -1001,7 +986,7 @@ export class WrappedTranscriptions extends Transcriptions {
         return value
       })
 
-      return preserveAPIPromiseHelpers(
+      return preserveProviderPromise(
         parentPromise as APIPromise<Stream<OpenAIOrignal.Audio.Transcriptions.TranscriptionStreamEvent>>,
         wrappedPromise
       )
@@ -1049,7 +1034,7 @@ export class WrappedTranscriptions extends Transcriptions {
         }
       )
 
-      return preserveAPIPromiseHelpers(
+      return preserveProviderPromise(
         parentPromise as APIPromise<OpenAIOrignal.Audio.Transcriptions.TranscriptionCreateResponse>,
         wrappedPromise
       )
