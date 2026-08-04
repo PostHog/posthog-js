@@ -952,6 +952,13 @@ describe('SurveyManager', () => {
             // array that points past the end of the questions array. Popping such an entry on Back
             // would send the renderer to a non-existent question and re-empty the container. The
             // restored visited indices must be filtered so Back always lands on a real question.
+            //
+            // Open questions schedule a 100ms autofocus setTimeout on mount. Unlike the
+            // @testing-library render() tests (which auto-unmount in afterEach and clear it),
+            // renderSurvey mounts Preact directly with no teardown, so that timer would outlive
+            // the test as an orphan and trip CI's "worker failed to exit gracefully" guard. Fake
+            // timers keep it from ever becoming a real pending handle.
+            jest.useFakeTimers()
             const backSurvey = {
                 ...mockSurvey,
                 id: 'stale-visited-indices-survey',
@@ -986,6 +993,7 @@ describe('SurveyManager', () => {
 
             document.body.removeChild(surveyDiv)
             localStorage.clear()
+            jest.useRealTimers()
         })
 
         it('exposes the current question index on .survey-box for embedders', () => {
