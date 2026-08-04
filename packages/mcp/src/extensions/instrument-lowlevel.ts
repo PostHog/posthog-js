@@ -7,7 +7,7 @@ import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import type { CompatibleRequestHandlerExtra, MCPRequestLike, MCPServerLike } from '../types'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
-import { log } from './logger'
+import type { LoggerFn } from './logger'
 import { handleReportMissing, resolveMissingCapabilityToolName } from './tools'
 import {
   handleInitializeRequest,
@@ -15,6 +15,7 @@ import {
   patchRequestHandlers,
   captureToolCall,
   isToolAdvertised,
+  type HandlerPatch,
 } from './instrumentation'
 import { getContextArgument } from './tracing-helpers'
 
@@ -29,14 +30,17 @@ type MCPRequestExtra = Parameters<MCPRequestHandler>[1]
  * `tools/call`. The tool-call lifecycle is delegated to {@link captureToolCall},
  * shared with the high-level wrapper.
  */
-export function instrumentLowLevelServer(server: MCPServerLike): void {
+export function instrumentLowLevelServer(server: MCPServerLike, logger: LoggerFn): void {
   try {
     // Patch already existing handlers, and patch setRequestHandler to capture dynamically created handlers.
     const hadCallToolHandler = server._requestHandlers.has('tools/call')
-    const handlers = {
-      initialize: handleInitializeRequest,
-      'tools/list': handleListToolsRequest,
-      'tools/call': handleToolCallRequest,
+    const handlers: Record<string, HandlerPatch> = {
+      initialize: (server, originalHandler, request, extra) =>
+        handleInitializeRequest(server, originalHandler, request, extra, logger),
+      'tools/list': (server, originalHandler, request, extra) =>
+        handleListToolsRequest(server, originalHandler, request, extra, logger),
+      'tools/call': (server, originalHandler, request, extra) =>
+        handleToolCallRequest(server, originalHandler, request, extra, logger),
     }
     patchRequestHandlers(server, handlers)
 
@@ -49,7 +53,7 @@ export function instrumentLowLevelServer(server: MCPServerLike): void {
       })
     }
   } catch (error) {
-    log(`Warning: Failed to setup tool call instrumentation - ${error}`)
+    logger(`Warning: Failed to setup tool call instrumentation - ${error}`)
     throw error
   }
 }
@@ -58,11 +62,12 @@ async function handleToolCallRequest(
   server: MCPServerLike,
   originalCallToolHandler: MCPRequestHandler | undefined,
   request: MCPRequest,
-  extra: MCPRequestExtra
+  extra: MCPRequestExtra,
+  logger: LoggerFn
 ): Promise<unknown> {
   const data = getServerTrackingData(server)
   if (!data) {
-    log(
+    logger(
       'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called instrument(server, options) before using tool calls.'
     )
     return await originalCallToolHandler?.(request, extra)
@@ -72,7 +77,7 @@ async function handleToolCallRequest(
   const isMissingCapabilityCandidate =
     data.options.reportMissing && toolName === resolveMissingCapabilityToolName(data.options)
 
-  if (isMissingCapabilityCandidate && (await isToolAdvertised(server, toolName, extra)) === false) {
+  if (isMissingCapabilityCandidate && (await isToolAdvertised(server, toolName, extra, data.logger)) === false) {
     const context = getContextArgument(request) || ''
     return await captureToolCall({
       server,
@@ -81,7 +86,7 @@ async function handleToolCallRequest(
       extra,
       eventType: MCPAnalyticsEventType.mcpMissingCapability,
       explicitContextIntent: context,
-      execute: async () => handleReportMissing({ context }),
+      execute: async () => handleReportMissing({ context }, data.logger),
     })
   }
 

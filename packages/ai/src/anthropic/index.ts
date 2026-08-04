@@ -18,8 +18,9 @@ type Message = AnthropicOriginal.Messages.Message
 type RawMessageStreamEvent = AnthropicOriginal.Messages.RawMessageStreamEvent
 type MessageCreateParamsBase = AnthropicOriginal.Messages.MessageCreateParams
 type RequestOptions = AnthropicOriginal.RequestOptions
-import type { Stream } from '@anthropic-ai/sdk/streaming'
+import { Stream } from '@anthropic-ai/sdk/streaming'
 import { sanitizeAnthropic } from '../sanitization'
+import { monitoredStreamTee } from '../stream'
 
 interface ToolInProgress {
   block: FormattedFunctionCall
@@ -96,8 +97,11 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
           webSearchCount: 0,
         }
         let lastRawUsage: unknown
-        if ('tee' in value) {
-          const [stream1, stream2] = value.tee()
+        if (Symbol.asyncIterator in value) {
+          const [stream1, stream2] = monitoredStreamTee<RawMessageStreamEvent, Stream<RawMessageStreamEvent>>(
+            value as Stream<RawMessageStreamEvent>,
+            (iterator, controller) => new Stream(iterator, controller)
+          )
           ;(async () => {
             try {
               for await (const chunk of stream1) {
