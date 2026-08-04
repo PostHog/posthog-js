@@ -1699,6 +1699,8 @@ describe('Lazy SessionRecording', () => {
                         expect(sessionRecording['_lazyLoadedSessionRecording']['_holdFlushUntilInteraction']).toEqual(
                             false
                         )
+                        // the release clears the hold synchronously but ships on the normal flush cadence
+                        jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
                         expect(posthog.capture).toHaveBeenCalledWith(
                             '$snapshot',
                             expect.objectContaining({
@@ -1790,6 +1792,8 @@ describe('Lazy SessionRecording', () => {
                         simpleEventEmitter.emit('eventCaptured', { event: '$exception', properties: {} })
 
                         expect(lazyRecorder['_holdFlushUntilInteraction']).toEqual(false)
+                        // the release clears the hold synchronously but ships on the normal flush cadence
+                        jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
                         expect(posthog.capture).toHaveBeenCalledWith(
                             '$snapshot',
                             expect.objectContaining({
