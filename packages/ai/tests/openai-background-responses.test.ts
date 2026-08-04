@@ -20,17 +20,21 @@ const usage = {
   total_tokens: 19,
 }
 
-function responseBody(status: 'queued' | 'in_progress' | 'completed' | 'cancelled'): Record<string, unknown> {
+type ResponseStatus = 'queued' | 'in_progress' | 'completed' | 'failed' | 'incomplete' | 'cancelled'
+
+function responseBody(status: ResponseStatus): Record<string, unknown> {
+  const hasUsage = status === 'completed' || status === 'failed' || status === 'incomplete'
   return {
     id: responseID,
     object: 'response',
-    created_at: 1,
+    created_at: 100,
+    completed_at: status === 'completed' ? 104 : null,
     model: 'gpt-4o-mini',
     status,
     output: status === 'completed' ? output : [],
-    usage: status === 'completed' ? usage : null,
-    error: null,
-    incomplete_details: null,
+    usage: hasUsage ? usage : null,
+    error: status === 'failed' ? { code: 'server_error', message: 'Background response failed.' } : null,
+    incomplete_details: status === 'incomplete' ? { reason: 'max_output_tokens' } : null,
     instructions: null,
     metadata: null,
     parallel_tool_calls: true,
@@ -59,6 +63,21 @@ function createFetchMock(): jest.Mock {
   })
 }
 
+function createTerminalFetchMock(status: 'completed' | 'failed' | 'incomplete'): jest.Mock {
+  return jest.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    const method = init?.method ?? (input instanceof Request ? input.method : 'GET')
+    const body = method === 'POST' ? responseBody('queued') : responseBody(status)
+
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: {
+        'content-type': 'application/json',
+        'x-request-id': `req_background_${status}`,
+      },
+    })
+  })
+}
+
 function createCancelFetchMock(): jest.Mock {
   return jest.fn(async (input: string | URL | Request) => {
     const url = input instanceof Request ? input.url : String(input)
@@ -74,6 +93,14 @@ function createCancelFetchMock(): jest.Mock {
       },
     })
   })
+}
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise
+  })
+  return { promise, resolve }
 }
 
 function createPostHogMock() {
@@ -115,6 +142,24 @@ function createStreamingFetchMock(
     return new Response(JSON.stringify(responseBody('completed')), {
       status: 200,
       headers: { 'content-type': 'application/json' },
+    })
+  })
+}
+
+function createResumedStreamFetchMock(): jest.Mock {
+  return jest.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    const method = init?.method ?? (input instanceof Request ? input.method : 'GET')
+    const url = input instanceof Request ? input.url : String(input)
+    const requestBody = init?.body ? JSON.parse(init.body as string) : undefined
+    const isStreamingCreate = method === 'POST' && requestBody?.stream === true
+    const events = isStreamingCreate
+      ? [{ type: 'response.created', sequence_number: 0, response: responseBody('queued') }]
+      : [{ type: 'response.completed', sequence_number: 1, response: responseBody('completed') }]
+
+    expect(isStreamingCreate || url.includes('stream=true')).toBe(true)
+    return new Response(`${events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join('')}data: [DONE]\n\n`, {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
     })
   })
 }
@@ -199,6 +244,7 @@ describe.each(providerCases)('$provider background Responses', ({ provider, crea
       client.responses.retrieve(responseID),
     ])
     expect(firstTerminalPoll.status).toBe('completed')
+    expect((firstTerminalPoll as any)._request_id).toBe('req_background_terminal')
     expect(duplicateTerminalPoll.status).toBe('completed')
     expect(fetchMock).toHaveBeenCalledTimes(4)
     expect(fetchMock.mock.calls.slice(1).every((call) => call[1].method === 'GET')).toBe(true)
@@ -217,6 +263,8 @@ describe.each(providerCases)('$provider background Responses', ({ provider, crea
       $ai_output_tokens: 7,
       $ai_reasoning_tokens: 2,
       $ai_cache_read_input_tokens: 3,
+      $ai_usage: usage,
+      $ai_latency: 4,
       $ai_completion_id: responseID,
       $ai_stop_reason: 'completed',
       $ai_trace_id: 'background-trace',
@@ -224,6 +272,87 @@ describe.each(providerCases)('$provider background Responses', ({ provider, crea
       $ai_provider_metadata: { request_id: 'req_background_terminal' },
       workflow: 'nightly',
     })
+  })
+
+  test.each([
+    { status: 'failed' as const, isError: true },
+    { status: 'incomplete' as const, isError: false },
+  ])('captures a $status terminal response with its failure details', async ({ status, isError }) => {
+    const fetchMock = createTerminalFetchMock(status)
+    const posthog = createPostHogMock()
+    const client = createClient(fetchMock, posthog)
+    await createTrackedBackgroundResponse(client)
+
+    await expect(client.responses.retrieve(responseID)).resolves.toMatchObject({ status })
+
+    expect(posthog.captureImmediate).toHaveBeenCalledTimes(1)
+    const properties = posthog.captureImmediate.mock.calls[0][0].properties
+    expect(properties).toMatchObject({
+      $ai_provider: provider,
+      $ai_http_status: 200,
+      $ai_input_tokens: 12,
+      $ai_output_tokens: 7,
+      $ai_usage: usage,
+      $ai_stop_reason: status,
+      $ai_provider_metadata: {
+        request_id: `req_background_${status}`,
+        ...(status === 'incomplete' ? { incomplete_details: { reason: 'max_output_tokens' } } : {}),
+      },
+    })
+    expect(properties).not.toHaveProperty('$ai_latency')
+    expect(properties.$ai_is_error).toBe(isError ? true : undefined)
+    if (isError) {
+      expect(properties.$ai_error).toContain('Background response failed.')
+    }
+  })
+
+  test.each([
+    {
+      operation: 'retrieve',
+      createFetch: () => createTerminalFetchMock('completed'),
+      invoke: (client: ReturnType<(typeof providerCases)[number]['createClient']>) =>
+        client.responses.retrieve(responseID),
+    },
+    {
+      operation: 'cancel',
+      createFetch: createCancelFetchMock,
+      invoke: (client: ReturnType<(typeof providerCases)[number]['createClient']>) =>
+        client.responses.cancel(responseID),
+    },
+  ])('waits for immediate capture before resolving a non-streaming $operation', async ({ createFetch, invoke }) => {
+    const fetchMock = createFetch()
+    const posthog = createPostHogMock()
+    const client = createClient(fetchMock, posthog)
+    await createTrackedBackgroundResponse(client)
+    const capture = deferred<void>()
+    posthog.captureImmediate.mockReturnValue(capture.promise)
+
+    let settled = false
+    const operationPromise = invoke(client).then((result) => {
+      settled = true
+      return result
+    })
+    await new Promise<void>((resolve) => setImmediate(resolve))
+
+    expect(posthog.captureImmediate).toHaveBeenCalledTimes(1)
+    expect(settled).toBe(false)
+
+    capture.resolve(undefined)
+    await operationPromise
+    expect(settled).toBe(true)
+  })
+
+  test('returns the upstream retrieve promise unchanged for untracked responses', () => {
+    const posthog = createPostHogMock()
+    const client = createClient(jest.fn(), posthog)
+    const upstreamPrototype = Object.getPrototypeOf(Object.getPrototypeOf(client.responses))
+    const upstreamPromise = Promise.resolve(responseBody('completed')) as any
+    const retrieve = jest.spyOn(upstreamPrototype, 'retrieve').mockReturnValue(upstreamPromise)
+
+    expect(client.responses.retrieve('untracked-response')).toBe(upstreamPromise)
+    expect(client.responses.retrieve('untracked-response', { stream: true })).toBe(upstreamPromise)
+
+    retrieve.mockRestore()
   })
 
   test('keeps the raw retrieve response body readable through asResponse', async () => {
@@ -259,11 +388,13 @@ describe.each(providerCases)('$provider background Responses', ({ provider, crea
     expect(typeof cancelPromise.asResponse).toBe('function')
     expect(typeof cancelPromise.withResponse).toBe('function')
 
-    const [{ data: cancelled }, rawResponse] = await Promise.all([
+    const [{ data: cancelled, request_id: requestID }, rawResponse] = await Promise.all([
       cancelPromise.withResponse(),
       cancelPromise.asResponse(),
     ])
     expect(cancelled.status).toBe('cancelled')
+    expect((cancelled as any)._request_id).toBe('req_background_cancelled')
+    expect(requestID).toBe('req_background_cancelled')
     expect(rawResponse.status).toBe(200)
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(String(fetchMock.mock.calls[1][0])).toContain(`/responses/${responseID}/cancel`)
@@ -294,6 +425,46 @@ describe.each(providerCases)('$provider background Responses', ({ provider, crea
     expect((await untrackedCancel).status).toBe('cancelled')
     expect(fetchMock).toHaveBeenCalledTimes(3)
     expect(posthog.captureImmediate).toHaveBeenCalledTimes(1)
+  })
+
+  test('resumes an interrupted background create stream with its original context', async () => {
+    const fetchMock = createResumedStreamFetchMock()
+    const posthog = createPostHogMock()
+    const client = createClient(fetchMock, posthog)
+
+    const createStream = await client.responses.create({
+      model: 'gpt-4o-mini',
+      input: 'Run this in the background.',
+      background: true,
+      stream: true,
+      posthogDistinctId: 'background-user',
+      posthogTraceId: 'background-trace',
+      posthogProperties: { workflow: 'nightly' },
+      posthogCaptureImmediate: true,
+    })
+    for await (const event of createStream) {
+      expect(event.type).toBe('response.created')
+      break
+    }
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    expect(posthog.captureImmediate).not.toHaveBeenCalled()
+
+    const resumedStream = await client.responses.retrieve(responseID, { stream: true, starting_after: 0 })
+    for await (const event of resumedStream) {
+      expect(event.type).toBe('response.completed')
+    }
+    await new Promise<void>((resolve) => setImmediate(resolve))
+
+    expect(String(fetchMock.mock.calls[1][0])).toContain('starting_after=0')
+    expect(posthog.captureImmediate).toHaveBeenCalledTimes(1)
+    expect(posthog.captureImmediate.mock.calls[0][0]).toMatchObject({
+      distinctId: 'background-user',
+      properties: {
+        $ai_provider: provider,
+        $ai_trace_id: 'background-trace',
+        workflow: 'nightly',
+      },
+    })
   })
 
   test('captures one terminal event from a streaming retrieval with the original context', async () => {

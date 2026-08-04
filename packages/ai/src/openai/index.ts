@@ -23,10 +23,11 @@ import type { ResponseCreateParamsWithTools, ExtractParsedContentFromParams } fr
 import type { FormattedMessage, FormattedContent } from '../types'
 import { sanitizeOpenAI, sanitizeOpenAIResponse } from '../sanitization'
 import { extractPosthogParams } from '../utils'
-import { isResponseTokenChunk, extractRequestId, buildProviderMetadata } from './utils'
+import { isResponseTokenChunk, extractRequestId, buildProviderMetadata, getResponseFailure } from './utils'
 import type { MonitoringEventPropertiesWithDefaults } from '../utils'
 import {
   BackgroundResponseTracker,
+  getBackgroundResponseLatency,
   isPendingBackgroundResponse,
   isTerminalResponse,
   wrapBackgroundResponseStream,
@@ -55,7 +56,6 @@ type EmbeddingCreateParams = OpenAIOrignal.EmbeddingCreateParams
 interface BackgroundResponseState {
   openAIParams: ResponsesCreateParamsBase
   posthogParams: MonitoringEventPropertiesWithDefaults
-  startTime: number
 }
 
 interface MonitoringOpenAIConfig extends ClientOptions {
@@ -447,14 +447,14 @@ export class WrappedResponses extends Responses {
     result: OpenAIOrignal.Responses.Response,
     context: BackgroundResponseState
   ): Promise<void> {
-    const { openAIParams, posthogParams, startTime } = context
+    const { openAIParams, posthogParams } = context
     await captureAiGenerationAfterSuccess(this.phClient, {
       ...posthogParams,
       model: openAIParams.model ?? result.model,
       provider: 'openai',
       input: formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions),
       output: formatResponseOpenAI({ output: result.output }),
-      latency: (Date.now() - startTime) / 1000,
+      latency: getBackgroundResponseLatency(result),
       baseURL: this.baseURL,
       modelParameters: getModelParams(openAIParams, result.service_tier),
       httpStatus: 200,
@@ -469,7 +469,11 @@ export class WrappedResponses extends Responses {
       stopReason: result.status ?? undefined,
       tools: extractAvailableToolCalls('openai', openAIParams),
       completionId: result.id,
-      providerMetadata: buildProviderMetadata({ requestId: extractRequestId(result) }),
+      providerMetadata: buildProviderMetadata({
+        requestId: extractRequestId(result),
+        incompleteDetails: result.incomplete_details,
+      }),
+      error: getResponseFailure(result),
     })
   }
 
@@ -533,6 +537,7 @@ export class WrappedResponses extends Responses {
                 webSearchCount: 0,
               }
               let rawUsageData: unknown
+              let terminalResponse: OpenAIOrignal.Responses.Response | undefined
 
               for await (const chunk of stream1) {
                 // Track first token time on content delta events
@@ -547,6 +552,12 @@ export class WrappedResponses extends Responses {
                   }
                   if (!completionIdFromResponse && chunk.response.id) {
                     completionIdFromResponse = chunk.response.id
+                  }
+                  if (openAIParams.background === true && !this.backgroundResponses.get(chunk.response.id)) {
+                    this.backgroundResponses.set(chunk.response.id, { openAIParams, posthogParams })
+                  }
+                  if (isTerminalResponse(chunk.response)) {
+                    terminalResponse = chunk.response
                   }
                   if (chunk.response.service_tier != null) {
                     serviceTierFromResponse = chunk.response.service_tier
@@ -581,6 +592,16 @@ export class WrappedResponses extends Responses {
                 }
               }
 
+              if (openAIParams.background === true) {
+                if (terminalResponse) {
+                  const context = this.backgroundResponses.take(terminalResponse.id)
+                  if (context) {
+                    await this.captureBackgroundResponse(terminalResponse, context).catch(() => undefined)
+                  }
+                }
+                return
+              }
+
               const latency = (Date.now() - startTime) / 1000
               const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
               const availableTools = extractAvailableToolCalls('openai', openAIParams)
@@ -611,6 +632,14 @@ export class WrappedResponses extends Responses {
                 completionId: completionIdFromResponse,
               })
             } catch (error: unknown) {
+              if (
+                openAIParams.background === true &&
+                completionIdFromResponse &&
+                this.backgroundResponses.get(completionIdFromResponse)
+              ) {
+                throw error
+              }
+
               await captureAiGeneration(this.phClient, {
                 ...posthogParams,
                 model: openAIParams.model,
@@ -647,7 +676,7 @@ export class WrappedResponses extends Responses {
         async (result) => {
           if ('output' in result) {
             if (isPendingBackgroundResponse(openAIParams, result)) {
-              this.backgroundResponses.set(result.id, { openAIParams, posthogParams, startTime })
+              this.backgroundResponses.set(result.id, { openAIParams, posthogParams })
               return result
             }
 
@@ -675,7 +704,11 @@ export class WrappedResponses extends Responses {
               stopReason: result.status ?? undefined,
               tools: availableTools,
               completionId: result.id,
-              providerMetadata: buildProviderMetadata({ requestId: extractRequestId(result) }),
+              providerMetadata: buildProviderMetadata({
+                requestId: extractRequestId(result),
+                incompleteDetails: result.incomplete_details,
+              }),
+              error: getResponseFailure(result),
             })
           }
           return result
@@ -735,6 +768,12 @@ export class WrappedResponses extends Responses {
   ): APIPromise<OpenAIOrignal.Responses.Response | Stream<OpenAIOrignal.Responses.ResponseStreamEvent>> {
     const parentPromise = super.retrieve(responseID, query, options)
 
+    // Preserve the upstream promise and stream unchanged for responses that
+    // were not created through this client.
+    if (!this.backgroundResponses.get(responseID)) {
+      return parentPromise
+    }
+
     if (query.stream) {
       return parentPromise._thenUnwrap((result) => {
         if ('controller' in result) {
@@ -746,7 +785,7 @@ export class WrappedResponses extends Responses {
       })
     }
 
-    return parentPromise._thenUnwrap((result) => {
+    return parentPromise._thenUnwrap(async (result) => {
       if (!('output' in result) || !isTerminalResponse(result)) {
         return result
       }
@@ -754,13 +793,11 @@ export class WrappedResponses extends Responses {
       // Removing the context before capture makes concurrent or repeated
       // terminal polls idempotent.
       const context = this.backgroundResponses.take(responseID)
-      if (!context) {
-        return result
+      if (context) {
+        await this.captureBackgroundResponse(result, context).catch(() => undefined)
       }
-
-      void this.captureBackgroundResponse(result, context).catch(() => undefined)
       return result
-    })
+    }) as unknown as APIPromise<OpenAIOrignal.Responses.Response>
   }
 
   public cancel(responseID: string, options?: RequestOptions): APIPromise<OpenAIOrignal.Responses.Response> {
@@ -772,17 +809,17 @@ export class WrappedResponses extends Responses {
       return parentPromise
     }
 
-    return parentPromise._thenUnwrap((result) => {
+    return parentPromise._thenUnwrap(async (result) => {
       if (!isTerminalResponse(result)) {
         return result
       }
 
       const context = this.backgroundResponses.take(responseID)
       if (context) {
-        void this.captureBackgroundResponse(result, context).catch(() => undefined)
+        await this.captureBackgroundResponse(result, context).catch(() => undefined)
       }
       return result
-    })
+    }) as unknown as APIPromise<OpenAIOrignal.Responses.Response>
   }
 
   public parse<Params extends ResponseCreateParamsWithTools, ParsedT = ExtractParsedContentFromParams<Params>>(
@@ -799,7 +836,7 @@ export class WrappedResponses extends Responses {
     const wrappedPromise = parentPromise.then(
       async (result) => {
         if (isPendingBackgroundResponse(openAIParams, result)) {
-          this.backgroundResponses.set(result.id, { openAIParams, posthogParams, startTime })
+          this.backgroundResponses.set(result.id, { openAIParams, posthogParams })
           return result
         }
 
@@ -823,7 +860,11 @@ export class WrappedResponses extends Responses {
           },
           stopReason: result.status ?? undefined,
           completionId: result.id,
-          providerMetadata: buildProviderMetadata({ requestId: extractRequestId(result) }),
+          providerMetadata: buildProviderMetadata({
+            requestId: extractRequestId(result),
+            incompleteDetails: result.incomplete_details,
+          }),
+          error: getResponseFailure(result),
         })
         return result
       },

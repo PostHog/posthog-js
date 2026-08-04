@@ -985,6 +985,14 @@ describe('PostHogAzureOpenAI - response service tier', () => {
     },
   })
 
+  const responsesUsage = {
+    input_tokens: 20,
+    output_tokens: 10,
+    total_tokens: 30,
+    input_tokens_details: { cached_tokens: 4 },
+    output_tokens_details: { reasoning_tokens: 3 },
+  }
+
   const mockResponsesResult = (serviceTier: 'default' | 'flex') => ({
     id: 'resp-service-tier',
     model: 'gpt-4',
@@ -992,7 +1000,7 @@ describe('PostHogAzureOpenAI - response service tier', () => {
     created_at: 1234567890,
     status: 'completed',
     output: [],
-    usage: null,
+    usage: responsesUsage,
     service_tier: serviceTier,
   })
 
@@ -1098,6 +1106,11 @@ describe('PostHogAzureOpenAI - response service tier', () => {
     await invoke()
 
     expect(capturedServiceTier()).toBe('flex')
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    expect(captureArgs[0].properties).toMatchObject({
+      $ai_usage: responsesUsage,
+      $ai_stop_reason: 'completed',
+    })
   })
 
   test('prefers the final response tier for streaming responses', async () => {

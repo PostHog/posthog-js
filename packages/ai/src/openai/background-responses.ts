@@ -15,6 +15,20 @@ export function isTerminalResponse(response: { status?: string | null }): boolea
 }
 
 /**
+ * Uses provider timestamps so background polling cadence does not inflate
+ * generation latency. Non-completed responses do not expose a terminal time.
+ */
+export function getBackgroundResponseLatency(
+  response: Pick<Response, 'created_at' | 'completed_at'>
+): number | undefined {
+  if (typeof response.created_at !== 'number' || typeof response.completed_at !== 'number') {
+    return undefined
+  }
+
+  return Math.max(0, response.completed_at - response.created_at)
+}
+
+/**
  * Keeps the original create context available while a background response is
  * polled. Entries are insertion ordered, so the oldest context is discarded
  * when the bound is reached.

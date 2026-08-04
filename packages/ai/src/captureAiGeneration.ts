@@ -181,7 +181,7 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
       $ai_input_tokens: usage.inputTokens ?? 0,
       ...(usage.outputTokens !== undefined ? { $ai_output_tokens: usage.outputTokens } : {}),
       ...additionalTokenValues,
-      $ai_latency: options.latency ?? 0,
+      ...(options.latency !== undefined ? { $ai_latency: options.latency } : {}),
       ...(options.timeToFirstToken !== undefined ? { $ai_time_to_first_token: options.timeToFirstToken } : {}),
       $ai_trace_id: traceId,
       $ai_base_url: options.baseURL ?? '',
