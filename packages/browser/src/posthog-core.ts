@@ -122,6 +122,7 @@ import {
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { ExternalIntegrations } from './extensions/external-integration'
 import { BrowserClientAdapter } from './extensions/browser-client'
+import { MutableFeatureFlagsConfigSource } from './feature-flags-config'
 import type { PostHogSurveys } from './posthog-surveys'
 import type { Autocapture } from './autocapture'
 import type { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
@@ -461,6 +462,8 @@ export class PostHog implements PostHogInterface {
     private readonly _extensions: Extension[] = []
     private readonly _extensionEventPropertyProducers: Array<() => Record<string, unknown>> = []
     private _browserClientAdapter: BrowserClientAdapter | undefined
+    private _featureFlagsConfigSource: MutableFeatureFlagsConfigSource | undefined
+    private _featureFlagsReloadingUnsubscribe: (() => void) | undefined
 
     private _replaceExtension<T extends Extension>(oldExt: T | undefined, newExt: T): T {
         if (oldExt) {
@@ -541,7 +544,11 @@ export class PostHog implements PostHogInterface {
         // Eagerly construct extensions from default classes so they're available before init().
         // For the slim bundle, these remain undefined until _initExtensions sets them from config.
         const ext = PostHog.__defaultExtensionClasses ?? {}
-        this.featureFlags = ext.featureFlags && new ext.featureFlags(this)
+        this._featureFlagsConfigSource = ext.featureFlags ? new MutableFeatureFlagsConfigSource(this.config) : undefined
+        this.featureFlags =
+            ext.featureFlags && this._featureFlagsConfigSource
+                ? new ext.featureFlags(this._featureFlagsConfigSource)
+                : undefined
         this.toolbar = ext.toolbar && new ext.toolbar(this)
         this.surveys = ext.surveys && new ext.surveys(this)
         this.conversations = ext.conversations && new ext.conversations(this)
@@ -728,6 +735,8 @@ export class PostHog implements PostHogInterface {
             this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager, this.persistence)
         }
 
+        this._enrollFeatureFlags()
+
         // Conditionally defer extension initialization based on config
         if (this.config.__preview_deferred_init_extensions) {
             // EXPERIMENTAL: Defer non-critical extension initialization to next tick
@@ -881,6 +890,26 @@ export class PostHog implements PostHogInterface {
         return this
     }
 
+    private _enrollFeatureFlags(): void {
+        const FeatureFlagsClass =
+            this.config.__extensionClasses?.featureFlags ?? PostHog.__defaultExtensionClasses?.featureFlags
+        if (!FeatureFlagsClass) {
+            return
+        }
+        this._featureFlagsConfigSource ??= new MutableFeatureFlagsConfigSource(this.config, this._shouldDisableFlags())
+        if (!this.featureFlags || !(this.featureFlags instanceof FeatureFlagsClass)) {
+            this._featureFlagsReloadingUnsubscribe?.()
+            this._featureFlagsReloadingUnsubscribe = undefined
+            this.featureFlags = new FeatureFlagsClass(this._featureFlagsConfigSource)
+        }
+        if (!this._featureFlagsReloadingUnsubscribe) {
+            this._featureFlagsReloadingUnsubscribe = this.featureFlags.onReloading(() => {
+                this._internalEventEmitter.emit('featureFlagsReloading', true)
+            })
+            void this._getBrowserClientAdapter().add(this.featureFlags)
+        }
+    }
+
     private _initExtensions(startInCookielessMode: boolean): void {
         // we don't support IE11 anymore, so performance.now is safe
         // eslint-disable-next-line compat/compat
@@ -890,9 +919,6 @@ export class PostHog implements PostHogInterface {
 
         // Due to name mangling, we can't easily iterate and assign these extensions
         // The assignment needs to also be mangled. Thus, the loop is unrolled.
-        if (ext.featureFlags) {
-            this._extensions.push((this.featureFlags = this.featureFlags ?? new ext.featureFlags(this)))
-        }
         if (ext.exceptions) {
             this._extensions.push((this.exceptions = this.exceptions ?? new ext.exceptions(this)))
         }
@@ -1370,18 +1396,6 @@ export class PostHog implements PostHogInterface {
             return
         }
 
-        if (this._extensionEventPropertyProducers.length > 0) {
-            const dynamicProperties: Properties = {}
-            for (const producer of this._extensionEventPropertyProducers.slice()) {
-                try {
-                    extend(dynamicProperties, producer() as Properties)
-                } catch (error) {
-                    logger.error('Failed to produce browser extension event properties', error)
-                }
-            }
-            properties = { ...dynamicProperties, ...(properties ?? {}) }
-        }
-
         if (properties?.$current_url && !isString(properties?.$current_url)) {
             logger.error(
                 'Invalid `$current_url` property provided to `posthog.capture`. Input must be a string. Ignoring provided value.'
@@ -1703,8 +1717,22 @@ export class PostHog implements PostHogInterface {
             }
         })
 
+        const dynamicProperties: Properties = {}
+        if (this._extensionEventPropertyProducers.length > 0) {
+            for (const producer of this._extensionEventPropertyProducers.slice()) {
+                try {
+                    extend(dynamicProperties, producer() as Properties)
+                } catch (error) {
+                    logger.error('Failed to produce browser extension event properties', error)
+                }
+            }
+        }
+
         // update properties with pageview info and super-properties
-        properties = extend({}, infoProperties, persistenceProperties, sessionPersistenceProperties, properties)
+        properties = extend({}, infoProperties, persistenceProperties, sessionPersistenceProperties, {
+            ...dynamicProperties,
+            ...properties,
+        })
 
         properties['$is_identified'] = this._isIdentified()
 
@@ -2715,7 +2743,11 @@ export class PostHog implements PostHogInterface {
         // affect flag evaluation; the anonymous/identified state itself is not part of the /flags request.
         if (identityDidChange) {
             this.reloadFeatureFlags()
-            this.unregister(FLAG_CALL_REPORTED)
+            if (this.featureFlags) {
+                this.featureFlags.resetFlagCallReported()
+            } else {
+                this.unregister(FLAG_CALL_REPORTED)
+            }
         } else if (shouldTransitionToIdentified && (userPropertiesToSet || userPropertiesToSetOnce)) {
             this.reloadFeatureFlags()
         }
@@ -3174,7 +3206,6 @@ export class PostHog implements PostHogInterface {
         void this.metrics?.flush('sendBeacon')
         this._requestQueue?.unload()
         this._retryQueue?.unload()
-        this.featureFlags?.destroy()
     }
 
     /**
@@ -3434,6 +3465,8 @@ export class PostHog implements PostHogInterface {
                     localStore._is_supported() && localStore._remove('ph_debug')
                 }
             }
+
+            this._featureFlagsConfigSource?.update(this.config, this._shouldDisableFlags())
 
             this.exceptionObserver?.onConfigChange()
             this.exceptions?.onConfigChange()

@@ -677,9 +677,10 @@ describe('PostHog extension dynamic properties', () => {
         const beforeSend = jest.fn((event) => event)
         const posthog = await createPosthogInstance(undefined, { before_send: beforeSend })
         const error = jest.spyOn(logger, 'error').mockImplementation()
-        const calculateEventProperties = jest.spyOn(posthog, 'calculateEventProperties')
+        posthog.register({ producerWinsPersistence: 'persistent' })
         const removeDynamic = posthog._registerExtensionEventProperties(() => ({
             dynamic: 'value',
+            producerWinsPersistence: 'dynamic',
             overridden: 'dynamic',
             overriddenWithUndefined: 'dynamic',
         }))
@@ -691,18 +692,16 @@ describe('PostHog extension dynamic properties', () => {
         posthog._registerExtensionEventProperties(duplicateProducer)
 
         posthog.capture('with-dynamic', { overridden: 'explicit', overriddenWithUndefined: undefined })
-        expect(calculateEventProperties.mock.calls[0][1]).toEqual(
-            expect.objectContaining({
-                dynamic: 'value',
-                overridden: 'explicit',
-                overriddenWithUndefined: undefined,
-            })
-        )
         expect(beforeSend).toHaveBeenLastCalledWith(
             expect.objectContaining({
-                properties: expect.objectContaining({ dynamic: 'value', overridden: 'explicit' }),
+                properties: expect.objectContaining({
+                    dynamic: 'value',
+                    producerWinsPersistence: 'dynamic',
+                    overridden: 'explicit',
+                }),
             })
         )
+        expect(beforeSend.mock.calls[0][0]?.properties).not.toHaveProperty('overriddenWithUndefined')
 
         expect(duplicateProducer).toHaveBeenCalledTimes(2)
         removeFirstDuplicate()
