@@ -60,6 +60,12 @@ export function captureEvent(
     // over sessionInfo, so concurrent stateless requests stay isolated.
     clientName: eventInput.clientName ?? sessionInfo.clientName,
     clientVersion: eventInput.clientVersion ?? sessionInfo.clientVersion,
+    // Read from this request's headers only — there is deliberately no
+    // sessionInfo fallback to coalesce with. Headers ride every HTTP request, so
+    // a remembered value would just be a chance to attribute a sibling request's
+    // client surface to this event.
+    clientUserAgent: eventInput.clientUserAgent,
+    vendorClient: eventInput.vendorClient,
     identifyActorGivenId: sessionInfo.identifyActorGivenId,
     identifyActorData: sessionInfo.identifyActorData,
     groups: sessionInfo.identifyActorGroups,

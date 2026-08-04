@@ -244,6 +244,10 @@ function baseEvent(eventType: MCPAnalyticsEventType, common: McpCaptureCommon): 
     eventType,
     sessionId: common.sessionId,
     protocolVersion: common.protocolVersion,
+    // There is no `extra` on this path, so the host reads the request headers and
+    // passes them per capture — the SDK has no transport to read them from.
+    clientUserAgent: common.clientUserAgent,
+    vendorClient: common.vendorClient,
     timestamp: common.timestamp ?? new Date(),
     properties: common.properties,
     groups: common.groups,

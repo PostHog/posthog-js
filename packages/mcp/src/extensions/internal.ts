@@ -15,6 +15,7 @@ import type {
 import { MCPAnalyticsEventType } from './event-types'
 import { captureEvent } from './capture'
 import { stampMetaClientInfo } from './client-identity'
+import { stampTransportIdentity } from './transport-identity'
 
 /**
  * Bounded LRU cache for session identities, capped at `maxSize` entries so a
@@ -153,6 +154,7 @@ export async function handleIdentify(
     timestamp: new Date(),
   }
   stampMetaClientInfo(identifyEvent, request)
+  stampTransportIdentity(identifyEvent, extra)
 
   try {
     const identityResult =

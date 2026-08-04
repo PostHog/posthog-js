@@ -386,6 +386,45 @@ describe('concurrent request attribution', () => {
     })
   })
 
+  it('keeps each request attributed to the client surface its own headers named', async () => {
+    const metadataAStarted = deferred()
+    const releaseMetadataA = deferred()
+    const server = createServer({
+      eventProperties: async (request) => {
+        const requestLabel = String(request.params?.arguments?.requestLabel)
+        if (requestLabel === 'A') {
+          metadataAStarted.resolve()
+          await releaseMetadataA.promise
+        }
+        return { requestLabel }
+      },
+    })
+
+    const requestA = invokeTool(server, 'A', {
+      requestInfo: { headers: { 'user-agent': 'claude-code/2.1.0 (cli)', 'x-anthropic-client': 'claude-code' } },
+    })
+    await metadataAStarted.promise
+
+    await invokeTool(server, 'B', {
+      requestInfo: { headers: { 'user-agent': 'claude-code/2.1.0 (claude-vscode)' } },
+    })
+    releaseMetadataA.resolve()
+    await requestA
+    await flushCaptures()
+
+    const toolCalls = capture.findCapturesByEvent('$mcp_tool_call')
+    const captureA = toolCalls.find((event) => event.properties.requestLabel === 'A')
+    const captureB = toolCalls.find((event) => event.properties.requestLabel === 'B')
+
+    expect(captureA?.properties).toMatchObject({
+      $mcp_client_user_agent: 'claude-code/2.1.0 (cli)',
+      $mcp_vendor_client: 'claude-code',
+    })
+    expect(captureB?.properties.$mcp_client_user_agent).toBe('claude-code/2.1.0 (claude-vscode)')
+    // B never sent the vendor header, so A's must not bleed into B's event.
+    expect(captureB?.properties).not.toHaveProperty('$mcp_vendor_client')
+  })
+
   it('keeps failed tool events attributed to the request that threw', async () => {
     const toolAStarted = deferred()
     const releaseToolA = deferred()
