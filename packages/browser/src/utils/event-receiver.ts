@@ -386,9 +386,9 @@ export abstract class EventReceiver<T extends EventTriggerable> {
     }
 
     /**
-     * Stamp when an item was armed, so a resumed display delay can be computed from the elapsed
-     * time on a later page load. Keeps the first activation time for an already-stamped item, so
-     * a repeat trigger before the item is shown does not restart the delay.
+     * Stamp when an item enters persisted activation, so a resumed display delay can be computed
+     * from the elapsed time on a later page load. Repeated triggers do not call this method because
+     * `_persistActivation` returns false while the current activation is still live.
      */
     private _recordActivationTimestamp(itemId: string): void {
         const key = this._getActivationTimestampsKey()
@@ -396,9 +396,6 @@ export abstract class EventReceiver<T extends EventTriggerable> {
             return
         }
         const timestamps = this._getRawActivationTimestamps()
-        if (isNumber(timestamps[itemId])) {
-            return
-        }
         this._writeActivationTimestamps({ ...timestamps, [itemId]: Date.now() })
     }
 

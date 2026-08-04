@@ -540,6 +540,17 @@ describe('survey-event-receiver', () => {
             expect(receiver.getActivationTimestamp('delayed-survey')).toBe(1_000_000)
         })
 
+        it('replaces a stale activation timestamp when starting a new activation', () => {
+            const { receiver, hook } = setup(makeDelayedSurvey())
+            instance.persistence?.register({
+                [SURVEYS_ACTIVATED_TIMESTAMPS]: { 'delayed-survey': 900_000 },
+            })
+
+            hook('trigger_event')
+
+            expect(receiver.getActivationTimestamp('delayed-survey')).toBe(1_000_000)
+        })
+
         it('does not persist an armed survey without a delay (keeps the exit-intent scoping)', () => {
             const { receiver, hook } = setup(makeDelayedSurvey({ appearance: {} }))
 
