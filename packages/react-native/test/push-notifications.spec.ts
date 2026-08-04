@@ -1,6 +1,6 @@
 import { PostHog } from '../src/posthog-rn'
 import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
-import { setupFetch, waitForNativePluginEvaluation } from './test-utils'
+import { setupFetch, waitForExpect, waitForNativePluginEvaluation } from './test-utils'
 
 jest.mock('../src/optional/OptionalPlugin', () => ({
   OptionalReactNativePlugin: {
@@ -209,7 +209,7 @@ describe('push notifications', () => {
 
     it('swallows a native rejection instead of throwing', async () => {
       const posthog = await createPostHog()
-      mockPlugin.registerPushNotificationToken.mockImplementation(() => Promise.reject(new Error('no appId')))
+      mockPlugin.registerPushNotificationToken.mockImplementationOnce(() => Promise.reject(new Error('no appId')))
 
       await expect(posthog.registerPushNotificationToken('a-token')).resolves.toBeUndefined()
 
@@ -238,10 +238,28 @@ describe('push notifications', () => {
       await posthog.shutdown()
     })
 
-    it('still allows unregistering after opt-out', async () => {
-      // Unregistering removes data, so opting out must not strand a live subscription.
+    it('unregisters the existing subscription on opt-out', async () => {
+      // Native keeps its own persisted record and retry loop and never sees the JS opt-out, so a
+      // token registered before consent withdrawal would stay live unless opt-out removes it.
+      const posthog = await createPostHog()
+
+      await posthog.optOut()
+
+      await waitForExpect(1000, () => {
+        expect(mockPlugin.unregisterPushNotificationToken).toHaveBeenCalledTimes(1)
+      })
+
+      await posthog.shutdown()
+    })
+
+    it('still allows unregistering explicitly after opt-out', async () => {
+      // Unregistering removes data, so it stays callable while opted out.
       const posthog = await createPostHog()
       await posthog.optOut()
+      await waitForExpect(1000, () => {
+        expect(mockPlugin.unregisterPushNotificationToken).toHaveBeenCalled()
+      })
+      mockPlugin.unregisterPushNotificationToken.mockClear()
 
       await posthog.unregisterPushNotificationToken()
 

@@ -1008,6 +1008,12 @@ export class PostHog extends PostHogCore {
     // Consent must be durable. See reset()/identify().
     const result = super.optOut()
     void this._eventsStorage.waitForPersist()
+    // A device token registered before opt-out would otherwise survive consent withdrawal: the
+    // native subscription handler keeps its own persisted record and retry loop, and never
+    // learns about the JS opt-out. unregister is deliberately allowed while opted out.
+    if (OptionalReactNativePlugin?.unregisterPushNotificationToken) {
+      void this.unregisterPushNotificationToken()
+    }
     return result
   }
 
@@ -2171,7 +2177,10 @@ export class PostHog extends PostHogCore {
     }
     // ready() doesn't cover native setup — it's kicked off fire-and-forget. Queue behind the
     // init chain, or the native SDK drops the call for not being initialized yet and still
-    // resolves, so the caller sees a success that never registered anything.
+    // resolves, so the caller sees a success that never registered anything. _initPromise comes
+    // first because it is what assigns the chain: until then the chain is still its initial
+    // resolved value and awaiting it alone passes straight through.
+    await this._initPromise.catch(() => {})
     await this._sessionReplayEvalChain.catch(() => {})
     try {
       await invoke(OptionalReactNativePlugin)
@@ -2261,11 +2270,13 @@ export class PostHog extends PostHogCore {
       return true
     }
 
-    // The native SDKs can't be re-initialized — a second setup() would reset the running
-    // instance. If error tracking is already running, skip setup() and start replay on the
-    // existing native instance instead (setup() is what would otherwise start it).
-    // Push is excluded: it initializes by default, and counting it here would skip the setup()
-    // that carries replay's resolved remote config to native.
+    // Both native SDKs ignore a second setup() once running (PostHogSDK.swift:139,
+    // PostHog.kt:150), so when error tracking is already up, replay has to be started on the
+    // live instance instead. Push is excluded deliberately: it initializes by default, and
+    // short-circuiting here would skip the sampling and event-trigger evaluation further down
+    // that decides whether recording may start at all. Replay's config still reaches native in
+    // both orders — setup() always sends sdkReplayConfig, and each plugin applies it whether or
+    // not recording starts at setup.
     if (
       (this._sessionReplayNativeInitialized || this._nativeErrorTrackingInitialized) &&
       enableSessionReplay &&
