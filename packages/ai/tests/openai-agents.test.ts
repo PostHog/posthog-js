@@ -1,6 +1,6 @@
 import { PostHogTracingProcessor } from '../src/openai-agents/processor'
 
-// Mock types matching @openai/agents-core interfaces
+// Mock types matching @openai/agents interfaces
 interface MockTrace {
   type: 'trace'
   traceId: string
@@ -1100,7 +1100,7 @@ describe('PostHogTracingProcessor', () => {
 })
 
 const mockAddTraceProcessor = jest.fn()
-jest.mock('@openai/agents-core', () => ({
+jest.mock('@openai/agents', () => ({
   addTraceProcessor: mockAddTraceProcessor,
 }))
 
