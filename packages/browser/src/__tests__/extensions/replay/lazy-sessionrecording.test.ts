@@ -1540,14 +1540,18 @@ describe('Lazy SessionRecording', () => {
                     )
                 })
 
-                it('discards a fresh interaction-less epoch on unload instead of shipping it', () => {
+                it('ships a fresh interaction-less epoch on clean unload (passive visits are captured)', () => {
                     jest.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
-                    emitInactiveEvent(startingTimestamp + 100, 'unknown')
+                    const snapshot = emitInactiveEvent(startingTimestamp + 100, 'unknown')
                     ;(posthog.capture as Mock).mockClear()
 
                     sessionRecording['_lazyLoadedSessionRecording']['_onBeforeUnload']()
 
-                    expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+                    expect(posthog.capture).toHaveBeenCalledWith(
+                        '$snapshot',
+                        expect.objectContaining({ $snapshot_data: expect.arrayContaining([snapshot]) }),
+                        expect.any(Object)
+                    )
                 })
 
                 // an explicit override is intent to record, so it releases the fresh-start hold —
@@ -1744,7 +1748,8 @@ describe('Lazy SessionRecording', () => {
                 }
             })
 
-            it('does not ship on the size cap while a fresh interaction-less epoch is held', () => {
+            it('drops a held buffer at the size cap and recovers with a fresh full snapshot on release', () => {
+                jest.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual('unknown')
 
                 sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
@@ -1753,17 +1758,20 @@ describe('Lazy SessionRecording', () => {
                 sessionRecording['_lazyLoadedSessionRecording']['_buffer'].size = RECORDING_MAX_EVENT_SIZE - 1
                 sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
 
-                // the size-cap flush goes through _flushBuffer, so the interaction-less
-                // hold wins — a tab nobody touched must not ship a billable recording
+                // a tab nobody touched must not ship a billable recording, and its held
+                // buffer must not grow unbounded — the data is dropped instead
+                expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([])
+
+                // an unload after the overflow has nothing useful to ship
+                sessionRecording['_lazyLoadedSessionRecording']['_onBeforeUnload']()
                 expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
 
-                // once someone interacts, the release ships the capped buffer
+                // an interaction release takes a fresh full snapshot so the recording resumes playable
+                const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock
+                takeFullSnapshot.mockClear()
                 emitActiveEvent(startingTimestamp + 200)
-                expect(posthog.capture).toHaveBeenCalledWith(
-                    '$snapshot',
-                    expect.objectContaining({ $session_id: sessionId }),
-                    expect.any(Object)
-                )
+                expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
             })
 
             it('holds the buffer of a background tab that never sees interaction', () => {

@@ -476,9 +476,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
      */
     private _queuedRRWebEvents: QueuedRRWebEvent[] = []
     private _isIdle: boolean | 'unknown' = 'unknown'
-    // true while a rotation-born session has had no user interaction; a held epoch is
-    // discarded (not shipped) by stop, unload, or a subsequent rotation
+    // true while the current epoch has had no user interaction; a held epoch is
+    // discarded (not shipped) by stop or a subsequent rotation
     private _holdFlushUntilInteraction = false
+    // fresh-start holds ship on a clean unload (passive visits are captured, matching
+    // pre-hold behavior); rotation-born holds don't — that unload ship was the incident
+    private _heldEpochShipsOnUnload = false
+    // set when a held buffer hit the size cap and was dropped to bound memory; a release
+    // then takes a fresh full snapshot so the recording resumes playable
+    private _heldBufferOverflowed = false
     private _rrwebError = false
     private _rrwebStartAttempted = false
     private _maxDepthExceeded = false
@@ -1024,6 +1030,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // interaction evidence should release.
         if (!this.isStarted) {
             this._holdFlushUntilInteraction = this._isIdle !== false
+            this._heldEpochShipsOnUnload = this._holdFlushUntilInteraction
+            this._heldBufferOverflowed = false
         }
 
         // Invalidate any in-flight async cleanup queued by a prior stop(). On a session-id
@@ -1375,6 +1383,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this.stop()
         this.start('session_id_changed')
         this._holdFlushUntilInteraction = holdNextEpoch
+        this._heldEpochShipsOnUnload = false
     }
 
     // releases run on evidence someone cares about the session: a user interaction, an event
@@ -1385,6 +1394,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return
         }
         this._holdFlushUntilInteraction = false
+        this._heldEpochShipsOnUnload = false
+        if (this._heldBufferOverflowed) {
+            this._heldBufferOverflowed = false
+            this._tryTakeFullSnapshot()
+        }
         this._scheduleFlushBuffer()
     }
 
@@ -1903,8 +1917,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             sessionChanged ||
             // we never want to flush a healthy same-session buffer while confirmed idle, but
             // 'unknown' still captures so its buffer must respect the size cap or it grows unbounded
-            // (a held epoch skips the cap flush — growth is bounded because 'unknown'
-            // transitions to confirmed idle after the idle threshold and capture stops)
             (this._isIdle !== true &&
                 !this._holdFlushUntilInteraction &&
                 this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE)
@@ -1917,6 +1929,20 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             // After flushing, update buffer to use the new target session/window IDs
             this._buffer.sessionId = targetSessionId
             this._buffer.windowId = properties.$window_id as string
+        }
+
+        // a held buffer can't ship at the cap, so bound memory instead: drop the epoch's data
+        // and stop collecting; a release takes a fresh full snapshot to resume playable
+        if (
+            this._holdFlushUntilInteraction &&
+            (this._heldBufferOverflowed ||
+                this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE)
+        ) {
+            if (!this._heldBufferOverflowed) {
+                this._heldBufferOverflowed = true
+                this._buffer = this._clearBuffer()
+            }
+            return
         }
 
         this._buffer.size += properties.$snapshot_bytes
@@ -1986,6 +2012,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         if (this.status === BUFFERING) {
             this._clearBuffer()
             return
+        }
+
+        // a clean unload releases a fresh-start hold so passive visits (reading, video)
+        // still ship, as they did before holds existed; rotation-born holds stay held,
+        // and an overflowed hold has nothing playable left to ship
+        if (this._holdFlushUntilInteraction && this._heldEpochShipsOnUnload && !this._heldBufferOverflowed) {
+            this._holdFlushUntilInteraction = false
         }
 
         // beforeunload cannot wait for async CompressionStream work. Synchronously
