@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.10.4
+
+### Patch Changes
+
+- [#4379](https://github.com/PostHog/posthog-js/pull/4379) [`4d8df50`](https://github.com/PostHog/posthog-js/commit/4d8df50bea343aee7626483d4c3be9703bafc024) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve tool-owned analytics arguments across event capture, low-level servers, and strict schemas.
+  (2026-08-04)
+
 ## 0.10.3
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.410.1",
+    "version": "1.410.6",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
@@ -94,7 +94,7 @@
         "@rollup/plugin-json": "^6.1.0",
         "@rollup/plugin-node-resolve": "^16.0.3",
         "@rollup/plugin-terser": "^0.4.4",
-        "@rollup/plugin-typescript": "^12.1.4",
+        "@rollup/plugin-typescript": "^12.3.0",
         "@sentry/types": "8.7.0",
         "@testing-library/dom": "catalog:",
         "@testing-library/jest-dom": "catalog:",

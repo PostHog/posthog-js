@@ -8,6 +8,7 @@ import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
 
 jest.mock('../extensions/logger', () => ({
+  createLogger: (logger?: (message: string) => void) => logger ?? (() => undefined),
   log: jest.fn(),
   setLogger: jest.fn(),
 }))
@@ -106,6 +107,11 @@ describe('addContextParameterToTool', () => {
         'tool declares context with a false schema',
         { name: 'has-false-context', inputSchema: { type: 'object', properties: { context: false } } },
         "already has 'context' parameter",
+      ],
+      [
+        'schema uses a root $ref',
+        { name: 'referenced-tool', inputSchema: { $ref: '#/$defs/Input' } },
+        'complex schema',
       ],
       [
         'schema uses oneOf',

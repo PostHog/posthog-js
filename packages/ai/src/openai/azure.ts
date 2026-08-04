@@ -10,13 +10,14 @@ import {
 } from '../utils'
 import { captureAiGeneration } from './capture'
 import type { APIPromise } from 'openai'
-import type { Stream } from 'openai/streaming'
+import { Stream } from 'openai/streaming'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
 import type { ResponseCreateParamsWithTools, ExtractParsedContentFromParams } from 'openai/lib/ResponsesParser'
 import type { FormattedMessage, FormattedContent } from '../types'
 import { sanitizeOpenAI } from '../sanitization'
 import { extractPosthogParams } from '../utils'
 import { isResponseTokenChunk, extractRequestId, buildProviderMetadata } from './utils'
+import { monitoredStreamTee } from '../stream'
 
 type ChatCompletion = OpenAIOrignal.ChatCompletion
 type ChatCompletionChunk = OpenAIOrignal.ChatCompletionChunk
@@ -102,8 +103,11 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
 
     if (openAIParams.stream) {
       return parentPromise.then((value) => {
-        if ('tee' in value) {
-          const [stream1, stream2] = value.tee()
+        if (Symbol.asyncIterator in value) {
+          const [stream1, stream2] = monitoredStreamTee<ChatCompletionChunk, Stream<ChatCompletionChunk>>(
+            value as Stream<ChatCompletionChunk>,
+            (iterator, controller) => new Stream(iterator, controller)
+          )
           ;(async () => {
             // Hoisted so the catch block can surface whatever was accumulated
             // from the streamed chunks before the failure.
@@ -391,8 +395,14 @@ export class WrappedResponses extends AzureOpenAI.Responses {
 
     if (openAIParams.stream) {
       return parentPromise.then((value) => {
-        if ('tee' in value && typeof (value as any).tee === 'function') {
-          const [stream1, stream2] = (value as any).tee()
+        if (Symbol.asyncIterator in value) {
+          const [stream1, stream2] = monitoredStreamTee<
+            OpenAIOrignal.Responses.ResponseStreamEvent,
+            Stream<OpenAIOrignal.Responses.ResponseStreamEvent>
+          >(
+            value as Stream<OpenAIOrignal.Responses.ResponseStreamEvent>,
+            (iterator, controller) => new Stream(iterator, controller)
+          )
           ;(async () => {
             // Hoisted so the catch block can surface the completion ID that
             // was accumulated from the streamed chunks before the failure.
@@ -438,12 +448,12 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 ) {
                   finalContent = chunk.response.output
                 }
-                if ('usage' in chunk && chunk.usage) {
+                if ('response' in chunk && chunk.response?.usage) {
                   usage = {
-                    inputTokens: chunk.usage.input_tokens ?? 0,
-                    outputTokens: chunk.usage.output_tokens ?? 0,
-                    reasoningTokens: chunk.usage.output_tokens_details?.reasoning_tokens ?? 0,
-                    cacheReadInputTokens: chunk.usage.input_tokens_details?.cached_tokens ?? 0,
+                    inputTokens: chunk.response.usage.input_tokens ?? 0,
+                    outputTokens: chunk.response.usage.output_tokens ?? 0,
+                    reasoningTokens: chunk.response.usage.output_tokens_details?.reasoning_tokens ?? 0,
+                    cacheReadInputTokens: chunk.response.usage.input_tokens_details?.cached_tokens ?? 0,
                   }
                 }
               }
