@@ -993,7 +993,7 @@ describe('PostHogAzureOpenAI - Responses terminal statuses', () => {
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
     const properties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
-    expect(properties['$ai_stop_reason']).toBe(status === 'completed' ? undefined : status)
+    expect(properties['$ai_stop_reason']).toBe(status)
     expect(properties['$ai_input_tokens']).toBe(11)
     expect(properties['$ai_output_tokens']).toBe(7)
     expect(properties['$ai_output_choices']).toEqual(response.output)
@@ -1010,7 +1010,8 @@ describe('PostHogAzureOpenAI - Responses terminal statuses', () => {
   })
 
   test.each(terminalStatuses)('streaming %s response preserves terminal data', async (status) => {
-    const response = terminalResponse(status)
+    const baseResponse = terminalResponse(status)
+    const response = { ...baseResponse, output: status === 'cancelled' ? undefined : baseResponse.output }
     const terminalEventType =
       status === 'failed' ? 'response.failed' : status === 'completed' ? 'response.completed' : 'response.incomplete'
     const chunks = [{ type: terminalEventType, sequence_number: 0, response }]
@@ -1032,10 +1033,10 @@ describe('PostHogAzureOpenAI - Responses terminal statuses', () => {
 
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
     const properties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
-    expect(properties['$ai_stop_reason']).toBe(status === 'completed' ? undefined : status)
-    expect(properties['$ai_input_tokens']).toBe(status === 'completed' ? 0 : 11)
-    expect(properties['$ai_output_tokens']).toBe(status === 'completed' ? 0 : 7)
-    expect(properties['$ai_output_choices']).toEqual(response.output)
+    expect(properties['$ai_stop_reason']).toBe(status)
+    expect(properties['$ai_input_tokens']).toBe(11)
+    expect(properties['$ai_output_tokens']).toBe(7)
+    expect(properties['$ai_output_choices']).toEqual(response.output ?? [])
     expect(properties['$ai_is_error']).toBe(status === 'failed' ? true : undefined)
     if (status === 'failed') {
       expect(properties['$ai_error']).toContain('provider response failed')
@@ -1045,6 +1046,25 @@ describe('PostHogAzureOpenAI - Responses terminal statuses', () => {
         ? { incomplete_details: { reason: 'max_output_tokens' } }
         : undefined
     )
+  })
+
+  test('parse failed response preserves terminal data', async () => {
+    const response = terminalResponse('failed')
+    const ResponsesMock: any = openaiModule.Responses
+    ResponsesMock.prototype.parse = jest.fn().mockResolvedValue(response)
+
+    await client.responses.parse({
+      model: 'gpt-4',
+      input: 'Hello',
+      posthogDistinctId: 'test-id',
+    } as any)
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const properties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+    expect(properties['$ai_stop_reason']).toBe('failed')
+    expect(properties['$ai_is_error']).toBe(true)
+    expect(properties['$ai_error']).toContain('provider response failed')
+    expect(properties['$ai_provider_metadata']).toEqual({ request_id: 'req_failed' })
   })
 })
 

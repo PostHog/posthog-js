@@ -436,17 +436,17 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                   if (chunk.response.service_tier != null) {
                     serviceTierFromResponse = chunk.response.service_tier
                   }
+                  if (chunk.response.usage) {
+                    usage = {
+                      inputTokens: chunk.response.usage.input_tokens ?? 0,
+                      outputTokens: chunk.response.usage.output_tokens ?? 0,
+                      reasoningTokens: chunk.response.usage.output_tokens_details?.reasoning_tokens ?? 0,
+                      cacheReadInputTokens: chunk.response.usage.input_tokens_details?.cached_tokens ?? 0,
+                    }
+                  }
                   if (isTerminalResponse(chunk.response)) {
                     terminalResponse = chunk.response
-                    finalContent = chunk.response.output
-                    if (chunk.response.status !== 'completed' && chunk.response.usage) {
-                      usage = {
-                        inputTokens: chunk.response.usage.input_tokens ?? 0,
-                        outputTokens: chunk.response.usage.output_tokens ?? 0,
-                        reasoningTokens: chunk.response.usage.output_tokens_details?.reasoning_tokens ?? 0,
-                        cacheReadInputTokens: chunk.response.usage.input_tokens_details?.cached_tokens ?? 0,
-                      }
-                    }
+                    finalContent = chunk.response.output ?? []
                   }
                 }
                 if ('usage' in chunk && chunk.usage) {
@@ -473,8 +473,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 modelParameters: getModelParams(body, serviceTierFromResponse),
                 httpStatus: 200,
                 usage,
-                stopReason:
-                  terminalResponse?.status === 'completed' ? undefined : (terminalResponse?.status ?? undefined),
+                stopReason: terminalResponse?.status ?? undefined,
                 completionId: completionIdFromResponse,
                 providerMetadata: buildProviderMetadata({
                   incompleteDetails: terminalResponse?.incomplete_details,
@@ -529,7 +528,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
                 cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
               },
-              stopReason: result.status === 'completed' ? undefined : (result.status ?? undefined),
+              stopReason: result.status ?? undefined,
               completionId: result.id,
               providerMetadata: buildProviderMetadata({
                 requestId: extractRequestId(result),
@@ -598,7 +597,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
             reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
             cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
           },
-          stopReason: result.status === 'completed' ? undefined : (result.status ?? undefined),
+          stopReason: result.status ?? undefined,
           completionId: result.id,
           providerMetadata: buildProviderMetadata({
             requestId: extractRequestId(result),

@@ -537,7 +537,7 @@ export class WrappedResponses extends Responses {
 
                   if (isTerminalResponse(chunk.response)) {
                     terminalResponse = chunk.response
-                    finalContent = chunk.response.output
+                    finalContent = chunk.response.output ?? []
                     stopReason = chunk.response.status
                   }
                 }

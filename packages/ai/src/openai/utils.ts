@@ -37,7 +37,7 @@ export function extractRequestId(result: unknown): string | undefined {
 export function buildProviderMetadata(fields: {
   systemFingerprint?: string | null
   requestId?: string | null
-  incompleteDetails?: unknown
+  incompleteDetails?: OpenAI.Responses.Response['incomplete_details']
 }): Record<string, unknown> | undefined {
   const metadata: Record<string, unknown> = {}
   if (fields.systemFingerprint) {
@@ -54,13 +54,21 @@ export function buildProviderMetadata(fields: {
 
 const TERMINAL_RESPONSE_STATUSES = new Set(['completed', 'failed', 'cancelled', 'incomplete'])
 
+/**
+ * Checks whether a Responses API response has reached a status that should
+ * produce a final `$ai_generation` event.
+ */
 export function isTerminalResponse(response: { status?: string | null } | null | undefined): boolean {
   return !!response?.status && TERMINAL_RESPONSE_STATUSES.has(response.status)
 }
 
+/**
+ * Returns an isolated copy of a failed Responses API error for `$ai_error`, or
+ * creates a fallback error when the provider omitted failure details.
+ */
 export function getResponseFailure(
   response: Pick<OpenAI.Responses.Response, 'id' | 'status' | 'error'> | null | undefined
-): unknown | undefined {
+): unknown {
   if (response?.status !== 'failed') {
     return undefined
   }
