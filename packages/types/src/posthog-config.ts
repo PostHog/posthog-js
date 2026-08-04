@@ -623,7 +623,7 @@ export interface SessionRecordingOptions {
 
     /**
      * Derived from `rrweb.record` options. Called with `(name, value, element)` for every
-     * string-valued attribute in the final serialized representation so you can mask
+     * non-empty string-valued attribute in the final serialized representation so you can mask
      * specific attributes. Returning the original value leaves it visible. This callback
      * takes precedence over `maskAllElementAttributes` when both options are set.
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
