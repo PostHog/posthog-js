@@ -384,6 +384,13 @@ const entrypointTargets = entrypoints.map((file) => {
             {
                 file: `dist/${fileName}.js`,
                 sourcemap: true,
+                // Mark every source in our bundles as third-party so devtools skip our frames.
+                // Without this, wrappers we install on globals (most visibly the console capture
+                // in entrypoints/logs.ts and rrweb's console plugin) become the reported location
+                // of the caller's own `console.*` calls (e.g. everything blamed on `logs.ts`).
+                // Rollup's default only ignore-lists paths containing node_modules, which misses
+                // both our `src/` and workspace packages (they resolve through symlinks).
+                sourcemapIgnoreList: () => true,
                 format,
                 ...(format === 'iife'
                     ? {
@@ -404,9 +411,25 @@ const entrypointTargets = entrypoints.map((file) => {
 // consumers don't need a runtime dep on the re-exported package to resolve them.
 const inlineExternalTypesEntries = new Set([
     'extension-bundles.es.ts',
+    'posthog-recorder.ts',
+    'recorder.ts',
     'rrweb.es.ts',
     'rrweb-types.es.ts',
     'rrweb-plugin-console-record.es.ts',
+])
+
+// Entries whose declarations use PostHog must reference the canonical class in
+// module.d.ts instead of inlining a nominally incompatible copy.
+const mainModuleTypesEntries = new Set([
+    'conversations.ts',
+    'customizations.es.ts',
+    'dead-clicks-autocapture.ts',
+    'main.cjs.ts',
+    'product-tours-preview.es.ts',
+    'product-tours.ts',
+    'surveys-preview.es.ts',
+    'surveys.ts',
+    'tracing-headers.ts',
 ])
 
 // rrdom's dts drops the local `RRNodeType` alias declaration; the renderChunk
@@ -414,14 +437,12 @@ const inlineExternalTypesEntries = new Set([
 const rewriteRrdomNodeTypeAlias = (file) => file === 'rrweb.es.ts'
 
 const typeTargets = entrypoints
-    .filter((file) => file.endsWith('.es.ts'))
+    .filter((file) => file.endsWith('.ts'))
     .map((file) => {
         const source = `./lib/src/entrypoints/${file.replace('.ts', '.d.ts')}`
         const isExtensionBundles = file === 'extension-bundles.es.ts'
-        // customizations types must reference the main module for the PostHog class —
-        // an inlined duplicate would be nominally incompatible with the consumer's
-        // `posthog` instance (same private-fields problem as extension-bundles).
-        const isCustomizations = file === 'customizations.es.ts'
+        const isSlimModule = file === 'module.slim.es.ts'
+        const referencesMainModuleTypes = mainModuleTypesEntries.has(file)
         const inlineExternalTypes = inlineExternalTypesEntries.has(file)
         const rewriteRrdomAlias = rewriteRrdomNodeTypeAlias(file)
         /** @type {import('rollup').RollupOptions} */
@@ -429,13 +450,17 @@ const typeTargets = entrypoints
             input: source,
             // extension-bundles types must reference module.slim rather than inlining
             // their own copies — classes with private fields are nominally typed, so
-            // duplicate declarations across .d.ts files are incompatible.
+            // duplicate declarations across .d.ts files are incompatible. For the same
+            // reason, module.slim must use a source-level re-export from
+            // module.slim.no-external and keep that module external here, so dts preserves
+            // the reference instead of inlining a second declaration graph.
             ...(isExtensionBundles ? { external: [/module\.slim/] } : {}),
-            ...(isCustomizations ? { external: [/posthog-core$/] } : {}),
+            ...(isSlimModule ? { external: [/module\.slim\.no-external/] } : {}),
+            ...(referencesMainModuleTypes ? { external: [/posthog-core$/] } : {}),
             output: [
                 {
                     dir: path.resolve('./dist'),
-                    entryFileNames: file.replace('.es.ts', '.d.ts'),
+                    entryFileNames: file.replace(/(?:\.(?:cjs|es|iife))?\.ts$/, '.d.ts'),
                 },
             ],
             plugins: [
@@ -444,25 +469,30 @@ const typeTargets = entrypoints
                     exclude: [],
                     ...(inlineExternalTypes ? { respectExternal: true } : {}),
                 }),
-                // dts preserves the tsc-era path (e.g. './module.slim.es') but the
-                // output has been renamed to module.slim.d.ts — fix the reference.
-                ...(isExtensionBundles
+                // dts preserves tsc-era paths ending in `.es`, but the output files
+                // omit that segment — fix references between the generated declarations.
+                ...(isExtensionBundles || isSlimModule
                     ? [
                           {
                               name: 'fix-dts-external-paths',
                               renderChunk(code) {
-                                  return code.replace(/\.\/module\.slim\.es(?=['"])/g, './module.slim')
+                                  return code
+                                      .replace(/\.\/module\.slim\.es(?=['"])/g, './module.slim')
+                                      .replace(
+                                          /\.\/module\.slim\.no-external\.es(?=['"])/g,
+                                          './module.slim.no-external'
+                                      )
                               },
                           },
                       ]
                     : []),
-                ...(isCustomizations
+                ...(referencesMainModuleTypes
                     ? [
                           {
-                              name: 'fix-customizations-dts-external-paths',
+                              name: 'fix-main-module-dts-external-paths',
                               renderChunk(code) {
-                                  // the external posthog-core import keeps its source-relative
-                                  // path; point it at dist/module.d.ts instead
+                                  // The external posthog-core import keeps its source-relative
+                                  // path; point it at the canonical PostHog in dist/module.d.ts.
                                   return code.replace(/['"](?:\.\.\/)+posthog-core['"]/g, "'./module'")
                               },
                           },

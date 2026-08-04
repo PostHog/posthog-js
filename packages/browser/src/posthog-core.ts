@@ -645,8 +645,18 @@ export class PostHog implements PostHogInterface {
 
         if (this.__loaded) {
             // need to be able to log before having processed debug config
-            // eslint-disable-next-line no-console
-            console.warn('[PostHog.js]', 'You have already initialized PostHog! Re-initializing is a no-op')
+            if (normalizedToken !== this.config?.token) {
+                // A second init() with a different project token often means that someone is trying to send
+                // events to a second project without giving that instance a name.
+                // eslint-disable-next-line no-console
+                console.warn(
+                    '[PostHog.js]',
+                    `You have already initialized PostHog with a different project token! Re-initializing is a no-op, so events will keep going to the project this instance was initialized with. To capture into a second project, load PostHog once, then initialize a named instance after the SDK has loaded, e.g. posthog.init('${normalizedToken}', { ... }, 'project2')`
+                )
+            } else {
+                // eslint-disable-next-line no-console
+                console.warn('[PostHog.js]', 'You have already initialized PostHog! Re-initializing is a no-op')
+            }
             return this
         }
 
@@ -4436,9 +4446,17 @@ const add_dom_loaded_handler = function () {
 
 export function init_from_snippet(): void {
     Config.SDK_DIST_CHANNEL = 'cdn'
-    const posthogMain = (instances[PRIMARY_INSTANCE_NAME] = new PostHog())
 
     const snippetPostHog = assignableWindow['posthog']
+
+    // The snippet stub always has an _i initialization queue, while a materialized SDK instance does not.
+    // Multiple snippet init() calls can insert array.js more than once, so do not let a later execution replace
+    // the live global instance (including an unloaded primary with loaded named instances).
+    if (snippetPostHog && !isArray(snippetPostHog['_i'])) {
+        return
+    }
+
+    const posthogMain = (instances[PRIMARY_INSTANCE_NAME] = new PostHog())
 
     if (snippetPostHog) {
         /**
@@ -4473,13 +4491,15 @@ export function init_from_snippet(): void {
 
         // Call all pre-loaded init calls properly
 
+        const processedSnippetQueues: any[] = []
         each(snippetPostHog['_i'], function (item: [token: string, config: Partial<PostHogConfig>, name: string]) {
             if (item && isArray(item)) {
                 const instance = posthogMain.init(item[0], item[1], item[2])
 
                 const instanceSnippet = snippetPostHog[item[2]] || snippetPostHog
 
-                if (instance) {
+                if (instance.__loaded && processedSnippetQueues.indexOf(instanceSnippet) === -1) {
+                    processedSnippetQueues.push(instanceSnippet)
                     // Crunch through the people queue first - we queue this data up &
                     // flush on identify, so it's better to do all these operations first
                     instance._execute_array.call(instance.people, instanceSnippet.people)
@@ -4489,6 +4509,8 @@ export function init_from_snippet(): void {
         })
     }
 
+    // Keep the snippet sentinel so another pasted snippet cannot replace live SDK methods with queue stubs.
+    ;(posthogMain as any).__SV = 1
     assignableWindow['posthog'] = posthogMain
 
     add_dom_loaded_handler()

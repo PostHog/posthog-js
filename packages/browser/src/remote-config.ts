@@ -4,6 +4,7 @@ import { RemoteConfig } from './types'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { document } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from './utils/globals'
+import type { RequestResponse } from '@posthog/types'
 
 const logger = createLogger('[RemoteConfig]')
 
@@ -31,13 +32,11 @@ export class RemoteConfigLoader {
         }
     }
 
-    private _loadRemoteConfigJSON(cb: (config?: RemoteConfig) => void): void {
+    private _loadRemoteConfigJSON(cb: (response: RequestResponse) => void): void {
         this._instance._send_request({
             method: 'GET',
             url: this._instance.requestRouter.endpointFor('assets', `/array/${this._instance.config.token}/config`),
-            callback: (response) => {
-                cb(response.json as RemoteConfig | undefined)
-            },
+            callback: cb,
         })
     }
 
@@ -62,8 +61,8 @@ export class RemoteConfigLoader {
                 if (!config) {
                     logger.info('No config found after loading remote JS config. Falling back to JSON.')
                     // Attempt 3 Load the config json instead of the script - we won't get site apps etc. but we will get the config
-                    this._loadRemoteConfigJSON((config) => {
-                        this._onRemoteConfig(config)
+                    this._loadRemoteConfigJSON((response) => {
+                        this._onRemoteConfig(response.json as RemoteConfig | undefined, response)
                         this._startRefreshInterval()
                     })
                     return
@@ -116,9 +115,15 @@ export class RemoteConfigLoader {
         }, intervalMs)
     }
 
-    private _onRemoteConfig(config?: RemoteConfig): void {
-        if (!config) {
-            logger.error('Failed to fetch remote config from PostHog.')
+    private _onRemoteConfig(config?: RemoteConfig, response?: RequestResponse): void {
+        if (!config && response) {
+            if (response.statusCode === 0) {
+                if (!response.error) {
+                    logger.warn('Failed to fetch remote config from PostHog.')
+                }
+            } else {
+                logger.error('Failed to fetch remote config from PostHog.')
+            }
         }
 
         // Config and flags are loaded separately: config from /array/{token}/config,
