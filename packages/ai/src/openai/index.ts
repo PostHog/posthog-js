@@ -12,13 +12,14 @@ import {
 } from '../utils'
 import { captureAiGeneration } from './capture'
 import type { APIPromise } from 'openai'
-import type { Stream } from 'openai/streaming'
+import { Stream } from 'openai/streaming'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
 import type { ResponseCreateParamsWithTools, ExtractParsedContentFromParams } from 'openai/lib/ResponsesParser'
 import type { FormattedMessage, FormattedContent } from '../types'
 import { sanitizeOpenAI, sanitizeOpenAIResponse } from '../sanitization'
 import { extractPosthogParams } from '../utils'
 import { isResponseTokenChunk, extractRequestId, buildProviderMetadata } from './utils'
+import { monitoredStreamTee } from '../stream'
 
 const Chat = OpenAIOrignal.Chat
 const Completions = Chat.Completions
@@ -165,8 +166,11 @@ export class WrappedCompletions extends Completions {
 
     if (openAIParams.stream) {
       const wrappedPromise = parentPromise.then((value) => {
-        if ('tee' in value) {
-          const [stream1, stream2] = value.tee()
+        if (Symbol.asyncIterator in value) {
+          const [stream1, stream2] = monitoredStreamTee<ChatCompletionChunk, Stream<ChatCompletionChunk>>(
+            value as Stream<ChatCompletionChunk>,
+            (iterator, controller) => new Stream(iterator, controller)
+          )
           ;(async () => {
             // Hoisted so the catch block can surface whatever was accumulated
             // from the streamed chunks before the failure.
@@ -487,8 +491,14 @@ export class WrappedResponses extends Responses {
 
     if (openAIParams.stream) {
       const wrappedPromise = parentPromise.then((value) => {
-        if ('tee' in value && typeof value.tee === 'function') {
-          const [stream1, stream2] = value.tee()
+        if (Symbol.asyncIterator in value) {
+          const [stream1, stream2] = monitoredStreamTee<
+            OpenAIOrignal.Responses.ResponseStreamEvent,
+            Stream<OpenAIOrignal.Responses.ResponseStreamEvent>
+          >(
+            value as Stream<OpenAIOrignal.Responses.ResponseStreamEvent>,
+            (iterator, controller) => new Stream(iterator, controller)
+          )
           ;(async () => {
             // Hoisted so the catch block can surface the completion ID that
             // was accumulated from the streamed chunks before the failure.
@@ -918,8 +928,14 @@ export class WrappedTranscriptions extends Transcriptions {
 
     if (openAIParams.stream) {
       const wrappedPromise = parentPromise.then((value) => {
-        if ('tee' in value && typeof (value as any).tee === 'function') {
-          const [stream1, stream2] = (value as any).tee()
+        if (Symbol.asyncIterator in value) {
+          const [stream1, stream2] = monitoredStreamTee<
+            OpenAIOrignal.Audio.Transcriptions.TranscriptionStreamEvent,
+            Stream<OpenAIOrignal.Audio.Transcriptions.TranscriptionStreamEvent>
+          >(
+            value as Stream<OpenAIOrignal.Audio.Transcriptions.TranscriptionStreamEvent>,
+            (iterator, controller) => new Stream(iterator, controller)
+          )
           ;(async () => {
             try {
               let finalContent: string = ''
