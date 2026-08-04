@@ -873,7 +873,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }, interval)
     }
 
-    private _onTriggerActivated(): void {
+    private _onTriggerActivated(triggerType?: TriggerType): void {
+        // V2 event-trigger matches release the interaction hold here (V1's release lives in
+        // _activateTrigger). URL and linked-flag activations never release — they fire
+        // without a human present.
+        if (triggerType === 'event') {
+            this._releaseHoldAndFlush()
+        }
         if (this._urlTriggerMatching.urlBlocked || !['sampled', 'active'].includes(this.status)) {
             return
         }
