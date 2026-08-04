@@ -494,13 +494,19 @@ export abstract class EventReceiver<T extends EventTriggerable> {
     /**
      * Drop a persisted activation once the session it was stamped under is no longer current.
      * Fired on session rotation (idle timeout, max length, cross-tab adoption) — the cases the
-     * read-only session read on the display path cannot observe.
+     * read-only session read on the display path cannot observe. Pending timers must also be
+     * cancelled so a fresh trigger in the new session starts its full delay from the new timestamp.
      */
     private _onSessionIdChanged(sessionId: string): void {
         const stampedSessionId = this._instance?.persistence?.props[this._getActivatedSessionKey()]
         if (stampedSessionId && stampedSessionId !== sessionId) {
-            if (this._getRawPersistedActivatedIds().length > 0) {
+            const activatedItemIds = this._getRawPersistedActivatedIds()
+            const activationTimestamps = this._getRawActivationTimestamps()
+            if (activatedItemIds.length > 0) {
                 this._setActivatedItems([])
+                activatedItemIds
+                    .filter((itemId) => isNumber(activationTimestamps[itemId]))
+                    .forEach((itemId) => this._cancelPendingItem(itemId))
             }
             this._clearActivationSession()
             this._clearAllActivationTimestamps()

@@ -561,7 +561,7 @@ describe('survey-event-receiver', () => {
             expect(new SurveyEventReceiver(instance).getSurveys()).not.toContain('delayed-survey')
         })
 
-        it('drops the delayed activation and its timestamp when the session rotates', () => {
+        it('drops the delayed activation and pending timer when the session rotates', () => {
             const { receiver, hook } = setup(makeDelayedSurvey())
 
             hook('trigger_event')
@@ -571,6 +571,7 @@ describe('survey-event-receiver', () => {
             expect(receiver.getSurveys()).not.toContain('delayed-survey')
             expect(receiver.getActivationTimestamp('delayed-survey')).toBeUndefined()
             expect(new SurveyEventReceiver(instance).getActivationTimestamp('delayed-survey')).toBeUndefined()
+            expect(instance.cancelPendingSurvey).toHaveBeenCalledWith('delayed-survey')
         })
 
         it.each([
