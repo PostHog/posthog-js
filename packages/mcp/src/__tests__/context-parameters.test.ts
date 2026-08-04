@@ -8,6 +8,7 @@ import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
 
 jest.mock('../extensions/logger', () => ({
+  createLogger: (logger?: (message: string) => void) => logger ?? (() => undefined),
   log: jest.fn(),
   setLogger: jest.fn(),
 }))
