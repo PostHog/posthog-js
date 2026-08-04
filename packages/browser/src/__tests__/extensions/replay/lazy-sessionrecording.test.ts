@@ -3955,6 +3955,44 @@ describe('Lazy SessionRecording', () => {
             expect(documentRemoveEventListener).toHaveBeenCalledWith('visibilitychange', expect.any(Function))
         })
 
+        it('stops an active recorder when disposed', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            const lazyRecorderStop = jest.spyOn(sessionRecording['_lazyLoadedSessionRecording']!, 'stop')
+
+            sessionRecording.dispose()
+
+            expect(lazyRecorderStop).toHaveBeenCalledTimes(1)
+        })
+
+        it('does not start a recorder when its script loads after disposal', () => {
+            let completeScriptLoad: (() => void) | undefined
+            loadScriptMock.mockImplementation((_ph, _path, callback) => {
+                completeScriptLoad = () => {
+                    addRRwebToWindow()
+                    callback()
+                }
+            })
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            expect(sessionRecording['_lazyLoadedSessionRecording']).toBeUndefined()
+
+            sessionRecording.dispose()
+            completeScriptLoad!()
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']).toBeUndefined()
+        })
+
         it('call stopRecording if its not enabled', () => {
             posthog.config.disable_session_recording = true
             sessionRecording.onRemoteConfig(
