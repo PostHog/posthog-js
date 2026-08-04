@@ -1540,6 +1540,26 @@ describe('Lazy SessionRecording', () => {
                     )
                 })
 
+                it('an override while stopped survives the restart instead of being swallowed by the fresh-start hold', () => {
+                    jest.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                    const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+                    lazyRecorder.stop()
+
+                    // startSessionRecording({ sampling: true }) applies the override before
+                    // set_config restarts the recorder
+                    lazyRecorder.overrideSampling()
+                    lazyRecorder.start()
+
+                    expect(lazyRecorder['_holdFlushUntilInteraction']).toEqual(false)
+                    const snapshot = emitInactiveEvent(startingTimestamp + 200, 'unknown')
+                    jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                    expect(posthog.capture).toHaveBeenCalledWith(
+                        '$snapshot',
+                        expect.objectContaining({ $snapshot_data: expect.arrayContaining([snapshot]) }),
+                        expect.any(Object)
+                    )
+                })
+
                 it('ships a fresh interaction-less epoch on clean unload (passive visits are captured)', () => {
                     jest.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
                     const snapshot = emitInactiveEvent(startingTimestamp + 100, 'unknown')

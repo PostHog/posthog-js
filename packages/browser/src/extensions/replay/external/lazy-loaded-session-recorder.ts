@@ -485,6 +485,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // set when a held buffer hit the size cap and was dropped to bound memory; a release
     // then takes a fresh full snapshot so the recording resumes playable
     private _heldBufferOverflowed = false
+    // a release while the recorder is stopped (e.g. an override during startSessionRecording's
+    // restart) must survive the next start(), whose fresh-start hold would otherwise swallow it
+    private _suppressNextFreshStartHold = false
     private _rrwebError = false
     private _rrwebStartAttempted = false
     private _maxDepthExceeded = false
@@ -1029,7 +1032,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // held recorder (e.g. a remote-config refresh) cannot release a hold that only
         // interaction evidence should release.
         if (!this.isStarted) {
-            this._holdFlushUntilInteraction = this._isIdle !== false
+            this._holdFlushUntilInteraction = this._isIdle !== false && !this._suppressNextFreshStartHold
+            this._suppressNextFreshStartHold = false
             this._heldEpochShipsOnUnload = this._holdFlushUntilInteraction
             this._heldBufferOverflowed = false
         }
@@ -1390,6 +1394,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // trigger match, or an explicit override. Scheduling instead of flushing synchronously keeps
     // the release batched on the normal cadence and re-passes _flushBuffer's gates.
     private _releaseHoldAndFlush() {
+        if (!this.isStarted) {
+            this._suppressNextFreshStartHold = true
+        }
         if (!this._holdFlushUntilInteraction) {
             return
         }
