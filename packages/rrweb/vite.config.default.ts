@@ -113,6 +113,17 @@ export default function (
   let formats: LibraryFormats[] = ['es', 'cjs'];
 
   return defineConfig(() => ({
+    // Inline workers run from blob URLs, so relative source map URLs cannot resolve.
+    worker: {
+      plugins: () => [
+        {
+          name: 'disable-inline-worker-sourcemaps',
+          outputOptions(options) {
+            return { ...options, sourcemap: false };
+          },
+        },
+      ],
+    },
     build: {
       // See https://vitejs.dev/guide/build.html#library-mode
       lib: {

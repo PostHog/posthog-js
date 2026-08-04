@@ -27,7 +27,11 @@ export class PostHog extends PostHogBackendClient {
         new CoreErrorTracking.PrimitiveCoercer(),
       ],
       CoreErrorTracking.createStackParser('node:javascript', CoreErrorTracking.nodeStackLineParser),
-      [createModulerModifier(), addSourceContext, createRelativePathModifier()]
+      [
+        createModulerModifier(),
+        (frames) => addSourceContext(frames, undefined, this._logger),
+        createRelativePathModifier(),
+      ]
     )
   }
 }

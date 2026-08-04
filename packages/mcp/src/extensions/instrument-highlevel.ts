@@ -11,7 +11,12 @@ import type {
   RegisteredTool,
   ToolCallback,
 } from '../types'
-import { stripConversationId } from './conversation-id'
+import {
+  analyticsOwnsParameter,
+  getAnalyticsParameterOwnership,
+  stripOwnedAnalyticsArguments,
+} from './analytics-parameters'
+import { isContextEnabled } from './context-parameters'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
 import { log } from './logger'
@@ -78,7 +83,10 @@ function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
               return Reflect.set(target, property, value)
             }
 
-            const nextValue = addTracingToToolCallbackInternal(value, property, server)
+            // The MCP SDK's registry copy is currently stale after update(), but keep this lookup lazy so
+            // ownership follows the current schema once the registry reflects live tool state.
+            const getCurrentInputSchema = () => value.inputSchema
+            const nextValue = addTracingToToolCallbackInternal(value, property, server, getCurrentInputSchema)
 
             if (typeof nextValue.update === 'function') {
               const originalUpdate = nextValue.update
@@ -89,7 +97,8 @@ function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
                     const wrappedTool = addTracingToToolCallbackInternal(
                       { callback: updateObj.callback },
                       property,
-                      server
+                      server,
+                      getCurrentInputSchema
                     )
                     updateObj.callback = getToolFunction(wrappedTool)
                   }
@@ -141,12 +150,12 @@ function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
 function addTracingToToolCallbackInternal(
   tool: RegisteredTool,
   toolName: string,
-  server: HighLevelMCPServerLike
+  server: HighLevelMCPServerLike,
+  getCurrentInputSchema: () => unknown = () => tool.inputSchema
 ): RegisteredTool {
   const originalCallback = getToolFunction(tool)
-  const missingToolName = resolveMissingCapabilityToolName(
-    getServerTrackingData(server.server as MCPServerLike)?.options
-  )
+  const options = getServerTrackingData(server.server as MCPServerLike)?.options
+  const missingToolName = resolveMissingCapabilityToolName(options)
 
   if (wrappedCallbacks.has(originalCallback)) {
     log(`Tool ${toolName} callback already wrapped, skipping re-wrap`)
@@ -170,15 +179,17 @@ function addTracingToToolCallbackInternal(
       extra = params[0] as CompatibleRequestHandlerExtra
     }
 
-    const removeContextFromArgs = (input: unknown): unknown => {
-      if (input && typeof input === 'object' && 'context' in input) {
-        const { context: _context, ...rest } = input
-        return rest
-      }
-      return input
-    }
-
-    const cleanedArgs = toolName === missingToolName ? args : stripConversationId(removeContextFromArgs(args))
+    const inputSchema = getCurrentInputSchema()
+    const cleanedArgs = stripOwnedAnalyticsArguments(args, {
+      context:
+        toolName !== missingToolName &&
+        isContextEnabled(options?.context) &&
+        analyticsOwnsParameter(inputSchema, 'context'),
+      conversationId:
+        toolName !== missingToolName &&
+        options?.enableConversationId === true &&
+        analyticsOwnsParameter(inputSchema, 'conversation_id'),
+    })
 
     try {
       if (cleanedArgs === undefined) {
@@ -209,6 +220,7 @@ function addTracingToToolCallbackInternal(
 }
 
 async function handleToolCallRequest(
+  highLevelServer: HighLevelMCPServerLike,
   server: MCPServerLike,
   originalCallToolHandler: MCPRequestHandler,
   request: MCPRequest,
@@ -235,16 +247,19 @@ async function handleToolCallRequest(
     })
   }
 
-  // The high-level handler re-derives arguments from the original request and
-  // strips the injected params inside the wrapped callback, so we hand it the
-  // original request rather than the conversation-stripped one. Errors thrown
-  // by the tool are stashed on `extra` by the callback wrapper; surface them.
+  const toolName = request.params?.name
+  const registeredTool = toolName ? highLevelServer._registeredTools[toolName] : undefined
+
+  // Strip SDK-owned arguments before the MCP SDK validates the registered Zod
+  // schema. The callback wrapper repeats the ownership-aware cleanup as a
+  // defensive fallback for direct callback invocation.
   return await captureToolCall({
     server,
     data,
     request,
     extra,
-    execute: () => originalCallToolHandler(request, extra),
+    execute: (downstreamRequest) => originalCallToolHandler(downstreamRequest as MCPRequest, extra),
+    parameterOwnership: registeredTool ? getAnalyticsParameterOwnership(registeredTool.inputSchema) : undefined,
     takeCapturedError: () => {
       const captured = extra?.__mcp_analytics_error
       if (extra) {
@@ -264,7 +279,12 @@ export function instrumentHighLevelServer(server: HighLevelMCPServerLike): void 
     const handlers = {
       initialize: handleInitializeRequest,
       'tools/list': handleListToolsRequest,
-      'tools/call': handleToolCallRequest,
+      'tools/call': (
+        trackedServer: MCPServerLike,
+        originalHandler: MCPRequestHandler,
+        request: MCPRequest,
+        extra: MCPRequestExtra
+      ) => handleToolCallRequest(server, trackedServer, originalHandler, request, extra),
     }
     patchRequestHandlers(lowLevelServer, handlers)
 

@@ -32,6 +32,7 @@ import {
 } from '@posthog/browser-common/utils/request-utils'
 import { isCurrentDomainAllowed, getRestoreTokenFromUrl, clearRestoreTokenFromUrl } from './url-utils'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
+import { createConversationsSendError } from './errors'
 
 const logger = createLogger('[ConversationsManager]')
 
@@ -196,19 +197,43 @@ export class ConversationsManager implements ConversationsManagerInterface {
                 },
                 callback: (response) => {
                     if (response.statusCode === 429) {
-                        reject(new Error('Too many requests. Please wait before trying again.'))
+                        logger.warn('Rate limited sending message')
+                        reject(
+                            createConversationsSendError(
+                                'rate_limit',
+                                'Too many requests. Please wait before trying again.'
+                            )
+                        )
+                        return
+                    }
+
+                    if (response.statusCode === 0) {
+                        // The request never reached the API - ad blocker, offline, CORS, page teardown.
+                        // `_send_request` owns logging when it provides an error. XHR reports status 0
+                        // without one, so keep a warning here for that otherwise-unlogged path.
+                        if (!response.error) {
+                            logger.warn('Network error sending message')
+                        }
+                        reject(
+                            createConversationsSendError(
+                                'network',
+                                'Unable to reach the server. Please check your connection and try again.'
+                            )
+                        )
                         return
                     }
 
                     if (response.statusCode !== 200 && response.statusCode !== 201) {
                         const errorMsg = response.json?.detail || response.json?.message || 'Failed to send message'
                         logger.error('Failed to send message', { status: response.statusCode })
-                        reject(new Error(errorMsg))
+                        reject(createConversationsSendError('http', errorMsg))
                         return
                     }
 
                     if (!response.json) {
-                        reject(new Error('Invalid response from server'))
+                        const errorMsg = 'Invalid response from server'
+                        logger.error(errorMsg)
+                        reject(createConversationsSendError('invalid_response', errorMsg))
                         return
                     }
 
@@ -652,16 +677,13 @@ export class ConversationsManager implements ConversationsManagerInterface {
         // Get user traits from the widget
         const userTraits = this._widgetRef?.getUserTraits() || undefined
 
-        try {
-            // Call the public API method (which handles tracking and state updates)
-            await this.sendMessage(message, userTraits)
+        // Call the public API method (which handles tracking and state updates).
+        // Any rejection is propagated to the widget, which renders the error state and logs it -
+        // logging it here as well would surface a benign network failure as a captured exception.
+        await this.sendMessage(message, userTraits)
 
-            // Poll for response immediately
-            setTimeout(() => this._pollMessages(), 1000)
-        } catch (error) {
-            logger.error('Failed to send message', error)
-            throw error
-        }
+        // Poll for response immediately
+        setTimeout(() => this._pollMessages(), 1000)
     }
 
     /**

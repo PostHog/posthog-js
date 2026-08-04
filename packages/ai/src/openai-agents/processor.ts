@@ -16,7 +16,7 @@ import type {
   SpeechSpanData,
   SpeechGroupSpanData,
   MCPListToolsSpanData,
-} from '@openai/agents-core'
+} from '@openai/agents'
 import { MAX_OUTPUT_SIZE, toContentString, truncate, utf8ByteLength, withPrivacyMode } from '../utils'
 import { version } from '../../package.json'
 import { warnIfPostHogAiGateway } from '../gatewayWarning'
@@ -483,7 +483,13 @@ export class PostHogTracingProcessor implements TracingProcessor {
     groupId: string | null,
     errorProperties: Record<string, any>
   ): void {
-    const usage = spanData.usage ?? {}
+    // OpenAI Agents 0.8 stores the raw Chat Completions response in output[0].
+    // Canonical generation fields take precedence when the SDK provides them.
+    const rawResponse = spanData.output?.[0]
+    const rawResponseUsage = rawResponse?.usage
+    const usage = spanData.usage ?? rawResponseUsage ?? {}
+    const usesRawResponseUsage = spanData.usage === undefined && rawResponseUsage !== undefined
+    const model = spanData.model ?? (rawResponse?.model as string | undefined)
     const inputTokens = (usage.input_tokens as number) || (usage as any).prompt_tokens || 0
     const outputTokens = (usage.output_tokens as number) || (usage as any).completion_tokens || 0
 
@@ -501,7 +507,7 @@ export class PostHogTracingProcessor implements TracingProcessor {
 
     const properties: Record<string, any> = {
       ...this._baseProperties(traceId, spanId, parentId, latency, groupId, errorProperties),
-      $ai_model: spanData.model,
+      $ai_model: model,
       // Best-effort: Agents SDK only sets model_config.base_url for chat-completions
       // calls with no model settings; Responses and normal chat calls omit it, so ''.
       $ai_base_url: typeof modelConfig.base_url === 'string' ? modelConfig.base_url : '',
@@ -511,6 +517,21 @@ export class PostHogTracingProcessor implements TracingProcessor {
       $ai_input_tokens: inputTokens,
       $ai_output_tokens: outputTokens,
       $ai_total_tokens: inputTokens + outputTokens,
+    }
+
+    if (usesRawResponseUsage) {
+      // Chat Completions prompt tokens include cached tokens rather than reporting them exclusively.
+      properties.$ai_cache_reporting_exclusive = false
+    }
+
+    // Raw Chat Completions usage keeps token details under provider-specific fields.
+    const promptTokenDetails = (usage as any).prompt_tokens_details
+    const completionTokenDetails = (usage as any).completion_tokens_details
+    if (completionTokenDetails?.reasoning_tokens) {
+      properties.$ai_reasoning_tokens = completionTokenDetails.reasoning_tokens
+    }
+    if (promptTokenDetails?.cached_tokens) {
+      properties.$ai_cache_read_input_tokens = promptTokenDetails.cached_tokens
     }
 
     if (usage.details) {

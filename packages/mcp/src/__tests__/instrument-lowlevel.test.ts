@@ -36,6 +36,19 @@ const TOOLS = [
     description: 'Returns an isError result without throwing',
     inputSchema: { type: 'object', properties: {} },
   },
+  {
+    name: 'owned_reserved',
+    description: 'Owns the reserved analytics argument names',
+    inputSchema: {
+      type: 'object',
+      _def: { annotation: 'custom JSON Schema keyword' },
+      properties: {
+        context: { type: 'string' },
+        conversation_id: { type: 'string' },
+        value: { type: 'string' },
+      },
+    },
+  },
 ]
 
 async function setupLowLevelServer() {
@@ -43,8 +56,10 @@ async function setupLowLevelServer() {
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }))
 
+  const receivedCalls: { name: string | undefined; arguments: unknown }[] = []
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const name = request.params?.name
+    receivedCalls.push({ name, arguments: request.params?.arguments })
     if (name === 'explode') {
       throw new Error('boom')
     }
@@ -61,6 +76,7 @@ async function setupLowLevelServer() {
   return {
     server,
     client,
+    receivedCalls,
     async connect() {
       await Promise.all([client.connect(clientTransport), server.connect(serverTransport)])
     },
@@ -190,6 +206,182 @@ describe('Low-level Server tracing (e2e)', () => {
       )
     } finally {
       await cleanup()
+    }
+  })
+
+  it.each(['context', 'conversation_id'] as const)(
+    'preserves a tool-owned %s argument without consuming it as analytics metadata',
+    async (reservedArgument) => {
+      const { server, client, receivedCalls, connect, cleanup } = await setupLowLevelServer()
+      try {
+        instrument(server, fakePostHog(), { context: true, enableConversationId: true })
+        await connect()
+        await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+
+        const suppliedArguments = { [reservedArgument]: 'application value', value: 'kept' }
+        const result = await client.request(
+          {
+            method: 'tools/call',
+            params: { name: 'owned_reserved', arguments: suppliedArguments },
+          },
+          CallToolResultSchema
+        )
+
+        expect(receivedCalls.at(-1)).toEqual({ name: 'owned_reserved', arguments: suppliedArguments })
+        expect(
+          (result.content as { text?: string }[]).some((content) => content.text?.includes('conversation_id='))
+        ).toBe(false)
+
+        await new Promise((resolve) => setTimeout(resolve, 50))
+        const events = eventCapture.getEvents().filter((event) => event.resourceName === 'owned_reserved')
+        expect(events).toHaveLength(1)
+        expect(events[0].userIntent).toBeUndefined()
+        expect(events[0].conversationId).toBeUndefined()
+      } finally {
+        await cleanup()
+      }
+    }
+  )
+
+  it('strips and captures analytics-owned reserved arguments on the low-level path', async () => {
+    const { server, client, receivedCalls, connect, cleanup } = await setupLowLevelServer()
+    try {
+      instrument(server, fakePostHog(), { context: true, enableConversationId: true })
+      await connect()
+      await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+
+      await client.request(
+        {
+          method: 'tools/call',
+          params: {
+            name: 'echo',
+            arguments: { context: 'analytics intent', conversation_id: 'analytics conversation', text: 'hi' },
+          },
+        },
+        CallToolResultSchema
+      )
+
+      expect(receivedCalls.at(-1)).toEqual({ name: 'echo', arguments: { text: 'hi' } })
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const event = eventCapture.getEvents().find((candidate) => candidate.resourceName === 'echo')
+      expect(event?.userIntent).toBe('analytics intent')
+      expect(event?.conversationId).toBe('analytics conversation')
+    } finally {
+      await cleanup()
+    }
+  })
+
+  it('preserves reserved arguments before low-level ownership is learned from tools/list', async () => {
+    const { server, client, receivedCalls, connect, cleanup } = await setupLowLevelServer()
+    try {
+      instrument(server, fakePostHog(), { context: true, enableConversationId: true })
+      await connect()
+
+      const result = await client.request(
+        {
+          method: 'tools/call',
+          params: {
+            name: 'echo',
+            arguments: { context: 'unknown context', conversation_id: 'unknown conversation', text: 'hi' },
+          },
+        },
+        CallToolResultSchema
+      )
+
+      expect(receivedCalls.at(-1)).toEqual({
+        name: 'echo',
+        arguments: { context: 'unknown context', conversation_id: 'unknown conversation', text: 'hi' },
+      })
+      expect(
+        (result.content as { text?: string }[]).some((content) => content.text?.includes('conversation_id='))
+      ).toBe(false)
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const event = eventCapture.getEvents().find((candidate) => candidate.resourceName === 'echo')
+      expect(event?.userIntent).toBeUndefined()
+      expect(event?.conversationId).toBeUndefined()
+    } finally {
+      await cleanup()
+    }
+  })
+
+  it('preserves ownership metadata across paginated tools/list responses', async () => {
+    const server = new Server({ name: 'paginated low-level', version: '1.0.0' }, { capabilities: { tools: {} } })
+    const receivedCalls: { name: string | undefined; arguments: unknown }[] = []
+    server.setRequestHandler(ListToolsRequestSchema, async (request) => {
+      if (request.params?.cursor === 'page-2') {
+        return {
+          tools: [
+            {
+              name: 'page_two_owned',
+              inputSchema: {
+                type: 'object',
+                properties: { context: { type: 'string' }, conversation_id: { type: 'string' } },
+              },
+            },
+          ],
+        }
+      }
+      return {
+        tools: [
+          {
+            name: 'page_one_analytics',
+            inputSchema: { type: 'object', properties: { value: { type: 'string' } } },
+          },
+        ],
+        nextCursor: 'page-2',
+      }
+    })
+    server.setRequestHandler(CallToolRequestSchema, async (request) => {
+      receivedCalls.push({ name: request.params?.name, arguments: request.params?.arguments })
+      return { content: [{ type: 'text', text: 'ok' }] }
+    })
+
+    const client = new Client({ name: 'test client', version: '1.0' }, { capabilities: {} })
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    try {
+      instrument(server, fakePostHog(), { context: true, enableConversationId: true })
+      await Promise.all([client.connect(clientTransport), server.connect(serverTransport)])
+      await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+      await client.request({ method: 'tools/list', params: { cursor: 'page-2' } }, ListToolsResultSchema)
+
+      await client.request(
+        {
+          method: 'tools/call',
+          params: {
+            name: 'page_one_analytics',
+            arguments: { context: 'analytics context', conversation_id: 'analytics conversation', value: 'kept' },
+          },
+        },
+        CallToolResultSchema
+      )
+      await client.request(
+        {
+          method: 'tools/call',
+          params: {
+            name: 'page_two_owned',
+            arguments: { context: 'application context', conversation_id: 'application conversation' },
+          },
+        },
+        CallToolResultSchema
+      )
+
+      expect(receivedCalls).toEqual([
+        { name: 'page_one_analytics', arguments: { value: 'kept' } },
+        {
+          name: 'page_two_owned',
+          arguments: { context: 'application context', conversation_id: 'application conversation' },
+        },
+      ])
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const analyticsEvent = eventCapture.getEvents().find((event) => event.resourceName === 'page_one_analytics')
+      expect(analyticsEvent?.userIntent).toBe('analytics context')
+      expect(analyticsEvent?.conversationId).toBe('analytics conversation')
+      const ownedEvent = eventCapture.getEvents().find((event) => event.resourceName === 'page_two_owned')
+      expect(ownedEvent?.userIntent).toBeUndefined()
+      expect(ownedEvent?.conversationId).toBeUndefined()
+    } finally {
+      await clientTransport.close?.()
+      await serverTransport.close?.()
     }
   })
 
