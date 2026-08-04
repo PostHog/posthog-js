@@ -41,7 +41,8 @@ export class MediaTypeContext {
 
   constructor(
     private readonly parent: Record<string, unknown> | undefined,
-    private readonly key: string | undefined
+    private readonly key: string | undefined,
+    private readonly explicitMediaType?: string
   ) {}
 
   inferMediaType(): string | undefined {
@@ -51,6 +52,7 @@ export class MediaTypeContext {
   }
 
   inferFromSiblingMime(): string | undefined {
+    if (this.explicitMediaType) return this.explicitMediaType
     if (!this.parent) return undefined
     for (const hint of MIME_HINT_KEYS) {
       const v = this.parent[hint]
@@ -89,7 +91,14 @@ export class MediaTypeContext {
     return undefined
   }
 
+  hasExplicitBinaryMediaType(): boolean {
+    if (!this.explicitMediaType && (!this.parent || !this.key || !STRONG_CONTEXT_KEYS.has(this.key))) return false
+    const mediaType = this.inferFromSiblingMime()
+    return mediaType !== undefined && !mediaType.toLowerCase().startsWith('text/')
+  }
+
   signalsBinary(): boolean {
+    if (this.explicitMediaType) return true
     if (this.parent) {
       for (const hint of MIME_HINT_KEYS) {
         if (typeof this.parent[hint] === 'string') return true

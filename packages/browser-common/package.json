@@ -1,6 +1,6 @@
 {
     "name": "@posthog/browser-common",
-    "version": "0.2.4",
+    "version": "0.3.1",
     "description": "Internal shared browser utilities and extension primitives for PostHog Browser SDKs",
     "license": "MIT",
     "repository": {
@@ -83,6 +83,7 @@
         "@rslib/core": "catalog:",
         "@types/jest": "catalog:",
         "jest": "catalog:",
+        "jest-environment-jsdom": "catalog:",
         "ts-jest": "catalog:",
         "typescript": "catalog:"
     }

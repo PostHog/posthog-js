@@ -146,6 +146,11 @@ export class PostHogExceptions implements Extension {
                     ? this._addBufferedExceptionSteps(properties)
                     : properties
 
+            const injectedReleaseId = ErrorTracking.getInjectedReleaseId()
+            if (injectedReleaseId) {
+                propertiesForExceptionCapture.$release_id = injectedReleaseId
+            }
+
             try {
                 const result = this._instance.capture('$exception', propertiesForExceptionCapture, {
                     _noTruncate: true,
@@ -213,31 +218,45 @@ export class PostHogExceptions implements Extension {
             return false
         }
 
-        const exceptionValues = exceptionList.reduce(
-            (acc, { type, value }) => {
-                if (isString(type) && type.length > 0) {
-                    acc['$exception_types'].push(type)
+        try {
+            const exceptionValues = exceptionList.reduce(
+                (acc, { type, value }) => {
+                    if (isString(type) && type.length > 0) {
+                        acc['$exception_types'].push(type)
+                    }
+                    if (isString(value) && value.length > 0) {
+                        acc['$exception_values'].push(value)
+                    }
+                    return acc
+                },
+                {
+                    $exception_types: [] as string[],
+                    $exception_values: [] as string[],
                 }
-                if (isString(value) && value.length > 0) {
-                    acc['$exception_values'].push(value)
-                }
-                return acc
-            },
-            {
-                $exception_types: [] as string[],
-                $exception_values: [] as string[],
-            }
-        )
+            )
 
-        return this._suppressionRules.some((rule) => {
-            const results = rule.values.map((v) => {
-                const compare = propertyComparisons[v.operator]
-                const targets = isArray(v.value) ? v.value : [v.value]
-                const values = exceptionValues[v.key] ?? []
-                return targets.length > 0 ? compare(targets, values) : false
+            return this._suppressionRules.some((rule) => {
+                const results = rule.values.map((v) => {
+                    const compare: ((targets: string[], values: string[]) => boolean) | undefined =
+                        propertyComparisons[v.operator]
+                    const values: string[] | undefined = exceptionValues[v.key]
+
+                    if (!compare || !values) {
+                        return false
+                    }
+
+                    const targets = isArray(v.value) ? v.value : [v.value]
+                    return targets.length > 0 ? compare(targets, values) : false
+                })
+                return rule.type === 'OR' ? results.some(Boolean) : results.every(Boolean)
             })
-            return rule.type === 'OR' ? results.some(Boolean) : results.every(Boolean)
-        })
+        } catch (error) {
+            // Suppression only ever filters what we capture, so failing to evaluate it must not cost
+            // us the exception. Letting this throw reaches the handler in sendExceptionEvent, which
+            // drops the event entirely.
+            logger.warn('Failed to evaluate suppression rules. Capturing the exception.', error)
+            return false
+        }
     }
 
     private _isExtensionException(exceptionList: ErrorTracking.ExceptionList): boolean {

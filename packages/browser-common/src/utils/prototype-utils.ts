@@ -7,7 +7,7 @@
  * after a number of performance reports from Angular users
  */
 
-import { isFunction, isNativeFunction } from '@posthog/core'
+import { isFunction, isNativeFunction, isWebKit } from '@posthog/core'
 
 import { logger } from './logger'
 import { isAngularZonePresent } from './type-utils'
@@ -37,18 +37,32 @@ export function getNativeImplementation<T extends keyof NativeImplementationsCac
 
     const document = assignableWindow.document
     if (document && isFunction(document.createElement)) {
+        let sandbox: HTMLIFrameElement | undefined
+        let keepSandboxAttached = false
         try {
-            const sandbox = document.createElement('iframe')
+            sandbox = document.createElement('iframe')
             sandbox.hidden = true
             document.head.appendChild(sandbox)
             const contentWindow = sandbox.contentWindow
             if (contentWindow && (contentWindow as any)[name]) {
                 impl = (contentWindow as any)[name] as NativeImplementationsCache[T]
+
+                // WebKit tears down a detached iframe's ScriptExecutionContext, causing
+                // MutationObserver callbacks from its realm to be silently dropped.
+                // Keep the iframe alive for the lifetime of the cached constructor.
+                // See https://webkit.org/b/179224 and the equivalent rrweb fallback.
+                if (name === 'MutationObserver' && isWebKit(assignableWindow.navigator?.userAgent ?? '')) {
+                    sandbox.classList.add('rr-block', 'ph-no-capture')
+                    keepSandboxAttached = true
+                }
             }
-            document.head.removeChild(sandbox)
         } catch (e) {
             // Could not create sandbox iframe, just use assignableWindow.xxx
             logger.warn(`Could not create sandbox iframe for ${name} check, bailing to assignableWindow.${name}: `, e)
+        } finally {
+            if (!keepSandboxAttached && sandbox?.parentNode) {
+                sandbox.parentNode.removeChild(sandbox)
+            }
         }
     }
 

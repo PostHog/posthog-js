@@ -1,5 +1,12 @@
 # @rrweb/all
 
+## 0.0.25
+
+### Patch Changes
+
+- Updated dependencies []:
+    - @posthog/rrweb@0.1.6
+
 ## 0.0.24
 
 ### Patch Changes
