@@ -7,13 +7,14 @@ import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import type { CompatibleRequestHandlerExtra, MCPRequestLike, MCPServerLike } from '../types'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
-import { log } from './logger'
+import type { LoggerFn } from './logger'
 import { handleReportMissing, resolveMissingCapabilityToolName } from './tools'
 import {
   handleInitializeRequest,
   handleListToolsRequest,
   patchRequestHandlers,
   captureToolCall,
+  type HandlerPatch,
 } from './instrumentation'
 import { getContextArgument } from './tracing-helpers'
 
@@ -28,22 +29,24 @@ type MCPRequestExtra = Parameters<MCPRequestHandler>[1]
  * `tools/call`. The tool-call lifecycle is delegated to {@link captureToolCall},
  * shared with the high-level wrapper.
  */
-export function instrumentLowLevelServer(server: MCPServerLike): void {
+export function instrumentLowLevelServer(server: MCPServerLike, logger: LoggerFn): void {
   try {
     // Patch already existing handlers, and patch setRequestHandler to capture dynamically created handlers.
-    const handlers = {
-      initialize: handleInitializeRequest,
-      'tools/list': handleListToolsRequest,
+    const handlers: Record<string, HandlerPatch> = {
+      initialize: (server, originalHandler, request, extra) =>
+        handleInitializeRequest(server, originalHandler, request, extra, logger),
+      'tools/list': (server, originalHandler, request, extra) =>
+        handleListToolsRequest(server, originalHandler, request, extra, logger),
     }
     patchRequestHandlers(server, handlers)
 
     const originalCallToolHandler = server._requestHandlers.get('tools/call')
     server.setRequestHandler(
       CallToolRequestSchema,
-      async (request, extra) => await handleToolCallRequest(server, originalCallToolHandler, request, extra)
+      async (request, extra) => await handleToolCallRequest(server, originalCallToolHandler, request, extra, logger)
     )
   } catch (error) {
-    log(`Warning: Failed to setup tool call instrumentation - ${error}`)
+    logger(`Warning: Failed to setup tool call instrumentation - ${error}`)
     throw error
   }
 }
@@ -52,11 +55,12 @@ async function handleToolCallRequest(
   server: MCPServerLike,
   originalCallToolHandler: MCPRequestHandler | undefined,
   request: MCPRequest,
-  extra: MCPRequestExtra
+  extra: MCPRequestExtra,
+  logger: LoggerFn
 ): Promise<unknown> {
   const data = getServerTrackingData(server)
   if (!data) {
-    log(
+    logger(
       'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called instrument(server, options) before using tool calls.'
     )
     return await originalCallToolHandler?.(request, extra)
@@ -71,7 +75,7 @@ async function handleToolCallRequest(
       extra,
       eventType: MCPAnalyticsEventType.mcpMissingCapability,
       explicitContextIntent: context,
-      execute: async () => handleReportMissing({ context }),
+      execute: async () => handleReportMissing({ context }, data.logger),
     })
   }
 

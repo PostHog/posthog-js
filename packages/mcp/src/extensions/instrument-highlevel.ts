@@ -19,7 +19,7 @@ import {
 import { isContextEnabled } from './context-parameters'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
-import { log } from './logger'
+import type { LoggerFn } from './logger'
 import { createWrappedTool, getToolFunction, hasToolFunction } from './mcp-sdk-compat'
 import { handleReportMissing, resolveMissingCapabilityToolName } from './tools'
 import {
@@ -28,6 +28,7 @@ import {
   patchRequestHandlers,
   captureToolCall,
   readToolMetaCategory,
+  type HandlerPatch,
 } from './instrumentation'
 import { getContextArgument } from './tracing-helpers'
 
@@ -51,18 +52,22 @@ function isCallbackUpdate(value: unknown): value is { callback: ToolCallback } {
 
 function addTracingToToolRegistry(
   tools: Record<string, RegisteredTool>,
-  server: HighLevelMCPServerLike
+  server: HighLevelMCPServerLike,
+  logger: LoggerFn
 ): Record<string, RegisteredTool> {
   return Object.fromEntries(
-    Object.entries(tools).map(([name, tool]) => [name, addTracingToToolCallbackInternal(tool, name, server)])
+    Object.entries(tools).map(([name, tool]) => [
+      name,
+      addTracingToToolCallbackInternal(tool, name, server, () => tool.inputSchema, logger),
+    ])
   )
 }
 
-function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
+function setupListenerToRegisteredTools(server: HighLevelMCPServerLike, logger: LoggerFn): void {
   try {
     const data = getServerTrackingData(server.server as MCPServerLike)
     if (!data) {
-      log('Warning: Cannot setup listener - no tracking data found')
+      logger('Warning: Cannot setup listener - no tracking data found')
       return
     }
 
@@ -74,19 +79,19 @@ function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
               data.toolDescriptions.set(property, value.description)
             }
             if ((value as ProcessedRegisteredTool)[MCP_ANALYTICS_PROCESSED]) {
-              log(`Tool ${String(property)} already processed, skipping proxy wrapping`)
+              logger(`Tool ${String(property)} already processed, skipping proxy wrapping`)
               return Reflect.set(target, property, value)
             }
 
             if (wrappedCallbacks.has(getToolFunction(value))) {
-              log(`Tool ${String(property)} callback already wrapped, skipping proxy wrapping`)
+              logger(`Tool ${String(property)} callback already wrapped, skipping proxy wrapping`)
               return Reflect.set(target, property, value)
             }
 
             // The MCP SDK's registry copy is currently stale after update(), but keep this lookup lazy so
             // ownership follows the current schema once the registry reflects live tool state.
             const getCurrentInputSchema = () => value.inputSchema
-            const nextValue = addTracingToToolCallbackInternal(value, property, server, getCurrentInputSchema)
+            const nextValue = addTracingToToolCallbackInternal(value, property, server, getCurrentInputSchema, logger)
 
             if (typeof nextValue.update === 'function') {
               const originalUpdate = nextValue.update
@@ -98,7 +103,8 @@ function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
                       { callback: updateObj.callback },
                       property,
                       server,
-                      getCurrentInputSchema
+                      getCurrentInputSchema,
+                      logger
                     )
                     updateObj.callback = getToolFunction(wrappedTool)
                   }
@@ -111,7 +117,7 @@ function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
 
           return Reflect.set(target, property, value)
         } catch (error) {
-          log(`Warning: Error in proxy set handler for tool ${String(property)} - ${error}`)
+          logger(`Warning: Error in proxy set handler for tool ${String(property)} - ${error}`)
           return Reflect.set(target, property, value)
         }
       },
@@ -132,9 +138,9 @@ function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
     const originalTools = server._registeredTools || {}
     server._registeredTools = new Proxy(originalTools, handler)
 
-    log('Successfully set up listener for new tool registrations')
+    logger('Successfully set up listener for new tool registrations')
   } catch (error) {
-    log(`Warning: Failed to setup listener for registered tools - ${error}`)
+    logger(`Warning: Failed to setup listener for registered tools - ${error}`)
   }
 }
 
@@ -151,19 +157,20 @@ function addTracingToToolCallbackInternal(
   tool: RegisteredTool,
   toolName: string,
   server: HighLevelMCPServerLike,
-  getCurrentInputSchema: () => unknown = () => tool.inputSchema
+  getCurrentInputSchema: () => unknown,
+  logger: LoggerFn
 ): RegisteredTool {
   const originalCallback = getToolFunction(tool)
   const options = getServerTrackingData(server.server as MCPServerLike)?.options
   const missingToolName = resolveMissingCapabilityToolName(options)
 
   if (wrappedCallbacks.has(originalCallback)) {
-    log(`Tool ${toolName} callback already wrapped, skipping re-wrap`)
+    logger(`Tool ${toolName} callback already wrapped, skipping re-wrap`)
     return tool
   }
 
   if ((tool as ProcessedRegisteredTool)[MCP_ANALYTICS_PROCESSED]) {
-    log(`Tool ${toolName} already processed, skipping re-wrap`)
+    logger(`Tool ${toolName} already processed, skipping re-wrap`)
     return tool
   }
 
@@ -224,11 +231,12 @@ async function handleToolCallRequest(
   server: MCPServerLike,
   originalCallToolHandler: MCPRequestHandler,
   request: MCPRequest,
-  extra: MCPRequestExtra
+  extra: MCPRequestExtra,
+  logger: LoggerFn
 ): Promise<unknown> {
   const data = getServerTrackingData(server)
   if (!data) {
-    log(
+    logger(
       'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called instrument(server, options) before using tool calls.'
     )
     return await originalCallToolHandler(request, extra)
@@ -243,7 +251,7 @@ async function handleToolCallRequest(
       extra,
       eventType: MCPAnalyticsEventType.mcpMissingCapability,
       explicitContextIntent: context,
-      execute: async () => handleReportMissing({ context }),
+      execute: async () => handleReportMissing({ context }, data.logger),
     })
   }
 
@@ -270,34 +278,32 @@ async function handleToolCallRequest(
   })
 }
 
-export function instrumentHighLevelServer(server: HighLevelMCPServerLike): void {
+export function instrumentHighLevelServer(server: HighLevelMCPServerLike, logger: LoggerFn): void {
   try {
     const lowLevelServer = server.server
     const mcpAnalyticsData = getServerTrackingData(lowLevelServer)
 
     // Patch already existing handlers, and patch setRequestHandler to capture dynamically created handlers.
-    const handlers = {
-      initialize: handleInitializeRequest,
-      'tools/list': handleListToolsRequest,
-      'tools/call': (
-        trackedServer: MCPServerLike,
-        originalHandler: MCPRequestHandler,
-        request: MCPRequest,
-        extra: MCPRequestExtra
-      ) => handleToolCallRequest(server, trackedServer, originalHandler, request, extra),
+    const handlers: Record<string, HandlerPatch> = {
+      initialize: (trackedServer, originalHandler, request, extra) =>
+        handleInitializeRequest(trackedServer, originalHandler, request, extra, logger),
+      'tools/list': (trackedServer, originalHandler, request, extra) =>
+        handleListToolsRequest(trackedServer, originalHandler, request, extra, logger),
+      'tools/call': (trackedServer, originalHandler, request, extra) =>
+        handleToolCallRequest(server, trackedServer, originalHandler, request, extra, logger),
     }
     patchRequestHandlers(lowLevelServer, handlers)
 
-    server._registeredTools = addTracingToToolRegistry(server._registeredTools, server)
+    server._registeredTools = addTracingToToolRegistry(server._registeredTools, server, logger)
 
     if (mcpAnalyticsData) {
       seedToolDescriptionsFromRegistry(mcpAnalyticsData.toolDescriptions, server._registeredTools)
       seedToolCategoriesFromRegistry(mcpAnalyticsData.toolCategories, server._registeredTools)
     }
 
-    setupListenerToRegisteredTools(server)
+    setupListenerToRegisteredTools(server, logger)
   } catch (error) {
-    log(`Warning: Failed to setup tool call instrumentation - ${error}`)
+    logger(`Warning: Failed to setup tool call instrumentation - ${error}`)
   }
 }
 
