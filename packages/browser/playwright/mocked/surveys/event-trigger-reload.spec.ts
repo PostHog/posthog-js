@@ -63,6 +63,61 @@ test.describe('surveys - event trigger reload persistence', () => {
         await expect(survey).toBeVisible({ timeout: 10000 })
     })
 
+    test('an armed delayed survey does not survive a session rotation across a reload', async ({ page, context }) => {
+        const surveysAPICall = page.route('**/surveys/**', async (route) => {
+            await route.fulfill({
+                json: {
+                    surveys: [
+                        {
+                            id: 'rotated-session-survey',
+                            name: 'Rotated session survey',
+                            type: 'popover',
+                            start_date: '2021-01-01T00:00:00Z',
+                            questions: [openTextQuestion],
+                            appearance: { surveyPopupDelaySeconds: 3 },
+                            conditions: { events: { values: [{ name: 'trigger_event' }] } },
+                        },
+                    ],
+                },
+            })
+        })
+
+        const surveysResponse = page.waitForResponse('**/surveys/**')
+        await start(startOptions, page, context)
+        await surveysAPICall
+        await surveysResponse
+
+        const survey = page.locator('.PostHogSurvey-rotated-session-survey').locator('.survey-form')
+
+        await page.evaluate(() => {
+            ;(window as any).posthog.capture('trigger_event')
+        })
+
+        // Rotate after arming but before the next load. The persisted activation belongs to the
+        // triggering session, so the receiver must clear it when the new session is announced.
+        const [previousSessionId, nextSessionId] = await page.evaluate(() => {
+            const posthog = (window as any).posthog
+            const previousSessionId = posthog.get_session_id()
+            posthog.sessionManager.resetSessionId()
+            const nextSessionId = posthog.sessionManager.checkAndGetSessionAndWindowId(false).sessionId
+            return [previousSessionId, nextSessionId]
+        })
+        expect(nextSessionId).not.toBe(previousSessionId)
+
+        await page.reload()
+        await start({ ...startOptions, type: 'reload' }, page, context)
+        await surveysAPICall
+
+        await page.waitForTimeout(5000)
+        await expect(survey).not.toBeVisible()
+
+        // The survey remains displayable when it receives a fresh trigger in the new session.
+        await page.evaluate(() => {
+            ;(window as any).posthog.capture('trigger_event')
+        })
+        await expect(survey).toBeVisible({ timeout: 10000 })
+    })
+
     test('a shown non-repeatable survey survives a reload until interacted with', async ({ page, context }) => {
         const surveysAPICall = page.route('**/surveys/**', async (route) => {
             await route.fulfill({

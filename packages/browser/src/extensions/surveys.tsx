@@ -288,7 +288,7 @@ export class SurveyManager {
         // (e.g. a survey shown on an `always`/wait-period basis rather than a trigger) we fall
         // back to the full delay, matching the previous behaviour.
         const activatedAt = resumeDelayFromActivation
-            ? this._posthog.surveys?._surveyEventReceiver?.getActivationTimestamp(survey.id)
+            ? this._posthog.surveys?._surveyEventReceiver?.getActivationTimestamp?.(survey.id)
             : undefined
         // Clamp the elapsed time at 0 so a clock that moved backwards after the activation was
         // stamped (NTP correction, VM suspend/resume) cannot stretch the wait past the delay.

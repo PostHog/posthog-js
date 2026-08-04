@@ -536,6 +536,18 @@ describe('SurveyManager', () => {
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
         })
 
+        it('waits the full delay when an older core bundle has no activation timestamp method', () => {
+            jest.useFakeTimers()
+            const survey = makeDelayedSurvey('older-core-survey', 60)
+            mockPostHog.surveys.getSurveys = jest.fn((cb) => cb([survey]))
+            ;(mockPostHog.surveys as any)._surveyEventReceiver = { getSurveys: () => [survey.id] }
+
+            expect(() => surveyManager.callSurveysAndEvaluateDisplayLogic(true)).not.toThrow()
+            jest.advanceTimersByTime(60_000)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
+        })
+
         // An explicit displaySurvey() call honors its own `ignoreDelay` option, so it must never
         // shortcut the wait using an activation the display loop recorded.
         it('waits the full delay for an explicit display call even when the trigger fired long ago', () => {
