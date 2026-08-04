@@ -144,6 +144,37 @@ describe('monitorStream', () => {
     expect(sourceFinalized).toBe(true)
   })
 
+  test('keeps the monitor pending without reading ahead when the caller is abandoned', async () => {
+    const sourceIterator = (async function* () {
+      yield 1
+      yield 2
+    })()
+    const sourceNext = jest.spyOn(sourceIterator, 'next')
+    const source = createTestStream(() => sourceIterator, new AbortController())
+    const [monitoringStream, wrapped] = monitoredStreamTee<number, TestStream<number>>(source, createTestStream)
+    const monitoringIterator = monitoringStream[Symbol.asyncIterator]()
+    const callerIterator = wrapped[Symbol.asyncIterator]()
+
+    await expect(Promise.all([monitoringIterator.next(), callerIterator.next()])).resolves.toEqual([
+      { done: false, value: 1 },
+      { done: false, value: 1 },
+    ])
+
+    let monitorSettled = false
+    const pendingMonitor = monitoringIterator.next().finally(() => {
+      monitorSettled = true
+    })
+    await new Promise<void>((resolve) => process.nextTick(resolve))
+
+    expect(sourceNext).toHaveBeenCalledTimes(1)
+    expect(monitorSettled).toBe(false)
+
+    // Clean up the deliberately abandoned caller after pinning the behavior.
+    await expect(callerIterator.return?.()).resolves.toEqual({ done: true, value: undefined })
+    await expect(pendingMonitor).resolves.toEqual({ done: true, value: undefined })
+    expect(sourceNext).toHaveBeenCalledTimes(1)
+  })
+
   test('resolves 3+ concurrent next calls in FIFO order without reading ahead of the monitor', async () => {
     const sourceIterator = (async function* () {
       yield 1

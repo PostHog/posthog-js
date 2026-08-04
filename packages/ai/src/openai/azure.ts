@@ -448,18 +448,12 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 ) {
                   finalContent = chunk.response.output
                 }
-                if ('usage' in chunk && chunk.usage) {
-                  const chunkUsage = chunk.usage as {
-                    input_tokens?: number
-                    output_tokens?: number
-                    output_tokens_details?: { reasoning_tokens?: number }
-                    input_tokens_details?: { cached_tokens?: number }
-                  }
+                if ('response' in chunk && chunk.response?.usage) {
                   usage = {
-                    inputTokens: chunkUsage.input_tokens ?? 0,
-                    outputTokens: chunkUsage.output_tokens ?? 0,
-                    reasoningTokens: chunkUsage.output_tokens_details?.reasoning_tokens ?? 0,
-                    cacheReadInputTokens: chunkUsage.input_tokens_details?.cached_tokens ?? 0,
+                    inputTokens: chunk.response.usage.input_tokens ?? 0,
+                    outputTokens: chunk.response.usage.output_tokens ?? 0,
+                    reasoningTokens: chunk.response.usage.output_tokens_details?.reasoning_tokens ?? 0,
+                    cacheReadInputTokens: chunk.response.usage.input_tokens_details?.cached_tokens ?? 0,
                   }
                 }
               }

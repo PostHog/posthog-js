@@ -1122,4 +1122,39 @@ describe('PostHogAzureOpenAI - response service tier', () => {
 
     expect(capturedServiceTier()).toBe('flex')
   })
+
+  test('captures usage from the final streaming response', async () => {
+    const completedResponse = {
+      ...mockResponsesResult('default'),
+      usage: {
+        input_tokens: 20,
+        output_tokens: 10,
+        total_tokens: 30,
+        input_tokens_details: { cached_tokens: 4 },
+        output_tokens_details: { reasoning_tokens: 3 },
+      },
+    }
+    const ResponsesMock: any = openaiModule.Responses
+    ResponsesMock.prototype.create = jest
+      .fn()
+      .mockResolvedValue(createMockAsyncIterator([{ type: 'response.completed', response: completedResponse }]))
+
+    const stream = await client.responses.create({
+      model: 'gpt-4',
+      input: 'Hello',
+      stream: true,
+      posthogDistinctId: 'test-id',
+    })
+    for await (const _chunk of stream) {
+      // consume the stream so the analytics copy reaches the final chunk
+    }
+    await flushPromises()
+
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const properties = captureArgs[0].properties
+    expect(properties['$ai_input_tokens']).toBe(20)
+    expect(properties['$ai_output_tokens']).toBe(10)
+    expect(properties['$ai_reasoning_tokens']).toBe(3)
+    expect(properties['$ai_cache_read_input_tokens']).toBe(4)
+  })
 })
