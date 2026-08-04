@@ -1653,10 +1653,15 @@ describe('Lazy SessionRecording', () => {
 
                     it('a URL trigger activation does not release the hold', () => {
                         applyV2Config([], [{ url: 'test.com', matching: 'regex' }])
+                        fakeNavigateTo('https://test.com/')
 
                         const rotationTimestamp = rotateExternallyWhileUnknown()
                         // the URL trigger matches on the next emitted event's trigger check
                         const snapshot = emitInactiveEvent(rotationTimestamp + 100, 'unknown')
+
+                        // guard against a vacuous pass: 'sampled' is only reachable once a group's
+                        // trigger status is 'trigger_activated' (triggerGroupsMatchSessionRecordingStatus)
+                        expect(sessionRecording.status).toBe('sampled')
 
                         jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
 
