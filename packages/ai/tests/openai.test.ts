@@ -39,6 +39,7 @@ jest.mock(
   () => ({
     uuidv7: jest.fn(() => 'uuid-v7'),
     ErrorTracking: {},
+    toJsonSafeValue: jest.fn((value) => value),
   }),
   { virtual: true }
 )
