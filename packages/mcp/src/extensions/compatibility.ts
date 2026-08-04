@@ -4,7 +4,7 @@
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
 import type { HighLevelMCPServerLike, MCPServerLike } from '../types'
-import { log, type LoggerFn } from './logger'
+import type { LoggerFn } from './logger'
 
 type ServerRecord = Record<string, unknown>
 
@@ -22,7 +22,7 @@ type ServerRecord = Record<string, unknown>
  */
 
 // Function to log compatibility information
-export function logCompatibilityWarning(logger: LoggerFn = log): void {
+export function logCompatibilityWarning(logger: LoggerFn): void {
   logger(
     'PostHog MCP analytics SDK Compatibility: This version only supports Model Context Protocol TypeScript SDK v1.11 and above. Please upgrade if using an older version.'
   )
@@ -41,10 +41,7 @@ export function isLowLevelServer(server: unknown): server is ServerRecord {
 }
 
 // Type guard function that validates server compatibility and returns typed server
-export function isCompatibleServerType(
-  server: unknown,
-  logger: LoggerFn = log
-): MCPServerLike | HighLevelMCPServerLike {
+export function isCompatibleServerType(server: unknown, logger: LoggerFn): MCPServerLike | HighLevelMCPServerLike {
   if (!server || typeof server !== 'object') {
     logCompatibilityWarning(logger)
     throw new Error(

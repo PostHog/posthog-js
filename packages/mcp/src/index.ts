@@ -51,7 +51,7 @@ import type {
  * ```
  */
 function instrument(server: unknown, posthog: PostHog, options: MCPAnalyticsOptions = {}): McpAnalytics {
-  const logger = createLogger(options.logger)
+  const logger = createLogger(options?.logger)
   try {
     if (!posthog) {
       logger('Warning: No PostHog client passed to instrument(). Events will not be sent anywhere.')

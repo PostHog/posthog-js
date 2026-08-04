@@ -33,6 +33,16 @@ describe('per-server logger isolation', () => {
   beforeEach(() => resetTodos())
   afterEach(() => setLogger(undefined))
 
+  it('does not throw when untyped JavaScript passes null options', async () => {
+    const setup = await setupTestServerAndClient()
+
+    try {
+      expect(() => instrument(setup.server, fakePostHog(), null as any)).not.toThrow()
+    } finally {
+      await setup.cleanup()
+    }
+  })
+
   it('routes concurrent identity and sink activity only to each server logger', async () => {
     const [setupA, setupB] = await Promise.all([setupTestServerAndClient(), setupTestServerAndClient()])
     const logsA: string[] = []
