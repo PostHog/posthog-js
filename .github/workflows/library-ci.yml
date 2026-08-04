@@ -111,9 +111,6 @@ jobs:
         with:
           build: false
 
-      - name: Install jq
-        run: apt-get update && apt-get install --yes --no-install-recommends jq
-
       - name: Build package
         run: pnpm build
 
@@ -143,26 +140,38 @@ jobs:
             exit 0
           fi
 
-          if ! jq -e '(.stats.unexpected | type == "number") and (.errors | type == "array")' compat-results.json > /dev/null; then
+          if ! node -e '
+            const results = require("./compat-results.json")
+            if (!Number.isInteger(results.stats?.unexpected) || !Array.isArray(results.errors)) process.exit(1)
+          '; then
             report_failures "- Compatibility test results could not be parsed. Check the test step logs."
             exit 0
           fi
 
-          UNEXPECTED=$(jq -r '.stats.unexpected' compat-results.json)
-          RUNNER_ERRORS=$(jq -r '.errors | length' compat-results.json)
+          UNEXPECTED=$(node -p 'require("./compat-results.json").stats.unexpected')
+          RUNNER_ERRORS=$(node -p 'require("./compat-results.json").errors.length')
           if [ "$COMPAT_TEST_OUTCOME" = "success" ] && [ "$UNEXPECTED" -eq 0 ] && [ "$RUNNER_ERRORS" -eq 0 ]; then
             echo "has_failures=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          FAILED_TESTS=$(jq -r '
-            [
-              .. | objects |
-              select(.tests? and (.tests | type == "array")) |
-              select(any(.tests[]?; .status == "unexpected")) |
-              "- `\(.title)`"
-            ] | unique[]?
-          ' compat-results.json)
+          FAILED_TESTS=$(node -e '
+            const results = require("./compat-results.json")
+            const failures = new Set()
+            const visit = (value) => {
+              if (!value || typeof value !== "object") return
+              if (
+                Array.isArray(value.tests) &&
+                value.tests.some((test) => test.status === "unexpected") &&
+                typeof value.title === "string"
+              ) {
+                failures.add("- `" + value.title + "`")
+              }
+              Object.values(value).forEach(visit)
+            }
+            visit(results)
+            process.stdout.write([...failures].join("\n"))
+          ')
 
           if [ "$RUNNER_ERRORS" -gt 0 ]; then
             RUNNER_FAILURES="- $RUNNER_ERRORS Playwright runner error(s) were reported. Check the test step logs for details."

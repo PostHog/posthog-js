@@ -714,6 +714,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
         "undefined",
         "false",
         "true"
+      ],
+      "__preview_web_vitals_soft_navs": [
+        "undefined",
+        "false",
+        "true"
       ]
     }
   ],

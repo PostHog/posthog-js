@@ -22,7 +22,8 @@ import { type eventWithTime } from './types/rrweb-types'
 
 import { isNullish, isNumber, isUndefined, isValidSampleRate } from '@posthog/core'
 import { createLogger } from '@posthog/browser-common/utils/logger'
-import { window } from '@posthog/browser-common/utils/globals'
+import { document, window } from '@posthog/browser-common/utils/globals'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { assignableWindow, LazyLoadedSessionRecordingInterface, PostHogExtensionKind } from '../../utils/globals'
 import { RECORDING_REMOTE_CONFIG_TTL_MS } from './external/lazy-loaded-session-recorder'
 import {
@@ -53,6 +54,14 @@ export class SessionRecording implements Extension {
 
     private _persistFlagsOnSessionListener: (() => void) | undefined = undefined
     private _lazyLoadedSessionRecording: LazyLoadedSessionRecordingInterface | undefined
+    private _sessionRecordingDisposed = false
+    private _documentWasEverVisible = !document?.visibilityState || document.visibilityState === 'visible'
+
+    private _onVisibilityChange = (): void => {
+        if (document?.visibilityState === 'visible') {
+            this._documentWasEverVisible = true
+        }
+    }
 
     public get started(): boolean {
         return !!this._lazyLoadedSessionRecording?.isStarted
@@ -74,10 +83,22 @@ export class SessionRecording implements Extension {
         if (this._config.cookieless_mode === COOKIELESS_ALWAYS) {
             throw new Error(LOGGER_PREFIX + ' cannot be used with cookieless_mode="always"')
         }
+
+        // Start before the recorder chunk loads so a visible -> hidden transition during
+        // lazy loading is not mistaken for a document that was never foregrounded.
+        if (document?.addEventListener) {
+            addEventListener(document, 'visibilitychange', this._onVisibilityChange)
+        }
     }
 
     initialize() {
         this.startIfEnabledOrStop()
+    }
+
+    dispose(): void {
+        this._sessionRecordingDisposed = true
+        document?.removeEventListener?.('visibilitychange', this._onVisibilityChange)
+        this.stopRecording()
     }
 
     private get _isRecordingEnabled() {
@@ -88,6 +109,10 @@ export class SessionRecording implements Extension {
     }
 
     startIfEnabledOrStop(startReason?: SessionStartReason) {
+        if (this._sessionRecordingDisposed) {
+            return
+        }
+
         if (this._isRecordingEnabled && this._lazyLoadedSessionRecording?.isStarted) {
             return
         }
@@ -296,6 +321,10 @@ export class SessionRecording implements Extension {
     }
 
     private _onScriptLoaded(startReason?: SessionStartReason) {
+        if (this._sessionRecordingDisposed) {
+            return
+        }
+
         if (!assignableWindow.__PosthogExtensions__?.initSessionRecording) {
             logger.warn(
                 'Called on script loaded before session recording is available. This can be caused by adblockers.'
@@ -308,8 +337,12 @@ export class SessionRecording implements Extension {
 
         if (!this._lazyLoadedSessionRecording) {
             this._lazyLoadedSessionRecording = assignableWindow.__PosthogExtensions__?.initSessionRecording(
-                this._instance
+                this._instance,
+                this._documentWasEverVisible
             )
+            if (this._lazyLoadedSessionRecording) {
+                document?.removeEventListener?.('visibilitychange', this._onVisibilityChange)
+            }
             ;(this._lazyLoadedSessionRecording as any)._forceAllowLocalhostNetworkCapture =
                 this._forceAllowLocalhostNetworkCapture
         }
