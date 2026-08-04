@@ -6,7 +6,6 @@ import { SurveyEventName, SurveyEventProperties } from '../posthog-surveys-types
 import { ProductTourEventName, ProductTourEventProperties } from '../posthog-product-tours-types'
 import { SURVEY_SEEN_PREFIX } from '../utils/survey-utils'
 import { beforeEach } from '@jest/globals'
-import { SESSION_REGISTERED_PROPERTIES } from '../constants'
 
 jest.mock('@posthog/browser-common/utils/globals', () => {
     const orig = jest.requireActual('@posthog/browser-common/utils/globals')
@@ -788,7 +787,6 @@ describe('posthog core', () => {
             posthog.register_for_session({ link_id: 'abc123', flow: 'signup' })
             expect(posthog.sessionPersistence?.props['link_id']).toBe('abc123')
             expect(posthog.sessionPersistence?.props['flow']).toBe('signup')
-            expect(posthog.sessionPersistence?.properties()).not.toHaveProperty(SESSION_REGISTERED_PROPERTIES)
 
             emitSessionChange(posthog, {
                 noSessionId: false,
@@ -799,7 +797,15 @@ describe('posthog core', () => {
 
             expect(posthog.sessionPersistence?.props['link_id']).toBeUndefined()
             expect(posthog.sessionPersistence?.props['flow']).toBeUndefined()
-            expect(posthog.sessionPersistence?.props[SESSION_REGISTERED_PROPERTIES]).toBeUndefined()
+        })
+
+        it('does not collide with user-provided session property names', async () => {
+            const posthog = await createPosthogInstance(uuidv7(), { persistence: 'localStorage' })
+
+            posthog.register_for_session({ $session_registered_properties: 'user-value' })
+
+            expect(posthog.sessionPersistence?.props['$session_registered_properties']).toBe('user-value')
+            expect(posthog.sessionPersistence?.properties()['$session_registered_properties']).toBe('user-value')
         })
 
         it('clears session-registered props after a page reload and later session rotation', async () => {
