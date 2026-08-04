@@ -1,10 +1,10 @@
 import { EventMessage, PostHog } from 'posthog-node'
 import { v4 as uuidv4 } from 'uuid'
-import { uuidv7, ErrorTracking as CoreErrorTracking } from '@posthog/core'
+import { uuidv7, ErrorTracking as CoreErrorTracking, toJsonSafeValue } from '@posthog/core'
 import { version } from '../package.json'
 import type { TokenUsage } from './types'
 import { stringifyError } from './serializeError'
-import { AIEvent, CostOverride, getTokensSource, sanitizeValues, withPrivacyMode } from './utils'
+import { AIEvent, CostOverride, getTokensSource, withPrivacyMode } from './utils'
 import { warnIfPostHogAiGateway } from './gatewayWarning'
 
 /**
@@ -104,8 +104,12 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
   const privacyMode = options.privacyMode ?? false
   const usage = options.usage ?? {}
 
-  const safeInput = sanitizeValues(options.input)
-  const safeOutput = sanitizeValues(options.output)
+  // Check privacy before reading or traversing input/output. Besides avoiding
+  // needless work, this ensures hostile getters/proxies cannot observe a value
+  // that the caller explicitly requested us to redact.
+  const shouldRedact = withPrivacyMode(client, privacyMode, false) === null
+  const safeInput = shouldRedact ? null : toJsonSafeValue(options.input)
+  const safeOutput = shouldRedact ? null : toJsonSafeValue(options.output)
 
   let httpStatus = options.httpStatus
   let errorData: Record<string, unknown> = {}
@@ -160,8 +164,8 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
     $ai_provider: options.providerOverride ?? options.provider,
     $ai_model: options.modelOverride ?? options.model,
     $ai_model_parameters: options.modelParameters ?? {},
-    $ai_input: withPrivacyMode(client, privacyMode, safeInput),
-    $ai_output_choices: withPrivacyMode(client, privacyMode, safeOutput),
+    $ai_input: safeInput,
+    $ai_output_choices: safeOutput,
     $ai_http_status: httpStatus,
     $ai_input_tokens: usage.inputTokens ?? 0,
     ...(usage.outputTokens !== undefined ? { $ai_output_tokens: usage.outputTokens } : {}),

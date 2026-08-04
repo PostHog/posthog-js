@@ -1,9 +1,9 @@
-import { isPlainError } from '@/utils'
+import { isError } from '@/utils/type-utils'
 import { CoercingContext, ErrorTrackingCoercer, ExceptionLike } from '../types'
 
 export class ErrorCoercer implements ErrorTrackingCoercer<Error> {
   match(err: unknown): err is Error {
-    return isPlainError(err)
+    return isError(err)
   }
 
   coerce(err: Error, ctx: CoercingContext): ExceptionLike {

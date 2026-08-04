@@ -4,24 +4,19 @@
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
 import { uuidv7 } from '@posthog/core'
+import {
+  canInjectAnalyticsParameter,
+  hasAnalyticsParameter,
+  type AnalyticsInjectableJsonSchema,
+} from './analytics-parameters'
 import { DEFAULT_CONVERSATION_ID_DESCRIPTION } from './constants'
 import { log } from './logger'
 import { GET_MORE_TOOLS_NAME } from './tools'
 
 export const CONVERSATION_ID_PARAM_NAME = 'conversation_id'
 
-interface JsonSchema {
-  additionalProperties?: boolean
-  allOf?: unknown
-  anyOf?: unknown
-  oneOf?: unknown
-  properties?: Record<string, unknown>
-  required?: string[]
-  type?: string
-}
-
 export interface ConversationIdInjectableTool {
-  inputSchema?: JsonSchema
+  inputSchema?: AnalyticsInjectableJsonSchema
   name?: string
   [key: string]: unknown
 }
@@ -29,17 +24,16 @@ export interface ConversationIdInjectableTool {
 export function addConversationIdToTool<TTool extends ConversationIdInjectableTool>(tool: TTool): TTool {
   const modifiedTool = { ...tool }
   const toolName = tool.name || 'unknown'
-  const schema = modifiedTool.inputSchema as JsonSchema | undefined
+  const schema = modifiedTool.inputSchema as AnalyticsInjectableJsonSchema | undefined
 
-  if (schema?.properties?.[CONVERSATION_ID_PARAM_NAME]) {
-    log(
-      `WARN: Tool "${toolName}" already has '${CONVERSATION_ID_PARAM_NAME}' parameter. Skipping conversation_id injection.`
-    )
-    return modifiedTool
-  }
-
-  if (schema?.oneOf || schema?.allOf || schema?.anyOf) {
-    log(`WARN: Tool "${toolName}" has complex schema (oneOf/allOf/anyOf). Skipping conversation_id injection.`)
+  if (!canInjectAnalyticsParameter(schema, CONVERSATION_ID_PARAM_NAME)) {
+    if (hasAnalyticsParameter(schema, CONVERSATION_ID_PARAM_NAME)) {
+      log(
+        `WARN: Tool "${toolName}" already has '${CONVERSATION_ID_PARAM_NAME}' parameter. Skipping conversation_id injection.`
+      )
+    } else {
+      log(`WARN: Tool "${toolName}" has complex schema (oneOf/allOf/anyOf/$ref). Skipping conversation_id injection.`)
+    }
     return modifiedTool
   }
 
@@ -51,9 +45,9 @@ export function addConversationIdToTool<TTool extends ConversationIdInjectableTo
     }
   }
 
-  modifiedTool.inputSchema = JSON.parse(JSON.stringify(modifiedTool.inputSchema)) as JsonSchema
+  modifiedTool.inputSchema = JSON.parse(JSON.stringify(modifiedTool.inputSchema)) as AnalyticsInjectableJsonSchema
 
-  const inputSchema = modifiedTool.inputSchema as JsonSchema
+  const inputSchema = modifiedTool.inputSchema as AnalyticsInjectableJsonSchema
 
   if (!inputSchema.properties) {
     inputSchema.properties = {}
@@ -135,25 +129,6 @@ export function extractConversationId(args: unknown): string | undefined {
   }
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : undefined
-}
-
-export function cloneRequestWithoutConversationId<
-  TRequest extends { params?: { arguments?: unknown; [k: string]: unknown } },
->(request: TRequest): TRequest {
-  if (!request.params || typeof request.params !== 'object') {
-    return request
-  }
-  const args = request.params.arguments
-  if (!(args && typeof args === 'object')) {
-    return request
-  }
-  return {
-    ...request,
-    params: {
-      ...request.params,
-      arguments: stripConversationId(args) as typeof request.params.arguments,
-    },
-  }
 }
 
 export function stripConversationId(args: unknown): unknown {
