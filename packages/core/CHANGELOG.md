@@ -1,5 +1,19 @@
 # @posthog/core
 
+## 1.46.6
+
+### Patch Changes
+
+- [#4363](https://github.com/PostHog/posthog-js/pull/4363) [`821a2c6`](https://github.com/PostHog/posthog-js/commit/821a2c6bc46c61b988f92557f52a0b84afb342a8) Thanks [@marandaneto](https://github.com/marandaneto)! - Safely capture circular and otherwise unknown telemetry values with a shared JSON-safe value converter.
+  (2026-08-04)
+
+## 1.46.5
+
+### Patch Changes
+
+- [#4235](https://github.com/PostHog/posthog-js/pull/4235) [`7db0e8c`](https://github.com/PostHog/posthog-js/commit/7db0e8c2a46edfc180b1d13d3b23fbcac867e552) Thanks [@hpouillot](https://github.com/hpouillot)! - Preserve messages, source locations, and existing stacks from browser errors that do not provide a same-realm `Error` object.
+  (2026-08-03)
+
 ## 1.46.4
 
 ### Patch Changes

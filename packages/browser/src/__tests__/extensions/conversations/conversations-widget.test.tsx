@@ -2,7 +2,7 @@ import { render, fireEvent, waitFor } from '@testing-library/preact'
 import '@testing-library/jest-dom'
 import { ConversationsWidget } from '../../../extensions/conversations/external/components/ConversationsWidget'
 import { ConversationsRemoteConfig } from '../../../posthog-conversations-types'
-import { createConversationsSendError } from '../../../extensions/conversations/external/errors'
+import { createConversationsError } from '../../../extensions/conversations/external/errors'
 import Config from '../../../config'
 
 describe('ConversationsWidget', () => {
@@ -73,6 +73,37 @@ describe('ConversationsWidget', () => {
         ).toBeInTheDocument()
     })
 
+    it('should render handled restore failures without logging them again', async () => {
+        const error = createConversationsError(
+            'network',
+            'Unable to reach the server. Please check your connection and try again.'
+        )
+        const previousDebug = Config.DEBUG
+        Config.DEBUG = true
+        const errorSpy = jest.spyOn(console, 'error').mockImplementation()
+
+        try {
+            const { getByText, getByPlaceholderText, findByText } = render(
+                <ConversationsWidget
+                    config={config}
+                    initialState="open"
+                    onSendMessage={jest.fn().mockResolvedValue(undefined)}
+                    onRequestRestoreLink={jest.fn().mockRejectedValue(error)}
+                />
+            )
+
+            fireEvent.click(getByText('Recover them here'))
+            fireEvent.input(getByPlaceholderText('you@example.com'), { target: { value: 'user@example.com' } })
+            fireEvent.click(getByText('Send restore link'))
+
+            expect(await findByText(error.message)).toBeInTheDocument()
+            expect(errorSpy).not.toHaveBeenCalled()
+        } finally {
+            errorSpy.mockRestore()
+            Config.DEBUG = previousDebug
+        }
+    })
+
     it('should return to ticket view when closing restore request with multiple tickets', () => {
         const onViewChange = jest.fn()
         const { getByText, getByLabelText } = render(
@@ -110,7 +141,7 @@ describe('ConversationsWidget', () => {
     })
 
     it('should render handled send failures without logging them again', async () => {
-        const error = createConversationsSendError(
+        const error = createConversationsError(
             'network',
             'Unable to reach the server. Please check your connection and try again.'
         )

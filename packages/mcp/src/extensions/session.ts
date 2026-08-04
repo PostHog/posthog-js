@@ -125,5 +125,5 @@ export function getSessionInfo(
 
   data.sessionInfo = sessionInfo
   setServerTrackingData(server, data)
-  return data.sessionInfo
+  return { ...sessionInfo }
 }

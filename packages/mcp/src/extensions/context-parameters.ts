@@ -10,7 +10,7 @@ import {
   type AnalyticsInjectableJsonSchema,
 } from './analytics-parameters'
 import { DEFAULT_CONTEXT_PARAMETER_DESCRIPTION } from './constants'
-import { log } from './logger'
+import { log, type LoggerFn } from './logger'
 
 export interface ContextInjectableTool {
   inputSchema?: AnalyticsInjectableJsonSchema
@@ -33,12 +33,13 @@ export function getContextDescription(context: MCPAnalyticsOptions['context']): 
  *
  * Skips injection (with warning) for:
  * - Tools that already have a 'context' parameter
- * - Complex schemas (oneOf/allOf/anyOf) that can't safely have properties added
+ * - Complex schemas (oneOf/allOf/anyOf/$ref) that can't safely have properties added
  * - Schemas with additionalProperties: false
  */
 export function addContextParameterToTool<TTool extends ContextInjectableTool>(
   tool: TTool,
-  contextDescriptionOverride?: string
+  contextDescriptionOverride?: string,
+  logger: LoggerFn = log
 ): TTool {
   // Create a shallow copy of the tool to avoid modifying the original
   const modifiedTool = { ...tool }
@@ -47,9 +48,9 @@ export function addContextParameterToTool<TTool extends ContextInjectableTool>(
 
   if (!canInjectAnalyticsParameter(schema, 'context')) {
     if (hasAnalyticsParameter(schema, 'context')) {
-      log(`WARN: Tool "${toolName}" already has 'context' parameter. Skipping context injection.`)
+      logger(`WARN: Tool "${toolName}" already has 'context' parameter. Skipping context injection.`)
     } else {
-      log(`WARN: Tool "${toolName}" has complex schema (oneOf/allOf/anyOf). Skipping context injection.`)
+      logger(`WARN: Tool "${toolName}" has complex schema (oneOf/allOf/anyOf/$ref). Skipping context injection.`)
     }
     return modifiedTool
   }
@@ -104,13 +105,8 @@ export function addContextParameterToTool<TTool extends ContextInjectableTool>(
 
 export function addContextParameterToTools<TTool extends ContextInjectableTool>(
   tools: TTool[],
-  contextDescriptionOverride?: string
+  contextDescriptionOverride?: string,
+  logger: LoggerFn = log
 ): TTool[] {
-  return tools.map((tool) => {
-    // Skip get_more_tools - it has its own special context parameter
-    if (tool.name === 'get_more_tools') {
-      return tool
-    }
-    return addContextParameterToTool(tool, contextDescriptionOverride)
-  })
+  return tools.map((tool) => addContextParameterToTool(tool, contextDescriptionOverride, logger))
 }
