@@ -4,7 +4,7 @@
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
 import { type CallToolResult, type ListToolsResult } from '@modelcontextprotocol/sdk/types.js'
-import { log } from './logger'
+import { log, type LoggerFn } from './logger'
 
 export const GET_MORE_TOOLS_NAME = 'get_more_tools' as const
 
@@ -67,7 +67,7 @@ export function getMoreToolsResult(): CallToolResult {
   }
 }
 
-export function handleReportMissing(args: { context: string }): CallToolResult {
-  log(`Missing tool reported: ${JSON.stringify(args)}`)
+export function handleReportMissing(args: { context: string }, logger: LoggerFn = log): CallToolResult {
+  logger(`Missing tool reported: ${JSON.stringify(args)}`)
   return getMoreToolsResult()
 }

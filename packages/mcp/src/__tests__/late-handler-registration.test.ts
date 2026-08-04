@@ -5,9 +5,11 @@ import {
   CallToolRequestSchema,
   CallToolResultSchema,
   ListToolsRequestSchema,
+  type ListToolsResult,
   ListToolsResultSchema,
 } from '@modelcontextprotocol/sdk/types.js'
 import { instrument } from '../index'
+import type { MCPAnalyticsOptions, MCPRequestLike } from '../types'
 import { EventCapture, fakePostHog } from './test-utils'
 
 /**
@@ -40,21 +42,29 @@ const TOOLS = [
   },
 ]
 
-async function setupLateRegisteredServer() {
+async function setupLateRegisteredServer(
+  options: MCPAnalyticsOptions = { context: true },
+  tools: ListToolsResult['tools'] = TOOLS,
+  callHandler?: (request: MCPRequestLike) => Promise<unknown>
+) {
   // Capability is declared at construction — mcp-nest does this before the
   // serverMutator (where instrument runs) is invoked.
   const server = new McpServer({ name: 'late-reg test', version: '1.0.0' }, { capabilities: { tools: {} } })
 
-  instrument(server, fakePostHog(), { context: true })
+  instrument(server, fakePostHog(), options)
 
   // Handlers registered AFTER instrument(), directly at the low level — this is
   // the path mcp-nest takes and the case the fix targets.
   const lowLevel = server.server
-  lowLevel.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }))
-  lowLevel.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const event = (request.params?.arguments?.event as string) ?? ''
-    return { content: [{ type: 'text', text: `trends for ${event}` }] }
-  })
+  lowLevel.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }))
+  lowLevel.setRequestHandler(
+    CallToolRequestSchema,
+    callHandler ??
+      (async (request) => {
+        const event = (request.params?.arguments?.event as string) ?? ''
+        return { content: [{ type: 'text', text: `trends for ${event}` }] }
+      })
+  )
 
   const client = new Client({ name: 'test client', version: '1.0' }, { capabilities: {} })
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
@@ -109,6 +119,34 @@ describe('Late handler registration (mcp-nest ordering)', () => {
     const listings = eventCapture.findCapturesByEvent('$mcp_tools_list')
     expect(listings).toHaveLength(1)
     expect(listings[0].properties.$mcp_listed_tool_names).toEqual(expect.arrayContaining(['get_trends']))
+  })
+
+  it('preserves a colliding real tool registered directly on the low-level server', async () => {
+    const collisionTools = [
+      {
+        name: 'get_more_tools',
+        description: 'A real adapter-owned tool',
+        inputSchema: { type: 'object', properties: { value: { type: 'string' } } },
+      },
+    ]
+    const collision = await setupLateRegisteredServer({ reportMissing: true }, collisionTools, async (request) => ({
+      content: [{ type: 'text', text: `real handler: ${request.params?.arguments?.value}` }],
+    }))
+    await collision.connect()
+
+    try {
+      const result = await collision.client.request(
+        { method: 'tools/call', params: { name: 'get_more_tools', arguments: { value: 'adapter' } } },
+        CallToolResultSchema
+      )
+      await new Promise((r) => setTimeout(r, 50))
+
+      expect((result.content as { text: string }[])[0].text).toBe('real handler: adapter')
+      expect(eventCapture.findCapturesByEvent('$mcp_tool_call')).toHaveLength(1)
+      expect(eventCapture.findCapturesByEvent('$mcp_missing_capability')).toHaveLength(0)
+    } finally {
+      await collision.cleanup()
+    }
   })
 
   it('captures $mcp_tool_call for a tools/call handler registered after instrument()', async () => {

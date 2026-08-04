@@ -40,6 +40,11 @@ describe('Base64 image redaction', () => {
       expect(redactBase64DataUrl(url)).toBe('https://example.com/image.jpg')
     })
 
+    it('should use an explicit media type when redacting raw base64', () => {
+      expect(redactBase64DataUrl('SGVsbG8=', 'image/png')).toBe('[base64 image/png redacted]')
+      expect(redactBase64DataUrl('hello', 'text/plain')).toBe('hello')
+    })
+
     it('should handle non-string inputs', () => {
       expect(redactBase64DataUrl(null as any)).toBe(null)
       expect(redactBase64DataUrl(undefined as any)).toBe(undefined)
