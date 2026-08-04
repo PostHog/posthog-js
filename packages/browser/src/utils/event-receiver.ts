@@ -329,8 +329,9 @@ export abstract class EventReceiver<T extends EventTriggerable> {
         const armedInMemory: string[] = []
         for (const itemId of itemIds) {
             if (canPersist && this._shouldPersistArmedActivation(itemId)) {
-                this._persistActivation(itemId)
-                this._recordActivationTimestamp(itemId)
+                if (this._persistActivation(itemId)) {
+                    this._recordActivationTimestamp(itemId)
+                }
             } else {
                 armedInMemory.push(itemId)
             }
@@ -348,13 +349,15 @@ export abstract class EventReceiver<T extends EventTriggerable> {
      * on top of the session-scoped read, a stale set left over from a previous session is
      * dropped here rather than accumulated.
      */
-    private _persistActivation(itemId: string): void {
+    private _persistActivation(itemId: string): boolean {
         this._pendingActivatedItems = this._pendingActivatedItems.filter((id) => id !== itemId)
         const persisted = this._getPersistedActivatedIds()
-        if (!persisted.includes(itemId)) {
-            this._setActivatedItems([...persisted, itemId])
-            this._stampActivationSession()
+        if (persisted.includes(itemId)) {
+            return false
         }
+        this._setActivatedItems([...persisted, itemId])
+        this._stampActivationSession()
+        return true
     }
 
     /** Drop items from both the in-memory and persisted activation sets. */

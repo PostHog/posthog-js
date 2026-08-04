@@ -610,6 +610,17 @@ describe('survey-event-receiver', () => {
             expect(new SurveyEventReceiver(instance).getActivationTimestamp('delayed-survey')).toBeUndefined()
         })
 
+        it('does not record a new activation time when the trigger fires again after the survey is shown', () => {
+            const { receiver, hook } = setup(makeDelayedSurvey())
+
+            hook('trigger_event')
+            hook(SurveyEventName.SHOWN, surveyEventPayload('delayed-survey', SurveyEventName.SHOWN))
+            nowSpy.mockReturnValue(1_030_000)
+            hook('trigger_event')
+
+            expect(receiver.getActivationTimestamp('delayed-survey')).toBeUndefined()
+        })
+
         it('falls back to in-memory arming for a delayed survey when no session id is resolvable', () => {
             const { receiver, hook } = setup(makeDelayedSurvey(), false)
 
