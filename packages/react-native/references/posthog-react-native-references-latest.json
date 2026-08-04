@@ -4067,6 +4067,10 @@
           "name": "unregisterPushNotificationToken"
         },
         {
+          "type": "((optOut: boolean) => Promise<void>) & ((optOut: boolean) => Promise<void>)",
+          "name": "setOptOut"
+        },
+        {
           "type": "((properties: PostHogReactNativePluginMap) => Promise<void>) & ((properties: { [key: string]: any; }) => Promise<void>)",
           "name": "capturePushNotificationOpened"
         },
