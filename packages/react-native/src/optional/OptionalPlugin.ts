@@ -2,6 +2,7 @@ import { Platform } from 'react-native'
 
 // Optional native dependency; resolved at runtime via require()/try-catch below.
 import type PostHogReactNativePlugin from '@posthog/react-native-plugin'
+import type { PostHogPushIdentityProvider } from '../types'
 
 /**
  * `@posthog/react-native-plugin` is the primary native plugin; we fall back to
@@ -14,6 +15,11 @@ export type PostHogReactNativePluginExtended = typeof PostHogReactNativePlugin &
   startRecording?: (resumeCurrent: boolean) => Promise<void>
   stopRecording?: () => Promise<void>
   addExceptionStep?: (message: string, properties?: { [key: string]: any }) => Promise<void>
+  registerPushNotificationToken?: (deviceToken: string, appId: string | null) => Promise<void>
+  unregisterPushNotificationToken?: () => Promise<void>
+  capturePushNotificationOpened?: (properties: { [key: string]: any }) => Promise<void>
+  setPushIdentityProvider?: (provider: PostHogPushIdentityProvider) => void
+  reset?: (distinctId: string, anonymousId: string) => Promise<void>
 }
 
 export let OptionalReactNativePlugin: PostHogReactNativePluginExtended | undefined = undefined
