@@ -74,6 +74,7 @@ const LEGACY_RESERVED_PERSISTENCE_KEYS = new Set([
     'ph_product_tours',
     '$product_tours_activated',
     '$surveys_activated_session',
+    '$surveys_activated_timestamps',
     '$product_tours_activated_session',
     '$product_tours_enabled_server_side',
     '$session_recording_remote_config',
