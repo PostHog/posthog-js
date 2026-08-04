@@ -1,5 +1,14 @@
 # posthog-js-lite
 
+## 4.10.2
+
+### Patch Changes
+
+- [#4347](https://github.com/PostHog/posthog-js/pull/4347) [`7c3a9af`](https://github.com/PostHog/posthog-js/commit/7c3a9af42be80051705f7fe820623dd7e1b879d5) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve events added to a full queue while an earlier batch is being flushed.
+  (2026-08-03)
+- Updated dependencies [[`7c3a9af`](https://github.com/PostHog/posthog-js/commit/7c3a9af42be80051705f7fe820623dd7e1b879d5)]:
+  - @posthog/core@1.46.2
+
 ## 4.10.1
 
 ### Patch Changes

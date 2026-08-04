@@ -11,26 +11,25 @@ import type {
   RegisteredTool,
   ToolCallback,
 } from '../types'
-import { canInjectAnalyticsParameter } from './analytics-parameters'
-import { stripConversationId } from './conversation-id'
+import {
+  analyticsOwnsParameter,
+  getAnalyticsParameterOwnership,
+  stripOwnedAnalyticsArguments,
+} from './analytics-parameters'
 import { isContextEnabled } from './context-parameters'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
-import { log } from './logger'
-import {
-  createWrappedTool,
-  getObjectShape,
-  getToolFunction,
-  hasToolFunction,
-  isZodRawShapeCompat,
-} from './mcp-sdk-compat'
+import type { LoggerFn } from './logger'
+import { createWrappedTool, getToolFunction, hasToolFunction } from './mcp-sdk-compat'
 import { handleReportMissing, resolveMissingCapabilityToolName } from './tools'
 import {
   handleInitializeRequest,
   handleListToolsRequest,
   patchRequestHandlers,
   captureToolCall,
+  isToolAdvertised,
   readToolMetaCategory,
+  type HandlerPatch,
 } from './instrumentation'
 import { getContextArgument } from './tracing-helpers'
 
@@ -52,55 +51,24 @@ function isCallbackUpdate(value: unknown): value is { callback: ToolCallback } {
   return !!value && typeof value === 'object' && 'callback' in value && typeof value.callback === 'function'
 }
 
-function analyticsOwnsParameter(inputSchema: unknown, parameterName: string): boolean {
-  if (!inputSchema || typeof inputSchema !== 'object') {
-    return canInjectAnalyticsParameter(undefined, parameterName)
-  }
-
-  if (isZodRawShapeCompat(inputSchema)) {
-    return canInjectAnalyticsParameter({ properties: inputSchema }, parameterName)
-  }
-
-  const shape = getObjectShape(inputSchema)
-  if (shape) {
-    return canInjectAnalyticsParameter({ properties: shape }, parameterName)
-  }
-
-  const schema = inputSchema as Record<string, unknown>
-  if ('_def' in schema || '_zod' in schema || '~standard' in schema) {
-    // The MCP SDK advertises non-object schemas as an empty object schema.
-    return canInjectAnalyticsParameter(undefined, parameterName)
-  }
-
-  return canInjectAnalyticsParameter(schema, parameterName)
-}
-
-function stripOwnedAnalyticsArguments(
-  args: unknown,
-  ownership: { context: boolean; conversationId: boolean }
-): unknown {
-  let cleanedArgs = args
-  if (ownership.context && cleanedArgs && typeof cleanedArgs === 'object' && 'context' in cleanedArgs) {
-    const { context: _context, ...rest } = cleanedArgs
-    cleanedArgs = rest
-  }
-  return ownership.conversationId ? stripConversationId(cleanedArgs) : cleanedArgs
-}
-
 function addTracingToToolRegistry(
   tools: Record<string, RegisteredTool>,
-  server: HighLevelMCPServerLike
+  server: HighLevelMCPServerLike,
+  logger: LoggerFn
 ): Record<string, RegisteredTool> {
   return Object.fromEntries(
-    Object.entries(tools).map(([name, tool]) => [name, addTracingToToolCallbackInternal(tool, name, server)])
+    Object.entries(tools).map(([name, tool]) => [
+      name,
+      addTracingToToolCallbackInternal(tool, name, server, () => tool.inputSchema, logger),
+    ])
   )
 }
 
-function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
+function setupListenerToRegisteredTools(server: HighLevelMCPServerLike, logger: LoggerFn): void {
   try {
     const data = getServerTrackingData(server.server as MCPServerLike)
     if (!data) {
-      log('Warning: Cannot setup listener - no tracking data found')
+      logger('Warning: Cannot setup listener - no tracking data found')
       return
     }
 
@@ -112,19 +80,19 @@ function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
               data.toolDescriptions.set(property, value.description)
             }
             if ((value as ProcessedRegisteredTool)[MCP_ANALYTICS_PROCESSED]) {
-              log(`Tool ${String(property)} already processed, skipping proxy wrapping`)
+              logger(`Tool ${String(property)} already processed, skipping proxy wrapping`)
               return Reflect.set(target, property, value)
             }
 
             if (wrappedCallbacks.has(getToolFunction(value))) {
-              log(`Tool ${String(property)} callback already wrapped, skipping proxy wrapping`)
+              logger(`Tool ${String(property)} callback already wrapped, skipping proxy wrapping`)
               return Reflect.set(target, property, value)
             }
 
             // The MCP SDK's registry copy is currently stale after update(), but keep this lookup lazy so
             // ownership follows the current schema once the registry reflects live tool state.
             const getCurrentInputSchema = () => value.inputSchema
-            const nextValue = addTracingToToolCallbackInternal(value, property, server, getCurrentInputSchema)
+            const nextValue = addTracingToToolCallbackInternal(value, property, server, getCurrentInputSchema, logger)
 
             if (typeof nextValue.update === 'function') {
               const originalUpdate = nextValue.update
@@ -136,7 +104,8 @@ function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
                       { callback: updateObj.callback },
                       property,
                       server,
-                      getCurrentInputSchema
+                      getCurrentInputSchema,
+                      logger
                     )
                     updateObj.callback = getToolFunction(wrappedTool)
                   }
@@ -149,7 +118,7 @@ function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
 
           return Reflect.set(target, property, value)
         } catch (error) {
-          log(`Warning: Error in proxy set handler for tool ${String(property)} - ${error}`)
+          logger(`Warning: Error in proxy set handler for tool ${String(property)} - ${error}`)
           return Reflect.set(target, property, value)
         }
       },
@@ -170,9 +139,9 @@ function setupListenerToRegisteredTools(server: HighLevelMCPServerLike): void {
     const originalTools = server._registeredTools || {}
     server._registeredTools = new Proxy(originalTools, handler)
 
-    log('Successfully set up listener for new tool registrations')
+    logger('Successfully set up listener for new tool registrations')
   } catch (error) {
-    log(`Warning: Failed to setup listener for registered tools - ${error}`)
+    logger(`Warning: Failed to setup listener for registered tools - ${error}`)
   }
 }
 
@@ -189,19 +158,18 @@ function addTracingToToolCallbackInternal(
   tool: RegisteredTool,
   toolName: string,
   server: HighLevelMCPServerLike,
-  getCurrentInputSchema: () => unknown = () => tool.inputSchema
+  getCurrentInputSchema: () => unknown,
+  logger: LoggerFn
 ): RegisteredTool {
   const originalCallback = getToolFunction(tool)
   const options = getServerTrackingData(server.server as MCPServerLike)?.options
-  const missingToolName = resolveMissingCapabilityToolName(options)
-
   if (wrappedCallbacks.has(originalCallback)) {
-    log(`Tool ${toolName} callback already wrapped, skipping re-wrap`)
+    logger(`Tool ${toolName} callback already wrapped, skipping re-wrap`)
     return tool
   }
 
   if ((tool as ProcessedRegisteredTool)[MCP_ANALYTICS_PROCESSED]) {
-    log(`Tool ${toolName} already processed, skipping re-wrap`)
+    logger(`Tool ${toolName} already processed, skipping re-wrap`)
     return tool
   }
 
@@ -219,16 +187,9 @@ function addTracingToToolCallbackInternal(
 
     const inputSchema = getCurrentInputSchema()
     const cleanedArgs = stripOwnedAnalyticsArguments(args, {
-      context:
-        toolName !== missingToolName &&
-        isContextEnabled(options?.context) &&
-        analyticsOwnsParameter(inputSchema, 'context'),
-      conversationId:
-        toolName !== missingToolName &&
-        options?.enableConversationId === true &&
-        analyticsOwnsParameter(inputSchema, 'conversation_id'),
+      context: isContextEnabled(options?.context) && analyticsOwnsParameter(inputSchema, 'context'),
+      conversationId: options?.enableConversationId === true && analyticsOwnsParameter(inputSchema, 'conversation_id'),
     })
-
     try {
       if (cleanedArgs === undefined) {
         const handler = originalCallback as (extra: CompatibleRequestHandlerExtra) => Promise<CallToolResult>
@@ -258,20 +219,26 @@ function addTracingToToolCallbackInternal(
 }
 
 async function handleToolCallRequest(
+  highLevelServer: HighLevelMCPServerLike,
   server: MCPServerLike,
   originalCallToolHandler: MCPRequestHandler,
   request: MCPRequest,
-  extra: MCPRequestExtra
+  extra: MCPRequestExtra,
+  logger: LoggerFn
 ): Promise<unknown> {
   const data = getServerTrackingData(server)
   if (!data) {
-    log(
+    logger(
       'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called instrument(server, options) before using tool calls.'
     )
     return await originalCallToolHandler(request, extra)
   }
 
-  if (request.params?.name === resolveMissingCapabilityToolName(data.options)) {
+  const toolName = request.params?.name
+  const isMissingCapabilityCandidate =
+    data.options.reportMissing && toolName === resolveMissingCapabilityToolName(data.options)
+
+  if (isMissingCapabilityCandidate && (await isToolAdvertised(server, toolName, extra, data.logger)) === false) {
     const context = getContextArgument(request) || ''
     return await captureToolCall({
       server,
@@ -280,20 +247,22 @@ async function handleToolCallRequest(
       extra,
       eventType: MCPAnalyticsEventType.mcpMissingCapability,
       explicitContextIntent: context,
-      execute: async () => handleReportMissing({ context }),
+      execute: async () => handleReportMissing({ context }, data.logger),
     })
   }
 
-  // The high-level handler re-derives arguments from the original request and
-  // strips the injected params inside the wrapped callback, so we hand it the
-  // original request rather than the conversation-stripped one. Errors thrown
-  // by the tool are stashed on `extra` by the callback wrapper; surface them.
+  const registeredTool = toolName ? highLevelServer._registeredTools[toolName] : undefined
+
+  // Strip SDK-owned arguments before the MCP SDK validates the registered Zod
+  // schema. The callback wrapper repeats the ownership-aware cleanup as a
+  // defensive fallback for direct callback invocation.
   return await captureToolCall({
     server,
     data,
     request,
     extra,
-    execute: () => originalCallToolHandler(request, extra),
+    execute: (downstreamRequest) => originalCallToolHandler(downstreamRequest as MCPRequest, extra),
+    parameterOwnership: registeredTool ? getAnalyticsParameterOwnership(registeredTool.inputSchema) : undefined,
     takeCapturedError: () => {
       const captured = extra?.__mcp_analytics_error
       if (extra) {
@@ -304,29 +273,32 @@ async function handleToolCallRequest(
   })
 }
 
-export function instrumentHighLevelServer(server: HighLevelMCPServerLike): void {
+export function instrumentHighLevelServer(server: HighLevelMCPServerLike, logger: LoggerFn): void {
   try {
     const lowLevelServer = server.server
     const mcpAnalyticsData = getServerTrackingData(lowLevelServer)
 
     // Patch already existing handlers, and patch setRequestHandler to capture dynamically created handlers.
-    const handlers = {
-      initialize: handleInitializeRequest,
-      'tools/list': handleListToolsRequest,
-      'tools/call': handleToolCallRequest,
+    const handlers: Record<string, HandlerPatch> = {
+      initialize: (trackedServer, originalHandler, request, extra) =>
+        handleInitializeRequest(trackedServer, originalHandler, request, extra, logger),
+      'tools/list': (trackedServer, originalHandler, request, extra) =>
+        handleListToolsRequest(trackedServer, originalHandler, request, extra, logger),
+      'tools/call': (trackedServer, originalHandler, request, extra) =>
+        handleToolCallRequest(server, trackedServer, originalHandler, request, extra, logger),
     }
     patchRequestHandlers(lowLevelServer, handlers)
 
-    server._registeredTools = addTracingToToolRegistry(server._registeredTools, server)
+    server._registeredTools = addTracingToToolRegistry(server._registeredTools, server, logger)
 
     if (mcpAnalyticsData) {
       seedToolDescriptionsFromRegistry(mcpAnalyticsData.toolDescriptions, server._registeredTools)
       seedToolCategoriesFromRegistry(mcpAnalyticsData.toolCategories, server._registeredTools)
     }
 
-    setupListenerToRegisteredTools(server)
+    setupListenerToRegisteredTools(server, logger)
   } catch (error) {
-    log(`Warning: Failed to setup tool call instrumentation - ${error}`)
+    logger(`Warning: Failed to setup tool call instrumentation - ${error}`)
   }
 }
 
