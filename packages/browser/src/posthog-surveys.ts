@@ -280,12 +280,10 @@ export class PostHogSurveys implements Extension {
                 const statusCode = response.statusCode
                 if (statusCode !== 200 || !response.json) {
                     const error = `Surveys API could not be loaded, status: ${statusCode}`
-                    if (statusCode === 0) {
-                        if (!response.error) {
-                            logger.warn(error)
-                        }
-                    } else {
+                    if (statusCode !== 0) {
                         logger.error(error)
+                    } else if (!response.error) {
+                        logger.warn(error)
                     }
                     this._lastSurveyRefreshFailedAt = Date.now()
                     const context = { isLoaded: false, error }

@@ -568,6 +568,55 @@ describe('ConversationsManager', () => {
             }
         )
 
+        it.each([
+            {
+                failure: 'HTTP',
+                response: { statusCode: 500, json: { detail: 'Internal server error' } },
+                kind: 'http',
+                message: 'Internal server error',
+            },
+            {
+                failure: 'rate limit',
+                response: { statusCode: 429 },
+                kind: 'rate_limit',
+                message: 'Too many requests. Please wait before trying again.',
+            },
+            {
+                failure: 'invalid response',
+                response: { statusCode: 200 },
+                kind: 'invalid_response',
+                message: 'Invalid response from server',
+            },
+        ])(
+            'logs restore retries once at warning severity for $failure failures',
+            async ({ response, kind, message }) => {
+                ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+                    options.callback(response)
+                })
+
+                const previousDebug = Config.DEBUG
+                Config.DEBUG = true
+                const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+                const errorSpy = jest.spyOn(console, 'error').mockImplementation()
+
+                try {
+                    await expect(manager.restoreFromToken('restore-token')).rejects.toMatchObject({ kind, message })
+                    expect(mockPosthog._send_request).toHaveBeenCalledTimes(2)
+                    expect(warnSpy).toHaveBeenCalledTimes(1)
+                    expect(warnSpy).toHaveBeenCalledWith(
+                        expect.stringContaining('[ConversationsManager]'),
+                        'Restore token exchange failed, retrying once',
+                        expect.objectContaining({ kind, message })
+                    )
+                    expect(errorSpy).not.toHaveBeenCalled()
+                } finally {
+                    warnSpy.mockRestore()
+                    errorSpy.mockRestore()
+                    Config.DEBUG = previousDebug
+                }
+            }
+        )
+
         it('warns once for a bare status-zero polling response', async () => {
             ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
                 options.callback({ statusCode: 0 })
@@ -584,6 +633,33 @@ describe('ConversationsManager', () => {
                 expect(warnSpy).toHaveBeenCalledWith(
                     expect.stringContaining('[ConversationsManager]'),
                     'Network error fetching tickets'
+                )
+                expect(errorSpy).not.toHaveBeenCalled()
+            } finally {
+                warnSpy.mockRestore()
+                errorSpy.mockRestore()
+                Config.DEBUG = previousDebug
+            }
+        })
+
+        it('warns once for a bare status-zero restore response', async () => {
+            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+                options.callback({ statusCode: 0 })
+            })
+
+            const previousDebug = Config.DEBUG
+            Config.DEBUG = true
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+            const errorSpy = jest.spyOn(console, 'error').mockImplementation()
+
+            try {
+                await expect(manager.restoreFromToken('restore-token')).rejects.toMatchObject({ kind: 'network' })
+                expect(mockPosthog._send_request).toHaveBeenCalledTimes(2)
+                expect(warnSpy).toHaveBeenCalledTimes(1)
+                expect(warnSpy).toHaveBeenCalledWith(
+                    expect.stringContaining('[ConversationsManager]'),
+                    'Restore token exchange failed, retrying once',
+                    expect.objectContaining({ kind: 'network' })
                 )
                 expect(errorSpy).not.toHaveBeenCalled()
             } finally {

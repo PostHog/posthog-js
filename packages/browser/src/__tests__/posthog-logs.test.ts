@@ -1204,6 +1204,24 @@ describe('posthog-logs', () => {
 
                 expect(mockLogger.error).not.toHaveBeenCalled()
             })
+
+            it('logs unhandled failures from an explicit flush', async () => {
+                const error = { statusCode: 500 }
+                const flush = jest.fn().mockRejectedValue(error)
+                const core = (logs as any)._core
+                ;(logs as any)._core = { flush }
+                mockLogger.error.mockClear()
+
+                try {
+                    logs.flushLogs()
+                    await flush.mock.results[0].value.catch(() => {})
+                    await Promise.resolve()
+
+                    expect(mockLogger.error).toHaveBeenCalledWith('PostHog logs flush failed:', error)
+                } finally {
+                    ;(logs as any)._core = core
+                }
+            })
         })
 
         describe('status 0 circuit breaker', () => {

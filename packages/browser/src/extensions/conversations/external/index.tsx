@@ -41,37 +41,48 @@ const createConversationsRequestError = (
     response: RequestResponse,
     operation: string,
     fallbackMessage: string,
-    rateLimitIsWarning: boolean = false
+    rateLimitIsWarning: boolean = false,
+    logFailure: boolean = true
 ): Error => {
     if (response.statusCode === 0) {
         // Fetch failures are already logged by `_send_request`. XHR reports status 0
         // without an error, so keep one warning for that otherwise-unlogged path.
-        if (!response.error) {
-            logger.warn(`Network error ${operation}`)
-        }
-        return createConversationsError(
+        const error = createConversationsError(
             'network',
             'Unable to reach the server. Please check your connection and try again.'
         )
+        if (response.error) {
+            const errorWithCause = error as Error & { cause?: unknown }
+            errorWithCause.cause = response.error
+        } else if (logFailure) {
+            logger.warn(`Network error ${operation}`)
+        }
+        return error
     }
 
     if (response.statusCode === 429) {
-        if (rateLimitIsWarning) {
-            logger.warn(`Rate limited ${operation}`)
-        } else {
-            logger.error(fallbackMessage, { status: response.statusCode })
+        if (logFailure) {
+            if (rateLimitIsWarning) {
+                logger.warn(`Rate limited ${operation}`)
+            } else {
+                logger.error(fallbackMessage, { status: response.statusCode })
+            }
         }
         return createConversationsError('rate_limit', 'Too many requests. Please wait before trying again.')
     }
 
     const message = response.json?.error || response.json?.detail || response.json?.message || fallbackMessage
-    logger.error(fallbackMessage, { status: response.statusCode })
+    if (logFailure) {
+        logger.error(fallbackMessage, { status: response.statusCode })
+    }
     return createConversationsError('http', message)
 }
 
-const createInvalidConversationsResponseError = (operation: string): Error => {
+const createInvalidConversationsResponseError = (operation: string, logFailure: boolean = true): Error => {
     const message = 'Invalid response from server'
-    logger.error(message, { operation })
+    if (logFailure) {
+        logger.error(message, { operation })
+    }
     return createConversationsError('invalid_response', message)
 }
 
@@ -487,7 +498,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
         try {
             return await this._restoreFromToken(restoreToken)
         } catch (error) {
-            if (!isConversationsError(error)) {
+            const requestLayerHandledNetworkError =
+                isConversationsError(error) && error.kind === 'network' && 'cause' in error
+            if (!requestLayerHandledNetworkError) {
                 logger.warn('Restore token exchange failed, retrying once', error)
             }
             return await this._restoreFromToken(restoreToken)
@@ -520,14 +533,15 @@ export class ConversationsManager implements ConversationsManagerInterface {
                                 response,
                                 'restoring conversations',
                                 'Failed to restore conversations',
-                                true
+                                true,
+                                false
                             )
                         )
                         return
                     }
 
                     if (!response.json) {
-                        reject(createInvalidConversationsResponseError('restoring conversations'))
+                        reject(createInvalidConversationsResponseError('restoring conversations', false))
                         return
                     }
 
