@@ -33,7 +33,7 @@ export function getContextDescription(context: MCPAnalyticsOptions['context']): 
  *
  * Skips injection (with warning) for:
  * - Tools that already have a 'context' parameter
- * - Complex schemas (oneOf/allOf/anyOf) that can't safely have properties added
+ * - Complex schemas (oneOf/allOf/anyOf/$ref) that can't safely have properties added
  * - Schemas with additionalProperties: false
  */
 export function addContextParameterToTool<TTool extends ContextInjectableTool>(
@@ -50,7 +50,7 @@ export function addContextParameterToTool<TTool extends ContextInjectableTool>(
     if (hasAnalyticsParameter(schema, 'context')) {
       logger(`WARN: Tool "${toolName}" already has 'context' parameter. Skipping context injection.`)
     } else {
-      logger(`WARN: Tool "${toolName}" has complex schema (oneOf/allOf/anyOf). Skipping context injection.`)
+      logger(`WARN: Tool "${toolName}" has complex schema (oneOf/allOf/anyOf/$ref). Skipping context injection.`)
     }
     return modifiedTool
   }

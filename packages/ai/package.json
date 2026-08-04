@@ -1,6 +1,6 @@
 {
   "name": "@posthog/ai",
-  "version": "8.6.1",
+  "version": "8.6.2",
   "description": "PostHog Node.js AI integrations",
   "repository": {
     "type": "git",
@@ -13,12 +13,13 @@
   "license": "MIT",
   "scripts": {
     "clean": "rimraf dist",
-    "test:unit": "jest",
+    "test:unit": "jest && pnpm test:module-load",
+    "test:module-load": "node tests/otel-module-load.cjs",
     "lint": "eslint src tests",
     "lint:fix": "eslint src tests --fix",
     "build": "rollup -c",
     "dev": "rollup -c --watch",
-    "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
+    "prepublishOnly": "pnpm lint && pnpm build && pnpm test:unit",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
   "devDependencies": {
@@ -30,7 +31,6 @@
     "@openai/agents": "^0.8.0",
     "@openai/agents-core": "^0.8.0",
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/core": "^2.0.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.200.0",
     "@opentelemetry/otlp-exporter-base": "^0.200.0",
     "@opentelemetry/sdk-trace-base": "^2.0.0",

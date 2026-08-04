@@ -1,5 +1,14 @@
 # posthog-node
 
+## 5.47.8
+
+### Patch Changes
+
+- [#4348](https://github.com/PostHog/posthog-js/pull/4348) [`d4ffb83`](https://github.com/PostHog/posthog-js/commit/d4ffb83a1bebeb99edc8e9452a674c146c22f033) Thanks [@marandaneto](https://github.com/marandaneto)! - Schedule local feature flag polls after each request settles.
+  (2026-08-04)
+- Updated dependencies [[`821a2c6`](https://github.com/PostHog/posthog-js/commit/821a2c6bc46c61b988f92557f52a0b84afb342a8)]:
+  - @posthog/core@1.46.6
+
 ## 5.47.7
 
 ### Patch Changes

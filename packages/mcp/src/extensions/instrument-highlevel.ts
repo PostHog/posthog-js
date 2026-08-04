@@ -11,19 +11,16 @@ import type {
   RegisteredTool,
   ToolCallback,
 } from '../types'
-import { canInjectAnalyticsParameter } from './analytics-parameters'
-import { stripConversationId } from './conversation-id'
+import {
+  analyticsOwnsParameter,
+  getAnalyticsParameterOwnership,
+  stripOwnedAnalyticsArguments,
+} from './analytics-parameters'
 import { isContextEnabled } from './context-parameters'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
 import type { LoggerFn } from './logger'
-import {
-  createWrappedTool,
-  getObjectShape,
-  getToolFunction,
-  hasToolFunction,
-  isZodRawShapeCompat,
-} from './mcp-sdk-compat'
+import { createWrappedTool, getToolFunction, hasToolFunction } from './mcp-sdk-compat'
 import { handleReportMissing, resolveMissingCapabilityToolName } from './tools'
 import {
   handleInitializeRequest,
@@ -51,41 +48,6 @@ type ProcessedRegisteredTool = RegisteredTool & {
 
 function isCallbackUpdate(value: unknown): value is { callback: ToolCallback } {
   return !!value && typeof value === 'object' && 'callback' in value && typeof value.callback === 'function'
-}
-
-function analyticsOwnsParameter(inputSchema: unknown, parameterName: string): boolean {
-  if (!inputSchema || typeof inputSchema !== 'object') {
-    return canInjectAnalyticsParameter(undefined, parameterName)
-  }
-
-  if (isZodRawShapeCompat(inputSchema)) {
-    return canInjectAnalyticsParameter({ properties: inputSchema }, parameterName)
-  }
-
-  const shape = getObjectShape(inputSchema)
-  if (shape) {
-    return canInjectAnalyticsParameter({ properties: shape }, parameterName)
-  }
-
-  const schema = inputSchema as Record<string, unknown>
-  if ('_def' in schema || '_zod' in schema || '~standard' in schema) {
-    // The MCP SDK advertises non-object schemas as an empty object schema.
-    return canInjectAnalyticsParameter(undefined, parameterName)
-  }
-
-  return canInjectAnalyticsParameter(schema, parameterName)
-}
-
-function stripOwnedAnalyticsArguments(
-  args: unknown,
-  ownership: { context: boolean; conversationId: boolean }
-): unknown {
-  let cleanedArgs = args
-  if (ownership.context && cleanedArgs && typeof cleanedArgs === 'object' && 'context' in cleanedArgs) {
-    const { context: _context, ...rest } = cleanedArgs
-    cleanedArgs = rest
-  }
-  return ownership.conversationId ? stripConversationId(cleanedArgs) : cleanedArgs
 }
 
 function addTracingToToolRegistry(
@@ -265,6 +227,7 @@ function addTracingToToolCallbackInternal(
 }
 
 async function handleToolCallRequest(
+  highLevelServer: HighLevelMCPServerLike,
   server: MCPServerLike,
   originalCallToolHandler: MCPRequestHandler,
   request: MCPRequest,
@@ -292,16 +255,19 @@ async function handleToolCallRequest(
     })
   }
 
-  // The high-level handler re-derives arguments from the original request and
-  // strips the injected params inside the wrapped callback, so we hand it the
-  // original request rather than the conversation-stripped one. Errors thrown
-  // by the tool are stashed on `extra` by the callback wrapper; surface them.
+  const toolName = request.params?.name
+  const registeredTool = toolName ? highLevelServer._registeredTools[toolName] : undefined
+
+  // Strip SDK-owned arguments before the MCP SDK validates the registered Zod
+  // schema. The callback wrapper repeats the ownership-aware cleanup as a
+  // defensive fallback for direct callback invocation.
   return await captureToolCall({
     server,
     data,
     request,
     extra,
-    execute: () => originalCallToolHandler(request, extra),
+    execute: (downstreamRequest) => originalCallToolHandler(downstreamRequest as MCPRequest, extra),
+    parameterOwnership: registeredTool ? getAnalyticsParameterOwnership(registeredTool.inputSchema) : undefined,
     takeCapturedError: () => {
       const captured = extra?.__mcp_analytics_error
       if (extra) {
@@ -319,12 +285,12 @@ export function instrumentHighLevelServer(server: HighLevelMCPServerLike, logger
 
     // Patch already existing handlers, and patch setRequestHandler to capture dynamically created handlers.
     const handlers: Record<string, HandlerPatch> = {
-      initialize: (server, originalHandler, request, extra) =>
-        handleInitializeRequest(server, originalHandler, request, extra, logger),
-      'tools/list': (server, originalHandler, request, extra) =>
-        handleListToolsRequest(server, originalHandler, request, extra, logger),
-      'tools/call': (server, originalHandler, request, extra) =>
-        handleToolCallRequest(server, originalHandler, request, extra, logger),
+      initialize: (trackedServer, originalHandler, request, extra) =>
+        handleInitializeRequest(trackedServer, originalHandler, request, extra, logger),
+      'tools/list': (trackedServer, originalHandler, request, extra) =>
+        handleListToolsRequest(trackedServer, originalHandler, request, extra, logger),
+      'tools/call': (trackedServer, originalHandler, request, extra) =>
+        handleToolCallRequest(server, trackedServer, originalHandler, request, extra, logger),
     }
     patchRequestHandlers(lowLevelServer, handlers)
 
