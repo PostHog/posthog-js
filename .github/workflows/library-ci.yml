@@ -111,6 +111,9 @@ jobs:
         with:
           build: false
 
+      - name: Install jq
+        run: apt-get update && apt-get install --yes --no-install-recommends jq
+
       - name: Build package
         run: pnpm build
 
