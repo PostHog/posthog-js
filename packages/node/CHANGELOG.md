@@ -1,5 +1,58 @@
 # posthog-node
 
+## 5.47.7
+
+### Patch Changes
+
+- [#4352](https://github.com/PostHog/posthog-js/pull/4352) [`1cf9c6d`](https://github.com/PostHog/posthog-js/commit/1cf9c6d555b3a774bfa0bd109de290656e64d662) Thanks [@marandaneto](https://github.com/marandaneto)! - Bound stack source context reads and skip non-regular or oversized files.
+  (2026-08-03)
+
+## 5.47.6
+
+### Patch Changes
+
+- [#4381](https://github.com/PostHog/posthog-js/pull/4381) [`f3a71a1`](https://github.com/PostHog/posthog-js/commit/f3a71a1f462384543de5f39762c3c1ed7b532be8) Thanks [@marandaneto](https://github.com/marandaneto)! - Clear completed lifecycle timeout handles so successful shutdowns do not leave timers running.
+  (2026-08-03)
+- Updated dependencies [[`f3a71a1`](https://github.com/PostHog/posthog-js/commit/f3a71a1f462384543de5f39762c3c1ed7b532be8)]:
+  - @posthog/core@1.46.4
+
+## 5.47.5
+
+### Patch Changes
+
+- [#4155](https://github.com/PostHog/posthog-js/pull/4155) [`eb0a793`](https://github.com/PostHog/posthog-js/commit/eb0a7930eebf2474dc03846b36891dc33df112f7) Thanks [@ATKasem](https://github.com/ATKasem)! - fix: `personProperties` and `groupProperties` on the feature flag methods are no longer typed as `Record<string, string>`, so numeric and boolean values type-check without a cast. Local evaluation already handled them — `matchProperty` takes `Record<string, any>` and compares numerically for `gt`/`gte`/`lt`/`lte` — only the public types disagreed. These now use the shared `Properties` type (`personProperties?: Properties`, `groupProperties?: Record<string, Properties>`), matching `setPersonPropertiesForFlags`/`setGroupPropertiesForFlags` so the `any` can be narrowed later. Types only, no runtime change.
+  (2026-08-03)
+- Updated dependencies [[`eb0a793`](https://github.com/PostHog/posthog-js/commit/eb0a7930eebf2474dc03846b36891dc33df112f7)]:
+  - @posthog/core@1.46.3
+
+## 5.47.4
+
+### Patch Changes
+
+- [#4347](https://github.com/PostHog/posthog-js/pull/4347) [`7c3a9af`](https://github.com/PostHog/posthog-js/commit/7c3a9af42be80051705f7fe820623dd7e1b879d5) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve events added to a full queue while an earlier batch is being flushed.
+  (2026-08-03)
+- Updated dependencies [[`7c3a9af`](https://github.com/PostHog/posthog-js/commit/7c3a9af42be80051705f7fe820623dd7e1b879d5)]:
+  - @posthog/core@1.46.2
+
+## 5.47.3
+
+### Patch Changes
+
+- [#4349](https://github.com/PostHog/posthog-js/pull/4349) [`0e2b371`](https://github.com/PostHog/posthog-js/commit/0e2b371f7bf3a32fbb5b7079c9adf4b106a35b29) Thanks [@marandaneto](https://github.com/marandaneto)! - Apply the feature flag definition request timeout while consuming the response body.
+  (2026-07-31)
+
+- [#4349](https://github.com/PostHog/posthog-js/pull/4349) [`0e2b371`](https://github.com/PostHog/posthog-js/commit/0e2b371f7bf3a32fbb5b7079c9adf4b106a35b29) Thanks [@marandaneto](https://github.com/marandaneto)! - Keep the feature flag definition request timeout active until the request settles.
+  (2026-07-31)
+
+## 5.47.2
+
+### Patch Changes
+
+- [#4332](https://github.com/PostHog/posthog-js/pull/4332) [`b9a241e`](https://github.com/PostHog/posthog-js/commit/b9a241ec862ba5b753ef34d94c856257bdff2a2f) Thanks [@ioannisj](https://github.com/ioannisj)! - Fix `identify()` leaving a user anonymous when the supplied ID already matches the persisted distinct ID (for example after a non-identified bootstrap seeded the same ID). The user is now marked identified and a person-processed `$set` event is captured. Ports the same fix from posthog-js (browser) to the shared core used by React Native, Node, and posthog-js-lite.
+  (2026-07-31)
+- Updated dependencies [[`b9a241e`](https://github.com/PostHog/posthog-js/commit/b9a241ec862ba5b753ef34d94c856257bdff2a2f)]:
+  - @posthog/core@1.46.1
+
 ## 5.47.1
 
 ### Patch Changes

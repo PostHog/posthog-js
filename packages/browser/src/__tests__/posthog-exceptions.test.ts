@@ -172,6 +172,39 @@ describe('PostHogExceptions', () => {
             expect(captureMock).toBeCalled()
         })
 
+        test.each([
+            [
+                'an operator the SDK does not implement',
+                createSuppressionRule('AND', [
+                    {
+                        key: '$lib',
+                        value: 'is_not_set',
+                        operator: 'is_not_set',
+                        type: 'event_property',
+                    } as unknown as ErrorTrackingSuppressionRuleValue,
+                ]),
+            ],
+            [
+                'a negative operator on a key the SDK cannot resolve',
+                createSuppressionRule('OR', [
+                    {
+                        key: '$host',
+                        value: '(\\.|^)posthog\\.com$',
+                        operator: 'not_regex',
+                        type: 'event_property',
+                    } as unknown as ErrorTrackingSuppressionRuleValue,
+                ]),
+            ],
+            ['values that are not an array', { type: 'AND', values: null } as unknown as ErrorTrackingSuppressionRule],
+        ])('captures the exception when a rule uses %s', (_description, suppressionRule) => {
+            exceptions.onRemoteConfig({
+                ok: true,
+                config: { errorTracking: { suppressionRules: [suppressionRule] } } as RemoteConfig,
+            })
+            exceptions.sendExceptionEvent({ $exception_list: [{ type: 'TypeError', value: 'This is a type error' }] })
+            expect(captureMock).toBeCalled()
+        })
+
         it('captures an exception if there are no targets on the rule', () => {
             const suppressionRule = createSuppressionRule('OR', [
                 {

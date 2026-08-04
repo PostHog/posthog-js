@@ -75,6 +75,7 @@ export type {
     ExceptionRateLimiterConfig,
     MaskInputOptions,
     SlimDOMOptions,
+    SessionRecordingSamplingConfig,
     SessionRecordingOptions,
     RequestQueueConfig,
     LogCaptureOptions,

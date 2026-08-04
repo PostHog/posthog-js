@@ -31,6 +31,7 @@ import {
   removeTrailingSlash,
   retriable,
   RetriableOptions,
+  raceWithTimeout,
   safeSetTimeout,
   STRING_FORMAT,
   createLogger,
@@ -1454,7 +1455,25 @@ export abstract class PostHogCoreStateless {
 
       const persistQueueChange = async (): Promise<void> => {
         const refreshedQueue = this.getPersistedProperty<PostHogQueueItem[]>(queueKey) || []
-        const newQueue = refreshedQueue.slice(batchItems.length)
+        // The live queue may have overflowed while this batch was in flight. Remove only
+        // snapshotted items: UUID survives persistence, while reference identity supports
+        // legacy queue items without a UUID.
+        const remainingBatchItems = [...batchItems]
+        const newQueue = refreshedQueue.filter((item) => {
+          const itemUuid = item.message?.uuid
+          const batchItemIndex = remainingBatchItems.findIndex(
+            (batchItem) =>
+              batchItem === item ||
+              (typeof itemUuid === 'string' && itemUuid.length > 0 && batchItem.message?.uuid === itemUuid)
+          )
+
+          if (batchItemIndex === -1) {
+            return true
+          }
+
+          remainingBatchItems.splice(batchItemIndex, 1)
+          return false
+        })
         this.setPersistedProperty<PostHogQueueItem[]>(queueKey, newQueue)
         queue = newQueue
         this._dequeuedMessagesCount += batchItems.length
@@ -1706,21 +1725,11 @@ export abstract class PostHogCoreStateless {
       }
     }
 
-    let timeoutHandle: ReturnType<typeof safeSetTimeout> | undefined
-    try {
-      return await Promise.race([
-        new Promise<void>((_, reject) => {
-          timeoutHandle = safeSetTimeout(() => {
-            this._logger.error('Timed out while shutting down PostHog')
-            hasTimedOut = true
-            reject('Timeout while shutting down PostHog. Some events may not have been sent.')
-          }, shutdownTimeoutMs)
-        }),
-        doShutdown(),
-      ])
-    } finally {
-      clearTimeout(timeoutHandle)
-    }
+    return raceWithTimeout(doShutdown(), shutdownTimeoutMs, () => {
+      this._logger.error('Timed out while shutting down PostHog')
+      hasTimedOut = true
+      throw 'Timeout while shutting down PostHog. Some events may not have been sent.'
+    })
   }
 
   /**

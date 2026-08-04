@@ -4,21 +4,16 @@
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
 import type { MCPAnalyticsOptions } from '../types'
+import {
+  canInjectAnalyticsParameter,
+  hasAnalyticsParameter,
+  type AnalyticsInjectableJsonSchema,
+} from './analytics-parameters'
 import { DEFAULT_CONTEXT_PARAMETER_DESCRIPTION } from './constants'
 import { log, type LoggerFn } from './logger'
 
-interface JsonSchema {
-  additionalProperties?: boolean
-  allOf?: unknown
-  anyOf?: unknown
-  oneOf?: unknown
-  properties?: Record<string, unknown>
-  required?: string[]
-  type?: string
-}
-
 export interface ContextInjectableTool {
-  inputSchema?: JsonSchema
+  inputSchema?: AnalyticsInjectableJsonSchema
   name?: string
   [key: string]: unknown
 }
@@ -49,17 +44,14 @@ export function addContextParameterToTool<TTool extends ContextInjectableTool>(
   // Create a shallow copy of the tool to avoid modifying the original
   const modifiedTool = { ...tool }
   const toolName = tool.name || 'unknown'
-  const schema = modifiedTool.inputSchema as JsonSchema | undefined
+  const schema = modifiedTool.inputSchema as AnalyticsInjectableJsonSchema | undefined
 
-  // Check if tool already has context parameter - skip to avoid collision
-  if (schema?.properties?.context) {
-    logger(`WARN: Tool "${toolName}" already has 'context' parameter. Skipping context injection.`)
-    return modifiedTool
-  }
-
-  // Skip complex schemas that can't safely have properties added at root level
-  if (schema?.oneOf || schema?.allOf || schema?.anyOf) {
-    logger(`WARN: Tool "${toolName}" has complex schema (oneOf/allOf/anyOf). Skipping context injection.`)
+  if (!canInjectAnalyticsParameter(schema, 'context')) {
+    if (hasAnalyticsParameter(schema, 'context')) {
+      logger(`WARN: Tool "${toolName}" already has 'context' parameter. Skipping context injection.`)
+    } else {
+      logger(`WARN: Tool "${toolName}" has complex schema (oneOf/allOf/anyOf). Skipping context injection.`)
+    }
     return modifiedTool
   }
 
@@ -78,9 +70,9 @@ export function addContextParameterToTool<TTool extends ContextInjectableTool>(
   const contextDescription = contextDescriptionOverride || DEFAULT_CONTEXT_PARAMETER_DESCRIPTION
 
   // Deep copy the inputSchema to avoid mutations
-  modifiedTool.inputSchema = JSON.parse(JSON.stringify(modifiedTool.inputSchema)) as JsonSchema
+  modifiedTool.inputSchema = JSON.parse(JSON.stringify(modifiedTool.inputSchema)) as AnalyticsInjectableJsonSchema
 
-  const inputSchema = modifiedTool.inputSchema as JsonSchema
+  const inputSchema = modifiedTool.inputSchema as AnalyticsInjectableJsonSchema
 
   // Ensure properties object exists
   if (!inputSchema.properties) {
