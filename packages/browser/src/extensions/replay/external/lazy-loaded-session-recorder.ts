@@ -1015,12 +1015,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return
         }
 
-        // a fresh start is never held — only rotation-born epochs are (re-set in
-        // _restartForSessionIdChange after this returns). Guarded on isStarted so a
-        // re-entrant start() on a live held recorder (e.g. a remote-config refresh)
-        // cannot release a hold that only a user interaction should release.
+        // any epoch that starts without confirmed user activity is held until there's
+        // evidence someone cares (interaction, event trigger, or explicit override) —
+        // a tab nobody touches (prefetch, background load) must not ship a billable
+        // recording. Rotation-born epochs re-set this in _restartForSessionIdChange
+        // after this returns. Guarded on isStarted so a re-entrant start() on a live
+        // held recorder (e.g. a remote-config refresh) cannot release a hold that only
+        // interaction evidence should release.
         if (!this.isStarted) {
-            this._holdFlushUntilInteraction = false
+            this._holdFlushUntilInteraction = this._isIdle !== false
         }
 
         // Invalidate any in-flight async cleanup queued by a prior stop(). On a session-id
@@ -1379,7 +1382,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return
         }
         this._holdFlushUntilInteraction = false
-        this._flushBuffer()
+        // schedule rather than flush synchronously: an immediate flush would split
+        // batches (an extra network request per released epoch) and can run before
+        // the sampling decision applies; the timer path re-checks _flushBuffer's gates
+        if (!this._flushBufferTimer) {
+            this._flushBufferTimer = setTimeout(() => {
+                this._flushBuffer()
+            }, RECORDING_BUFFER_TIMEOUT)
+        }
     }
 
     discard() {
@@ -1718,6 +1728,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     public overrideLinkedFlag() {
         this._linkedFlagMatching.linkedFlagSeen = true
         this._tryTakeFullSnapshot()
+        // an override is explicit intent to record, so an interaction-less hold must not swallow it
+        this._releaseHoldAndFlush()
         this._reportStarted('linked_flag_overridden')
     }
 
@@ -1734,6 +1746,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             [SESSION_RECORDING_SAMPLE_RATE]: null,
         })
         this._tryTakeFullSnapshot()
+        // an override is explicit intent to record, so an interaction-less hold must not swallow it
+        this._releaseHoldAndFlush()
         this._reportStarted('sampling_overridden')
     }
 
@@ -1744,6 +1758,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
      * instead call `posthog.startSessionRecording({trigger: 'url' | 'event'})`
      * */
     public overrideTrigger(triggerType: TriggerType) {
+        // unlike an organic URL trigger match, an explicit override is intent to record,
+        // so it releases the interaction-less hold for both trigger types
+        this._releaseHoldAndFlush()
         this._activateTrigger(triggerType)
     }
 
