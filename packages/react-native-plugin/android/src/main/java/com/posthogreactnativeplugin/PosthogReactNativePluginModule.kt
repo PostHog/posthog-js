@@ -548,19 +548,24 @@ class PosthogReactNativePluginModule(
       completion(null)
     }
 
+    @Volatile private var cachedFirebaseProjectId: String? = null
+
     // No Firebase dependency here, so the project id is looked up reflectively and any
-    // failure (class missing, Firebase not initialized) is swallowed. Memoized: the id
-    // can't change without an app restart, and token-refresh listeners call this repeatedly.
-    private val firebaseProjectId: String? by
-      lazy {
-        try {
-          val firebaseAppClass = Class.forName("com.google.firebase.FirebaseApp")
-          val firebaseApp = firebaseAppClass.getMethod("getInstance").invoke(null)
-          val options = firebaseAppClass.getMethod("getOptions").invoke(firebaseApp)
-          options?.javaClass?.getMethod("getProjectId")?.invoke(options) as? String
-        } catch (e: Throwable) {
-          null
-        }
-      }
+    // failure (class missing, Firebase not initialized) is swallowed. Only a successful lookup
+    // is cached: getInstance() throws until Firebase initializes, so memoizing the null would
+    // strand every later token-refresh call with no resolvable appId for the process lifetime.
+    private val firebaseProjectId: String?
+      get() =
+        cachedFirebaseProjectId
+          ?: try {
+            val firebaseAppClass = Class.forName("com.google.firebase.FirebaseApp")
+            val firebaseApp = firebaseAppClass.getMethod("getInstance").invoke(null)
+            val options = firebaseAppClass.getMethod("getOptions").invoke(firebaseApp)
+            (options?.javaClass?.getMethod("getProjectId")?.invoke(options) as? String)?.also {
+              cachedFirebaseProjectId = it
+            }
+          } catch (e: Throwable) {
+            null
+          }
   }
 }
