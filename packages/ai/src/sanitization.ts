@@ -5,8 +5,7 @@ const redactor = new BinaryContentRedactor()
 export function redactBase64DataUrl(str: string, mediaType?: string): string
 export function redactBase64DataUrl(str: unknown, mediaType?: string): unknown
 export function redactBase64DataUrl(str: unknown, mediaType?: string): unknown {
-  if (!mediaType) return redactor.redact(str)
-  return (redactor.redact({ data: str, mediaType }) as { data: unknown }).data
+  return redactor.redact(str, mediaType)
 }
 
 export const sanitizeOpenAI = (data: unknown): unknown => redactor.redact(data)

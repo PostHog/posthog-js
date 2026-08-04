@@ -78,6 +78,16 @@ describe('redactBinaryContent', () => {
       )
     })
 
+    it('does not redact non-base64 content that starts with a base64 character', () => {
+      const value = 'Uhello world'
+      expect((redactBinaryContent({ data: value, mediaType: 'image/png' }) as any).data).toBe(value)
+    })
+
+    it('uses the first sibling MIME consistently for recognition and the placeholder', () => {
+      const out = redactBinaryContent({ data: SHORT_B64, mediaType: 'text/plain', mimeType: 'image/png' })
+      expect((out as any).data).toBe(SHORT_B64)
+    })
+
     it('keeps the strong threshold when context has no explicit MIME', () => {
       expect((redactBinaryContent({ type: 'image', data: SHORT_B64 }) as any).data).toBe(SHORT_B64)
     })

@@ -9,11 +9,11 @@ export class BinaryContentRedactor {
 
   constructor(private readonly recognizer: Base64Recognizer = new Base64Recognizer()) {}
 
-  redact<T>(value: T): T
-  redact(value: unknown): unknown {
+  redact<T>(value: T, mediaType?: string): T
+  redact(value: unknown, mediaType?: string): unknown {
     if (this.isMultimodalEnabled()) return value
     this.visited = new WeakSet()
-    return this.walk(value, MediaTypeContext.EMPTY)
+    return this.walk(value, mediaType ? new MediaTypeContext(undefined, undefined, mediaType) : MediaTypeContext.EMPTY)
   }
 
   private walk(value: unknown, ctx: MediaTypeContext): unknown {
@@ -42,12 +42,14 @@ export class BinaryContentRedactor {
   }
 
   private redactString(value: string, ctx: MediaTypeContext): string {
-    const minLength = ctx.hasExplicitBinaryMediaType()
-      ? 1
+    const hasExplicitBinaryMediaType = ctx.hasExplicitBinaryMediaType()
+    const recognitionValue = hasExplicitBinaryMediaType ? value.replace(/[\r\n]/g, '') : value
+    const minLength = hasExplicitBinaryMediaType
+      ? Math.min(recognitionValue.length, STRONG_CONTEXT_MIN_LENGTH)
       : ctx.signalsBinary()
         ? STRONG_CONTEXT_MIN_LENGTH
         : WEAK_CONTEXT_MIN_LENGTH
-    const recognition = this.recognizer.recognize(value, minLength)
+    const recognition = this.recognizer.recognize(recognitionValue, minLength)
     switch (recognition.kind) {
       case 'data-url':
         return this.placeholderFor(recognition.mediaType)
