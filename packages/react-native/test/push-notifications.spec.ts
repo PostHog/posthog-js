@@ -116,13 +116,12 @@ describe('push notifications', () => {
       await posthog.shutdown()
     })
 
-    it('skips the native flags and remote-config fetch when push is the only reason to init', async () => {
+    it('skips the native feature-flag preload when push is the only reason to init', async () => {
       const posthog = await createPostHog()
 
-      // JS already owns flags and remote config; a push-only native SDK must not duplicate them.
+      // JS already owns flags; a push-only native SDK must not duplicate the fetch.
       const sdkOptions = mockPlugin.setup.mock.calls[0][1]
       expect(sdkOptions.preloadFeatureFlags).toBe(false)
-      expect(sdkOptions.remoteConfig).toBe(false)
 
       await posthog.shutdown()
     })
@@ -135,7 +134,6 @@ describe('push notifications', () => {
 
       const sdkOptions = mockPlugin.setup.mock.calls[0][1]
       expect(sdkOptions.preloadFeatureFlags).toBe(true)
-      expect(sdkOptions.remoteConfig).toBe(true)
 
       await posthog.shutdown()
     })

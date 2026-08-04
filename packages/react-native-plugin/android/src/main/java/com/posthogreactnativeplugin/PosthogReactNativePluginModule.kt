@@ -98,9 +98,8 @@ class PosthogReactNativePluginModule(
           val theSdkVersion = getString(sdkOptions, "sdkVersion", "")
           val theFlushAt = getInt(sdkOptions, "flushAt", DEFAULT_FLUSH_AT)
           val theOptOut = getBoolean(sdkOptions, "optOut", false)
-          // Default true: an older JS layer that never sends these keeps native's own fetch.
+          // Default true: an older JS layer that never sends this keeps native's own fetch.
           val thePreloadFeatureFlags = getBoolean(sdkOptions, "preloadFeatureFlags", true)
-          val theRemoteConfig = getBoolean(sdkOptions, "remoteConfig", true)
 
           // Forward custom headers (e.g. Authorization for a reverse proxy) so the native SDK
           // attaches them to the requests it sends directly (session replay, crash uploads).
@@ -115,7 +114,6 @@ class PosthogReactNativePluginModule(
               debug = debugValue
               optOut = theOptOut
               preloadFeatureFlags = thePreloadFeatureFlags
-              remoteConfig = theRemoteConfig
               captureDeepLinks = false
               captureApplicationLifecycleEvents = false
               captureScreenViews = false

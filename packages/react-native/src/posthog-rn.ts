@@ -2379,8 +2379,9 @@ export class PostHog extends PostHogCore {
       `Session replay session recording from flags cached config: ${JSON.stringify(cachedSessionReplayConfig)}`
     )
 
-    // Push alone doesn't need native's flags/remote-config fetch — JS owns both. Error tracking's
-    // autocapture kill-switch does read it, so only skip when push is the sole reason for setup.
+    // Push alone doesn't need native's own feature-flag preload — JS already owns flags. Error
+    // tracking's autocapture kill-switch does, so only skip when push is the sole reason for
+    // setup. Remote config isn't skippable: both native SDKs deprecated that option to a no-op.
     const pushOnlyInit = enablePush && !enableSessionReplay && !enableNativeErrorTracking
 
     const sdkOptions = {
@@ -2395,7 +2396,6 @@ export class PostHog extends PostHogCore {
       // would keep registering a device token after optOut().
       optOut: this.optedOut,
       preloadFeatureFlags: !pushOnlyInit,
-      remoteConfig: !pushOnlyInit,
       // Native-sent requests (session replay, crash uploads) bypass the JS request path,
       // so the configured headers are passed through to the native plugin as well.
       requestHeaders: this._requestHeaders,
