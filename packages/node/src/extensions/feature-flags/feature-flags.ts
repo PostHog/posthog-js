@@ -1,6 +1,6 @@
 import { FeatureFlagCondition, FlagProperty, FlagPropertyValue, PostHogFeatureFlag, PropertyGroup } from '../../types'
 import type { FeatureFlagValue, JsonType, PostHogFetchOptions, PostHogFetchResponse } from '@posthog/core'
-import { safeSetTimeout } from '@posthog/core'
+import { raceWithTimeout, safeSetTimeout } from '@posthog/core'
 import { hashSHA1 } from './crypto'
 import { FlagDefinitionCacheProvider, FlagDefinitionCacheData } from './cache'
 
@@ -107,6 +107,7 @@ class FeatureFlagsPoller {
   onLoad?: (count: number) => void
   private cacheProvider?: FlagDefinitionCacheProvider
   private loadingPromise?: Promise<void>
+  private pollerStopped: boolean = false
   private flagsEtag?: string
   private nextFetchAllowedAt?: number
   private strictLocalEvaluation: boolean
@@ -823,8 +824,6 @@ class FeatureFlagsPoller {
       this.poller = undefined
     }
 
-    this.poller = setTimeout(() => this.loadFeatureFlags(true), this.getPollingInterval())
-
     try {
       let shouldFetch = true
       if (this.cacheProvider) {
@@ -975,6 +974,10 @@ class FeatureFlagsPoller {
       if (err instanceof ClientError) {
         this.onError?.(err)
       }
+    } finally {
+      if (!this.pollerStopped) {
+        this.poller = setTimeout(() => this.loadFeatureFlags(true), this.getPollingInterval())
+      }
     }
   }
 
@@ -998,7 +1001,7 @@ class FeatureFlagsPoller {
     }
   }
 
-  _requestFeatureFlagDefinitions(): Promise<PostHogFetchResponse> {
+  async _requestFeatureFlagDefinitions(): Promise<PostHogFetchResponse> {
     const url = `${this.host}/flags/definitions?token=${this.projectApiKey}&send_cohorts`
 
     const options = this.getPersonalApiKeyRequestOptions('GET', this.flagsEtag)
@@ -1013,18 +1016,48 @@ class FeatureFlagsPoller {
       options.signal = controller.signal
     }
 
+    const clearAbortTimeout = () => clearTimeout(abortTimeout)
+
     try {
       // Unbind fetch from `this` to avoid potential issues in edge environments, e.g., Cloudflare Workers:
       // https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors
       const fetch = this.fetch
-      return fetch(url, options)
-    } finally {
-      clearTimeout(abortTimeout)
+      const res = await fetch(url, options)
+
+      if (res.status !== 200) {
+        clearAbortTimeout()
+        return res
+      }
+
+      return {
+        status: res.status,
+        headers: res.headers,
+        body: res.body,
+        text: async () => {
+          try {
+            return await res.text()
+          } finally {
+            clearAbortTimeout()
+          }
+        },
+        json: async () => {
+          try {
+            return await res.json()
+          } finally {
+            clearAbortTimeout()
+          }
+        },
+      }
+    } catch (err) {
+      clearAbortTimeout()
+      throw err
     }
   }
 
   async stopPoller(timeoutMs: number = 30000): Promise<void> {
+    this.pollerStopped = true
     clearTimeout(this.poller)
+    this.poller = undefined
 
     if (this.cacheProvider) {
       try {
@@ -1034,12 +1067,9 @@ class FeatureFlagsPoller {
           // This follows the same timeout logic defined in _shutdown.
           // We time out after some period of time to avoid hanging the entire
           // shutdown process if the cache provider misbehaves.
-          await Promise.race([
-            shutdownResult,
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error(`Cache shutdown timeout after ${timeoutMs}ms`)), timeoutMs)
-            ),
-          ])
+          await raceWithTimeout(shutdownResult, timeoutMs, () => {
+            throw new Error(`Cache shutdown timeout after ${timeoutMs}ms`)
+          })
         }
       } catch (err) {
         this.onError?.(new Error(`Error during cache shutdown: ${err}`))

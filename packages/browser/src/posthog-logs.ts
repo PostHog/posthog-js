@@ -39,11 +39,35 @@ const LOGS_SEND_TIMEOUT_MS = 90000
 // the `online` event reopens the pipe.
 // NOTE: keep the constant value and the warning copy in sync with retry-queue.ts.
 const MAX_CONSECUTIVE_STATUS_ZERO_FAILURES = 3
+const HANDLED_LOGS_REQUEST_ERROR = '__posthogHandledLogsRequestError' as const
+
+type HandledLogsRequestError = Error & { [HANDLED_LOGS_REQUEST_ERROR]: true }
+
+const markLogsRequestErrorAsHandled = (error: unknown, fallbackMessage: string): HandledLogsRequestError => {
+    const handledError = (error instanceof Error ? error : new Error(fallbackMessage)) as HandledLogsRequestError
+    handledError[HANDLED_LOGS_REQUEST_ERROR] = true
+    return handledError
+}
+
+const isHandledLogsRequestError = (error: unknown): error is HandledLogsRequestError =>
+    !!error &&
+    typeof error === 'object' &&
+    (error as Partial<HandledLogsRequestError>)[HANDLED_LOGS_REQUEST_ERROR] === true
 
 export class PostHogLogs implements Extension {
     private _isLogsEnabled: boolean = false
     private _isLoaded: boolean = false
     private readonly _logger = createLogger('[logs]')
+    // Core owns retry/backoff but the browser request layer owns transport logging.
+    // Filter only errors explicitly branded by this adapter; fatal core errors remain visible.
+    private readonly _coreLogger = {
+        ...this._logger,
+        error: (...args: any[]) => {
+            if (!args.some(isHandledLogsRequestError)) {
+                this._logger.error(...args)
+            }
+        },
+    }
 
     // In-memory only; records do not survive a page reload.
     private _queue: BufferedLogEntry[] = []
@@ -94,7 +118,7 @@ export class PostHogLogs implements Extension {
         const core = new CorePostHogLogs(
             this._createHost(getQueue, setQueue),
             config,
-            this._logger,
+            this._coreLogger,
             () => this._getSdkContext(),
             (fn) => fn(),
             undefined,
@@ -196,10 +220,16 @@ export class PostHogLogs implements Extension {
             return
         }
         if (this._core) {
-            void this._core.flush().catch((err) => this._logger.error('PostHog logs flush failed:', err))
+            void this._core.flush().catch((err) => this._logFlushError(err))
         }
         if (this._consoleCore) {
-            void this._consoleCore.flush().catch((err) => this._logger.error('PostHog logs flush failed:', err))
+            void this._consoleCore.flush().catch((err) => this._logFlushError(err))
+        }
+    }
+
+    private _logFlushError(error: unknown): void {
+        if (!isHandledLogsRequestError(error)) {
+            this._logger.error('PostHog logs flush failed:', error)
         }
     }
 
@@ -271,7 +301,10 @@ export class PostHogLogs implements Extension {
                 // advances the queue so records don't pile up while blocked.
                 // The `onLine` guard ensures genuine offline periods still queue
                 // for the reconnect flush instead of being fatally dropped.
-                resolve({ kind: 'fatal', error: new Error('logs endpoint is unreachable, dropping batch') })
+                resolve({
+                    kind: 'fatal',
+                    error: markLogsRequestErrorAsHandled(undefined, 'logs endpoint is unreachable, dropping batch'),
+                })
                 return
             }
 
@@ -287,10 +320,13 @@ export class PostHogLogs implements Extension {
 
             // Backstop for `_send_request` paths that never call back, so the promise
             // always settles and core's flush can't wedge. Keeps records for retry.
-            const timer = setTimeout(
-                () => settle({ kind: 'retry-later', error: new Error('logs request timed out') }),
-                LOGS_SEND_TIMEOUT_MS
-            )
+            const timer = setTimeout(() => {
+                this._logger.warn('Logs request timed out before receiving a response')
+                settle({
+                    kind: 'retry-later',
+                    error: markLogsRequestErrorAsHandled(undefined, 'logs request timed out'),
+                })
+            }, LOGS_SEND_TIMEOUT_MS)
 
             this._instance._send_request({
                 method: 'POST',
@@ -309,10 +345,26 @@ export class PostHogLogs implements Extension {
                         settle({ kind: 'too-large' })
                     } else if (status === 0 || status === 429 || status >= 500) {
                         // Transient (network / rate-limit / server error): keep and retry.
-                        settle({
-                            kind: 'retry-later',
-                            error: response.error ?? new Error(`logs request failed with status ${status}`),
-                        })
+                        if (status === 0) {
+                            // `_send_request` already logs fetch failures. Bare status 0 is the
+                            // XHR/synthetic path, so keep one warning for it here.
+                            if (!response.error) {
+                                this._logger.warn('Logs request failed before receiving an HTTP response')
+                            }
+                            settle({
+                                kind: 'retry-later',
+                                error: markLogsRequestErrorAsHandled(
+                                    response.error,
+                                    'logs request failed before receiving an HTTP response'
+                                ),
+                            })
+                        } else {
+                            // Preserve error severity for real HTTP failures.
+                            settle({
+                                kind: 'retry-later',
+                                error: response.error ?? new Error(`logs request failed with status ${status}`),
+                            })
+                        }
                     } else {
                         // Client error (4xx): won't succeed on retry, drop.
                         settle({ kind: 'fatal', error: new Error(`logs request failed with status ${status}`) })

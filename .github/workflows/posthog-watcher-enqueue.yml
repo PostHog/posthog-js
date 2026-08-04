@@ -39,7 +39,7 @@ jobs:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
             - name: Enqueue watcher event
-              uses: PostHog/posthog-watcher-action@8b166434ccf42ce9da6ee1fda3f622268812aed5
+              uses: PostHog/posthog-watcher-action@46c2a53dd018bfc21435ff97360d7a1a04521db9
               with:
                   mode: enqueue
                   trigger-drain-workflow: 'true'

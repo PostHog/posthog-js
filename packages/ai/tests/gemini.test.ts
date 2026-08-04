@@ -286,6 +286,36 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(properties['$ai_output_choices']).toBeNull()
   })
 
+  test('preserves the provider result when captureImmediate rejects', async () => {
+    ;(mockPostHogClient.captureImmediate as jest.Mock).mockRejectedValue(new Error('telemetry failed'))
+
+    const response = await client.models.generateContent({
+      model: 'gemini-2.0-flash-001',
+      contents: 'Hello',
+      posthogCaptureImmediate: true,
+    })
+
+    expect(response).toBe(mockGeminiResponse)
+    expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
+  })
+
+  test('preserves the provider error when captureImmediate rejects', async () => {
+    const providerError = new Error('provider failed')
+    ;(client as any).client.models.generateContent = jest.fn().mockRejectedValue(providerError)
+    ;(mockPostHogClient.captureImmediate as jest.Mock).mockRejectedValue(new Error('telemetry failed'))
+
+    const rejection = await client.models
+      .generateContent({
+        model: 'gemini-2.0-flash-001',
+        contents: 'Hello',
+        posthogCaptureImmediate: true,
+      })
+      .catch((error: unknown) => error)
+
+    expect(rejection).toBe(providerError)
+    expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
+  })
+
   test('error handling', async () => {
     const error = new Error('API Error')
     ;(error as any).status = 400

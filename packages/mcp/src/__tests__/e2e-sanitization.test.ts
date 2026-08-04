@@ -123,7 +123,7 @@ describe('E2E Sanitization - real MCP tool calls', () => {
     }
   })
 
-  it('should sanitize large base64 strings in tool call parameters', async () => {
+  it('should sanitize large binary encodings without redacting ordinary long text in tool call parameters', async () => {
     resetTodos()
     const { server, client, cleanup } = await setupTestServerAndClient()
 
@@ -141,22 +141,29 @@ describe('E2E Sanitization - real MCP tool calls', () => {
         'Upload a file as base64',
         {
           filename: z.string(),
-          data: z.string().describe('Base64-encoded file data'),
+          classicBase64: z.string().describe('Base64-encoded file data'),
+          base64Url: z.string().describe('Base64url-encoded file data'),
+          dataUrl: z.string().describe('Base64 data URL'),
+          longText: z.string(),
         },
         async (args) => ({
           content: [{ type: 'text', text: `Uploaded ${args.filename} successfully` }],
         })
       )
 
-      // Create a large base64 string (>10KB to trigger the size gate)
-      const largeBase64 = `${'A'.repeat(12_000)}=`
+      // Each binary representation exceeds the 10KB size gate.
+      const classicBase64 = `${'A'.repeat(12_000)}=`
+      const base64Url = Buffer.from(Array.from({ length: 9_000 }, (_, index) => index % 256)).toString('base64url')
+      const wrappedPayload = `${'A'.repeat(11_999)}=`.match(/.{1,76}/g)!.join('\r\n')
+      const dataUrl = `data:image/png;base64,${wrappedPayload}`
+      const longText = 'This is ordinary long text with words and punctuation. '.repeat(250)
 
       await client.request(
         {
           method: 'tools/call',
           params: {
             name: 'upload_file',
-            arguments: { filename: 'photo.png', data: largeBase64 },
+            arguments: { filename: 'photo.png', classicBase64, base64Url, dataUrl, longText },
           },
         },
         CallToolResultSchema
@@ -170,10 +177,11 @@ describe('E2E Sanitization - real MCP tool calls', () => {
       )
 
       expect(toolEvent).toBeDefined()
-      // The base64 param should be redacted in the captured event's parameters
       const args = toolEvent!.parameters?.request?.params?.arguments
-      expect(args.data).toBe('[binary data redacted - not supported by PostHog MCP analytics]')
-      // Non-base64 params should be preserved
+      expect(args.classicBase64).toBe('[binary data redacted - not supported by PostHog MCP analytics]')
+      expect(args.base64Url).toBe('[binary data redacted - not supported by PostHog MCP analytics]')
+      expect(args.dataUrl).toBe('[binary data redacted - not supported by PostHog MCP analytics]')
+      expect(args.longText).toBe(longText)
       expect(args.filename).toBe('photo.png')
 
       await eventCapture.stop()
