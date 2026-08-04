@@ -1,5 +1,24 @@
 # posthog-ai
 
+## 8.6.6
+
+### Patch Changes
+
+- [#4365](https://github.com/PostHog/posthog-js/pull/4365) [`63d87d8`](https://github.com/PostHog/posthog-js/commit/63d87d8d970c69d0974f5034590a244c22dfb4bb) Thanks [@marandaneto](https://github.com/marandaneto)! - Track OpenAI and Azure background Responses through their terminal state.
+  (2026-08-04)
+
+## 8.6.5
+
+### Patch Changes
+
+- [#4366](https://github.com/PostHog/posthog-js/pull/4366) [`1aa1690`](https://github.com/PostHog/posthog-js/commit/1aa1690974e649170c075cc0d16523cee61ad522) Thanks [@marandaneto](https://github.com/marandaneto)! - Capture failed and incomplete Responses API results correctly.
+  (2026-08-04)
+
+- [#4364](https://github.com/PostHog/posthog-js/pull/4364) [`2c6c614`](https://github.com/PostHog/posthog-js/commit/2c6c6145ded013765b418aaa306b70835acdfe2f) Thanks [@marandaneto](https://github.com/marandaneto)! - Redact binary content consistently across AI integrations.
+  (2026-08-04)
+- Updated dependencies [[`facb4c1`](https://github.com/PostHog/posthog-js/commit/facb4c1e173c0afc6b4c14154a0e65ed239d43f4)]:
+  - posthog-node@5.47.9
+
 ## 8.6.4
 
 ### Patch Changes

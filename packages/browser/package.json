@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.410.7",
+    "version": "1.411.0",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
@@ -71,7 +71,8 @@
         "fflate": "^0.4.8",
         "preact": "^10.29.3",
         "query-selector-shadow-dom": "^1.0.1",
-        "web-vitals": "^5.3.0"
+        "web-vitals": "^5.3.0",
+        "web-vitals-soft-navs": "npm:web-vitals@6.0.0"
     },
     "devDependencies": {
         "@babel/core": "catalog:",

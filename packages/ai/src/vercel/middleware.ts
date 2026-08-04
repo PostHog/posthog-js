@@ -23,7 +23,7 @@ import {
   getModelParams,
 } from '../utils'
 import { captureAiGeneration } from '../captureAiGeneration'
-import { redactBase64DataUrl } from '../sanitization'
+import { redactBase64DataUrl, sanitizeVercel } from '../sanitization'
 import { isObject, isString } from '../typeGuards'
 
 // Union types for dual version support
@@ -72,6 +72,16 @@ type OutputContentItem =
   | { type: 'file'; name: string; mediaType: string; data: string }
   | { type: 'source'; sourceType: string; id: string; url: string; title: string }
 
+const redactFileData = (data: unknown, mediaType?: string): string | undefined => {
+  if (data instanceof URL) {
+    return redactBase64DataUrl(data.toString(), data.protocol === 'data:' ? mediaType : undefined)
+  }
+  if (isString(data)) {
+    return redactBase64DataUrl(data, mediaType)
+  }
+  return undefined
+}
+
 const mapVercelParams = (params: any): Record<string, any> => {
   return {
     temperature: params.temperature,
@@ -107,19 +117,8 @@ const mapVercelPrompt = (messages: LanguageModelPrompt): PostHogInput[] => {
               text: truncate(c.text),
             }
           } else if (c.type === 'file') {
-            // For file type, check if it's a data URL and redact if needed
-            let fileData: string
-
-            const contentData: unknown = c.data
-
-            if (contentData instanceof URL) {
-              fileData = contentData.toString()
-            } else if (isString(contentData)) {
-              // Redact base64 data URLs and raw base64 to prevent oversized events
-              fileData = redactBase64DataUrl(contentData)
-            } else {
-              fileData = 'raw files not supported'
-            }
+            // Redact base64 data URLs and raw base64 to prevent oversized events
+            const fileData = redactFileData(c.data, c.mediaType) ?? 'raw files not supported'
 
             return {
               type: 'file',
@@ -143,7 +142,7 @@ const mapVercelPrompt = (messages: LanguageModelPrompt): PostHogInput[] => {
               type: 'tool-result',
               toolCallId: c.toolCallId,
               toolName: c.toolName,
-              output: c.output,
+              output: sanitizeVercel(c.output),
               isError: c.isError,
             }
           }
@@ -225,18 +224,11 @@ const mapVercelOutput = (result: LanguageModelContent[]): PostHogInput[] => {
     }
     if (item.type === 'file') {
       // Handle files similar to input mapping - avoid large base64 data
-      let fileData: string
-      if (item.data instanceof URL) {
-        fileData = item.data.toString()
-      } else if (typeof item.data === 'string') {
-        fileData = redactBase64DataUrl(item.data)
+      let fileData = redactFileData(item.data, item.mediaType) ?? `[binary ${item.mediaType} file]`
 
-        // If not redacted and still large, replace with size indicator
-        if (fileData === item.data && item.data.length > 1000) {
-          fileData = `[${item.mediaType} file - ${item.data.length} bytes]`
-        }
-      } else {
-        fileData = `[binary ${item.mediaType} file]`
+      // If not redacted and still large, replace with size indicator
+      if (typeof item.data === 'string' && fileData === item.data && item.data.length > 1000) {
+        fileData = `[${item.mediaType} file - ${item.data.length} bytes]`
       }
 
       return {

@@ -1,5 +1,14 @@
 # @posthog/mcp
 
+## 0.10.7
+
+### Patch Changes
+
+- [#4357](https://github.com/PostHog/posthog-js/pull/4357) [`632049c`](https://github.com/PostHog/posthog-js/commit/632049cc8b3ba3a9dc76d00be68ebe7de9eaa69d) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent concurrent MCP requests from leaking identity and session attribution.
+  (2026-08-04)
+- Updated dependencies [[`facb4c1`](https://github.com/PostHog/posthog-js/commit/facb4c1e173c0afc6b4c14154a0e65ed239d43f4)]:
+  - posthog-node@5.47.9
+
 ## 0.10.6
 
 ### Patch Changes

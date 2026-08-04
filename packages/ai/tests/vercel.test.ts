@@ -239,6 +239,131 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       expect(captureCall[0].properties['$ai_usage'].providerMetadata).toBeDefined()
     })
 
+    it('redacts short explicit-MIME files without changing Vercel provider payloads', async () => {
+      const binary = 'U0hPUlQgQklOQVJZ'
+      const providerResult = {
+        content: [{ type: 'file', data: binary, mediaType: 'image/png' }],
+        usage: v3TokenUsage(1, 1),
+        response: { modelId: 'image-model' },
+        providerMetadata: {},
+        finishReason: { unified: 'stop', raw: undefined },
+        warnings: [],
+      }
+      const baseModel = {
+        ...createMockV3Model('image-model'),
+        doGenerate: jest.fn().mockResolvedValue(providerResult),
+      } as LanguageModelV3
+      const model = withTracing(baseModel, mockPostHogClient, { posthogDistinctId: 'test-user' })
+      const params = {
+        prompt: [
+          {
+            role: 'user',
+            content: [{ type: 'file', data: binary, mediaType: 'audio/wav' }],
+          },
+        ],
+      } as any
+
+      const result = await model.doGenerate(params)
+
+      expect(result).toBe(providerResult)
+      expect(baseModel.doGenerate).toHaveBeenCalledWith(params)
+      const properties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+      expect(JSON.stringify(properties['$ai_input'])).not.toContain(binary)
+      expect(JSON.stringify(properties['$ai_output_choices'])).not.toContain(binary)
+      expect(JSON.stringify(properties)).toContain('[base64 audio/wav redacted]')
+      expect(JSON.stringify(properties)).toContain('[base64 image/png redacted]')
+    })
+
+    it('redacts binary content nested in tool results without changing Vercel provider payloads', async () => {
+      const binary = 'U0hPUlQgVE9PTCBSRVNVTFQ='
+      const baseModel = createMockV3Model('tool-model')
+      const model = withTracing(baseModel, mockPostHogClient, { posthogDistinctId: 'test-user' })
+      const params = {
+        prompt: [
+          {
+            role: 'tool',
+            content: [
+              {
+                type: 'tool-result',
+                toolCallId: 'tool-call-id',
+                toolName: 'read-file',
+                output: {
+                  type: 'content',
+                  value: [{ type: 'media', data: binary, mediaType: 'image/png' }],
+                },
+              },
+            ],
+          },
+        ],
+      } as any
+
+      await model.doGenerate(params)
+
+      expect(baseModel.doGenerate).toHaveBeenCalledWith(params)
+      const input = JSON.stringify((mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties['$ai_input'])
+      expect(input).not.toContain(binary)
+      expect(input).toContain('[base64 image/png redacted]')
+    })
+
+    it('redacts data URL objects from input while preserving HTTP URL objects', async () => {
+      const binary = 'SU5QVVQgVVJMIERBVEE='
+      const dataUrl = new URL(`data:audio/wav;base64,${binary}`)
+      const httpUrl = new URL('https://example.com/input.wav')
+      const baseModel = createMockV3Model('audio-model')
+      const model = withTracing(baseModel, mockPostHogClient, { posthogDistinctId: 'test-user' })
+      const params = {
+        prompt: [
+          {
+            role: 'user',
+            content: [
+              { type: 'file', data: dataUrl, mediaType: 'audio/wav' },
+              { type: 'file', data: httpUrl, mediaType: 'audio/wav' },
+            ],
+          },
+        ],
+      } as any
+
+      await model.doGenerate(params)
+
+      expect(baseModel.doGenerate).toHaveBeenCalledWith(params)
+      const input = JSON.stringify((mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties['$ai_input'])
+      expect(input).not.toContain(binary)
+      expect(input).toContain('[base64 audio/wav redacted]')
+      expect(input).toContain(httpUrl.toString())
+    })
+
+    it('redacts data URL objects from output while preserving HTTP URL objects', async () => {
+      const binary = 'T1VUUFVUIFVSTCBEQVRB'
+      const dataUrl = new URL(`data:image/png;base64,${binary}`)
+      const httpUrl = new URL('https://example.com/output.png')
+      const providerResult = {
+        content: [
+          { type: 'file', data: dataUrl, mediaType: 'image/png' },
+          { type: 'file', data: httpUrl, mediaType: 'image/png' },
+        ],
+        usage: v3TokenUsage(1, 1),
+        response: { modelId: 'image-model' },
+        providerMetadata: {},
+        finishReason: { unified: 'stop', raw: undefined },
+        warnings: [],
+      }
+      const baseModel = {
+        ...createMockV3Model('image-model'),
+        doGenerate: jest.fn().mockResolvedValue(providerResult),
+      } as LanguageModelV3
+      const model = withTracing(baseModel, mockPostHogClient, { posthogDistinctId: 'test-user' })
+
+      const result = await model.doGenerate({ prompt: [] })
+
+      expect(result).toBe(providerResult)
+      const output = JSON.stringify(
+        (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties['$ai_output_choices']
+      )
+      expect(output).not.toContain(binary)
+      expect(output).toContain('[base64 image/png redacted]')
+      expect(output).toContain(httpUrl.toString())
+    })
+
     it('should handle undefined content in tool-call-only responses', async () => {
       const baseModel: LanguageModelV3 = {
         specificationVersion: 'v3' as const,

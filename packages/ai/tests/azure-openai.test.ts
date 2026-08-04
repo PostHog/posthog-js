@@ -263,6 +263,75 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     expect(properties['foo']).toBe('bar')
   })
 
+  conditionalTest('redacts chat and Responses input/output without changing Azure payloads', async () => {
+    const binary = 'A'.repeat(80)
+    const chatResponse = {
+      id: 'chatcmpl-binary',
+      model: 'gpt-4o-audio-preview',
+      choices: [
+        {
+          index: 0,
+          finish_reason: 'stop',
+          message: {
+            role: 'assistant',
+            content: null,
+            audio: { id: 'audio-1', data: binary, transcript: 'hello', expires_at: 0 },
+          },
+        },
+      ],
+      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+    }
+    const ChatMock: any = openaiModule.Chat
+    ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue(chatResponse)
+    const chatRequest = {
+      model: 'gpt-4o-audio-preview',
+      messages: [
+        {
+          role: 'user' as const,
+          content: [{ type: 'input_audio' as const, input_audio: { data: binary, format: 'wav' as const } }],
+        },
+      ],
+    }
+
+    await client.chat.completions.create(chatRequest)
+
+    expect((ChatMock.Completions as any).prototype.create).toHaveBeenCalledWith(chatRequest, undefined)
+    const chatProperties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+    expect(JSON.stringify(chatProperties['$ai_input'])).not.toContain(binary)
+    expect(JSON.stringify(chatProperties['$ai_output_choices'])).not.toContain(binary)
+    expect(JSON.stringify(chatProperties)).toContain('[base64 audio/wav redacted]')
+    expect(JSON.stringify(chatProperties)).toContain('[base64 audio redacted]')
+
+    jest.clearAllMocks()
+    const responsesResult = {
+      id: 'resp-binary',
+      model: 'gpt-4o',
+      output: [{ type: 'image_generation_call', id: 'image-1', status: 'completed', result: binary }],
+      usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+    }
+    const ResponsesMock: any = openaiModule.Responses
+    ResponsesMock.prototype.create = jest.fn().mockResolvedValue(responsesResult)
+    const responsesRequest = {
+      model: 'gpt-4o',
+      input: [
+        {
+          role: 'user' as const,
+          content: [{ type: 'input_image' as const, image_url: `data:image/png;base64,${binary}` }],
+        },
+      ],
+    }
+
+    const response = await client.responses.create(responsesRequest as any)
+
+    expect(response.output[0]).toMatchObject({ result: binary })
+    expect(ResponsesMock.prototype.create).toHaveBeenCalledWith(responsesRequest, undefined)
+    const responsesProperties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+    expect(JSON.stringify(responsesProperties['$ai_input'])).not.toContain(binary)
+    expect(JSON.stringify(responsesProperties['$ai_output_choices'])).not.toContain(binary)
+    expect(JSON.stringify(responsesProperties)).toContain('[base64 image/png redacted]')
+    expect(JSON.stringify(responsesProperties)).toContain('[base64 redacted]')
+  })
+
   conditionalTest('groups', async () => {
     const mockAzureChatResponse = {
       id: 'test-response-id',
@@ -973,6 +1042,143 @@ describe('PostHogAzureOpenAI - cache token reporting convention', () => {
   })
 })
 
+describe('PostHogAzureOpenAI - Responses terminal statuses', () => {
+  let mockPostHogClient: PostHog
+  let client: PostHogAzureOpenAI
+
+  const terminalStatuses = ['completed', 'failed', 'incomplete', 'cancelled'] as const
+
+  const createMockAsyncIterator = <T>(chunks: T[]): { [Symbol.asyncIterator](): AsyncIterator<T> } => ({
+    async *[Symbol.asyncIterator]() {
+      for (const chunk of chunks) {
+        yield chunk
+      }
+    },
+  })
+
+  const terminalResponse = (status: (typeof terminalStatuses)[number]) => ({
+    id: `resp_${status}`,
+    _request_id: `req_${status}`,
+    model: 'gpt-4',
+    object: 'response',
+    created_at: 1234567890,
+    status,
+    output: [
+      {
+        id: `msg_${status}`,
+        type: 'message',
+        role: 'assistant',
+        status: status === 'completed' ? 'completed' : 'incomplete',
+        content: [{ type: 'output_text', text: `${status} output`, annotations: [] }],
+      },
+    ],
+    usage: {
+      input_tokens: 11,
+      output_tokens: 7,
+      total_tokens: 18,
+      input_tokens_details: { cached_tokens: 2 },
+      output_tokens_details: { reasoning_tokens: 3 },
+    },
+    service_tier: 'default',
+    error: status === 'failed' ? { code: 'server_error', message: 'provider response failed' } : null,
+    incomplete_details: status === 'incomplete' || status === 'cancelled' ? { reason: 'max_output_tokens' } : null,
+  })
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockPostHogClient = new (PostHog as any)()
+    client = new PostHogAzureOpenAI({
+      apiKey: 'mock-azure-key',
+      posthog: mockPostHogClient as any,
+    })
+  })
+
+  test.each(terminalStatuses)('non-streaming %s response preserves terminal data', async (status) => {
+    const response = terminalResponse(status)
+    const ResponsesMock: any = openaiModule.Responses
+    ResponsesMock.prototype.create = jest.fn().mockResolvedValue(response)
+
+    await client.responses.create({
+      model: 'gpt-4',
+      input: 'Hello',
+      posthogDistinctId: 'test-id',
+    })
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const properties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+    expect(properties['$ai_stop_reason']).toBe(status)
+    expect(properties['$ai_input_tokens']).toBe(11)
+    expect(properties['$ai_output_tokens']).toBe(7)
+    expect(properties['$ai_output_choices']).toEqual(response.output)
+    expect(properties['$ai_is_error']).toBe(status === 'failed' ? true : undefined)
+    if (status === 'failed') {
+      expect(properties['$ai_error']).toContain('provider response failed')
+    }
+    expect(properties['$ai_provider_metadata']).toEqual({
+      request_id: `req_${status}`,
+      ...(status === 'incomplete' || status === 'cancelled'
+        ? { incomplete_details: { reason: 'max_output_tokens' } }
+        : {}),
+    })
+  })
+
+  test.each(terminalStatuses)('streaming %s response preserves terminal data', async (status) => {
+    const baseResponse = terminalResponse(status)
+    const response = { ...baseResponse, output: status === 'cancelled' ? undefined : baseResponse.output }
+    const terminalEventType =
+      status === 'failed' ? 'response.failed' : status === 'completed' ? 'response.completed' : 'response.incomplete'
+    const chunks = [{ type: terminalEventType, sequence_number: 0, response }]
+    const ResponsesMock: any = openaiModule.Responses
+    ResponsesMock.prototype.create = jest.fn().mockResolvedValue(createMockAsyncIterator(chunks))
+
+    const stream = await client.responses.create({
+      model: 'gpt-4',
+      input: 'Hello',
+      stream: true,
+      posthogDistinctId: 'test-id',
+    })
+    for await (const _chunk of stream) {
+      // consume the returned stream while analytics consumes its monitored copy
+    }
+    await flushPromises()
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const properties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+    expect(properties['$ai_stop_reason']).toBe(status)
+    expect(properties['$ai_input_tokens']).toBe(11)
+    expect(properties['$ai_output_tokens']).toBe(7)
+    expect(properties['$ai_output_choices']).toEqual(response.output ?? [])
+    expect(properties['$ai_is_error']).toBe(status === 'failed' ? true : undefined)
+    if (status === 'failed') {
+      expect(properties['$ai_error']).toContain('provider response failed')
+    }
+    expect(properties['$ai_provider_metadata']).toEqual(
+      status === 'incomplete' || status === 'cancelled'
+        ? { incomplete_details: { reason: 'max_output_tokens' } }
+        : undefined
+    )
+  })
+
+  test('parse failed response preserves terminal data', async () => {
+    const response = terminalResponse('failed')
+    const ResponsesMock: any = openaiModule.Responses
+    ResponsesMock.prototype.parse = jest.fn().mockResolvedValue(response)
+
+    await client.responses.parse({
+      model: 'gpt-4',
+      input: 'Hello',
+      posthogDistinctId: 'test-id',
+    } as any)
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const properties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+    expect(properties['$ai_stop_reason']).toBe('failed')
+    expect(properties['$ai_is_error']).toBe(true)
+    expect(properties['$ai_error']).toContain('provider response failed')
+    expect(properties['$ai_provider_metadata']).toEqual({ request_id: 'req_failed' })
+  })
+})
+
 describe('PostHogAzureOpenAI - response service tier', () => {
   let mockPostHogClient: PostHog
   let client: PostHogAzureOpenAI
@@ -985,6 +1191,14 @@ describe('PostHogAzureOpenAI - response service tier', () => {
     },
   })
 
+  const responsesUsage = {
+    input_tokens: 20,
+    output_tokens: 10,
+    total_tokens: 30,
+    input_tokens_details: { cached_tokens: 4 },
+    output_tokens_details: { reasoning_tokens: 3 },
+  }
+
   const mockResponsesResult = (serviceTier: 'default' | 'flex') => ({
     id: 'resp-service-tier',
     model: 'gpt-4',
@@ -992,7 +1206,7 @@ describe('PostHogAzureOpenAI - response service tier', () => {
     created_at: 1234567890,
     status: 'completed',
     output: [],
-    usage: null,
+    usage: responsesUsage,
     service_tier: serviceTier,
   })
 
@@ -1098,6 +1312,11 @@ describe('PostHogAzureOpenAI - response service tier', () => {
     await invoke()
 
     expect(capturedServiceTier()).toBe('flex')
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    expect(captureArgs[0].properties).toMatchObject({
+      $ai_usage: responsesUsage,
+      $ai_stop_reason: 'completed',
+    })
   })
 
   test('prefers the final response tier for streaming responses', async () => {
