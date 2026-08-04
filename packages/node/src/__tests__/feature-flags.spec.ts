@@ -6256,7 +6256,7 @@ describe('feature flag definition request timeout', () => {
     expect(signals[1].aborted).toBe(true)
     await expect(evaluationPromise).resolves.toBeUndefined()
 
-    await jest.advanceTimersByTimeAsync(90)
+    await jest.advanceTimersByTimeAsync(100)
 
     expect(fetchDefinitions).toHaveBeenCalledTimes(3)
     await expect(
