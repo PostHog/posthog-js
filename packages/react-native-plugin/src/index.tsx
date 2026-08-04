@@ -116,6 +116,14 @@ export function unregisterPushNotificationToken(): Promise<void> {
   return PosthogReactNativePlugin.unregisterPushNotificationToken()
 }
 
+/**
+ * Propagates a runtime consent change to the native SDK, which otherwise only reads the JS
+ * opt-out flag at setup() and could auto-register a refreshed push token after optOut().
+ */
+export function setOptOut(optOut: boolean): Promise<void> {
+  return PosthogReactNativePlugin.setOptOut(optOut)
+}
+
 export function capturePushNotificationOpened(properties: PostHogReactNativePluginMap): Promise<void> {
   return PosthogReactNativePlugin.capturePushNotificationOpened(properties)
 }
@@ -202,6 +210,8 @@ export interface PostHogReactNativePluginModule {
 
   unregisterPushNotificationToken: () => Promise<void>
 
+  setOptOut: (optOut: boolean) => Promise<void>
+
   capturePushNotificationOpened: (properties: PostHogReactNativePluginMap) => Promise<void>
 
   setPushIdentityProvider: (provider: PostHogPushIdentityProvider) => void
@@ -220,6 +230,7 @@ const PostHogReactNativePlugin: PostHogReactNativePluginModule = {
   addExceptionStep,
   registerPushNotificationToken,
   unregisterPushNotificationToken,
+  setOptOut,
   capturePushNotificationOpened,
   setPushIdentityProvider,
 }

@@ -56,6 +56,10 @@ RCT_EXTERN_METHOD(registerPushNotificationToken:(NSString)deviceToken
 RCT_EXTERN_METHOD(unregisterPushNotificationToken:(RCTPromiseResolveBlock)resolve
                  withRejecter:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(setOptOut:(BOOL)optOut
+                 withResolver:(RCTPromiseResolveBlock)resolve
+                 withRejecter:(RCTPromiseRejectBlock)reject)
+
 RCT_EXTERN_METHOD(capturePushNotificationOpened:(NSDictionary)properties
                  withResolver:(RCTPromiseResolveBlock)resolve
                  withRejecter:(RCTPromiseRejectBlock)reject)

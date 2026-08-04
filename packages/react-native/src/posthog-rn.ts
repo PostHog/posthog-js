@@ -991,6 +991,9 @@ export class PostHog extends PostHogCore {
     // Consent must be durable. See reset()/identify().
     const result = super.optIn()
     void this._eventsStorage.waitForPersist()
+    // Native re-arms push on opt-in (iOS reinstalls its integrations, Android resumes deferred
+    // work on the next flush), so the token unregistered by optOut() comes back without a restart.
+    this._propagateNativeOptOut(false)
     return result
   }
 
@@ -1014,12 +1017,35 @@ export class PostHog extends PostHogCore {
     const result = super.optOut()
     void this._eventsStorage.waitForPersist()
     // A device token registered before opt-out would otherwise survive consent withdrawal: the
-    // native subscription handler keeps its own persisted record and retry loop, and never
-    // learns about the JS opt-out. unregister is deliberately allowed while opted out.
+    // native subscription handler keeps its own persisted record and retry loop. unregister is
+    // deliberately allowed while opted out.
     if (OptionalReactNativePlugin?.unregisterPushNotificationToken) {
-      void this.unregisterPushNotificationToken()
+      // Native gates unregister sends on its own opt-out flag, so consent propagates only after
+      // the unregister is dispatched; a DELETE that still loses that race is persisted natively
+      // and replayed after opt-in.
+      void this.unregisterPushNotificationToken().then(() => this._propagateNativeOptOut(true))
+    } else {
+      this._propagateNativeOptOut(true)
     }
     return result
+  }
+
+  // Native persists its own consent flag and only reads the JS one at setup(), so runtime
+  // changes must cross the bridge or native's automatic push registration keeps running on
+  // its setup-time snapshot (e.g. re-registering an OS-refreshed token after optOut()).
+  private _propagateNativeOptOut(optOut: boolean): void {
+    if (this.isDisabled || isWeb() || !OptionalReactNativePlugin) {
+      return
+    }
+    if (!OptionalReactNativePlugin.setOptOut) {
+      // A plugin that predates push cannot auto-register tokens, so there is no consent to sync.
+      return
+    }
+    // Never set up (e.g. opted out at startup): the next setup() carries the current state.
+    this._queueNativeCall(
+      () => OptionalReactNativePlugin?.setOptOut?.(optOut),
+      (e) => this._logger.warn(`Native PostHog failed to update opt-out: ${e}.`)
+    )
   }
 
   /**

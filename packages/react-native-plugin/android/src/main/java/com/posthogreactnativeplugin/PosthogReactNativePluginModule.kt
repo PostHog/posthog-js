@@ -278,6 +278,27 @@ class PosthogReactNativePluginModule(
     }
   }
 
+  // Runtime consent changes must reach native: it persists its own opt-out flag and only reads
+  // the JS value at setup(), so a refreshed FCM token could otherwise auto-register after the
+  // user opted out. optIn() also resumes deferred push work on the next flush.
+  @ReactMethod
+  fun setOptOut(
+    optOut: Boolean,
+    promise: Promise,
+  ) {
+    try {
+      if (optOut) {
+        PostHog.optOut()
+      } else {
+        PostHog.optIn()
+      }
+    } catch (e: Throwable) {
+      logError("setOptOut", e)
+    } finally {
+      promise.resolve(null)
+    }
+  }
+
   private fun setIdentify(
     cachePreferences: PostHogPreferences?,
     distinctId: String,

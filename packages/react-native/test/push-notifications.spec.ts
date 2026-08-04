@@ -15,6 +15,7 @@ jest.mock('../src/optional/OptionalPlugin', () => ({
     addExceptionStep: jest.fn(() => Promise.resolve()),
     registerPushNotificationToken: jest.fn(() => Promise.resolve()),
     unregisterPushNotificationToken: jest.fn(() => Promise.resolve()),
+    setOptOut: jest.fn(() => Promise.resolve()),
     capturePushNotificationOpened: jest.fn(() => Promise.resolve()),
     setPushIdentityProvider: jest.fn(),
     reset: jest.fn(() => Promise.resolve()),
@@ -278,6 +279,50 @@ describe('push notifications', () => {
       await waitForExpect(1000, () => {
         expect(mockPlugin.unregisterPushNotificationToken).toHaveBeenCalledTimes(1)
       })
+
+      await posthog.shutdown()
+    })
+
+    it('propagates opt-out to native after the unregister is dispatched', async () => {
+      // Native persists its own consent flag and only reads the JS one at setup(), so without
+      // this an OS token refresh after optOut() would auto-register a new subscription. The
+      // unregister must be dispatched first: native gates unregister sends on its opt-out flag.
+      const posthog = await createPostHog()
+
+      await posthog.optOut()
+
+      await waitForExpect(1000, () => {
+        expect(mockPlugin.setOptOut).toHaveBeenCalledWith(true)
+      })
+      expect(mockPlugin.unregisterPushNotificationToken.mock.invocationCallOrder[0]).toBeLessThan(
+        mockPlugin.setOptOut.mock.invocationCallOrder[0]
+      )
+
+      await posthog.shutdown()
+    })
+
+    it('propagates opt-in to native so push re-arms without a restart', async () => {
+      const posthog = await createPostHog()
+      await posthog.optOut()
+      await waitForExpect(1000, () => {
+        expect(mockPlugin.setOptOut).toHaveBeenCalledWith(true)
+      })
+
+      await posthog.optIn()
+
+      await waitForExpect(1000, () => {
+        expect(mockPlugin.setOptOut).toHaveBeenCalledWith(false)
+      })
+
+      await posthog.shutdown()
+    })
+
+    it('skips consent propagation when the installed plugin predates setOptOut', async () => {
+      const posthog = await createPostHog()
+      delete (mockPlugin as any).setOptOut
+
+      await posthog.optOut()
+      await posthog.optIn()
 
       await posthog.shutdown()
     })

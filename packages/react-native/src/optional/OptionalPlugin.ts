@@ -17,6 +17,7 @@ export type PostHogReactNativePluginExtended = typeof PostHogReactNativePlugin &
   addExceptionStep?: (message: string, properties?: { [key: string]: any }) => Promise<void>
   registerPushNotificationToken?: (deviceToken: string, appId: string | null) => Promise<void>
   unregisterPushNotificationToken?: () => Promise<void>
+  setOptOut?: (optOut: boolean) => Promise<void>
   capturePushNotificationOpened?: (properties: { [key: string]: any }) => Promise<void>
   setPushIdentityProvider?: (provider: PostHogPushIdentityProvider) => void
   reset?: (distinctId: string, anonymousId: string) => Promise<void>

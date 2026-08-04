@@ -365,6 +365,21 @@ class PosthogReactNativePlugin: RCTEventEmitter {
         }
     }
 
+    // Runtime consent changes must reach native: it persists its own opt-out flag and only
+    // reads the JS value at setup(), so a refreshed APNs token could otherwise auto-register
+    // after the user opted out. optIn() also reinstalls the integrations opt-out removed.
+    @objc(setOptOut:withResolver:withRejecter:)
+    func setOptOut(
+        optOut: Bool, resolve: RCTPromiseResolveBlock, reject _: RCTPromiseRejectBlock
+    ) {
+        if optOut {
+            PostHogSDK.shared.optOut()
+        } else {
+            PostHogSDK.shared.optIn()
+        }
+        resolve(nil)
+    }
+
     @objc(startRecording:withResolver:withRejecter:)
     func startRecording(
         resumeCurrent: Bool, resolve: RCTPromiseResolveBlock, reject _: RCTPromiseRejectBlock
