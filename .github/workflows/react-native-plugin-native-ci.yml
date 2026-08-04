@@ -93,7 +93,7 @@ jobs:
 
   build-ios-static-lib:
     name: Build example for iOS (CocoaPods)
-    runs-on: macos-14-xlarge
+    runs-on: macos-26
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -212,7 +212,7 @@ jobs:
 
   build-macos:
     name: Build example for macOS (CocoaPods)
-    runs-on: macos-14-xlarge
+    runs-on: macos-26
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
