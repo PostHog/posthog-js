@@ -80,7 +80,6 @@
     "react-native": "*"
   },
   "jest": {
-    "preset": "react-native",
     "modulePathIgnorePatterns": [
       "<rootDir>/lib/"
     ],
