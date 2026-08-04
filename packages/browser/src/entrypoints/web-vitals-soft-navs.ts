@@ -1,19 +1,19 @@
 /**
- * Web Vitals entrypoint (without attribution)
+ * Web Vitals entrypoint (soft navigations, without attribution)
  *
- * This is the default, lighter bundle (~6KB) that captures core web vitals metrics
- * without attribution data. Attribution data includes debugging information like
- * which elements caused layout shifts, timing breakdowns, etc.
+ * Identical to web-vitals.ts, but built against pinned stable web-vitals 6.x.
+ * That build understands the `reportSoftNavs` option, which
+ * scopes each metric to the browser's Soft Navigation entries. On a single-page
+ * app this restarts the measurement window on client-side route changes instead
+ * of accumulating against the original hard-navigation timestamp (which otherwise
+ * inflates LCP and friends).
  *
- * We split this into two bundles because:
- * 1. Attribution code adds ~6KB to the bundle size
- * 2. Attribution can cause memory issues in SPAs (onCLS holds references to detached DOM elements)
- * 3. Most users only need aggregate metrics, not debugging attribution data
+ * This is loaded lazily only when `capture_performance: { __preview_web_vitals_soft_navs: true }`
+ * is set, so the standard bundle and its consumers are unaffected. The feature relies
+ * on Chrome's experimental Soft Navigation Detection API.
  *
- * For attribution data, use web-vitals-with-attribution.ts instead by setting:
- *   capture_performance: { web_vitals_attribution: true }
- *
- * @see web-vitals-with-attribution.ts
+ * @see web-vitals.ts for the default bundle
+ * @see web-vitals-with-attribution-soft-navs.ts for the attribution variant
  */
 // Must be first: installs an Array.prototype.at polyfill before web-vitals (which uses it
 // internally) is evaluated, so the bundle doesn't throw on browsers that predate `.at()`.
@@ -21,7 +21,7 @@ import '@posthog/browser-common/utils/array-at-polyfill'
 
 import { assignableWindow, type WebVitalsCallbacks } from '../utils/globals'
 
-import { onINP, onLCP, onCLS, onFCP } from 'web-vitals'
+import { onINP, onLCP, onCLS, onFCP } from 'web-vitals-soft-navs'
 
 const postHogWebVitalsCallbacks: WebVitalsCallbacks = {
     onLCP,
@@ -33,7 +33,8 @@ const postHogWebVitalsCallbacks: WebVitalsCallbacks = {
 assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
 assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacksByFlavor =
     assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacksByFlavor || {}
-assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacksByFlavor['web-vitals'] = postHogWebVitalsCallbacks
+assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacksByFlavor['web-vitals-soft-navs'] =
+    postHogWebVitalsCallbacks
 assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = postHogWebVitalsCallbacks
 
 // we used to put posthogWebVitalsCallbacks on window, and now we put it on __PosthogExtensions__

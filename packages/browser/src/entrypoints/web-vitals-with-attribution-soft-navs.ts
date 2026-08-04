@@ -1,20 +1,22 @@
 /**
- * Web Vitals entrypoint (with attribution)
+ * Web Vitals entrypoint (soft navigations, with attribution)
  *
- * This bundle includes attribution data which provides additional debugging information:
- * - Which elements caused layout shifts (CLS)
- * - Timing breakdowns for LCP
- * - Interaction targets for INP
+ * Identical to web-vitals-with-attribution.ts, but built against pinned stable
+ * web-vitals 6.x so the observers understand the `reportSoftNavs` option.
+ * That option scopes each metric to the browser's Soft Navigation entries, so on a
+ * single-page app the measurement window restarts on client-side route changes
+ * instead of accumulating against the original hard-navigation timestamp.
  *
- * This bundle is ~12KB (vs ~6KB for the non-attribution version).
+ * This is loaded lazily only when both `web_vitals_attribution` and
+ * `__preview_web_vitals_soft_navs` are enabled. The feature relies on Chrome's experimental
+ * Soft Navigation Detection API.
  *
- * Note: Attribution can cause memory issues in SPAs because the onCLS callback
- * holds references to DOM elements that may be detached during navigation.
- * Only enable if you need the debugging data.
+ * Note: as with the non-soft-navs attribution build, attribution can cause memory
+ * issues in SPAs because the onCLS callback holds references to DOM elements that
+ * may be detached during navigation.
  *
- * Enable via: capture_performance: { web_vitals_attribution: true }
- *
- * @see web-vitals.ts for the lighter, default bundle
+ * @see web-vitals-soft-navs.ts for the lighter soft-navs bundle
+ * @see web-vitals-with-attribution.ts for the default attribution bundle
  */
 // Must be first: installs an Array.prototype.at polyfill before web-vitals (which uses it
 // internally) is evaluated, so the bundle doesn't throw on browsers that predate `.at()`.
@@ -27,7 +29,7 @@ import {
     onLCP as onLCPWithAttribution,
     onCLS as onCLSWithAttribution,
     onFCP as onFCPWithAttribution,
-} from 'web-vitals/attribution'
+} from 'web-vitals-soft-navs/attribution'
 
 const postHogWebVitalsCallbacks: WebVitalsCallbacks = {
     onLCP: onLCPWithAttribution,
@@ -39,7 +41,7 @@ const postHogWebVitalsCallbacks: WebVitalsCallbacks = {
 assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
 assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacksByFlavor =
     assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacksByFlavor || {}
-assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacksByFlavor['web-vitals-with-attribution'] =
+assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacksByFlavor['web-vitals-with-attribution-soft-navs'] =
     postHogWebVitalsCallbacks
 assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = postHogWebVitalsCallbacks
 
