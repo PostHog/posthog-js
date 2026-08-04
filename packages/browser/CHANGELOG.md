@@ -1,5 +1,45 @@
 # posthog-js
 
+## 1.410.6
+
+### Patch Changes
+
+- [#4407](https://github.com/PostHog/posthog-js/pull/4407) [`6d5e314`](https://github.com/PostHog/posthog-js/commit/6d5e314c1e1b2ee493edb1f96a7e3779d75852e4) Thanks [@ioannisj](https://github.com/ioannisj)! - Fix session replay shipping one billable recording per session rotation for tabs the user never interacts with. A session born from an idle rotation now holds its buffer until the first user interaction, then ships a recording playable from the session's start; without interaction nothing is sent — a further rotation, stop, opt-out, or page unload discards the held data instead of shipping it. An event trigger match (for example record-on-exception) also releases the hold, since it is explicit intent to record the session.
+  (2026-08-03)
+
+## 1.410.5
+
+### Patch Changes
+
+- [#4273](https://github.com/PostHog/posthog-js/pull/4273) [`8ec3499`](https://github.com/PostHog/posthog-js/commit/8ec349949fdf0b8ea667219ce4ad021c9493e0eb) Thanks [@felipeatom](https://github.com/felipeatom)! - Fix selector-widget surveys being abruptly removed while open when their trigger element is unmounted from the DOM (e.g. a dropdown or menu that hosts the trigger closes). The survey is now kept in place while open and only torn down once the user has closed it. Also fixes a related leak where, if the selector resolved to a different element while the survey was open, the old element's click listener was never removed and kept dispatching the show-widget event for the lifetime of the page.
+  (2026-08-03)
+
+## 1.410.4
+
+### Patch Changes
+
+- [#4235](https://github.com/PostHog/posthog-js/pull/4235) [`7db0e8c`](https://github.com/PostHog/posthog-js/commit/7db0e8c2a46edfc180b1d13d3b23fbcac867e552) Thanks [@hpouillot](https://github.com/hpouillot)! - Preserve messages, source locations, and existing stacks from browser errors that do not provide a same-realm `Error` object.
+  (2026-08-03)
+- Updated dependencies [[`7db0e8c`](https://github.com/PostHog/posthog-js/commit/7db0e8c2a46edfc180b1d13d3b23fbcac867e552)]:
+    - @posthog/core@1.46.5
+
+## 1.410.3
+
+### Patch Changes
+
+- [#4399](https://github.com/PostHog/posthog-js/pull/4399) [`662fb4c`](https://github.com/PostHog/posthog-js/commit/662fb4c62d6cd653c51455f79ae90dc0faed8fde) Thanks [@christiaan-ph](https://github.com/christiaan-ph)! - Conversations widget: bullet and numbered lists in a support reply now keep their markers on host pages with an aggressive CSS reset (for example Tailwind preflight's `ol, ul { list-style: none }`). The widget renders into the host page's DOM, so the list style is now set inline on `<ul>`, `<ol>`, and `<li>` rather than left to the page's own styles.
+  (2026-08-03)
+
+## 1.410.2
+
+### Patch Changes
+
+- [#4334](https://github.com/PostHog/posthog-js/pull/4334) [`bd93230`](https://github.com/PostHog/posthog-js/commit/bd932302f493924f1607429194918da23f2d67c9) Thanks [@posthog](https://github.com/apps/posthog)! - Conversations widget: treat a network-level message send failure (ad blocker, offline, CORS, page teardown) as transient — the widget now shows a "check your connection" message and logs at `warn` instead of `error`, so these benign failures no longer show up as captured exceptions in error tracking.
+  (2026-08-03)
+
+- [#4341](https://github.com/PostHog/posthog-js/pull/4341) [`d68e607`](https://github.com/PostHog/posthog-js/commit/d68e607b14cc5defd1e56f92fc598cd2872d00d2) Thanks [@posthog](https://github.com/apps/posthog)! - Prevent duplicate snippet loaders from replacing an initialized instance or replaying queued calls more than once, and warn with actionable guidance when `init()` is called again with a different project token
+  (2026-08-03)
+
 ## 1.410.1
 
 ### Patch Changes

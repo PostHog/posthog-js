@@ -53,10 +53,11 @@ async function runIntentFallback(
 export async function resolveToolCallIntent(
   data: MCPAnalyticsData,
   request: MCPRequestLike,
+  analyticsOwnsContext: boolean,
   extra?: CompatibleRequestHandlerExtra
 ): Promise<ResolvedIntent | null> {
   const contextArgument = getContextArgument(request)
-  if (isContextEnabled(data.options.context) && contextArgument) {
+  if (analyticsOwnsContext && isContextEnabled(data.options.context) && contextArgument) {
     return { intent: contextArgument, source: 'context_parameter' }
   }
 

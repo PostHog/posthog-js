@@ -32,7 +32,7 @@ export function addConversationIdToTool<TTool extends ConversationIdInjectableTo
         `WARN: Tool "${toolName}" already has '${CONVERSATION_ID_PARAM_NAME}' parameter. Skipping conversation_id injection.`
       )
     } else {
-      log(`WARN: Tool "${toolName}" has complex schema (oneOf/allOf/anyOf). Skipping conversation_id injection.`)
+      log(`WARN: Tool "${toolName}" has complex schema (oneOf/allOf/anyOf/$ref). Skipping conversation_id injection.`)
     }
     return modifiedTool
   }
@@ -130,25 +130,6 @@ export function extractConversationId(args: unknown): string | undefined {
   }
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : undefined
-}
-
-export function cloneRequestWithoutConversationId<
-  TRequest extends { params?: { arguments?: unknown; [k: string]: unknown } },
->(request: TRequest): TRequest {
-  if (!request.params || typeof request.params !== 'object') {
-    return request
-  }
-  const args = request.params.arguments
-  if (!(args && typeof args === 'object')) {
-    return request
-  }
-  return {
-    ...request,
-    params: {
-      ...request.params,
-      arguments: stripConversationId(args) as typeof request.params.arguments,
-    },
-  }
 }
 
 export function stripConversationId(args: unknown): unknown {

@@ -113,6 +113,111 @@ describe('captureAiGeneration', () => {
     expect(properties.$ai_output_choices).toBeNull()
   })
 
+  it('preserves input and output overrides from custom properties', async () => {
+    const client = buildClient()
+
+    await captureAiGeneration(client, {
+      ...baseRequiredOptions,
+      properties: { $ai_input: 'override prompt', $ai_output_choices: 'override response' },
+    })
+
+    const properties = lastCaptureProperties(client)
+    expect(properties.$ai_input).toBe('override prompt')
+    expect(properties.$ai_output_choices).toBe('override response')
+  })
+
+  it('redacts input and output before inspecting them in privacy mode', async () => {
+    const client = buildClient()
+    const inspectInput = jest.fn(() => {
+      throw new Error('input inspected')
+    })
+    const inspectOutput = jest.fn(() => {
+      throw new Error('output inspected')
+    })
+    const input = new Proxy({}, { ownKeys: inspectInput })
+    const output = new Proxy({}, { ownKeys: inspectOutput })
+
+    await expect(
+      captureAiGeneration(client, { ...baseRequiredOptions, input, output, privacyMode: true })
+    ).resolves.toBeUndefined()
+
+    expect(inspectInput).not.toHaveBeenCalled()
+    expect(inspectOutput).not.toHaveBeenCalled()
+    expect(lastCaptureProperties(client)).toMatchObject({ $ai_input: null, $ai_output_choices: null })
+  })
+
+  it('converts circular, BigInt, function, and throwing-toJSON input/output to JSON-safe values', async () => {
+    const client = buildClient()
+    const throwingToJSON = jest.fn(() => {
+      throw new Error('cannot serialize')
+    })
+    const input: Record<string, unknown> = {
+      count: 42n,
+      callback: () => 'secret',
+      nested: { value: 'kept', toJSON: throwingToJSON },
+    }
+    input.self = input
+    const output: unknown[] = [7n, () => undefined]
+    output.push(output)
+
+    await expect(captureAiGeneration(client, { ...baseRequiredOptions, input, output })).resolves.toBeUndefined()
+
+    const properties = lastCaptureProperties(client)
+    expect(properties.$ai_input).toEqual({
+      count: '42',
+      callback: '[Function]',
+      nested: { value: 'kept', toJSON: '[Function]' },
+      self: '[Circular]',
+    })
+    expect(properties.$ai_output_choices).toEqual(['7', '[Function]', '[Circular]'])
+    expect(throwingToJSON).toHaveBeenCalledTimes(1)
+    expect(() => JSON.stringify(properties.$ai_input)).not.toThrow()
+    expect(() => JSON.stringify(properties.$ai_output_choices)).not.toThrow()
+  })
+
+  it('uses intrinsic Date methods instead of caller-provided overrides', async () => {
+    const client = buildClient()
+    const getTimeOverride = jest.fn(() => 0)
+    const toISOStringOverride = jest.fn(() => 2n)
+    const validDate = new Date('2025-01-02T03:04:05.000Z')
+    const invalidDate = new Date(Number.NaN)
+
+    for (const date of [validDate, invalidDate]) {
+      Object.defineProperties(date, {
+        getTime: { value: getTimeOverride },
+        toISOString: { value: toISOStringOverride },
+      })
+    }
+
+    await captureAiGeneration(client, { ...baseRequiredOptions, input: validDate, output: invalidDate })
+
+    const properties = lastCaptureProperties(client)
+    expect(properties.$ai_input).toBe('2025-01-02T03:04:05.000Z')
+    expect(properties.$ai_output_choices).toBeNull()
+    expect(getTimeOverride).not.toHaveBeenCalled()
+    expect(toISOStringOverride).not.toHaveBeenCalled()
+    expect(() => JSON.stringify(properties)).not.toThrow()
+  })
+
+  it('bounds deeply nested and oversized input/output values', async () => {
+    const client = buildClient()
+    const input: Record<string, unknown> = {}
+    let cursor = input
+    for (let depth = 0; depth < 100; depth++) {
+      const child: Record<string, unknown> = {}
+      cursor.child = child
+      cursor = child
+    }
+    const output = Array.from({ length: 2_000 }, (_, index) => index)
+
+    await captureAiGeneration(client, { ...baseRequiredOptions, input, output })
+
+    const properties = lastCaptureProperties(client)
+    expect(JSON.stringify(properties.$ai_input)).toContain('[Truncated]')
+    expect(properties.$ai_output_choices).toHaveLength(1_001)
+    expect(properties.$ai_output_choices.at(-1)).toBe('[Truncated]')
+  })
+
   it.each([
     {
       name: 'derives httpStatus from error.status',

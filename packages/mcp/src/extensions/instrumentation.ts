@@ -5,6 +5,7 @@
 
 import type { ListToolsResult } from '@modelcontextprotocol/sdk/types.js'
 import type {
+  AnalyticsParameterOwnership,
   CompatibleRequestHandlerExtra,
   MCPAnalyticsData,
   MCPRequestLike,
@@ -12,12 +13,12 @@ import type {
   McpEvent,
   ServerClientInfoLike,
 } from '../types'
+import { getAnalyticsParameterOwnership, stripOwnedAnalyticsArguments } from './analytics-parameters'
 import { addContextParameterToTools, getContextDescription, isContextEnabled } from './context-parameters'
 import {
   addConversationIdToTools,
   type ConversationIdResolution,
   canInjectConversationIdPromptBack,
-  cloneRequestWithoutConversationId,
   injectConversationIdPromptBack,
   resolveConversationId,
 } from './conversation-id'
@@ -45,11 +46,7 @@ import { applyResolvedMetadata, isToolResultError } from './tracing-helpers'
 
 type MCPRequestHandler = (request: MCPRequestLike, extra?: CompatibleRequestHandlerExtra) => Promise<unknown>
 
-/**
- * Runs the underlying tool. Receives the request with the SDK-injected
- * `conversation_id` stripped; an adapter is free to ignore it (the high-level
- * path strips arguments inside the wrapped callback instead).
- */
+/** Runs the underlying tool with SDK-owned analytics arguments removed. */
 type ToolExecutor = (downstreamRequest: MCPRequestLike) => Promise<unknown>
 
 interface TraceToolCallParams {
@@ -58,6 +55,8 @@ interface TraceToolCallParams {
   request: MCPRequestLike
   extra?: CompatibleRequestHandlerExtra
   execute: ToolExecutor
+  /** Optional schema-derived ownership override for adapters with direct registry access. */
+  parameterOwnership?: AnalyticsParameterOwnership
   /**
    * Event type to capture. Defaults to a tool call; the `get_more_tools` virtual
    * tool passes `mcpMissingCapability` so it records a capability gap rather than
@@ -88,17 +87,33 @@ interface TraceToolCallParams {
  * throws, and the tool's own errors are always re-thrown to the caller.
  */
 export async function captureToolCall(params: TraceToolCallParams): Promise<unknown> {
-  const { server, data, request, extra, execute, eventType, explicitContextIntent, takeCapturedError } = params
+  const {
+    server,
+    data,
+    request,
+    extra,
+    execute,
+    parameterOwnership,
+    eventType,
+    explicitContextIntent,
+    takeCapturedError,
+  } = params
   const resolvedEventType = eventType ?? MCPAnalyticsEventType.mcpToolsCall
+  const ownership = getActiveAnalyticsParameterOwnership(
+    data,
+    request.params?.name,
+    parameterOwnership,
+    resolvedEventType === MCPAnalyticsEventType.mcpMissingCapability
+  )
   const conversation = resolveConversationId(
-    data.options.enableConversationId ?? false,
+    ownership.conversationId,
     request.params?.arguments,
     request.params?.name,
     resolvedEventType === MCPAnalyticsEventType.mcpMissingCapability
       ? resolveMissingCapabilityToolName(data.options)
       : ''
   )
-  const downstreamRequest = conversation.conversationId ? cloneRequestWithoutConversationId(request) : request
+  const downstreamRequest = cloneRequestWithoutOwnedAnalyticsArguments(request, ownership)
 
   // Prepare the event in isolation: if identity/metadata/intent resolution
   // throws, we drop instrumentation for this call but still run the tool.
@@ -111,6 +126,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     extra,
     startTime,
     conversation,
+    ownership,
     resolvedEventType
   )
   if (event && explicitContextIntent) {
@@ -130,6 +146,38 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   return finalResult
 }
 
+function getActiveAnalyticsParameterOwnership(
+  data: MCPAnalyticsData,
+  toolName: string | undefined,
+  override: AnalyticsParameterOwnership | undefined,
+  isMissingCapabilityTool: boolean
+): AnalyticsParameterOwnership {
+  const ownership = override ?? (toolName ? data.toolAnalyticsParameterOwnership.get(toolName) : undefined)
+  return {
+    context: !isMissingCapabilityTool && isContextEnabled(data.options.context) && ownership?.context === true,
+    conversationId:
+      !isMissingCapabilityTool && data.options.enableConversationId === true && ownership?.conversationId === true,
+  }
+}
+
+function cloneRequestWithoutOwnedAnalyticsArguments(
+  request: MCPRequestLike,
+  ownership: AnalyticsParameterOwnership
+): MCPRequestLike {
+  const args = request.params?.arguments
+  const cleanedArgs = stripOwnedAnalyticsArguments(args, ownership)
+  if (cleanedArgs === args || !request.params) {
+    return request
+  }
+  return {
+    ...request,
+    params: {
+      ...request.params,
+      arguments: cleanedArgs as typeof request.params.arguments,
+    },
+  }
+}
+
 async function prepareToolCallEvent(
   server: MCPServerLike,
   data: MCPAnalyticsData,
@@ -138,6 +186,7 @@ async function prepareToolCallEvent(
   extra: CompatibleRequestHandlerExtra | undefined,
   startTime: Date,
   conversation: ConversationIdResolution,
+  ownership: AnalyticsParameterOwnership,
   eventType: MCPAnalyticsEventType
 ): Promise<McpEvent | null> {
   try {
@@ -161,7 +210,7 @@ async function prepareToolCallEvent(
     stampMetaClientInfo(event, request)
 
     await applyResolvedMetadata(event, data, request, extra)
-    setEventIntent(event, await resolveToolCallIntent(data, request, extra))
+    setEventIntent(event, await resolveToolCallIntent(data, request, ownership.context, extra))
     return event
   } catch (error) {
     log(
@@ -394,6 +443,18 @@ export async function handleListToolsRequest(
   return { tools }
 }
 
+function cacheToolAnalyticsParameterOwnership(
+  cache: Map<string, AnalyticsParameterOwnership>,
+  tools: ListToolsResult['tools']
+): void {
+  // Merge pages and concurrent enumerations; repeated tool names overwrite stale schemas.
+  for (const tool of tools) {
+    if (tool?.name) {
+      cache.set(tool.name, getAnalyticsParameterOwnership(tool.inputSchema))
+    }
+  }
+}
+
 function collectListedToolNames(tools: ListToolsResult['tools'] | undefined): string[] | undefined {
   if (!tools || tools.length === 0) {
     return
@@ -415,6 +476,9 @@ async function getTracedToolsList(
     // Injection must not mutate arrays reused or frozen by the server.
     let tools = [...(originalResponse.tools || [])]
 
+    if (data) {
+      cacheToolAnalyticsParameterOwnership(data.toolAnalyticsParameterOwnership, tools)
+    }
     if (data && isContextEnabled(data.options.context)) {
       tools = addContextParameterToTools(tools, getContextDescription(data.options.context))
     }
