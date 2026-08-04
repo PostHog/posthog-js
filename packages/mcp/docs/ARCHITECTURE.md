@@ -51,7 +51,7 @@ client → MCP server → tools/call wrapper (instrument-highlevel.ts) → captu
   └─ captureEvent(server, event)  → McpEventSink.capture()
 ```
 
-The wrapper strips the `context` argument from `params.arguments` before forwarding to the user's tool callback, so tool implementations never see the analytics-only arg.
+The wrapper strips SDK-injected `context` and `conversation_id` arguments from `params.arguments` before validation and tool execution. Fields already declared by the tool's own schema are preserved.
 
 ## 3. Event pipeline
 
@@ -137,7 +137,7 @@ All wire keys live in `PostHogMCPAnalyticsProperty` (`src/extensions/constants.t
 | `ProtocolVersion` | `$mcp_protocol_version`  | string                              | Negotiated MCP spec version. Learned at `initialize` (off the response), then stamped on **every** event for the session — persisted in `sessionInfo` and recovered cross-pod from the session token (re-minted to carry the negotiated version). Tracks spec-revision adoption and lets you slice event metrics by spec version |
 | `Intent`          | `$mcp_intent`            | string                              | `context` argument when present, else `intentFallback()` return                                                                                                                                                                                                                                                                  |
 | `IntentSource`    | `$mcp_intent_source`     | `"context_parameter" \| "inferred"` | Where the intent came from                                                                                                                                                                                                                                                                                                       |
-| `ConversationId`  | `$mcp_conversation_id`   | string                              | Optional; only set when `enableConversationId: true`                                                                                                                                                                                                                                                                             |
+| `ConversationId`  | `$mcp_conversation_id`   | string                              | Optional; set when `enableConversationId: true` and the SDK owns the tool's injected `conversation_id` parameter                                                                                                                                                                                                                 |
 | `Parameters`      | `$mcp_parameters`        | object                              | Sanitized MCP request payload (see §3)                                                                                                                                                                                                                                                                                           |
 | `Response`        | `$mcp_response`          | object                              | Sanitized tool result                                                                                                                                                                                                                                                                                                            |
 
@@ -165,7 +165,7 @@ The `posthog-node` client is **not** an option — it is the required positional
 | ---------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `logger`                     | no-op                                   | STDIO-safe log sink for SDK-internal warnings. Receives single string messages.                                                                                                                                                                               |
 | `enableExceptionAutocapture` | `true`                                  | When `false`, a failed tool call does not emit the sibling `$exception` event.                                                                                                                                                                                |
-| `enableConversationId`       | `false`                                 | Inject the `conversation_id` parameter into every tool and stamp `$mcp_conversation_id` on events.                                                                                                                                                            |
+| `enableConversationId`       | `false`                                 | Inject `conversation_id` into eligible tools that don't already declare it and stamp `$mcp_conversation_id` on their events.                                                                                                                                  |
 | `reportMissing`              | `false`                                 | Register the `get_more_tools` virtual tool.                                                                                                                                                                                                                   |
 | `context`                    | `true` (object form: `{ description }`) | Inject required `context` arg into every tool schema.                                                                                                                                                                                                         |
 | `intentFallback`             | —                                       | Consumer-supplied callback returning a `$mcp_intent` string when the client didn't pass a `context` argument. SDK does no inference.                                                                                                                          |
@@ -300,7 +300,7 @@ Intent is the most semantically-loaded property the SDK emits. Lives in `src/ext
 1. **The `context` argument the LLM/client passed** — the SDK-injected JSON-Schema parameter. Tagged `$mcp_intent_source = "context_parameter"`.
 2. **The `intentFallback` callback you supplied** — runs only when no `context` argument is present. Tagged `$mcp_intent_source = "inferred"`.
 
-Explicit context always wins. If `context` is non-empty, `intentFallback` is **not invoked**.
+An explicit SDK-owned context always wins. If the SDK injected `context` and its value is non-empty, `intentFallback` is **not invoked**. A tool's own declared `context` is not consumed as intent, so the fallback may still run.
 
 ### Why the fallback exists
 
@@ -347,6 +347,8 @@ The SDK does **not**: call an LLM, inspect tool arguments, build heuristics, or 
 
 ### Known sharp edges
 
+- `reportMissing` determines ownership from the server's raw `tools/list` handler without relying on a previous client request, so stateless calls can reach the virtual tool across instances. If a real tool already advertises the configured name, the SDK warns, does not inject a duplicate descriptor, and delegates calls to the real handler. If the raw listing is unavailable or fails, calls fail open to the server handler rather than risk intercepting a real tool.
+- The MCP SDK advertises non-object Zod schemas — including refined objects such as `z.object({ context, value }).refine(...)` — as empty object schemas. Reserved-argument ownership follows that advertised schema, so a `context` declared inside one of these schemas is treated as analytics-owned and stripped before the tool callback.
 - The `get_more_tools` virtual tool emits its own `$mcp_missing_capability` event (a capability gap), **not** a `$mcp_tool_call`. Its `context` arg is recorded as `$mcp_intent` with `$mcp_intent_source = "context_parameter"`. It's defensible — the LLM did type a context string — but worth knowing if you segment by source.
 - `$mcp_intent_source` is currently **only** present when an intent was captured. Events with neither a context arg nor a fallback result have no `$mcp_intent` and no `$mcp_intent_source`. Dashboards filtering on `$mcp_intent_source = "inferred"` won't see them — that's the desired behavior; just don't expect a synthetic `"none"` value.
 

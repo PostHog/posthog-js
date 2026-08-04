@@ -1,6 +1,6 @@
 import { PostHogTracingProcessor } from '../src/openai-agents/processor'
 
-// Mock types matching @openai/agents-core interfaces
+// Mock types matching @openai/agents interfaces
 interface MockTrace {
   type: 'trace'
   traceId: string
@@ -118,13 +118,24 @@ describe('PostHogTracingProcessor', () => {
       expect(call.properties.$ai_latency).toBeDefined()
     })
 
-    it('includes group_id in trace events', async () => {
+    it('includes group_id in trace and span events as both session and group id', async () => {
       const trace = createMockTrace({ groupId: 'group_abc' })
-      await processor.onTraceStart(trace as any)
-      await processor.onTraceEnd(trace as any)
+      const span = createMockSpan({ spanData: { type: 'generation', model: 'gpt-4o' } })
 
-      const call = mockClient.capture.mock.calls[0][0]
-      expect(call.properties.$ai_group_id).toBe('group_abc')
+      await processor.onTraceStart(trace as any)
+      mockClient.capture.mockClear()
+
+      await processor.onSpanStart(span as any)
+      await processor.onSpanEnd(span as any)
+      const spanCall = mockClient.capture.mock.calls[0][0]
+
+      await processor.onTraceEnd(trace as any)
+      const traceCall = mockClient.capture.mock.calls[1][0]
+
+      expect(spanCall.properties.$ai_session_id).toBe('group_abc')
+      expect(spanCall.properties.$ai_group_id).toBe('group_abc')
+      expect(traceCall.properties.$ai_session_id).toBe('group_abc')
+      expect(traceCall.properties.$ai_group_id).toBe('group_abc')
     })
 
     it('includes trace metadata in trace events', async () => {
@@ -266,6 +277,106 @@ describe('PostHogTracingProcessor', () => {
       expect(call.properties.$ai_input).toEqual([{ role: 'user', content: 'Hello' }])
       expect(call.properties.$ai_output_choices).toEqual([{ role: 'assistant', content: 'Hi there!' }])
       expect(call.properties.$ai_model_parameters).toEqual({ temperature: 0.7, max_tokens: 100 })
+    })
+
+    it('maps OpenAI Agents 0.8 non-streamed Chat Completions response metadata', async () => {
+      const span = createMockSpan({
+        spanData: {
+          type: 'generation',
+          model: 'configured-model',
+          output: [
+            {
+              id: 'chatcmpl_nonstreamed',
+              object: 'chat.completion',
+              model: 'resolved-model',
+              choices: [{ message: { role: 'assistant', content: 'Hello!' }, finish_reason: 'stop', index: 0 }],
+              usage: {
+                prompt_tokens: 12,
+                completion_tokens: 7,
+                total_tokens: 19,
+                prompt_tokens_details: { cached_tokens: 5 },
+                completion_tokens_details: { reasoning_tokens: 3 },
+              },
+            },
+          ],
+        },
+      })
+
+      await processor.onSpanStart(span as any)
+      await processor.onSpanEnd(span as any)
+
+      const properties = mockClient.capture.mock.calls[0][0].properties
+      expect(properties.$ai_model).toBe('configured-model')
+      expect(properties.$ai_input_tokens).toBe(12)
+      expect(properties.$ai_output_tokens).toBe(7)
+      expect(properties.$ai_total_tokens).toBe(19)
+      expect(properties.$ai_cache_read_input_tokens).toBe(5)
+      expect(properties.$ai_cache_reporting_exclusive).toBe(false)
+      expect(properties.$ai_reasoning_tokens).toBe(3)
+    })
+
+    it('maps OpenAI Agents 0.8 streamed Chat Completions response metadata', async () => {
+      const span = createMockSpan({
+        spanData: {
+          type: 'generation',
+          output: [
+            {
+              id: 'FAKE_ID',
+              object: 'chat.completion',
+              model: 'streamed-model',
+              choices: [{ message: { role: 'assistant', content: 'Hello from a stream!' }, index: 0 }],
+              usage: {
+                prompt_tokens: 18,
+                completion_tokens: 9,
+                total_tokens: 27,
+              },
+            },
+          ],
+        },
+      })
+
+      await processor.onSpanStart(span as any)
+      await processor.onSpanEnd(span as any)
+
+      const properties = mockClient.capture.mock.calls[0][0].properties
+      expect(properties.$ai_model).toBe('streamed-model')
+      expect(properties.$ai_input_tokens).toBe(18)
+      expect(properties.$ai_output_tokens).toBe(9)
+      expect(properties.$ai_total_tokens).toBe(27)
+    })
+
+    it('prefers canonical generation usage over raw response usage', async () => {
+      const span = createMockSpan({
+        spanData: {
+          type: 'generation',
+          usage: {
+            input_tokens: 4,
+            output_tokens: 6,
+            details: { reasoning_tokens: 2, cache_read_input_tokens: 3, cache_creation_input_tokens: 1 },
+          },
+          output: [
+            {
+              usage: {
+                prompt_tokens: 40,
+                completion_tokens: 60,
+                completion_tokens_details: { reasoning_tokens: 20 },
+              },
+            },
+          ],
+        },
+      })
+
+      await processor.onSpanStart(span as any)
+      await processor.onSpanEnd(span as any)
+
+      const properties = mockClient.capture.mock.calls[0][0].properties
+      expect(properties.$ai_input_tokens).toBe(4)
+      expect(properties.$ai_output_tokens).toBe(6)
+      expect(properties.$ai_total_tokens).toBe(10)
+      expect(properties.$ai_reasoning_tokens).toBe(2)
+      expect(properties.$ai_cache_read_input_tokens).toBe(3)
+      expect(properties.$ai_cache_creation_input_tokens).toBe(1)
+      expect(properties).not.toHaveProperty('$ai_cache_reporting_exclusive')
     })
 
     it('defaults $ai_base_url to empty when model_config has no base_url', async () => {
@@ -1089,7 +1200,7 @@ describe('PostHogTracingProcessor', () => {
 })
 
 const mockAddTraceProcessor = jest.fn()
-jest.mock('@openai/agents-core', () => ({
+jest.mock('@openai/agents', () => ({
   addTraceProcessor: mockAddTraceProcessor,
 }))
 

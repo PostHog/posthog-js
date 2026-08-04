@@ -1,5 +1,19 @@
 # @posthog/browser-common
 
+## 0.3.1
+
+### Patch Changes
+
+- [#4340](https://github.com/PostHog/posthog-js/pull/4340) [`4b8867c`](https://github.com/PostHog/posthog-js/commit/4b8867c1e3f752b29ae17339870bd7175d5117c5) Thanks [@marandaneto](https://github.com/marandaneto)! - Avoid redacting session replay network bodies when timestamps or UUID fragments resemble social security or credit card numbers.
+  (2026-07-31)
+
+## 0.3.0
+
+### Minor Changes
+
+- [#4300](https://github.com/PostHog/posthog-js/pull/4300) [`6b48a59`](https://github.com/PostHog/posthog-js/commit/6b48a59ed096a52f720a608ce59cc81c54c2ef4d) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Stream replayable remote config outcomes through shared browser extension clients.
+  (2026-07-31)
+
 ## 0.2.5
 
 ### Patch Changes

@@ -95,30 +95,35 @@ export class PostHogInterceptor implements NestInterceptor {
       properties,
     }
 
-    // Use enterContext so the context propagates through RxJS Observable
-    // subscription and catchError handlers, not just the synchronous callback.
-    this.posthog.enterContext(contextData)
+    return new Observable((subscriber) =>
+      this.posthog.withContext(
+        contextData,
+        () => {
+          let source = next.handle()
 
-    let source = next.handle()
+          if (this.captureExceptions) {
+            source = source.pipe(
+              catchError((exception: unknown) => {
+                if (ErrorTracking.isPreviouslyCapturedError(exception)) {
+                  return throwError(() => exception)
+                }
+                const status = getExceptionStatus(exception)
+                if (status !== undefined && status < this.minStatusToCapture) {
+                  return throwError(() => exception)
+                }
+                const responseStatus = status ?? response?.statusCode
+                const additionalProperties: Record<string, any> | undefined =
+                  responseStatus !== undefined ? { $response_status_code: responseStatus } : undefined
+                this.posthog.captureException(exception, distinctId, additionalProperties)
+                return throwError(() => exception)
+              })
+            )
+          }
 
-    if (this.captureExceptions) {
-      source = source.pipe(
-        catchError((exception: unknown) => {
-          if (ErrorTracking.isPreviouslyCapturedError(exception)) {
-            return throwError(() => exception)
-          }
-          const status = getExceptionStatus(exception)
-          if (status !== undefined && status < this.minStatusToCapture) {
-            return throwError(() => exception)
-          }
-          const responseStatus = status ?? response?.statusCode
-          const additionalProperties: Record<string, any> | undefined =
-            responseStatus !== undefined ? { $response_status_code: responseStatus } : undefined
-          this.posthog.captureException(exception, distinctId, additionalProperties)
-          return throwError(() => exception)
-        })
+          return source.subscribe(subscriber)
+        },
+        { fresh: true }
       )
-    }
-    return source
+    )
   }
 }
