@@ -202,7 +202,6 @@ describe('Lazy SessionRecording', () => {
     let sessionIdGeneratorMock: Mock
     let windowIdGeneratorMock: Mock
     let onFeatureFlagsCallback: ((flags: string[], variants: Record<string, string | boolean>) => void) | null
-    let removePageviewCaptureHookMock: Mock
 
     // staging for tests that are not about hold semantics: drop the fresh-start interaction hold
     function releaseInteractionHold(): void {
@@ -261,7 +260,6 @@ describe('Lazy SessionRecording', () => {
 
     beforeEach(() => {
         mockRemoteConfigLoad.mockClear()
-        removePageviewCaptureHookMock = jest.fn()
         sessionId = 'sessionId' + uuidv7()
 
         config = createMockConfig({
@@ -323,7 +321,7 @@ describe('Lazy SessionRecording', () => {
             _internalEventEmitter: simpleEventEmitter,
             on: jest.fn().mockImplementation((event, cb) => {
                 const unsubscribe = simpleEventEmitter.on(event, cb)
-                return removePageviewCaptureHookMock.mockImplementation(unsubscribe)
+                return jest.fn().mockImplementation(unsubscribe)
             }),
         } as Partial<PostHog> as PostHog
 
@@ -342,6 +340,8 @@ describe('Lazy SessionRecording', () => {
         })
 
         sessionRecording = new SessionRecording(posthog)
+        // mirror posthog-core, which exposes the eager extension on the instance
+        posthog.sessionRecording = sessionRecording
     })
 
     afterEach(() => {
@@ -3625,6 +3625,98 @@ describe('Lazy SessionRecording', () => {
     })
 
     describe('Event triggering', () => {
+        describe('events captured while the recorder script is lazy loading', () => {
+            it('activates an event trigger from an event captured before the script loaded', () => {
+                // defer the script load so events can arrive while the recorder is still loading
+                let completeScriptLoad: (() => void) | undefined
+                loadScriptMock.mockImplementation((_ph, _path, callback) => {
+                    completeScriptLoad = () => {
+                        addRRwebToWindow()
+                        callback()
+                    }
+                })
+
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            eventTriggers: ['$pageview'],
+                        },
+                    })
+                )
+
+                expect(sessionRecording.status).toBe('lazy_loading')
+                simpleEventEmitter.emit('eventCaptured', { event: '$pageview', properties: {} })
+
+                completeScriptLoad!()
+
+                expect(sessionRecording.status).toBe('active')
+            })
+
+            it('does not activate when pre-load events do not match the trigger', () => {
+                let completeScriptLoad: (() => void) | undefined
+                loadScriptMock.mockImplementation((_ph, _path, callback) => {
+                    completeScriptLoad = () => {
+                        addRRwebToWindow()
+                        callback()
+                    }
+                })
+
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            eventTriggers: ['$exception'],
+                        },
+                    })
+                )
+
+                simpleEventEmitter.emit('eventCaptured', { event: '$pageview', properties: {} })
+
+                completeScriptLoad!()
+
+                expect(sessionRecording.status).toBe('buffering')
+            })
+
+            it('stops buffering once the recorder has started', () => {
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            eventTriggers: ['$exception'],
+                        },
+                    })
+                )
+
+                // the recorder consumed the buffer on start, and later events are not buffered
+                simpleEventEmitter.emit('eventCaptured', { event: 'some_event', properties: {} })
+                expect(sessionRecording.consumeEventsCapturedBeforeRecorderStarted()).toEqual([])
+            })
+
+            it('caps the pre-start event buffer and keeps the earliest events', () => {
+                for (let i = 0; i < 150; i++) {
+                    simpleEventEmitter.emit('eventCaptured', { event: 'event_' + i, properties: {} })
+                }
+
+                const events = sessionRecording.consumeEventsCapturedBeforeRecorderStarted()
+                expect(events).toHaveLength(100)
+                expect(events[0].event).toBe('event_0')
+                expect(events[99].event).toBe('event_99')
+
+                // consuming empties the buffer and stops further buffering
+                simpleEventEmitter.emit('eventCaptured', { event: 'late_event', properties: {} })
+                expect(sessionRecording.consumeEventsCapturedBeforeRecorderStarted()).toEqual([])
+            })
+
+            it('clears the buffer when remote config disables recording', () => {
+                simpleEventEmitter.emit('eventCaptured', { event: '$pageview', properties: {} })
+
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: false }))
+
+                expect(sessionRecording.consumeEventsCapturedBeforeRecorderStarted()).toEqual([])
+            })
+        })
+
         it('uses the active snapshot interval immediately after a trigger matches', () => {
             jest.useFakeTimers()
             try {
@@ -3914,7 +4006,8 @@ describe('Lazy SessionRecording', () => {
             )
 
             expect(sessionRecording['_lazyLoadedSessionRecording']['_removePageViewCaptureHook']).not.toBeUndefined()
-            expect(posthog.on).toHaveBeenCalledTimes(1)
+            // one hook from the eager extension's pre-start event buffer, one for pageview capture
+            expect(posthog.on).toHaveBeenCalledTimes(2)
 
             // calling a second time doesn't add another capture hook
             sessionRecording.onRemoteConfig(
@@ -3924,7 +4017,7 @@ describe('Lazy SessionRecording', () => {
                     },
                 })
             )
-            expect(posthog.on).toHaveBeenCalledTimes(1)
+            expect(posthog.on).toHaveBeenCalledTimes(2)
         })
 
         it('removes the pageview capture hook on stop', () => {
@@ -3935,12 +4028,13 @@ describe('Lazy SessionRecording', () => {
                     },
                 })
             )
-            expect(sessionRecording['_lazyLoadedSessionRecording']['_removePageViewCaptureHook']).not.toBeUndefined()
+            const removePageviewCaptureHook =
+                sessionRecording['_lazyLoadedSessionRecording']['_removePageViewCaptureHook']
+            expect(removePageviewCaptureHook).not.toBeUndefined()
 
-            expect(removePageviewCaptureHookMock).not.toHaveBeenCalled()
             sessionRecording.stopRecording()
 
-            expect(removePageviewCaptureHookMock).toHaveBeenCalledTimes(1)
+            expect(removePageviewCaptureHook).toHaveBeenCalledTimes(1)
             expect(sessionRecording['_lazyLoadedSessionRecording']['_removePageViewCaptureHook']).toBeUndefined()
         })
 
