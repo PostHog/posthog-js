@@ -16,6 +16,12 @@ import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { CAMPAIGN_PARAMS } from '@posthog/browser-common/utils/event-utils'
 import { normalizeCaptureResult } from './helpers/normalize-capture-result'
 
+jest.mock('@posthog/browser-common/utils/globals', () => {
+    const globals = jest.requireActual('@posthog/browser-common/utils/globals')
+    const { SNAPSHOT_TEST_USER_AGENT } = jest.requireActual('./helpers/normalize-capture-result')
+    return { ...globals, userAgent: SNAPSHOT_TEST_USER_AGENT }
+})
+
 jest.useFakeTimers()
 jest.spyOn(global, 'setTimeout')
 

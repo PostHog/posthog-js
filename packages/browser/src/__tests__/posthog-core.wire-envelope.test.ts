@@ -1,9 +1,14 @@
 import type { CaptureResult } from '../types'
 
-jest.mock('@posthog/browser-common/utils/globals', () => ({
-    ...jest.requireActual('@posthog/browser-common/utils/globals'),
-    fetch: jest.fn(),
-}))
+jest.mock('@posthog/browser-common/utils/globals', () => {
+    const globals = jest.requireActual('@posthog/browser-common/utils/globals')
+    const { SNAPSHOT_TEST_USER_AGENT } = jest.requireActual('./helpers/normalize-capture-result')
+    return {
+        ...globals,
+        userAgent: SNAPSHOT_TEST_USER_AGENT,
+        fetch: jest.fn(),
+    }
+})
 
 import { fetch } from '@posthog/browser-common/utils/globals'
 import { createPosthogInstance } from './helpers/posthog-instance'

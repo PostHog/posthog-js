@@ -5,6 +5,12 @@ import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { defaultPostHog } from './helpers/posthog-instance'
 import { normalizeCaptureResult, standardVolatileCaptureProperties } from './helpers/normalize-capture-result'
 
+jest.mock('@posthog/browser-common/utils/globals', () => {
+    const globals = jest.requireActual('@posthog/browser-common/utils/globals')
+    const { SNAPSHOT_TEST_USER_AGENT } = jest.requireActual('./helpers/normalize-capture-result')
+    return { ...globals, userAgent: SNAPSHOT_TEST_USER_AGENT }
+})
+
 describe('identify()', () => {
     let instance: PostHog
     let beforeSendMock: jest.Mock
