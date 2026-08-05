@@ -6,6 +6,7 @@ import { ProductTourEventName, ProductTourEventProperties } from '../posthog-pro
 import { SURVEY_SEEN_PREFIX } from '../utils/survey-utils'
 import { beforeEach } from '@jest/globals'
 import { RateLimiter } from '../rate-limiter'
+import { normalizeCaptureResult } from './helpers/normalize-capture-result'
 
 jest.mock('@posthog/browser-common/utils/globals', () => {
     const orig = jest.requireActual('@posthog/browser-common/utils/globals')
@@ -125,6 +126,38 @@ describe('posthog core', () => {
             expect(beforeSendMock.mock.calls[0][0]).toMatchObject({
                 $unset: ['email'],
             })
+        })
+
+        it('produces a representative custom event capture', () => {
+            const { posthog, beforeSendMock } = setup({}, 'snapshot-token')
+            posthog.register({ plan: 'growth', workspace_id: 'workspace-42' })
+
+            posthog.capture('report exported', {
+                export_format: 'csv',
+                row_count: 42,
+                filters: { date_range: 'last_30_days', teams: ['analytics', 'growth'] },
+            })
+
+            const capturedEvent = beforeSendMock.mock.calls[0][0]
+            expect(normalizeCaptureResult(capturedEvent)).toMatchSnapshot()
+        })
+
+        it('produces a representative $groupidentify capture from a real instance', () => {
+            const { posthog, beforeSendMock } = setup({}, 'group-snapshot-token')
+
+            posthog.group('organization', 'org::5', { group: 'property', foo: 5 })
+
+            expect(beforeSendMock).toHaveBeenCalledTimes(1)
+            const capturedEvent = beforeSendMock.mock.calls[0][0]
+            expect(capturedEvent).toMatchObject({
+                event: '$groupidentify',
+                properties: {
+                    $group_type: 'organization',
+                    $group_key: 'org::5',
+                    $group_set: { group: 'property', foo: 5 },
+                },
+            })
+            expect(normalizeCaptureResult(capturedEvent)).toMatchSnapshot()
         })
 
         describe('rate limiting', () => {

@@ -226,12 +226,28 @@ describe('persistence', () => {
         })
 
         it('extracts enabled feature flags', () => {
-            library.register({ $enabled_feature_flags: { flag: 'variant', other: true } })
-            expect(library.props['$enabled_feature_flags']).toEqual({ flag: 'variant', other: true })
-            expect(library.properties()).toEqual({
-                '$feature/flag': 'variant',
-                '$feature/other': true,
+            library.register({
+                $enabled_feature_flags: {
+                    'checkout-redesign': 'compact',
+                    'priority-support': true,
+                    'retired-dashboard': false,
+                },
             })
+
+            expect(library.props['$enabled_feature_flags']).toEqual({
+                'checkout-redesign': 'compact',
+                'priority-support': true,
+                'retired-dashboard': false,
+            })
+            expect(library.properties()).toEqual({
+                '$feature/checkout-redesign': 'compact',
+                '$feature/priority-support': true,
+                '$feature/retired-dashboard': false,
+            })
+            expect({
+                persisted: library.props['$enabled_feature_flags'],
+                eventProperties: library.properties(),
+            }).toMatchSnapshot()
         })
 
         it('skips $feature/ properties when cache is stale and TTL is configured', () => {

@@ -1,0 +1,171 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`featureflags _callFlagsEndpoint via reloadFeatureFlags builds a representative flags request 1`] = `
+{
+  "callback": "<request-callback>",
+  "compression": "base64",
+  "data": {
+    "$anon_distinct_id": "anonymous-456",
+    "$device_id": "device-123",
+    "distinct_id": "blah id",
+    "evaluation_contexts": [
+      "production",
+      "web",
+    ],
+    "flag_keys": [
+      "checkout-redesign",
+      "new-dashboard",
+    ],
+    "group_properties": {
+      "organization": {
+        "employee_count": 120,
+        "industry": "technology",
+      },
+      "project": {
+        "region": "eu-west",
+      },
+    },
+    "groups": {
+      "organization": "org-42",
+      "project": "project-7",
+    },
+    "person_properties": {
+      "$lib": "web",
+      "$lib_version": "<sdk-version>",
+      "plan": "enterprise",
+      "seats": 25,
+    },
+    "timezone": "<runtime-timezone>",
+    "token": "random fake token",
+  },
+  "method": "POST",
+  "timeout": undefined,
+  "timestampMode": "body",
+  "url": "https://us.i.posthog.com/flags/?v=2",
+}
+`;
+
+exports[`featureflags Feature Flag Request ID and Evaluated At captures rich feature flag called event properties 1`] = `
+[
+  "$feature_flag_called",
+  {
+    "$feature_flag": "test-flag",
+    "$feature_flag_bootstrapped_payload": null,
+    "$feature_flag_bootstrapped_response": null,
+    "$feature_flag_evaluated_at": 1234567890,
+    "$feature_flag_has_experiment": true,
+    "$feature_flag_id": 23,
+    "$feature_flag_payload": {
+      "layout": "compact",
+      "max_items": 12,
+    },
+    "$feature_flag_reason": "Matched condition set 1",
+    "$feature_flag_request_id": "test-request-id-123",
+    "$feature_flag_response": "variant-1",
+    "$feature_flag_version": 42,
+    "$used_bootstrap_value": false,
+  },
+]
+`;
+
+exports[`minimal $feature_flag_called events sends exactly the allowlisted properties when gated and the flag has no experiment 1`] = `
+{
+  "event": "$feature_flag_called",
+  "properties": {
+    "$current_url": "http://localhost/",
+    "$device_id": "<generated-device-id>",
+    "$feature_flag": "test-flag",
+    "$feature_flag_evaluated_at": 1700000000000,
+    "$feature_flag_has_experiment": false,
+    "$feature_flag_id": 42,
+    "$feature_flag_request_id": "minimal-request-id",
+    "$feature_flag_response": true,
+    "$feature_flag_version": 3,
+    "$groups": {
+      "organization": "org-1",
+    },
+    "$lib": "web",
+    "$lib_version": "<sdk-version>",
+    "$pathname": "/",
+    "$process_person_profile": true,
+    "$referring_domain": "$direct",
+    "$session_id": "<generated-session-id>",
+    "$window_id": "<generated-window-id>",
+    "distinct_id": "<generated-distinct-id>",
+    "token": "minimal-flag-snapshot-token",
+  },
+  "timestamp": "<capture-timestamp>",
+  "uuid": "<event-uuid>",
+}
+`;
+
+exports[`minimal $feature_flag_called events sends the full event when gated but the flag has an experiment 1`] = `
+{
+  "event": "$feature_flag_called",
+  "properties": {
+    "$active_feature_flags": [
+      "test-flag",
+    ],
+    "$autocapture_disabled_server_side": false,
+    "$browser": "Safari",
+    "$browser_language": "en-US",
+    "$browser_language_prefix": "en",
+    "$browser_version": null,
+    "$config_defaults": "unset",
+    "$configured_session_timeout_ms": 1800000,
+    "$current_url": "http://localhost/",
+    "$device_id": "<generated-device-id>",
+    "$device_type": "Desktop",
+    "$feature/test-flag": true,
+    "$feature_flag": "test-flag",
+    "$feature_flag_bootstrapped_payload": null,
+    "$feature_flag_bootstrapped_response": null,
+    "$feature_flag_evaluated_at": 1700000000000,
+    "$feature_flag_has_experiment": true,
+    "$feature_flag_id": 42,
+    "$feature_flag_payload": null,
+    "$feature_flag_payloads": {},
+    "$feature_flag_request_id": "minimal-request-id",
+    "$feature_flag_response": true,
+    "$feature_flag_version": 3,
+    "$host": "localhost",
+    "$initialization_time": "<initialization-time>",
+    "$insert_id": "<insert-id>",
+    "$is_identified": false,
+    "$lib": "web",
+    "$lib_custom_api_host": "http://localhost",
+    "$lib_rate_limit_remaining_tokens": 99,
+    "$lib_version": "<sdk-version>",
+    "$pathname": "/",
+    "$process_person_profile": false,
+    "$raw_user_agent": "<user-agent>",
+    "$recording_status": "disabled",
+    "$referrer": "$direct",
+    "$referring_domain": "$direct",
+    "$screen_height": 0,
+    "$screen_width": 0,
+    "$sdk_debug_extensions_init_method": "synchronous",
+    "$sdk_debug_extensions_init_time_ms": "<extension-init-time>",
+    "$sdk_debug_retry_queue_size": 0,
+    "$sdk_dist_channel": "npm",
+    "$session_entry_host": "localhost",
+    "$session_entry_pathname": "/",
+    "$session_entry_referrer": "$direct",
+    "$session_entry_referring_domain": "$direct",
+    "$session_entry_url": "http://localhost/",
+    "$session_id": "<generated-session-id>",
+    "$time": "<event-time>",
+    "$timezone": "<runtime-timezone>",
+    "$timezone_offset": "<runtime-timezone-offset>",
+    "$used_bootstrap_value": true,
+    "$viewport_height": 768,
+    "$viewport_width": 1024,
+    "$window_id": "<generated-window-id>",
+    "distinct_id": "<generated-distinct-id>",
+    "super_prop": "super_value",
+    "token": "full-flag-snapshot-token",
+  },
+  "timestamp": "<capture-timestamp>",
+  "uuid": "<event-uuid>",
+}
+`;
