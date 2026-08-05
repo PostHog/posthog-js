@@ -630,6 +630,26 @@ export interface SessionRecordingOptions {
     maskInputFn?: ((text: string, element?: HTMLElement) => string) | null
 
     /**
+     * Derived from `rrweb.record` options. Masks every string-valued source DOM attribute,
+     * including rendering attributes such as `class`, `id`, `style`, `src`, `href`, and
+     * synthesized form values. Only rrweb-generated layout metadata is retained, so this
+     * option intentionally reduces replay fidelity. `maskAttributeFn` takes precedence when
+     * both options are set.
+     * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     * @default false
+     */
+    maskAllElementAttributes?: boolean
+
+    /**
+     * Derived from `rrweb.record` options. Called with `(name, value, element)` for every
+     * non-empty string-valued attribute in the final serialized representation so you can mask
+     * specific attributes. Returning the original value leaves it visible. This callback
+     * takes precedence over `maskAllElementAttributes` when both options are set.
+     * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     */
+    maskAttributeFn?: ((name: string, value: string, element?: Element) => string) | null
+
+    /**
      * Derived from `rrweb.record` options
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
      * @default {}

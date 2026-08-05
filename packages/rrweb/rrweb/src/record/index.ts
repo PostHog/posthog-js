@@ -197,6 +197,8 @@ function record<T = eventWithTime>(
     slimDOMOptions: _slimDOMOptions,
     maskInputFn,
     maskTextFn,
+    maskAllElementAttributes = false,
+    maskAttributeFn,
     hooks,
     packFn,
     sampling = {},
@@ -445,6 +447,8 @@ function record<T = eventWithTime>(
   const stylesheetManager = new StylesheetManager({
     mutationCb: wrappedMutationEmit,
     adoptedStyleSheetCb: wrappedAdoptedStyleSheetEmit,
+    maskAllElementAttributes,
+    maskAttributeFn,
   });
 
   const iframeManager = new IframeManager({
@@ -498,6 +502,8 @@ function record<T = eventWithTime>(
       dataURLOptions,
       maskTextFn,
       maskInputFn,
+      maskAllElementAttributes,
+      maskAttributeFn,
       recordCanvas,
       canvasMaskingConfigured,
       inlineImages,
@@ -554,6 +560,8 @@ function record<T = eventWithTime>(
         inlineStylesheetBudgetRules,
         maskTextFn,
         maskInputFn,
+        maskAllElementAttributes,
+        maskAttributeFn,
         slimDOM: slimDOMOptions,
         dataURLOptions,
         recordCanvas,
@@ -769,6 +777,8 @@ function record<T = eventWithTime>(
           doc,
           maskInputFn,
           maskTextFn,
+          maskAllElementAttributes,
+          maskAttributeFn,
           keepIframeSrcFn,
           blockSelector,
           slimDOMOptions,
