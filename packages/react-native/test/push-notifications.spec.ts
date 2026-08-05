@@ -295,23 +295,28 @@ describe('push notifications', () => {
       await posthog.shutdown()
     })
 
+    // Manual-registration options with storage shared across instances, so consecutive
+    // createPostHog calls behave like app relaunches.
+    const createRelaunchOptions = (): { [key: string]: any } => {
+      const store: { [key: string]: string } = {}
+      return {
+        capturePushNotificationSubscriptions: false,
+        capturePushNotificationOpened: false,
+        persistence: 'file',
+        customStorage: {
+          getItem: (key: string) => store[key] ?? null,
+          setItem: (key: string, value: string) => {
+            store[key] = value
+          },
+        },
+      }
+    }
+
     it('boots native on a later launch to clean up a manually registered subscription', async () => {
       // Native persists the subscription across launches; without the persisted
       // PushRegistered flag, launch B's unregister would no-op at the !requireInit gate
       // and Workflows would keep targeting the device.
-      const store: { [key: string]: string } = {}
-      const sharedStorage = {
-        getItem: (key: string) => store[key] ?? null,
-        setItem: (key: string, value: string) => {
-          store[key] = value
-        },
-      }
-      const relaunchOptions = {
-        capturePushNotificationSubscriptions: false,
-        capturePushNotificationOpened: false,
-        persistence: 'file',
-        customStorage: sharedStorage,
-      }
+      const relaunchOptions = createRelaunchOptions()
 
       const launchA = await createPostHog(relaunchOptions)
       await launchA.registerPushNotificationToken('token-abc')
@@ -334,19 +339,7 @@ describe('push notifications', () => {
     })
 
     it('boots native on reset() when a manual registration is persisted', async () => {
-      const store: { [key: string]: string } = {}
-      const sharedStorage = {
-        getItem: (key: string) => store[key] ?? null,
-        setItem: (key: string, value: string) => {
-          store[key] = value
-        },
-      }
-      const relaunchOptions = {
-        capturePushNotificationSubscriptions: false,
-        capturePushNotificationOpened: false,
-        persistence: 'file',
-        customStorage: sharedStorage,
-      }
+      const relaunchOptions = createRelaunchOptions()
 
       const launchA = await createPostHog(relaunchOptions)
       await launchA.registerPushNotificationToken('token-abc')
