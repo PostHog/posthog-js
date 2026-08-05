@@ -189,37 +189,29 @@ export interface PostHogOptions extends PostHogCoreOptions {
   overrideDisplayLanguage?: string | null
 
   /**
-   * Whether to automatically register this device's push token with PostHog, so
-   * PostHog Workflows can target it. Requires `@posthog/react-native-plugin`.
+   * Whether to automatically register this device's push token so PostHog
+   * Workflows can target it. Requires `@posthog/react-native-plugin`.
    *
-   * On iOS the native SDK swizzles the app delegate's remote-notification
-   * registration callback; on Android it fetches the FCM token at startup when
-   * `firebase-messaging` is on the classpath. Either way the host app is still
-   * responsible for requesting notification permission and calling
-   * `registerForRemoteNotifications()` (iOS) — this only observes the result.
-   *
-   * The startup fetch does not see later token refreshes; wire those to
+   * Your app still owns permission — PostHog only observes the token the OS hands
+   * back, and never sees later refreshes. Forward those to
    * {@link PostHog.registerPushNotificationToken} yourself.
    *
-   * Not supported on web or macOS (registration is iOS/Android only).
+   * Not supported on web or macOS.
    *
    * @default true
    */
   capturePushNotificationSubscriptions?: boolean
 
   /**
-   * Whether to automatically capture `$push_notification_opened` when the user
-   * taps a PostHog-delivered notification. Requires `@posthog/react-native-plugin`.
+   * Whether to automatically capture `$push_notification_opened` on a notification
+   * tap. Requires `@posthog/react-native-plugin`.
    *
-   * Coverage differs per platform. iOS hooks the notification-response
-   * delegate, so every tap on a **remote** notification is captured whatever
-   * the app state; locally-scheduled notifications are ignored. Android only
-   * reads the launch intent, so it sees cold starts alone. Call
-   * {@link PostHog.capturePushNotificationOpened} for the taps auto-capture
-   * cannot see.
+   * Fires for pushes from any provider, not just PostHog's — but title and body are
+   * attached only for PostHog's own, so third-party notification text never reaches
+   * analytics. Android sees cold starts only; call
+   * {@link PostHog.capturePushNotificationOpened} for the taps it misses.
    *
-   * The event is built and sent by the native SDK, so JS `before_send` hooks
-   * never see it.
+   * The native SDK builds and sends this event, so JS `before_send` never sees it.
    *
    * Not supported on web.
    *
@@ -229,19 +221,13 @@ export interface PostHogOptions extends PostHogCoreOptions {
 
   /**
    * Mints a signed identity-verification token for push subscription requests.
-   * Only needed when the PostHog project requires identity verification for
-   * push. Requires `@posthog/react-native-plugin`.
+   * Only needed when your PostHog project requires identity verification for push.
+   * Requires `@posthog/react-native-plugin`.
    *
-   * Called by the native SDK with the current `distinctId` and `appId`; the
-   * returned token is attached to the subscription request. Return `null` to
-   * send the request without an identity token.
-   *
-   * The token must be minted by your backend (HS256, with `sub` = distinctId,
-   * an `app_id` claim, and `aud` = `posthog:push_identity`), never in the app.
-   *
-   * The native SDKs cache the result per `(distinctId, appId)` and give the
-   * callback 10 seconds before falling back to an unauthenticated request, so
-   * a slow or throwing implementation degrades rather than blocking delivery.
+   * Called with the current `distinctId` and `appId`. Mint on your backend (HS256,
+   * `sub` = distinctId, an `app_id` claim, `aud` = `posthog:push_identity`), never
+   * in the app. Return `null` to send the request unauthenticated; a slow or
+   * throwing implementation does the same after 10 seconds.
    */
   pushIdentityProvider?: PostHogPushIdentityProvider
 }
@@ -2084,44 +2070,23 @@ export class PostHog extends PostHogCore {
    * Registers this device's push token so PostHog Workflows can target it.
    * Requires `@posthog/react-native-plugin`.
    *
-   * Both platforms register a token automatically at startup when
-   * {@link PostHogOptions.capturePushNotificationSubscriptions} is enabled, so the main
-   * reason to call this is a token refresh, which that startup fetch cannot see.
+   * Registration happens at startup on its own when
+   * {@link PostHogOptions.capturePushNotificationSubscriptions} is on, so call this for
+   * token refreshes, which that startup fetch cannot see — on Android only, since a
+   * refresh listener yields an FCM token and iOS defaults to APNs. Safe to call before
+   * the native SDK is ready; the call queues rather than being dropped.
    *
-   * `appId` identifies the app the token belongs to: the Firebase `project_id` for an
-   * FCM token, the APNs bundle id for an APNs token. It is what tells PostHog which
-   * provider to deliver through — the platform is only recorded alongside it. Leave it
-   * unset and iOS falls back to the bundle id while Android falls back to the default
-   * `FirebaseApp`'s project id, so pass it explicitly if your app does not use Firebase
-   * or registers a non-default Firebase project. Android cannot register without one and
-   * logs the skip as a warning.
+   * `appId` says which provider delivers: the Firebase `project_id` for an FCM token, the
+   * APNs bundle id for an APNs token. Unset, iOS uses the bundle id and Android the
+   * default `FirebaseApp`'s project id, so pass it if you don't use Firebase or use a
+   * non-default project. Registration fails server-side if your PostHog project has no
+   * matching integration for `appId`.
    *
-   * **The default provider is APNs on iOS and FCM on Android**, matching what automatic
-   * registration does on its own. Token-refresh listeners (e.g.
-   * `@react-native-firebase/messaging`'s `onTokenRefresh`) yield an FCM token on both
-   * platforms, so forward them on Android only — an FCM token paired with the iOS bundle
-   * id fails delivery:
-   *
-   * ```ts
-   * if (Platform.OS === 'android') {
-   *   messaging().onTokenRefresh((token) => posthog.registerPushNotificationToken(token))
-   * }
-   * ```
-   *
-   * **Using FCM on both platforms** is supported — pass the Firebase `project_id` as
-   * `appId` on iOS too — but set
-   * {@link PostHogOptions.capturePushNotificationSubscriptions} to `false` first.
-   * PostHog stores one subscription per app id, so leaving automatic registration on
-   * gives an iOS device two: an APNs one under the bundle id and an FCM one under the
-   * project id. A Workflow configured with both integrations then delivers to that
-   * device twice, and {@link unregisterPushNotificationToken} only clears the most
-   * recently registered of the two.
-   *
-   * Registration also fails server-side if your PostHog project has no Firebase or APNs
-   * integration configured for `appId`.
-   *
-   * Safe to call at any point: the call queues behind native initialization, so a token
-   * passed before the native SDK is ready is still registered rather than silently dropped.
+   * To use FCM on iOS too, pass the Firebase `project_id` as `appId` and set
+   * {@link PostHogOptions.capturePushNotificationSubscriptions} to `false` first —
+   * otherwise the device registers twice (APNs under the bundle id, FCM under the project
+   * id), a Workflow with both integrations delivers twice, and
+   * {@link unregisterPushNotificationToken} clears only the most recent.
    *
    * Not supported on web or macOS.
    */
@@ -2139,9 +2104,8 @@ export class PostHog extends PostHogCore {
    * Unregisters this device's push token so Workflows stop targeting it — for example
    * from your logout flow. Requires `@posthog/react-native-plugin`.
    *
-   * The intent is durable: if the request fails or the device is offline, the native SDK
-   * retries it on the next flush or app launch. `reset()` already moves a registered
-   * token to the new anonymous identity on its own, so this is only needed when you
+   * Durable: a failed or offline request retries on the next flush or launch. `reset()`
+   * already moves a registered token to the new identity, so this is only needed if you
    * manage subscriptions yourself.
    *
    * Not supported on web or macOS.
@@ -2160,18 +2124,13 @@ export class PostHog extends PostHogCore {
    * Captures `$push_notification_opened` when a user opens a push notification.
    * Requires `@posthog/react-native-plugin`.
    *
-   * Call this only for opens {@link PostHogOptions.capturePushNotificationOpened} cannot
-   * see itself — local notifications on either platform, plus warm-start and foreground
-   * taps on Android — or the tap is counted twice. That option's doc has the coverage
-   * matrix.
+   * Only for taps {@link PostHogOptions.capturePushNotificationOpened} cannot see itself —
+   * local notifications, plus warm-start and foreground taps on Android — or the tap is
+   * counted twice.
    *
-   * The event is built and sent by the native SDK, so JS `before_send` hooks never see
-   * it — redact anything sensitive before passing it here.
-   *
-   * Keys of `payload`'s `posthog` entry become `$notification_<key>` properties; it is
-   * decoded natively whether it arrives as a map or a JSON string. Leave `action` unset
-   * for a plain tap — only action-button taps carry an identifier. `subtitle` is iOS
-   * only and ignored on Android, which has no such field.
+   * Keys of `payload`'s `posthog` entry become `$notification_<key>` properties. Leave
+   * `action` unset for a plain tap; `subtitle` is iOS only. The native SDK builds and
+   * sends the event, so JS `before_send` never sees it — redact anything sensitive first.
    *
    * Not supported on web.
    */
