@@ -28,6 +28,7 @@ import badStyleEvents from './events/bad-style';
 import StyleSheetTextMutation from './events/style-sheet-text-mutation';
 import canvasInIframe from './events/canvas-in-iframe';
 import adoptedStyleSheet from './events/adopted-style-sheet';
+import adoptedStyleSheetBeforeShadowRoot from './events/adopted-style-sheet-before-shadow-root';
 import adoptedStyleSheetModification from './events/adopted-style-sheet-modification';
 import documentReplacementEvents from './events/document-replacement';
 import hoverInIframeShadowDom from './events/iframe-shadowdom-hover';
@@ -1037,6 +1038,36 @@ describe('replayer', function () {
     await waitForRAF(page);
     await page.evaluate('replayer.pause(600);');
     await checkCorrectness();
+  });
+
+  it('can replay adopted stylesheet events that arrive before the shadow root is attached', async () => {
+    await page.evaluate(`
+      events = ${JSON.stringify(adoptedStyleSheetBeforeShadowRoot)};
+      const { Replayer } = rrweb;
+      var replayer = new Replayer(events,{showDebug:true});
+      replayer.play();
+    `);
+    // the retry loop in applyAdoptedStyleSheet needs a few real timer ticks
+    // after the shadow-attaching mutation (at 20ms) has been applied
+    await page.waitForTimeout(1000);
+
+    const state = await page.evaluate(() => {
+      const iframe = document.querySelector('iframe') as HTMLIFrameElement;
+      const host = iframe.contentDocument!.querySelector(
+        'shared-header',
+      ) as HTMLElement;
+      const anchor = host.shadowRoot!.querySelector('a')!;
+      return {
+        adoptedSheetCount: host.shadowRoot!.adoptedStyleSheets.length,
+        ruleCounts: host.shadowRoot!.adoptedStyleSheets.map(
+          (s) => s.cssRules.length,
+        ),
+        anchorColor: iframe.contentWindow!.getComputedStyle(anchor).color,
+      };
+    });
+    expect(state.adoptedSheetCount).toBe(1);
+    expect(state.ruleCounts).toEqual([3]);
+    expect(state.anchorColor).toBe('rgb(255, 0, 0)');
   });
 
   it('can replay modification events for adoptedStyleSheet', async () => {

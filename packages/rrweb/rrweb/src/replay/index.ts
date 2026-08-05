@@ -2306,10 +2306,12 @@ export class Replayer {
        * The replayer has to get the correct host window to recreate a StyleSheetObject.
        */
       let hostWindow: IWindow | null = null;
-      if (hasShadowRoot(targetHost))
-        hostWindow = targetHost.ownerDocument?.defaultView || null;
-      else if (targetHost.nodeName === '#document')
+      if (targetHost.nodeName === '#document')
         hostWindow = (targetHost as Document).defaultView;
+      else
+        // don't require the host's shadow root to exist yet: the mutation
+        // attaching it may arrive after this event, and rules are only sent once
+        hostWindow = targetHost.ownerDocument?.defaultView || null;
 
       if (!hostWindow) return;
       try {
@@ -2334,18 +2336,26 @@ export class Replayer {
       const stylesToAdopt = styleIds
         .map((styleId) => this.styleMirror.getStyle(styleId))
         .filter((style) => style !== null) as CSSStyleSheet[];
-      if (hasShadowRoot(targetHost))
+      let adopted = false;
+      if (hasShadowRoot(targetHost)) {
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         (targetHost as HTMLElement).shadowRoot!.adoptedStyleSheets =
           stylesToAdopt;
-      else if (targetHost.nodeName === '#document')
+        adopted = true;
+      } else if (targetHost.nodeName === '#document') {
         (targetHost as Document).adoptedStyleSheets = stylesToAdopt;
+        adopted = true;
+      }
 
       /**
        * In the live mode where events are transferred over network without strict order guarantee, some newer events are applied before some old events and adopted stylesheets may haven't been created.
-       * This retry mechanism can help resolve this situation.
+       * The same applies to recorded streams when this event was emitted before the mutation that attaches the host's shadow root.
+       * This retry mechanism can help resolve these situations.
        */
-      if (stylesToAdopt.length !== styleIds.length && count < MAX_RETRY_TIME) {
+      if (
+        (!adopted || stylesToAdopt.length !== styleIds.length) &&
+        count < MAX_RETRY_TIME
+      ) {
         setTimeout(
           () => adoptStyleSheets(targetHost, styleIds),
           0 + 100 * count,
