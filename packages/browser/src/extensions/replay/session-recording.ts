@@ -92,10 +92,6 @@ export class SessionRecording implements Extension {
         this.startIfEnabledOrStop()
     }
 
-    dispose(): void {
-        document?.removeEventListener('visibilitychange', this._onVisibilityChange)
-    }
-
     private get _isRecordingEnabled() {
         const enabled_server_side = !!this._instance.get_property(SESSION_RECORDING_REMOTE_CONFIG)?.enabled
         const enabled_client_side = !this._config.disable_session_recording

@@ -44,14 +44,6 @@ describe('shutdown()', () => {
         expect(remoteConfigStop).toHaveBeenCalledTimes(1)
     })
 
-    it('disposes session recording visibility tracking', async () => {
-        const sessionRecordingDispose = jest.spyOn(instance.sessionRecording!, 'dispose')
-
-        await instance.shutdown()
-
-        expect(sessionRecordingDispose).toHaveBeenCalledTimes(1)
-    })
-
     it('destroys feature flags listeners', async () => {
         const featureFlagsDestroy = jest.spyOn(instance.featureFlags!, 'destroy')
 

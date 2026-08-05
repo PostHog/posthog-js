@@ -3198,7 +3198,6 @@ export class PostHog implements PostHogInterface {
 
         this._remoteConfigLoader?.stop()
         this._browserClientAdapter?.dispose()
-        this.sessionRecording?.dispose()
 
         // Best-effort flush of anything still queued, mirroring page-unload teardown
         // so no buffered events are silently dropped when teardown is explicit.
