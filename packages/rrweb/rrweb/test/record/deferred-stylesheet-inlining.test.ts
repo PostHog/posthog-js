@@ -31,6 +31,7 @@ import record, { inlineDeferredStylesheets } from '../../src/record';
 import { StylesheetManager } from '../../src/record/stylesheet-manager';
 import {
   getDeferredStylesheetStats,
+  getLastSnapshotCost,
   resetSnapshotCostState,
   stringifyStylesheet,
 } from '@posthog/rrweb-snapshot';
@@ -342,13 +343,13 @@ describe('record() teardown of deferred stylesheets', () => {
     return linkEl;
   };
 
-  const startRecording = () =>
+  // the default budget is small enough that every test sheet is deferred
+  const startRecording = (inlineStylesheetBudgetRules = 1) =>
     record({
       emit: (event) => {
         events.push(event as eventWithTime);
       },
-      // small enough that every test sheet is deferred
-      inlineStylesheetBudgetRules: 1,
+      inlineStylesheetBudgetRules,
     });
 
   const cssTextMutations = (from: eventWithTime[]): string[] => {
@@ -464,5 +465,83 @@ describe('record() teardown of deferred stylesheets', () => {
       afterBoundary.some((css) => css.includes('.boundary-b-599')),
     ).toBe(true);
     expect(getDeferredStylesheetStats().abandonedCount).toBe(0);
+  });
+
+  it('records the idle-time slices in the cumulative deferred duration stats', () => {
+    makeUnregisteredLink(1000, 'timed');
+    stop = startRecording();
+
+    drainIdle();
+
+    expect(cssTextMutations(events)).toHaveLength(1);
+    const stats = getDeferredStylesheetStats();
+    expect(stats.totalMs).toBeGreaterThan(0);
+    expect(stats.slowestSliceMs).toBeGreaterThan(0);
+    expect(stats.slowestSliceMs).toBeLessThanOrEqual(stats.totalMs);
+    expect(stats.deferredCount).toBe(1);
+  });
+
+  it('does not let a CSSOM-only <style> push link sheets into deferral', () => {
+    // styled-components/Emotion production mode: every rule lives only in the
+    // CSSOM, so this sheet can never be deferred and must not charge the budget
+    const cssomStyle = document.createElement('style');
+    document.head.appendChild(cssomStyle);
+    cleanupNodes.push(cssomStyle);
+    for (let i = 0; i < 200; i++) {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      cssomStyle.sheet!.insertRule(`.cssom-${i} { color: red }`);
+    }
+    makeUnregisteredLink(20, 'cssom-companion');
+
+    stop = startRecording(50);
+
+    // the link fits the budget on its own, so nothing went to the idle queue
+    expect(scheduled.size).toBe(0);
+    expect(cssTextMutations(events)).toHaveLength(0);
+    const cost = getLastSnapshotCost();
+    expect(cost?.deferredStylesheetCount).toBe(0);
+    expect(cost?.nonDeferrableCssRuleCount).toBe(200);
+    expect(cost?.cssRuleCount).toBe(240); // 200 CSSOM + 20 style text + 20 link
+  });
+
+  it('counts document adoptedStyleSheets inside the snapshot cost window', () => {
+    const burnMsPerRule = 2;
+    const adoptedRules = Array.from({ length: 5 }, (_, i) => ({
+      get cssText() {
+        const until = Date.now() + burnMsPerRule;
+        while (Date.now() < until) {
+          /* burn */
+        }
+        return `.adopted-${i} { color: red }`;
+      },
+    }));
+    const adoptedSheet = {
+      href: null,
+      rules: adoptedRules,
+      cssRules: adoptedRules,
+    } as unknown as CSSStyleSheet;
+    Object.defineProperty(document, 'adoptedStyleSheets', {
+      configurable: true,
+      value: [adoptedSheet],
+    });
+    try {
+      makeUnregisteredLink(2, 'adopted-companion');
+
+      stop = startRecording(10);
+
+      expect(scheduled.size).toBe(0);
+      const cost = getLastSnapshotCost();
+      expect(cost?.cssRuleCount).toBe(9); // 5 adopted + 2 style text + 2 link
+      expect(cost?.nonDeferrableCssRuleCount).toBe(5);
+      // the adopted stringification lands in the same synchronous freeze as the
+      // snapshot, so both timers must cover it
+      expect(cost?.stylesheetMs).toBeGreaterThanOrEqual(8);
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      expect(cost!.durationMs).toBeGreaterThanOrEqual(cost!.stylesheetMs);
+      expect(cost?.deferredStylesheetCount).toBe(0);
+    } finally {
+      delete (document as { adoptedStyleSheets?: unknown })
+        .adoptedStyleSheets;
+    }
   });
 });

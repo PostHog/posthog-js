@@ -13,14 +13,20 @@
  */
 
 export type SnapshotCost = {
-  /** wall-clock ms spent inside `snapshot()` */
+  /** wall-clock ms of the whole tracked window (the full snapshot task) */
   durationMs: number;
   /** of `durationMs`, ms spent stringifying stylesheets */
   stylesheetMs: number;
   /** DOM nodes visited by the serializer */
   nodeCount: number;
-  /** CSSRules read while stringifying stylesheets */
+  /** CSSRules read while stringifying stylesheets, all sources */
   cssRuleCount: number;
+  /**
+   * of `cssRuleCount`, rules from sources that can never be deferred
+   * (CSSOM-only `<style>` elements, adoptedStyleSheets). These do not charge
+   * the inlining budget: deferring other sheets buys them no freeze reduction.
+   */
+  nonDeferrableCssRuleCount: number;
   /** `<link rel=stylesheet>` elements whose inlining was deferred past the budget */
   deferredStylesheetCount: number;
 };
@@ -31,15 +37,23 @@ export type MutationCost = {
 };
 
 /**
- * Deferred sheets that never made it back into the recording. Both leave the
- * `<link>` serialized with only `rel`/`href`, so replay falls back to loading
- * the CSS from its original URL - which may 404 or have changed by then.
+ * Session-cumulative accounting of budget-deferred stylesheets. `failedCount`
+ * and `abandonedCount` are sheets that never made it back into the recording:
+ * both leave the `<link>` serialized with only `rel`/`href`, so replay falls
+ * back to loading the CSS from its original URL - which may 404 or have
+ * changed by then.
  */
 export type DeferredStylesheetStats = {
+  /** deferral events across every snapshot (a re-deferred sheet counts again) */
+  deferredCount: number;
   /** deferred sheets whose idle-time stringification produced nothing */
   failedCount: number;
   /** deferred sheets dropped when a teardown flush hit its safety cap */
   abandonedCount: number;
+  /** ms spent stringifying deferred sheets, across every slice */
+  totalMs: number;
+  /** slowest single slice of deferred stringification, in ms */
+  slowestSliceMs: number;
 };
 
 const emptyCost = (): SnapshotCost => ({
@@ -47,7 +61,16 @@ const emptyCost = (): SnapshotCost => ({
   stylesheetMs: 0,
   nodeCount: 0,
   cssRuleCount: 0,
+  nonDeferrableCssRuleCount: 0,
   deferredStylesheetCount: 0,
+});
+
+const emptyDeferredStats = (): DeferredStylesheetStats => ({
+  deferredCount: 0,
+  failedCount: 0,
+  abandonedCount: 0,
+  totalMs: 0,
+  slowestSliceMs: 0,
 });
 
 export function nowMs(): number {
@@ -72,13 +95,17 @@ let lastCost: SnapshotCost | null = null;
 // tracking scope, so stylesheet inlining there stays unbounded as before.
 let stylesheetBudgetRules: number | null = null;
 let deferredStylesheetLinks: HTMLLinkElement[] = [];
+// the count survives `takeDeferredStylesheetLinks()`, which drains the array
+// before the tracking window closes
+let deferredLinkCount = 0;
+
+// > 0 while stringifying a sheet the budget could never defer; see
+// `runNonDeferrableStylesheetWork`
+let nonDeferrableDepth = 0;
 
 let mutationCost: MutationCost = { slowestBatchMs: 0 };
 
-let deferredStylesheetStats: DeferredStylesheetStats = {
-  failedCount: 0,
-  abandonedCount: 0,
-};
+let deferredStylesheetStats: DeferredStylesheetStats = emptyDeferredStats();
 
 const positiveOrNull = (n: number | null | undefined) =>
   n && n > 0 ? n : null;
@@ -100,6 +127,7 @@ export function beginSnapshotCostTracking(budgetRules?: number | null): void {
   }
   inProgress = emptyCost();
   deferredStylesheetLinks = [];
+  deferredLinkCount = 0;
   stylesheetBudgetRules = positiveOrNull(budgetRules);
   startedAt = nowMs();
 }
@@ -113,7 +141,8 @@ export function endSnapshotCostTracking(): SnapshotCost {
     return inProgress;
   }
   inProgress.durationMs = nowMs() - startedAt;
-  inProgress.deferredStylesheetCount = deferredStylesheetLinks.length;
+  inProgress.deferredStylesheetCount = deferredLinkCount;
+  deferredStylesheetStats.deferredCount += deferredLinkCount;
   stylesheetBudgetRules = null;
   lastCost = inProgress;
   return lastCost;
@@ -187,7 +216,28 @@ export function countStylesheetRules(rules: CSSRuleList): void {
   if (trackingDepth === 0) {
     return;
   }
-  inProgress.cssRuleCount += countRuleList(rules, null, 0);
+  const counted = countRuleList(rules, null, 0);
+  inProgress.cssRuleCount += counted;
+  if (nonDeferrableDepth > 0) {
+    inProgress.nonDeferrableCssRuleCount += counted;
+  }
+}
+
+/**
+ * Run `fn` with its stylesheet rule counts marked as never-deferrable. The
+ * rules still show up in `cssRuleCount` (and in `nonDeferrableCssRuleCount`),
+ * but they don't charge the inlining budget: a CSSOM-dominated page (e.g.
+ * styled-components/Emotion `insertRule` output) gets no freeze reduction from
+ * deferring, so charging it would push ordinary `<link>` sheets into deferral
+ * for pure fidelity cost.
+ */
+export function runNonDeferrableStylesheetWork<T>(fn: () => T): T {
+  nonDeferrableDepth += 1;
+  try {
+    return fn();
+  } finally {
+    nonDeferrableDepth -= 1;
+  }
 }
 
 export function recordStylesheetCost(ms: number): void {
@@ -208,13 +258,15 @@ export function shouldDeferStylesheetInlining(
   if (trackingDepth === 0 || stylesheetBudgetRules === null) {
     return false;
   }
-  if (inProgress.cssRuleCount >= stylesheetBudgetRules) {
+  // never-deferrable rules don't count against the budget (see
+  // runNonDeferrableStylesheetWork)
+  const chargedRuleCount =
+    inProgress.cssRuleCount - inProgress.nonDeferrableCssRuleCount;
+  if (chargedRuleCount >= stylesheetBudgetRules) {
     // budget already spent: defer without paying the rule walk
     return true;
   }
-  return (
-    inProgress.cssRuleCount + safeCssRuleCount(sheet) > stylesheetBudgetRules
-  );
+  return chargedRuleCount + safeCssRuleCount(sheet) > stylesheetBudgetRules;
 }
 
 /**
@@ -241,6 +293,7 @@ export function safeCssRuleCount(sheet: CSSStyleSheet | null | undefined) {
 export function deferStylesheetLink(linkEl: HTMLLinkElement): void {
   if (trackingDepth > 0) {
     deferredStylesheetLinks.push(linkEl);
+    deferredLinkCount += 1;
   }
 }
 
@@ -261,11 +314,24 @@ export function recordDeferredStylesheetsAbandoned(count: number): void {
   }
 }
 
+/** One bounded slice of deferred stylesheet stringification took `ms`. */
+export function recordDeferredStylesheetSlice(ms: number): void {
+  deferredStylesheetStats.totalMs += ms;
+  if (ms > deferredStylesheetStats.slowestSliceMs) {
+    deferredStylesheetStats.slowestSliceMs = ms;
+  }
+}
+
 export function getDeferredStylesheetStats(): DeferredStylesheetStats {
   return { ...deferredStylesheetStats };
 }
 
 export function recordMutationCost(ms: number): void {
+  if (trackingDepth > 0) {
+    // a batch drained inside the full-snapshot window (the post-snapshot buffer
+    // unlock) is part of that snapshot's duration, not an incremental batch
+    return;
+  }
   if (ms > mutationCost.slowestBatchMs) {
     mutationCost.slowestBatchMs = ms;
   }
@@ -282,6 +348,8 @@ export function resetSnapshotCostState(): void {
   lastCost = null;
   stylesheetBudgetRules = null;
   deferredStylesheetLinks = [];
+  deferredLinkCount = 0;
+  nonDeferrableDepth = 0;
   mutationCost = { slowestBatchMs: 0 };
-  deferredStylesheetStats = { failedCount: 0, abandonedCount: 0 };
+  deferredStylesheetStats = emptyDeferredStats();
 }

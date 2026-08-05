@@ -510,6 +510,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
      * than only via customer-supplied Chrome traces.
      */
     private _slowestFullSnapshot: SnapshotCost | undefined
+    // the cost object most recently read from rrweb; each snapshot produces a fresh
+    // object, so identity comparison dedupes the sync and microtask reads
+    private _lastSeenSnapshotCost: SnapshotCost | undefined
     // only warn once per recorder instance that client-side masking is shadowing the project setting
     private _hasWarnedClientMaskingOverride = false
     private _maskRegionsFnFailed = false
@@ -1300,6 +1303,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         // cost metrics are per-session, so the next session isn't tarred with this one's
         this._slowestFullSnapshot = undefined
+        this._lastSeenSnapshotCost = undefined
         getRRWeb()?.resetSnapshotCostState?.()
 
         this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
@@ -1503,9 +1507,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _trackFullSnapshotCost() {
         const cost = getRRWeb()?.getLastSnapshotCost?.()
-        if (!cost) {
+        if (!cost || cost === this._lastSeenSnapshotCost) {
             return
         }
+        this._lastSeenSnapshotCost = cost
         if (!this._slowestFullSnapshot || cost.durationMs > this._slowestFullSnapshot.durationMs) {
             this._slowestFullSnapshot = cost
         }
@@ -1515,6 +1520,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 stylesheetMs: Math.round(cost.stylesheetMs),
                 nodeCount: cost.nodeCount,
                 cssRuleCount: cost.cssRuleCount,
+                nonDeferrableCssRuleCount: cost.nonDeferrableCssRuleCount,
                 deferredStylesheetCount: cost.deferredStylesheetCount,
             })
         }
@@ -1685,13 +1691,19 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         // we're processing a full snapshot, so we should reset the timer
         if (rawEvent.type === EventType.FullSnapshot) {
-            // read the cost globals now, synchronously with the snapshot that produced
-            // them; by the time the event drains from the async compression queue a
-            // newer snapshot (or a session reset) may have replaced them
             if (getRRWeb()?.wasMaxDepthReached?.()) {
                 this._maxDepthExceeded = true
             }
+            // the FullSnapshot event is emitted partway through rrweb's takeFullSnapshot,
+            // whose cost window only closes after the post-snapshot buffer drain and
+            // adoptedStyleSheets work; the sync read below picks up any snapshot we have
+            // not seen yet, and the microtask (which runs as soon as the synchronous
+            // snapshot task finishes, before any newer snapshot can replace the globals)
+            // picks up the one in progress right now
             this._trackFullSnapshotCost()
+            Promise.resolve()
+                .then(() => this._trackFullSnapshotCost())
+                .catch(() => {})
 
             this._scheduleFullSnapshot()
             // Full snapshots reset rrweb's node IDs, so clear any logged node tracking
@@ -2288,9 +2300,19 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             ),
             $sdk_debug_replay_slowest_full_snapshot_nodes: this._slowestFullSnapshot?.nodeCount,
             $sdk_debug_replay_slowest_full_snapshot_css_rules: this._slowestFullSnapshot?.cssRuleCount,
-            $sdk_debug_replay_deferred_stylesheets: this._slowestFullSnapshot?.deferredStylesheetCount,
+            // never-deferrable sources (CSSOM-only <style>, adoptedStyleSheets) split out,
+            // so a customer can tell which bucket dominates their page
+            $sdk_debug_replay_slowest_full_snapshot_css_rules_non_deferrable:
+                this._slowestFullSnapshot?.nonDeferrableCssRuleCount,
+            // cumulative across the session, unlike the slowest-snapshot properties: a fast
+            // first snapshot's deferrals must not vanish because a slower one deferred none
+            $sdk_debug_replay_deferred_stylesheets: deferredStylesheetStats?.deferredCount,
             $sdk_debug_replay_deferred_stylesheets_failed: deferredStylesheetStats?.failedCount,
             $sdk_debug_replay_deferred_stylesheets_abandoned: deferredStylesheetStats?.abandonedCount,
+            $sdk_debug_replay_deferred_stylesheet_ms: roundOrUndefined(deferredStylesheetStats?.totalMs),
+            $sdk_debug_replay_deferred_stylesheet_slowest_slice_ms: roundOrUndefined(
+                deferredStylesheetStats?.slowestSliceMs
+            ),
             $sdk_debug_replay_slowest_mutation_batch_ms: roundOrUndefined(
                 getRRWeb()?.getMutationCost?.()?.slowestBatchMs
             ),

@@ -4,11 +4,31 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { StylesheetManager } from '../../src/record/stylesheet-manager';
 import {
+  beginSnapshotCostTracking,
+  endSnapshotCostTracking,
   getDeferredStylesheetStats,
   resetSnapshotCostState,
+  shouldDeferStylesheetInlining,
   stringifyStylesheet,
 } from '@posthog/rrweb-snapshot';
 import type { mutationCallBack } from '@posthog/rrweb-types';
+
+/**
+ * jsdom stringifies rules too fast to measure, so fake sheets whose `cssText`
+ * access burns wall-clock, which is where the cost lands in real browsers.
+ */
+function makeBurningSheet(ruleCount: number, costMsPerRule: number) {
+  const rules = Array.from({ length: ruleCount }, (_, i) => ({
+    get cssText() {
+      const until = Date.now() + costMsPerRule;
+      while (Date.now() < until) {
+        /* burn */
+      }
+      return `.rule-${i} { color: red }`;
+    },
+  }));
+  return { href: null, rules, cssRules: rules } as unknown as CSSStyleSheet;
+}
 
 describe('StylesheetManager.inlineDeferredLinkElement()', () => {
   const LINK_ID = 7;
@@ -186,6 +206,31 @@ describe('StylesheetManager.beginDeferredLinkInlining()', () => {
     }
   });
 
+  it('records each slice into the cumulative deferred duration stats', () => {
+    const burningLink = document.createElement('link');
+    document.head.appendChild(burningLink);
+    Object.defineProperty(burningLink, 'sheet', {
+      value: makeBurningSheet(6, 2),
+    });
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const task = makeManager().beginDeferredLinkInlining(
+        burningLink,
+        LINK_ID,
+      )!;
+      expect(task.advance(3)).toBe(false); // first slice, >= 6ms
+      expect(task.advance(Infinity)).toBe(true); // second slice, >= 6ms
+
+      const stats = getDeferredStylesheetStats();
+      expect(stats.totalMs).toBeGreaterThanOrEqual(8);
+      expect(stats.slowestSliceMs).toBeGreaterThan(0);
+      // two slices ran, so the slowest one cannot account for all the time
+      expect(stats.slowestSliceMs).toBeLessThan(stats.totalMs);
+    } finally {
+      burningLink.remove();
+    }
+  });
+
   it('counts a failure when stringification produces nothing at idle time', () => {
     const brokenLink = document.createElement('link');
     document.head.appendChild(brokenLink);
@@ -210,5 +255,52 @@ describe('StylesheetManager.beginDeferredLinkInlining()', () => {
     } finally {
       brokenLink.remove();
     }
+  });
+});
+
+describe('StylesheetManager.adoptStyleSheets()', () => {
+  let adoptedStyleSheetCb: ReturnType<typeof vi.fn>;
+
+  const makeManager = () =>
+    new StylesheetManager({
+      mutationCb: vi.fn() as unknown as mutationCallBack,
+      adoptedStyleSheetCb,
+    });
+
+  beforeEach(() => {
+    resetSnapshotCostState();
+    adoptedStyleSheetCb = vi.fn();
+  });
+
+  afterEach(() => {
+    resetSnapshotCostState();
+  });
+
+  it('charges adopted sheets to the css counters as never-deferrable work', () => {
+    const manager = makeManager();
+    const sheet = makeBurningSheet(30, 1);
+
+    beginSnapshotCostTracking(20);
+    manager.adoptStyleSheets([sheet], 1);
+    // 30 adopted rules exceed the budget of 20, but they can never be
+    // deferred, so a small link sheet must still fit
+    expect(shouldDeferStylesheetInlining(makeBurningSheet(10, 0))).toBe(false);
+    // re-adopting the same sheet reuses the mirror entry: no double counting
+    manager.adoptStyleSheets([sheet], 2);
+    const cost = endSnapshotCostTracking();
+
+    expect(cost.cssRuleCount).toBe(30);
+    expect(cost.nonDeferrableCssRuleCount).toBe(30);
+    expect(cost.stylesheetMs).toBeGreaterThanOrEqual(20);
+    expect(adoptedStyleSheetCb).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not count adoption outside a snapshot window (the incremental path)', () => {
+    makeManager().adoptStyleSheets([makeBurningSheet(5, 0)], 1);
+
+    beginSnapshotCostTracking(null);
+    const cost = endSnapshotCostTracking();
+    expect(cost.cssRuleCount).toBe(0);
+    expect(adoptedStyleSheetCb).toHaveBeenCalledTimes(1);
   });
 });

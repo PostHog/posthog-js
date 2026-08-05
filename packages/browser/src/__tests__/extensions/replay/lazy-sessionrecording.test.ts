@@ -242,6 +242,13 @@ describe('Lazy SessionRecording', () => {
             resetMaxDepthState: jest.fn(),
             getLastSnapshotCost: jest.fn(() => null),
             getMutationCost: jest.fn(() => ({ slowestBatchMs: 0 })),
+            getDeferredStylesheetStats: jest.fn(() => ({
+                deferredCount: 0,
+                failedCount: 0,
+                abandonedCount: 0,
+                totalMs: 0,
+                slowestSliceMs: 0,
+            })),
             resetSnapshotCostState: jest.fn(),
         }
         assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot = jest.fn(() => {
@@ -3059,6 +3066,7 @@ describe('Lazy SessionRecording', () => {
                 stylesheetMs: durationMs / 2,
                 nodeCount: 1234,
                 cssRuleCount: 42_000,
+                nonDeferrableCssRuleCount: 30_000,
                 deferredStylesheetCount: 3,
             })
 
@@ -3076,9 +3084,55 @@ describe('Lazy SessionRecording', () => {
                 $sdk_debug_replay_slowest_full_snapshot_stylesheet_ms: 1959,
                 $sdk_debug_replay_slowest_full_snapshot_nodes: 1234,
                 $sdk_debug_replay_slowest_full_snapshot_css_rules: 42_000,
-                $sdk_debug_replay_deferred_stylesheets: 3,
+                $sdk_debug_replay_slowest_full_snapshot_css_rules_non_deferrable: 30_000,
                 $sdk_debug_replay_slowest_mutation_batch_ms: 241,
             })
+        })
+
+        it('reports cumulative deferred stylesheet counters and durations in sdkDebugProperties', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            // cumulative across the session, so a fast first snapshot's deferrals are
+            // not hidden by a slower snapshot that deferred nothing
+            assignableWindow.__PosthogExtensions__.rrweb.getDeferredStylesheetStats.mockReturnValue({
+                deferredCount: 5,
+                failedCount: 1,
+                abandonedCount: 2,
+                totalMs: 123.4,
+                slowestSliceMs: 45.6,
+            })
+
+            expect(sessionRecording['_lazyLoadedSessionRecording'].sdkDebugProperties).toMatchObject({
+                $sdk_debug_replay_deferred_stylesheets: 5,
+                $sdk_debug_replay_deferred_stylesheets_failed: 1,
+                $sdk_debug_replay_deferred_stylesheets_abandoned: 2,
+                $sdk_debug_replay_deferred_stylesheet_ms: 123,
+                $sdk_debug_replay_deferred_stylesheet_slowest_slice_ms: 46,
+            })
+        })
+
+        it('picks up the snapshot cost on a microtask when the emit-time read is stale', async () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            const rrweb = assignableWindow.__PosthogExtensions__.rrweb
+            // rrweb emits the FullSnapshot partway through takeFullSnapshot, before its
+            // cost window closes, so the synchronous read can see no cost at all
+            rrweb.getLastSnapshotCost.mockReturnValue(null)
+            _emit(createFullSnapshot())
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_slowestFullSnapshot']).toBeUndefined()
+
+            const cost = {
+                durationMs: 100,
+                stylesheetMs: 10,
+                nodeCount: 5,
+                cssRuleCount: 7,
+                nonDeferrableCssRuleCount: 2,
+                deferredStylesheetCount: 0,
+            }
+            rrweb.getLastSnapshotCost.mockReturnValue(cost)
+            await Promise.resolve()
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_slowestFullSnapshot']).toEqual(cost)
         })
 
         it('resets snapshot cost tracking on session change', () => {
@@ -3089,6 +3143,7 @@ describe('Lazy SessionRecording', () => {
                 stylesheetMs: 3000,
                 nodeCount: 1,
                 cssRuleCount: 1,
+                nonDeferrableCssRuleCount: 0,
                 deferredStylesheetCount: 0,
             }
 

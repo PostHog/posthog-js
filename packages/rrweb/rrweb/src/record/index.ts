@@ -5,6 +5,8 @@ import {
   createMirror,
   takeDeferredStylesheetLinks,
   recordDeferredStylesheetsAbandoned,
+  beginSnapshotCostTracking,
+  endSnapshotCostTracking,
 } from '@posthog/rrweb-snapshot';
 import {
   initObservers,
@@ -602,123 +604,135 @@ function record<T = eventWithTime>(
     if (!recordDOM) {
       return;
     }
-    wrappedEmit(
-      {
-        type: EventType.Meta,
-        data: {
-          href: window.location.href,
-          width: getWindowWidth(),
-          height: getWindowHeight(),
-        },
-      },
-      isCheckout,
-    );
-
-    // Any deferred inlining from the previous snapshot targets mirror ids that this
-    // snapshot is about to replace, so drop it rather than emitting stale mutations.
-    // No sheet is lost: this snapshot re-serializes every link, so a still-attached
-    // sheet is either inlined within the new budget or re-deferred into a new queue.
-    deferredStylesheetInlining?.cancel();
-    deferredStylesheetInlining = undefined;
-
-    // When we take a full snapshot, old tracked StyleSheets need to be removed.
-    stylesheetManager.reset();
-
-    shadowDomManager.init();
-
-    mutationBuffers.forEach((buf) => buf.lock()); // don't allow any mirror modifications during snapshotting
-    let node: ReturnType<typeof snapshot> = null;
-    let deferredStylesheetLinks: HTMLLinkElement[] = [];
+    // This whole body is one uninterruptible main-thread task: the serialize
+    // pass, the FullSnapshot emit, the locked-mutation drain on unlock, and the
+    // adoptedStyleSheets stringification all land in the same freeze, so they
+    // are tracked as one window. `snapshot()`'s own tracking nests inside it.
+    beginSnapshotCostTracking(inlineStylesheetBudgetRules);
     try {
-      node = snapshot(document, {
-        mirror,
-        blockClass,
-        blockSelector,
-        maskTextClass,
-        maskTextSelector,
-        inlineStylesheet,
-        maskAllInputs: maskInputOptions,
-        inlineStylesheetBudgetRules,
-        maskTextFn,
-        maskInputFn,
-        maskAllElementAttributes,
-        maskAttributeFn,
-        slimDOM: slimDOMOptions,
-        dataURLOptions,
-        recordCanvas,
-        canvasMaskingConfigured,
-        inlineImages,
-        onSerialize: (n) => {
-          if (isSerializedIframe(n, mirror)) {
-            iframeManager.addIframe(n as HTMLIFrameElement);
-          }
-          if (isSerializedStylesheet(n, mirror)) {
-            stylesheetManager.trackLinkElement(n as HTMLLinkElement);
-          }
-          if (hasShadowRoot(n)) {
-            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            shadowDomManager.addShadowRoot(dom.shadowRoot(n as Node)!, document);
-          }
+      wrappedEmit(
+        {
+          type: EventType.Meta,
+          data: {
+            href: window.location.href,
+            width: getWindowWidth(),
+            height: getWindowHeight(),
+          },
         },
-        onIframeLoad: (iframe, childSn) => {
-          iframeManager.attachIframe(iframe, childSn);
-          shadowDomManager.observeAttachShadow(iframe);
+        isCheckout,
+      );
+
+      // Any deferred inlining from the previous snapshot targets mirror ids that this
+      // snapshot is about to replace, so drop it rather than emitting stale mutations.
+      // No sheet is lost: this snapshot re-serializes every link, so a still-attached
+      // sheet is either inlined within the new budget or re-deferred into a new queue.
+      deferredStylesheetInlining?.cancel();
+      deferredStylesheetInlining = undefined;
+
+      // When we take a full snapshot, old tracked StyleSheets need to be removed.
+      stylesheetManager.reset();
+
+      shadowDomManager.init();
+
+      mutationBuffers.forEach((buf) => buf.lock()); // don't allow any mirror modifications during snapshotting
+      let node: ReturnType<typeof snapshot> = null;
+      let deferredStylesheetLinks: HTMLLinkElement[] = [];
+      try {
+        node = snapshot(document, {
+          mirror,
+          blockClass,
+          blockSelector,
+          maskTextClass,
+          maskTextSelector,
+          inlineStylesheet,
+          maskAllInputs: maskInputOptions,
+          inlineStylesheetBudgetRules,
+          maskTextFn,
+          maskInputFn,
+          maskAllElementAttributes,
+          maskAttributeFn,
+          slimDOM: slimDOMOptions,
+          dataURLOptions,
+          recordCanvas,
+          canvasMaskingConfigured,
+          inlineImages,
+          onSerialize: (n) => {
+            if (isSerializedIframe(n, mirror)) {
+              iframeManager.addIframe(n as HTMLIFrameElement);
+            }
+            if (isSerializedStylesheet(n, mirror)) {
+              stylesheetManager.trackLinkElement(n as HTMLLinkElement);
+            }
+            if (hasShadowRoot(n)) {
+              shadowDomManager.addShadowRoot(
+                // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+                dom.shadowRoot(n as Node)!,
+                document,
+              );
+            }
+          },
+          onIframeLoad: (iframe, childSn) => {
+            iframeManager.attachIframe(iframe, childSn);
+            shadowDomManager.observeAttachShadow(iframe);
+          },
+          onIframeListenerRegistered: (
+            iframe: HTMLIFrameElement,
+            disposer: () => void,
+          ) => {
+            iframeManager.registerLoadListenerDisposer(iframe, disposer);
+          },
+          onStylesheetLoad: (linkEl, childSn) => {
+            stylesheetManager.attachLinkElement(linkEl, childSn);
+          },
+          keepIframeSrcFn,
+        });
+      } finally {
+        // drain even when the snapshot throws, so a failed snapshot doesn't
+        // leave links queued for the next one
+        deferredStylesheetLinks = takeDeferredStylesheetLinks();
+      }
+
+      if (!node) {
+        return console.warn('Failed to snapshot the document');
+      }
+
+      wrappedEmit(
+        {
+          type: EventType.FullSnapshot,
+          data: {
+            node,
+            initialOffset: getWindowScroll(window),
+          },
         },
-        onIframeListenerRegistered: (
-          iframe: HTMLIFrameElement,
-          disposer: () => void,
-        ) => {
-          iframeManager.registerLoadListenerDisposer(iframe, disposer);
-        },
-        onStylesheetLoad: (linkEl, childSn) => {
-          stylesheetManager.attachLinkElement(linkEl, childSn);
-        },
-        keepIframeSrcFn,
-      });
+        isCheckout,
+      );
+      mutationBuffers.forEach((buf) => buf.unlock()); // generate & emit any mutations that happened during snapshotting, as can now apply against the newly built mirror
+      canvasManager.onFullSnapshot();
+
+      if (deferredStylesheetLinks.length) {
+        deferredStylesheetInlining = inlineDeferredStylesheets(
+          deferredStylesheetLinks,
+          stylesheetManager,
+          () => {
+            // queue drained: drop the handle so the closure and its links can be collected
+            deferredStylesheetInlining = undefined;
+          },
+        );
+      }
+
+      if (recordCrossOriginIframes) {
+        iframeManager.reattachIframes();
+      }
+
+      // Some old browsers don't support adoptedStyleSheets.
+      if (document.adoptedStyleSheets && document.adoptedStyleSheets.length > 0)
+        stylesheetManager.adoptStyleSheets(
+          document.adoptedStyleSheets,
+          mirror.getId(document),
+        );
     } finally {
-      // drain even when the snapshot throws, so a failed snapshot doesn't
-      // leave links queued for the next one
-      deferredStylesheetLinks = takeDeferredStylesheetLinks();
+      endSnapshotCostTracking();
     }
-
-    if (!node) {
-      return console.warn('Failed to snapshot the document');
-    }
-
-    wrappedEmit(
-      {
-        type: EventType.FullSnapshot,
-        data: {
-          node,
-          initialOffset: getWindowScroll(window),
-        },
-      },
-      isCheckout,
-    );
-    mutationBuffers.forEach((buf) => buf.unlock()); // generate & emit any mutations that happened during snapshotting, as can now apply against the newly built mirror
-    canvasManager.onFullSnapshot();
-
-    if (deferredStylesheetLinks.length) {
-      deferredStylesheetInlining = inlineDeferredStylesheets(
-        deferredStylesheetLinks,
-        stylesheetManager,
-        () => {
-          // queue drained: drop the handle so the closure and its links can be collected
-          deferredStylesheetInlining = undefined;
-        },
-      );
-    }
-
-    if (recordCrossOriginIframes) {
-      iframeManager.reattachIframes();
-    }
-
-    // Some old browsers don't support adoptedStyleSheets.
-    if (document.adoptedStyleSheets && document.adoptedStyleSheets.length > 0)
-      stylesheetManager.adoptStyleSheets(
-        document.adoptedStyleSheets,
-        mirror.getId(document),
-      );
   };
 
   try {

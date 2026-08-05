@@ -1,8 +1,13 @@
 import {
+  countStylesheetRules,
   createStylesheetTextCursor,
   maskAttributeValue,
+  nowMs,
   recordDeferredStylesheetFailure,
+  recordDeferredStylesheetSlice,
+  recordStylesheetCost,
   resetStylesheetLoadTracking,
+  runNonDeferrableStylesheetWork,
   stringifyRule,
 } from '@posthog/rrweb-snapshot';
 import type {
@@ -106,22 +111,29 @@ export class StylesheetManager {
     const readyCursor = cursor;
     return {
       advance: (maxRules: number) => {
-        if (!readyCursor.advance(maxRules)) {
-          return false;
-        }
-        const cssText = readyCursor.text();
-        if (!linkEl.isConnected) {
-          // the link left the DOM while we were slicing; the replay drops it too
+        // deferred work runs outside the snapshot's tracking window, so the
+        // snapshot timers miss it; measure each slice (emit included) here
+        const startedAt = nowMs();
+        try {
+          if (!readyCursor.advance(maxRules)) {
+            return false;
+          }
+          const cssText = readyCursor.text();
+          if (!linkEl.isConnected) {
+            // the link left the DOM while we were slicing; the replay drops it too
+            return true;
+          }
+          if (!cssText) {
+            // stringification produced nothing: the link keeps its href and replay
+            // must load the CSS remotely - a fidelity risk worth counting, not hiding
+            recordDeferredStylesheetFailure();
+            return true;
+          }
+          this.emitCssTextMutation(linkEl, id, cssText);
           return true;
+        } finally {
+          recordDeferredStylesheetSlice(nowMs() - startedAt);
         }
-        if (!cssText) {
-          // stringification produced nothing: the link keeps its href and replay
-          // must load the CSS remotely - a fidelity risk worth counting, not hiding
-          recordDeferredStylesheetFailure();
-          return true;
-        }
-        this.emitCssTextMutation(linkEl, id, cssText);
-        return true;
       },
     };
   }
@@ -177,16 +189,36 @@ export class StylesheetManager {
     };
     const styles: NonNullable<adoptedStyleSheetParam['styles']> = [];
     for (const sheet of sheets) {
-      let styleId;
+      let styleId: number;
       if (!this.styleMirror.has(sheet)) {
-        styleId = this.styleMirror.add(sheet);
-        styles.push({
-          styleId,
-          rules: Array.from(sheet.rules || CSSRule, (r, index) => ({
-            rule: stringifyRule(r, sheet.href),
-            index,
-          })),
-        });
+        const newStyleId = this.styleMirror.add(sheet);
+        styleId = newStyleId;
+        // synchronous stringification with no deferral path: charge it to the
+        // css counters (never-deferrable, so it never charges the budget); the
+        // no-op outside a full snapshot's tracking window keeps the
+        // incremental adoption path unmeasured, as before
+        const startedAt = nowMs();
+        try {
+          runNonDeferrableStylesheetWork(() => {
+            try {
+              const sheetRules = sheet.rules || sheet.cssRules;
+              if (sheetRules) {
+                countStylesheetRules(sheetRules);
+              }
+            } catch (e) {
+              //
+            }
+            styles.push({
+              styleId: newStyleId,
+              rules: Array.from(sheet.rules || CSSRule, (r, index) => ({
+                rule: stringifyRule(r, sheet.href),
+                index,
+              })),
+            });
+          });
+        } finally {
+          recordStylesheetCost(nowMs() - startedAt);
+        }
       } else styleId = this.styleMirror.getId(sheet);
       adoptedStyleSheetData.styleIds.push(styleId);
     }
