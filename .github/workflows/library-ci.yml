@@ -162,7 +162,7 @@ jobs:
               if (!value || typeof value !== "object") return
               if (
                 Array.isArray(value.tests) &&
-                value.tests.some((test) => test.status === "unexpected") &&
+                value.tests.some((test) => test?.status === "unexpected") &&
                 typeof value.title === "string"
               ) {
                 failures.add("- `" + value.title + "`")
