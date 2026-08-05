@@ -1,6 +1,7 @@
 import {
   resetStylesheetLoadTracking,
   stringifyRule,
+  stringifyStylesheet,
 } from '@posthog/rrweb-snapshot';
 import type {
   elementNode,
@@ -45,6 +46,40 @@ export class StylesheetManager {
       });
 
     this.trackLinkElement(linkEl);
+  }
+
+  /**
+   * Inline a `<link rel=stylesheet>` that the full snapshot skipped because it
+   * ran out of stylesheet budget, emitting the CSS as an attribute mutation.
+   * Same shape as {@link attachLinkElement}, which already does this for sheets
+   * that finish loading after the snapshot - the replayer swaps the link for a
+   * `<style>` carrying `_cssText`.
+   */
+  public inlineDeferredLinkElement(linkEl: HTMLLinkElement, id: number) {
+    if (id === -1 || !linkEl.isConnected) {
+      // never made it into the mirror (slimDOM dropped it), or detached while we
+      // were queued - either way a mutation for it would only make the replayer warn
+      return;
+    }
+    let cssText: string | null = null;
+    try {
+      const sheet = linkEl.sheet;
+      if (sheet) {
+        cssText = stringifyStylesheet(sheet);
+      }
+    } catch (e) {
+      //
+    }
+    if (!cssText) {
+      // nothing we can add; the link kept its href so replay still loads it remotely
+      return;
+    }
+    this.mutationCb({
+      adds: [],
+      removes: [],
+      texts: [],
+      attributes: [{ id, attributes: { _cssText: cssText } }],
+    });
   }
 
   public trackLinkElement(linkEl: HTMLLinkElement) {

@@ -483,6 +483,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "false",
       "true"
     ],
+    "inlineStylesheetBudgetRules": [
+      "undefined",
+      "number"
+    ],
     "recordCrossOriginIframes": [
       "undefined",
       "false",
@@ -721,6 +725,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
         "number"
       ],
       "web_vitals_attribution": [
+        "undefined",
+        "false",
+        "true"
+      ],
+      "__preview_web_vitals_soft_navs": [
         "undefined",
         "false",
         "true"

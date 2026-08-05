@@ -1,5 +1,62 @@
 # posthog-js
 
+## 1.412.1
+
+### Patch Changes
+
+- [#4404](https://github.com/PostHog/posthog-js/pull/4404) [`a348fb3`](https://github.com/PostHog/posthog-js/commit/a348fb3c3fb53f104b5f50d6c7f3e32258451958) Thanks [@dependabot](https://github.com/apps/dependabot)! - Update PostCSS to include upstream security fixes.
+  (2026-08-05)
+
+## 1.412.0
+
+### Minor Changes
+
+- [#4320](https://github.com/PostHog/posthog-js/pull/4320) [`837363e`](https://github.com/PostHog/posthog-js/commit/837363e16909663444fd41d8cd0bac846ed8f727) Thanks [@posthog](https://github.com/apps/posthog)! - Bound the main-thread cost of the recorder's initial full snapshot, and start measuring it.
+
+    `stringifyStylesheet` reads `cssText` for every CSSRule of every stylesheet, all inside the one uninterruptible task that takes the full snapshot. On CSS-heavy pages that is the dominant cost, and it has been observed freezing the UI (no rendering, scrolling, or cursor movement) for seconds. The existing `maxDepth` guard doesn't help, since it only bounds deep DOMs, not wide ones or heavy CSS.
+
+    Stylesheet inlining now stops after a budget of CSSRules per snapshot (`session_recording.inlineStylesheetBudgetRules`, default 10,000; set `0` for the previous unbounded behaviour). Sheets past the budget are serialized without `_cssText`, keeping `rel`/`href` so replay can load them remotely, and are then inlined one per idle callback and delivered as attribute mutations. Replay fidelity is preserved; the work is just no longer one long blocking task.
+
+    The snapshot's cost is also now measured and reported on captured events, so slow snapshots are visible without a browser profile: `$sdk_debug_replay_slowest_full_snapshot_ms`, `$sdk_debug_replay_slowest_full_snapshot_stylesheet_ms`, `$sdk_debug_replay_slowest_full_snapshot_nodes`, `$sdk_debug_replay_slowest_full_snapshot_css_rules`, `$sdk_debug_replay_deferred_stylesheets`, and, for the incremental path, `$sdk_debug_replay_slowest_mutation_batch_ms`. (2026-08-05)
+
+## 1.411.0
+
+### Minor Changes
+
+- [#4266](https://github.com/PostHog/posthog-js/pull/4266) [`43d1850`](https://github.com/PostHog/posthog-js/commit/43d18506565b491c4a1013f9237aa732ae3d6f4e) Thanks [@posthog](https://github.com/apps/posthog)! - feat: add opt-in `capture_performance.__preview_web_vitals_soft_navs` to fix inflated web vitals on single-page apps
+
+    Client-side route changes in SPAs previously left web vitals (LCP especially) accumulating against the original hard-navigation timestamp, inflating the top tail of Core Web Vitals. Setting `capture_performance: { __preview_web_vitals_soft_navs: true }` now scopes metrics to the browser's Soft Navigation entries so each route change starts a fresh measurement window. It's a preview option because it relies on Chrome's experimental Soft Navigation Detection API and loads pinned stable web-vitals 6.x callbacks; when disabled (the default), the existing web-vitals 5.x behavior remains unchanged. (2026-08-04)
+
+### Patch Changes
+
+- [#4287](https://github.com/PostHog/posthog-js/pull/4287) [`d3c4538`](https://github.com/PostHog/posthog-js/commit/d3c4538b7c22aa468aa0ab9e0edb63d2966618e7) Thanks [@posthog](https://github.com/apps/posthog)! - Keep `$referring_domain` and canonical `utm_*`/campaign parameters on minimal `$feature_flag_called` events. Previously the minimal allowlist stripped every campaign parameter, so a flag-called event landing first in a session could set the session's UTM attribution and channel type to NULL in web analytics.
+  (2026-08-04)
+- Updated dependencies [[`d3c4538`](https://github.com/PostHog/posthog-js/commit/d3c4538b7c22aa468aa0ab9e0edb63d2966618e7), [`43d1850`](https://github.com/PostHog/posthog-js/commit/43d18506565b491c4a1013f9237aa732ae3d6f4e)]:
+    - @posthog/core@1.46.7
+    - @posthog/types@1.401.0
+
+## 1.410.10
+
+### Patch Changes
+
+- [#4271](https://github.com/PostHog/posthog-js/pull/4271) [`3d4e2fd`](https://github.com/PostHog/posthog-js/commit/3d4e2fd566df1ac630a40bc8d0acc615e6bf3bba) Thanks [@felipeatom](https://github.com/felipeatom)! - Fix inline surveys rendering an empty container when a stale persisted question index (left over from a prior completion) points past the last question. When the persisted index is out of range the whole in-progress record is now discarded and the survey starts fresh, instead of clamping the index while keeping the equally-stale responses and visited indices. Restored visited indices are also filtered to valid questions so the Back button can never navigate to a non-existent question and re-empty the container.
+  (2026-08-04)
+
+- [#4412](https://github.com/PostHog/posthog-js/pull/4412) [`5f2b78a`](https://github.com/PostHog/posthog-js/commit/5f2b78af317266502754f91bff0192ab5ef36ba6) Thanks [@TueHaulund](https://github.com/TueHaulund)! - fix(replay): hold fresh interaction-less session recordings until there is evidence someone cares
+
+    A tab that loads but never sees any user interaction (prefetched pages, background tabs, in-app browser preloads) no longer ships a billable recording while it sits untouched. Like rotation-born sessions, a fresh recording epoch is held until there is evidence someone cares about it: a user interaction, an event trigger match, or an explicit override (`posthog.startSessionRecording(...)`) releases the hold and ships the buffer on the normal flush cadence, so released recordings are playable from the session's start. A clean unload also ships a fresh-start hold, so passive visits (reading, watching a video) are still captured exactly as before; rotation-born holds are discarded on unload as before. A held buffer that reaches the size cap is dropped to bound memory, and a later release takes a fresh full snapshot so the recording resumes playable. (2026-08-04)
+
+- [#4410](https://github.com/PostHog/posthog-js/pull/4410) [`064874a`](https://github.com/PostHog/posthog-js/commit/064874a62ea23d200ef2b7741820998638474576) Thanks [@ioannisj](https://github.com/ioannisj)! - Fix held rotation-born session replay buffers not flushing when a V2 event trigger matches
+  (2026-08-04)
+
+- [#4343](https://github.com/PostHog/posthog-js/pull/4343) [`83a9b67`](https://github.com/PostHog/posthog-js/commit/83a9b67b1985d76eb6b780cf550bfb3b223a01d8) Thanks [@arnohillen](https://github.com/arnohillen)! - Session replay no longer freezes the page re-encoding base64 images that are already small. When canvas recording is enabled, every `<img>` with a `data:` URL was synchronously redrawn and re-encoded through `canvas.toDataURL` during full snapshots and attribute mutations. The encode cost scales with pixel dimensions, not payload size, so a page of base64 lazy-load placeholders (measured: 18 images of 4096x3072 at ~33KB each) blocked the main thread for 7+ seconds to produce outputs that were larger than the inputs. Recompression now skips data URLs under 100KB (where it cannot save meaningful payload), keeps the original when the re-encoded output is not smaller, and memoizes by input so repeated snapshots and src-swapping mutations never pay for the same image twice. Genuinely large base64 images are still recompressed as before.
+  (2026-08-04)
+
+- [#4339](https://github.com/PostHog/posthog-js/pull/4339) [`f865818`](https://github.com/PostHog/posthog-js/commit/f8658186617a922ffd633428b20da330fd856138) Thanks [@posthog](https://github.com/apps/posthog)! - Report privacy-aware dropped-event count, page and session context in the client rate limit warning
+  (2026-08-04)
+- Updated dependencies [[`f865818`](https://github.com/PostHog/posthog-js/commit/f8658186617a922ffd633428b20da330fd856138)]:
+    - @posthog/types@1.400.2
+
 ## 1.410.9
 
 ### Patch Changes

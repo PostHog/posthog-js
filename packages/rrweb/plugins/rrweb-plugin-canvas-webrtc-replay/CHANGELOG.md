@@ -1,5 +1,12 @@
 # @rrweb/rrweb-plugin-canvas-webrtc-replay
 
+## 1.0.7
+
+### Patch Changes
+
+- Updated dependencies [[`837363e`](https://github.com/PostHog/posthog-js/commit/837363e16909663444fd41d8cd0bac846ed8f727)]:
+    - @posthog/rrweb@0.1.7
+
 ## 1.0.6
 
 ### Patch Changes

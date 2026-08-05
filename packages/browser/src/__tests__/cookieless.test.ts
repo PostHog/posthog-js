@@ -105,6 +105,31 @@ describe('cookieless', () => {
             expect(posthog.has_opted_in_capturing()).toBe(false)
         })
 
+        it('emits a rate-limit warning without session context or durable storage', async () => {
+            const token = uuidv7()
+            const { posthog, beforeSendMock } = await setup(
+                {
+                    cookieless_mode: 'always',
+                    capture_pageview: false,
+                    persistence: 'memory',
+                    persistence_name: token,
+                    rate_limiting: { events_per_second: 1, events_burst_limit: 1 },
+                },
+                token
+            )
+
+            console.error = jest.fn()
+            posthog.capture(eventName, eventProperties)
+            posthog.capture(eventName, eventProperties)
+
+            const warning = beforeSendMock.mock.calls.find(([event]) => event.event === '$$client_ingestion_warning')[0]
+            expect(warning.properties.$$client_ingestion_warning_message).not.toContain('session ')
+            expect(warning.properties.$$client_ingestion_warning_session_id).toBeUndefined()
+            expect(posthog.persistence?.get_property('$capture_rate_limit').dropped).toBe(0)
+            expect(localStorage.getItem(`ph_${token}`)).toBeNull()
+            expect(document.cookie).toBe('')
+        })
+
         it.each([[true], ['history_change']])(
             'should send the initial pageview event when capture_pageview is %p',
             async (capturePageview: PostHogConfig['capture_pageview']) => {

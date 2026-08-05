@@ -1586,6 +1586,61 @@ describe('PostHog Feature Flags v4', () => {
         expect(mocks.fetch).toHaveBeenCalledTimes(2)
       })
 
+      it('should retry when an injected flags response body ignores abort and stalls', async () => {
+        const cancel = jest.fn<Promise<void>, []>(() => new Promise<void>(() => {}))
+        let flagsRequestCount = 0
+        ;[posthog, mocks] = createTestClient(
+          'TEST_API_KEY',
+          {
+            flushAt: 1,
+            fetchRetryDelay: 1,
+            featureFlagsRequestMaxRetries: 1,
+            featureFlagsRequestTimeoutMs: 1000,
+          },
+          (_mocks) => {
+            _mocks.fetch.mockImplementation((url) => {
+              if (url.includes('/flags/')) {
+                flagsRequestCount++
+                if (flagsRequestCount === 1) {
+                  return Promise.resolve({
+                    status: 200,
+                    text: () => Promise.resolve('ok'),
+                    json: () => new Promise(() => {}),
+                    body: { cancel } as any,
+                  })
+                }
+                return Promise.resolve({
+                  status: 200,
+                  text: () => Promise.resolve('ok'),
+                  json: () =>
+                    Promise.resolve({
+                      flags: createMockFeatureFlags(),
+                      requestId: 'body-timeout-retry-success',
+                    }),
+                })
+              }
+              return Promise.resolve({
+                status: 200,
+                text: () => Promise.resolve('ok'),
+                json: () => Promise.resolve({ status: 'ok' }),
+              })
+            })
+          }
+        )
+
+        const resultPromise = posthog.getFlags('distinct-id')
+        await waitForPromises()
+        await jest.advanceTimersByTimeAsync(1000)
+        await jest.advanceTimersByTimeAsync(1)
+        const result = await resultPromise
+
+        expect(result.success).toBe(true)
+        expect(mocks.fetch).toHaveBeenCalledTimes(2)
+        expect(mocks.fetch.mock.calls[0][1].signal?.aborted).toBe(true)
+        expect(cancel).toHaveBeenCalledTimes(1)
+        expect(jest.getTimerCount()).toBe(0)
+      })
+
       it.each([502, 504])('should return api_error after exhausting retries for HTTP %i responses', async (status) => {
         ;[posthog, mocks] = createTestClient(
           'TEST_API_KEY',

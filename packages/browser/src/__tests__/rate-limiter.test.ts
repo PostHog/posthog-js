@@ -24,6 +24,7 @@ describe('Rate Limiter', () => {
         moveTimeForward(0)
 
         persistedBucket = {}
+        window!.history.replaceState({}, '', '/')
 
         mockPostHog = {
             config: {
@@ -31,6 +32,7 @@ describe('Rate Limiter', () => {
                     events_per_second: 10,
                     events_burst_limit: 100,
                 },
+                property_denylist: [],
             },
             persistence: {
                 get_property: jest.fn((key) => persistedBucket[key]),
@@ -38,7 +40,8 @@ describe('Rate Limiter', () => {
                     persistedBucket[key] = value
                 }),
             },
-            capture: jest.fn(),
+            capture: jest.fn(() => ({})),
+            get_session_id: jest.fn(() => 'session-id'),
         }
 
         rateLimiter = new RateLimiter(mockPostHog as any)
@@ -93,6 +96,7 @@ describe('Rate Limiter', () => {
             expect(persistedBucket['$capture_rate_limit']).toEqual({
                 tokens: 0,
                 last: systemTime,
+                dropped: 199, // the first drop emitted the warning and reset the tally
             })
 
             moveTimeForward(2000) // 2 seconds = 20 tokens
@@ -100,6 +104,7 @@ describe('Rate Limiter', () => {
             expect(persistedBucket['$capture_rate_limit']).toEqual({
                 tokens: 19, // 20 - 1
                 last: systemTime,
+                dropped: 199,
             })
         })
 
@@ -125,12 +130,94 @@ describe('Rate Limiter', () => {
                 '$$client_ingestion_warning',
                 {
                     $$client_ingestion_warning_message:
-                        'posthog-js client rate limited. Config is set to 10 events per second and 100 events burst limit.',
+                        'posthog-js client rate limited: 1 event(s) dropped since the last warning, triggered on http://localhost/, session session-id. Config is set to 10 events per second and 100 events burst limit.',
                 },
                 {
                     skip_client_rate_limiting: true,
                 }
             )
+        })
+
+        it('counts events dropped while limited and reports them on the next warning', () => {
+            range(200).forEach(() => rateLimiter.clientRateLimitContext())
+
+            // 100 tokens spent, then 100 drops - the first of which triggered the warning and reset the tally
+            expect(persistedBucket['$capture_rate_limit'].dropped).toEqual(99)
+
+            mockPostHog.capture.mockClear()
+
+            // recover, then trip the limiter again
+            moveTimeForward(1000000)
+            range(200).forEach(() => rateLimiter.clientRateLimitContext())
+
+            expect(mockPostHog.capture).toBeCalledTimes(1)
+            expect(mockPostHog.capture.mock.calls[0][1].$$client_ingestion_warning_message).toContain(
+                '100 event(s) dropped since the last warning'
+            )
+            expect(persistedBucket['$capture_rate_limit'].dropped).toEqual(99)
+        })
+
+        it('keeps dropped events tallied until a warning is accepted', () => {
+            mockPostHog.capture.mockReturnValueOnce(undefined)
+            range(200).forEach(() => rateLimiter.clientRateLimitContext())
+
+            expect(persistedBucket['$capture_rate_limit'].dropped).toEqual(100)
+
+            mockPostHog.capture.mockClear()
+            moveTimeForward(1000000)
+            range(200).forEach(() => rateLimiter.clientRateLimitContext())
+
+            expect(mockPostHog.capture.mock.calls[0][1].$$client_ingestion_warning_message).toContain(
+                '101 event(s) dropped since the last warning'
+            )
+            expect(persistedBucket['$capture_rate_limit'].dropped).toEqual(99)
+        })
+
+        it('reports a persisted dropped tally after reload', () => {
+            persistedBucket['$capture_rate_limit'] = { tokens: 1, last: systemTime, dropped: 19 }
+            rateLimiter = new RateLimiter(mockPostHog as any)
+
+            rateLimiter.clientRateLimitContext()
+            rateLimiter.clientRateLimitContext()
+
+            expect(mockPostHog.capture.mock.calls[0][1].$$client_ingestion_warning_message).toContain(
+                '20 event(s) dropped since the last warning'
+            )
+        })
+
+        it('omits the page and session when they are unavailable', () => {
+            mockPostHog.get_session_id = jest.fn(() => '')
+
+            range(200).forEach(() => rateLimiter.clientRateLimitContext())
+
+            expect(mockPostHog.capture.mock.calls[0][1].$$client_ingestion_warning_message).toEqual(
+                'posthog-js client rate limited: 1 event(s) dropped since the last warning, triggered on http://localhost/. Config is set to 10 events per second and 100 events burst limit.'
+            )
+        })
+
+        it.each(['$current_url', '$pathname', '$session_id'])('does not interpolate denylisted %s context', (key) => {
+            window!.history.replaceState({}, '', '/users/alice@example.com/private?token=secret#private')
+            mockPostHog.config.property_denylist = [key]
+
+            range(200).forEach(() => rateLimiter.clientRateLimitContext())
+
+            const properties = mockPostHog.capture.mock.calls[0][1]
+            if (key === '$session_id') {
+                expect(properties.$$client_ingestion_warning_message).not.toContain('session-id')
+            } else {
+                expect(properties.$$client_ingestion_warning_message).not.toContain('alice@example.com')
+            }
+        })
+
+        it('omits query strings and hashes from the warning page', () => {
+            window!.history.replaceState({}, '', '/private/path?token=secret#private')
+
+            range(200).forEach(() => rateLimiter.clientRateLimitContext())
+
+            const message = mockPostHog.capture.mock.calls[0][1].$$client_ingestion_warning_message
+            expect(message).toContain('triggered on http://localhost/private/path')
+            expect(message).not.toContain('token=secret')
+            expect(message).not.toContain('#private')
         })
 
         it('does not capture a rate limit event if the persisted config was already rate limited', () => {
