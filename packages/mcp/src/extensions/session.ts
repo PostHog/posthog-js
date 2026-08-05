@@ -59,6 +59,11 @@ export function getSessionId(
   // This returns instead of falling through to the shared-state writes at the
   // end: the handle belongs to this one request, and persisting it would leak
   // one chat's session onto a concurrent chat's `tools/list`.
+  //
+  // `lastActivity` therefore does not advance either, so a conversation that
+  // always echoes lets the in-memory fallback age past the inactivity timeout —
+  // and a later call carrying no handle rotates it. That is the honest reading:
+  // the fallback session really has been idle for that whole time.
   if (conversationId) {
     return deterministicPrefixedId('ses', conversationId)
   }

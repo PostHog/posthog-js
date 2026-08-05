@@ -1,6 +1,7 @@
 import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { instrument } from '../index'
 import { deterministicPrefixedId } from '../extensions/ids'
+import { MCP_SESSION_HEADER, encodeSessionId } from '../extensions/session-token'
 import { getServerTrackingData } from '../extensions/internal'
 import { getSessionId } from '../extensions/session'
 import type { HighLevelMCPServerLike, MCPServerLike } from '../types'
@@ -105,6 +106,38 @@ describe('conversation_id as the session anchor', () => {
       const data = getServerTrackingData(lowLevel)!
 
       expect(getSessionId(lowLevel, undefined, undefined)).toBe(data.sessionId)
+    })
+  })
+
+  describe('identity', () => {
+    it('still announces $identify for a handle-anchored session on a token deployment', async () => {
+      instrument(server, fakePostHog(), {
+        enableConversationId: true,
+        identify: async () => ({ distinctId: 'user-1' }),
+      })
+
+      // A replayed token leaves data.sessionSource === 'token', which is what
+      // suppresses a second $identify. A handle-anchored session is a brand new
+      // session nobody announced, so suppressing it would lose the event entirely
+      // on exactly the stateless deployments this feature targets.
+      const lowLevel = server.server as MCPServerLike
+      getServerTrackingData(lowLevel)!.sessionSource = 'token'
+      const callHandler = lowLevel._requestHandlers.get('tools/call')!
+      const extra: any = {
+        requestInfo: {
+          headers: { [MCP_SESSION_HEADER]: encodeSessionId({ sessionId: 'ses_from_token', clientName: 'c' }) },
+        },
+      }
+
+      for (const handle of ['conversation-a', 'conversation-b']) {
+        await callHandler(
+          { method: 'tools/call', params: { name: 'add_todo', arguments: { text: 't', conversation_id: handle } } },
+          extra
+        )
+      }
+      await new Promise((r) => setTimeout(r, 60))
+
+      expect(capture.findCapturesByEvent('$identify')).toHaveLength(2)
     })
   })
 
