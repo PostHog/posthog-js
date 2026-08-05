@@ -334,7 +334,7 @@ export const formatResponseGemini = (response: any): FormattedMessage[] => {
             }
 
             // Sanitize base64 data for images and other large inline data
-            data = redactBase64DataUrl(data)
+            data = redactBase64DataUrl(data, mimeType)
 
             content.push(buildInlineDataBlock(mimeType, data))
           }

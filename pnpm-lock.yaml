@@ -250,9 +250,6 @@ importers:
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
-      '@opentelemetry/core':
-        specifier: ^2.0.0
-        version: 2.2.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-trace-otlp-http':
         specifier: ^0.200.0
         version: 0.200.0(@opentelemetry/api@1.9.0)
@@ -313,6 +310,9 @@ importers:
       web-vitals:
         specifier: ^5.3.0
         version: 5.3.0
+      web-vitals-soft-navs:
+        specifier: npm:web-vitals@6.0.0
+        version: web-vitals@6.0.0
     devDependencies:
       '@babel/core':
         specifier: 'catalog:'
@@ -16695,6 +16695,9 @@ packages:
 
   web-vitals@5.3.0:
     resolution: {integrity: sha512-q6LWsLatGYZp5VGBIOvbTj6JBV2nOmC8KvWztXBmwJcfFAzhwKwbOxhUH306XY3CcaZDUlSmSuNPBsCn0bFu+g==}
+
+  web-vitals@6.0.0:
+    resolution: {integrity: sha512-Guaibvy/+uNtL6Bsu4jmMJGzuSl91oeRH5iO9pPRbYftnFUr3yqT1TUNX/OE4o9HexuEMU3Kb/Wg7iKhlffZUA==}
 
   webidl-conversions@3.0.1:
     resolution: {integrity: sha512-2JAn3z8AR6rjK8Sm8orRC0h/bcl/DqL7tRPdGZ4I1CjdF+EaMLmYxBHyXuKL849eucPFhvBoxMsflfOb8kxaeQ==}
@@ -38315,6 +38318,8 @@ snapshots:
   web-streams-polyfill@3.3.3: {}
 
   web-vitals@5.3.0: {}
+
+  web-vitals@6.0.0: {}
 
   webidl-conversions@3.0.1: {}
 

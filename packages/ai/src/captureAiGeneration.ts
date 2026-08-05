@@ -1,10 +1,10 @@
 import { EventMessage, PostHog } from 'posthog-node'
 import { v4 as uuidv4 } from 'uuid'
-import { uuidv7, ErrorTracking as CoreErrorTracking } from '@posthog/core'
+import { uuidv7, ErrorTracking as CoreErrorTracking, toJsonSafeValue } from '@posthog/core'
 import { version } from '../package.json'
 import type { TokenUsage } from './types'
 import { stringifyError } from './serializeError'
-import { AIEvent, CostOverride, getTokensSource, sanitizeValues, withPrivacyMode } from './utils'
+import { AIEvent, CostOverride, getTokensSource, withPrivacyMode } from './utils'
 import { warnIfPostHogAiGateway } from './gatewayWarning'
 
 /**
@@ -93,106 +93,125 @@ export interface CaptureAiGenerationOptions {
  * so callers can re-throw the original error reference safely.
  */
 export const captureAiGeneration = async (client: PostHog, options: CaptureAiGenerationOptions): Promise<void> => {
-  if (!client.capture) {
-    return
-  }
+  try {
+    if (!client.capture) {
+      return
+    }
 
-  warnIfPostHogAiGateway(options.baseURL)
+    warnIfPostHogAiGateway(options.baseURL)
 
-  const traceId = options.traceId ?? uuidv4()
-  const eventType = options.eventType ?? AIEvent.Generation
-  const privacyMode = options.privacyMode ?? false
-  const usage = options.usage ?? {}
+    const traceId = options.traceId ?? uuidv4()
+    const eventType = options.eventType ?? AIEvent.Generation
+    const privacyMode = options.privacyMode ?? false
+    const usage = options.usage ?? {}
 
-  const safeInput = sanitizeValues(options.input)
-  const safeOutput = sanitizeValues(options.output)
+    // Check privacy before reading or traversing input/output. Besides avoiding
+    // needless work, this ensures hostile getters/proxies cannot observe a value
+    // that the caller explicitly requested us to redact.
+    const shouldRedact = withPrivacyMode(client, privacyMode, false) === null
+    const safeInput = shouldRedact ? null : toJsonSafeValue(options.input)
+    const safeOutput = shouldRedact ? null : toJsonSafeValue(options.output)
 
-  let httpStatus = options.httpStatus
-  let errorData: Record<string, unknown> = {}
-  if (options.error) {
-    if (httpStatus === undefined) {
-      if (typeof options.error === 'object' && 'status' in options.error && typeof options.error.status === 'number') {
-        httpStatus = options.error.status
-      } else {
-        httpStatus = 500
+    let httpStatus = options.httpStatus
+    let errorData: Record<string, unknown> = {}
+    if (options.error) {
+      if (httpStatus === undefined) {
+        if (
+          typeof options.error === 'object' &&
+          'status' in options.error &&
+          typeof options.error.status === 'number'
+        ) {
+          httpStatus = options.error.status
+        } else if (
+          typeof options.error === 'object' &&
+          'statusCode' in options.error &&
+          typeof options.error.statusCode === 'number'
+        ) {
+          httpStatus = options.error.statusCode
+        } else {
+          httpStatus = 500
+        }
+      }
+
+      let exceptionId: string | undefined
+      if (client.options?.enableExceptionAutocapture) {
+        exceptionId = uuidv7()
+        client.captureException(options.error, undefined, { $ai_trace_id: traceId }, exceptionId)
+        if (typeof options.error === 'object') {
+          ;(options.error as CoreErrorTracking.PreviouslyCapturedError).__posthog_previously_captured_error = true
+        }
+      }
+
+      errorData = {
+        $ai_is_error: true,
+        $ai_error: stringifyError(options.error),
+        $exception_event_id: exceptionId,
+      }
+    }
+    httpStatus = httpStatus ?? 200
+
+    let costOverrideData: Record<string, number> = {}
+    if (options.costOverride) {
+      const inputCostUSD = (options.costOverride.inputCost ?? 0) * (usage.inputTokens ?? 0)
+      const outputCostUSD = (options.costOverride.outputCost ?? 0) * (usage.outputTokens ?? 0)
+      costOverrideData = {
+        $ai_input_cost_usd: inputCostUSD,
+        $ai_output_cost_usd: outputCostUSD,
+        $ai_total_cost_usd: inputCostUSD + outputCostUSD,
       }
     }
 
-    let exceptionId: string | undefined
-    if (client.options?.enableExceptionAutocapture) {
-      exceptionId = uuidv7()
-      client.captureException(options.error, undefined, { $ai_trace_id: traceId }, exceptionId)
-      if (typeof options.error === 'object') {
-        ;(options.error as CoreErrorTracking.PreviouslyCapturedError).__posthog_previously_captured_error = true
-      }
+    const additionalTokenValues = {
+      ...(usage.reasoningTokens ? { $ai_reasoning_tokens: usage.reasoningTokens } : {}),
+      ...(usage.cacheReadInputTokens ? { $ai_cache_read_input_tokens: usage.cacheReadInputTokens } : {}),
+      ...(usage.cacheCreationInputTokens ? { $ai_cache_creation_input_tokens: usage.cacheCreationInputTokens } : {}),
+      ...(usage.webSearchCount ? { $ai_web_search_count: usage.webSearchCount } : {}),
+      ...(usage.rawUsage ? { $ai_usage: usage.rawUsage } : {}),
     }
 
-    errorData = {
-      $ai_is_error: true,
-      $ai_error: stringifyError(options.error),
-      $exception_event_id: exceptionId,
+    const properties: Record<string, unknown> = {
+      $ai_lib: 'posthog-ai',
+      $ai_lib_version: version,
+      $ai_provider: options.providerOverride ?? options.provider,
+      $ai_model: options.modelOverride ?? options.model,
+      $ai_model_parameters: options.modelParameters ?? {},
+      $ai_input: safeInput,
+      $ai_output_choices: safeOutput,
+      $ai_http_status: httpStatus,
+      $ai_input_tokens: usage.inputTokens ?? 0,
+      ...(usage.outputTokens !== undefined ? { $ai_output_tokens: usage.outputTokens } : {}),
+      ...additionalTokenValues,
+      ...(options.latency !== undefined ? { $ai_latency: options.latency } : {}),
+      ...(options.timeToFirstToken !== undefined ? { $ai_time_to_first_token: options.timeToFirstToken } : {}),
+      $ai_trace_id: traceId,
+      $ai_base_url: options.baseURL ?? '',
+      ...options.properties,
+      $ai_tokens_source: getTokensSource(options.properties),
+      ...(options.distinctId ? {} : { $process_person_profile: false }),
+      ...(options.stopReason ? { $ai_stop_reason: options.stopReason } : {}),
+      ...(options.tools ? { $ai_tools: options.tools } : {}),
+      ...(options.completionId ? { $ai_completion_id: options.completionId } : {}),
+      ...(options.providerMetadata && Object.keys(options.providerMetadata).length > 0
+        ? { $ai_provider_metadata: options.providerMetadata }
+        : {}),
+      ...errorData,
+      ...costOverrideData,
     }
-  }
-  httpStatus = httpStatus ?? 200
 
-  let costOverrideData: Record<string, number> = {}
-  if (options.costOverride) {
-    const inputCostUSD = (options.costOverride.inputCost ?? 0) * (usage.inputTokens ?? 0)
-    const outputCostUSD = (options.costOverride.outputCost ?? 0) * (usage.outputTokens ?? 0)
-    costOverrideData = {
-      $ai_input_cost_usd: inputCostUSD,
-      $ai_output_cost_usd: outputCostUSD,
-      $ai_total_cost_usd: inputCostUSD + outputCostUSD,
+    const event: EventMessage = {
+      distinctId: options.distinctId ?? traceId,
+      event: eventType,
+      properties,
+      groups: options.groups,
     }
-  }
 
-  const additionalTokenValues = {
-    ...(usage.reasoningTokens ? { $ai_reasoning_tokens: usage.reasoningTokens } : {}),
-    ...(usage.cacheReadInputTokens ? { $ai_cache_read_input_tokens: usage.cacheReadInputTokens } : {}),
-    ...(usage.cacheCreationInputTokens ? { $ai_cache_creation_input_tokens: usage.cacheCreationInputTokens } : {}),
-    ...(usage.webSearchCount ? { $ai_web_search_count: usage.webSearchCount } : {}),
-    ...(usage.rawUsage ? { $ai_usage: usage.rawUsage } : {}),
-  }
-
-  const properties: Record<string, unknown> = {
-    $ai_lib: 'posthog-ai',
-    $ai_lib_version: version,
-    $ai_provider: options.providerOverride ?? options.provider,
-    $ai_model: options.modelOverride ?? options.model,
-    $ai_model_parameters: options.modelParameters ?? {},
-    $ai_input: withPrivacyMode(client, privacyMode, safeInput),
-    $ai_output_choices: withPrivacyMode(client, privacyMode, safeOutput),
-    $ai_http_status: httpStatus,
-    $ai_input_tokens: usage.inputTokens ?? 0,
-    ...(usage.outputTokens !== undefined ? { $ai_output_tokens: usage.outputTokens } : {}),
-    ...additionalTokenValues,
-    $ai_latency: options.latency ?? 0,
-    ...(options.timeToFirstToken !== undefined ? { $ai_time_to_first_token: options.timeToFirstToken } : {}),
-    $ai_trace_id: traceId,
-    $ai_base_url: options.baseURL ?? '',
-    ...options.properties,
-    $ai_tokens_source: getTokensSource(options.properties),
-    ...(options.distinctId ? {} : { $process_person_profile: false }),
-    ...(options.stopReason ? { $ai_stop_reason: options.stopReason } : {}),
-    ...(options.tools ? { $ai_tools: options.tools } : {}),
-    ...(options.completionId ? { $ai_completion_id: options.completionId } : {}),
-    ...(options.providerMetadata && Object.keys(options.providerMetadata).length > 0
-      ? { $ai_provider_metadata: options.providerMetadata }
-      : {}),
-    ...errorData,
-    ...costOverrideData,
-  }
-
-  const event: EventMessage = {
-    distinctId: options.distinctId ?? traceId,
-    event: eventType,
-    properties,
-    groups: options.groups,
-  }
-
-  if (options.captureImmediate) {
-    await client.captureImmediate(event)
-  } else {
-    client.capture(event)
+    if (options.captureImmediate) {
+      await client.captureImmediate(event)
+    } else {
+      client.capture(event)
+    }
+  } catch (error) {
+    // Telemetry failures must never affect the instrumented provider call.
+    console.warn('[PostHog AI] Failed to capture generation telemetry:', error)
   }
 }

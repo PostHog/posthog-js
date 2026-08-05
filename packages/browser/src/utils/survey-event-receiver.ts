@@ -1,5 +1,6 @@
 import { canSurveyActivateRepeatedly } from '@posthog/core/surveys'
-import { SURVEYS_ACTIVATED, SURVEYS_ACTIVATED_SESSION } from '../constants'
+import { isNumber } from '@posthog/core'
+import { SURVEYS_ACTIVATED, SURVEYS_ACTIVATED_SESSION, SURVEYS_ACTIVATED_TIMESTAMPS } from '../constants'
 import { Survey, SurveyEventName } from '../posthog-surveys-types'
 import { PostHog } from '../posthog-core'
 import { SURVEY_LOGGER as logger } from './survey-utils'
@@ -17,6 +18,32 @@ export class SurveyEventReceiver extends EventReceiver<Survey> {
 
     protected _getActivatedSessionKey(): string {
         return SURVEYS_ACTIVATED_SESSION
+    }
+
+    protected _getActivationTimestampsKey(): string {
+        return SURVEYS_ACTIVATED_TIMESTAMPS
+    }
+
+    protected _writeActivationTimestamps(timestamps: Record<string, number>): void {
+        this._instance?.persistence?.register({ [SURVEYS_ACTIVATED_TIMESTAMPS]: timestamps })
+    }
+
+    protected _clearActivationTimestampsStore(): void {
+        this._instance?.persistence?.unregister(SURVEYS_ACTIVATED_TIMESTAMPS)
+    }
+
+    /**
+     * A survey with a popup delay must survive navigation so the delay resumes from the recorded
+     * activation time on the next page instead of restarting from zero. Surveys without a delay
+     * keep the in-memory arming, so an exit-intent trigger does not surface them on a later page.
+     */
+    protected _shouldPersistArmedActivation(itemId: string): boolean {
+        let survey: Survey | undefined
+        this._getItems((surveys) => {
+            survey = surveys.find((s) => s.id === itemId)
+        })
+        const delaySeconds = survey?.appearance?.surveyPopupDelaySeconds
+        return isNumber(delaySeconds) && delaySeconds > 0
     }
 
     protected _getShownEventName(): string {
