@@ -301,6 +301,7 @@
         "_hasUnobservableSurfaces",
         "_hasUsableMessage",
         "_hasWarnedClientMaskingOverride",
+        "_hasWarnedExclusiveAttributeMasking",
         "_heldBufferOverflowed",
         "_heldEpochShipsOnUnload",
         "_holdFlushUntilInteraction",
