@@ -1,84 +1,70 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import type * as puppeteer from 'puppeteer';
-import { vi } from 'vitest';
-import type { recordOptions } from '../../src/types';
-import {
-  listenerHandler,
-  eventWithTime,
-  EventType,
-} from '@posthog/rrweb-types';
-import { launchPuppeteer } from '../utils';
-import {
-  callbackWrapper,
-  registerErrorHandler,
-  unregisterErrorHandler,
-} from '../../src/record/error-handler';
+import * as fs from 'fs'
+import * as path from 'path'
+import type * as puppeteer from 'puppeteer'
+import { vi } from 'vitest'
+import type { recordOptions } from '../../src/types'
+import { listenerHandler, eventWithTime, EventType, IncrementalSource, mutationData } from '@posthog/rrweb-types'
+import { launchPuppeteer } from '../utils'
+import { callbackWrapper, registerErrorHandler, unregisterErrorHandler } from '../../src/record/error-handler'
 
 interface ISuite {
-  code: string;
-  browser: puppeteer.Browser;
-  page: puppeteer.Page;
-  events: eventWithTime[];
+    code: string
+    browser: puppeteer.Browser
+    page: puppeteer.Page
+    events: eventWithTime[]
 }
 
 interface IWindow extends Window {
-  rrweb: {
-    record: (
-      options: recordOptions<eventWithTime>,
-    ) => listenerHandler | undefined;
-    addCustomEvent<T>(tag: string, payload: T): void;
-  };
-  emit: (e: eventWithTime) => undefined;
+    rrweb: {
+        record: (options: recordOptions<eventWithTime>) => listenerHandler | undefined
+        addCustomEvent<T>(tag: string, payload: T): void
+    }
+    emit: (e: eventWithTime) => undefined
 }
 
-const setup = function (
-  this: ISuite,
-  content: string,
-  canvasSample: 'all' | number = 'all',
-): ISuite {
-  const ctx = {} as ISuite;
+const setup = function (this: ISuite, content: string, canvasSample: 'all' | number = 'all'): ISuite {
+    const ctx = {} as ISuite
 
-  beforeAll(async () => {
-    ctx.browser = await launchPuppeteer();
+    beforeAll(async () => {
+        ctx.browser = await launchPuppeteer()
 
-    const bundlePath = path.resolve(__dirname, '../../dist/rrweb.umd.cjs');
-    ctx.code = fs.readFileSync(bundlePath, 'utf8');
-  });
+        const bundlePath = path.resolve(__dirname, '../../dist/rrweb.umd.cjs')
+        ctx.code = fs.readFileSync(bundlePath, 'utf8')
+    })
 
-  beforeEach(async () => {
-    ctx.page = await ctx.browser.newPage();
-    await ctx.page.goto('about:blank');
-    await ctx.page.setContent(content);
-    await ctx.page.evaluate(ctx.code);
-    ctx.events = [];
-    await ctx.page.exposeFunction('emit', (e: eventWithTime) => {
-      if (e.type === EventType.DomContentLoaded || e.type === EventType.Load) {
-        return;
-      }
-      ctx.events.push(e);
-    });
+    beforeEach(async () => {
+        ctx.page = await ctx.browser.newPage()
+        await ctx.page.goto('about:blank')
+        await ctx.page.setContent(content)
+        await ctx.page.evaluate(ctx.code)
+        ctx.events = []
+        await ctx.page.exposeFunction('emit', (e: eventWithTime) => {
+            if (e.type === EventType.DomContentLoaded || e.type === EventType.Load) {
+                return
+            }
+            ctx.events.push(e)
+        })
 
-    ctx.page.on('console', (msg) => console.log('PAGE LOG:', msg.text()));
-  });
+        ctx.page.on('console', (msg) => console.log('PAGE LOG:', msg.text()))
+    })
 
-  afterEach(async () => {
-    await ctx.page.close();
-  });
+    afterEach(async () => {
+        await ctx.page.close()
+    })
 
-  afterAll(async () => {
-    await ctx.browser?.close();
-  });
+    afterAll(async () => {
+        await ctx.browser?.close()
+    })
 
-  return ctx;
-};
+    return ctx
+}
 
 describe('error-handler', function (this: ISuite) {
-  vi.setConfig({ testTimeout: 100_000 });
+    vi.setConfig({ testTimeout: 100_000 })
 
-  const ctx: ISuite = setup.call(
-    this,
-    `
+    const ctx: ISuite = setup.call(
+        this,
+        `
       <!DOCTYPE html>
       <html>
         <head>
@@ -91,383 +77,431 @@ describe('error-handler', function (this: ISuite) {
           <div id='out'></div>
         </body>
       </html>
-    `,
-  );
+    `
+    )
 
-  describe('CSSStyleSheet.prototype', () => {
-    it('triggers for errors from insertRule', async () => {
-      await ctx.page.evaluate(() => {
-        // @ts-ignore rewrite this to something buggy
-        window.CSSStyleSheet.prototype.insertRule = function () {
-          // @ts-ignore
-          window.doSomethingWrong();
-        };
-      });
+    describe('CSSStyleSheet.prototype', () => {
+        it('preserves native insertRule exceptions when only recorder errors are contained', async () => {
+            const result = await ctx.page.evaluate(() => {
+                const { record } = (window as unknown as IWindow).rrweb
+                const contexts: string[] = []
+                record({
+                    errorHandler: (_error, context) => {
+                        contexts.push(context ?? 'missing')
+                        return context === 'rrweb'
+                    },
+                    emit: (window as unknown as IWindow).emit,
+                })
 
-      await ctx.page.evaluate(() => {
-        const { record } = (window as unknown as IWindow).rrweb;
-        record({
-          errorHandler: (error) => {
-            document.getElementById('out')!.innerText = `${error}`;
-          },
-          emit: (window as unknown as IWindow).emit,
-        });
+                try {
+                    document.styleSheets[0].insertRule(
+                        'body { background: blue; }',
+                        document.styleSheets[0].cssRules.length + 1
+                    )
+                    return { exceptionName: null, contexts }
+                } catch (error) {
+                    return {
+                        exceptionName: (error as { name?: string }).name,
+                        contexts,
+                    }
+                }
+            })
 
-        // Trigger buggy style sheet insert
-        setTimeout(() => {
-          // @ts-ignore
-          document.styleSheets[0].insertRule('body { background: blue; }');
-        }, 50);
-      });
+            expect(result).toEqual({
+                exceptionName: 'IndexSizeError',
+                contexts: ['host'],
+            })
+        })
 
-      await ctx.page.waitForTimeout(100);
+        it('triggers for errors from insertRule', async () => {
+            await ctx.page.evaluate(() => {
+                // @ts-ignore rewrite this to something buggy
+                window.CSSStyleSheet.prototype.insertRule = function () {
+                    // @ts-ignore
+                    window.doSomethingWrong()
+                }
+            })
 
-      const element = await ctx.page.$('#out');
-      const text = await element!.evaluate((el) => el.textContent);
+            await ctx.page.evaluate(() => {
+                const { record } = (window as unknown as IWindow).rrweb
+                record({
+                    errorHandler: (error) => {
+                        document.getElementById('out')!.innerText = `${error}`
+                    },
+                    emit: (window as unknown as IWindow).emit,
+                })
 
-      expect(text).toEqual(
-        'TypeError: window.doSomethingWrong is not a function',
-      );
-    });
+                // Trigger buggy style sheet insert
+                setTimeout(() => {
+                    // @ts-ignore
+                    document.styleSheets[0].insertRule('body { background: blue; }')
+                }, 50)
+            })
 
-    it('triggers for errors from deleteRule', async () => {
-      await ctx.page.evaluate(() => {
-        // @ts-ignore rewrite this to something buggy
-        window.CSSStyleSheet.prototype.deleteRule = function () {
-          // @ts-ignore
-          window.doSomethingWrong();
-        };
-      });
+            await ctx.page.waitForTimeout(100)
 
-      await ctx.page.evaluate(() => {
-        const { record } = (window as unknown as IWindow).rrweb;
-        record({
-          errorHandler: (error) => {
-            document.getElementById('out')!.innerText = `${error}`;
-          },
-          emit: (window as unknown as IWindow).emit,
-        });
+            const element = await ctx.page.$('#out')
+            const text = await element!.evaluate((el) => el.textContent)
 
-        // Trigger buggy style sheet delete
-        setTimeout(() => {
-          document.styleSheets[0].deleteRule(0);
-        }, 50);
-      });
+            expect(text).toEqual('TypeError: window.doSomethingWrong is not a function')
+        })
 
-      await ctx.page.waitForTimeout(100);
+        it('triggers for errors from deleteRule', async () => {
+            await ctx.page.evaluate(() => {
+                // @ts-ignore rewrite this to something buggy
+                window.CSSStyleSheet.prototype.deleteRule = function () {
+                    // @ts-ignore
+                    window.doSomethingWrong()
+                }
+            })
 
-      const element = await ctx.page.$('#out');
-      const text = await element!.evaluate((el) => el.textContent);
+            await ctx.page.evaluate(() => {
+                const { record } = (window as unknown as IWindow).rrweb
+                record({
+                    errorHandler: (error) => {
+                        document.getElementById('out')!.innerText = `${error}`
+                    },
+                    emit: (window as unknown as IWindow).emit,
+                })
 
-      expect(text).toEqual(
-        'TypeError: window.doSomethingWrong is not a function',
-      );
-    });
+                // Trigger buggy style sheet delete
+                setTimeout(() => {
+                    document.styleSheets[0].deleteRule(0)
+                }, 50)
+            })
 
-    it('triggers for errors from replace', async () => {
-      await ctx.page.evaluate(() => {
-        // @ts-ignore rewrite this to something buggy
-        window.CSSStyleSheet.prototype.replace = function () {
-          // @ts-ignore
-          window.doSomethingWrong();
-        };
-      });
+            await ctx.page.waitForTimeout(100)
 
-      await ctx.page.evaluate(() => {
-        const { record } = (window as unknown as IWindow).rrweb;
-        record({
-          errorHandler: (error) => {
-            document.getElementById('out')!.innerText = `${error}`;
-          },
-          emit: (window as unknown as IWindow).emit,
-        });
+            const element = await ctx.page.$('#out')
+            const text = await element!.evaluate((el) => el.textContent)
 
-        // Trigger buggy style sheet insert
-        setTimeout(() => {
-          // @ts-ignore
-          document.styleSheets[0].replace('body { background: blue; }');
-        }, 50);
-      });
+            expect(text).toEqual('TypeError: window.doSomethingWrong is not a function')
+        })
 
-      await ctx.page.waitForTimeout(100);
+        it('triggers for errors from replace', async () => {
+            await ctx.page.evaluate(() => {
+                // @ts-ignore rewrite this to something buggy
+                window.CSSStyleSheet.prototype.replace = function () {
+                    // @ts-ignore
+                    window.doSomethingWrong()
+                }
+            })
 
-      const element = await ctx.page.$('#out');
-      const text = await element!.evaluate((el) => el.textContent);
+            await ctx.page.evaluate(() => {
+                const { record } = (window as unknown as IWindow).rrweb
+                record({
+                    errorHandler: (error) => {
+                        document.getElementById('out')!.innerText = `${error}`
+                    },
+                    emit: (window as unknown as IWindow).emit,
+                })
 
-      expect(text).toEqual(
-        'TypeError: window.doSomethingWrong is not a function',
-      );
-    });
+                // Trigger buggy style sheet insert
+                setTimeout(() => {
+                    // @ts-ignore
+                    document.styleSheets[0].replace('body { background: blue; }')
+                }, 50)
+            })
 
-    it('triggers for errors from replaceSync', async () => {
-      await ctx.page.evaluate(() => {
-        // @ts-ignore rewrite this to something buggy
-        window.CSSStyleSheet.prototype.replaceSync = function () {
-          // @ts-ignore
-          window.doSomethingWrong();
-        };
-      });
+            await ctx.page.waitForTimeout(100)
 
-      await ctx.page.evaluate(() => {
-        const { record } = (window as unknown as IWindow).rrweb;
-        record({
-          errorHandler: (error) => {
-            document.getElementById('out')!.innerText = `${error}`;
-          },
-          emit: (window as unknown as IWindow).emit,
-        });
+            const element = await ctx.page.$('#out')
+            const text = await element!.evaluate((el) => el.textContent)
 
-        // Trigger buggy style sheet insert
-        setTimeout(() => {
-          // @ts-ignore
-          document.styleSheets[0].replaceSync('body { background: blue; }');
-        }, 50);
-      });
+            expect(text).toEqual('TypeError: window.doSomethingWrong is not a function')
+        })
 
-      await ctx.page.waitForTimeout(100);
+        it('triggers for errors from replaceSync', async () => {
+            await ctx.page.evaluate(() => {
+                // @ts-ignore rewrite this to something buggy
+                window.CSSStyleSheet.prototype.replaceSync = function () {
+                    // @ts-ignore
+                    window.doSomethingWrong()
+                }
+            })
 
-      const element = await ctx.page.$('#out');
-      const text = await element!.evaluate((el) => el.textContent);
+            await ctx.page.evaluate(() => {
+                const { record } = (window as unknown as IWindow).rrweb
+                record({
+                    errorHandler: (error) => {
+                        document.getElementById('out')!.innerText = `${error}`
+                    },
+                    emit: (window as unknown as IWindow).emit,
+                })
 
-      expect(text).toEqual(
-        'TypeError: window.doSomethingWrong is not a function',
-      );
-    });
+                // Trigger buggy style sheet insert
+                setTimeout(() => {
+                    // @ts-ignore
+                    document.styleSheets[0].replaceSync('body { background: blue; }')
+                }, 50)
+            })
 
-    it('triggers for errors from CSSGroupingRule.insertRule', async () => {
-      await ctx.page.evaluate(() => {
-        // @ts-ignore rewrite this to something buggy
-        window.CSSGroupingRule.prototype.insertRule = function () {
-          // @ts-ignore
-          window.doSomethingWrong();
-        };
-      });
+            await ctx.page.waitForTimeout(100)
 
-      await ctx.page.evaluate(() => {
-        const { record } = (window as unknown as IWindow).rrweb;
-        record({
-          errorHandler: (error) => {
-            document.getElementById('out')!.innerText = `${error}`;
-          },
-          emit: (window as unknown as IWindow).emit,
-        });
+            const element = await ctx.page.$('#out')
+            const text = await element!.evaluate((el) => el.textContent)
 
-        // Trigger buggy style sheet insert
-        setTimeout(() => {
-          document.styleSheets[0].insertRule('@media {}');
-          const atMediaRule = document.styleSheets[0]
-            .cssRules[0] as CSSMediaRule;
+            expect(text).toEqual('TypeError: window.doSomethingWrong is not a function')
+        })
 
-          const ruleIdx0 = atMediaRule.insertRule(
-            'body { background: #000; }',
-            0,
-          );
-        }, 50);
-      });
+        it('triggers for errors from CSSGroupingRule.insertRule', async () => {
+            await ctx.page.evaluate(() => {
+                // @ts-ignore rewrite this to something buggy
+                window.CSSGroupingRule.prototype.insertRule = function () {
+                    // @ts-ignore
+                    window.doSomethingWrong()
+                }
+            })
 
-      await ctx.page.waitForTimeout(100);
+            await ctx.page.evaluate(() => {
+                const { record } = (window as unknown as IWindow).rrweb
+                record({
+                    errorHandler: (error) => {
+                        document.getElementById('out')!.innerText = `${error}`
+                    },
+                    emit: (window as unknown as IWindow).emit,
+                })
 
-      const element = await ctx.page.$('#out');
-      const text = await element!.evaluate((el) => el.textContent);
+                // Trigger buggy style sheet insert
+                setTimeout(() => {
+                    document.styleSheets[0].insertRule('@media {}')
+                    const atMediaRule = document.styleSheets[0].cssRules[0] as CSSMediaRule
 
-      expect(text).toEqual(
-        'TypeError: window.doSomethingWrong is not a function',
-      );
-    });
+                    const ruleIdx0 = atMediaRule.insertRule('body { background: #000; }', 0)
+                }, 50)
+            })
 
-    it('triggers for errors from CSSGroupingRule.deleteRule', async () => {
-      await ctx.page.evaluate(() => {
-        // @ts-ignore rewrite this to something buggy
-        window.CSSGroupingRule.prototype.deleteRule = function () {
-          // @ts-ignore
-          window.doSomethingWrong();
-        };
-      });
+            await ctx.page.waitForTimeout(100)
 
-      await ctx.page.evaluate(() => {
-        const { record } = (window as unknown as IWindow).rrweb;
-        record({
-          errorHandler: (error) => {
-            document.getElementById('out')!.innerText = `${error}`;
-          },
-          emit: (window as unknown as IWindow).emit,
-        });
+            const element = await ctx.page.$('#out')
+            const text = await element!.evaluate((el) => el.textContent)
 
-        // Trigger buggy style sheet delete
-        setTimeout(() => {
-          document.styleSheets[0].insertRule('@media {}');
-          const atMediaRule = document.styleSheets[0]
-            .cssRules[0] as CSSMediaRule;
+            expect(text).toEqual('TypeError: window.doSomethingWrong is not a function')
+        })
 
-          const ruleIdx0 = atMediaRule.deleteRule(0);
-        }, 50);
-      });
+        it('triggers for errors from CSSGroupingRule.deleteRule', async () => {
+            await ctx.page.evaluate(() => {
+                // @ts-ignore rewrite this to something buggy
+                window.CSSGroupingRule.prototype.deleteRule = function () {
+                    // @ts-ignore
+                    window.doSomethingWrong()
+                }
+            })
 
-      await ctx.page.waitForTimeout(100);
+            await ctx.page.evaluate(() => {
+                const { record } = (window as unknown as IWindow).rrweb
+                record({
+                    errorHandler: (error) => {
+                        document.getElementById('out')!.innerText = `${error}`
+                    },
+                    emit: (window as unknown as IWindow).emit,
+                })
 
-      const element = await ctx.page.$('#out');
-      const text = await element!.evaluate((el) => el.textContent);
+                // Trigger buggy style sheet delete
+                setTimeout(() => {
+                    document.styleSheets[0].insertRule('@media {}')
+                    const atMediaRule = document.styleSheets[0].cssRules[0] as CSSMediaRule
 
-      expect(text).toEqual(
-        'TypeError: window.doSomethingWrong is not a function',
-      );
-    });
+                    const ruleIdx0 = atMediaRule.deleteRule(0)
+                }, 50)
+            })
 
-    it('triggers for errors from CSSStyleDeclaration.setProperty', async () => {
-      await ctx.page.evaluate(() => {
-        // @ts-ignore rewrite this to something buggy
-        window.CSSStyleDeclaration.prototype.setProperty = function () {
-          // @ts-ignore
-          window.doSomethingWrong();
-        };
-      });
+            await ctx.page.waitForTimeout(100)
 
-      await ctx.page.evaluate(() => {
-        const { record } = (window as unknown as IWindow).rrweb;
-        record({
-          errorHandler: (error) => {
-            document.getElementById('out')!.innerText = `${error}`;
-          },
-          emit: (window as unknown as IWindow).emit,
-        });
+            const element = await ctx.page.$('#out')
+            const text = await element!.evaluate((el) => el.textContent)
 
-        // Trigger buggy style sheet insert
-        setTimeout(() => {
-          (
-            document.styleSheets[0].cssRules[0] as unknown as {
-              style: CSSStyleDeclaration;
-            }
-          ).style.setProperty('background', 'blue');
-        }, 50);
-      });
+            expect(text).toEqual('TypeError: window.doSomethingWrong is not a function')
+        })
 
-      await ctx.page.waitForTimeout(100);
+        it('triggers for errors from CSSStyleDeclaration.setProperty', async () => {
+            await ctx.page.evaluate(() => {
+                // @ts-ignore rewrite this to something buggy
+                window.CSSStyleDeclaration.prototype.setProperty = function () {
+                    // @ts-ignore
+                    window.doSomethingWrong()
+                }
+            })
 
-      const element = await ctx.page.$('#out');
-      const text = await element!.evaluate((el) => el.textContent);
+            await ctx.page.evaluate(() => {
+                const { record } = (window as unknown as IWindow).rrweb
+                record({
+                    errorHandler: (error) => {
+                        document.getElementById('out')!.innerText = `${error}`
+                    },
+                    emit: (window as unknown as IWindow).emit,
+                })
 
-      expect(text).toEqual(
-        'TypeError: window.doSomethingWrong is not a function',
-      );
-    });
+                // Trigger buggy style sheet insert
+                setTimeout(() => {
+                    ;(
+                        document.styleSheets[0].cssRules[0] as unknown as {
+                            style: CSSStyleDeclaration
+                        }
+                    ).style.setProperty('background', 'blue')
+                }, 50)
+            })
 
-    it('triggers for errors from CSSStyleDeclaration.removeProperty', async () => {
-      await ctx.page.evaluate(() => {
-        // @ts-ignore rewrite this to something buggy
-        window.CSSStyleDeclaration.prototype.removeProperty = function () {
-          // @ts-ignore
-          window.doSomethingWrong();
-        };
-      });
+            await ctx.page.waitForTimeout(100)
 
-      await ctx.page.evaluate(() => {
-        const { record } = (window as unknown as IWindow).rrweb;
-        record({
-          errorHandler: (error) => {
-            document.getElementById('out')!.innerText = `${error}`;
-          },
-          emit: (window as unknown as IWindow).emit,
-        });
+            const element = await ctx.page.$('#out')
+            const text = await element!.evaluate((el) => el.textContent)
 
-        // Trigger buggy style sheet insert
-        setTimeout(() => {
-          (
-            document.styleSheets[0].cssRules[0] as unknown as {
-              style: CSSStyleDeclaration;
-            }
-          ).style.removeProperty('background');
-        }, 50);
-      });
+            expect(text).toEqual('TypeError: window.doSomethingWrong is not a function')
+        })
 
-      await ctx.page.waitForTimeout(100);
+        it('triggers for errors from CSSStyleDeclaration.removeProperty', async () => {
+            await ctx.page.evaluate(() => {
+                // @ts-ignore rewrite this to something buggy
+                window.CSSStyleDeclaration.prototype.removeProperty = function () {
+                    // @ts-ignore
+                    window.doSomethingWrong()
+                }
+            })
 
-      const element = await ctx.page.$('#out');
-      const text = await element!.evaluate((el) => el.textContent);
+            await ctx.page.evaluate(() => {
+                const { record } = (window as unknown as IWindow).rrweb
+                record({
+                    errorHandler: (error) => {
+                        document.getElementById('out')!.innerText = `${error}`
+                    },
+                    emit: (window as unknown as IWindow).emit,
+                })
 
-      expect(text).toEqual(
-        'TypeError: window.doSomethingWrong is not a function',
-      );
-    });
-  });
+                // Trigger buggy style sheet insert
+                setTimeout(() => {
+                    ;(
+                        document.styleSheets[0].cssRules[0] as unknown as {
+                            style: CSSStyleDeclaration
+                        }
+                    ).style.removeProperty('background')
+                }, 50)
+            })
 
-  it('triggers for errors from mutation observer', async () => {
-    await ctx.page.evaluate(() => {
-      const { record } = (window as unknown as IWindow).rrweb;
-      record({
-        errorHandler: (error) => {
-          document.getElementById('out')!.innerText = `${error}`;
-        },
-        emit: (window as unknown as IWindow).emit,
-      });
+            await ctx.page.waitForTimeout(100)
 
-      // Trigger buggy mutation observer
-      setTimeout(() => {
-        const el = document.getElementById('in')!;
+            const element = await ctx.page.$('#out')
+            const text = await element!.evaluate((el) => el.textContent)
 
-        // @ts-ignore we want to trigger an error in the mutation observer, which uses this
-        el.getAttribute = undefined;
+            expect(text).toEqual('TypeError: window.doSomethingWrong is not a function')
+        })
+    })
 
-        el.setAttribute('data-attr', 'new');
-      }, 50);
-    });
+    it('contains errors from the recorder-owned mutation observer callback', async () => {
+        await ctx.page.evaluate(() => {
+            const { record } = (window as unknown as IWindow).rrweb
+            record({
+                errorHandler: (error, context) => {
+                    document.getElementById('out')!.innerText = `${context}:${error}`
+                    return context === 'rrweb'
+                },
+                emit: (window as unknown as IWindow).emit,
+            })
 
-    await ctx.page.waitForTimeout(100);
+            // Trigger buggy mutation observer
+            setTimeout(() => {
+                const el = document.getElementById('in')!
 
-    const element = await ctx.page.$('#out');
-    const text = await element!.evaluate((el) => el.textContent);
+                // @ts-ignore we want to trigger an error in the mutation observer, which uses this
+                el.getAttribute = undefined
 
-    expect(text).toEqual('TypeError: m.target.getAttribute is not a function');
-  });
-});
+                el.setAttribute('data-attr', 'new')
+            }, 50)
+        })
+
+        await ctx.page.waitForTimeout(100)
+
+        const element = await ctx.page.$('#out')
+        const text = await element!.evaluate((el) => el.textContent)
+
+        expect(text).toEqual('rrweb:TypeError: m.target.getAttribute is not a function')
+    })
+
+    it('records attribute mutations on nodes adopted from another realm', async () => {
+        await ctx.page.evaluate(() => {
+            const iframe = document.createElement('iframe')
+            document.body.appendChild(iframe)
+            const adopted = iframe.contentDocument!.createElement('div')
+            adopted.id = 'adopted-node'
+            document.adoptNode(adopted)
+
+            const { record } = (window as unknown as IWindow).rrweb
+            record({ emit: (window as unknown as IWindow).emit })
+
+            document.body.appendChild(adopted)
+        })
+
+        await ctx.page.waitForTimeout(20)
+        await ctx.page.evaluate(() => {
+            document.getElementById('adopted-node')!.setAttribute('data-adopted', 'retained')
+        })
+        await ctx.page.waitForTimeout(50)
+
+        const attributes = ctx.events
+            .filter(
+                (event) =>
+                    event.type === EventType.IncrementalSnapshot && event.data.source === IncrementalSource.Mutation
+            )
+            .flatMap((event) => (event.data as mutationData).attributes)
+
+        expect(attributes).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    attributes: { 'data-adopted': 'retained' },
+                }),
+            ])
+        )
+    })
+})
 
 describe('errorHandler unit', function () {
-  afterEach(function () {
-    unregisterErrorHandler();
-  });
+    afterEach(function () {
+        unregisterErrorHandler()
+    })
 
-  it('does not swallow if no errorHandler set', () => {
-    unregisterErrorHandler();
+    it('does not swallow if no errorHandler set', () => {
+        unregisterErrorHandler()
 
-    const wrapped = callbackWrapper(() => {
-      throw new Error('test');
-    });
+        const wrapped = callbackWrapper(() => {
+            throw new Error('test')
+        })
 
-    expect(() => wrapped()).toThrowError('test');
-  });
+        expect(() => wrapped()).toThrowError('test')
+    })
 
-  it('does not swallow if errorHandler returns void', () => {
-    registerErrorHandler(() => {
-      // do nothing
-    });
+    it('does not swallow if errorHandler returns void', () => {
+        registerErrorHandler(() => {
+            // do nothing
+        })
 
-    const wrapped = callbackWrapper(() => {
-      throw new Error('test');
-    });
+        const wrapped = callbackWrapper(() => {
+            throw new Error('test')
+        })
 
-    expect(() => wrapped()).toThrowError('test');
-  });
+        expect(() => wrapped()).toThrowError('test')
+    })
 
-  it('does not swallow if errorHandler returns false', () => {
-    registerErrorHandler(() => {
-      return false;
-    });
+    it('does not swallow if errorHandler returns false', () => {
+        registerErrorHandler(() => {
+            return false
+        })
 
-    const wrapped = callbackWrapper(() => {
-      throw new Error('test');
-    });
+        const wrapped = callbackWrapper(() => {
+            throw new Error('test')
+        })
 
-    expect(() => wrapped()).toThrowError('test');
-  });
+        expect(() => wrapped()).toThrowError('test')
+    })
 
-  it('swallows if errorHandler returns true', () => {
-    registerErrorHandler(() => {
-      return true;
-    });
+    it('swallows if errorHandler returns true', () => {
+        registerErrorHandler(() => {
+            return true
+        })
 
-    const wrapped = callbackWrapper(() => {
-      throw new Error('test');
-    });
+        const wrapped = callbackWrapper(() => {
+            throw new Error('test')
+        })
 
-    expect(() => wrapped()).not.toThrowError('test');
-  });
-});
+        expect(() => wrapped()).not.toThrowError('test')
+    })
+})

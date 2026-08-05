@@ -1,467 +1,479 @@
 name: Library checks
 
 on:
-  pull_request:
-  push:
-    branches:
-      - main
+    pull_request:
+    push:
+        branches:
+            - main
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+    group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+    cancel-in-progress: true
 
 permissions:
-  contents: read
+    contents: read
 
 jobs:
-  affected:
-    uses: ./.github/workflows/check-affected.yml
-    with:
-      package-name: posthog-js
-      additional-paths: |
-        packages/browser/
-        .github/workflows/library-ci.yml
-        .github/workflows/check-affected.yml
-        .github/actions/is-affected/action.yaml
-        .github/actions/setup/action.yaml
-
-  unit:
-    name: Unit tests
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Setup environment
-        uses: ./.github/actions/setup
-
-      - name: Run unit tests
-        run: |
-          set -o pipefail
-          pnpm test:unit --concurrency=50% 2>&1 | tee unit-tests.log
-
-          if grep -Eq 'A worker process has failed to exit gracefully|Jest did not exit one second after the test run has completed|Jest has detected the following [0-9]+ open handles?' unit-tests.log; then
-            echo "::error::Jest leaked resources after the unit test run"
-            exit 1
-          fi
-
-      - run: pnpm test:docs-scripts
-
-  edge-runtime:
-    name: Node edge runtime tests
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Setup environment
-        uses: ./.github/actions/setup
-
-      - name: Node edge runtime tests
-        run: pnpm --filter=posthog-node test:edge-compat
-
-  integration:
-    name: Playwright E2E tests
-    needs: affected
-    if: needs.affected.outputs.is-affected == 'true'
-    runs-on: depot-ubuntu-latest-8
-    container:
-      # Keep this version in sync with packages/browser's @playwright/test dependency.
-      image: mcr.microsoft.com/playwright:v1.52.0-noble@sha256:a021500a801bab0611049217ffad6b9697d827205c15babb86a53bc1a61c02d5
-    env:
-      HOME: /root
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Setup environment
-        uses: ./.github/actions/setup
+    affected:
+        uses: ./.github/workflows/check-affected.yml
         with:
-          build: false
+            package-name: posthog-js
+            additional-paths: |
+                packages/browser/
+                .github/workflows/library-ci.yml
+                .github/workflows/check-affected.yml
+                .github/actions/is-affected/action.yaml
+                .github/actions/setup/action.yaml
 
-      - name: Build package
-        run: pnpm build
+    unit:
+        name: Unit tests
+        runs-on: ubuntu-22.04
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Run Playwright tests
-        run: pnpm exec playwright test --workers=5
-        working-directory: packages/browser
+            - name: Setup environment
+              uses: ./.github/actions/setup
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: ${{ !cancelled() }}
-        with:
-          name: playwright-report
-          path: packages/browser/playwright-report/
-          retention-days: 30
+            - name: Run unit tests
+              run: |
+                  set -o pipefail
+                  pnpm test:unit --concurrency=50% 2>&1 | tee unit-tests.log
 
-  compat:
-    name: Backward compatibility tests
-    needs: affected
-    runs-on: depot-ubuntu-latest-8
-    container:
-      # Keep this version in sync with packages/browser's @playwright/test dependency.
-      image: mcr.microsoft.com/playwright:v1.52.0-noble@sha256:a021500a801bab0611049217ffad6b9697d827205c15babb86a53bc1a61c02d5
-    env:
-      HOME: /root
-    if: github.event_name == 'pull_request' && needs.affected.outputs.is-affected == 'true'
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+                  if grep -Eq 'A worker process has failed to exit gracefully|Jest did not exit one second after the test run has completed|Jest has detected the following [0-9]+ open handles?' unit-tests.log; then
+                    echo "::error::Jest leaked resources after the unit test run"
+                    exit 1
+                  fi
 
-      - name: Setup environment
-        uses: ./.github/actions/setup
-        with:
-          build: false
+            - run: pnpm test:docs-scripts
 
-      - name: Build package
-        run: pnpm build
+    edge-runtime:
+        name: Node edge runtime tests
+        runs-on: ubuntu-22.04
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Run backward compatibility tests
-        id: compat-tests
-        continue-on-error: true
-        run: |
-          PLAYWRIGHT_JSON_OUTPUT_FILE=compat-results.json pnpm exec playwright test --config playwright.config.compat.ts --project chromium-compat --workers=5 --reporter=json,html
-        working-directory: packages/browser
+            - name: Setup environment
+              uses: ./.github/actions/setup
 
-      - name: Process compat test results
-        id: process-results
-        working-directory: packages/browser
+            - name: Node edge runtime tests
+              run: pnpm --filter=posthog-node test:edge-compat
+
+    integration:
+        name: Playwright E2E tests
+        needs: affected
+        if: needs.affected.outputs.is-affected == 'true'
+        runs-on: depot-ubuntu-latest-8
+        container:
+            # Keep this version in sync with packages/browser's @playwright/test dependency.
+            image: mcr.microsoft.com/playwright:v1.52.0-noble@sha256:a021500a801bab0611049217ffad6b9697d827205c15babb86a53bc1a61c02d5
         env:
-          COMPAT_TEST_OUTCOME: ${{ steps.compat-tests.outcome }}
-        run: |
-          report_failures() {
-            echo "has_failures=true" >> "$GITHUB_OUTPUT"
-            EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
-            echo "failed_tests<<$EOF" >> "$GITHUB_OUTPUT"
-            echo "$1" >> "$GITHUB_OUTPUT"
-            echo "$EOF" >> "$GITHUB_OUTPUT"
-          }
+            HOME: /root
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-          if [ ! -f compat-results.json ]; then
-            report_failures "- Compatibility test results were not created. Check the test step logs."
-            exit 0
-          fi
+            - name: Setup environment
+              uses: ./.github/actions/setup
+              with:
+                  build: false
 
-          if ! jq -e '(.stats.unexpected | type == "number") and (.errors | type == "array")' compat-results.json > /dev/null; then
-            report_failures "- Compatibility test results could not be parsed. Check the test step logs."
-            exit 0
-          fi
+            - name: Build package
+              run: pnpm build
 
-          UNEXPECTED=$(jq -r '.stats.unexpected' compat-results.json)
-          RUNNER_ERRORS=$(jq -r '.errors | length' compat-results.json)
-          if [ "$COMPAT_TEST_OUTCOME" = "success" ] && [ "$UNEXPECTED" -eq 0 ] && [ "$RUNNER_ERRORS" -eq 0 ]; then
-            echo "has_failures=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+            - name: Run Playwright tests
+              run: pnpm exec playwright test --workers=5
+              working-directory: packages/browser
 
-          FAILED_TESTS=$(jq -r '
-            [
-              .. | objects |
-              select(.tests? and (.tests | type == "array")) |
-              select(any(.tests[]?; .status == "unexpected")) |
-              "- `\(.title)`"
-            ] | unique[]?
-          ' compat-results.json)
+            - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              if: ${{ !cancelled() }}
+              with:
+                  name: playwright-report
+                  path: packages/browser/playwright-report/
+                  retention-days: 30
 
-          if [ "$RUNNER_ERRORS" -gt 0 ]; then
-            RUNNER_FAILURES="- $RUNNER_ERRORS Playwright runner error(s) were reported. Check the test step logs for details."
-            if [ -n "$FAILED_TESTS" ]; then
-              FAILED_TESTS="$FAILED_TESTS
-          $RUNNER_FAILURES"
-            else
-              FAILED_TESTS="$RUNNER_FAILURES"
-            fi
-          fi
-
-          if [ -z "$FAILED_TESTS" ]; then
-            if [ "$UNEXPECTED" -gt 0 ]; then
-              FAILED_TESTS="- $UNEXPECTED unexpected test(s) were reported. Check the test step logs for details."
-            else
-              FAILED_TESTS="- Compatibility test command completed with outcome: $COMPAT_TEST_OUTCOME. Check the test step logs."
-            fi
-          fi
-          report_failures "$FAILED_TESTS"
-
-      - name: Find existing compat comment
-        if: ${{ steps.process-results.outputs.has_failures == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
-        uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4.0.0
-        id: find-comment
-        with:
-          issue-number: ${{ github.event.pull_request.number }}
-          comment-author: 'github-actions[bot]'
-          body-includes: '<!-- compat-test-results -->'
-
-      - name: Create or update compat comment
-        if: ${{ steps.process-results.outputs.has_failures == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
-        uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
-        with:
-          comment-id: ${{ steps.find-comment.outputs.comment-id }}
-          issue-number: ${{ github.event.pull_request.number }}
-          edit-mode: replace
-          body: |
-            <!-- compat-test-results -->
-            ## ⚠️ Backward Compatibility Test Results
-
-            Some tests failed when running **newly built extensions** against the **currently published NPM version** of `array.js`.
-
-            This is **informational only** - it may indicate:
-            - 🆕 A new feature that requires the new array.js (expected, not breaking)
-            - ⚠️ A breaking change that affects users with cached old versions (needs investigation)
-
-            ### Failed Tests
-            ${{ steps.process-results.outputs.failed_tests }}
-
-            <details>
-            <summary>What does this mean?</summary>
-
-            Users load `array.js` (the core library) which then lazy-loads extensions like web-vitals, surveys, etc. If a user has an old cached `array.js` but gets new extensions, these tests check if things still work.
-
-            - If failures are for **new features** → Expected, the new feature just won't work until they get the new array.js
-            - If failures are for **existing features** → This could break existing functionality for users with cached versions
-            </details>
-
-            <details>
-            <summary>How to skip a test for older versions</summary>
-
-            If the failure is expected (new feature not available in older versions), add it to `packages/browser/playwright/compat-skips.ts`:
-
-            ```typescript
-            export const compatSkips = [
-                {
-                    range: '<1.335.0',
-                    test: 'web_vitals_attribution: true includes attribution data',
-                    reason: 'web_vitals_attribution option added in #2953',
-                },
-            ]
-            ```
-
-            **You must provide a reason** explaining why this skip is acceptable.
-            </details>
-
-      - name: Delete compat comment if tests pass
-        if: ${{ steps.process-results.outputs.has_failures == 'false' && github.event.pull_request.head.repo.full_name == github.repository }}
-        uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4.0.0
-        id: find-passing-comment
-        with:
-          issue-number: ${{ github.event.pull_request.number }}
-          comment-author: 'github-actions[bot]'
-          body-includes: '<!-- compat-test-results -->'
-
-      - name: Remove outdated comment
-        if: ${{ steps.find-passing-comment.outputs.comment-id != '' && github.event.pull_request.head.repo.full_name == github.repository }}
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+    compat:
+        name: Backward compatibility tests
+        needs: affected
+        runs-on: depot-ubuntu-latest-8
+        container:
+            # Keep this version in sync with packages/browser's @playwright/test dependency.
+            image: mcr.microsoft.com/playwright:v1.52.0-noble@sha256:a021500a801bab0611049217ffad6b9697d827205c15babb86a53bc1a61c02d5
         env:
-          COMMENT_ID: ${{ steps.find-passing-comment.outputs.comment-id }}
-        with:
-          script: |
-            github.rest.issues.deleteComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              comment_id: process.env.COMMENT_ID
-            })
+            HOME: /root
+        if: github.event_name == 'pull_request' && needs.affected.outputs.is-affected == 'true'
+        permissions:
+            contents: read
+            pull-requests: write
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: ${{ !cancelled() }}
-        with:
-          name: playwright-compat-report
-          path: packages/browser/playwright-report/
-          retention-days: 30
+            - name: Setup environment
+              uses: ./.github/actions/setup
+              with:
+                  build: false
 
-  functional:
-    name: Functional tests
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Setup environment
-        uses: ./.github/actions/setup
-      - run: pnpm test:functional
+            - name: Build package
+              run: pnpm build
 
-  rrweb:
-    name: rrweb tests
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+            - name: Run backward compatibility tests
+              id: compat-tests
+              continue-on-error: true
+              run: |
+                  PLAYWRIGHT_JSON_OUTPUT_FILE=compat-results.json pnpm exec playwright test --config playwright.config.compat.ts --project chromium-compat --workers=5 --reporter=json,html
+              working-directory: packages/browser
 
-      - name: Fetch comparison history
-        env:
-          BASE_BRANCH: ${{ github.event.pull_request.base.ref || github.ref_name }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          set -euo pipefail
+            - name: Process compat test results
+              id: process-results
+              working-directory: packages/browser
+              env:
+                  COMPAT_TEST_OUTCOME: ${{ steps.compat-tests.outcome }}
+              run: |
+                  report_failures() {
+                    echo "has_failures=true" >> "$GITHUB_OUTPUT"
+                    EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+                    echo "failed_tests<<$EOF" >> "$GITHUB_OUTPUT"
+                    echo "$1" >> "$GITHUB_OUTPUT"
+                    echo "$EOF" >> "$GITHUB_OUTPUT"
+                  }
 
-          REFS=("+refs/heads/$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH")
-          if [[ -n "$PR_NUMBER" ]]; then
-            REFS+=("+refs/pull/$PR_NUMBER/merge:refs/remotes/pull/$PR_NUMBER/merge")
-          fi
+                  if [ ! -f compat-results.json ]; then
+                    report_failures "- Compatibility test results were not created. Check the test step logs."
+                    exit 0
+                  fi
 
-          git fetch --no-tags --unshallow origin "${REFS[@]}"
+                  if ! node -e '
+                    const results = require("./compat-results.json")
+                    if (!Number.isInteger(results.stats?.unexpected) || !Array.isArray(results.errors)) process.exit(1)
+                  '; then
+                    report_failures "- Compatibility test results could not be parsed. Check the test step logs."
+                    exit 0
+                  fi
 
-      - name: Check if rrweb packages changed
-        id: changed
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: |
-          set -euo pipefail
+                  UNEXPECTED=$(node -p 'require("./compat-results.json").stats.unexpected')
+                  RUNNER_ERRORS=$(node -p 'require("./compat-results.json").errors.length')
+                  if [ "$COMPAT_TEST_OUTCOME" = "success" ] && [ "$UNEXPECTED" -eq 0 ] && [ "$RUNNER_ERRORS" -eq 0 ]; then
+                    echo "has_failures=false" >> "$GITHUB_OUTPUT"
+                    exit 0
+                  fi
 
-          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]] || ! git rev-parse --verify "${BASE_SHA}^{commit}" >/dev/null 2>&1; then
-            echo "Unable to determine the base commit; running rrweb tests"
-            echo "rrweb-changed=true" >> "$GITHUB_OUTPUT"
-          elif git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- \
-            packages/rrweb/ \
-            package.json \
-            pnpm-lock.yaml \
-            pnpm-workspace.yaml \
-            turbo.json \
-            .github/actions/setup/ \
-            .github/workflows/library-ci.yml; then
-            echo "rrweb-changed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "rrweb-changed=true" >> "$GITHUB_OUTPUT"
-          fi
+                  FAILED_TESTS=$(node -e '
+                    const results = require("./compat-results.json")
+                    const failures = new Set()
+                    const visit = (value) => {
+                      if (!value || typeof value !== "object") return
+                      if (
+                        Array.isArray(value.tests) &&
+                        value.tests.some((test) => test?.status === "unexpected") &&
+                        typeof value.title === "string"
+                      ) {
+                        failures.add("- `" + value.title + "`")
+                      }
+                      Object.values(value).forEach(visit)
+                    }
+                    visit(results)
+                    process.stdout.write([...failures].join("\n"))
+                  ')
 
-      - name: Setup environment
-        if: steps.changed.outputs.rrweb-changed == 'true'
-        uses: ./.github/actions/setup
-        with:
-          build: false
+                  if [ "$RUNNER_ERRORS" -gt 0 ]; then
+                    RUNNER_FAILURES="- $RUNNER_ERRORS Playwright runner error(s) were reported. Check the test step logs for details."
+                    if [ -n "$FAILED_TESTS" ]; then
+                      FAILED_TESTS="$FAILED_TESTS
+                  $RUNNER_FAILURES"
+                    else
+                      FAILED_TESTS="$RUNNER_FAILURES"
+                    fi
+                  fi
 
-      - name: Build rrweb packages
-        if: steps.changed.outputs.rrweb-changed == 'true'
-        run: pnpm turbo run build --filter='./packages/rrweb/**' --concurrency=1
+                  if [ -z "$FAILED_TESTS" ]; then
+                    if [ "$UNEXPECTED" -gt 0 ]; then
+                      FAILED_TESTS="- $UNEXPECTED unexpected test(s) were reported. Check the test step logs for details."
+                    else
+                      FAILED_TESTS="- Compatibility test command completed with outcome: $COMPAT_TEST_OUTCOME. Check the test step logs."
+                    fi
+                  fi
+                  report_failures "$FAILED_TESTS"
 
-      - name: Install Chrome for Puppeteer
-        if: steps.changed.outputs.rrweb-changed == 'true'
-        run: pnpm --filter @posthog/rrweb exec puppeteer browsers install chrome
+            - name: Find existing compat comment
+              if: ${{ steps.process-results.outputs.has_failures == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
+              uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4.0.0
+              id: find-comment
+              with:
+                  issue-number: ${{ github.event.pull_request.number }}
+                  comment-author: 'github-actions[bot]'
+                  body-includes: '<!-- compat-test-results -->'
 
-      - name: Run rrweb tests
-        if: steps.changed.outputs.rrweb-changed == 'true'
-        run: xvfb-run --server-args="-screen 0 1920x1080x24" pnpm turbo run test --filter='./packages/rrweb/**'
+            - name: Create or update compat comment
+              if: ${{ steps.process-results.outputs.has_failures == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
+              uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
+              with:
+                  comment-id: ${{ steps.find-comment.outputs.comment-id }}
+                  issue-number: ${{ github.event.pull_request.number }}
+                  edit-mode: replace
+                  body: |
+                      <!-- compat-test-results -->
+                      ## ⚠️ Backward Compatibility Test Results
 
-      - name: Upload diff images on failure
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: failure() && steps.changed.outputs.rrweb-changed == 'true'
-        with:
-          name: rrweb-image-diff
-          path: packages/rrweb/**/__image_snapshots__/__diff_output__/*.png
-          if-no-files-found: ignore
+                      Some tests failed when running **newly built extensions** against the **currently published NPM version** of `array.js`.
 
-  lint:
-    name: Lint packages
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Setup environment
-        uses: ./.github/actions/setup
-        with:
-          build: false
-      - name: Lint all packages
-        run: pnpm lint
+                      This is **informational only** - it may indicate:
+                      - 🆕 A new feature that requires the new array.js (expected, not breaking)
+                      - ⚠️ A breaking change that affects users with cached old versions (needs investigation)
 
-  lint-playground:
-    name: Lint playground
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Setup environment
-        uses: ./.github/actions/setup
-        with:
-          build: false
-      - name: Lint playground files
-        run: pnpm lint:playground
+                      ### Failed Tests
+                      ${{ steps.process-results.outputs.failed_tests }}
 
-  package:
-    name: Package tarballs
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+                      <details>
+                      <summary>What does this mean?</summary>
 
-      - name: Setup environment
-        uses: ./.github/actions/setup
-        with:
-          build: false
+                      Users load `array.js` (the core library) which then lazy-loads extensions like web-vitals, surveys, etc. If a user has an old cached `array.js` but gets new extensions, these tests check if things still work.
 
-      - name: Build package tarballs
-        run: pnpm package
+                      - If failures are for **new features** → Expected, the new feature just won't work until they get the new array.js
+                      - If failures are for **existing features** → This could break existing functionality for users with cached versions
+                      </details>
 
-      - name: Smoke test package tarballs
-        run: pnpm check:package-tarballs
+                      <details>
+                      <summary>How to skip a test for older versions</summary>
 
-      # Replaces Vercel preview deploy validation for @posthog/next.
-      - name: Install Next.js App Router example dependencies from local tarballs
-        run: pnpm install --lockfile=false
-        working-directory: examples/example-next-app-router
+                      If the failure is expected (new feature not available in older versions), add it to `packages/browser/playwright/compat-skips.ts`:
 
-      - name: Restore Next.js build cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            examples/example-next-app-router/.next/cache
-            examples/example-nextjs/.next/cache
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('pnpm-lock.yaml', 'examples/example-next-app-router/package.json', 'examples/example-nextjs/pnpm-lock.yaml') }}-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-nextjs-${{ hashFiles('pnpm-lock.yaml', 'examples/example-next-app-router/package.json', 'examples/example-nextjs/pnpm-lock.yaml') }}-
-            ${{ runner.os }}-nextjs-
+                      ```typescript
+                      export const compatSkips = [
+                          {
+                              range: '<1.335.0',
+                              test: 'web_vitals_attribution: true includes attribution data',
+                              reason: 'web_vitals_attribution option added in #2953',
+                          },
+                      ]
+                      ```
 
-      - name: Initialize Next.js build cache directories
-        run: mkdir -p examples/example-next-app-router/.next/cache examples/example-nextjs/.next/cache
+                      **You must provide a reason** explaining why this skip is acceptable.
+                      </details>
 
-      - name: Build Next.js App Router example
-        run: pnpm build
-        working-directory: examples/example-next-app-router
-        env:
-          NEXT_TELEMETRY_DISABLED: 1
-          NEXT_PUBLIC_POSTHOG_KEY: phc_ci_next_app_router
-          NEXT_PUBLIC_POSTHOG_HOST: https://us.i.posthog.com
+            - name: Delete compat comment if tests pass
+              if: ${{ steps.process-results.outputs.has_failures == 'false' && github.event.pull_request.head.repo.full_name == github.repository }}
+              uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4.0.0
+              id: find-passing-comment
+              with:
+                  issue-number: ${{ github.event.pull_request.number }}
+                  comment-author: 'github-actions[bot]'
+                  body-includes: '<!-- compat-test-results -->'
 
-      - name: Install Next.js config example dependencies from local tarballs
-        run: pnpm install --lockfile=false
-        working-directory: examples/example-nextjs
+            - name: Remove outdated comment
+              if: ${{ steps.find-passing-comment.outputs.comment-id != '' && github.event.pull_request.head.repo.full_name == github.repository }}
+              uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+              env:
+                  COMMENT_ID: ${{ steps.find-passing-comment.outputs.comment-id }}
+              with:
+                  script: |
+                      github.rest.issues.deleteComment({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        comment_id: process.env.COMMENT_ID
+                      })
 
-      - name: Build Next.js config example
-        run: pnpm build
-        working-directory: examples/example-nextjs
-        env:
-          NEXT_TELEMETRY_DISABLED: 1
-          POSTHOG_PERSONAL_API_KEY: phx_ci
-          POSTHOG_PROJECT_ID: '1'
-          POSTHOG_CLI_PATH: /usr/bin/true
+            - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              if: ${{ !cancelled() }}
+              with:
+                  name: playwright-compat-report
+                  path: packages/browser/playwright-report/
+                  retention-days: 30
 
-  write-mangled-property-names:
-    name: Write mangled property names
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+    functional:
+        name: Functional tests
+        runs-on: ubuntu-22.04
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+            - name: Setup environment
+              uses: ./.github/actions/setup
+            - run: pnpm test:functional
 
-      - name: Setup environment
-        uses: ./.github/actions/setup
-        with:
-          build: false
+    rrweb:
+        name: rrweb tests
+        runs-on: ubuntu-22.04
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Build posthog-js
-        run: pnpm exec turbo --filter=posthog-js build
-        env:
-          WRITE_MANGLED_PROPERTIES: 1
+            - name: Fetch comparison history
+              env:
+                  BASE_BRANCH: ${{ github.event.pull_request.base.ref || github.ref_name }}
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+              run: |
+                  set -euo pipefail
 
-      - run: git diff --exit-code # fail if e.g. the mangled properties list has changed, see rollup.config.js
+                  REFS=("+refs/heads/$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH")
+                  if [[ -n "$PR_NUMBER" ]]; then
+                    REFS+=("+refs/pull/$PR_NUMBER/merge:refs/remotes/pull/$PR_NUMBER/merge")
+                  fi
 
-  generate-references:
-    # Runs the same api-extractor pipeline the release workflow uses to bump
-    # versions, so type-extraction breakages (e.g. unresolved DOM globals in
-    # `@posthog/core` types when extracted from a non-DOM tsconfig) surface
-    # on the PR instead of blocking the release.
-    name: Generate references
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Setup environment
-        uses: ./.github/actions/setup
-        with:
-          build: false
-      - name: Generate public API references
-        run: pnpm generate-references
+                  git fetch --no-tags --unshallow origin "${REFS[@]}"
 
-      - name: Check public API references
-        run: pnpm check:public-api
+            - name: Check if rrweb packages changed
+              id: changed
+              env:
+                  BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+                  HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+              run: |
+                  set -euo pipefail
+
+                  if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]] || ! git rev-parse --verify "${BASE_SHA}^{commit}" >/dev/null 2>&1; then
+                    echo "Unable to determine the base commit; running rrweb tests"
+                    echo "rrweb-changed=true" >> "$GITHUB_OUTPUT"
+                  elif git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- \
+                    packages/rrweb/ \
+                    package.json \
+                    pnpm-lock.yaml \
+                    pnpm-workspace.yaml \
+                    turbo.json \
+                    .github/actions/setup/ \
+                    .github/workflows/library-ci.yml; then
+                    echo "rrweb-changed=false" >> "$GITHUB_OUTPUT"
+                  else
+                    echo "rrweb-changed=true" >> "$GITHUB_OUTPUT"
+                  fi
+
+            - name: Setup environment
+              if: steps.changed.outputs.rrweb-changed == 'true'
+              uses: ./.github/actions/setup
+              with:
+                  build: false
+
+            - name: Build rrweb packages
+              if: steps.changed.outputs.rrweb-changed == 'true'
+              run: pnpm turbo run build --filter='./packages/rrweb/**' --concurrency=1
+
+            - name: Install Chrome for Puppeteer
+              if: steps.changed.outputs.rrweb-changed == 'true'
+              run: pnpm --filter @posthog/rrweb exec puppeteer browsers install chrome
+
+            - name: Run rrweb tests
+              if: steps.changed.outputs.rrweb-changed == 'true'
+              run: xvfb-run --server-args="-screen 0 1920x1080x24" pnpm turbo run test --filter='./packages/rrweb/**'
+
+            - name: Upload diff images on failure
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              if: failure() && steps.changed.outputs.rrweb-changed == 'true'
+              with:
+                  name: rrweb-image-diff
+                  path: packages/rrweb/**/__image_snapshots__/__diff_output__/*.png
+                  if-no-files-found: ignore
+
+    lint:
+        name: Lint packages
+        runs-on: ubuntu-22.04
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+            - name: Setup environment
+              uses: ./.github/actions/setup
+              with:
+                  build: false
+            - name: Lint all packages
+              run: pnpm lint
+
+    lint-playground:
+        name: Lint playground
+        runs-on: ubuntu-22.04
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+            - name: Setup environment
+              uses: ./.github/actions/setup
+              with:
+                  build: false
+            - name: Lint playground files
+              run: pnpm lint:playground
+
+    package:
+        name: Package tarballs
+        runs-on: ubuntu-22.04
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+            - name: Setup environment
+              uses: ./.github/actions/setup
+              with:
+                  build: false
+
+            - name: Build package tarballs
+              run: pnpm package
+
+            - name: Smoke test package tarballs
+              run: pnpm check:package-tarballs
+
+            # Replaces Vercel preview deploy validation for @posthog/next.
+            - name: Install Next.js App Router example dependencies from local tarballs
+              run: pnpm install --lockfile=false
+              working-directory: examples/example-next-app-router
+
+            - name: Restore Next.js build cache
+              uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+              with:
+                  path: |
+                      examples/example-next-app-router/.next/cache
+                      examples/example-nextjs/.next/cache
+                  key: ${{ runner.os }}-nextjs-${{ hashFiles('pnpm-lock.yaml', 'examples/example-next-app-router/package.json', 'examples/example-nextjs/pnpm-lock.yaml') }}-${{ github.sha }}
+                  restore-keys: |
+                      ${{ runner.os }}-nextjs-${{ hashFiles('pnpm-lock.yaml', 'examples/example-next-app-router/package.json', 'examples/example-nextjs/pnpm-lock.yaml') }}-
+                      ${{ runner.os }}-nextjs-
+
+            - name: Initialize Next.js build cache directories
+              run: mkdir -p examples/example-next-app-router/.next/cache examples/example-nextjs/.next/cache
+
+            - name: Build Next.js App Router example
+              run: pnpm build
+              working-directory: examples/example-next-app-router
+              env:
+                  NEXT_TELEMETRY_DISABLED: 1
+                  NEXT_PUBLIC_POSTHOG_KEY: phc_ci_next_app_router
+                  NEXT_PUBLIC_POSTHOG_HOST: https://us.i.posthog.com
+
+            - name: Install Next.js config example dependencies from local tarballs
+              run: pnpm install --lockfile=false
+              working-directory: examples/example-nextjs
+
+            - name: Build Next.js config example
+              run: pnpm build
+              working-directory: examples/example-nextjs
+              env:
+                  NEXT_TELEMETRY_DISABLED: 1
+                  POSTHOG_PERSONAL_API_KEY: phx_ci
+                  POSTHOG_PROJECT_ID: '1'
+                  POSTHOG_CLI_PATH: /usr/bin/true
+
+    write-mangled-property-names:
+        name: Write mangled property names
+        runs-on: ubuntu-22.04
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+            - name: Setup environment
+              uses: ./.github/actions/setup
+              with:
+                  build: false
+
+            - name: Build posthog-js
+              run: pnpm exec turbo --filter=posthog-js build
+              env:
+                  WRITE_MANGLED_PROPERTIES: 1
+
+            - run: git diff --exit-code # fail if e.g. the mangled properties list has changed, see rollup.config.js
+
+    generate-references:
+        # Runs the same api-extractor pipeline the release workflow uses to bump
+        # versions, so type-extraction breakages (e.g. unresolved DOM globals in
+        # `@posthog/core` types when extracted from a non-DOM tsconfig) surface
+        # on the PR instead of blocking the release.
+        name: Generate references
+        runs-on: ubuntu-22.04
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+            - name: Setup environment
+              uses: ./.github/actions/setup
+              with:
+                  build: false
+            - name: Generate public API references
+              run: pnpm generate-references
+
+            - name: Check public API references
+              run: pnpm check:public-api

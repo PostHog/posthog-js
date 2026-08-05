@@ -31,7 +31,7 @@ import { createLogger } from '@posthog/browser-common/utils/logger'
 import { formDataToQuery } from '@posthog/browser-common/utils/request-utils'
 import { patch } from '../rrweb-plugins/patch'
 import { isHostOnDenyList } from '../../../extensions/replay/external/denylist'
-import { defaultNetworkOptions, effectivePayloadLimitBytes } from './config'
+import { defaultNetworkOptions, effectivePayloadLimitBytes, isInitialMaskFallback } from './config'
 
 const logger = createLogger('[Recorder]')
 
@@ -900,7 +900,10 @@ function initNetworkObserver(
 
             const maskedRequest = networkOptions.maskRequestFn(request)
             if (!isServerTiming) {
-                parentRequestDropped = !maskedRequest
+                // A null-filtered initial parent is replaced by a strict URL-less fallback so replay keeps its
+                // required timing metadata. Treat that fallback as dropped for derived server timings, which
+                // can still contain customer-controlled names and durations.
+                parentRequestDropped = !maskedRequest || isInitialMaskFallback(maskedRequest)
             }
             if (maskedRequest) {
                 requests.push(maskedRequest)

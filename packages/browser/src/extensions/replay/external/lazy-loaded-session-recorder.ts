@@ -1,4 +1,5 @@
 import type { recordOptions, rrwebRecord as rrwebRecordType } from '../types/rrweb'
+import type { SnapshotCost } from '@posthog/rrweb-record'
 import {
     type customEvent,
     EventType,
@@ -106,6 +107,14 @@ const FIVE_MINUTES = ONE_MINUTE * 5
 const ONE_HOUR = ONE_MINUTE * 60
 const MIN_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS = 1000
 const MAX_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS = ONE_HOUR
+
+// A full snapshot runs as one uninterruptible task, so anything at this scale is a
+// visible freeze - no rendering, scrolling, or cursor movement - and worth a warning.
+const SLOW_FULL_SNAPSHOT_THRESHOLD_MS = 500
+
+function roundOrUndefined(value: number | undefined): number | undefined {
+    return isUndefined(value) ? undefined : Math.round(value)
+}
 
 /**
  * Extracts the network_timing value from a capturePerformance config.
@@ -482,6 +491,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // fresh-start holds ship on a clean unload (passive visits are captured, matching
     // pre-hold behavior); rotation-born holds don't — that unload ship was the incident
     private _heldEpochShipsOnUnload = false
+    // Sticky for the document lifetime: background tabs that are never foregrounded should
+    // not release a fresh-start hold just because they unload.
+    private _documentWasEverVisible: boolean
     // set when a held buffer hit the size cap and was dropped to bound memory; a release
     // then takes a fresh full snapshot so the recording resumes playable
     private _heldBufferOverflowed = false
@@ -491,9 +503,18 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _rrwebError = false
     private _rrwebStartAttempted = false
     private _maxDepthExceeded = false
+    /**
+     * Cost of the most expensive full snapshot this recorder has taken. A full snapshot
+     * is one uninterruptible task, so this doubles as "the longest freeze we caused".
+     * Reported on captured events so slow snapshots are visible in our own data rather
+     * than only via customer-supplied Chrome traces.
+     */
+    private _slowestFullSnapshot: SnapshotCost | undefined
     // only warn once per recorder instance that client-side masking is shadowing the project setting
     private _hasWarnedClientMaskingOverride = false
     private _maskRegionsFnFailed = false
+    // only log once per recorder instance so a repeatedly-throwing callback doesn't flood the console
+    private _hasLoggedRecorderCallbackError = false
 
     private _linkedFlagMatching: LinkedFlagMatching
     private _urlTriggerMatching: URLTriggerMatching
@@ -558,7 +579,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _onSessionIdleResetForcedListener: (() => void) | undefined = undefined
     private _forceIdleSessionIdListener: (() => void) | undefined = undefined
 
-    constructor(private readonly _instance: PostHog) {
+    constructor(
+        private readonly _instance: PostHog,
+        documentWasEverVisible?: boolean
+    ) {
+        // An older core does not provide visibility history. Preserve its unload behavior
+        // rather than treating a currently hidden document as one that was never visible.
+        this._documentWasEverVisible = documentWasEverVisible ?? true
+
         // we know there's a sessionManager, so don't need to start without a session id
         const { sessionId, windowId } = this._sessionManager.checkAndGetSessionAndWindowId()
         this._sessionId = sessionId
@@ -579,25 +607,41 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._flushedSizeTracker = new FlushedSizeTracker(this._instance)
     }
 
+    setDocumentWasEverVisible(documentWasEverVisible: boolean): void {
+        if (documentWasEverVisible) {
+            this._documentWasEverVisible = true
+        }
+    }
+
     private get _masking():
-        | Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector' | 'blockSelector'>
+        | Pick<
+              SessionRecordingOptions,
+              'maskAllInputs' | 'maskTextSelector' | 'blockSelector' | 'maskAllElementAttributes'
+          >
         | undefined {
         const masking_server_side = this._remoteConfig?.masking
         const masking_client_side = {
             maskAllInputs: this._instance.config.session_recording?.maskAllInputs,
             maskTextSelector: this._instance.config.session_recording?.maskTextSelector,
             blockSelector: this._instance.config.session_recording?.blockSelector,
+            maskAllElementAttributes: this._instance.config.session_recording?.maskAllElementAttributes,
         }
 
         const maskAllInputs = masking_client_side?.maskAllInputs ?? masking_server_side?.maskAllInputs
         const maskTextSelector = masking_client_side?.maskTextSelector ?? masking_server_side?.maskTextSelector
         const blockSelector = masking_client_side?.blockSelector ?? masking_server_side?.blockSelector
+        const maskAllElementAttributes =
+            masking_client_side?.maskAllElementAttributes ?? masking_server_side?.maskAllElementAttributes
 
-        return !isUndefined(maskAllInputs) || !isUndefined(maskTextSelector) || !isUndefined(blockSelector)
+        return !isUndefined(maskAllInputs) ||
+            !isUndefined(maskTextSelector) ||
+            !isUndefined(blockSelector) ||
+            !isUndefined(maskAllElementAttributes)
             ? {
                   maskAllInputs: maskAllInputs ?? true,
                   maskTextSelector,
                   blockSelector,
+                  maskAllElementAttributes,
               }
             : undefined
     }
@@ -619,7 +663,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         const clientConfig = this._instance.config.session_recording
-        const divergentFields = (['maskAllInputs', 'maskTextSelector', 'blockSelector'] as const).filter((field) => {
+        const divergentFields = (
+            ['maskAllInputs', 'maskTextSelector', 'blockSelector', 'maskAllElementAttributes'] as const
+        ).filter((field) => {
             const clientValue = clientConfig?.[field]
             const serverValue = masking_server_side[field]
             // a client value that is set and disagrees with the project's value shadows it — an unset
@@ -644,6 +690,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     maskAllInputs: clientConfig?.maskAllInputs,
                     maskTextSelector: clientConfig?.maskTextSelector,
                     blockSelector: clientConfig?.blockSelector,
+                    maskAllElementAttributes: clientConfig?.maskAllElementAttributes,
                 },
                 project: masking_server_side,
             }
@@ -1150,7 +1197,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         addEventListener(window, 'beforeunload', this._onBeforeUnload)
         addEventListener(window, 'offline', this._onOffline)
         addEventListener(window, 'online', this._onOnline)
-        addEventListener(window, 'visibilitychange', this._onVisibilityChange)
+        addEventListener(document, 'visibilitychange', this._onVisibilityChange)
 
         if (!this._onSessionIdListener && isFunction(this._sessionManager.onSessionId)) {
             this._onSessionIdListener = this._sessionManager.onSessionId(this._onSessionIdCallback)
@@ -1247,6 +1294,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._maxDepthExceeded = false
         getRRWeb()?.resetMaxDepthState?.()
 
+        // cost metrics are per-session, so the next session isn't tarred with this one's
+        this._slowestFullSnapshot = undefined
+        getRRWeb()?.resetSnapshotCostState?.()
+
         this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
 
         this._clearConditionalRecordingPersistence()
@@ -1292,7 +1343,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         window?.removeEventListener('beforeunload', this._onBeforeUnload)
         window?.removeEventListener('offline', this._onOffline)
         window?.removeEventListener('online', this._onOnline)
-        window?.removeEventListener('visibilitychange', this._onVisibilityChange)
+        document?.removeEventListener('visibilitychange', this._onVisibilityChange)
 
         clearInterval(this._fullSnapshotTimer)
         this._clearFlushBufferTimer()
@@ -1435,10 +1486,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $window_id: targetWindowId,
         }
 
-        if (event.type === EventType.FullSnapshot && getRRWeb()?.wasMaxDepthReached?.()) {
-            this._maxDepthExceeded = true
-        }
-
         if (this.status === DISABLED) {
             this._clearBuffer()
             return
@@ -1447,6 +1494,25 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._ensureFullSnapshotForSession(event, targetSessionId)
 
         this._captureSnapshotBuffered(properties)
+    }
+
+    private _trackFullSnapshotCost() {
+        const cost = getRRWeb()?.getLastSnapshotCost?.()
+        if (!cost) {
+            return
+        }
+        if (!this._slowestFullSnapshot || cost.durationMs > this._slowestFullSnapshot.durationMs) {
+            this._slowestFullSnapshot = cost
+        }
+        if (cost.durationMs >= SLOW_FULL_SNAPSHOT_THRESHOLD_MS) {
+            logger.warn('full snapshot was slow, the page may have been unresponsive while it ran', {
+                durationMs: Math.round(cost.durationMs),
+                stylesheetMs: Math.round(cost.stylesheetMs),
+                nodeCount: cost.nodeCount,
+                cssRuleCount: cost.cssRuleCount,
+                deferredStylesheetCount: cost.deferredStylesheetCount,
+            })
+        }
     }
 
     // A session whose incrementals ship before any FullSnapshot is unplayable until the next periodic snapshot, so request one from rrweb (once per session id, to avoid loops if taking one keeps failing).
@@ -1614,6 +1680,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         // we're processing a full snapshot, so we should reset the timer
         if (rawEvent.type === EventType.FullSnapshot) {
+            // read the cost globals now, synchronously with the snapshot that produced
+            // them; by the time the event drains from the async compression queue a
+            // newer snapshot (or a session reset) may have replaced them
+            if (getRRWeb()?.wasMaxDepthReached?.()) {
+                this._maxDepthExceeded = true
+            }
+            this._trackFullSnapshotCost()
+
             this._scheduleFullSnapshot()
             // Full snapshots reset rrweb's node IDs, so clear any logged node tracking
             this._mutationThrottler?.reset()
@@ -2027,10 +2101,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return
         }
 
-        // a clean unload releases a fresh-start hold so passive visits (reading, video)
-        // still ship, as they did before holds existed; rotation-born holds stay held,
-        // and an overflowed hold has nothing playable left to ship
-        if (this._holdFlushUntilInteraction && this._heldEpochShipsOnUnload && !this._heldBufferOverflowed) {
+        // a clean unload releases a fresh-start hold for passive visits (reading, video),
+        // but only if the document was ever visible. Rotation-born holds stay held, and an
+        // overflowed hold has nothing playable left to ship.
+        if (
+            this._holdFlushUntilInteraction &&
+            this._heldEpochShipsOnUnload &&
+            this._documentWasEverVisible &&
+            !this._heldBufferOverflowed
+        ) {
             this._holdFlushUntilInteraction = false
         }
 
@@ -2050,6 +2129,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _onVisibilityChange = (): void => {
         if (document?.visibilityState) {
+            if (document.visibilityState === 'visible') {
+                this._documentWasEverVisible = true
+            }
             const label = 'window ' + document.visibilityState
             this._tryAddCustomEvent(label, {})
         }
@@ -2182,6 +2264,18 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $sdk_debug_replay_flushed_size: this._flushedSizeTracker?.currentTrackedSize(this.sessionId),
             $sdk_debug_replay_full_snapshots: this._fullSnapshotTimestamps,
             $snapshot_max_depth_exceeded: this._maxDepthExceeded,
+            // slowest, not most recent: a full snapshot is one uninterruptible task, so
+            // the worst one is the freeze a user would actually have noticed
+            $sdk_debug_replay_slowest_full_snapshot_ms: roundOrUndefined(this._slowestFullSnapshot?.durationMs),
+            $sdk_debug_replay_slowest_full_snapshot_stylesheet_ms: roundOrUndefined(
+                this._slowestFullSnapshot?.stylesheetMs
+            ),
+            $sdk_debug_replay_slowest_full_snapshot_nodes: this._slowestFullSnapshot?.nodeCount,
+            $sdk_debug_replay_slowest_full_snapshot_css_rules: this._slowestFullSnapshot?.cssRuleCount,
+            $sdk_debug_replay_deferred_stylesheets: this._slowestFullSnapshot?.deferredStylesheetCount,
+            $sdk_debug_replay_slowest_mutation_batch_ms: roundOrUndefined(
+                getRRWeb()?.getMutationCost?.()?.slowestBatchMs
+            ),
             $sdk_debug_replay_rrweb_error: this._rrwebError,
             [SDK_DEBUG_REPLAY_RRWEB_ATTACHED]: !!this._stopRrweb,
             [SDK_DEBUG_REPLAY_RRWEB_START_ATTEMPTED]: this._rrwebStartAttempted,
@@ -2207,9 +2301,16 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             maskAllInputs: true,
             maskInputOptions: { password: true },
             maskInputFn: undefined,
+            maskAllElementAttributes: false,
+            maskAttributeFn: undefined,
             slimDOMOptions: {},
             collectFonts: false,
             inlineStylesheet: true,
+            // inlining every CSSRule of every sheet is the dominant cost of a full
+            // snapshot on CSS-heavy pages, and it runs as one uninterruptible task.
+            // rrweb caps it by default and inlines the overflow across idle callbacks;
+            // listed here so users can raise the cap, or set 0 to do it all up front.
+            inlineStylesheetBudgetRules: undefined,
             recordCrossOriginIframes: false,
             sampling: undefined,
             attributeFilter: undefined,
@@ -2284,6 +2385,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             sessionRecordingOptions.maskAllInputs = this._masking.maskAllInputs ?? true
             sessionRecordingOptions.maskTextSelector = this._masking.maskTextSelector ?? undefined
             sessionRecordingOptions.blockSelector = this._masking.blockSelector ?? undefined
+            sessionRecordingOptions.maskAllElementAttributes = this._masking.maskAllElementAttributes ?? false
         }
 
         this._warnIfClientMaskingShadowsServer()
@@ -2317,6 +2419,19 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 this.onRRwebEmit(event)
             },
             plugins: activePlugins,
+            errorHandler: (error, context) => {
+                // A host API patch shares its callback boundary with the native
+                // operation. Preserve the application's exception semantics when
+                // rrweb cannot reliably distinguish where that error originated.
+                if (context !== 'rrweb') {
+                    return false
+                }
+                if (!this._hasLoggedRecorderCallbackError) {
+                    this._hasLoggedRecorderCallbackError = true
+                    logger.error('rrweb internal error - recording will continue but may be incomplete', error)
+                }
+                return true
+            },
             ...sessionRecordingOptions,
         })
 

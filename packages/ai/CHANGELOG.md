@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.6.7
+
+### Patch Changes
+
+- [#4416](https://github.com/PostHog/posthog-js/pull/4416) [`5a585b2`](https://github.com/PostHog/posthog-js/commit/5a585b22541cdec231a1875b3f956221cfc843e7) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Capture the reasoning text of assistant turns replayed in a Vercel AI SDK prompt. The input mapper read a non-existent `reasoning` field instead of the spec's `text`, so `$ai_input` reasoning parts arrived empty for multi-step agentic loops.
+  (2026-08-05)
+
 ## 8.6.6
 
 ### Patch Changes
