@@ -39,6 +39,15 @@ import type { Extension } from '../types'
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
 
+const hasDocumentEverBeenVisible = (): boolean => {
+    if (!document?.visibilityState || document.visibilityState === 'visible') {
+        return true
+    }
+
+    const visibilityEntries = window?.performance?.getEntriesByType?.('visibility-state')
+    return !visibilityEntries?.length || visibilityEntries.some((entry) => entry.name === 'visible')
+}
+
 export class SessionRecording implements Extension {
     _forceAllowLocalhostNetworkCapture: boolean = false
 
@@ -55,7 +64,7 @@ export class SessionRecording implements Extension {
     private _persistFlagsOnSessionListener: (() => void) | undefined = undefined
     private _lazyLoadedSessionRecording: LazyLoadedSessionRecordingInterface | undefined
     private _sessionRecordingDisposed = false
-    private _documentWasEverVisible = !document?.visibilityState || document.visibilityState === 'visible'
+    private _documentWasEverVisible = hasDocumentEverBeenVisible()
 
     private _onVisibilityChange = (): void => {
         if (document?.visibilityState === 'visible') {

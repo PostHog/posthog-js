@@ -210,6 +210,27 @@ describe('Lazy SessionRecording', () => {
     }
     let simpleEventEmitter: SimpleEventEmitter
 
+    const mockVisibilityHistory = (...states: Array<'hidden' | 'visible'>): { mockRestore: () => void } => {
+        const hadOwnProperty = Object.prototype.hasOwnProperty.call(window!.performance, 'getEntriesByType')
+        const originalDescriptor = Object.getOwnPropertyDescriptor(window!.performance, 'getEntriesByType')
+        Object.defineProperty(window!.performance, 'getEntriesByType', {
+            configurable: true,
+            value: jest.fn((entryType: string) =>
+                entryType === 'visibility-state' ? states.map((name) => ({ name }) as PerformanceEntry) : []
+            ),
+        })
+
+        return {
+            mockRestore: () => {
+                if (hadOwnProperty && originalDescriptor) {
+                    Object.defineProperty(window!.performance, 'getEntriesByType', originalDescriptor)
+                } else {
+                    delete (window!.performance as Partial<Performance>).getEntriesByType
+                }
+            },
+        }
+    }
+
     const addRRwebToWindow = () => {
         assignableWindow.__PosthogExtensions__.rrweb = {
             record: jest.fn(({ emit }) => {
@@ -335,6 +356,7 @@ describe('Lazy SessionRecording', () => {
 
         it('does not ship a held fresh recording when the document was never visible', () => {
             const visibilityState = jest.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
+            const visibilityHistory = mockVisibilityHistory('hidden')
             try {
                 sessionRecording = new SessionRecording(posthog)
                 sessionRecording.onRemoteConfig(
@@ -353,6 +375,37 @@ describe('Lazy SessionRecording', () => {
                 expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
             } finally {
                 sessionRecording.stopRecording()
+                visibilityHistory.mockRestore()
+                visibilityState.mockRestore()
+            }
+        })
+
+        it('ships when the document was visible before session recording was constructed', () => {
+            const visibilityState = jest.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
+            const visibilityHistory = mockVisibilityHistory('visible', 'hidden')
+            try {
+                sessionRecording = new SessionRecording(posthog)
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                        },
+                    })
+                )
+                const snapshot = createCustomSnapshot({ timestamp: Date.now() })
+                sessionRecording.onRRwebEmit(snapshot)
+                ;(posthog.capture as Mock).mockClear()
+
+                sessionRecording['_lazyLoadedSessionRecording']['_onBeforeUnload']()
+
+                expect(posthog.capture).toHaveBeenCalledWith(
+                    '$snapshot',
+                    expect.objectContaining({ $snapshot_data: expect.arrayContaining([snapshot]) }),
+                    expect.any(Object)
+                )
+            } finally {
+                sessionRecording.stopRecording()
+                visibilityHistory.mockRestore()
                 visibilityState.mockRestore()
             }
         })
@@ -393,6 +446,7 @@ describe('Lazy SessionRecording', () => {
 
         it('ships when the document becomes visible before the lazy recorder is constructed', () => {
             const visibilityState = jest.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
+            const visibilityHistory = mockVisibilityHistory('hidden')
             try {
                 sessionRecording = new SessionRecording(posthog)
                 visibilityState.mockReturnValue('visible')
@@ -420,12 +474,14 @@ describe('Lazy SessionRecording', () => {
                 )
             } finally {
                 sessionRecording.stopRecording()
+                visibilityHistory.mockRestore()
                 visibilityState.mockRestore()
             }
         })
 
         it('ships once a background document becomes visible after the lazy recorder is constructed', () => {
             const visibilityState = jest.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
+            const visibilityHistory = mockVisibilityHistory('hidden')
             try {
                 sessionRecording = new SessionRecording(posthog)
                 sessionRecording.onRemoteConfig(
@@ -452,6 +508,7 @@ describe('Lazy SessionRecording', () => {
                 )
             } finally {
                 sessionRecording.stopRecording()
+                visibilityHistory.mockRestore()
                 visibilityState.mockRestore()
             }
         })
@@ -4013,6 +4070,7 @@ describe('Lazy SessionRecording', () => {
         it('retains visibility history while the lazy recorder is stopped', () => {
             sessionRecording.dispose()
             const visibilityState = jest.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
+            const visibilityHistory = mockVisibilityHistory('hidden')
             try {
                 sessionRecording = new SessionRecording(posthog)
                 sessionRecording.onRemoteConfig(
@@ -4042,6 +4100,7 @@ describe('Lazy SessionRecording', () => {
                 )
             } finally {
                 sessionRecording.dispose()
+                visibilityHistory.mockRestore()
                 visibilityState.mockRestore()
             }
         })
