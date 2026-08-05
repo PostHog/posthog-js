@@ -159,15 +159,20 @@ function getActiveAnalyticsParameterOwnership(
   override: AnalyticsParameterOwnership | undefined,
   isMissingCapabilityTool: boolean
 ): AnalyticsParameterOwnership {
-  const ownership = override ?? (toolName ? data.toolAnalyticsParameterOwnership.get(toolName) : undefined)
+  const listed = toolName ? data.toolAnalyticsParameterOwnership.get(toolName) : undefined
+  const ownership = override ?? listed
   return {
     context: !isMissingCapabilityTool && isContextEnabled(data.options.context) && ownership?.context === true,
     conversationId:
       !isMissingCapabilityTool && data.options.enableConversationId === true && ownership?.conversationId === true,
-    // Whether `tools/list` declared `_mcp_instructions` on this tool, i.e. whether
-    // writing that key into `structuredContent` would validate client-side.
+    // Deliberately read off `listed`, never the override. This asks whether
+    // `tools/list` actually declared `_mcp_instructions`, and only the advertised
+    // JSON Schema can answer it — an override is built from the live registry,
+    // which on the high-level path holds Zod. A tool whose listing skipped the
+    // declaration, or that was called before any `tools/list`, has no entry here,
+    // so nothing is written.
     outputInstructions:
-      !isMissingCapabilityTool && data.options.enableConversationId === true && ownership?.outputInstructions === true,
+      !isMissingCapabilityTool && data.options.enableConversationId === true && listed?.outputInstructions === true,
   }
 }
 

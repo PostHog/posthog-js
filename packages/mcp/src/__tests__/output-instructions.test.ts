@@ -238,6 +238,22 @@ describe('_mcp_instructions declaration over a real client', () => {
   })
 })
 
+/** A server whose tool declares an outputSchema and returns structuredContent. */
+async function connectStructured(options: Record<string, unknown>) {
+  const server = new McpServer({ name: 'mirror-test', version: '1.0.0' })
+  server.registerTool(
+    'with_schema',
+    { description: 'Structured.', inputSchema: {}, outputSchema: { ok: z.boolean() } },
+    async () => ({ content: [{ type: 'text', text: '{"ok":true}' }], structuredContent: { ok: true } })
+  )
+  instrument(server, fakePostHog(), options)
+
+  const client = new Client({ name: 'test', version: '1.0.0' })
+  const [c, s] = InMemoryTransport.createLinkedPair()
+  await Promise.all([client.connect(c), server.connect(s)])
+  return { client, cleanup: () => client.close() }
+}
+
 describe('mirroring the session handle into structuredContent', () => {
   const withStructured = (extra = {}) => ({
     content: [{ type: 'text', text: '{"ok":true}' }],
@@ -283,22 +299,6 @@ describe('mirroring the session handle into structuredContent', () => {
 })
 
 describe('mirroring over a real client', () => {
-  /** A server whose tool declares an outputSchema and returns structuredContent. */
-  async function connectStructured(options: Record<string, unknown>) {
-    const server = new McpServer({ name: 'mirror-test', version: '1.0.0' })
-    server.registerTool(
-      'with_schema',
-      { description: 'Structured.', inputSchema: {}, outputSchema: { ok: z.boolean() } },
-      async () => ({ content: [{ type: 'text', text: '{"ok":true}' }], structuredContent: { ok: true } })
-    )
-    instrument(server, fakePostHog(), options)
-
-    const client = new Client({ name: 'test', version: '1.0.0' })
-    const [c, s] = InMemoryTransport.createLinkedPair()
-    await Promise.all([client.connect(c), server.connect(s)])
-    return { client, cleanup: () => client.close() }
-  }
-
   async function call(client: any, conversationId?: string) {
     return client.request(
       {
@@ -342,6 +342,56 @@ describe('mirroring over a real client', () => {
     try {
       await client.request({ method: 'tools/list' }, ListToolsResultSchema)
       const result = await call(client)
+      expect((result.structuredContent as any)[MCP_INSTRUCTIONS_KEY]).toBeUndefined()
+    } finally {
+      await cleanup()
+    }
+  })
+})
+
+describe('the write is gated on what tools/list actually declared', () => {
+  /** A tool that declares `_mcp_instructions` itself, so we must not write it. */
+  async function connectOwningTheKey() {
+    const server = new McpServer({ name: 'own-key', version: '1.0.0' })
+    server.registerTool(
+      'own_key',
+      {
+        description: 'Owns the key.',
+        inputSchema: {},
+        outputSchema: { ok: z.boolean(), [MCP_INSTRUCTIONS_KEY]: z.string() },
+      },
+      async () => ({
+        content: [{ type: 'text', text: '{"ok":true}' }],
+        structuredContent: { ok: true, [MCP_INSTRUCTIONS_KEY]: 'mine' },
+      })
+    )
+    instrument(server, fakePostHog(), { enableConversationId: true })
+
+    const client = new Client({ name: 'test', version: '1.0.0' })
+    const [c, s] = InMemoryTransport.createLinkedPair()
+    await Promise.all([client.connect(c), server.connect(s)])
+    return { client, cleanup: () => client.close() }
+  }
+
+  it('never overwrites a key the tool declares and produces itself', async () => {
+    const { client, cleanup } = await connectOwningTheKey()
+    try {
+      await client.listTools()
+      const result = await client.callTool({ name: 'own_key', arguments: {} })
+
+      // tools/list skips the declaration for this tool, so the write must skip too.
+      expect((result.structuredContent as any)[MCP_INSTRUCTIONS_KEY]).toBe('mine')
+    } finally {
+      await cleanup()
+    }
+  })
+
+  it('writes nothing when the tool was never listed', async () => {
+    const { client, cleanup } = await connectStructured({ enableConversationId: true })
+    try {
+      // No tools/list first: we cannot know what the client's cached schema
+      // declares, so writing would risk failing its validation.
+      const result = await client.callTool({ name: 'with_schema', arguments: {} })
       expect((result.structuredContent as any)[MCP_INSTRUCTIONS_KEY]).toBeUndefined()
     } finally {
       await cleanup()
