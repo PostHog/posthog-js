@@ -13,57 +13,58 @@
  */
 
 export type SnapshotCost = {
-    /** wall-clock ms spent inside `snapshot()` */
-    durationMs: number
-    /** of `durationMs`, ms spent stringifying stylesheets */
-    stylesheetMs: number
-    /** DOM nodes visited by the serializer */
-    nodeCount: number
-    /** CSSRules read while stringifying stylesheets */
-    cssRuleCount: number
-    /** `<link rel=stylesheet>` elements whose inlining was deferred past the budget */
-    deferredStylesheetCount: number
-}
+  /** wall-clock ms spent inside `snapshot()` */
+  durationMs: number;
+  /** of `durationMs`, ms spent stringifying stylesheets */
+  stylesheetMs: number;
+  /** DOM nodes visited by the serializer */
+  nodeCount: number;
+  /** CSSRules read while stringifying stylesheets */
+  cssRuleCount: number;
+  /** `<link rel=stylesheet>` elements whose inlining was deferred past the budget */
+  deferredStylesheetCount: number;
+};
 
 export type MutationCost = {
-    /** slowest single mutation batch, in ms, since the last reset */
-    slowestBatchMs: number
-}
+  /** slowest single mutation batch, in ms, since the last reset */
+  slowestBatchMs: number;
+};
 
 const emptyCost = (): SnapshotCost => ({
-    durationMs: 0,
-    stylesheetMs: 0,
-    nodeCount: 0,
-    cssRuleCount: 0,
-    deferredStylesheetCount: 0,
-})
+  durationMs: 0,
+  stylesheetMs: 0,
+  nodeCount: 0,
+  cssRuleCount: 0,
+  deferredStylesheetCount: 0,
+});
 
 export function nowMs(): number {
-    try {
-        if (typeof performance !== 'undefined' && performance.now) {
-            return performance.now()
-        }
-    } catch (e) {
-        //
+  try {
+    if (typeof performance !== 'undefined' && performance.now) {
+      return performance.now();
     }
-    return Date.now()
+  } catch (e) {
+    //
+  }
+  return Date.now();
 }
 
 // `snapshot()` can legitimately re-enter (a caller snapshotting an iframe document
 // from inside an onSerialize hook), so nest rather than clobbering the outer run.
-let trackingDepth = 0
-let startedAt = 0
-let inProgress: SnapshotCost = emptyCost()
-let lastCost: SnapshotCost | null = null
+let trackingDepth = 0;
+let startedAt = 0;
+let inProgress: SnapshotCost = emptyCost();
+let lastCost: SnapshotCost | null = null;
 
 // null means "no budget in effect" - the incremental mutation path never opens a
 // tracking scope, so stylesheet inlining there stays unbounded as before.
-let stylesheetBudgetRules: number | null = null
-let deferredStylesheetLinks: HTMLLinkElement[] = []
+let stylesheetBudgetRules: number | null = null;
+let deferredStylesheetLinks: HTMLLinkElement[] = [];
 
-let mutationCost: MutationCost = { slowestBatchMs: 0 }
+let mutationCost: MutationCost = { slowestBatchMs: 0 };
 
-const positiveOrNull = (n: number | null | undefined) => (n && n > 0 ? n : null)
+const positiveOrNull = (n: number | null | undefined) =>
+  n && n > 0 ? n : null;
 
 /**
  * @param budgetRules cap on the number of CSSRules this snapshot may stringify.
@@ -76,45 +77,45 @@ const positiveOrNull = (n: number | null | undefined) => (n && n > 0 ? n : null)
  * is roughly uniform per rule - and keeps the emitted event stream deterministic.
  */
 export function beginSnapshotCostTracking(budgetRules?: number | null): void {
-    trackingDepth += 1
-    if (trackingDepth > 1) {
-        return
-    }
-    inProgress = emptyCost()
-    deferredStylesheetLinks = []
-    stylesheetBudgetRules = positiveOrNull(budgetRules)
-    startedAt = nowMs()
+  trackingDepth += 1;
+  if (trackingDepth > 1) {
+    return;
+  }
+  inProgress = emptyCost();
+  deferredStylesheetLinks = [];
+  stylesheetBudgetRules = positiveOrNull(budgetRules);
+  startedAt = nowMs();
 }
 
 export function endSnapshotCostTracking(): SnapshotCost {
-    if (trackingDepth === 0) {
-        return lastCost || emptyCost()
-    }
-    trackingDepth -= 1
-    if (trackingDepth > 0) {
-        return inProgress
-    }
-    inProgress.durationMs = nowMs() - startedAt
-    inProgress.deferredStylesheetCount = deferredStylesheetLinks.length
-    stylesheetBudgetRules = null
-    lastCost = inProgress
-    return lastCost
+  if (trackingDepth === 0) {
+    return lastCost || emptyCost();
+  }
+  trackingDepth -= 1;
+  if (trackingDepth > 0) {
+    return inProgress;
+  }
+  inProgress.durationMs = nowMs() - startedAt;
+  inProgress.deferredStylesheetCount = deferredStylesheetLinks.length;
+  stylesheetBudgetRules = null;
+  lastCost = inProgress;
+  return lastCost;
 }
 
 /** Cost of the most recent completed `snapshot()`, or null if none has run. */
 export function getLastSnapshotCost(): SnapshotCost | null {
-    return lastCost
+  return lastCost;
 }
 
 export function countSerializedNode(): void {
-    if (trackingDepth > 0) {
-        inProgress.nodeCount += 1
-    }
+  if (trackingDepth > 0) {
+    inProgress.nodeCount += 1;
+  }
 }
 
 // Counting descends as deep as the CSS nests; past this we stop (undercount)
 // rather than risk pathological recursion on adversarial stylesheets.
-const MAX_COUNT_DEPTH = 32
+const MAX_COUNT_DEPTH = 32;
 
 /**
  * Rules in a list, descending grouping rules (`@media`, `@supports`, `@layer`,
@@ -125,35 +126,39 @@ const MAX_COUNT_DEPTH = 32
  * diamond-shaped import graphs terminate. Unreadable rules (cross-origin
  * `@import`) cost nothing: `stringifyStylesheet` can't read them either.
  */
-function countRuleList(rules: CSSRuleList, visitedSheets: WeakSet<CSSStyleSheet> | null, depth: number): number {
-    let total = rules.length
-    if (depth >= MAX_COUNT_DEPTH) {
-        return total
-    }
-    for (let i = 0; i < rules.length; i++) {
-        const rule = rules[i] as CSSRule & {
-            cssRules?: CSSRuleList
-            styleSheet?: CSSStyleSheet
+function countRuleList(
+  rules: CSSRuleList,
+  visitedSheets: WeakSet<CSSStyleSheet> | null,
+  depth: number,
+): number {
+  let total = rules.length;
+  if (depth >= MAX_COUNT_DEPTH) {
+    return total;
+  }
+  for (let i = 0; i < rules.length; i++) {
+    const rule = rules[i] as CSSRule & {
+      cssRules?: CSSRuleList;
+      styleSheet?: CSSStyleSheet;
+    };
+    try {
+      const nested = rule.cssRules;
+      if (nested && nested.length) {
+        total += countRuleList(nested, visitedSheets, depth + 1);
+      } else if (visitedSheets && rule.styleSheet) {
+        const imported = rule.styleSheet;
+        if (!visitedSheets.has(imported)) {
+          visitedSheets.add(imported);
+          const importedRules = imported.rules || imported.cssRules;
+          if (importedRules) {
+            total += countRuleList(importedRules, visitedSheets, depth + 1);
+          }
         }
-        try {
-            const nested = rule.cssRules
-            if (nested && nested.length) {
-                total += countRuleList(nested, visitedSheets, depth + 1)
-            } else if (visitedSheets && rule.styleSheet) {
-                const imported = rule.styleSheet
-                if (!visitedSheets.has(imported)) {
-                    visitedSheets.add(imported)
-                    const importedRules = imported.rules || imported.cssRules
-                    if (importedRules) {
-                        total += countRuleList(importedRules, visitedSheets, depth + 1)
-                    }
-                }
-            }
-        } catch (e) {
-            //
-        }
+      }
+    } catch (e) {
+      //
     }
-    return total
+  }
+  return total;
 }
 
 /**
@@ -162,16 +167,16 @@ function countRuleList(rules: CSSRuleList, visitedSheets: WeakSet<CSSStyleSheet>
  * their own `stringifyStylesheet` recursion, so they are not descended here.
  */
 export function countStylesheetRules(rules: CSSRuleList): void {
-    if (trackingDepth === 0) {
-        return
-    }
-    inProgress.cssRuleCount += countRuleList(rules, null, 0)
+  if (trackingDepth === 0) {
+    return;
+  }
+  inProgress.cssRuleCount += countRuleList(rules, null, 0);
 }
 
 export function recordStylesheetCost(ms: number): void {
-    if (trackingDepth > 0) {
-        inProgress.stylesheetMs += ms
-    }
+  if (trackingDepth > 0) {
+    inProgress.stylesheetMs += ms;
+  }
 }
 
 /**
@@ -180,15 +185,19 @@ export function recordStylesheetCost(ms: number): void {
  * the incremental mutation path is never capped. Guards run before the rule
  * count so the unbudgeted paths never pay the walk over the sheet's rules.
  */
-export function shouldDeferStylesheetInlining(sheet: CSSStyleSheet | null | undefined): boolean {
-    if (trackingDepth === 0 || stylesheetBudgetRules === null) {
-        return false
-    }
-    if (inProgress.cssRuleCount >= stylesheetBudgetRules) {
-        // budget already spent: defer without paying the rule walk
-        return true
-    }
-    return inProgress.cssRuleCount + safeCssRuleCount(sheet) > stylesheetBudgetRules
+export function shouldDeferStylesheetInlining(
+  sheet: CSSStyleSheet | null | undefined,
+): boolean {
+  if (trackingDepth === 0 || stylesheetBudgetRules === null) {
+    return false;
+  }
+  if (inProgress.cssRuleCount >= stylesheetBudgetRules) {
+    // budget already spent: defer without paying the rule walk
+    return true;
+  }
+  return (
+    inProgress.cssRuleCount + safeCssRuleCount(sheet) > stylesheetBudgetRules
+  );
 }
 
 /**
@@ -199,48 +208,48 @@ export function shouldDeferStylesheetInlining(sheet: CSSStyleSheet | null | unde
  * See {@link countRuleList} for the nesting and `@import` descent rules.
  */
 export function safeCssRuleCount(sheet: CSSStyleSheet | null | undefined) {
-    try {
-        const rules = sheet && (sheet.rules || sheet.cssRules)
-        if (!rules) {
-            return 0
-        }
-        const visited = new WeakSet<CSSStyleSheet>()
-        visited.add(sheet as CSSStyleSheet)
-        return countRuleList(rules, visited, 0)
-    } catch (e) {
-        return 0
+  try {
+    const rules = sheet && (sheet.rules || sheet.cssRules);
+    if (!rules) {
+      return 0;
     }
+    const visited = new WeakSet<CSSStyleSheet>();
+    visited.add(sheet as CSSStyleSheet);
+    return countRuleList(rules, visited, 0);
+  } catch (e) {
+    return 0;
+  }
 }
 
 export function deferStylesheetLink(linkEl: HTMLLinkElement): void {
-    if (trackingDepth > 0) {
-        deferredStylesheetLinks.push(linkEl)
-    }
+  if (trackingDepth > 0) {
+    deferredStylesheetLinks.push(linkEl);
+  }
 }
 
 /** Drains the links skipped by the budget. Safe to call after tracking ends. */
 export function takeDeferredStylesheetLinks(): HTMLLinkElement[] {
-    const links = deferredStylesheetLinks
-    deferredStylesheetLinks = []
-    return links
+  const links = deferredStylesheetLinks;
+  deferredStylesheetLinks = [];
+  return links;
 }
 
 export function recordMutationCost(ms: number): void {
-    if (ms > mutationCost.slowestBatchMs) {
-        mutationCost.slowestBatchMs = ms
-    }
+  if (ms > mutationCost.slowestBatchMs) {
+    mutationCost.slowestBatchMs = ms;
+  }
 }
 
 export function getMutationCost(): MutationCost {
-    return { ...mutationCost }
+  return { ...mutationCost };
 }
 
 export function resetSnapshotCostState(): void {
-    trackingDepth = 0
-    startedAt = 0
-    inProgress = emptyCost()
-    lastCost = null
-    stylesheetBudgetRules = null
-    deferredStylesheetLinks = []
-    mutationCost = { slowestBatchMs: 0 }
+  trackingDepth = 0;
+  startedAt = 0;
+  inProgress = emptyCost();
+  lastCost = null;
+  stylesheetBudgetRules = null;
+  deferredStylesheetLinks = [];
+  mutationCost = { slowestBatchMs: 0 };
 }

@@ -1,5 +1,5 @@
 ---
-'@posthog/react-native-plugin': minor
+"@posthog/react-native-plugin": minor
 ---
 
 Add the native push notification bridge, so `posthog-react-native` can register device tokens and capture notification opens through the native PostHog SDKs.
