@@ -215,6 +215,215 @@ export function isCSSStyleRule(rule: CSSRule): rule is CSSStyleRule {
   return 'selectorText' in rule;
 }
 
+/**
+ * Resumable, slice-at-a-time variant of {@link stringifyStylesheet}.
+ *
+ * A huge sheet (tens of thousands of rules) takes hundreds of ms to stringify,
+ * which in a single pass is one uninterruptible main-thread task. The cursor
+ * stringifies a bounded number of rules per {@link StylesheetTextCursor.advance}
+ * call and accumulates the parts across calls, so a caller can spread the work
+ * over idle slices. Nothing is observable until the sheet completes: `text()`
+ * then returns output byte-identical to `stringifyStylesheet` on the same
+ * sheet (`fixBrowserCompatibilityIssuesInCSS` runs at each sheet's final
+ * assembly, exactly as the single pass does). `@import`ed sheets are descended
+ * with the same cursor, so a slice boundary can fall inside an import chain.
+ */
+export interface StylesheetTextCursor {
+  /**
+   * Stringify up to `maxRules` further rules, with a floor of one so progress
+   * is always made. Returns true once the sheet - imports included - is done.
+   */
+  advance(maxRules: number): boolean;
+  /** The assembled css text. Null until done, and null for unreadable sheets. */
+  text(): string | null;
+}
+
+// One per sheet mid-stringification: the root sheet at the bottom, plus one for
+// each `@import` currently being descended.
+type StringifyFrame = {
+  sheet: CSSStyleSheet;
+  rules: CSSRuleList;
+  sheetHref: string | null;
+  index: number;
+  parts: string[];
+  /** the `@import` rule in the parent frame that opened this frame; null for the root */
+  importRule: CSSImportRule | null;
+};
+
+export function createStylesheetTextCursor(
+  sheet: CSSStyleSheet,
+): StylesheetTextCursor {
+  const stack: StringifyFrame[] = [];
+  let done = false;
+  let result: string | null = null;
+
+  // mirrors the setup of `stringifyStylesheet`, budget accounting included;
+  // failure means this sheet stringifies to null
+  function openFrame(
+    s: CSSStyleSheet,
+    importRule: CSSImportRule | null,
+  ): boolean {
+    try {
+      const rules = s.rules || s.cssRules;
+      if (!rules) {
+        return false;
+      }
+      countStylesheetRules(rules);
+      let sheetHref = s.href;
+      if (!sheetHref && s.ownerNode) {
+        // an inline <style> element
+        sheetHref = s.ownerNode.baseURI;
+      }
+      stack.push({
+        sheet: s,
+        rules,
+        sheetHref,
+        index: 0,
+        parts: [],
+        importRule,
+      });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // The top frame's sheet finished (text) or failed (null). Resolve it into its
+  // parent, exactly as `stringifyRule` handles the recursive
+  // `stringifyStylesheet` return value; the root frame finishes the cursor.
+  function completeTop(text: string | null): void {
+    const frame = stack.pop() as StringifyFrame;
+    if (!frame.importRule) {
+      done = true;
+      result = text;
+      return;
+    }
+    resolveImport(stack[stack.length - 1], frame.importRule, text);
+  }
+
+  // Appends the resolved text of an `@import` rule (`nested` is what the
+  // imported sheet stringified to, null if unreadable) and steps past the rule.
+  // `parent` must be the top frame.
+  function resolveImport(
+    parent: StringifyFrame,
+    rule: CSSImportRule,
+    nested: string | null,
+  ): void {
+    try {
+      let importStringified: string | null;
+      try {
+        importStringified = nested || escapeImportStatement(rule);
+      } catch (e) {
+        importStringified = rule.cssText;
+      }
+      try {
+        if (importStringified && rule.styleSheet?.href) {
+          // url()s within the imported stylesheet are relative to _that_ sheet's href
+          importStringified = absolutifyURLs(
+            importStringified,
+            rule.styleSheet.href,
+          );
+        }
+      } catch (e) {
+        // swallow and keep the unabsolutified text, as `stringifyRule` does
+      }
+      if (importStringified) {
+        parent.parts.push(importStringified);
+      }
+      parent.index += 1;
+    } catch (e) {
+      // the fallback itself threw reading the rule: the parent sheet fails,
+      // matching where that throw would land in the single pass
+      completeTop(null);
+    }
+  }
+
+  // Stringifies the rule at frame.index; descends into readable same-origin
+  // imports by opening a child frame. Throws only where the same throw fails
+  // the whole sheet in the single-pass version.
+  function stepRule(frame: StringifyFrame): void {
+    const rule = frame.rules[frame.index];
+    if (isCSSImportRule(rule)) {
+      let imported: CSSStyleSheet | null = null;
+      try {
+        imported = rule.styleSheet;
+      } catch (e) {
+        // the single pass lands in `stringifyRule`'s catch here: raw cssText,
+        // with no escape or absolutify fallback
+        frame.parts.push(rule.cssText);
+        frame.index += 1;
+        return;
+      }
+      // guard true import cycles, which the single-pass recursion has no
+      // terminating path for; the rule falls back to its `@import url(...)` form
+      const cyclic = imported && stack.some((f) => f.sheet === imported);
+      if (imported && !cyclic && openFrame(imported, rule)) {
+        // descend; frame.index advances when the child frame completes
+        return;
+      }
+      resolveImport(frame, rule, null);
+    } else {
+      let ruleStringified = rule.cssText;
+      if (isCSSStyleRule(rule) && rule.selectorText.includes(':')) {
+        // Safari does not escape selectors with : properly
+        // see https://bugs.webkit.org/show_bug.cgi?id=184604
+        ruleStringified = fixSafariColons(ruleStringified);
+      }
+      frame.parts.push(
+        frame.sheetHref
+          ? absolutifyURLs(ruleStringified, frame.sheetHref)
+          : ruleStringified,
+      );
+      frame.index += 1;
+    }
+  }
+
+  if (!openFrame(sheet, null)) {
+    done = true;
+  }
+
+  return {
+    advance(maxRules: number): boolean {
+      if (done) {
+        return true;
+      }
+      const startedAt = nowMs();
+      // NaN/zero/negative floor to one rule, so callers always make progress
+      let budget = maxRules > 0 ? maxRules : 1;
+      try {
+        while (!done && budget > 0) {
+          const frame = stack[stack.length - 1];
+          if (frame.index >= frame.rules.length) {
+            let text: string | null = null;
+            try {
+              text = fixBrowserCompatibilityIssuesInCSS(frame.parts.join(''));
+            } catch (e) {
+              // e.g. the joined text overflows the string limit; the sheet fails
+            }
+            completeTop(text);
+            continue;
+          }
+          budget -= 1;
+          try {
+            stepRule(frame);
+          } catch (e) {
+            // matches the catch-all in `stringifyStylesheet`: the sheet fails
+            completeTop(null);
+          }
+        }
+      } catch (e) {
+        // belt and braces - `stringifyStylesheet` never throws, nor does advance
+        done = true;
+        result = null;
+      } finally {
+        recordStylesheetCost(nowMs() - startedAt);
+      }
+      return done;
+    },
+    text: () => (done ? result : null),
+  };
+}
+
 export class Mirror implements IMirror<Node> {
   private idNodeMap: idNodeMap = new Map();
   private nodeMetaMap: nodeMetaMap = new WeakMap();

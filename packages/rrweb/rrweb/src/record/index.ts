@@ -41,6 +41,7 @@ import { IframeManager } from './iframe-manager';
 import { ShadowDomManager } from './shadow-dom-manager';
 import { CanvasManager } from './observers/canvas/canvas-manager';
 import { StylesheetManager } from './stylesheet-manager';
+import type { DeferredLinkInliningTask } from './stylesheet-manager';
 import ProcessedNodeManager from './processed-node-manager';
 import {
   callbackWrapper,
@@ -107,14 +108,32 @@ function whenIdle(cb: (deadline?: IdleDeadline) => void): IdleTask {
   return { cancel: () => clearTimeout(handle) };
 }
 
+// CSSRules stringified per slice before re-checking the idle deadline. A rule
+// stringifies in single-digit microseconds, so a slice stays around a
+// millisecond even on slow devices - small enough that overshooting a deadline
+// by one slice is negligible, big enough that a permanently busy page still
+// finishes real work with its one guaranteed slice per callback.
+const DEFERRED_STYLESHEET_RULES_PER_SLICE = 200;
+
+// Without idle deadlines (the setTimeout fallback in whenIdle) each tick gets a
+// fixed slice allowance instead: a tick stays a few ms, while a giant sheet
+// still completes in seconds rather than minutes.
+const DEFERRED_STYLESHEET_SLICES_PER_FALLBACK_TICK = 10;
+
 /**
  * Inline the `<link rel=stylesheet>` elements the snapshot skipped once it ran out
- * of stylesheet budget, emitting each as an attribute mutation. At least one sheet
- * per idle callback so a busy main thread still makes progress, more while the
- * deadline says we're genuinely idle. Splitting the work this way keeps every task
- * short - the total CPU is unchanged, but the page stays responsive between chunks.
+ * of stylesheet budget, emitting each as an attribute mutation. The unit of work is
+ * a bounded range of CSSRules, not a whole sheet: a resumable cursor stringifies
+ * {@link DEFERRED_STYLESHEET_RULES_PER_SLICE} rules per slice and accumulates, so
+ * even a monolithic sheet never holds the main thread for one long task. At least
+ * one slice per idle callback so a busy main thread still makes progress, more
+ * slices (and more sheets) while the deadline says we're genuinely idle. A sheet's
+ * mutation is emitted atomically when its last slice completes - cancelling
+ * mid-sheet emits nothing for that sheet.
+ *
+ * Exported for unit tests only.
  */
-function inlineDeferredStylesheets(
+export function inlineDeferredStylesheets(
   links: Array<HTMLLinkElement | null>,
   stylesheetManager: StylesheetManager,
   onDone: () => void,
@@ -122,29 +141,49 @@ function inlineDeferredStylesheets(
   let cancelled = false;
   let pending: IdleTask | null = null;
   let index = 0;
+  // resumable stringification of the sheet currently being inlined; the
+  // accumulated slices live inside the task, so dropping it drops them
+  let task: DeferredLinkInliningTask | null = null;
 
   const step = (deadline?: IdleDeadline) => {
     pending = null;
     if (cancelled) {
       return;
     }
+    let slices = 0;
     do {
-      const link = links[index];
-      // release the element so completed entries aren't pinned by this closure
-      links[index] = null;
-      index += 1;
-      if (link) {
-        callSafely(() =>
-          stylesheetManager.inlineDeferredLinkElement(link, mirror.getId(link)),
-        );
+      if (!task) {
+        const link = links[index];
+        // release the element so completed entries aren't pinned by this closure
+        links[index] = null;
+        index += 1;
+        if (link) {
+          callSafely(() => {
+            task = stylesheetManager.beginDeferredLinkInlining(
+              link,
+              mirror.getId(link),
+            );
+          });
+        }
       }
+      if (task) {
+        const activeTask = task;
+        let finished = true;
+        callSafely(() => {
+          finished = activeTask.advance(DEFERRED_STYLESHEET_RULES_PER_SLICE);
+        });
+        if (finished) {
+          task = null;
+        }
+      }
+      slices += 1;
     } while (
-      index < links.length &&
-      deadline &&
-      !deadline.didTimeout &&
-      deadline.timeRemaining() > 5
+      (task !== null || index < links.length) &&
+      (deadline
+        ? !deadline.didTimeout && deadline.timeRemaining() > 5
+        : slices < DEFERRED_STYLESHEET_SLICES_PER_FALLBACK_TICK)
     );
-    if (index < links.length) {
+    if (task !== null || index < links.length) {
       pending = whenIdle(step);
     } else {
       onDone();
@@ -155,6 +194,8 @@ function inlineDeferredStylesheets(
 
   return () => {
     cancelled = true;
+    // drop the half-stringified sheet, if any; its mutation is never emitted
+    task = null;
     pending?.cancel();
     pending = null;
   };

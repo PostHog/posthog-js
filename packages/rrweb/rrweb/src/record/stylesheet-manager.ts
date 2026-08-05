@@ -1,10 +1,13 @@
 import {
+  createStylesheetTextCursor,
   maskAttributeValue,
   resetStylesheetLoadTracking,
   stringifyRule,
-  stringifyStylesheet,
 } from '@posthog/rrweb-snapshot';
-import type { MaskAttributeFn } from '@posthog/rrweb-snapshot';
+import type {
+  MaskAttributeFn,
+  StylesheetTextCursor,
+} from '@posthog/rrweb-snapshot';
 import type {
   elementNode,
   serializedNodeWithId,
@@ -14,6 +17,15 @@ import type {
   mutationCallBack,
 } from '@posthog/rrweb-types';
 import { StyleSheetMirror } from '../utils';
+
+/** Resumable inlining of one deferred stylesheet; see {@link StylesheetManager.beginDeferredLinkInlining}. */
+export type DeferredLinkInliningTask = {
+  /**
+   * Stringify up to `maxRules` more rules of the sheet. Returns true once the
+   * sheet is finished (its mutation emitted, or nothing to emit).
+   */
+  advance: (maxRules: number) => boolean;
+};
 
 export class StylesheetManager {
   private trackedLinkElements: WeakSet<HTMLLinkElement> = new WeakSet();
@@ -58,30 +70,63 @@ export class StylesheetManager {
 
   /**
    * Inline a `<link rel=stylesheet>` that the full snapshot skipped because it
-   * ran out of stylesheet budget, emitting the CSS as an attribute mutation.
-   * Same shape as {@link attachLinkElement}, which already does this for sheets
-   * that finish loading after the snapshot - the replayer swaps the link for a
-   * `<style>` carrying `_cssText`.
+   * ran out of stylesheet budget. The returned task stringifies a bounded rule
+   * range per `advance` call, accumulating across calls, and emits ONE
+   * attribute mutation carrying the complete `_cssText` when the last slice
+   * finishes - a partial sheet never reaches the wire, and dropping the task
+   * mid-sheet emits nothing and leaks nothing. Same mutation shape as
+   * {@link attachLinkElement} - the replayer swaps the link for a `<style>`
+   * carrying `_cssText`. Returns null when there is nothing to inline.
    */
-  public inlineDeferredLinkElement(linkEl: HTMLLinkElement, id: number) {
+  public beginDeferredLinkInlining(
+    linkEl: HTMLLinkElement,
+    id: number,
+  ): DeferredLinkInliningTask | null {
     if (id === -1 || !linkEl.isConnected) {
       // never made it into the mirror (slimDOM dropped it), or detached while we
       // were queued - either way a mutation for it would only make the replayer warn
-      return;
+      return null;
     }
-    let cssText: string | null = null;
+    let cursor: StylesheetTextCursor | null = null;
     try {
       const sheet = linkEl.sheet;
       if (sheet) {
-        cssText = stringifyStylesheet(sheet);
+        cursor = createStylesheetTextCursor(sheet);
       }
     } catch (e) {
       //
     }
-    if (!cssText) {
-      // nothing we can add; the link kept its href so replay still loads it remotely
-      return;
+    if (!cursor) {
+      return null;
     }
+    const readyCursor = cursor;
+    return {
+      advance: (maxRules: number) => {
+        if (!readyCursor.advance(maxRules)) {
+          return false;
+        }
+        const cssText = readyCursor.text();
+        if (!cssText || !linkEl.isConnected) {
+          // nothing we can add (the link kept its href so replay still loads it
+          // remotely), or the link left the DOM while we were slicing
+          return true;
+        }
+        this.emitCssTextMutation(linkEl, id, cssText);
+        return true;
+      },
+    };
+  }
+
+  /** One-call variant of {@link beginDeferredLinkInlining}: the whole sheet in a single slice. */
+  public inlineDeferredLinkElement(linkEl: HTMLLinkElement, id: number) {
+    this.beginDeferredLinkInlining(linkEl, id)?.advance(Infinity);
+  }
+
+  private emitCssTextMutation(
+    linkEl: HTMLLinkElement,
+    id: number,
+    cssText: string,
+  ) {
     // The snapshot path masks _cssText inside serializeElementNode; this path
     // builds the value itself, so it has to mask it too.
     this.mutationCb({
