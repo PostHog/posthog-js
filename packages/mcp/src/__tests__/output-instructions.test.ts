@@ -326,12 +326,15 @@ describe('mirroring over a real client', () => {
     const { client, cleanup } = await connectStructured({ enableConversationId: true })
     try {
       await client.request({ method: 'tools/list' }, ListToolsResultSchema)
-      const second = await call(client, 'conv-supplied')
+      // Shaped like a handle the SDK would have minted, which is what a real
+      // agent echoes — an arbitrary string is treated as no handle at all.
+      const echoed = '019fd2b0-1111-7111-8111-111111111111'
+      const second = await call(client, echoed)
 
       // The text block is mint-only; the structured copy rides every response.
       const hasText = (second.content ?? []).some((c: any) => String(c.text).includes('conversation_id='))
       expect(hasText).toBe(false)
-      expect((second.structuredContent as any)[MCP_INSTRUCTIONS_KEY].conversation_id).toBe('conv-supplied')
+      expect((second.structuredContent as any)[MCP_INSTRUCTIONS_KEY].conversation_id).toBe(echoed)
     } finally {
       await cleanup()
     }
