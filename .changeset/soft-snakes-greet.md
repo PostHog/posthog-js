@@ -1,6 +1,5 @@
 ---
 "posthog-react-native": minor
-"@posthog/react-native-plugin": minor
 ---
 
 Add push notification support, so PostHog Workflows can target React Native apps.
