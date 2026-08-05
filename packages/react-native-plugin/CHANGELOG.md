@@ -1,5 +1,15 @@
 # @posthog/react-native-plugin
 
+## 2.3.0
+
+### Minor Changes
+
+- [#4429](https://github.com/PostHog/posthog-js/pull/4429) [`1b6ed5a`](https://github.com/PostHog/posthog-js/commit/1b6ed5ad44147774db4818c1dd8150625183d5a6) Thanks [@ioannisj](https://github.com/ioannisj)! - Add the native push notification bridge, so `posthog-react-native` can register device tokens and capture notification opens through the native PostHog SDKs.
+  - Forwards the push config (`capturePushNotificationSubscriptions`, `capturePushNotificationOpened`) to posthog-ios and posthog-android at setup.
+  - Bridges `registerPushNotificationToken`, `unregisterPushNotificationToken`, `capturePushNotificationOpened`, `setOptOut`, and `reset` for runtime control from JS.
+  - Supports a JS `pushIdentityProvider` for projects that require identity-verified subscriptions.
+  - Captures cold-start notification opens on Android by inspecting the launch Activity's intent at setup, which posthog-android's own lifecycle integration cannot observe in React Native apps. (2026-08-05)
+
 ## 2.2.4
 
 ### Patch Changes
