@@ -1797,10 +1797,11 @@ export class PostHog extends PostHogCore {
       void this._enqueueNative('identify', (plugin) => {
         const nativeDistinctId = String(this.getDistinctId() || previousDistinctId)
         const anonymousId = String(this.getAnonymousId())
-        plugin.identify(nativeDistinctId, anonymousId)
+        const identified = plugin.identify(nativeDistinctId, anonymousId)
         this._logger.info(
           `Native PostHog identified with distinctId ${nativeDistinctId} and anonymousId ${anonymousId}.`
         )
+        return identified
       })
     }
 

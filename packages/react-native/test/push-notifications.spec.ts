@@ -274,6 +274,40 @@ describe('push notifications', () => {
       await posthog.shutdown()
     })
 
+    it('holds later native commands until identify() settles, not just dispatches', async () => {
+      // The queue awaits each callback's returned promise; if identify dropped it, a reset
+      // issued right after could reach native while the bridge identify is still in flight.
+      const posthog = await createPostHog()
+
+      let resolveIdentify!: () => void
+      mockPlugin.identify.mockImplementationOnce(() => new Promise<void>((resolve) => (resolveIdentify = resolve)))
+
+      await posthog.identify('user-B')
+      posthog.reset()
+
+      await waitForExpect(1000, () => expect(mockPlugin.identify).toHaveBeenCalledTimes(1))
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(mockPlugin.reset).not.toHaveBeenCalled()
+
+      resolveIdentify()
+      await waitForExpect(1000, () => expect(mockPlugin.reset).toHaveBeenCalledTimes(1))
+
+      await posthog.shutdown()
+    })
+
+    it('keeps the native queue alive when identify() rejects', async () => {
+      const posthog = await createPostHog()
+
+      mockPlugin.identify.mockImplementationOnce(() => Promise.reject(new Error('bridge down')))
+
+      await posthog.identify('user-B')
+      posthog.reset()
+
+      await waitForExpect(1000, () => expect(mockPlugin.reset).toHaveBeenCalledTimes(1))
+
+      await posthog.shutdown()
+    })
+
     it('initializes native push on optIn() when the app started opted out', async () => {
       // Nothing runs setup() for an opted-out user, so consent has no native instance to land
       // on — optIn() has to bring one up or push never arms without a restart.
