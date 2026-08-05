@@ -502,9 +502,13 @@ describe('conversation_id edge cases', () => {
 
     // Same connection, so anything falling back to the transport or in-memory
     // session would report one id for both. Only the handle can separate them.
+    // Both are shaped like handles the SDK would have minted, which is what a
+    // real agent echoes — an arbitrary string is treated as no handle at all.
+    const one = '019fd2b0-aaaa-7aaa-8aaa-aaaaaaaaaaaa'
+    const two = '019fd2b0-bbbb-7bbb-8bbb-bbbbbbbbbbbb'
     for (const [handle, text] of [
-      ['conversation-one', 'Needed a delete tool.'],
-      ['conversation-two', 'Needed an export tool.'],
+      [one, 'Needed a delete tool.'],
+      [two, 'Needed an export tool.'],
     ]) {
       await client.request(
         {
@@ -517,7 +521,7 @@ describe('conversation_id edge cases', () => {
 
     await new Promise((r) => setTimeout(r, 50))
     const gaps = capture.getEvents().filter((e) => e.eventType === MCPAnalyticsEventType.mcpMissingCapability)
-    expect(gaps.map((g) => g.conversationId)).toEqual(['conversation-one', 'conversation-two'])
+    expect(gaps.map((g) => g.conversationId)).toEqual([one, two])
     await capture.stop()
   })
 
