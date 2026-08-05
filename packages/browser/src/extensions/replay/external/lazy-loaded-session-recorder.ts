@@ -605,6 +605,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._flushedSizeTracker = new FlushedSizeTracker(this._instance)
     }
 
+    setDocumentWasEverVisible(documentWasEverVisible: boolean): void {
+        if (documentWasEverVisible) {
+            this._documentWasEverVisible = true
+        }
+    }
+
     private get _masking():
         | Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector' | 'blockSelector'>
         | undefined {

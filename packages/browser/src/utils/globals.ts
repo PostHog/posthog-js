@@ -209,6 +209,7 @@ export interface LazyLoadedSessionRecordingInterface {
     overrideTrigger: (triggerType: TriggerType) => void
     isStarted: boolean
     tryAddCustomEvent(tag: string, payload: any): boolean
+    setDocumentWasEverVisible?: (documentWasEverVisible: boolean) => void
 }
 
 export interface LazyLoadedDeadClicksAutocaptureInterface {

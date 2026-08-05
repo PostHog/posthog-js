@@ -60,6 +60,7 @@ export class SessionRecording implements Extension {
     private _onVisibilityChange = (): void => {
         if (document?.visibilityState === 'visible') {
             this._documentWasEverVisible = true
+            this._lazyLoadedSessionRecording?.setDocumentWasEverVisible?.(true)
         }
     }
 
@@ -340,9 +341,6 @@ export class SessionRecording implements Extension {
                 this._instance,
                 this._documentWasEverVisible
             )
-            if (this._lazyLoadedSessionRecording) {
-                document?.removeEventListener?.('visibilitychange', this._onVisibilityChange)
-            }
             ;(this._lazyLoadedSessionRecording as any)._forceAllowLocalhostNetworkCapture =
                 this._forceAllowLocalhostNetworkCapture
         }
@@ -358,6 +356,7 @@ export class SessionRecording implements Extension {
         }
 
         this._recordingStatus = LAZY_LOADING
+        this._lazyLoadedSessionRecording.setDocumentWasEverVisible?.(this._documentWasEverVisible)
         this._lazyLoadedSessionRecording.start(startReason)
     }
 
