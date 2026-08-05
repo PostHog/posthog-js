@@ -1,7 +1,16 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, test, expect } from 'vitest';
+import {
+  describe,
+  it,
+  test,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type MockInstance,
+} from 'vitest';
 import {
   createMirror,
   escapeImportStatement,
@@ -9,6 +18,7 @@ import {
   fixSafariColons,
   hasEmptyShorthandLonghand,
   isNodeMetaEqual,
+  recompressBase64Image,
   stringifyStylesheet,
 } from '../src/utils';
 import { NodeType } from '@posthog/rrweb-types';
@@ -457,6 +467,123 @@ describe('utils', () => {
       expect(mirror.has(5)).toBe(false);
 
       document.body.removeChild(iframe);
+    });
+  });
+
+  describe('recompressBase64Image()', () => {
+    const makeImg = (
+      naturalWidth: number,
+      naturalHeight: number,
+      complete = true,
+    ) => {
+      const img = document.createElement('img');
+      Object.defineProperty(img, 'complete', { value: complete });
+      Object.defineProperty(img, 'naturalWidth', { value: naturalWidth });
+      Object.defineProperty(img, 'naturalHeight', { value: naturalHeight });
+      return img;
+    };
+    // unique per call so the module-level memoization cache never leaks
+    // state between tests
+    let uniqueId = 0;
+    const makeDataURL = (length: number) =>
+      `data:image/png;base64,${'a'.repeat(length)}#${uniqueId++}`;
+
+    let toDataURL: MockInstance;
+    let getContext: MockInstance;
+
+    beforeEach(() => {
+      getContext = vi
+        .spyOn(HTMLCanvasElement.prototype, 'getContext')
+        .mockReturnValue({
+          drawImage: vi.fn(),
+        } as unknown as CanvasRenderingContext2D);
+      toDataURL = vi
+        .spyOn(HTMLCanvasElement.prototype, 'toDataURL')
+        .mockReturnValue('data:image/webp;base64,tiny');
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('does not touch the canvas for data URLs too small to be worth recompressing', () => {
+      const dataURL = makeDataURL(50_000);
+      expect(
+        recompressBase64Image(makeImg(4096, 3072), dataURL, 'image/webp', 0.4),
+      ).toBe(dataURL);
+      expect(getContext).not.toHaveBeenCalled();
+      expect(toDataURL).not.toHaveBeenCalled();
+    });
+
+    it('recompresses large data URLs', () => {
+      const dataURL = makeDataURL(200_000);
+      expect(
+        recompressBase64Image(makeImg(800, 600), dataURL, 'image/webp', 0.4),
+      ).toBe('data:image/webp;base64,tiny');
+      expect(toDataURL).toHaveBeenCalledWith('image/webp', 0.4);
+    });
+
+    it('keeps the original when recompression does not make it smaller', () => {
+      const dataURL = makeDataURL(200_000);
+      toDataURL.mockReturnValue(
+        `data:image/webp;base64,${'b'.repeat(300_000)}`,
+      );
+      expect(recompressBase64Image(makeImg(800, 600), dataURL)).toBe(dataURL);
+    });
+
+    it('encodes each unique data URL only once', () => {
+      const dataURL = makeDataURL(200_000);
+      const img = makeImg(800, 600);
+      const first = recompressBase64Image(img, dataURL, 'image/webp', 0.4);
+      const second = recompressBase64Image(img, dataURL, 'image/webp', 0.4);
+      expect(second).toBe(first);
+      expect(toDataURL).toHaveBeenCalledTimes(1);
+    });
+
+    it('re-encodes when type or quality changes', () => {
+      const dataURL = makeDataURL(200_000);
+      const img = makeImg(800, 600);
+      recompressBase64Image(img, dataURL, 'image/webp', 0.4);
+      recompressBase64Image(img, dataURL, 'image/webp', 0.8);
+      expect(toDataURL).toHaveBeenCalledTimes(2);
+    });
+
+    it('evicts only the oldest entry when the cache is full', () => {
+      const img = makeImg(800, 600);
+      // one more than MAX_RECOMPRESSION_CACHE_ENTRIES
+      const dataURLs = Array.from({ length: 11 }, () =>
+        makeDataURL(200_000),
+      );
+      for (const dataURL of dataURLs) {
+        recompressBase64Image(img, dataURL, 'image/webp', 0.4);
+      }
+      expect(toDataURL).toHaveBeenCalledTimes(11);
+
+      // the 10 most recent entries are still cached
+      for (const dataURL of dataURLs.slice(1)) {
+        recompressBase64Image(img, dataURL, 'image/webp', 0.4);
+      }
+      expect(toDataURL).toHaveBeenCalledTimes(11);
+
+      // only the oldest entry was evicted and needs re-encoding
+      recompressBase64Image(img, dataURLs[0], 'image/webp', 0.4);
+      expect(toDataURL).toHaveBeenCalledTimes(12);
+    });
+
+    it('returns the original for images that are not loaded', () => {
+      const dataURL = makeDataURL(200_000);
+      expect(recompressBase64Image(makeImg(0, 0, false), dataURL)).toBe(
+        dataURL,
+      );
+      expect(toDataURL).not.toHaveBeenCalled();
+    });
+
+    it('returns the original for images larger than the dimension cap', () => {
+      const dataURL = makeDataURL(200_000);
+      expect(recompressBase64Image(makeImg(5000, 3000), dataURL)).toBe(
+        dataURL,
+      );
+      expect(toDataURL).not.toHaveBeenCalled();
     });
   });
 });

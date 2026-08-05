@@ -247,6 +247,25 @@ export interface PerformanceCaptureConfig {
      * @default false
      */
     web_vitals_attribution?: boolean
+
+    /**
+     * Scope web vitals metrics to the browser's Soft Navigation entries, so that
+     * client-side route changes in single-page apps each start a fresh measurement
+     * window instead of accumulating against the original hard-navigation timestamp.
+     *
+     * Without this, an SPA's LCP observer keeps treating the "largest paint so far"
+     * as belonging to the initial page load across every subsequent route change,
+     * which inflates LCP (and the other metrics) by the time spent on the app.
+     *
+     * This is a preview option (opt-in) because it relies on Chrome's Soft Navigation Detection API,
+     * which is still experimental. When enabled, PostHog loads a pinned stable web-vitals 6.x
+     * bundle and passes `reportSoftNavs` to the observers. The default path remains on the
+     * existing web-vitals 5.x bundle. In browsers without soft-nav support, metrics fall
+     * back to their existing hard-navigation behavior.
+     *
+     * @default false
+     */
+    __preview_web_vitals_soft_navs?: boolean
 }
 
 export interface DeadClickCandidate {
@@ -2001,7 +2020,13 @@ export interface PostHogConfig {
     process_person?: 'always' | 'never' | 'identified_only'
 
     /**
-     * Client side rate limiting
+     * Client side rate limiting.
+     *
+     * A token bucket, per browser, that stops a runaway loop on your site from flooding capture.
+     * When it drains, further `capture` calls are dropped and a one-off `$$client_ingestion_warning`
+     * is sent reporting how many events were dropped and the page and session that tripped it -
+     * usually the fastest way to find the loop. Raise these limits if you legitimately capture in
+     * bursts; a warning under the defaults is more often a bug on the page than a limit set too low.
      */
     rate_limiting?: {
         /**
