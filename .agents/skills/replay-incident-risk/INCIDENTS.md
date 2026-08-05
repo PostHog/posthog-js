@@ -39,6 +39,12 @@ Changing when sessions rotate, how idle state is tracked, or when buffers flush 
 3. What is the oldest event a flushed buffer can contain after this change?
 4. If recording volume moves fleet-wide, the week-over-week recordings anomaly alert should catch it within a day. Watch it after release.
 
+**Volume invariants.** These must hold after any change in this class. The scenario tests in `lazy-sessionrecording.test.ts` (`recording volume invariants` block) assert them over multi-day simulated timelines; if your change could affect one, extend that block rather than only testing your mechanism:
+
+- A tab with zero user interaction ships zero recordings while it stays open, no matter how many rotations pass.
+- A session with one interaction ships exactly one recording; idle rotations after it add none.
+- No flushed buffer contains events older than the session age cap.
+
 ## Class 3: Network primitive wrappers (fetch and XHR patching)
 
 The highest-severity class: bugs here **break the customer's own site**, not just telemetry, and spread instantly to all SDK versions via the unversioned recorder bundle. Three separate incidents have come from the fetch wrappers. Standing policy from those incidents: no AI-generated PRs in the wrappers, and every change lands with a failing real-browser test first.
