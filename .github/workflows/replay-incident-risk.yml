@@ -38,9 +38,27 @@ jobs:
           node .agents/skills/replay-incident-risk/check.mjs "$BASE" > risk.txt || true
           COUNT=$(node -e "console.log(JSON.parse(require('fs').readFileSync('risk.json','utf8')).findings.length)")
           echo "findings=$COUNT" >> "$GITHUB_OUTPUT"
+
           {
-            echo 'report<<RISK_EOF'
+            echo '<!-- replay-incident-risk -->'
+            echo '## Replay incident risk check'
+            echo ''
+            if [ "$COUNT" != "0" ]; then
+              echo 'This diff touches code involved in past incidents. This is a heads-up, not a verdict: read the matched sections of [INCIDENTS.md](https://github.com/PostHog/posthog-js/blob/main/.agents/skills/replay-incident-risk/INCIDENTS.md) and answer their review questions before merging.'
+              echo ''
+              echo 'For a judgment on whether this diff has the same failure mode, run the `replay-incident-risk` skill locally: open a Claude session in the repo root and ask it to review your diff with that skill. Or run `node .agents/skills/replay-incident-risk/check.mjs` and answer the review questions for each matched class yourself.'
+            else
+              echo 'The current diff no longer matches any past incident pattern.'
+            fi
+            echo ''
+            echo '```'
             cat risk.txt
+            echo '```'
+          } > comment.md
+
+          {
+            echo 'comment<<RISK_EOF'
+            cat comment.md
             echo 'RISK_EOF'
           } >> "$GITHUB_OUTPUT"
           cat risk.txt
@@ -65,12 +83,4 @@ jobs:
           comment-id: ${{ steps.fc.outputs.comment-id }}
           issue-number: ${{ github.event.pull_request.number }}
           edit-mode: replace
-          body: |
-            <!-- replay-incident-risk -->
-            ## Replay incident risk check
-
-            ${{ steps.check.outputs.findings != '0' && 'This diff touches code involved in past incidents. This is a heads-up, not a verdict: read the matched sections of [INCIDENTS.md](https://github.com/PostHog/posthog-js/blob/main/.agents/skills/replay-incident-risk/INCIDENTS.md) and answer their review questions before merging.' || 'The current diff no longer matches any past incident pattern.' }}
-
-            ```
-            ${{ steps.check.outputs.report }}
-            ```
+          body: ${{ steps.check.outputs.comment }}

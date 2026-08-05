@@ -121,4 +121,7 @@ for (const f of findings) {
     console.log(`  Read: ${registry}#${f.anchor}\n`)
 }
 console.log('This check is advisory. It flags resemblance to past incidents, not correctness.')
+console.log('For a judgment pass on whether this diff has the same failure mode, run the')
+console.log('`replay-incident-risk` skill in a Claude session from the repo root, or answer the')
+console.log(`review questions in the matched sections of ${registry} yourself.`)
 process.exit(0)

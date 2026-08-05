@@ -104,6 +104,30 @@ Bugs and attacks in how the SDK reaches browsers, rather than in SDK logic.
 
 ---
 
+## Class 8: Masking, privacy, and consent (proactive, no incident yet)
+
+No registry incident here yet, and that is the point: a regression in input masking, text masking, canvas masking, or consent/opt-out handling **records data the customer promised their users we would not store**. Nothing throws, recording volume doesn't move, and no alert exists that could fire. Discovery would come from a customer finding a password in a replay, and the recorded data cannot be un-stored.
+
+**Review questions:**
+
+1. Does the change touch masking defaults, selector matching, or the order in which masking is applied vs when the snapshot is serialized? Any path where a node is serialized before masking runs is a leak.
+2. Could a new element type, attribute, or mutation path bypass `maskAllInputs` / `maskTextSelector` / canvas masking? Password inputs must be masked in every code path, including mutations and attribute changes, not just the initial snapshot.
+3. Does the change affect opt-out, consent state, or `disable_session_recording` being respected before the first event is captured (not just before the first flush)?
+4. Add a real-browser test asserting the sensitive value does not appear anywhere in the emitted snapshot bytes.
+
+## Class 9: Capture transport and retry behavior (proactive, no incident yet)
+
+The rate limiter, retry queue, and request queue run on every customer page. A retry bug here scales by the size of the fleet: retries without backoff or jitter become a coordinated flood against capture during any ingestion blip, and over-eager deduplication or dropped queues become silent event loss.
+
+**Review questions:**
+
+1. On a 5xx or network failure, does every retry path keep exponential backoff and jitter, with a bounded retry count?
+2. Can the same event be sent twice (retry after a timeout that actually succeeded), and is that acceptable downstream?
+3. When the rate limiter engages, what is dropped, and is the drop observable (`$rate_limit` style signal) rather than silent?
+4. Walk a page that stays open through a 30-minute capture outage: how many requests does this change cause it to send during and after?
+
+---
+
 ## Cross-cutting lessons
 
 - **npm pinning does not protect customers.** Until extension scripts are strictly versioned everywhere, treat every publish of a lazy-loaded bundle as an immediate fleet-wide deploy to all SDK versions ever released.
