@@ -32,16 +32,43 @@ jobs:
           # this commits to the branch so we can't use the default GITHUB_TOKEN, otherwise Actions won't trigger
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
 
-      # The action leaves a local commit behind that it could not push. ghcommit
-      # sends `git rev-parse HEAD` as the mutation's expectedHeadOid, so HEAD has
-      # to be rewound onto the remote branch tip or the commit below is rejected.
-      # --mixed keeps the generated changeset file in the working tree.
+      # The action leaves a local commit behind that it could not push. ghcommit sends
+      # `git rev-parse HEAD` as the mutation's expectedHeadOid, so HEAD has to be
+      # rewound off that commit or the commit below is rejected. --mixed keeps the
+      # generated changeset in the working tree.
+      #
+      # Rewinding decouples HEAD from the working tree, which defeats the
+      # expectedHeadOid guard, so the invariants of the one tolerated failure are
+      # checked first: exactly one local commit, sitting on the current remote tip,
+      # touching nothing outside `.changeset/`. Without that, a partial write that
+      # never committed, or a branch that advanced mid-run, would be replayed onto the
+      # new tip — resurrecting changesets the branch has since deleted.
+      #
+      # The reset targets HEAD^ rather than the fetched ref so the retained working
+      # tree is exactly that commit's diff by construction.
       - name: Rewind the failed local commit
+        if: steps.generate.outcome == 'failure'
         env:
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
+          set -euo pipefail
           git fetch origin "+refs/heads/$HEAD_REF:refs/remotes/origin/$HEAD_REF"
-          git reset --mixed "refs/remotes/origin/$HEAD_REF"
+          remote=$(git rev-parse "refs/remotes/origin/$HEAD_REF")
+
+          if [ "$(git rev-parse HEAD)" = "$remote" ]; then
+            echo "::error::generation failed without committing; refusing to commit a partial result"
+            exit 1
+          fi
+          if [ "$(git rev-parse HEAD^)" != "$remote" ]; then
+            echo "::error::$HEAD_REF advanced during generation; rerun against the new branch state"
+            exit 1
+          fi
+          if git diff --name-only HEAD^ HEAD | grep -qv '^\.changeset/'; then
+            echo "::error::the generated commit touches files outside .changeset/"
+            exit 1
+          fi
+
+          git reset --mixed HEAD^
 
       - name: Check for a generated changeset
         id: changes
