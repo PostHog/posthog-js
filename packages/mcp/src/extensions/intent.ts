@@ -11,7 +11,6 @@ import type {
   McpEvent,
 } from '../types'
 import { isContextEnabled } from './context-parameters'
-import { log } from './logger'
 
 interface ResolvedIntent {
   intent: string
@@ -45,7 +44,7 @@ async function runIntentFallback(
     const intent = normalizeIntent(await data.options.intentFallback(request, extra))
     return intent ? { intent, source: 'inferred' } : null
   } catch (error) {
-    log(`intentFallback callback error: ${error}`)
+    data.logger(`intentFallback callback error: ${error}`)
     return null
   }
 }
@@ -53,10 +52,11 @@ async function runIntentFallback(
 export async function resolveToolCallIntent(
   data: MCPAnalyticsData,
   request: MCPRequestLike,
+  analyticsOwnsContext: boolean,
   extra?: CompatibleRequestHandlerExtra
 ): Promise<ResolvedIntent | null> {
   const contextArgument = getContextArgument(request)
-  if (isContextEnabled(data.options.context) && request.params?.name !== 'get_more_tools' && contextArgument) {
+  if (analyticsOwnsContext && isContextEnabled(data.options.context) && contextArgument) {
     return { intent: contextArgument, source: 'context_parameter' }
   }
 

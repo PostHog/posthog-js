@@ -284,6 +284,10 @@ export enum PostHogPersistedProperty {
   InstalledAppBuild = 'installed_app_build', // only used by posthog-react-native
   InstalledAppVersion = 'installed_app_version', // only used by posthog-react-native
   SessionReplay = 'session_replay', // only used by posthog-react-native
+  // Set by a manual registerPushNotificationToken(): the native SDK persists the
+  // subscription across launches, so cleanup (unregister/reset) must boot native even in a
+  // process where nothing else initialized it. Only used by posthog-react-native.
+  PushRegistered = 'push_registered',
   // Session id for which an event trigger has activated session replay. only used by posthog-react-native
   SessionReplayEventTriggerActivatedSession = 'session_replay_event_trigger_activated_session',
   SurveyLastSeenDate = 'survey_last_seen_date', // only used by posthog-react-native

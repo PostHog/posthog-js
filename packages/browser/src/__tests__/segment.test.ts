@@ -14,6 +14,11 @@ import { PostHog } from '../posthog-core'
 import { assignableWindow } from '../utils/globals'
 import { PostHogConfig } from '../types'
 
+jest.mock(
+    '@posthog/browser-common/utils/globals',
+    () => jest.requireActual('./helpers/snapshot-test-globals').snapshotTestGlobals
+)
+
 const initPostHogInAPromise = (
     segment: any,
     posthogName: string,
@@ -100,6 +105,57 @@ describe(`Segment integration`, () => {
 
         expect(posthog.get_distinct_id()).toBe('test-id')
         expect(posthog.get_property('$device_id')).toBe('test-anonymous-id')
+    })
+
+    it('enriches Segment track events with PostHog properties', async () => {
+        await initPostHogInAPromise(segment, posthogName, { persistence: 'memory' })
+        const context = {
+            event: {
+                event: 'Order Completed',
+                userId: 'test-id',
+                anonymousId: 'test-anonymous-id',
+                properties: {
+                    order_id: 'order-123',
+                    revenue: 99.5,
+                    currency: 'USD',
+                },
+            },
+        } as unknown as SegmentContext
+
+        const enrichedContext = segmentIntegration.track!(context)
+        const event = enrichedContext.event
+        expect(event.properties).toEqual(
+            expect.objectContaining({
+                distinct_id: 'test-id',
+                $device_id: 'test-anonymous-id',
+                $session_id: expect.any(String),
+                $window_id: expect.any(String),
+                $lib_version: expect.any(String),
+                $initialization_time: expect.any(String),
+                $insert_id: expect.any(String),
+                $raw_user_agent: expect.any(String),
+                $sdk_debug_extensions_init_time_ms: expect.any(Number),
+                $time: expect.any(Number),
+                $timezone: expect.any(String),
+                $timezone_offset: expect.any(Number),
+            })
+        )
+        expect({
+            ...event,
+            properties: {
+                ...event.properties,
+                $session_id: '<generated-session-id>',
+                $window_id: '<generated-window-id>',
+                $lib_version: '<sdk-version>',
+                $initialization_time: '<initialization-time>',
+                $insert_id: '<insert-id>',
+                $raw_user_agent: '<user-agent>',
+                $sdk_debug_extensions_init_time_ms: '<extension-init-time>',
+                $time: '<event-time>',
+                $timezone: '<runtime-timezone>',
+                $timezone_offset: '<runtime-timezone-offset>',
+            },
+        }).toMatchSnapshot()
     })
 
     // FIXME: Flaky test - fails on main branch, see issue tracking test isolation

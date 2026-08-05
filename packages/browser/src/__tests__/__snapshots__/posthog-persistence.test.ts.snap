@@ -1,0 +1,46 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`persistence persistence modes: "cookie" extracts enabled feature flags 1`] = `
+{
+  "eventProperties": {
+    "$feature/checkout-redesign": "compact",
+    "$feature/priority-support": true,
+    "$feature/retired-dashboard": false,
+  },
+  "persisted": {
+    "checkout-redesign": "compact",
+    "priority-support": true,
+    "retired-dashboard": false,
+  },
+}
+`;
+
+exports[`persistence persistence modes: "localStorage" extracts enabled feature flags 1`] = `
+{
+  "eventProperties": {
+    "$feature/checkout-redesign": "compact",
+    "$feature/priority-support": true,
+    "$feature/retired-dashboard": false,
+  },
+  "persisted": {
+    "checkout-redesign": "compact",
+    "priority-support": true,
+    "retired-dashboard": false,
+  },
+}
+`;
+
+exports[`persistence persistence modes: "localStorage+cookie" extracts enabled feature flags 1`] = `
+{
+  "eventProperties": {
+    "$feature/checkout-redesign": "compact",
+    "$feature/priority-support": true,
+    "$feature/retired-dashboard": false,
+  },
+  "persisted": {
+    "checkout-redesign": "compact",
+    "priority-support": true,
+    "retired-dashboard": false,
+  },
+}
+`;

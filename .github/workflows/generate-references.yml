@@ -65,8 +65,15 @@ jobs:
             echo "No new latest references generated for $PACKAGE_NAME"
           fi
           
-      - uses: stefanzweifel/git-auto-commit-action@4a55954c782fc1ea30b9056cd3e7a2b40ca8887d # v7.2.0
+      # Commits through the GitHub API so it carries GitHub's signature, which the
+      # signed-commits ruleset on this repo requires. git-auto-commit-action pushes
+      # with plain git and has no API mode, so it is rejected.
+      - uses: planetscale/ghcommit-action@a6b150b81dca5dd027baa898604418eec9e11465 # v0.2.22
         if: steps.changes.outputs.changed == 'true'
         with:
           commit_message: "Update generated references"
+          repo: ${{ github.repository }}
+          branch: ${{ github.ref_name }}
           file_pattern: "packages/*/references/*-references-latest.json"
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}

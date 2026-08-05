@@ -8,11 +8,18 @@ import {
 } from '../posthog-featureflags'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
-import { isUndefined } from '@posthog/core'
+import { isUndefined, MINIMAL_FLAG_CALLED_EVENT_CAMPAIGN_PROPERTIES } from '@posthog/core'
 import { PostHogConfig } from '../types'
 import { createMockPostHog, createPosthogInstance } from './helpers/posthog-instance'
 import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
+import { CAMPAIGN_PARAMS } from '@posthog/browser-common/utils/event-utils'
+import { normalizeCaptureResult } from './helpers/normalize-capture-result'
+
+jest.mock(
+    '@posthog/browser-common/utils/globals',
+    () => jest.requireActual('./helpers/snapshot-test-globals').snapshotTestGlobals
+)
 
 jest.useFakeTimers()
 jest.spyOn(global, 'setTimeout')
@@ -1113,6 +1120,43 @@ describe('featureflags', () => {
                 expect.objectContaining({ method: 'POST', timestampMode: 'body' })
             )
             expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(undefined)
+        })
+
+        it('builds a representative flags request', () => {
+            instance.getGroups = () => ({ organization: 'org-42', project: 'project-7' })
+            instance.persistence.register({ $device_id: 'device-123' })
+            featureFlags.setAnonymousDistinctId('anonymous-456')
+            featureFlags.setPersonPropertiesForFlags({ plan: 'enterprise', seats: 25 }, false)
+            featureFlags.setGroupPropertiesForFlags(
+                {
+                    organization: { industry: 'technology', employee_count: 120 },
+                    project: { region: 'eu-west' },
+                },
+                false
+            )
+            instance.config.evaluation_contexts = ['production', 'web']
+            instance.config.flag_keys = ['checkout-redesign', 'new-dashboard']
+
+            featureFlags.reloadFeatureFlags()
+            jest.runOnlyPendingTimers()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            const request = instance._send_request.mock.calls[0][0]
+            expect(request.callback).toEqual(expect.any(Function))
+            expect(request.data.timezone).toEqual(expect.any(String))
+            expect(request.data.person_properties.$lib_version).toEqual(expect.any(String))
+            expect({
+                ...request,
+                callback: '<request-callback>',
+                data: {
+                    ...request.data,
+                    timezone: '<runtime-timezone>',
+                    person_properties: {
+                        ...request.data.person_properties,
+                        $lib_version: '<sdk-version>',
+                    },
+                },
+            }).toMatchSnapshot()
         })
 
         it('should call /flags with flags disabled if advanced_disable_feature_flags is set', () => {
@@ -2862,11 +2906,11 @@ describe('featureflags', () => {
             )
         })
 
-        it('includes version in feature flag called event', () => {
+        it('captures rich feature flag called event properties', () => {
             // Setup flags with requestId and evaluatedAt
             featureFlags.receivedFeatureFlags({
                 featureFlags: { 'test-flag': true },
-                featureFlagPayloads: {},
+                featureFlagPayloads: { 'test-flag': { layout: 'compact', max_items: 12 } },
                 requestId: TEST_REQUEST_ID,
                 evaluatedAt: TEST_EVALUATED_AT,
                 flags: {
@@ -2883,16 +2927,21 @@ describe('featureflags', () => {
                         metadata: {
                             id: 23,
                             version: 42,
+                            description: 'Compact dashboard experiment',
+                            payload: { layout: 'compact', max_items: 12 },
+                            has_experiment: true,
                         },
                     },
                 },
             })
             featureFlags._hasLoadedFlags = true
+            featureFlags._flagsLoadedFromRemote = true
+            instance.persistence.unregister('$feature_flag_errors')
 
             // Test flag call
             featureFlags.getFeatureFlag('test-flag')
 
-            // Verify capture call includes requestId and evaluatedAt
+            expect(instance.capture).toHaveBeenCalledTimes(1)
             expect(instance.capture).toHaveBeenCalledWith(
                 '$feature_flag_called',
                 expect.objectContaining({
@@ -2905,6 +2954,7 @@ describe('featureflags', () => {
                     $feature_flag_id: 23,
                 })
             )
+            expect(instance.capture.mock.calls[0]).toMatchSnapshot()
         })
 
         it('updates requestId when new /flags response is received', () => {
@@ -4531,7 +4581,7 @@ describe('minimal $feature_flag_called events', () => {
             },
         },
         requestId: 'minimal-request-id',
-        evaluatedAt: Date.now(),
+        evaluatedAt: 1700000000000,
         ...(isUndefined(options.minimalFlagCalledEvents)
             ? {}
             : { minimalFlagCalledEvents: options.minimalFlagCalledEvents }),
@@ -4553,7 +4603,7 @@ describe('minimal $feature_flag_called events', () => {
     const findFlagCalledEvent = (events: any[]) => events.find((e) => e.event === '$feature_flag_called')
 
     it('sends exactly the allowlisted properties when gated and the flag has no experiment', async () => {
-        const { posthog, events } = await createInstanceWithCapturedEvents()
+        const { posthog, events } = await createInstanceWithCapturedEvents({}, 'minimal-flag-snapshot-token')
         // Super properties must be structurally excluded from the minimal event
         posthog.register({ super_prop: 'super_value' })
         // $groups must survive minimization — it feeds ingestion dedup and group-flag routing
@@ -4582,6 +4632,9 @@ describe('minimal $feature_flag_called events', () => {
                 '$groups',
                 '$current_url',
                 '$pathname',
+                // session-level attribution props survive minimization so a flag-called
+                // event firing first doesn't null out the session's UTM/channel
+                '$referring_domain',
                 '$session_id',
                 '$window_id',
                 '$lib',
@@ -4597,9 +4650,43 @@ describe('minimal $feature_flag_called events', () => {
             $feature_flag_id: 42,
             $feature_flag_version: 3,
             $feature_flag_request_id: 'minimal-request-id',
+            $feature_flag_evaluated_at: 1700000000000,
             $groups: { organization: 'org-1' },
         })
         expect(event.$set_once).toBeUndefined()
+        expect(
+            normalizeCaptureResult(event, ['distinct_id', '$device_id', '$session_id', '$window_id', '$lib_version'])
+        ).toMatchSnapshot()
+    })
+
+    it('keeps every canonical session-attribution campaign param without widening the minimal event', async () => {
+        const { posthog, events } = await createInstanceWithCapturedEvents()
+        const campaignProperties = Object.fromEntries(CAMPAIGN_PARAMS.map((key) => [key, `value-for-${key}`]))
+
+        // Keep the shared minimal-event set exhaustively synchronized with the canonical
+        // browser campaign set without copying that list into this test.
+        expect(MINIMAL_FLAG_CALLED_EVENT_CAMPAIGN_PROPERTIES).toEqual(CAMPAIGN_PARAMS)
+
+        posthog.register({
+            ...campaignProperties,
+            $referring_domain: 'referring.example',
+            $referrer: 'https://referring.example/path?private=value',
+            unrelated_superproperty: 'must-be-stripped',
+        })
+        posthog.featureFlags.receivedFeatureFlags(
+            gatedFlagsResponse({ minimalFlagCalledEvents: true, hasExperiment: false })
+        )
+
+        expect(posthog.getFeatureFlag('test-flag')).toBe(true)
+
+        const event = findFlagCalledEvent(events)
+        expect(event).toBeDefined()
+        expect(event.properties).toMatchObject({
+            ...campaignProperties,
+            $referring_domain: 'referring.example',
+        })
+        expect(event.properties).not.toHaveProperty('$referrer')
+        expect(event.properties).not.toHaveProperty('unrelated_superproperty')
     })
 
     it('strips the timestamp-override props when captured with an explicit timestamp', async () => {
@@ -4629,6 +4716,7 @@ describe('minimal $feature_flag_called events', () => {
                 '$feature_flag_request_id',
                 '$current_url',
                 '$pathname',
+                '$referring_domain',
                 '$session_id',
                 '$window_id',
                 '$lib',
@@ -4642,7 +4730,7 @@ describe('minimal $feature_flag_called events', () => {
     })
 
     it('sends the full event when gated but the flag has an experiment', async () => {
-        const { posthog, events } = await createInstanceWithCapturedEvents()
+        const { posthog, events } = await createInstanceWithCapturedEvents({}, 'full-flag-snapshot-token')
         posthog.register({ super_prop: 'super_value' })
         posthog.featureFlags.receivedFeatureFlags(
             gatedFlagsResponse({ minimalFlagCalledEvents: true, hasExperiment: true })
@@ -4658,6 +4746,7 @@ describe('minimal $feature_flag_called events', () => {
             $active_feature_flags: ['test-flag'],
             $used_bootstrap_value: expect.any(Boolean),
         })
+        expect(normalizeCaptureResult(event)).toMatchSnapshot()
     })
 
     it.each([

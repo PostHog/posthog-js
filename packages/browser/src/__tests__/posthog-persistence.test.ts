@@ -74,6 +74,7 @@ const LEGACY_RESERVED_PERSISTENCE_KEYS = new Set([
     'ph_product_tours',
     '$product_tours_activated',
     '$surveys_activated_session',
+    '$surveys_activated_timestamps',
     '$product_tours_activated_session',
     '$product_tours_enabled_server_side',
     '$session_recording_remote_config',
@@ -159,6 +160,28 @@ describe('persistence', () => {
             saveMock.mockClear()
         })
 
+        it('persists nested object mutations when re-registering the same reference', () => {
+            const value = { nested: { status: 'initial' } }
+            library.register({ value })
+
+            value.nested.status = 'updated'
+            library.register({ value })
+
+            const reloaded = new PostHogPersistence(makePostHogConfig('test', persistenceMode))
+            expect(reloaded.props.value).toEqual({ nested: { status: 'updated' } })
+        })
+
+        it('persists array mutations when re-registering the same reference', () => {
+            const value = ['initial']
+            library.register({ value })
+
+            value.push('updated')
+            library.register({ value })
+
+            const reloaded = new PostHogPersistence(makePostHogConfig('test', persistenceMode))
+            expect(reloaded.props.value).toEqual(['initial', 'updated'])
+        })
+
         it('should rebuild storage when cookie_persisted_properties changes via update_config', () => {
             const encode = (props: any) => encodeURIComponent(JSON.stringify(props))
             const expectedProps = () => ({
@@ -225,12 +248,28 @@ describe('persistence', () => {
         })
 
         it('extracts enabled feature flags', () => {
-            library.register({ $enabled_feature_flags: { flag: 'variant', other: true } })
-            expect(library.props['$enabled_feature_flags']).toEqual({ flag: 'variant', other: true })
-            expect(library.properties()).toEqual({
-                '$feature/flag': 'variant',
-                '$feature/other': true,
+            library.register({
+                $enabled_feature_flags: {
+                    'checkout-redesign': 'compact',
+                    'priority-support': true,
+                    'retired-dashboard': false,
+                },
             })
+
+            expect(library.props['$enabled_feature_flags']).toEqual({
+                'checkout-redesign': 'compact',
+                'priority-support': true,
+                'retired-dashboard': false,
+            })
+            expect(library.properties()).toEqual({
+                '$feature/checkout-redesign': 'compact',
+                '$feature/priority-support': true,
+                '$feature/retired-dashboard': false,
+            })
+            expect({
+                persisted: library.props['$enabled_feature_flags'],
+                eventProperties: library.properties(),
+            }).toMatchSnapshot()
         })
 
         it('skips $feature/ properties when cache is stale and TTL is configured', () => {

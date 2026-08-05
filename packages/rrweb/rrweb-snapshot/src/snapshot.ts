@@ -3,6 +3,7 @@ import type {
   SlimDOMOptions,
   MaskTextFn,
   MaskInputFn,
+  MaskAttributeFn,
   KeepIframeSrcFn,
   ICanvas,
   DialogAttributes,
@@ -23,6 +24,7 @@ import {
   isElement,
   isShadowRoot,
   maskInputValue,
+  maskAttributeValue,
   isNativeShadowDom,
   stringifyStylesheet,
   hasEmptyShorthandLonghand,
@@ -34,6 +36,13 @@ import {
   absolutifyURLs,
 } from './utils';
 import dom from '@posthog/rrweb-utils';
+import {
+  beginSnapshotCostTracking,
+  countSerializedNode,
+  deferStylesheetLink,
+  endSnapshotCostTracking,
+  shouldDeferStylesheetInlining,
+} from './snapshot-cost';
 
 let _id = 1;
 const tagNameRegex = new RegExp('[^a-z0-9-_:]');
@@ -44,7 +53,7 @@ export function genId(): number {
   return _id++;
 }
 
-function getValidTagName(element: HTMLElement): Lowercase<string> {
+function getValidTagName(element: Element): Lowercase<string> {
   if (element instanceof HTMLFormElement) {
     return 'form';
   }
@@ -189,7 +198,7 @@ export function transformAttribute(
   tagName: Lowercase<string>,
   name: Lowercase<string>,
   value: string | null,
-  element?: HTMLElement,
+  element?: Element,
   dataURLOptions?: DataURLOptions,
 ): string | null {
   if (!value) {
@@ -266,7 +275,7 @@ export function ignoreAttribute(
 }
 
 export function _isBlockedElement(
-  element: HTMLElement,
+  element: Element,
   blockClass: string | RegExp,
   blockSelector: string | null,
 ): boolean {
@@ -513,6 +522,8 @@ function serializeNode(
     maskInputOptions: MaskInputOptions;
     maskTextFn: MaskTextFn | undefined;
     maskInputFn: MaskInputFn | undefined;
+    maskAllElementAttributes: boolean;
+    maskAttributeFn: MaskAttributeFn | undefined;
     dataURLOptions?: DataURLOptions;
     inlineImages: boolean;
     recordCanvas: boolean;
@@ -534,6 +545,8 @@ function serializeNode(
     maskInputOptions = {},
     maskTextFn,
     maskInputFn,
+    maskAllElementAttributes = false,
+    maskAttributeFn,
     dataURLOptions = {},
     inlineImages,
     recordCanvas,
@@ -566,13 +579,15 @@ function serializeNode(
         rootId,
       };
     case n.ELEMENT_NODE:
-      return serializeElementNode(n as HTMLElement, {
+      return serializeElementNode(n as Element, {
         doc,
         blockClass,
         blockSelector,
         inlineStylesheet,
         maskInputOptions,
         maskInputFn,
+        maskAllElementAttributes,
+        maskAttributeFn,
         dataURLOptions,
         inlineImages,
         recordCanvas,
@@ -636,6 +651,12 @@ function serializeTextNode(
         // We can't read all of the sheet's .cssRules and expect them
         // to _only_ include the current rule(s) added by the text node.
         // So we'll be conservative and keep textContent as-is.
+      } else if (
+        shouldDeferStylesheetInlining((parent as HTMLStyleElement).sheet)
+      ) {
+        // Budget spent - keep the raw textContent, which is what we already fall
+        // back to for sheets we can't read. Costs us `@import` expansion and the
+        // browser's rule normalisation, not the CSS itself.
       } else if ((parent as HTMLStyleElement).sheet?.cssRules) {
         const stringified = stringifyStylesheet(
           (parent as HTMLStyleElement).sheet!,
@@ -689,7 +710,7 @@ function hrefFrom(n: unknown): string | undefined {
 }
 
 function serializeElementNode(
-  n: HTMLElement,
+  n: Element,
   options: {
     doc: Document;
     blockClass: string | RegExp;
@@ -697,6 +718,8 @@ function serializeElementNode(
     inlineStylesheet: boolean;
     maskInputOptions: MaskInputOptions;
     maskInputFn: MaskInputFn | undefined;
+    maskAllElementAttributes: boolean;
+    maskAttributeFn: MaskAttributeFn | undefined;
     dataURLOptions?: DataURLOptions;
     inlineImages: boolean;
     recordCanvas: boolean;
@@ -716,6 +739,8 @@ function serializeElementNode(
     inlineStylesheet,
     maskInputOptions = {},
     maskInputFn,
+    maskAllElementAttributes = false,
+    maskAttributeFn,
     dataURLOptions = {},
     inlineImages,
     recordCanvas,
@@ -726,6 +751,7 @@ function serializeElementNode(
   } = options;
   const needBlock = _isBlockedElement(n, blockClass, blockSelector);
   const tagName = getValidTagName(n);
+  const generatedAttributeNames = new Set<string>();
   let attributes: attributes = {};
   const len = n.attributes.length;
   for (let i = 0; i < len; i++) {
@@ -742,7 +768,9 @@ function serializeElementNode(
     }
   }
   // remote css
-  if (tagName === 'link' && inlineStylesheet) {
+  // a blocked link is serialized as a dimensions-only placeholder, so reading its
+  // sheet would be wasted work - and deferring it would leak CSS the block excluded
+  if (tagName === 'link' && inlineStylesheet && !needBlock) {
     // Direct sheet reference survives baseURI drift; href lookup is the fallback.
     let stylesheet: CSSStyleSheet | null | undefined = (n as HTMLLinkElement)
       .sheet;
@@ -760,7 +788,14 @@ function serializeElementNode(
     }
     let cssText: string | null = null;
     if (stylesheet) {
-      cssText = stringifyStylesheet(stylesheet);
+      if (shouldDeferStylesheetInlining(stylesheet)) {
+        // This snapshot has already spent its stylesheet budget. Leave `rel`/`href`
+        // in place so the replayer can still load the sheet remotely, and hand the
+        // element to the caller to inline off the critical path.
+        deferStylesheetLink(n as HTMLLinkElement);
+      } else {
+        cssText = stringifyStylesheet(stylesheet);
+      }
     }
     if (cssText) {
       delete attributes.rel;
@@ -773,7 +808,7 @@ function serializeElementNode(
     tagName === 'style' &&
     (n as HTMLStyleElement).sheet &&
     // TODO: Currently we only try to get dynamic stylesheet when it is an empty style element
-    !(n.innerText || dom.textContent(n) || '').trim().length
+    !((n as HTMLElement).innerText || dom.textContent(n) || '').trim().length
   ) {
     const cssText = stringifyStylesheet(
       (n as HTMLStyleElement).sheet as CSSStyleSheet,
@@ -794,8 +829,8 @@ function serializeElementNode(
       value
     ) {
       attributes.value = maskInputValue({
-        element: n,
-        type: getInputType(n),
+        element: n as HTMLElement,
+        type: getInputType(n as HTMLElement),
         tagName,
         value,
         maskInputOptions,
@@ -830,6 +865,7 @@ function serializeElementNode(
       attributes.rr_open_mode = 'modal';
       attributes.ph_rr_could_not_detect_modal = true;
     }
+    generatedAttributeNames.add('rr_open_mode');
   }
 
   // canvas image data
@@ -868,6 +904,7 @@ function serializeElementNode(
     }
   }
   // save image offline
+  let serializationComplete = false;
   if (tagName === 'img' && inlineImages) {
     if (!canvasService) {
       canvasService = doc.createElement('canvas');
@@ -877,16 +914,29 @@ function serializeElementNode(
     const imageSrc: string =
       image.currentSrc || image.getAttribute('src') || '<unknown-src>';
     const priorCrossOrigin = image.crossOrigin;
+    // recordInlineImage can fire after the masking pass at the end of this
+    // function, in which case the values it assigns must be masked here.
+    const maskLateAttribute = (name: string, value: string) =>
+      serializationComplete
+        ? maskAttributeValue({
+            element: n,
+            name,
+            value,
+            maskAllElementAttributes,
+            maskAttributeFn,
+          })
+        : value;
     const recordInlineImage = () => {
       removeEventListenerSafely(image, 'load', recordInlineImage);
       try {
         canvasService!.width = image.naturalWidth;
         canvasService!.height = image.naturalHeight;
         canvasCtx!.drawImage(image, 0, 0);
-        attributes.rr_dataURL = canvasService!.toDataURL(
+        const dataURL = canvasService!.toDataURL(
           dataURLOptions.type,
           dataURLOptions.quality,
         );
+        attributes.rr_dataURL = maskLateAttribute('rr_dataURL', dataURL);
       } catch (err) {
         if (image.crossOrigin !== 'anonymous') {
           image.crossOrigin = 'anonymous';
@@ -901,9 +951,14 @@ function serializeElementNode(
         }
       }
       if (image.crossOrigin === 'anonymous') {
-        priorCrossOrigin
-          ? (attributes.crossOrigin = priorCrossOrigin)
-          : image.removeAttribute('crossorigin');
+        if (priorCrossOrigin) {
+          attributes.crossOrigin = maskLateAttribute(
+            'crossOrigin',
+            priorCrossOrigin,
+          );
+        } else {
+          image.removeAttribute('crossorigin');
+        }
       }
     };
     // The image content may not have finished loading yet.
@@ -916,6 +971,7 @@ function serializeElementNode(
     mediaAttributes.rr_mediaState = (n as HTMLMediaElement).paused
       ? 'paused'
       : 'played';
+    generatedAttributeNames.add('rr_mediaState');
     mediaAttributes.rr_mediaCurrentTime = (n as HTMLMediaElement).currentTime;
     mediaAttributes.rr_mediaPlaybackRate = (n as HTMLMediaElement).playbackRate;
     mediaAttributes.rr_mediaMuted = (n as HTMLMediaElement).muted;
@@ -946,19 +1002,26 @@ function serializeElementNode(
       rr_left: `${Math.floor(left + (doc.defaultView?.scrollX || 0))}px`,
       rr_top: `${Math.floor(top + (doc.defaultView?.scrollY || 0))}px`,
     };
+    generatedAttributeNames.add('rr_width');
+    generatedAttributeNames.add('rr_height');
+    generatedAttributeNames.add('rr_left');
+    generatedAttributeNames.add('rr_top');
     // Captured so rebuild can keep originally-in-flow placeholders in flow
     // instead of forcing `position: absolute` and collapsing sibling layout.
     if (computed) {
       // JSDOM-style envs return '' for unset computed values; normalize to the CSS default.
       attributes.rr_position = computed.position || 'static';
+      generatedAttributeNames.add('rr_position');
       if (computed.transform && computed.transform !== 'none') {
         attributes.rr_transform = computed.transform;
+        generatedAttributeNames.add('rr_transform');
       }
       // Any inline-level box has its in-flow slot rebuilt as the tag's default
       // display once style is stripped, which collapses width/height. Capture
       // so rebuild can restore (promote plain `inline` → `inline-block`).
       if (computed.display && computed.display.startsWith('inline')) {
         attributes.rr_display = computed.display;
+        generatedAttributeNames.add('rr_display');
       }
     }
   }
@@ -971,6 +1034,24 @@ function serializeElementNode(
     }
     delete attributes.src; // prevent auto loading
   }
+
+  // Mask the final serialized representation after synthesized values and
+  // rrweb keys have been applied, so later serialization cannot restore PII.
+  if (maskAllElementAttributes || maskAttributeFn) {
+    for (const [name, value] of Object.entries(attributes)) {
+      if (typeof value === 'string' || value === null) {
+        attributes[name] = maskAttributeValue({
+          element: n,
+          name,
+          value,
+          maskAllElementAttributes,
+          maskAttributeFn,
+          isGenerated: generatedAttributeNames.has(name),
+        });
+      }
+    }
+  }
+  serializationComplete = true;
 
   let isCustomElement: true | undefined;
   try {
@@ -1122,6 +1203,8 @@ export function serializeNodeWithId(
     needsMask?: boolean;
     maskTextFn: MaskTextFn | undefined;
     maskInputFn: MaskInputFn | undefined;
+    maskAllElementAttributes?: boolean;
+    maskAttributeFn?: MaskAttributeFn;
     slimDOMOptions: SlimDOMOptions;
     dataURLOptions?: DataURLOptions;
     keepIframeSrcFn?: KeepIframeSrcFn;
@@ -1161,6 +1244,8 @@ export function serializeNodeWithId(
     maskInputOptions = {},
     maskTextFn,
     maskInputFn,
+    maskAllElementAttributes = false,
+    maskAttributeFn,
     slimDOMOptions,
     dataURLOptions = {},
     inlineImages = false,
@@ -1204,6 +1289,8 @@ export function serializeNodeWithId(
     );
   }
 
+  countSerializedNode();
+
   const _serializedNode = serializeNode(n, {
     doc,
     mirror,
@@ -1214,6 +1301,8 @@ export function serializeNodeWithId(
     maskInputOptions,
     maskTextFn,
     maskInputFn,
+    maskAllElementAttributes,
+    maskAttributeFn,
     dataURLOptions,
     inlineImages,
     recordCanvas,
@@ -1290,6 +1379,8 @@ export function serializeNodeWithId(
       maskInputOptions,
       maskTextFn,
       maskInputFn,
+      maskAllElementAttributes,
+      maskAttributeFn,
       slimDOMOptions,
       dataURLOptions,
       inlineImages,
@@ -1362,6 +1453,8 @@ export function serializeNodeWithId(
             maskInputOptions,
             maskTextFn,
             maskInputFn,
+            maskAllElementAttributes,
+            maskAttributeFn,
             slimDOMOptions,
             dataURLOptions,
             inlineImages,
@@ -1415,6 +1508,8 @@ export function serializeNodeWithId(
             maskInputOptions,
             maskTextFn,
             maskInputFn,
+            maskAllElementAttributes,
+            maskAttributeFn,
             slimDOMOptions,
             dataURLOptions,
             inlineImages,
@@ -1482,6 +1577,8 @@ function snapshot(
     maskAllInputs?: boolean | MaskInputOptions;
     maskTextFn?: MaskTextFn;
     maskInputFn?: MaskInputFn;
+    maskAllElementAttributes?: boolean;
+    maskAttributeFn?: MaskAttributeFn;
     slimDOM?: 'all' | boolean | SlimDOMOptions;
     dataURLOptions?: DataURLOptions;
     inlineImages?: boolean;
@@ -1505,6 +1602,13 @@ function snapshot(
     stylesheetLoadTimeout?: number;
     keepIframeSrcFn?: KeepIframeSrcFn;
     maxDepth?: number;
+    /**
+     * Cap on the number of CSSRules this snapshot may stringify. Sheets past the
+     * cap are left un-inlined and reported by `takeDeferredStylesheetLinks()` so
+     * the caller can inline them off the critical path. Omit or pass 0 for the
+     * previous unbounded behaviour.
+     */
+    inlineStylesheetBudgetRules?: number;
   },
 ): serializedNodeWithId | null {
   const {
@@ -1520,6 +1624,8 @@ function snapshot(
     maskAllInputs = false,
     maskTextFn,
     maskInputFn,
+    maskAllElementAttributes = false,
+    maskAttributeFn,
     slimDOM = false,
     dataURLOptions,
     preserveWhiteSpace,
@@ -1531,6 +1637,7 @@ function snapshot(
     stylesheetLoadTimeout,
     keepIframeSrcFn = () => false,
     maxDepth,
+    inlineStylesheetBudgetRules,
   } = options || {};
   const maskInputOptions: MaskInputOptions =
     maskAllInputs === true
@@ -1558,34 +1665,41 @@ function snapshot(
         }
       : maskAllInputs;
   const slimDOMOptions: SlimDOMOptions = slimDOMDefaults(slimDOM);
-  return serializeNodeWithId(n, {
-    doc: n,
-    mirror,
-    blockClass,
-    blockSelector,
-    maskTextClass,
-    maskTextSelector,
-    skipChild: false,
-    inlineStylesheet,
-    maskInputOptions,
-    maskTextFn,
-    maskInputFn,
-    slimDOMOptions,
-    dataURLOptions,
-    inlineImages,
-    recordCanvas,
-    canvasMaskingConfigured,
-    preserveWhiteSpace,
-    onSerialize,
-    onIframeLoad,
-    iframeLoadTimeout,
-    onIframeListenerRegistered,
-    onStylesheetLoad,
-    stylesheetLoadTimeout,
-    keepIframeSrcFn,
-    newlyAddedElement: false,
-    maxDepth,
-  });
+  beginSnapshotCostTracking(inlineStylesheetBudgetRules);
+  try {
+    return serializeNodeWithId(n, {
+      doc: n,
+      mirror,
+      blockClass,
+      blockSelector,
+      maskTextClass,
+      maskTextSelector,
+      skipChild: false,
+      inlineStylesheet,
+      maskInputOptions,
+      maskTextFn,
+      maskInputFn,
+      maskAllElementAttributes,
+      maskAttributeFn,
+      slimDOMOptions,
+      dataURLOptions,
+      inlineImages,
+      recordCanvas,
+      canvasMaskingConfigured,
+      preserveWhiteSpace,
+      onSerialize,
+      onIframeLoad,
+      iframeLoadTimeout,
+      onIframeListenerRegistered,
+      onStylesheetLoad,
+      stylesheetLoadTimeout,
+      keepIframeSrcFn,
+      newlyAddedElement: false,
+      maxDepth,
+    });
+  } finally {
+    endSnapshotCostTracking();
+  }
 }
 
 export function visitSnapshot(

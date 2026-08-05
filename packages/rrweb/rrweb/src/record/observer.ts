@@ -668,6 +668,7 @@ function initStyleSheetObserver(
         }
         return target.apply(thisArg, argumentsList);
       },
+      'host',
     ),
   });
 
@@ -708,6 +709,7 @@ function initStyleSheetObserver(
         }
         return target.apply(thisArg, argumentsList);
       },
+      'host',
     ),
   });
 
@@ -748,6 +750,7 @@ function initStyleSheetObserver(
           }
           return target.apply(thisArg, argumentsList);
         },
+        'host',
       ),
     });
   }
@@ -780,6 +783,7 @@ function initStyleSheetObserver(
           }
           return target.apply(thisArg, argumentsList);
         },
+        'host',
       ),
     });
   }
@@ -854,6 +858,7 @@ function initStyleSheetObserver(
             }
             return target.apply(thisArg, argumentsList);
           },
+          'host',
         ),
       },
     );
@@ -886,6 +891,7 @@ function initStyleSheetObserver(
             }
             return target.apply(thisArg, argumentsList);
           },
+          'host',
         ),
       },
     );
@@ -1043,6 +1049,7 @@ function initStyleDeclarationObserver(
         }
         return target.apply(thisArg, argumentsList);
       },
+      'host',
     ),
   });
 
@@ -1079,6 +1086,7 @@ function initStyleDeclarationObserver(
         }
         return target.apply(thisArg, argumentsList);
       },
+      'host',
     ),
   });
 

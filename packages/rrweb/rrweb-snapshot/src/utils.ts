@@ -1,5 +1,6 @@
 import type {
   idNodeMap,
+  MaskAttributeFn,
   MaskInputFn,
   MaskInputOptions,
   nodeMetaMap,
@@ -16,6 +17,11 @@ import type {
   elementNode,
 } from '@posthog/rrweb-types';
 import dom from '@posthog/rrweb-utils';
+import {
+  countStylesheetRules,
+  nowMs,
+  recordStylesheetCost,
+} from './snapshot-cost';
 
 export function isElement(n: Node): n is Element {
   return n.nodeType === n.ELEMENT_NODE;
@@ -122,12 +128,20 @@ export function hasEmptyShorthandLonghand(css: string): boolean {
   return /(?:^|[\s;{}])-?[a-zA-Z][\w-]*\s*:\s*;/.test(css);
 }
 
+// `stringifyStylesheet` recurses into `@import`ed sheets, so only the outermost
+// call owns the wall-clock measurement - otherwise nested sheets get counted twice.
+let stringifyStylesheetDepth = 0;
+
 export function stringifyStylesheet(s: CSSStyleSheet): string | null {
+  const isOutermost = stringifyStylesheetDepth === 0;
+  const startedAt = isOutermost ? nowMs() : 0;
+  stringifyStylesheetDepth += 1;
   try {
     const rules = s.rules || s.cssRules;
     if (!rules) {
       return null;
     }
+    countStylesheetRules(rules);
     let sheetHref = s.href;
     if (!sheetHref && s.ownerNode) {
       // an inline <style> element
@@ -139,6 +153,11 @@ export function stringifyStylesheet(s: CSSStyleSheet): string | null {
     return fixBrowserCompatibilityIssuesInCSS(stringifiedRules);
   } catch (error) {
     return null;
+  } finally {
+    stringifyStylesheetDepth -= 1;
+    if (isOutermost) {
+      recordStylesheetCost(nowMs() - startedAt);
+    }
   }
 }
 
@@ -312,6 +331,54 @@ export function maskInputValue({
 
 export function toLowerCase<T extends string>(str: T): Lowercase<T> {
   return str.toLowerCase() as unknown as Lowercase<T>;
+}
+
+// Minimum rrweb-generated layout metadata that must retain its value for replay.
+// Unlike source DOM attributes, these values cannot contain application strings.
+const RENDERING_METADATA_ATTRIBUTES = new Set([
+  'rr_width',
+  'rr_height',
+  'rr_left',
+  'rr_top',
+  'rr_position',
+  'rr_transform',
+  'rr_display',
+  'rr_scrollleft',
+  'rr_scrolltop',
+  'rr_mediastate',
+  'rr_open_mode',
+]);
+
+export function maskAttributeValue({
+  element,
+  name,
+  value,
+  maskAllElementAttributes,
+  maskAttributeFn,
+  isGenerated = false,
+}: {
+  element: Element;
+  name: string;
+  value: string | null;
+  maskAllElementAttributes: boolean;
+  maskAttributeFn: MaskAttributeFn | undefined;
+  isGenerated?: boolean;
+}): string | null {
+  if (!value) {
+    return value;
+  }
+  // The options are mutually exclusive and the coarse one fails closed: when
+  // both are set the callback is never consulted, so it cannot silently
+  // unmask values the coarse option would have hidden.
+  if (maskAllElementAttributes) {
+    return isGenerated && RENDERING_METADATA_ATTRIBUTES.has(toLowerCase(name))
+      ? value
+      : '*'.repeat(value.length);
+  }
+  if (maskAttributeFn) {
+    return maskAttributeFn(name, value, element);
+  }
+  return value;
 }
 
 const ORIGINAL_ATTRIBUTE_NAME = '__rrweb_original__';
@@ -490,6 +557,21 @@ const STRIPED_PLACEHOLDER_SVG =
   'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgogIDxkZWZzPgogICAgPHBhdHRlcm4gaWQ9InN0cmlwZXMiIHBhdHRlcm5Vbml0cz0idXNlclNwYWNlT25Vc2UiIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiI+CiAgICAgIDxyZWN0IHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgZmlsbD0iYmxhY2siLz4KICAgICAgPHBhdGggZD0iTTggMEgxNkwwIDE2VjhMOCAwWiIgZmlsbD0iIzJEMkQyRCIvPgogICAgICA8cGF0aCBkPSJNMTYgOFYxNkg4TDE2IDhaIiBmaWxsPSIjMkQyRDJEIi8+CiAgICA8L3BhdHRlcm4+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjc3RyaXBlcykiLz4KPC9zdmc+Cg==';
 
 const MAX_IMAGE_DIMENSION_FOR_RECOMPRESSION = 4096;
+// below this, recompression cannot save enough payload to justify a
+// synchronous canvas encode, whose cost scales with pixel count (not bytes)
+// and can block the main thread for hundreds of ms per image
+const MIN_DATA_URL_LENGTH_FOR_RECOMPRESSION = 100_000;
+const MAX_RECOMPRESSION_CACHE_ENTRIES = 10;
+
+type RecompressionCacheEntry = {
+  type?: string;
+  quality?: number;
+  result: string;
+};
+
+// full snapshots and attribute mutations serialize the same image repeatedly,
+// so each unique data URL should only ever be encoded once
+const recompressionCache = new Map<string, RecompressionCacheEntry>();
 
 export function recompressBase64Image(
   img: HTMLImageElement,
@@ -497,6 +579,10 @@ export function recompressBase64Image(
   type?: string,
   quality?: number,
 ): string {
+  if (dataURL.length < MIN_DATA_URL_LENGTH_FOR_RECOMPRESSION) {
+    return dataURL;
+  }
+
   if (!img.complete || img.naturalWidth === 0) {
     return dataURL;
   }
@@ -507,6 +593,11 @@ export function recompressBase64Image(
     img.naturalHeight > MAX_IMAGE_DIMENSION_FOR_RECOMPRESSION
   ) {
     return dataURL;
+  }
+
+  const cached = recompressionCache.get(dataURL);
+  if (cached && cached.type === type && cached.quality === quality) {
+    return cached.result;
   }
 
   try {
@@ -521,8 +612,21 @@ export function recompressBase64Image(
 
     ctx.drawImage(img, 0, 0);
     const recompressed = canvas.toDataURL(type || 'image/webp', quality ?? 0.4);
+    // re-encoding an already optimized image can produce a larger file
+    const result =
+      recompressed.length < dataURL.length ? recompressed : dataURL;
 
-    return recompressed;
+    if (recompressionCache.size >= MAX_RECOMPRESSION_CACHE_ENTRIES) {
+      // evict only the oldest entry (Map preserves insertion order) so
+      // pages with many unique images keep the rest of the cache warm
+      const oldestKey = recompressionCache.keys().next().value;
+      if (oldestKey !== undefined) {
+        recompressionCache.delete(oldestKey);
+      }
+    }
+    recompressionCache.set(dataURL, { type, quality, result });
+
+    return result;
   } catch (err) {
     return dataURL;
   }

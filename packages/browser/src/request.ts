@@ -551,6 +551,25 @@ export const request = (_options: RequestWithOptions) => {
         throw new Error('No available transport method')
     }
 
+    // A `transportMethod` (e.g. `_fetch`) can itself throw synchronously - e.g. a third-party
+    // script (a Shopify storefront listener, an ad blocker) monkey-patches `fetch`/`Headers` in
+    // a way `_fetch`'s own internal try/catch doesn't cover. Inside this promise chain such a
+    // throw would otherwise reject with no further `.catch`, escaping as an unhandled rejection
+    // and landing in error tracking. Route it through the same `{ statusCode: 0, error }`
+    // callback path as every other transport failure instead.
+    const safeTransportMethod = (opts: RequestWithEncodedBody) => {
+        try {
+            transportMethod(opts)
+        } catch (error) {
+            if (isExpectedNetworkError(error)) {
+                logger.warn(error)
+            } else {
+                logger.error(error)
+            }
+            options.callback?.({ statusCode: 0, error })
+        }
+    }
+
     // For non-sendBeacon transports, use async native CompressionStream when available
     // to avoid blocking the main thread with fflate's synchronous gzip (which can take 300ms+).
     // sendBeacon must remain synchronous as it's used during page unload.
@@ -564,12 +583,12 @@ export const request = (_options: RequestWithOptions) => {
     ) {
         preEncodeAsync(options)
             .then((encodedOptions) => {
-                transportMethod(encodedOptions)
+                safeTransportMethod(encodedOptions)
             })
             .catch((error) => {
                 if (isNativeAsyncGzipReadError(error)) {
                     nativeAsyncGzipDisabled = true
-                    transportMethod({
+                    safeTransportMethod({
                         ...options,
                         compression: undefined,
                         url: buildRequestURL(_options.url, _options.method, undefined, _options.timestampMode),
@@ -582,7 +601,7 @@ export const request = (_options: RequestWithOptions) => {
                 }
 
                 // If async compression fails for another reason, fall back to the synchronous fflate path
-                transportMethod(options)
+                safeTransportMethod(options)
             })
     } else {
         transportMethod(options)
