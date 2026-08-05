@@ -1,5 +1,19 @@
 # posthog-js
 
+## 1.413.1
+
+### Patch Changes
+
+- [#4390](https://github.com/PostHog/posthog-js/pull/4390) [`1160403`](https://github.com/PostHog/posthog-js/commit/11604031ef1ed3f816ab4bc59cb72b6e09f046d8) Thanks [@posthog](https://github.com/apps/posthog)! - Contain and log recorder-owned callback failures while preserving exceptions from patched native host APIs. Keep recording mutations from adopted cross-realm nodes.
+  (2026-08-05)
+
+- [#4286](https://github.com/PostHog/posthog-js/pull/4286) [`d108d66`](https://github.com/PostHog/posthog-js/commit/d108d668d1fcae8fdc5834dd50230e5814f8023f) Thanks [@posthog](https://github.com/apps/posthog)! - fix(replay): preserve privacy masking for initial network metadata
+
+    Initial navigation and performance-timing entries are now passed through `maskCapturedNetworkRequestFn`, including when they have no method. URL rewrites are respected. When the callback returns nullish for an initial entry, replay-required timing metadata is retained without its URL, headers, or body so method-gated callbacks do not drop the metadata or expose deliberately filtered customer data. Derived server-timing entries are also suppressed when this strict fallback is used. Enforced PostHog filtering and payload cleaning still run first. (2026-08-05)
+
+- Updated dependencies [[`d108d66`](https://github.com/PostHog/posthog-js/commit/d108d668d1fcae8fdc5834dd50230e5814f8023f)]:
+    - @posthog/types@1.402.1
+
 ## 1.413.0
 
 ### Minor Changes
