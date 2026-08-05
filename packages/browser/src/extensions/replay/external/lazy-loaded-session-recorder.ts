@@ -2308,9 +2308,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             inlineStylesheet: true,
             // inlining every CSSRule of every sheet is the dominant cost of a full
             // snapshot on CSS-heavy pages, and it runs as one uninterruptible task.
-            // rrweb caps it by default and inlines the overflow across idle callbacks;
-            // listed here so users can raise the cap, or set 0 to do it all up front.
-            inlineStylesheetBudgetRules: undefined,
+            // We cap it here (rrweb itself stays unbounded) so the budget only turns
+            // on when this config surface ships alongside the recorder; the overflow
+            // is inlined across idle callbacks. The cap is in rules, not elapsed
+            // time, so a single enormous sheet can't slip through, and ~10k rules
+            // (a couple hundred ms in Chrome, well above Bootstrap's 2-3k) keeps it
+            // inert for ordinary sites. Users can raise it, or set 0 to disable.
+            inlineStylesheetBudgetRules: 10_000,
             recordCrossOriginIframes: false,
             sampling: undefined,
             attributeFilter: undefined,

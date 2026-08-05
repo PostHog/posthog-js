@@ -88,7 +88,7 @@ export type recordOptions<T> = {
    * mutations. Fidelity is preserved; the work just stops being one long blocking
    * task.
    *
-   * Set to 0 to disable the cap and restore the previous unbounded behaviour.
+   * Unset or 0 means no cap (the default): every sheet is inlined synchronously.
    */
   inlineStylesheetBudgetRules?: number;
   hooks?: hooksParam;

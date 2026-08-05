@@ -2865,6 +2865,7 @@ describe('Lazy SessionRecording', () => {
                 collectFonts: false,
                 plugins: [],
                 inlineStylesheet: true,
+                inlineStylesheetBudgetRules: 10_000,
                 recordCrossOriginIframes: false,
             })
         })
@@ -2896,6 +2897,34 @@ describe('Lazy SessionRecording', () => {
                 assignableWindow.POSTHOG_DEBUG = previousDebug
                 errorSpy.mockRestore()
             }
+        })
+
+        it('passes the default stylesheet budget of 10,000 rules to rrweb.record', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({ inlineStylesheetBudgetRules: 10_000 })
+            )
+        })
+
+        it('passes an explicit inlineStylesheetBudgetRules of 0 through to rrweb.record to disable the budget', () => {
+            posthog.config.session_recording.inlineStylesheetBudgetRules = 0
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({ inlineStylesheetBudgetRules: 0 })
+            )
+        })
+
+        it('passes a raised inlineStylesheetBudgetRules through to rrweb.record', () => {
+            posthog.config.session_recording.inlineStylesheetBudgetRules = 50_000
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({ inlineStylesheetBudgetRules: 50_000 })
+            )
         })
 
         it('passes a configured attributeFilter through to rrweb.record', () => {

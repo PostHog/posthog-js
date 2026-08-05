@@ -674,6 +674,8 @@ export interface SessionRecordingOptions {
      * Max CSSRules inlined synchronously per full snapshot. Sheets past the
      * budget keep their `rel`/`href` (so replay can load them remotely) and
      * are inlined across idle callbacks instead of blocking the snapshot.
+     * The default is applied by posthog-js when it starts the recorder; the
+     * recorder itself is unbounded without it.
      * Set 0 to inline everything up front (the pre-budget behaviour).
      * @default 10000
      */

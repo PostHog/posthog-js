@@ -84,20 +84,6 @@ const nonUserInitiatedSources = new Set<IncrementalSource>([
   IncrementalSource.StyleDeclaration,
   IncrementalSource.AdoptedStyleSheet,
 ]);
-/**
- * Stylesheet stringification is the dominant, and least bounded, cost of a full
- * snapshot on CSS-heavy pages: `stringifyStylesheet` reads `cssText` for every
- * CSSRule of every sheet, all inside one uninterruptible task.
- *
- * The cap is in rules rather than elapsed time on purpose. A time cap can only stop
- * the *next* sheet, so a single enormous sheet slips straight through it, and it
- * makes the split depend on how contended the machine happens to be - the same page
- * would defer different sheets from load to load. ~10k rules costs a couple of
- * hundred ms in Chrome and sits well above what an ordinary page carries (Bootstrap
- * is around 2-3k rules), so this is inert for most sites.
- */
-export const DEFAULT_INLINE_STYLESHEET_BUDGET_RULES = 10_000;
-
 type IdleTask = { cancel: () => void };
 type IdleDeadline = { didTimeout: boolean; timeRemaining: () => number };
 
@@ -191,7 +177,7 @@ function record<T = eventWithTime>(
     maskTextClass = 'rr-mask',
     maskTextSelector = null,
     inlineStylesheet = true,
-    inlineStylesheetBudgetRules = DEFAULT_INLINE_STYLESHEET_BUDGET_RULES,
+    inlineStylesheetBudgetRules,
     maskAllInputs,
     maskInputOptions: _maskInputOptions,
     slimDOMOptions: _slimDOMOptions,
