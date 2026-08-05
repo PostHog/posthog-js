@@ -500,4 +500,67 @@ describe('conversation_id edge cases', () => {
     // Its own bespoke `context` parameter is untouched.
     expect((virtual.inputSchema as any).properties.context).toBeDefined()
   })
+
+  describe('with enableConversationId off', () => {
+    it('leaves errored results alone', async () => {
+      instrument(server, fakePostHog(), { enableConversationId: false })
+
+      const result = await client.request(
+        { method: 'tools/call', params: { name: 'complete_todo', arguments: { id: 'does-not-exist' } } },
+        CallToolResultSchema
+      )
+
+      const hasPromptBack = (result.content ?? []).some((c: any) => String(c.text ?? '').includes('conversation_id='))
+      expect(hasPromptBack).toBe(false)
+    })
+
+    it('leaves get_more_tools alone', async () => {
+      instrument(server, fakePostHog(), { enableConversationId: false, reportMissing: true })
+
+      const { tools } = await client.request({ method: 'tools/list' }, ListToolsResultSchema)
+      const virtual = tools.find((t: any) => t.name === 'get_more_tools')
+
+      expect((virtual.inputSchema as any).properties.conversation_id).toBeUndefined()
+      // Its own parameter still there — we removed nothing.
+      expect((virtual.inputSchema as any).properties.context).toBeDefined()
+    })
+
+    it('publishes a capability gap with no conversation id', async () => {
+      const capture = new EventCapture()
+      await capture.start()
+      instrument(server, fakePostHog(), { enableConversationId: false, reportMissing: true })
+
+      await client.request({ method: 'tools/list' }, ListToolsResultSchema)
+      await client.request(
+        { method: 'tools/call', params: { name: 'get_more_tools', arguments: { context: 'Needed a delete tool.' } } },
+        CallToolResultSchema
+      )
+
+      await new Promise((r) => setTimeout(r, 50))
+      const missing = capture.getEvents().find((e) => e.eventType === MCPAnalyticsEventType.mcpMissingCapability)
+      expect(missing).toBeDefined()
+      expect(missing?.conversationId).toBeUndefined()
+      await capture.stop()
+    })
+
+    it('ignores a conversation_id an agent sends anyway', async () => {
+      const capture = new EventCapture()
+      await capture.start()
+      instrument(server, fakePostHog(), { enableConversationId: false })
+
+      // With injection off the argument is the host's, not ours — never read.
+      await client.request(
+        {
+          method: 'tools/call',
+          params: { name: 'add_todo', arguments: { text: 'x', conversation_id: 'agent-made-up' } },
+        },
+        CallToolResultSchema
+      )
+
+      await new Promise((r) => setTimeout(r, 50))
+      const toolCall = capture.getEvents().find((e) => e.resourceName === 'add_todo')
+      expect(toolCall?.conversationId).toBeUndefined()
+      await capture.stop()
+    })
+  })
 })
