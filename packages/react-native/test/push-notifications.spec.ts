@@ -181,6 +181,82 @@ describe('push notifications', () => {
       await posthog.shutdown()
     })
 
+    it('re-sends consent on reset(), which clears the JS opt-out', async () => {
+      // super.reset() drops the persisted OptedOut property, so JS is opted back in. Native
+      // keeps its own copy and would otherwise stay opted out for the rest of the process,
+      // silently suppressing push, replay and crash uploads for the new user.
+      const posthog = await createPostHog()
+      await posthog.optOut()
+      await waitForExpect(1000, () => {
+        expect(mockPlugin.setOptOut).toHaveBeenCalledWith(true)
+      })
+      mockPlugin.setOptOut.mockClear()
+
+      posthog.reset()
+
+      await waitForExpect(1000, () => {
+        expect(mockPlugin.setOptOut).toHaveBeenCalledWith(false)
+      })
+
+      await posthog.shutdown()
+    })
+
+    it('orders a native reset() before an identify() issued after it', async () => {
+      // reset() then identify() is the ordinary logout-then-login sequence. Both share one
+      // native command queue, so the reset lands first and the identity write reads the
+      // identified id at dispatch — a snapshot taken before identify() would strand native
+      // on the throwaway post-reset anonymous id.
+      const posthog = await createPostHog()
+
+      posthog.reset()
+      await posthog.identify('user-B')
+
+      await waitForExpect(1000, () => {
+        expect(mockPlugin.reset).toHaveBeenCalledTimes(1)
+        expect(mockPlugin.identify).toHaveBeenCalled()
+      })
+      expect(mockPlugin.reset.mock.invocationCallOrder[0]).toBeLessThan(mockPlugin.identify.mock.invocationCallOrder[0])
+      expect(mockPlugin.identify).toHaveBeenLastCalledWith('user-B', expect.any(String))
+
+      await posthog.shutdown()
+    })
+
+    it('initializes native push on optIn() when the app started opted out', async () => {
+      // Nothing runs setup() for an opted-out user, and optIn() alone used to propagate
+      // consent to a native instance that did not exist — so push never armed without a
+      // restart, contradicting the changeset's no-restart promise.
+      const posthog = await createPostHog({ defaultOptIn: false })
+      expect(mockPlugin.setup).not.toHaveBeenCalled()
+
+      await posthog.optIn()
+
+      await waitForExpect(1000, () => {
+        expect(mockPlugin.setup).toHaveBeenCalledTimes(1)
+      })
+      expect(mockPlugin.setup.mock.calls[0][1].optOut).toBe(false)
+
+      await posthog.shutdown()
+    })
+
+    it('converges on the final consent when optOut() and optIn() are not awaited', async () => {
+      // optOut() dispatches two bridge calls where optIn() dispatches one, so an unawaited
+      // pair could previously land setOptOut(false) before setOptOut(true) and leave native
+      // stuck opted out until the next cold start.
+      const posthog = await createPostHog()
+
+      void posthog.optOut()
+      void posthog.optIn()
+
+      await waitForExpect(1000, () => {
+        expect(mockPlugin.setOptOut).toHaveBeenCalled()
+        const calls = mockPlugin.setOptOut.mock.calls
+        expect(calls[calls.length - 1][0]).toBe(false)
+      })
+      expect(posthog.optedOut).toBe(false)
+
+      await posthog.shutdown()
+    })
+
     it('installs the JS identity provider before setup and flags it in the config', async () => {
       const provider = jest.fn(async () => 'token')
       const posthog = await createPostHog({ pushIdentityProvider: provider })
@@ -355,6 +431,44 @@ describe('push notifications', () => {
       await posthog.unregisterPushNotificationToken()
 
       expect(mockPlugin.unregisterPushNotificationToken).toHaveBeenCalledTimes(1)
+
+      await posthog.shutdown()
+    })
+
+    it('brings native up for a manual register when both capture flags are off', async () => {
+      // The FCM-on-both-platforms setup the docs describe: auto-capture off, host registers
+      // itself. Without a forced init the promise resolves having done nothing, because
+      // native's own isEnabled() guard drops the call when setup() never ran.
+      const posthog = await createPostHog({
+        capturePushNotificationSubscriptions: false,
+        capturePushNotificationOpened: false,
+      })
+      expect(mockPlugin.setup).not.toHaveBeenCalled()
+
+      await posthog.registerPushNotificationToken('a-token')
+
+      expect(mockPlugin.setup).toHaveBeenCalledTimes(1)
+      // Forcing init must not turn auto-capture back on: the config still carries the opt-out.
+      expect(mockPlugin.setup.mock.calls[0][2].push).toEqual({
+        capturePushNotificationSubscriptions: false,
+        capturePushNotificationOpened: false,
+        pushIdentityProviderEnabled: false,
+      })
+      expect(mockPlugin.registerPushNotificationToken).toHaveBeenCalledWith('a-token', null)
+
+      await posthog.shutdown()
+    })
+
+    it('does not claim native initialization on the legacy session-replay plugin', async () => {
+      // The legacy plugin has no setup(), so push can never reach native. Latching that as
+      // "unsupported" rather than "initialized" keeps a manual call from being reported as
+      // delivered — and keeps session replay's own resume path from trusting a dead instance.
+      delete (mockPlugin as any).setup
+      const posthog = await createPostHog()
+
+      await posthog.registerPushNotificationToken('a-token')
+
+      expect(mockPlugin.registerPushNotificationToken).not.toHaveBeenCalled()
 
       await posthog.shutdown()
     })
