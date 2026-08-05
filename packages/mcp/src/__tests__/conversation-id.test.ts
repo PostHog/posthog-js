@@ -124,13 +124,15 @@ describe('conversation-id', () => {
   })
 
   describe('addConversationIdToTools', () => {
-    it('skips the get_more_tools tool', () => {
+    it('injects into get_more_tools too, so capability gaps join their session', () => {
       const tools = [
         { name: 'get_more_tools', description: 'report missing' },
         { name: 'other_tool', description: 'fine' },
       ]
       const result = addConversationIdToTools(tools)
-      expect(result[0]).toBe(tools[0])
+      expect(
+        (result[0].inputSchema as { properties?: Record<string, unknown> }).properties?.conversation_id
+      ).toBeDefined()
       expect(
         (
           result[1].inputSchema as {
@@ -182,12 +184,14 @@ describe('conversation-id', () => {
       expect(content[1].text).toContain('conversation_id=conv-123')
     })
 
-    it('does not inject when result.isError is true', () => {
+    it('injects into an errored result — the retry must land in the same conversation', () => {
       const original = {
         isError: true,
         content: [{ type: 'text', text: 'oops' }],
       }
-      expect(injectConversationIdPromptBack(original, 'conv-123')).toBe(original)
+      const result = injectConversationIdPromptBack(original, 'conv-123') as { content: { text: string }[] }
+      expect(result.content).toHaveLength(2)
+      expect(result.content[1].text).toContain('conv-123')
     })
 
     it('does not inject when content is missing or not an array', () => {
@@ -213,6 +217,7 @@ describe('conversation-id', () => {
 })
 import { CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { instrument } from '../index'
+import { MCPAnalyticsEventType } from '../extensions/event-types'
 import type { HighLevelMCPServerLike } from '../types'
 import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
@@ -354,7 +359,7 @@ describe('conversation_id tool parameter', () => {
       await capture.stop()
     })
 
-    it('does not inject the prompt-back into error results', async () => {
+    it('injects the prompt-back into error results too', async () => {
       instrument(server, fakePostHog(), { enableConversationId: true })
 
       const result = await client.request(
@@ -368,13 +373,15 @@ describe('conversation_id tool parameter', () => {
         CallToolResultSchema
       )
 
+      // A tool that fails on the first call is exactly when the agent needs the
+      // session handle, or its retry starts a different conversation.
       const hasPromptBack = (result.content ?? []).some(
         (c) => c.type === 'text' && typeof c.text === 'string' && c.text.includes('conversation_id=')
       )
-      expect(hasPromptBack).toBe(false)
+      expect(hasPromptBack).toBe(true)
     })
 
-    it('clears event.conversationId on error when we minted it (agent never received it)', async () => {
+    it('keeps event.conversationId on error, since the prompt-back now reaches the agent', async () => {
       const capture = new EventCapture()
       await capture.start()
       instrument(server, fakePostHog(), { enableConversationId: true })
@@ -393,7 +400,7 @@ describe('conversation_id tool parameter', () => {
       await new Promise((r) => setTimeout(r, 50))
       const toolCall = capture.getEvents().find((e) => e.resourceName === 'complete_todo')
       expect(toolCall).toBeDefined()
-      expect(toolCall?.conversationId).toBeUndefined()
+      expect(toolCall?.conversationId).toBeDefined()
       await capture.stop()
     })
 
@@ -421,5 +428,76 @@ describe('conversation_id tool parameter', () => {
       expect(toolCall?.conversationId).toBe('agent-supplied-on-error')
       await capture.stop()
     })
+  })
+})
+
+describe('conversation_id edge cases', () => {
+  let server: HighLevelMCPServerLike
+  let client: any
+  let cleanup: () => Promise<void>
+
+  beforeEach(async () => {
+    resetTodos()
+    const setup = await setupTestServerAndClient()
+    server = setup.server
+    client = setup.client
+    cleanup = setup.cleanup
+  })
+
+  afterEach(async () => {
+    await cleanup()
+  })
+
+  it('puts a capability gap in the same session as the calls around it', async () => {
+    const capture = new EventCapture()
+    await capture.start()
+    instrument(server, fakePostHog(), { enableConversationId: true, reportMissing: true })
+
+    await client.request({ method: 'tools/list' }, ListToolsResultSchema)
+
+    // A real call mints the handle, then the agent echoes it while reporting the gap.
+    const first = await client.request(
+      { method: 'tools/call', params: { name: 'add_todo', arguments: { text: 'first' } } },
+      CallToolResultSchema
+    )
+    const handle = (first.content ?? [])
+      .map((c: any) => String(c.text ?? '').match(/conversation_id=([\w-]+)/)?.[1])
+      .find(Boolean)
+    expect(handle).toBeDefined()
+
+    await client.request(
+      {
+        method: 'tools/call',
+        params: {
+          name: 'get_more_tools',
+          arguments: {
+            context: 'Needed a tool to delete todos, which this server does not expose.',
+            conversation_id: handle,
+          },
+        },
+      },
+      CallToolResultSchema
+    )
+
+    await new Promise((r) => setTimeout(r, 50))
+    const events = capture.getEvents()
+    const toolCall = events.find((e) => e.resourceName === 'add_todo')
+    const missing = events.find((e) => e.eventType === MCPAnalyticsEventType.mcpMissingCapability)
+
+    expect(missing?.conversationId).toBe(handle)
+    // The point: the gap report and the work that hit it group together.
+    expect(missing?.sessionId).toBe(toolCall?.sessionId)
+    await capture.stop()
+  })
+
+  it('advertises conversation_id on the virtual get_more_tools tool', async () => {
+    instrument(server, fakePostHog(), { enableConversationId: true, reportMissing: true })
+
+    const { tools } = await client.request({ method: 'tools/list' }, ListToolsResultSchema)
+    const virtual = tools.find((t: any) => t.name === 'get_more_tools')
+
+    expect((virtual.inputSchema as any).properties.conversation_id).toBeDefined()
+    // Its own bespoke `context` parameter is untouched.
+    expect((virtual.inputSchema as any).properties.context).toBeDefined()
   })
 })
