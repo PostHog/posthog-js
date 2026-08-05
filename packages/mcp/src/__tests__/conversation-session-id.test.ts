@@ -210,11 +210,16 @@ describe('conversation_id as the session anchor', () => {
     it('separates calls carrying different conversation ids', async () => {
       instrument(server, fakePostHog(), { enableConversationId: true })
 
-      await callTool('first', 'conversation-one')
-      await callTool('second', 'conversation-two')
+      // Both handles must be minted-shaped, or the shape check replaces them and
+      // the two sessions differ because *minting* produced two ids — not because
+      // the two supplied handles did. Assert the derived values for the same
+      // reason as the test above: `not.toBe` alone cannot tell those apart.
+      const a = '019fd2b0-1111-7111-8111-111111111111'
+      const b = '019fd2b0-2222-7222-8222-222222222222'
+      await callTool('first', a)
+      await callTool('second', b)
 
-      const [first, second] = toolCallSessionIds()
-      expect(first).not.toBe(second)
+      expect(toolCallSessionIds()).toEqual([deterministicPrefixedId('ses', a), deterministicPrefixedId('ses', b)])
     })
 
     it('stamps both $session_id and $mcp_conversation_id on the payload', async () => {
