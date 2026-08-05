@@ -22,7 +22,10 @@ jobs:
       # the signed-commits ruleset on this repo rejects. continue-on-error keeps the
       # job alive through that rejected push; the changeset file it wrote is still in
       # the workspace, and the next step commits it through the GitHub API instead.
+      # The guard below makes sure this only tolerates the rejected push, not a real
+      # failure of the action.
       - name: Generate changeset
+        id: generate
         continue-on-error: true
         uses: the-guild-org/changesets-dependencies-action@f11b16181c79e07d62b112c2f32c9db534a9df09 # v1.2.2
         env:
@@ -42,8 +45,17 @@ jobs:
 
       - name: Check for a generated changeset
         id: changes
+        env:
+          GENERATE_OUTCOME: ${{ steps.generate.outcome }}
         run: |
           if [ -z "$(git status --porcelain -- .changeset)" ]; then
+            # The only failure we tolerate is the rejected push, which still leaves the
+            # changeset behind. Nothing to commit plus a failed step means the action
+            # itself broke, so surface it instead of passing a job that did nothing.
+            if [ "$GENERATE_OUTCOME" = "failure" ]; then
+              echo "::error::changesets-dependencies-action failed without writing a changeset"
+              exit 1
+            fi
             echo "No changeset generated"
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
