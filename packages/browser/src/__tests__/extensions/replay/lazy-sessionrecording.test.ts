@@ -1698,6 +1698,7 @@ describe('Lazy SessionRecording', () => {
                         )
 
                         simpleEventEmitter.emit('eventCaptured', { event: '$exception', properties: {} })
+                        jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
 
                         expect(sessionRecording['_lazyLoadedSessionRecording']['_holdFlushUntilInteraction']).toEqual(
                             false
@@ -1792,6 +1793,7 @@ describe('Lazy SessionRecording', () => {
                         )
 
                         simpleEventEmitter.emit('eventCaptured', { event: '$exception', properties: {} })
+                        jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
 
                         expect(lazyRecorder['_holdFlushUntilInteraction']).toEqual(false)
                         jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
