@@ -99,6 +99,8 @@ try {
 
 const mirror = createMirror();
 
+const BUDGETED_SNAPSHOT_DIAGNOSTIC_TAG = 'budgeted-full-snapshot';
+
 // incremental sources which fire without user interaction (e.g. a looping
 // background video, a JS animation) and so must not unfreeze a frozen page
 // (upstream rrweb #1697). Hoisted so the check does not allocate per event.
@@ -213,14 +215,24 @@ function estimateRetainedSize(value: unknown, ceiling: number): number {
  * claimed the ids it references; after the commit the same scrub runs against
  * the ids that remained unclaimed (their nodes also left the DOM mid-walk, so
  * they exist for no one) and drops those references for good. Returns the
- * event unchanged, a copy with offending pointer positions filtered out, or
- * null. Covers every id-bearing payload shape: a single `id`, pointer
- * `positions`, selection `ranges`, mutation `adds` (attach-iframe payloads —
- * real mutations sit in locked buffers; under `recordCrossOriginIframes`,
- * child-frame events forwarded by the parent also land here), and custom
- * events carrying a `payload.id` (fullscreen).
+ * event unchanged, a copy with offending pointer positions or selection
+ * ranges filtered out, or null.
+ *
+ * Inspected shapes: a single `id`, pointer `positions`, selection `ranges`,
+ * mutation `adds`, and custom events carrying a `payload.id` (fullscreen).
+ * Mutation `removes`, `texts` and `attributes` are deliberately NOT
+ * inspected. The only mutation payloads that reach the held queue are
+ * attach-iframe payloads, which carry adds only (real mutations sit in
+ * locked buffers), and child-frame events forwarded by the parent under
+ * `recordCrossOriginIframes`, whose ids live in the crossOriginIframeMirror
+ * remap space and can never collide with this document's reserved ids (each
+ * genId value is handed out exactly once). Only `adds` can name a node of
+ * THIS document (the host iframe element as parentId), so only `adds` needs
+ * the check.
+ *
+ * Exported for unit tests only.
  */
-function scrubUnclaimedIds(
+export function scrubUnclaimedIds(
   event: eventWithoutTime,
   unclaimedIds: Set<number>,
 ): eventWithoutTime | null {
@@ -254,11 +266,19 @@ function scrubUnclaimedIds(
       } as eventWithoutTime;
     }
   }
-  if (Array.isArray(data.ranges)) {
-    const referencesUnclaimed = (
+  if (Array.isArray(data.ranges) && data.ranges.length > 0) {
+    // filtered per range, like positions above: one dead range must not
+    // cost a multi-range selection its still-valid ranges
+    const ranges = (
       data.ranges as Array<{ start: number; end: number }>
-    ).some((r) => unclaimedIds.has(r.start) || unclaimedIds.has(r.end));
-    if (referencesUnclaimed) return null;
+    ).filter((r) => !unclaimedIds.has(r.start) && !unclaimedIds.has(r.end));
+    if (ranges.length === 0) return null;
+    if (ranges.length !== data.ranges.length) {
+      return {
+        ...(e as object),
+        data: { ...data, ranges },
+      } as eventWithoutTime;
+    }
   }
   if (Array.isArray(data.adds)) {
     const referencesUnclaimed = (
@@ -528,6 +548,12 @@ function record<T = eventWithTime>(
       !(
         e.type === EventType.IncrementalSnapshot &&
         nonUserInitiatedSources.has(e.data.source)
+      ) &&
+      // recorder-internal diagnostics are not user activity; unfreezing on
+      // them would defeat the freeze they may be reporting about
+      !(
+        e.type === EventType.Custom &&
+        (e.data as { tag?: string }).tag === BUDGETED_SNAPSHOT_DIAGNOSTIC_TAG
       )
     ) {
       // we've got a user initiated event so first we need to apply
@@ -853,7 +879,7 @@ function record<T = eventWithTime>(
       sessionEmit({
         type: EventType.Custom,
         data: {
-          tag: 'budgeted-full-snapshot',
+          tag: BUDGETED_SNAPSHOT_DIAGNOSTIC_TAG,
           payload: { status, budgetMs: fullSnapshotYieldBudgetMs, ...detail },
         },
       } as eventWithoutTime);
@@ -864,7 +890,14 @@ function record<T = eventWithTime>(
 
   const finishFullSnapshot = () => {
     if (recordCrossOriginIframes) {
-      iframeManager.reattachIframes();
+      // guarded: a failed reattach must not cost the adopted stylesheets
+      // below their delivery, or the document replays unstyled
+      try {
+        iframeManager.reattachIframes();
+      } catch (error) {
+        reportError(error);
+        console.warn('Iframe reattach failed', error);
+      }
     }
 
     // Some old browsers don't support adoptedStyleSheets.
@@ -926,9 +959,20 @@ function record<T = eventWithTime>(
         discardMutationBuffers(bufferToken);
         return false;
       }
-      commitMutationBuffers(bufferToken);
+      const commitOutcome = commitMutationBuffers(bufferToken);
       if (generation !== recordingGeneration) {
         return false;
+      }
+      // deferred records are freezePage semantics (unfreeze() delivers
+      // them); only genuine loss is worth a diagnostic on this path
+      if (commitOutcome.droppedRecordCount > 0) {
+        emitBudgetedSnapshotDiagnostic('mutation-commit-incomplete', {
+          droppedMutationRecords: commitOutcome.droppedRecordCount,
+          deferredMutationRecords: commitOutcome.deferredRecordCount,
+        });
+        if (generation !== recordingGeneration) {
+          return false;
+        }
       }
       canvasManager.onFullSnapshot();
       finishFullSnapshot();
@@ -1178,6 +1222,13 @@ function record<T = eventWithTime>(
     // walk here would interleave its Meta with the flush and its unlock
     // with the new walk's locks.
     budgetedSnapshotFlushing = true;
+    // Degradation accounting across both commits and the deferred pass,
+    // reported once the flush is done: mutations lost to a force-discard,
+    // mutations a frozen buffer holds back for unfreeze(), and held events
+    // dropped because the id they reference was never claimed.
+    let droppedMutationRecords = 0;
+    let deferredMutationRecords = 0;
+    let droppedHeldEvents = 0;
     // Every delivery below re-enters the consumer, and the consumer can
     // rotate the recorder from any of them. The early returns land in the
     // finally blocks, which release this transaction's own state either way
@@ -1188,8 +1239,15 @@ function record<T = eventWithTime>(
         if (recordCrossOriginIframes) {
           // Held child-frame events reference nodes inside previously
           // attached iframe documents; the replayer drops them as unknown
-          // unless the reattach lands first.
-          iframeManager.reattachIframes();
+          // unless the reattach lands first. Guarded: a failed reattach
+          // loses those frames' context, not the held window, the commit
+          // or the canvas/adopted-sheet steps behind it.
+          try {
+            iframeManager.reattachIframes();
+          } catch (reattachError) {
+            reportError(reattachError);
+            console.warn('Iframe reattach failed', reattachError);
+          }
           if (walkSuperseded(transaction)) {
             return;
           }
@@ -1238,7 +1296,11 @@ function record<T = eventWithTime>(
           }
         }
 
-        commitMutationBuffers(transaction.bufferToken); // generate & emit any mutations that happened during snapshotting, as can now apply against the newly built mirror
+        // generate & emit any mutations that happened during snapshotting,
+        // as they can now apply against the newly built mirror
+        const commitOutcome = commitMutationBuffers(transaction.bufferToken);
+        droppedMutationRecords += commitOutcome.droppedRecordCount;
+        deferredMutationRecords += commitOutcome.deferredRecordCount;
         if (walkSuperseded(transaction)) {
           return;
         }
@@ -1260,6 +1322,8 @@ function record<T = eventWithTime>(
               if (walkSuperseded(transaction)) {
                 return;
               }
+            } else {
+              droppedHeldEvents++;
             }
           }
         }
@@ -1269,18 +1333,11 @@ function record<T = eventWithTime>(
         // second call after a successful commit is a token-mismatch no-op.)
         // A superseded walk leaves them alone (the rotation released them).
         if (!walkSuperseded(transaction)) {
-          commitMutationBuffers(transaction.bufferToken);
+          const lateOutcome = commitMutationBuffers(transaction.bufferToken);
+          droppedMutationRecords += lateOutcome.droppedRecordCount;
+          deferredMutationRecords += lateOutcome.deferredRecordCount;
         }
       }
-      canvasManager.onFullSnapshot();
-      if (walkSuperseded(transaction)) {
-        return;
-      }
-      if (document.adoptedStyleSheets && document.adoptedStyleSheets.length > 0)
-        stylesheetManager.adoptStyleSheets(
-          document.adoptedStyleSheets,
-          mirror.getId(document),
-        );
     } catch (flushError) {
       // a consumer throw mid-flush loses that one delivery, nothing else —
       // the commit already ran (finally above) and recording continues.
@@ -1294,10 +1351,56 @@ function record<T = eventWithTime>(
         // would make its events resolve to -1
         abandonSupersededWalk(transaction);
       } else {
-        mirror.endIdReservation();
-        budgetedSnapshotFlushing = false;
-        budgetedSnapshotInFlight = false;
-        activeBudgetedSnapshot = null;
+        // In the finally so a genuine same-session throw above cannot skip
+        // them: canvas frame dedup must reset for every delivered snapshot,
+        // and constructed stylesheets must reach the wire or the replay
+        // renders unstyled.
+        try {
+          canvasManager.onFullSnapshot();
+        } catch (canvasError) {
+          reportError(canvasError);
+        }
+        if (!walkSuperseded(transaction)) {
+          try {
+            if (
+              document.adoptedStyleSheets &&
+              document.adoptedStyleSheets.length > 0
+            )
+              stylesheetManager.adoptStyleSheets(
+                document.adoptedStyleSheets,
+                mirror.getId(document),
+              );
+          } catch (adoptError) {
+            reportError(adoptError);
+            console.warn('Adopted stylesheet delivery failed', adoptError);
+          }
+        }
+        if (walkSuperseded(transaction)) {
+          // a rotation from inside the adopted-sheet delivery: the live
+          // reservation is the new session's, stand down
+          abandonSupersededWalk(transaction);
+        } else {
+          mirror.endIdReservation();
+          budgetedSnapshotFlushing = false;
+          budgetedSnapshotInFlight = false;
+          activeBudgetedSnapshot = null;
+        }
+      }
+    }
+
+    if (
+      !walkSuperseded(transaction) &&
+      (droppedMutationRecords > 0 || deferredMutationRecords > 0)
+    ) {
+      emitBudgetedSnapshotDiagnostic('mutation-commit-incomplete', {
+        droppedMutationRecords,
+        deferredMutationRecords,
+        droppedHeldEventCount: droppedHeldEvents,
+      });
+      // the diagnostic went through the consumer; a rotation from it owns
+      // the recorder now, including the coalesced follow-up
+      if (walkSuperseded(transaction)) {
+        return;
       }
     }
 
@@ -1711,6 +1814,11 @@ function record<T = eventWithTime>(
       } else {
         discardActiveMutationBufferTransaction();
       }
+      // An observer callback queued before teardown can still drain through
+      // sessionEmit; a stale in-flight gate with no transaction behind it
+      // would swallow whatever it delivers, silently.
+      budgetedSnapshotInFlight = false;
+      budgetedSnapshotFlushing = false;
       handlers.forEach((h) => callSafely(h));
       processedNodeManager.destroy();
       iframeManager.removeLoadListener();
@@ -1803,6 +1911,10 @@ function record<T = eventWithTime>(
     // A walk started by init() before the failure would otherwise keep
     // running against a recording that never finished setting up.
     recordingGeneration++;
+    // The superseded walk stands down without touching the shared mirror,
+    // and no rotation follows to reset it: the reservation the walk opened
+    // must end here or the mirror reserves ids for the life of the page.
+    mirror.endIdReservation();
     // TODO: handle internal error
     console.warn(error);
   }

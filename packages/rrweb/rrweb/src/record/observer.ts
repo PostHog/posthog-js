@@ -97,6 +97,23 @@ export function lockMutationBuffers(token: number): boolean {
   return locked;
 }
 
+export interface CommitMutationBuffersResult {
+  // every holder was released and delivered its records
+  committed: boolean;
+  // records lost for good: a throwing commit, or the sweep cap force-discard
+  droppedRecordCount: number;
+  // records a frozen buffer kept back; its unfreeze() delivers them later
+  deferredRecordCount: number;
+}
+
+function safePendingRecordCount(buffer: MutationBuffer): number {
+  try {
+    return buffer.pendingRecordCount();
+  } catch {
+    return 0;
+  }
+}
+
 // commit() re-enters consumer code synchronously (emit → mutationCb →
 // wrappedEmit → the consumer's callback), which can throw, splice
 // `mutationBuffers` (iframe/shadow teardown), or attach an iframe whose new
@@ -104,11 +121,21 @@ export function lockMutationBuffers(token: number): boolean {
 // otherwise strand buffers locked forever with no owner — so: iterate a
 // snapshot of the array, isolate per-buffer failures, keep the token armed
 // until every holder is released, and sweep for buffers born mid-commit.
-export function commitMutationBuffers(token: number): boolean {
+export function commitMutationBuffers(
+  token: number,
+): CommitMutationBuffersResult {
+  const result: CommitMutationBuffersResult = {
+    committed: true,
+    droppedRecordCount: 0,
+    deferredRecordCount: 0,
+  };
   if (activeMutationBufferLockToken !== token) {
-    return false;
+    result.committed = false;
+    return result;
   }
-  let committed = true;
+  // a buffer whose discard also fails is retried every sweep; count its
+  // records as dropped exactly once
+  const countedAsDropped = new Set<MutationBuffer>();
   let sweeps = 0;
   while (sweeps++ < 4) {
     const holding = [...mutationBuffers].filter((buffer) =>
@@ -118,12 +145,19 @@ export function commitMutationBuffers(token: number): boolean {
       break;
     }
     for (const buffer of holding) {
+      const pendingBefore = safePendingRecordCount(buffer);
       try {
         if (!buffer.commit(token)) {
-          committed = false;
+          result.committed = false;
+          // a frozen buffer keeps its records; unfreeze() delivers them
+          result.deferredRecordCount += safePendingRecordCount(buffer);
         }
       } catch {
-        committed = false;
+        result.committed = false;
+        if (!countedAsDropped.has(buffer)) {
+          countedAsDropped.add(buffer);
+          result.droppedRecordCount += pendingBefore;
+        }
         try {
           buffer.discard(token);
         } catch {
@@ -135,7 +169,11 @@ export function commitMutationBuffers(token: number): boolean {
   activeMutationBufferLockToken = null;
   for (const buffer of [...mutationBuffers]) {
     if (buffer.hasLockToken(token)) {
-      committed = false;
+      result.committed = false;
+      if (!countedAsDropped.has(buffer)) {
+        countedAsDropped.add(buffer);
+        result.droppedRecordCount += safePendingRecordCount(buffer);
+      }
       try {
         buffer.discard(token);
       } catch {
@@ -143,7 +181,7 @@ export function commitMutationBuffers(token: number): boolean {
       }
     }
   }
-  return committed;
+  return result;
 }
 
 // Releases by token rather than by global ownership: recovery from a

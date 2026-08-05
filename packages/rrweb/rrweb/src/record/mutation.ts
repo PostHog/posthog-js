@@ -295,6 +295,11 @@ export default class MutationBuffer {
     }
     this.lockToken = null;
     this.canvasManager.unlock();
+    if (this.frozen) {
+      // freezePage defers delivery: the records stay buffered and unfreeze()
+      // emits them, so this commit must not claim they went out
+      return false;
+    }
     this.emit();
     return true;
   }

@@ -27,6 +27,7 @@ type FakeBuffer = Pick<
   committed: boolean;
   discarded: boolean;
   onCommit?: () => void;
+  pendingRecordCount?: () => number;
 };
 
 function makeBuffer(overrides: Partial<FakeBuffer> = {}): FakeBuffer {
@@ -115,7 +116,7 @@ describe('mutation buffer transactions', () => {
 
     const token = createMutationBufferLockToken();
     expect(lockMutationBuffers(token)).toBe(true);
-    expect(commitMutationBuffers(token)).toBe(false);
+    expect(commitMutationBuffers(token).committed).toBe(false);
 
     expect(healthy.committed).toBe(true);
     expect(stuck.discarded).toBe(true);
@@ -163,10 +164,58 @@ describe('mutation buffer transactions', () => {
 
     const token = createMutationBufferLockToken();
     expect(lockMutationBuffers(token)).toBe(true);
-    expect(commitMutationBuffers(token)).toBe(true);
+    expect(commitMutationBuffers(token).committed).toBe(true);
 
     expect(late.committed).toBe(true);
     expect(late.lockToken).toBeNull();
+  });
+
+  it('a frozen buffer defers its records to unfreeze() instead of dropping them', () => {
+    // mimics MutationBuffer.commit on a frozen buffer: the lock is released,
+    // the records stay buffered, and the commit reports the miss
+    const frozen = makeBuffer({ pendingRecordCount: () => 3 });
+    frozen.commit = (token: number) => {
+      if (frozen.lockToken !== token) return false;
+      frozen.lockToken = null;
+      return false;
+    };
+    const healthy = makeBuffer();
+    install(frozen, healthy);
+
+    const token = createMutationBufferLockToken();
+    expect(lockMutationBuffers(token)).toBe(true);
+    const outcome = commitMutationBuffers(token);
+
+    expect(outcome.committed).toBe(false);
+    expect(outcome.deferredRecordCount).toBe(3);
+    expect(outcome.droppedRecordCount).toBe(0);
+    expect(frozen.discarded).toBe(false);
+    expect(healthy.committed).toBe(true);
+  });
+
+  it('counts force-discarded records as dropped, exactly once', () => {
+    // discard failing too keeps the buffer a lock holder across every sweep,
+    // the worst case for double counting
+    const stuck = makeBuffer({ pendingRecordCount: () => 5 });
+    stuck.commit = () => {
+      throw new Error('commit failed before releasing');
+    };
+    stuck.discard = () => {
+      throw new Error('discard failed too');
+    };
+    install(stuck);
+
+    const token = createMutationBufferLockToken();
+    expect(lockMutationBuffers(token)).toBe(true);
+    const outcome = commitMutationBuffers(token);
+
+    expect(outcome.committed).toBe(false);
+    expect(outcome.droppedRecordCount).toBe(5);
+    expect(outcome.deferredRecordCount).toBe(0);
+
+    // the stranded fake still holds its token; release it so afterEach's
+    // cleanup is not fighting a buffer that throws on discard
+    stuck.lockToken = null;
   });
 
   it('discard works by token even after the global owner was cleared', () => {
