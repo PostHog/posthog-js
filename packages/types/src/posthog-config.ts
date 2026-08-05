@@ -794,7 +794,12 @@ export interface SessionRecordingOptions {
     }
 
     /**
-     * Modify the network request before it is captured. Returning null or undefined stops it being captured
+     * Modify the network request before it is captured. Returning null or undefined stops it being captured.
+     *
+     * Initial navigation and performance-timing entries are also passed to this function. They have
+     * `isInitial === true`, can have `method === undefined`, and contain the page URL in `name`. If the
+     * function returns null or undefined for an initial entry, PostHog retains the replay-required timing
+     * metadata but omits its URL, headers, and body. Return a modified entry to retain a redacted URL.
      */
     maskCapturedNetworkRequestFn?: ((data: CapturedNetworkRequest) => CapturedNetworkRequest | null | undefined) | null
 
