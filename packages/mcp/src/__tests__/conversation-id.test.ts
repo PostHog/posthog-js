@@ -564,3 +564,50 @@ describe('conversation_id edge cases', () => {
     })
   })
 })
+
+describe('enableConversationId and reportMissing are independent', () => {
+  let server: HighLevelMCPServerLike
+  let client: any
+  let cleanup: () => Promise<void>
+
+  beforeEach(async () => {
+    resetTodos()
+    const setup = await setupTestServerAndClient()
+    server = setup.server
+    client = setup.client
+    cleanup = setup.cleanup
+  })
+
+  afterEach(async () => {
+    await cleanup()
+  })
+
+  /** [enableConversationId, reportMissing] → [handle on a real tool, virtual tool exists] */
+  const matrix: [boolean, boolean, boolean, boolean][] = [
+    [false, false, false, false],
+    [false, true, false, true],
+    [true, false, true, false],
+    [true, true, true, true],
+  ]
+
+  it.each(matrix)(
+    'enableConversationId=%s reportMissing=%s → handle=%s virtualTool=%s',
+    async (enableConversationId, reportMissing, expectHandle, expectVirtual) => {
+      instrument(server, fakePostHog(), { enableConversationId, reportMissing })
+
+      const { tools } = await client.request({ method: 'tools/list' }, ListToolsResultSchema)
+      const realTool = tools.find((t: any) => t.name === 'add_todo')
+      const virtual = tools.find((t: any) => t.name === 'get_more_tools')
+
+      // One option decides stitching, the other decides whether the tool exists.
+      expect(!!(realTool.inputSchema as any).properties.conversation_id).toBe(expectHandle)
+      expect(!!virtual).toBe(expectVirtual)
+
+      // When both are on they compose: the virtual tool stitches like any other.
+      if (expectVirtual) {
+        expect(!!(virtual.inputSchema as any).properties.conversation_id).toBe(expectHandle)
+        expect((virtual.inputSchema as any).properties.context).toBeDefined()
+      }
+    }
+  )
+})
