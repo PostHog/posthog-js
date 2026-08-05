@@ -54,7 +54,6 @@ export class SessionRecording implements Extension {
 
     private _persistFlagsOnSessionListener: (() => void) | undefined = undefined
     private _lazyLoadedSessionRecording: LazyLoadedSessionRecordingInterface | undefined
-    private _sessionRecordingDisposed = false
     private _documentWasEverVisible = !document?.visibilityState || document.visibilityState === 'visible'
 
     private _onVisibilityChange = (): void => {
@@ -86,9 +85,7 @@ export class SessionRecording implements Extension {
 
         // Start before the recorder chunk loads so a visible -> hidden transition during
         // lazy loading is not mistaken for a document that was never foregrounded.
-        if (document?.addEventListener) {
-            addEventListener(document, 'visibilitychange', this._onVisibilityChange)
-        }
+        addEventListener(document, 'visibilitychange', this._onVisibilityChange)
     }
 
     initialize() {
@@ -96,9 +93,7 @@ export class SessionRecording implements Extension {
     }
 
     dispose(): void {
-        this._sessionRecordingDisposed = true
-        document?.removeEventListener?.('visibilitychange', this._onVisibilityChange)
-        this.stopRecording()
+        document?.removeEventListener('visibilitychange', this._onVisibilityChange)
     }
 
     private get _isRecordingEnabled() {
@@ -109,10 +104,6 @@ export class SessionRecording implements Extension {
     }
 
     startIfEnabledOrStop(startReason?: SessionStartReason) {
-        if (this._sessionRecordingDisposed) {
-            return
-        }
-
         if (this._isRecordingEnabled && this._lazyLoadedSessionRecording?.isStarted) {
             return
         }
@@ -321,10 +312,6 @@ export class SessionRecording implements Extension {
     }
 
     private _onScriptLoaded(startReason?: SessionStartReason) {
-        if (this._sessionRecordingDisposed) {
-            return
-        }
-
         if (!assignableWindow.__PosthogExtensions__?.initSessionRecording) {
             logger.warn(
                 'Called on script loaded before session recording is available. This can be caused by adblockers.'
@@ -341,7 +328,7 @@ export class SessionRecording implements Extension {
                 this._documentWasEverVisible
             )
             if (this._lazyLoadedSessionRecording) {
-                document?.removeEventListener?.('visibilitychange', this._onVisibilityChange)
+                document?.removeEventListener('visibilitychange', this._onVisibilityChange)
             }
             ;(this._lazyLoadedSessionRecording as any)._forceAllowLocalhostNetworkCapture =
                 this._forceAllowLocalhostNetworkCapture
