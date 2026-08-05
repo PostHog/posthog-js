@@ -173,6 +173,9 @@ let _executeArrayDepth = 0
 
 const __NOOP = () => {}
 const CONSENT_COOKIELESS_WARN = 'Consent opt in/out is not valid with cookieless_mode="always" and will be ignored'
+const RESET_CONSENT_WARN =
+    'reset() cleared the stored consent, and capturing is now off because of `opt_out_capturing_by_default`. ' +
+    'Call opt_in_capturing() again, and prefer calling reset() before opting in rather than after.'
 const SURVEYS_NOT_AVAILABLE = 'Surveys module not available'
 const SANITIZE_DEPRECATED = 'sanitize_properties is deprecated. Use before_send instead'
 const DENYLIST_INVALID = 'Invalid value for property_denylist config: '
@@ -3039,6 +3042,11 @@ export class PostHog implements PostHogInterface {
      * - User identification (sets new random distinct_id)
      * - Cached data and consent settings
      *
+     * ⚠️ **Warning**: because consent is cleared, `reset()` returns the instance to the default
+     * consent state. With `opt_out_capturing_by_default` that default is opted out,
+     * so calling `reset()` *after* `opt_in_capturing()` silently stops capturing.
+     * Always `reset()` first, then opt in.
+     *
      * {@label Identification}
      * @example
      * ```js
@@ -3055,11 +3063,22 @@ export class PostHog implements PostHogInterface {
      * posthog.reset(true)  // also resets device_id
      * ```
      *
+     * @example
+     * ```js
+     * // with opt_out_capturing_by_default, reset() before opting in, never after
+     * posthog.reset()
+     * posthog.opt_in_capturing()
+     * ```
+     *
      * @public
      *
      * @param {boolean} [reset_device_id] Whether to generate a new device ID as well as a new distinct ID.
      */
     reset(reset_device_id?: boolean): void {
+        this._reset(reset_device_id)
+    }
+
+    private _reset(reset_device_id?: boolean, isConsentTransition = false): void {
         logger.info('reset')
         if (!this.__loaded) {
             return logger.uninitializedWarning('posthog.reset')
@@ -3076,7 +3095,19 @@ export class PostHog implements PostHogInterface {
         // checkout (~5 min later).
         const recordingRemoteConfig = this.get_property(SESSION_RECORDING_REMOTE_CONFIG)
 
+        // Consent is user state, so reset() clears it along with the rest. But when capturing is
+        // opted out by default that flips capturing back off, and nothing else surfaces it: events
+        // are dropped with no error. Warn instead of failing silently.
+        const wasCapturing = this.is_capturing()
+
         this.consent.reset()
+
+        if (!isConsentTransition && wasCapturing && !this.is_capturing()) {
+            // Unlike logger.warn(), this warning must be visible with the normal debug:false configuration.
+            // eslint-disable-next-line no-console
+            console.warn('[PostHog.js]', RESET_CONSENT_WARN)
+        }
+
         this.persistence?.clear()
         this.sessionPersistence?.clear()
 
@@ -3167,6 +3198,7 @@ export class PostHog implements PostHogInterface {
 
         this._remoteConfigLoader?.stop()
         this._browserClientAdapter?.dispose()
+        this.sessionRecording?.dispose()
 
         // Best-effort flush of anything still queued, mirroring page-unload teardown
         // so no buffered events are silently dropped when teardown is explicit.
@@ -3977,7 +4009,7 @@ export class PostHog implements PostHogInterface {
         if (this._inCookielessMode()) {
             // If the user was being treated as rejected in on_reject mode (either explicitly opted out, or opted out by default via opt_out_capturing_by_default), then before we can start sending regular non-cookieless events
             // we need to reset the instance to ensure that there is no leaking of state or data between the cookieless and regular events
-            this.reset(true)
+            this._reset(true, true)
             this.sessionManager?.destroy()
             this.pageViewManager?.destroy()
             this.sessionManager = new SessionIdManager(this)
@@ -4051,7 +4083,7 @@ export class PostHog implements PostHogInterface {
 
         if (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isOptedIn()) {
             // If the user has opted in, we need to reset the instance to ensure that there is no leaking of state or data between the cookieless and regular events
-            this.reset(true)
+            this._reset(true, true)
         }
 
         this.consent.optInOut(false)

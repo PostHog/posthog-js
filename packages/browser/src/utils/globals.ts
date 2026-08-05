@@ -1,4 +1,5 @@
 import { window as commonWindow } from '@posthog/browser-common/utils/globals'
+import type { MutationCost, SnapshotCost } from '@posthog/rrweb-record'
 import type { ErrorTracking } from '@posthog/core'
 
 import type { PostHog } from '../posthog-core'
@@ -157,11 +158,32 @@ export type AssignableWindow = Window &
 
 export type ExternalExtensionKind = 'intercom-integration' | 'crisp-chat-integration'
 
+/** Subset of the web-vitals library's `ReportOpts` passed to metric observers. */
+export interface WebVitalsReportOpts {
+    reportAllChanges?: boolean
+    reportSoftNavs?: boolean
+}
+
+export type WebVitalsCallbackFlavor =
+    | 'web-vitals'
+    | 'web-vitals-with-attribution'
+    | 'web-vitals-soft-navs'
+    | 'web-vitals-with-attribution-soft-navs'
+
+export type WebVitalsCallbacks = {
+    onLCP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
+    onCLS: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
+    onFCP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
+    onINP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
+}
+
 export type PostHogExtensionKind =
     | 'toolbar'
     | 'exception-autocapture'
     | 'web-vitals'
     | 'web-vitals-with-attribution'
+    | 'web-vitals-soft-navs'
+    | 'web-vitals-with-attribution-soft-navs'
     | 'recorder'
     | 'lazy-recorder'
     | 'tracing-headers'
@@ -187,6 +209,7 @@ export interface LazyLoadedSessionRecordingInterface {
     overrideTrigger: (triggerType: TriggerType) => void
     isStarted: boolean
     tryAddCustomEvent(tag: string, payload: any): boolean
+    setDocumentWasEverVisible?: (documentWasEverVisible: boolean) => void
 }
 
 export interface LazyLoadedDeadClicksAutocaptureInterface {
@@ -233,19 +256,25 @@ interface PostHogExtensions {
         wrapUnhandledRejection: (captureFn: (props: ErrorTracking.ErrorProperties) => void) => () => void
         wrapConsoleError: (captureFn: (props: ErrorTracking.ErrorProperties) => void) => () => void
     }
-    rrweb?: { record: any; version: string; wasMaxDepthReached?: () => boolean; resetMaxDepthState?: () => void }
+    rrweb?: {
+        record: any
+        version: string
+        wasMaxDepthReached?: () => boolean
+        resetMaxDepthState?: () => void
+        // see rrweb-snapshot/src/snapshot-cost.ts
+        getLastSnapshotCost?: () => SnapshotCost | null
+        getMutationCost?: () => MutationCost
+        resetSnapshotCostState?: () => void
+    }
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }
     generateSurveys?: (posthog: PostHog, isSurveysEnabled: boolean) => any | undefined
     generateProductTours?: (posthog: PostHog, isEnabled: boolean) => any | undefined
     logs?: {
         initializeLogs?: (posthog: PostHog) => any | undefined
     }
-    postHogWebVitalsCallbacks?: {
-        onLCP: (metric: any) => void
-        onCLS: (metric: any) => void
-        onFCP: (metric: any) => void
-        onINP: (metric: any) => void
-    }
+    /** @deprecated Use `postHogWebVitalsCallbacksByFlavor` to select callbacks explicitly. */
+    postHogWebVitalsCallbacks?: WebVitalsCallbacks
+    postHogWebVitalsCallbacksByFlavor?: Partial<Record<WebVitalsCallbackFlavor, WebVitalsCallbacks>>
     /**
      * @deprecated
      *
@@ -271,7 +300,7 @@ interface PostHogExtensions {
     integrations?: {
         [K in ExternalIntegrationKind]?: { start: (posthog: PostHog) => void; stop: () => void }
     }
-    initSessionRecording?: (ph: PostHog) => LazyLoadedSessionRecordingInterface
+    initSessionRecording?: (ph: PostHog, documentWasEverVisible?: boolean) => LazyLoadedSessionRecordingInterface
     initConversations?: (config: ConversationsRemoteConfig, posthog: PostHog) => LazyLoadedConversationsInterface
 }
 

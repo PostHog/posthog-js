@@ -17,10 +17,14 @@ const openTextQuestion = {
 }
 
 // These exercise the real reload + localStorage path that the unit tests can only simulate:
-// an event-armed survey is session-scoped until shown, and only persists once it has displayed.
+// a survey armed by an event trigger is session-scoped, and a display delay resumes across a
+// reload (rather than restarting from zero) so a user who navigates mid-delay still sees it.
 test.describe('surveys - event trigger reload persistence', () => {
-    test('an armed-but-unshown survey does not survive a reload', async ({ page, context }) => {
-        // A display delay keeps the survey armed-but-not-yet-shown long enough to reload mid-flight.
+    test('an armed delayed survey resumes its delay across a reload and still shows', async ({ page, context }) => {
+        // The popup delay used to be an in-memory timer discarded on navigation, so a user who
+        // reloaded mid-delay restarted the countdown from zero on every page and never saw the
+        // survey. The armed activation is now persisted for the session and the delay resumes, so
+        // it displays after the reload without the trigger firing again.
         const surveysAPICall = page.route('**/surveys/**', async (route) => {
             await route.fulfill({
                 json: {
@@ -46,7 +50,7 @@ test.describe('surveys - event trigger reload persistence', () => {
 
         const survey = page.locator('.PostHogSurvey-armed-survey').locator('.survey-form')
 
-        // Arm it, then reload before the delay elapses (so it never shows / is never persisted)
+        // Arm it, then reload before the delay elapses
         await page.evaluate(() => {
             ;(window as any).posthog.capture('trigger_event')
         })
@@ -54,11 +58,60 @@ test.describe('surveys - event trigger reload persistence', () => {
         await start({ ...startOptions, type: 'reload' }, page, context)
         await surveysAPICall
 
-        // Wait past the original display delay: a persisted arming would have re-displayed by now
+        // No fresh trigger fires after the reload: the survey shows only because the armed
+        // activation survived and the remaining delay elapsed.
+        await expect(survey).toBeVisible({ timeout: 10000 })
+    })
+
+    test('an armed delayed survey does not survive a session rotation across a reload', async ({ page, context }) => {
+        const surveysAPICall = page.route('**/surveys/**', async (route) => {
+            await route.fulfill({
+                json: {
+                    surveys: [
+                        {
+                            id: 'rotated-session-survey',
+                            name: 'Rotated session survey',
+                            type: 'popover',
+                            start_date: '2021-01-01T00:00:00Z',
+                            questions: [openTextQuestion],
+                            appearance: { surveyPopupDelaySeconds: 3 },
+                            conditions: { events: { values: [{ name: 'trigger_event' }] } },
+                        },
+                    ],
+                },
+            })
+        })
+
+        const surveysResponse = page.waitForResponse('**/surveys/**')
+        await start(startOptions, page, context)
+        await surveysAPICall
+        await surveysResponse
+
+        const survey = page.locator('.PostHogSurvey-rotated-session-survey').locator('.survey-form')
+
+        await page.evaluate(() => {
+            ;(window as any).posthog.capture('trigger_event')
+        })
+
+        // Rotate after arming but before the next load. The persisted activation belongs to the
+        // triggering session, so the receiver must clear it when the new session is announced.
+        const [previousSessionId, nextSessionId] = await page.evaluate(() => {
+            const posthog = (window as any).posthog
+            const previousSessionId = posthog.get_session_id()
+            posthog.sessionManager.resetSessionId()
+            const nextSessionId = posthog.sessionManager.checkAndGetSessionAndWindowId(false).sessionId
+            return [previousSessionId, nextSessionId]
+        })
+        expect(nextSessionId).not.toBe(previousSessionId)
+
+        await page.reload()
+        await start({ ...startOptions, type: 'reload' }, page, context)
+        await surveysAPICall
+
         await page.waitForTimeout(5000)
         await expect(survey).not.toBeVisible()
 
-        // Sanity check the survey itself is still displayable when the event fires in-session
+        // The survey remains displayable when it receives a fresh trigger in the new session.
         await page.evaluate(() => {
             ;(window as any).posthog.capture('trigger_event')
         })

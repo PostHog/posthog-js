@@ -3,7 +3,7 @@ import { ActionMatcher } from '../extensions/surveys/action-matcher'
 import { PostHog } from '../posthog-core'
 import { CaptureResult } from '../types'
 import { matchPropertyFilters } from '@posthog/browser-common/utils/property-utils'
-import { isUndefined } from '@posthog/core'
+import { isEmptyObject, isNumber, isUndefined } from '@posthog/core'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 
 /**
@@ -94,6 +94,35 @@ export abstract class EventReceiver<T extends EventTriggerable> {
      * triggering session (but not a brand-new session) until it's actually interacted with.
      */
     protected abstract _activationOutcome(event: string, itemId: string): ActivationOutcome
+
+    /**
+     * Whether an item armed by a trigger should be persisted immediately (session-scoped)
+     * instead of kept in memory until it is shown. Overridden by receivers whose items carry a
+     * display delay that must survive a navigation, so the delay can resume from where it left
+     * off on the next page. Default: keep in memory, so the arming is page-scoped and an
+     * exit-intent-style trigger cannot leak an armed item onto a later page load.
+     */
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    protected _shouldPersistArmedActivation(_itemId: string): boolean {
+        return false
+    }
+
+    /**
+     * Persistence key under which per-item activation timestamps are read from, or null for
+     * receivers that don't track them. Used to resume a display delay across navigations. Writes
+     * go through `_writeActivationTimestamps` / `_clearActivationTimestampsStore` so the register
+     * sink always resolves to a literal key constant.
+     */
+    protected _getActivationTimestampsKey(): string | null {
+        return null
+    }
+
+    /** Persist the activation timestamp map. Overridden by receivers that track timestamps. */
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    protected _writeActivationTimestamps(_timestamps: Record<string, number>): void {}
+
+    /** Forget the whole activation timestamp map. Overridden by receivers that track timestamps. */
+    protected _clearActivationTimestampsStore(): void {}
 
     private _doesEventMatchFilter(
         eventConfig: SurveyEventWithFilters | undefined,
@@ -237,6 +266,10 @@ export abstract class EventReceiver<T extends EventTriggerable> {
             if (outcome === 'persist') {
                 logger.info('shown item promoted to persisted activation', { event, itemId })
                 this._persistActivation(itemId)
+                // The display delay has served its purpose once the item was shown, so drop the
+                // activation time: a later page load in this session waits the full delay again
+                // instead of re-rendering the item instantly on every navigation.
+                this._clearActivationTimestamps([itemId])
                 return
             }
             // 'ignore': no activation transition for this item on this event — fall through.
@@ -279,12 +312,33 @@ export abstract class EventReceiver<T extends EventTriggerable> {
         }
     }
 
-    /** Arm items in memory only (not persisted) until they are shown. */
+    /**
+     * Arm items. Most are held in memory only (not persisted) until they are shown, so their
+     * arming is page-scoped. Items that opt in via `_shouldPersistArmedActivation` (those with a
+     * display delay) are persisted right away and stamped with the activation time, so the delay
+     * survives a navigation and resumes from the elapsed time on the next page.
+     */
     private _activateItems(itemIds: string[]): void {
         if (itemIds.length === 0) {
             return
         }
-        this._pendingActivatedItems = [...new Set([...this._pendingActivatedItems, ...itemIds])]
+        // A persisted activation is scoped to the current session, so it can only be persisted
+        // when a session id is resolvable. With none (e.g. cookieless mode) we keep the in-memory
+        // arming — a reload can't be scoped anyway, so persisting would make it unreadable.
+        const canPersist = !!this._instance?.get_session_id?.()
+        const armedInMemory: string[] = []
+        for (const itemId of itemIds) {
+            if (canPersist && this._shouldPersistArmedActivation(itemId)) {
+                if (this._persistActivation(itemId)) {
+                    this._recordActivationTimestamp(itemId)
+                }
+            } else {
+                armedInMemory.push(itemId)
+            }
+        }
+        if (armedInMemory.length > 0) {
+            this._pendingActivatedItems = [...new Set([...this._pendingActivatedItems, ...armedInMemory])]
+        }
         this._getLogger().info('updating activated items', { activatedItems: this.getActivatedIds() })
     }
 
@@ -295,13 +349,15 @@ export abstract class EventReceiver<T extends EventTriggerable> {
      * on top of the session-scoped read, a stale set left over from a previous session is
      * dropped here rather than accumulated.
      */
-    private _persistActivation(itemId: string): void {
+    private _persistActivation(itemId: string): boolean {
         this._pendingActivatedItems = this._pendingActivatedItems.filter((id) => id !== itemId)
         const persisted = this._getPersistedActivatedIds()
-        if (!persisted.includes(itemId)) {
-            this._setActivatedItems([...persisted, itemId])
-            this._stampActivationSession()
+        if (persisted.includes(itemId)) {
+            return false
         }
+        this._setActivatedItems([...persisted, itemId])
+        this._stampActivationSession()
+        return true
     }
 
     /** Drop items from both the in-memory and persisted activation sets. */
@@ -316,6 +372,77 @@ export abstract class EventReceiver<T extends EventTriggerable> {
                 this._clearActivationSession()
             }
         }
+        this._clearActivationTimestamps(itemIds)
+    }
+
+    /** The raw persisted activation timestamps as stored, ignoring session scoping. */
+    private _getRawActivationTimestamps(): Record<string, number> {
+        const key = this._getActivationTimestampsKey()
+        if (!key) {
+            return {}
+        }
+        const stored = this._instance?.persistence?.props[key]
+        return stored && typeof stored === 'object' ? (stored as Record<string, number>) : {}
+    }
+
+    /**
+     * Stamp when an item enters persisted activation, so a resumed display delay can be computed
+     * from the elapsed time on a later page load. Repeated triggers do not call this method because
+     * `_persistActivation` returns false while the current activation is still live.
+     */
+    private _recordActivationTimestamp(itemId: string): void {
+        const key = this._getActivationTimestampsKey()
+        if (!key) {
+            return
+        }
+        const timestamps = this._getRawActivationTimestamps()
+        this._writeActivationTimestamps({ ...timestamps, [itemId]: Date.now() })
+    }
+
+    /** Drop the activation timestamps for the given items. */
+    private _clearActivationTimestamps(itemIds: string[]): void {
+        const key = this._getActivationTimestampsKey()
+        if (!key) {
+            return
+        }
+        const timestamps = this._getRawActivationTimestamps()
+        const next: Record<string, number> = {}
+        let changed = false
+        for (const [id, ts] of Object.entries(timestamps)) {
+            if (itemIds.includes(id)) {
+                changed = true
+            } else {
+                next[id] = ts
+            }
+        }
+        if (!changed) {
+            return
+        }
+        if (isEmptyObject(next)) {
+            this._clearActivationTimestampsStore()
+            return
+        }
+        this._writeActivationTimestamps(next)
+    }
+
+    /** Forget all activation timestamps (e.g. on reset or a session rollover). */
+    private _clearAllActivationTimestamps(): void {
+        if (this._getActivationTimestampsKey()) {
+            this._clearActivationTimestampsStore()
+        }
+    }
+
+    /**
+     * The time (epoch ms) an item was armed by its trigger, or undefined if none is recorded.
+     * Session-scoped: a timestamp is only honored while its activation is still live for the
+     * current session, so a stale entry left in persistence cannot resurrect an expired delay.
+     */
+    getActivationTimestamp(itemId: string): number | undefined {
+        if (!this._getPersistedActivatedIds().includes(itemId)) {
+            return undefined
+        }
+        const ts = this._getRawActivationTimestamps()[itemId]
+        return isNumber(ts) ? ts : undefined
     }
 
     /** The raw persisted set as stored, ignoring session scoping. */
@@ -367,15 +494,22 @@ export abstract class EventReceiver<T extends EventTriggerable> {
     /**
      * Drop a persisted activation once the session it was stamped under is no longer current.
      * Fired on session rotation (idle timeout, max length, cross-tab adoption) — the cases the
-     * read-only session read on the display path cannot observe.
+     * read-only session read on the display path cannot observe. Pending timers must also be
+     * cancelled so a fresh trigger in the new session starts its full delay from the new timestamp.
      */
     private _onSessionIdChanged(sessionId: string): void {
         const stampedSessionId = this._instance?.persistence?.props[this._getActivatedSessionKey()]
         if (stampedSessionId && stampedSessionId !== sessionId) {
-            if (this._getRawPersistedActivatedIds().length > 0) {
+            const activatedItemIds = this._getRawPersistedActivatedIds()
+            const activationTimestamps = this._getRawActivationTimestamps()
+            if (activatedItemIds.length > 0) {
                 this._setActivatedItems([])
+                activatedItemIds
+                    .filter((itemId) => isNumber(activationTimestamps[itemId]))
+                    .forEach((itemId) => this._cancelPendingItem(itemId))
             }
             this._clearActivationSession()
+            this._clearAllActivationTimestamps()
         }
     }
 
@@ -397,6 +531,7 @@ export abstract class EventReceiver<T extends EventTriggerable> {
             this._setActivatedItems([])
         }
         this._clearActivationSession()
+        this._clearAllActivationTimestamps()
     }
 
     getEventToItemsMap(): Map<string, string[]> {
