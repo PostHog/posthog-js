@@ -280,4 +280,9 @@ export type CrossOriginIframeMessageEventContent<T = eventWithTime> = {
 export type CrossOriginIframeMessageEvent =
   MessageEvent<CrossOriginIframeMessageEventContent>;
 
-export type ErrorHandler = (error: unknown) => void | boolean;
+export type ErrorHandlerContext = 'rrweb' | 'host';
+
+export type ErrorHandler = (
+  error: unknown,
+  context?: ErrorHandlerContext,
+) => void | boolean;

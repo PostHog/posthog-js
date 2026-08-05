@@ -1,4 +1,4 @@
-import type { ErrorHandler } from '../types';
+import type { ErrorHandler, ErrorHandlerContext } from '../types';
 
 type Callback = (...args: unknown[]) => unknown;
 
@@ -14,8 +14,15 @@ export function unregisterErrorHandler() {
 
 /**
  * Wrap callbacks in a wrapper that allows to pass errors to a configured `errorHandler` method.
+ *
+ * Host API patches must set `context` to `host`. Their callback boundary also
+ * contains the native operation, so an error handler cannot otherwise reliably
+ * distinguish an application-visible native exception from recorder work.
  */
-export const callbackWrapper = <T extends Callback>(cb: T): T => {
+export const callbackWrapper = <T extends Callback>(
+  cb: T,
+  context: ErrorHandlerContext = 'rrweb',
+): T => {
   if (!errorHandler) {
     return cb;
   }
@@ -24,7 +31,7 @@ export const callbackWrapper = <T extends Callback>(cb: T): T => {
     try {
       return cb(...rest);
     } catch (error) {
-      if (errorHandler && errorHandler(error) === true) {
+      if (errorHandler && errorHandler(error, context) === true) {
         return;
       }
 
