@@ -3001,6 +3001,13 @@ describe('Lazy SessionRecording', () => {
                     skip_client_rate_limiting: true,
                 }
             )
+            const captureArguments = posthog.capture.mock.calls[0]
+            expect(captureArguments[1].$session_id).toBe(sessionId)
+            expect([
+                captureArguments[0],
+                { ...captureArguments[1], $session_id: '<generated-session-id>' },
+                captureArguments[2],
+            ]).toMatchSnapshot()
         })
 
         it('sets $snapshot_max_depth_exceeded when depth limit is hit', () => {
