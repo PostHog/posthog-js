@@ -34,7 +34,7 @@ catalog:
   react-dom: ^19.2.1
   react-test-renderer: ^19.2.1
   rollup: ^4.53.3
-  ts-jest: 29.4.12
+  ts-jest: 29.4.11
   tslib: ^2.5.0
   typescript: 5.8.2
   vite: ^6.2.0
