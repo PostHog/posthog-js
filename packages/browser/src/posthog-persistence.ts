@@ -703,9 +703,16 @@ export class PostHogPersistence {
         return false
     }
 
-    unregister(prop: string): void {
-        if (prop in this.props) {
-            this._deleteProp(prop)
+    unregister(propOrProps: string | readonly string[]): void {
+        const props = typeof propOrProps === 'string' ? [propOrProps] : propOrProps
+        let hasChanges = false
+        for (const prop of props) {
+            if (prop in this.props) {
+                this._deleteProp(prop)
+                hasChanges = true
+            }
+        }
+        if (hasChanges) {
             this.save()
         }
     }
