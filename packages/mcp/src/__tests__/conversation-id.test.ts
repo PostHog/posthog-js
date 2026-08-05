@@ -484,9 +484,40 @@ describe('conversation_id edge cases', () => {
     const toolCall = events.find((e) => e.resourceName === 'add_todo')
     const missing = events.find((e) => e.eventType === MCPAnalyticsEventType.mcpMissingCapability)
 
+    // This is what this PR controls: the gap report carries the same handle.
     expect(missing?.conversationId).toBe(handle)
-    // The point: the gap report and the work that hit it group together.
+    // Forward guard only. On one server instance over InMemoryTransport both
+    // events fall back to the same in-memory session id anyway, so this cannot
+    // tell "grouped by the handle" from "nothing rotated" until the handle
+    // drives $session_id. The distinguishing assertion is the next test.
     expect(missing?.sessionId).toBe(toolCall?.sessionId)
+    await capture.stop()
+  })
+
+  it('gives two different handles two different conversations', async () => {
+    const capture = new EventCapture()
+    await capture.start()
+    instrument(server, fakePostHog(), { enableConversationId: true, reportMissing: true })
+    await client.request({ method: 'tools/list' }, ListToolsResultSchema)
+
+    // Same connection, so anything falling back to the transport or in-memory
+    // session would report one id for both. Only the handle can separate them.
+    for (const [handle, text] of [
+      ['conversation-one', 'Needed a delete tool.'],
+      ['conversation-two', 'Needed an export tool.'],
+    ]) {
+      await client.request(
+        {
+          method: 'tools/call',
+          params: { name: 'get_more_tools', arguments: { context: text, conversation_id: handle } },
+        },
+        CallToolResultSchema
+      )
+    }
+
+    await new Promise((r) => setTimeout(r, 50))
+    const gaps = capture.getEvents().filter((e) => e.eventType === MCPAnalyticsEventType.mcpMissingCapability)
+    expect(gaps.map((g) => g.conversationId)).toEqual(['conversation-one', 'conversation-two'])
     await capture.stop()
   })
 
