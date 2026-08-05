@@ -71,4 +71,16 @@ describe('StylesheetManager.inlineDeferredLinkElement()', () => {
       linkEl,
     );
   });
+
+  it('ignores maskAttributeFn when maskAllElementAttributes is set', () => {
+    const maskAttributeFn = vi.fn(() => '[CSS-MASKED]');
+
+    makeManager({
+      maskAllElementAttributes: true,
+      maskAttributeFn,
+    }).inlineDeferredLinkElement(linkEl, LINK_ID);
+
+    expect(emittedCssText()).toMatch(/^\*+$/);
+    expect(maskAttributeFn).not.toHaveBeenCalled();
+  });
 });
