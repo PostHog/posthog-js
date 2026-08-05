@@ -315,8 +315,13 @@ export function isIgnored(
     return true;
   }
   // The main part of the slimDOM check happens in
-  // rrweb-snapshot::serializeNodeWithId
-  return mirror.getId(n) === IGNORED_NODE;
+  // rrweb-snapshot::serializeNodeWithId.
+  // getMeta, not getId: this probe runs against every mutation target, and
+  // while a time-sliced full snapshot is in flight getId MINTS an id
+  // reservation for any connected node it has not seen (a walk-long map
+  // entry for nodes no event will ever reference). An ignored node was still
+  // added to the mirror (to track nextSiblings), so its meta answers here.
+  return mirror.getMeta(n)?.id === IGNORED_NODE;
 }
 
 export function isAncestorRemoved(target: Node, mirror: Mirror): boolean {

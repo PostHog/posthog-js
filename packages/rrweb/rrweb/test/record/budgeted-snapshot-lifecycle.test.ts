@@ -7,11 +7,21 @@
  * post-snapshot steps, freezePage() during a walk must defer the commit to
  * unfreeze() and say so on the wire, and the held-event scrub must filter
  * selection ranges individually instead of dropping mixed selections whole.
+ * Also covered: reservations stay answerable through the flush and are
+ * claimed by the commit, held caller-owned payloads are snapshotted at hold
+ * time, order-independent SDK control events bypass the held window, only the
+ * fullscreen custom event is scrubbed by payload id, and isIgnored never
+ * mints a reservation.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { EventType, IncrementalSource } from '@posthog/rrweb-types';
+import {
+  EventType,
+  FullscreenCustomEventTag,
+  IncrementalSource,
+} from '@posthog/rrweb-types';
 import type { eventWithTime, eventWithoutTime } from '@posthog/rrweb-types';
+import { createMirror, slimDOMDefaults } from '@posthog/rrweb-snapshot';
 
 const observeControl = vi.hoisted(() => ({ failNextInitObservers: false }));
 
@@ -33,6 +43,7 @@ vi.mock('../../src/record/observer', async (importOriginal) => {
 import record, { scrubUnclaimedIds } from '../../src/record';
 import { mutationBuffers } from '../../src/record/observer';
 import { IframeManager } from '../../src/record/iframe-manager';
+import { isIgnored } from '../../src/utils';
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -224,6 +235,202 @@ describe('budgeted snapshot lifecycle hardening', () => {
       expect(JSON.stringify(mutations)).toContain('deferred-marker');
     });
   }, 20_000);
+
+  it('a reservation minted mid-walk stays answerable during the flush and is claimed by the commit', async () => {
+    fillBody();
+    const events: eventWithTime[] = [];
+    let marker: HTMLElement | null = null;
+    let flushProbeId: number | null = null;
+
+    stop = record({
+      emit: (event) => {
+        const e = event as eventWithTime;
+        events.push(e);
+        if (
+          marker &&
+          e.type === EventType.Custom &&
+          (e as { data: { tag: string } }).data.tag === 'held-during-walk'
+        ) {
+          // this delivery happens inside the flush, after the handout pause
+          // and before the buffer commit; the reserved id must still answer
+          flushProbeId = record.mirror.getId(marker);
+        }
+      },
+      fullSnapshotYieldBudgetMs: 1,
+    });
+
+    expect(events.some((e) => e.type === EventType.FullSnapshot)).toBe(false);
+
+    // created mid-walk: the walk skips it (its add is pending in the locked
+    // buffer) and the commit re-serializes it
+    marker = document.createElement('div');
+    marker.id = 'reserved-marker';
+    document.body.appendChild(marker);
+    // an observer resolving the node mid-walk mints its reservation
+    const reservedId = record.mirror.getId(marker);
+    expect(reservedId).toBeGreaterThan(0);
+    // a held event so the flush re-enters the consumer while paused
+    record.addCustomEvent('held-during-walk', {});
+
+    await vi.waitFor(
+      () => {
+        expect(events.some((e) => e.type === EventType.FullSnapshot)).toBe(
+          true,
+        );
+      },
+      { timeout: 10_000 },
+    );
+    await settle();
+
+    expect(flushProbeId).toBe(reservedId);
+    // the commit claimed exactly the reserved id for the marker's add
+    expect(record.mirror.getId(marker)).toBe(reservedId);
+    const adds = events
+      .filter(
+        (e) =>
+          e.type === EventType.IncrementalSnapshot &&
+          (e as { data: { source: IncrementalSource } }).data.source ===
+            IncrementalSource.Mutation,
+      )
+      .flatMap(
+        (e) =>
+          (e as unknown as { data: { adds?: Array<{ node: { id: number } }> } })
+            .data.adds ?? [],
+      );
+    expect(adds.some((a) => a.node.id === reservedId)).toBe(true);
+  }, 20_000);
+
+  it('order-independent SDK control events bypass the held window', async () => {
+    fillBody();
+    const events: eventWithTime[] = [];
+
+    stop = record({
+      emit: (event) => {
+        events.push(event as eventWithTime);
+      },
+      fullSnapshotYieldBudgetMs: 1,
+    });
+
+    expect(events.some((e) => e.type === EventType.FullSnapshot)).toBe(false);
+    record.addCustomEvent('$session_id_change', {
+      sessionId: 'next-session',
+      windowId: 'next-window',
+      changeReason: { activityTimeout: true },
+    });
+    record.addCustomEvent('ordinary-tag', {});
+
+    const tagIndex = (tag: string) =>
+      events.findIndex(
+        (e) =>
+          e.type === EventType.Custom &&
+          (e as { data: { tag: string } }).data.tag === tag,
+      );
+
+    // the control event is already on the wire, before the walk finished
+    expect(events.some((e) => e.type === EventType.FullSnapshot)).toBe(false);
+    expect(tagIndex('$session_id_change')).toBeGreaterThan(-1);
+    // the ordinary custom event is held like anything else
+    expect(tagIndex('ordinary-tag')).toBe(-1);
+
+    await vi.waitFor(
+      () => {
+        expect(events.some((e) => e.type === EventType.FullSnapshot)).toBe(
+          true,
+        );
+      },
+      { timeout: 10_000 },
+    );
+    await settle();
+
+    const fullIndex = events.findIndex(
+      (e) => e.type === EventType.FullSnapshot,
+    );
+    expect(tagIndex('$session_id_change')).toBeLessThan(fullIndex);
+    expect(tagIndex('ordinary-tag')).toBeGreaterThan(fullIndex);
+  }, 20_000);
+
+  it('a held custom payload records the value it had at hold time', async () => {
+    fillBody();
+    const events: eventWithTime[] = [];
+
+    stop = record({
+      emit: (event) => {
+        events.push(event as eventWithTime);
+      },
+      fullSnapshotYieldBudgetMs: 1,
+    });
+
+    expect(events.some((e) => e.type === EventType.FullSnapshot)).toBe(false);
+    const payload = { step: 'started', items: [1, 2] };
+    record.addCustomEvent('checkout', payload);
+    // the caller mutating its payload after the fact must not rewrite the
+    // held event; the synchronous path would have serialized it already
+    payload.step = 'mutated-after-hold';
+    payload.items.push(3);
+
+    await vi.waitFor(
+      () => {
+        expect(events.some((e) => e.type === EventType.FullSnapshot)).toBe(
+          true,
+        );
+      },
+      { timeout: 10_000 },
+    );
+    await settle();
+
+    const recorded = events.find(
+      (e) =>
+        e.type === EventType.Custom &&
+        (e as { data: { tag: string } }).data.tag === 'checkout',
+    ) as unknown as { data: { payload: unknown } } | undefined;
+    expect(recorded).toBeDefined();
+    expect(recorded?.data.payload).toEqual({ step: 'started', items: [1, 2] });
+  }, 20_000);
+
+  it('isIgnored does not mint an id reservation for an unserialized mutation target', () => {
+    const mirror = createMirror();
+    let next = 1;
+    mirror.beginIdReservation(() => next++);
+
+    const target = document.createElement('div');
+    document.body.appendChild(target);
+    expect(isIgnored(target, mirror, slimDOMDefaults(false))).toBe(false);
+    // the probe must be a peek: no reservation for a node no event references
+    expect(mirror.getReservedId(target)).toBeUndefined();
+    expect(mirror.getUnclaimedReservedIds()).toEqual([]);
+
+    mirror.endIdReservation();
+    document.body.removeChild(target);
+  });
+
+  describe('scrubUnclaimedIds custom events', () => {
+    const customEvent = (tag: string, payload: unknown): eventWithoutTime =>
+      ({
+        type: EventType.Custom,
+        data: { tag, payload },
+      }) as unknown as eventWithoutTime;
+
+    it('never drops a consumer custom event whose payload id collides with a reservation', () => {
+      const event = customEvent('checkout', { id: 42 });
+      expect(scrubUnclaimedIds(event, new Set([42]))).toBe(event);
+    });
+
+    it('drops the internal fullscreen event when its target id was never claimed', () => {
+      const event = customEvent(FullscreenCustomEventTag, {
+        id: 42,
+        enter: true,
+      });
+      expect(scrubUnclaimedIds(event, new Set([42]))).toBeNull();
+    });
+
+    it('keeps the internal fullscreen event when its target id was claimed', () => {
+      const event = customEvent(FullscreenCustomEventTag, {
+        id: 7,
+        enter: true,
+      });
+      expect(scrubUnclaimedIds(event, new Set([42]))).toBe(event);
+    });
+  });
 
   describe('scrubUnclaimedIds selection handling', () => {
     const selectionEvent = (

@@ -115,6 +115,74 @@ const nonUserInitiatedSources = new Set<IncrementalSource>([
   IncrementalSource.AdoptedStyleSheet,
 ]);
 
+// SDK control events that may bypass the held window while a time-sliced
+// full snapshot is in flight. The held window exists so nothing referencing
+// the mirror gets ahead of the FullSnapshot; these posthog-js tags describe
+// session/recorder state, never document state (their payloads carry no
+// mirror node ids), so their position relative to the snapshot is meaningless
+// to the replayer. And they lose their value when they arrive late: the SDK
+// rotates sessions and closes buffers on them in real time. Everything else
+// waits, because a consumer tag can carry anything, including node
+// references.
+const ORDER_INDEPENDENT_CONTROL_EVENT_TAGS = new Set<string>([
+  '$session_id_change',
+  '$session_ending',
+  '$session_starting',
+  '$recording_started',
+  '$remote_config_received',
+  '$session_options',
+  '$posthog_config',
+  'sessionIdle',
+  'sessionNoLongerIdle',
+  'browser offline',
+  'browser online',
+  'window visible',
+  'window hidden',
+  'recording paused',
+  'recording resumed',
+]);
+
+// posthog-js records console output through this rrweb plugin. Its payload is
+// level/trace/message strings (never mirror ids), and the replay console
+// orders entries by timestamp, not wire position, so a console.error observed
+// mid-walk can go out immediately instead of up to 30s late.
+const CONSOLE_PLUGIN_NAME = 'rrweb/console@1';
+
+const bypassesHeldEventWindow = (e: eventWithTime): boolean => {
+  if (e.type === EventType.Custom) {
+    const tag = (e.data as { tag?: unknown } | undefined)?.tag;
+    return (
+      typeof tag === 'string' && ORDER_INDEPENDENT_CONTROL_EVENT_TAGS.has(tag)
+    );
+  }
+  if (e.type === EventType.Plugin) {
+    return (
+      (e.data as { plugin?: unknown } | undefined)?.plugin ===
+      CONSOLE_PLUGIN_NAME
+    );
+  }
+  return false;
+};
+
+// Custom and Plugin payloads are the only held payloads the caller still owns
+// after emit; the recorder builds every other event's payload itself and never
+// touches it again. Snapshotting them at hold time keeps budgeted mode at
+// parity with the synchronous path, where the payload is serialized before
+// the caller can mutate it, and makes the held-byte cap measure the object
+// that will actually be emitted.
+const snapshotCallerOwnedEvent = (r: eventWithoutTime): eventWithoutTime => {
+  try {
+    if (typeof structuredClone === 'function') {
+      return structuredClone(r);
+    }
+    return JSON.parse(JSON.stringify(r)) as eventWithoutTime;
+  } catch {
+    // an uncloneable payload keeps sync parity best-effort: holding the
+    // reference beats losing the event
+    return r;
+  }
+};
+
 interface HeldEvent {
   event: eventWithoutTime;
   isCheckout: boolean | undefined;
@@ -219,7 +287,10 @@ function estimateRetainedSize(value: unknown, ceiling: number): number {
  * ranges filtered out, or null.
  *
  * Inspected shapes: a single `id`, pointer `positions`, selection `ranges`,
- * mutation `adds`, and custom events carrying a `payload.id` (fullscreen).
+ * mutation `adds`, and the recorder's own fullscreen custom event, whose
+ * `payload.id` is a mirror id (matched by tag, because a consumer custom
+ * event via record.addCustomEvent owns its payload shape and a numeric `id`
+ * there is application data that may collide with a reservation by accident).
  * Mutation `removes`, `texts` and `attributes` are deliberately NOT
  * inspected. The only mutation payloads that reach the held queue are
  * attach-iframe payloads, which carry adds only (real mutations sit in
@@ -239,13 +310,16 @@ export function scrubUnclaimedIds(
   if (unclaimedIds.size === 0) return event;
   const e = event as { type: EventType; data?: Record<string, unknown> };
   if (e.type === EventType.Custom && e.data) {
-    const payload = e.data.payload as { id?: unknown } | undefined;
-    if (
-      payload &&
-      typeof payload.id === 'number' &&
-      unclaimedIds.has(payload.id)
-    ) {
-      return null;
+    // only the fullscreen tag carries a mirror id; see the docstring above
+    if ((e.data as { tag?: unknown }).tag === FullscreenCustomEventTag) {
+      const payload = e.data.payload as { id?: unknown } | undefined;
+      if (
+        payload &&
+        typeof payload.id === 'number' &&
+        unclaimedIds.has(payload.id)
+      ) {
+        return null;
+      }
     }
     return event;
   }
@@ -429,7 +503,9 @@ function record<T = eventWithTime>(
   // the wire before anything that references the mirror it builds, so every
   // other event observed while one is in flight is held here — timestamped at
   // observation time — and delivered in order once the snapshot lands. See
-  // sessionEmit for why holding rather than dropping is the only safe option.
+  // sessionEmit for why holding rather than dropping is the only safe option,
+  // and ORDER_INDEPENDENT_CONTROL_EVENT_TAGS for the SDK control events that
+  // are exempt from the hold.
   let budgetedSnapshotInFlight = false;
   let budgetedSnapshotQueued: { isCheckout: boolean } | null = null;
   // True while the post-snapshot flush (held events + buffer unlock) runs:
@@ -487,7 +563,8 @@ function record<T = eventWithTime>(
       budgetedSnapshotInFlight &&
       !budgetedSnapshotFlushing &&
       e.type !== EventType.Meta &&
-      e.type !== EventType.FullSnapshot
+      e.type !== EventType.FullSnapshot &&
+      !bypassesHeldEventWindow(e)
     ) {
       // A sliced snapshot spans several tasks, so real events land while the
       // FullSnapshot is still being built. They cannot go out ahead of it — the
@@ -513,8 +590,14 @@ function record<T = eventWithTime>(
         transaction.droppedAfterAbort++;
         return;
       }
+      // snapshot caller-owned payloads at hold time (see the helper); the
+      // clone is what gets measured, scrubbed and eventually emitted
+      const held =
+        e.type === EventType.Custom || e.type === EventType.Plugin
+          ? snapshotCallerOwnedEvent(r)
+          : r;
       const retainedBytes = estimateRetainedSize(
-        r,
+        held,
         MAX_HELD_EVENT_BYTES - transaction.heldEventBytes,
       );
       if (
@@ -535,7 +618,7 @@ function record<T = eventWithTime>(
         return;
       }
       transaction.eventQueue.push({
-        event: r,
+        event: held,
         isCheckout,
         seq: transaction.serializedCount,
       });

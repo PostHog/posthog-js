@@ -222,18 +222,25 @@ export class Mirror implements IMirror<Node> {
     const id = this.getMeta(n)?.id;
     if (id !== undefined) return id;
 
-    // Not serialized yet. Reserve the id this node is going to get, but only
-    // while it is still connected: a detached node will never be serialized,
-    // and callers such as `processRemoves` rely on -1 meaning "this never made
-    // it into the mirror".
-    if (this.reserveNextId && this.reservedIds && n.isConnected) {
-      let reserved = this.reservedIds.get(n);
-      if (reserved === undefined) {
-        reserved = this.reserveNextId();
-        this.reservedIds.set(n, reserved);
-        this.pendingReservedIds?.add(reserved);
+    if (this.reservedIds) {
+      // An id already reserved stays answerable for the whole transaction,
+      // even while the handout of NEW ids is paused for the post-walk flush
+      // (see pauseReservationHandout) and even if the node has been detached
+      // since: events already held carry this id, and answering -1 would make
+      // an event nested inside the flush disagree with them.
+      const reserved = this.reservedIds.get(n);
+      if (reserved !== undefined) return reserved;
+
+      // Not reserved yet. Reserve the id this node is going to get, but only
+      // while it is still connected: a detached node will never be serialized,
+      // and callers such as `processRemoves` rely on -1 meaning "this never
+      // made it into the mirror".
+      if (this.reserveNextId && n.isConnected) {
+        const fresh = this.reserveNextId();
+        this.reservedIds.set(n, fresh);
+        this.pendingReservedIds?.add(fresh);
+        return fresh;
       }
-      return reserved;
     }
 
     // if n is not a serialized Node, use -1 as its id.
