@@ -491,6 +491,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // fresh-start holds ship on a clean unload (passive visits are captured, matching
     // pre-hold behavior); rotation-born holds don't — that unload ship was the incident
     private _heldEpochShipsOnUnload = false
+    // Sticky for the document lifetime: background tabs that are never foregrounded should
+    // not release a fresh-start hold just because they unload.
+    private _documentWasEverVisible: boolean
     // set when a held buffer hit the size cap and was dropped to bound memory; a release
     // then takes a fresh full snapshot so the recording resumes playable
     private _heldBufferOverflowed = false
@@ -574,7 +577,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _onSessionIdleResetForcedListener: (() => void) | undefined = undefined
     private _forceIdleSessionIdListener: (() => void) | undefined = undefined
 
-    constructor(private readonly _instance: PostHog) {
+    constructor(
+        private readonly _instance: PostHog,
+        documentWasEverVisible?: boolean
+    ) {
+        // An older core does not provide visibility history. Preserve its unload behavior
+        // rather than treating a currently hidden document as one that was never visible.
+        this._documentWasEverVisible = documentWasEverVisible ?? true
+
         // we know there's a sessionManager, so don't need to start without a session id
         const { sessionId, windowId } = this._sessionManager.checkAndGetSessionAndWindowId()
         this._sessionId = sessionId
@@ -593,6 +603,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         this._flushedSizeTracker = new FlushedSizeTracker(this._instance)
+    }
+
+    setDocumentWasEverVisible(documentWasEverVisible: boolean): void {
+        if (documentWasEverVisible) {
+            this._documentWasEverVisible = true
+        }
     }
 
     private get _masking():
@@ -1166,7 +1182,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         addEventListener(window, 'beforeunload', this._onBeforeUnload)
         addEventListener(window, 'offline', this._onOffline)
         addEventListener(window, 'online', this._onOnline)
-        addEventListener(window, 'visibilitychange', this._onVisibilityChange)
+        addEventListener(document, 'visibilitychange', this._onVisibilityChange)
 
         if (!this._onSessionIdListener && isFunction(this._sessionManager.onSessionId)) {
             this._onSessionIdListener = this._sessionManager.onSessionId(this._onSessionIdCallback)
@@ -1312,7 +1328,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         window?.removeEventListener('beforeunload', this._onBeforeUnload)
         window?.removeEventListener('offline', this._onOffline)
         window?.removeEventListener('online', this._onOnline)
-        window?.removeEventListener('visibilitychange', this._onVisibilityChange)
+        document?.removeEventListener('visibilitychange', this._onVisibilityChange)
 
         clearInterval(this._fullSnapshotTimer)
         this._clearFlushBufferTimer()
@@ -2070,10 +2086,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return
         }
 
-        // a clean unload releases a fresh-start hold so passive visits (reading, video)
-        // still ship, as they did before holds existed; rotation-born holds stay held,
-        // and an overflowed hold has nothing playable left to ship
-        if (this._holdFlushUntilInteraction && this._heldEpochShipsOnUnload && !this._heldBufferOverflowed) {
+        // a clean unload releases a fresh-start hold for passive visits (reading, video),
+        // but only if the document was ever visible. Rotation-born holds stay held, and an
+        // overflowed hold has nothing playable left to ship.
+        if (
+            this._holdFlushUntilInteraction &&
+            this._heldEpochShipsOnUnload &&
+            this._documentWasEverVisible &&
+            !this._heldBufferOverflowed
+        ) {
             this._holdFlushUntilInteraction = false
         }
 
@@ -2093,6 +2114,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _onVisibilityChange = (): void => {
         if (document?.visibilityState) {
+            if (document.visibilityState === 'visible') {
+                this._documentWasEverVisible = true
+            }
             const label = 'window ' + document.visibilityState
             this._tryAddCustomEvent(label, {})
         }
