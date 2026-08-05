@@ -79,7 +79,7 @@
   },
   "dependencies": {
     "@types/postcss-safe-parser": "^5.0.4",
-    "postcss": "^8.5.23",
+    "postcss": "^8.5.25",
     "postcss-safe-parser": "^7.0.1"
   }
 }
