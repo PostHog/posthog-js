@@ -295,6 +295,72 @@ describe('push notifications', () => {
       await posthog.shutdown()
     })
 
+    it('boots native on a later launch to clean up a manually registered subscription', async () => {
+      // Native persists the subscription across launches; without the persisted
+      // PushRegistered flag, launch B's unregister would no-op at the !requireInit gate
+      // and Workflows would keep targeting the device.
+      const store: { [key: string]: string } = {}
+      const sharedStorage = {
+        getItem: (key: string) => store[key] ?? null,
+        setItem: (key: string, value: string) => {
+          store[key] = value
+        },
+      }
+      const relaunchOptions = {
+        capturePushNotificationSubscriptions: false,
+        capturePushNotificationOpened: false,
+        persistence: 'file',
+        customStorage: sharedStorage,
+      }
+
+      const launchA = await createPostHog(relaunchOptions)
+      await launchA.registerPushNotificationToken('token-abc')
+      expect(mockPlugin.setup).toHaveBeenCalledTimes(1)
+      await launchA.shutdown()
+
+      const launchB = await createPostHog(relaunchOptions)
+      expect(mockPlugin.setup).toHaveBeenCalledTimes(1)
+      await launchB.unregisterPushNotificationToken()
+      expect(mockPlugin.setup).toHaveBeenCalledTimes(2)
+      expect(mockPlugin.unregisterPushNotificationToken).toHaveBeenCalledTimes(1)
+      await launchB.shutdown()
+
+      // The unregister cleared the flag, so a third launch's cleanup no-ops again.
+      const launchC = await createPostHog(relaunchOptions)
+      await launchC.unregisterPushNotificationToken()
+      expect(mockPlugin.setup).toHaveBeenCalledTimes(2)
+      expect(mockPlugin.unregisterPushNotificationToken).toHaveBeenCalledTimes(1)
+      await launchC.shutdown()
+    })
+
+    it('boots native on reset() when a manual registration is persisted', async () => {
+      const store: { [key: string]: string } = {}
+      const sharedStorage = {
+        getItem: (key: string) => store[key] ?? null,
+        setItem: (key: string, value: string) => {
+          store[key] = value
+        },
+      }
+      const relaunchOptions = {
+        capturePushNotificationSubscriptions: false,
+        capturePushNotificationOpened: false,
+        persistence: 'file',
+        customStorage: sharedStorage,
+      }
+
+      const launchA = await createPostHog(relaunchOptions)
+      await launchA.registerPushNotificationToken('token-abc')
+      await launchA.shutdown()
+
+      const launchB = await createPostHog(relaunchOptions)
+      launchB.reset()
+      await waitForExpect(1000, () => {
+        expect(mockPlugin.setup).toHaveBeenCalledTimes(2)
+        expect(mockPlugin.reset).toHaveBeenCalledTimes(1)
+      })
+      await launchB.shutdown()
+    })
+
     it('keeps the native queue alive when identify() rejects', async () => {
       const posthog = await createPostHog()
 

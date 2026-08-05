@@ -771,10 +771,13 @@ export class PostHog extends PostHogCore {
     // user-specific survey state (SurveysSeen, SurveyLastSeenDate) is still cleared.
     // Do NOT keep SessionReplayEventTriggerActivatedSession: it is user-session state, so the
     // base reset() must clear it to stop one user's activation leaking into the next.
+    // PushRegistered is device-level subscription state, not user data: native reset()
+    // re-binds the subscription rather than deleting it, so the device stays registered.
     super.reset([
       PostHogPersistedProperty.RemoteConfig,
       PostHogPersistedProperty.SessionReplay,
       PostHogPersistedProperty.Surveys,
+      PostHogPersistedProperty.PushRegistered,
       ...effectivePropertiesToKeep,
     ])
 
@@ -791,8 +794,12 @@ export class PostHog extends PostHogCore {
     if (OptionalReactNativePlugin?.reset) {
       // Ids are read at dispatch, not here: a same-tick identify() shares this queue and
       // lands after, so native must converge on whichever identity is current by then.
-      void this._enqueueNative('reset', (plugin) =>
-        plugin.reset?.(String(this.getDistinctId()), String(this.getAnonymousId()))
+      void this._enqueueNative(
+        'reset',
+        (plugin) => plugin.reset?.(String(this.getDistinctId()), String(this.getAnonymousId())),
+        // Boot native when a manual register persisted a subscription; skipping the rebind
+        // would leave Workflows targeting the pre-reset identity.
+        this.getPersistedProperty(PostHogPersistedProperty.PushRegistered) === true
       )
     }
     // super.reset() cleared the persisted opt-out, but native keeps its own copy and would
@@ -2111,7 +2118,12 @@ export class PostHog extends PostHogCore {
       // requireInit: a host driving registration itself may have both capture flags off, so
       // nothing else would ever bring the native SDK up and the token would be dropped.
       { allowMacOS: false, requireInit: true, noop: 'token not registered' },
-      (plugin) => plugin.registerPushNotificationToken?.(deviceToken, options?.appId ?? null)
+      (plugin) => {
+        // Native persists the subscription across launches; remember that so a later
+        // launch's cleanup knows to boot native (see unregister/reset).
+        this.setPersistedProperty(PostHogPersistedProperty.PushRegistered, true)
+        return plugin.registerPushNotificationToken?.(deviceToken, options?.appId ?? null)
+      }
     )
   }
 
@@ -2128,10 +2140,23 @@ export class PostHog extends PostHogCore {
   async unregisterPushNotificationToken(): Promise<void> {
     return this._callPushPlugin(
       'unregisterPushNotificationToken',
-      // No requireInit: if native never came up there is no subscription to remove, and
+      // requireInit only when a manual register persisted a subscription: native keeps it
+      // across launches, so cleanup must boot native even in a process where nothing else
+      // initialized it. Without one, native never came up with anything to remove, and
       // booting it to delete nothing would defeat the opt-out this usually follows.
-      { allowMacOS: false, allowWhenOptedOut: true, requireInit: false, noop: 'nothing to unregister' },
-      (plugin) => plugin.unregisterPushNotificationToken?.()
+      {
+        allowMacOS: false,
+        allowWhenOptedOut: true,
+        requireInit: this.getPersistedProperty(PostHogPersistedProperty.PushRegistered) === true,
+        noop: 'nothing to unregister',
+      },
+      (plugin) => {
+        // Clear on dispatch: both native SDKs persist the delete intent before their
+        // consent/network gates and retry it on later launches, so the retry is native's
+        // from here on.
+        this.setPersistedProperty(PostHogPersistedProperty.PushRegistered, null)
+        return plugin.unregisterPushNotificationToken?.()
+      }
     )
   }
 
