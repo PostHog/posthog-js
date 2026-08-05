@@ -78,7 +78,6 @@ packageExtensions:
 
 minimumReleaseAgeExclude:
   - '@posthog/cli'
-  - postcss@8.5.25
   - posthog-react-native-session-replay
 
 supportedArchitectures:
