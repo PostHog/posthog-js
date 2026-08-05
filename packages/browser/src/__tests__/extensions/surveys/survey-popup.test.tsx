@@ -417,7 +417,7 @@ describe('SurveyPopup', () => {
             expect(mockPosthog.capture).toHaveBeenCalledTimes(1)
         })
 
-        test('advances past the intro screen on Enter', () => {
+        test('does not advance the intro screen on a window-level Enter press', () => {
             render(
                 <SurveyPopup
                     survey={introSurvey}
@@ -428,8 +428,10 @@ describe('SurveyPopup', () => {
             )
 
             expect(screen.getByText('Welcome!')).toBeVisible()
+            // An Enter aimed at the host page (e.g. an unrelated form input) must not skip the intro
             fireEvent.keyDown(window, { key: 'Enter' })
-            expect(screen.getByText('Question 1')).toBeVisible()
+            expect(screen.getByText('Welcome!')).toBeVisible()
+            expect(screen.queryByText('Question 1')).not.toBeInTheDocument()
         })
 
         test('does not show the intro screen when the survey has in-progress state', () => {

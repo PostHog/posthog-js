@@ -4,13 +4,8 @@ import { renderChildrenAsTextOrHtml } from '../surveys-extension-utils'
 import { BottomSection } from './BottomSection'
 import { Cancel } from './QuestionHeader'
 
-import { useContext, useEffect } from 'preact/hooks'
+import { useContext } from 'preact/hooks'
 import { SurveyContext } from '../surveys-extension-utils'
-import { addEventListener } from '@posthog/browser-common/utils/general-utils'
-import { window as _window } from '@posthog/browser-common/utils/globals'
-
-// We cast the types here which is dangerous but protected by the top level generateSurveys call
-const window = _window as Window
 
 export function IntroScreen({
     header,
@@ -27,27 +22,12 @@ export function IntroScreen({
     appearance: SurveyAppearance
     onStart: () => void
 }) {
-    const { isPopup, isPreviewMode, onPreviewSubmit, onPopupSurveyDismissed } = useContext(SurveyContext)
+    const { isPopup, onPreviewSubmit, onPopupSurveyDismissed } = useContext(SurveyContext)
 
-    useEffect(() => {
-        // Escape is intentionally not bound: unlike the confirmation message (where the survey is
-        // already complete), leaving the intro dismisses the whole survey, which must stay an
-        // explicit action via the cancel button. In preview mode the parent owns navigation, and a
-        // window-level listener would hijack Enter presses in the surrounding editor UI.
-        if (isPreviewMode) {
-            return
-        }
-        const handleKeyDown = (event: KeyboardEvent) => {
-            if (event.key === 'Enter') {
-                event.preventDefault()
-                onStart()
-            }
-        }
-        addEventListener(window, 'keydown', handleKeyDown as EventListener)
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown)
-        }
-    }, [isPreviewMode, onStart])
+    // Unlike the confirmation message, no window-level key handling here: a global Enter
+    // listener would advance the intro when the user presses Enter in an unrelated host-page
+    // input, and Escape would dismiss the whole survey rather than close a completed one.
+    // The advance button is natively keyboard-operable once focused.
 
     const renderCancelButton = isPopup && appearance.hideCancelButton !== true
 
