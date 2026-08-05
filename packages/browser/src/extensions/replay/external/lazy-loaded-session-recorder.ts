@@ -2481,3 +2481,5 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         return this._tryAddCustomEvent(tag, payload)
     }
 }
+
+// temporary: exercises the replay-incident-risk check, do not merge (touches _isIdle + flushBuffer paths)
