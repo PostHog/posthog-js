@@ -1703,6 +1703,98 @@ describe('time-sliced full snapshot converges on replay', () => {
     }
   });
 
+  it('falls back to a synchronous snapshot when the consumer emit throws on the retry Meta', async () => {
+    const page = await browser.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', (err) => errors.push(err.message));
+    try {
+      await fakeGoto(page, `${serverURL}/html/convergence.html`);
+      // the duplicate `emit` key overrides buildHtml's default consumer
+      await page.setContent(
+        buildHtml(
+          '',
+          YIELD_BUDGET_MS,
+          `
+            emit: function (event) {
+              if (window.__failNextMeta && event.type === 4) {
+                window.__failNextMeta = false;
+                throw new Error('injected consumer Meta failure');
+              }
+              window.snapshots.push(event);
+            },
+          `,
+        ),
+      );
+      // Overflow the held-event queue so the walk fails with a retryable
+      // reason, then make the consumer's emit throw at the retry's Meta. The
+      // recovery must land in the synchronous fallback, not in a live
+      // recorder that never emits a FullSnapshot.
+      const beforeRecovery = (await page.evaluate(`
+        (function () {
+          for (var i = 0; i < 4200; i++) {
+            rrweb.record.addCustomEvent('queue-pressure', { index: i });
+          }
+          window.__failNextMeta = true;
+          return {
+            hasFullSnapshot: window.snapshots.some(function (e) {
+              return e.type === 2;
+            }),
+          };
+        })()
+      `)) as { hasFullSnapshot: boolean };
+      expect(beforeRecovery.hasFullSnapshot).toBe(false);
+
+      await page.waitForFunction('window.snapshots.some((e) => e.type === 2)', {
+        timeout: 120_000,
+      });
+      await page.evaluate(`
+        (function () {
+          var marker = document.createElement('div');
+          marker.id = 'after-meta-throw-recovery';
+          document.body.appendChild(marker);
+        })()
+      `);
+      await new Promise((r) => setTimeout(r, 500));
+
+      const result = (await page.evaluate(`
+        (function () {
+          var statuses = window.snapshots
+            .filter(function (e) {
+              return e.type === 5 && e.data &&
+                e.data.tag === 'budgeted-full-snapshot';
+            })
+            .map(function (e) { return e.data.payload.status; });
+          var fullIndex = window.snapshots.findIndex(function (e) {
+            return e.type === 2;
+          });
+          return {
+            statuses: statuses,
+            fullSnapshots: window.snapshots.filter(function (e) {
+              return e.type === 2;
+            }).length,
+            mutationAfterRecovery: window.snapshots
+              .slice(fullIndex + 1)
+              .some(function (e) {
+                return JSON.stringify(e).indexOf('after-meta-throw-recovery') !== -1;
+              }),
+          };
+        })()
+      `)) as {
+        statuses: string[];
+        fullSnapshots: number;
+        mutationAfterRecovery: boolean;
+      };
+
+      expect(result.statuses).toContain('budgeted-retry');
+      expect(result.statuses).toContain('sync-fallback');
+      expect(result.fullSnapshots).toBe(1);
+      expect(result.mutationAfterRecovery).toBe(true);
+      expect(errors).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('survives recording being stopped while a snapshot is in flight', async () => {
     const page = await browser.newPage();
     const errors: string[] = [];

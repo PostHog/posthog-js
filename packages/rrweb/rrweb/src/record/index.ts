@@ -877,18 +877,10 @@ function record<T = eventWithTime>(
 
   const takeFullSnapshotSynchronous = (isCheckout: boolean): boolean => {
     const generation = recordingGeneration;
-    // Meta first, matching the pre-budget ordering — a throw from the
-    // consumer's Meta handling must not leak a held buffer lock.
-    emitMetaEvent(isCheckout);
-    // The consumer's Meta handling can synchronously stop() this recording or
-    // start a new one; the mirror and the buffers belong to that session now.
-    if (generation !== recordingGeneration) {
-      return false;
-    }
-
-    stylesheetManager.reset();
-    shadowDomManager.init();
-
+    // Lock viability is checked before Meta goes out: a reentrant call that
+    // cannot own the buffers (e.g. a checkout requested from inside a buffer
+    // commit) must not put an orphan Meta on the wire with no FullSnapshot
+    // behind it.
     const bufferToken = createMutationBufferLockToken();
     if (!lockMutationBuffers(bufferToken)) {
       console.warn('A different full snapshot owns the mutation buffers');
@@ -896,6 +888,19 @@ function record<T = eventWithTime>(
     }
 
     try {
+      emitMetaEvent(isCheckout);
+      // The consumer's Meta handling can synchronously stop() this recording
+      // or start a new one; the mirror and the buffers belong to that session
+      // now. The discard is token-checked, a no-op when the new owner already
+      // released this token.
+      if (generation !== recordingGeneration) {
+        discardMutationBuffers(bufferToken);
+        return false;
+      }
+
+      stylesheetManager.reset();
+      shadowDomManager.init();
+
       const node = snapshot(document, buildFullSnapshotOptions());
       if (!node) {
         discardMutationBuffers(bufferToken);
@@ -1101,13 +1106,22 @@ function record<T = eventWithTime>(
         }
         try {
           takeFullSnapshotBudgeted(isCheckout, true);
+          // the retry walk (or the in-flight walk it coalesced into) owns
+          // recovery from here
+          return;
         } catch (retryError) {
-          // e.g. the consumer's emit now throws at the retry's Meta — an
-          // escape here would surface as an unhandled rejection
+          // e.g. the consumer's emit throws at the retry's Meta. Swallowing
+          // this and returning would leave a live recorder that never emits
+          // a FullSnapshot, so a genuine failure falls through to the
+          // synchronous fallback below.
           reportError(retryError);
           console.warn('Budgeted full snapshot retry failed', retryError);
+          if (walkSuperseded(transaction)) {
+            // a rotation mid-throw stands down; the fallback would snapshot
+            // the new session's world
+            return;
+          }
         }
-        return;
       }
 
       emitBudgetedSnapshotDiagnostic('sync-fallback', {
@@ -1729,7 +1743,15 @@ function record<T = eventWithTime>(
     };
 
     const init = () => {
-      if (!sessionTakeFullSnapshot()) {
+      const generation = recordingGeneration;
+      // A failed initial snapshot (null node, lock conflict) must not leave a
+      // half-started recorder that claims to be running: observers still
+      // install, restoring the pre-budget behavior, so a later checkout or
+      // the periodic full snapshot can recover. A throw still propagates so
+      // record() returns undefined and the SDK's own retry logic trips.
+      sessionTakeFullSnapshot();
+      if (generation !== recordingGeneration) {
+        // a rotation from inside the snapshot's emits owns the recorder now
         return;
       }
       handlers.push(observe(document));
