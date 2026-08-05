@@ -485,6 +485,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         {
           fetch: (url, fetchOptions) => this.fetch(url, fetchOptions),
           onError: (error) => this._events.emit('error', error),
+          compress: (payload) => this.compressPayload(payload),
         }
       )
     }
