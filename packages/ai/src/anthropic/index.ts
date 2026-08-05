@@ -1,4 +1,4 @@
-import AnthropicOriginal, { APIPromise } from '@anthropic-ai/sdk'
+import AnthropicOriginal, { APIPromise, ClientOptions } from '@anthropic-ai/sdk'
 import { PostHog } from 'posthog-node'
 import {
   formatResponseAnthropic,
@@ -18,18 +18,19 @@ type Message = AnthropicOriginal.Messages.Message
 type RawMessageStreamEvent = AnthropicOriginal.Messages.RawMessageStreamEvent
 type MessageCreateParamsBase = AnthropicOriginal.Messages.MessageCreateParams
 type RequestOptions = AnthropicOriginal.RequestOptions
-import type { Stream } from '@anthropic-ai/sdk/streaming'
+import { Stream } from '@anthropic-ai/sdk/streaming'
 import { sanitizeAnthropic } from '../sanitization'
+import { preserveProviderPromise } from '../providerPromise'
+import { monitoredStreamTee } from '../stream'
 
 interface ToolInProgress {
   block: FormattedFunctionCall
   inputString: string
 }
 
-interface MonitoringAnthropicConfig {
+interface MonitoringAnthropicConfig extends ClientOptions {
   apiKey: string
   posthog: PostHog
-  baseURL?: string
 }
 
 export class PostHogAnthropic extends AnthropicOriginal {
@@ -70,10 +71,9 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
     const { providerParams: anthropicParams, posthogParams } = extractPosthogParams(body)
     const startTime = Date.now()
 
-    const parentPromise = super.create(anthropicParams, options)
-
     if (anthropicParams.stream) {
-      return parentPromise.then((value) => {
+      const parentPromise = super.create(anthropicParams, options)
+      const wrappedPromise = parentPromise.then((value) => {
         let accumulatedContent = ''
         const contentBlocks: FormattedContentItem[] = []
         const toolsInProgress: Map<string, ToolInProgress> = new Map()
@@ -95,9 +95,12 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
           cacheReadInputTokens: 0,
           webSearchCount: 0,
         }
-        let rawUsage: Record<string, unknown> = {}
-        if ('tee' in value) {
-          const [stream1, stream2] = value.tee()
+        let lastRawUsage: unknown
+        if (Symbol.asyncIterator in value) {
+          const [stream1, stream2] = monitoredStreamTee<RawMessageStreamEvent, Stream<RawMessageStreamEvent>>(
+            value as Stream<RawMessageStreamEvent>,
+            (iterator, controller) => new Stream(iterator, controller)
+          )
           ;(async () => {
             try {
               for await (const chunk of stream1) {
@@ -189,17 +192,14 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 }
 
                 if (chunk.type == 'message_start') {
-                  rawUsage = { ...chunk.message.usage }
+                  lastRawUsage = chunk.message.usage
                   usage.inputTokens = chunk.message.usage.input_tokens ?? 0
                   usage.cacheCreationInputTokens = chunk.message.usage.cache_creation_input_tokens ?? 0
                   usage.cacheReadInputTokens = chunk.message.usage.cache_read_input_tokens ?? 0
                   usage.webSearchCount = chunk.message.usage.server_tool_use?.web_search_requests ?? 0
                 }
                 if ('usage' in chunk) {
-                  rawUsage = {
-                    ...rawUsage,
-                    ...Object.fromEntries(Object.entries(chunk.usage).filter(([, value]) => value != null)),
-                  }
+                  lastRawUsage = chunk.usage
                   usage.outputTokens = chunk.usage.output_tokens ?? 0
                   // Update web search count if present in delta
                   if (chunk.usage.server_tool_use?.web_search_requests !== undefined) {
@@ -214,7 +214,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                   }
                 }
               }
-              usage.rawUsage = rawUsage
+              usage.rawUsage = lastRawUsage
 
               const latency = (Date.now() - startTime) / 1000
               const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
@@ -279,8 +279,11 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
           return stream2
         }
         return value
-      }) as APIPromise<Stream<RawMessageStreamEvent>>
+      })
+
+      return preserveProviderPromise(parentPromise, wrappedPromise, { requestIdHeader: 'request-id' })
     } else {
+      const parentPromise = super.create(anthropicParams, options)
       const wrappedPromise = parentPromise.then(
         async (result) => {
           if ('content' in result) {
@@ -331,9 +334,9 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
           })
           throw error
         }
-      ) as APIPromise<Message>
+      )
 
-      return wrappedPromise
+      return preserveProviderPromise(parentPromise, wrappedPromise, { requestIdHeader: 'request-id' })
     }
   }
 }
