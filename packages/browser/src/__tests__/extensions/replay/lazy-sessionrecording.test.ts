@@ -2053,6 +2053,79 @@ describe('Lazy SessionRecording', () => {
                 })
             })
 
+            describe('recording volume invariants', () => {
+                // Billing-level invariants over long simulated timelines. The mechanics of
+                // holding rotation-born sessions are covered above; these assert the outcome
+                // that matters regardless of mechanism: how many recordings a tab ships.
+
+                function shippedSessionIds(): Set<string> {
+                    return new Set(
+                        (posthog.capture as Mock).mock.calls
+                            .filter(([eventName]) => eventName === '$snapshot')
+                            .map(([, properties]) => properties.$session_id)
+                    )
+                }
+
+                function emitInactiveWithoutAssertion(activityTimestamp: number): void {
+                    _emit({
+                        event: 123,
+                        type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                        data: { source: 0, adds: [], attributes: [], removes: [], texts: [] },
+                        timestamp: activityTimestamp,
+                    })
+                }
+
+                function runIdleRotations(fromTimestamp: number, days: number): void {
+                    let timestamp = fromTimestamp
+                    const endTimestamp = fromTimestamp + days * 24 * 60 * 60 * 1000
+                    let rotationCount = 0
+                    while (timestamp < endTimestamp) {
+                        timestamp += sessionManager['_sessionTimeoutMs'] + 1000
+                        rotationCount++
+                        sessionIdGeneratorMock.mockImplementation(() => `volume-rotation-${rotationCount}`)
+                        jest.setSystemTime(new Date(timestamp))
+                        sessionManager.checkAndGetSessionAndWindowId(false, timestamp)
+                        emitInactiveWithoutAssertion(timestamp + 10)
+                        jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                    }
+                }
+
+                beforeEach(() => {
+                    jest.useFakeTimers().setSystemTime(new Date(startingTimestamp))
+                })
+
+                it('a tab with zero user interaction ships zero recordings across three days of rotations', () => {
+                    runIdleRotations(startingTimestamp, 3)
+
+                    expect(shippedSessionIds()).toEqual(new Set())
+                })
+
+                it('a single interaction ships exactly one session and later idle rotations add none', () => {
+                    emitActiveEvent(startingTimestamp + 100)
+                    jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                    expect(shippedSessionIds()).toEqual(new Set([sessionId]))
+
+                    runIdleRotations(startingTimestamp + 100, 2)
+
+                    expect(shippedSessionIds()).toEqual(new Set([sessionId]))
+                })
+
+                it('no flushed batch spans more than the 24 hour session age cap', () => {
+                    emitActiveEvent(startingTimestamp + 100)
+                    runIdleRotations(startingTimestamp + 100, 2)
+
+                    const dayInMillis = 24 * 60 * 60 * 1000
+                    const snapshotCalls = (posthog.capture as Mock).mock.calls.filter(
+                        ([eventName]) => eventName === '$snapshot'
+                    )
+                    expect(snapshotCalls.length).toBeGreaterThan(0)
+                    for (const [, properties] of snapshotCalls) {
+                        const timestamps = properties.$snapshot_data.map((event: eventWithTime) => event.timestamp)
+                        expect(Math.max(...timestamps) - Math.min(...timestamps)).toBeLessThanOrEqual(dayInMillis)
+                    }
+                })
+            })
+
             it('takes a full snapshot for the new session on a second idle rotation without user interaction', () => {
                 // Regression test for #4202, reported production sequence: interaction, idle,
                 // rotation (restart leaves _isIdle 'unknown'), no further interaction, second
