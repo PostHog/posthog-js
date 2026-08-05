@@ -6,8 +6,16 @@ import {
   CONVERSATION_ID_PARAM_NAME,
   extractConversationId,
   injectConversationIdPromptBack,
+  resolveConversationId,
   stripConversationId,
 } from '../extensions/conversation-id'
+
+/**
+ * Handles shaped like ones we would have minted — `resolveConversationId` only
+ * echoes a value that could have come from us, and mints over anything else.
+ */
+const AGENT_ECHOED = '019fd2b0-1111-7111-8111-111111111111'
+const AGENT_ECHOED_ON_ERROR = '019fd2b0-2222-7222-8222-222222222222'
 
 describe('conversation-id', () => {
   describe('addConversationIdToTool', () => {
@@ -158,6 +166,50 @@ describe('conversation-id', () => {
     })
   })
 
+  describe('resolveConversationId', () => {
+    const resolve = (args: unknown) => resolveConversationId(true, args, 'a_tool')
+
+    it('echoes a handle shaped like one we minted', () => {
+      expect(resolve({ conversation_id: AGENT_ECHOED })).toEqual({
+        minted: false,
+        conversationId: AGENT_ECHOED,
+      })
+    })
+
+    it('mints instead of trusting a value the agent invented', () => {
+      // The reason this branch exists: the value becomes $session_id via a
+      // deterministic hash, so two unrelated callers both sending `conv-1` would
+      // otherwise be merged into a single session — across users and pods.
+      for (const invented of ['conv-1', '1', 'session', 'chat_abc', 'not-a-uuid']) {
+        const result = resolve({ conversation_id: invented })
+        expect(result.minted).toBe(true)
+        expect(result.conversationId).not.toBe(invented)
+      }
+    })
+
+    it('mints a value that would itself be echoed back', () => {
+      const { conversationId } = resolve({})
+      expect(resolve({ conversation_id: conversationId })).toEqual({
+        minted: false,
+        conversationId,
+      })
+    })
+
+    it('rejects a uuid that is not v7', () => {
+      // v4 in the version nibble. Nothing we mint looks like this, so it is a
+      // value the agent brought from somewhere else.
+      const v4 = '019fd2b0-1111-4111-8111-111111111111'
+      expect(resolve({ conversation_id: v4 }).minted).toBe(true)
+    })
+
+    it('returns nothing when the feature is off', () => {
+      expect(resolveConversationId(false, { conversation_id: AGENT_ECHOED }, 'a_tool')).toEqual({
+        minted: false,
+        conversationId: undefined,
+      })
+    })
+  })
+
   describe('stripConversationId', () => {
     it('returns args without conversation_id and leaves other keys intact', () => {
       const result = stripConversationId({
@@ -276,7 +328,7 @@ describe('conversation_id tool parameter', () => {
       await capture.start()
       instrument(server, fakePostHog(), { enableConversationId: true })
 
-      const agentConversationId = 'conversation-abc-1'
+      const agentConversationId = '019fd2b0-5555-7555-8555-555555555555'
       await client.request(
         {
           method: 'tools/call',
@@ -347,7 +399,7 @@ describe('conversation_id tool parameter', () => {
           method: 'tools/call',
           params: {
             name: 'add_todo',
-            arguments: { text: 'x', conversation_id: 'agent-supplied-1' },
+            arguments: { text: 'x', conversation_id: AGENT_ECHOED },
           },
         },
         CallToolResultSchema
@@ -355,7 +407,7 @@ describe('conversation_id tool parameter', () => {
 
       await new Promise((r) => setTimeout(r, 50))
       const toolCall = capture.getEvents().find((e) => e.resourceName === 'add_todo')
-      expect(toolCall?.conversationId).toBe('agent-supplied-1')
+      expect(toolCall?.conversationId).toBe(AGENT_ECHOED)
       await capture.stop()
     })
 
@@ -447,7 +499,7 @@ describe('conversation_id tool parameter', () => {
             name: 'complete_todo',
             arguments: {
               id: 'does-not-exist',
-              conversation_id: 'agent-supplied-on-error',
+              conversation_id: AGENT_ECHOED_ON_ERROR,
             },
           },
         },
@@ -456,7 +508,7 @@ describe('conversation_id tool parameter', () => {
 
       await new Promise((r) => setTimeout(r, 50))
       const toolCall = capture.getEvents().find((e) => e.resourceName === 'complete_todo')
-      expect(toolCall?.conversationId).toBe('agent-supplied-on-error')
+      expect(toolCall?.conversationId).toBe(AGENT_ECHOED_ON_ERROR)
       await capture.stop()
     })
   })

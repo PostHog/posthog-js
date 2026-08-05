@@ -14,6 +14,9 @@ import { resetTodos, setupTestServerAndClient } from './test-utils/client-server
  * This is what lets calls correlate across reconnects, restarts, and the
  * per-request server instances the MCP 2026-07-28 revision introduces.
  */
+/** Shaped like a handle we would have minted, so it is echoed rather than replaced. */
+const CONVERSATION_HANDLE = '019fd2b0-4444-7444-8444-444444444444'
+
 describe('conversation_id as the session anchor', () => {
   let server: HighLevelMCPServerLike
   let client: any
@@ -129,7 +132,7 @@ describe('conversation_id as the session anchor', () => {
         },
       }
 
-      for (const handle of ['conversation-a', 'conversation-b']) {
+      for (const handle of ['019fd2b0-aaaa-7aaa-8aaa-aaaaaaaaaaaa', '019fd2b0-bbbb-7bbb-8bbb-bbbbbbbbbbbb']) {
         await callHandler(
           { method: 'tools/call', params: { name: 'add_todo', arguments: { text: 't', conversation_id: handle } } },
           extra
@@ -158,18 +161,49 @@ describe('conversation_id as the session anchor', () => {
         await other.cleanup()
       }
     })
+
+    it('does not merge two callers that invent the same conversation_id', async () => {
+      // The flip side of the property above. Agreement across pods is the whole
+      // point, so it cannot be weakened here — the guard is upstream, in
+      // resolveConversationId, which refuses to anchor on a handle it could not
+      // have minted. Without it, two unrelated users both sending `conv-1` share
+      // a session, and the data looks fine while being wrong.
+      instrument(server, fakePostHog(), { enableConversationId: true })
+
+      const other = await setupTestServerAndClient()
+      instrument(other.server, fakePostHog(), { enableConversationId: true })
+
+      try {
+        const invented = 'conv-1'
+        await callTool('from a', invented)
+        await other.client.request(
+          {
+            method: 'tools/call',
+            params: { name: 'add_todo', arguments: { text: 'from b', conversation_id: invented } },
+          },
+          CallToolResultSchema
+        )
+        await new Promise((r) => setTimeout(r, 60))
+
+        const sessions = new Set(capture.getCaptures().map((c: any) => c.properties.$session_id))
+        expect(sessions.size).toBe(2)
+        expect(sessions).not.toContain(deterministicPrefixedId('ses', invented))
+      } finally {
+        await other.cleanup()
+      }
+    })
   })
 
   describe('tool calls', () => {
     it('groups calls sharing a conversation id into one session', async () => {
       instrument(server, fakePostHog(), { enableConversationId: true })
 
-      await callTool('first', 'conversation-xyz')
-      await callTool('second', 'conversation-xyz')
+      await callTool('first', CONVERSATION_HANDLE)
+      await callTool('second', CONVERSATION_HANDLE)
 
       // Assert the derived value, not just that the two agree — they would also
       // agree on the transport session id if the handle were ignored entirely.
-      const expected = deterministicPrefixedId('ses', 'conversation-xyz')
+      const expected = deterministicPrefixedId('ses', CONVERSATION_HANDLE)
       expect(toolCallSessionIds()).toEqual([expected, expected])
     })
 
@@ -186,11 +220,11 @@ describe('conversation_id as the session anchor', () => {
     it('stamps both $session_id and $mcp_conversation_id on the payload', async () => {
       instrument(server, fakePostHog(), { enableConversationId: true })
 
-      await callTool('first', 'conversation-xyz')
+      await callTool('first', CONVERSATION_HANDLE)
 
       const [payload] = capture.findCapturesByEvent('$mcp_tool_call')
-      expect(payload.properties.$session_id).toBe(deterministicPrefixedId('ses', 'conversation-xyz'))
-      expect(payload.properties.$mcp_conversation_id).toBe('conversation-xyz')
+      expect(payload.properties.$session_id).toBe(deterministicPrefixedId('ses', CONVERSATION_HANDLE))
+      expect(payload.properties.$mcp_conversation_id).toBe(CONVERSATION_HANDLE)
       // Deliberately distinct values: one is the grouping key, the other the raw handle.
       expect(payload.properties.$session_id).not.toBe(payload.properties.$mcp_conversation_id)
     })
@@ -200,7 +234,7 @@ describe('conversation_id as the session anchor', () => {
       const data = getServerTrackingData(server.server as MCPServerLike)!
 
       // The argument is the host's own, not ours, when injection is disabled.
-      await callTool('first', 'conversation-xyz')
+      await callTool('first', CONVERSATION_HANDLE)
 
       expect(toolCallSessionIds()[0]).toBe(data.sessionId)
     })
