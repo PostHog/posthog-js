@@ -406,8 +406,9 @@ class PosthogReactNativePluginModule(
     Log.println(Log.ERROR, POSTHOG_TAG, "Method $method, error: $error")
   }
 
-  // These reject instead of this module's usual swallow-and-resolve convention:
-  // registration has real error paths (blank token, unresolvable appId) JS needs to see.
+  // These reject instead of this module's usual swallow-and-resolve convention: a failed
+  // registration is a distinct signal, not a silent success. The JS layer's public methods
+  // never throw, so the rejection is what gives it something to log.
   @ReactMethod
   fun registerPushNotificationToken(
     deviceToken: String?,

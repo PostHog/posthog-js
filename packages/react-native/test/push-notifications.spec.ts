@@ -181,6 +181,23 @@ describe('push notifications', () => {
       await posthog.shutdown()
     })
 
+    it('queues identify() behind an in-flight native setup instead of dropping it', async () => {
+      // Push brings native up by default, so startup identifies land while setup() is still in
+      // flight. Dropping one strands native on the anonymous id the setup call snapshotted, and
+      // the push subscription registers under it.
+      const { posthog, resolveSetup } = await createPostHogWithPendingSetup()
+
+      await posthog.identify('user-A')
+      expect(mockPlugin.identify).not.toHaveBeenCalled()
+
+      resolveSetup()
+      await waitForExpect(1000, () => {
+        expect(mockPlugin.identify).toHaveBeenCalledWith('user-A', expect.any(String))
+      })
+
+      await posthog.shutdown()
+    })
+
     it('re-sends consent on reset(), which clears the JS opt-out', async () => {
       // super.reset() drops the persisted OptedOut property, so JS is opted back in. Native
       // keeps its own copy and would otherwise stay opted out for the rest of the process,
@@ -197,6 +214,42 @@ describe('push notifications', () => {
       await waitForExpect(1000, () => {
         expect(mockPlugin.setOptOut).toHaveBeenCalledWith(false)
       })
+
+      await posthog.shutdown()
+    })
+
+    it('re-asserts JS consent to native after setup()', async () => {
+      // Native resolves its own persisted opt-out over the sdkOptions.optOut passed to setup(),
+      // so an earlier optIn() keeps winning and an opted-out user would keep registering a
+      // push token. Only an explicit setOptOut() overwrites it, so setup() must be followed
+      // by one every time.
+      const posthog = await createPostHog()
+
+      await waitForExpect(1000, () => {
+        expect(mockPlugin.setup).toHaveBeenCalled()
+        expect(mockPlugin.setOptOut).toHaveBeenCalledWith(false)
+      })
+      expect(mockPlugin.setup.mock.invocationCallOrder[0]).toBeLessThan(
+        mockPlugin.setOptOut.mock.invocationCallOrder[0]
+      )
+
+      await posthog.shutdown()
+    })
+
+    it('does not double-initialize native when startSessionRecording races a push call', async () => {
+      // startSessionRecording() is the only entry to initializeNativePlugin() off the replay
+      // eval chain; unserialized it races push's forced init and each builds a different
+      // pluginConfig, so whichever setup() native captures first silently wins. Awaiting both
+      // also proves the chaining doesn't deadlock.
+      const posthog = await createPostHog({
+        capturePushNotificationSubscriptions: false,
+        capturePushNotificationOpened: false,
+      })
+      expect(mockPlugin.setup).not.toHaveBeenCalled()
+
+      await Promise.all([posthog.startSessionRecording(), posthog.registerPushNotificationToken('token-abc')])
+
+      expect(mockPlugin.setup).toHaveBeenCalledTimes(1)
 
       await posthog.shutdown()
     })
@@ -222,9 +275,8 @@ describe('push notifications', () => {
     })
 
     it('initializes native push on optIn() when the app started opted out', async () => {
-      // Nothing runs setup() for an opted-out user, and optIn() alone used to propagate
-      // consent to a native instance that did not exist — so push never armed without a
-      // restart, contradicting the changeset's no-restart promise.
+      // Nothing runs setup() for an opted-out user, so consent has no native instance to land
+      // on — optIn() has to bring one up or push never arms without a restart.
       const posthog = await createPostHog({ defaultOptIn: false })
       expect(mockPlugin.setup).not.toHaveBeenCalled()
 
@@ -239,9 +291,8 @@ describe('push notifications', () => {
     })
 
     it('converges on the final consent when optOut() and optIn() are not awaited', async () => {
-      // optOut() dispatches two bridge calls where optIn() dispatches one, so an unawaited
-      // pair could previously land setOptOut(false) before setOptOut(true) and leave native
-      // stuck opted out until the next cold start.
+      // optOut() dispatches two bridge calls where optIn() dispatches one. Consent is read at
+      // dispatch, so the pair converges on the final value however the two interleave.
       const posthog = await createPostHog()
 
       void posthog.optOut()
@@ -276,6 +327,22 @@ describe('push notifications', () => {
       const posthog = await createPostHog({ pushIdentityProvider: jest.fn(async () => 'token') })
 
       expect(mockPlugin.setup.mock.calls[0][2].push.pushIdentityProviderEnabled).toBe(false)
+
+      await posthog.shutdown()
+    })
+
+    it('still installs the provider when replay brings native up for an opted-out user', async () => {
+      // Push is off while opted out, but replay's setup() is the only one native will ever run,
+      // so the provider must install there or every subscription after optIn() is unauthenticated.
+      const provider = jest.fn(async () => 'token')
+      const posthog = await createPostHog({
+        defaultOptIn: false,
+        enableSessionReplay: true,
+        pushIdentityProvider: provider,
+      })
+
+      expect(mockPlugin.setPushIdentityProvider).toHaveBeenCalledWith(provider)
+      expect(mockPlugin.setup.mock.calls[0][2].push.pushIdentityProviderEnabled).toBe(true)
 
       await posthog.shutdown()
     })
@@ -360,9 +427,10 @@ describe('push notifications', () => {
     })
 
     it('propagates opt-out to native after the unregister is dispatched', async () => {
-      // Native persists its own consent flag and only reads the JS one at setup(), so without
-      // this an OS token refresh after optOut() would auto-register a new subscription. The
-      // unregister must be dispatched first: native gates unregister sends on its opt-out flag.
+      // Native persists its own consent flag and resolves it over the one setup() passes, so
+      // without this an OS token refresh after optOut() would auto-register a new subscription.
+      // The unregister must be dispatched first: native gates unregister sends on its opt-out
+      // flag. Indexed by value, not position — setup() re-asserts consent before any of this.
       const posthog = await createPostHog()
 
       await posthog.optOut()
@@ -370,8 +438,9 @@ describe('push notifications', () => {
       await waitForExpect(1000, () => {
         expect(mockPlugin.setOptOut).toHaveBeenCalledWith(true)
       })
+      const optOutCall = mockPlugin.setOptOut.mock.calls.findIndex(([optOut]) => optOut === true)
       expect(mockPlugin.unregisterPushNotificationToken.mock.invocationCallOrder[0]).toBeLessThan(
-        mockPlugin.setOptOut.mock.invocationCallOrder[0]
+        mockPlugin.setOptOut.mock.invocationCallOrder[optOutCall]
       )
 
       await posthog.shutdown()
@@ -437,8 +506,8 @@ describe('push notifications', () => {
 
     it('brings native up for a manual register when both capture flags are off', async () => {
       // The FCM-on-both-platforms setup the docs describe: auto-capture off, host registers
-      // itself. Without a forced init the promise resolves having done nothing, because
-      // native's own isEnabled() guard drops the call when setup() never ran.
+      // itself. Needs a forced init — native's own isEnabled() guard drops the call when
+      // setup() never ran, and the promise would resolve having done nothing.
       const posthog = await createPostHog({
         capturePushNotificationSubscriptions: false,
         capturePushNotificationOpened: false,
@@ -460,9 +529,9 @@ describe('push notifications', () => {
     })
 
     it('does not claim native initialization on the legacy session-replay plugin', async () => {
-      // The legacy plugin has no setup(), so push can never reach native. Latching that as
-      // "unsupported" rather than "initialized" keeps a manual call from being reported as
-      // delivered — and keeps session replay's own resume path from trusting a dead instance.
+      // The legacy plugin has no setup(), so push can never reach native. Latched unsupported,
+      // not initialized: a manual call must no-op rather than be reported as delivered, and
+      // replay's resume path must not trust an instance that isn't there.
       delete (mockPlugin as any).setup
       const posthog = await createPostHog()
 
