@@ -1540,6 +1540,39 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       ])
       expect(captureCall[0].properties.$ai_reasoning_tokens).toBe(5)
     })
+
+    // Agentic loops replay the previous assistant turn — reasoning included — as the
+    // next step's prompt, so the input mapper has to carry the thinking text too.
+    it.each(['v2', 'v3'] as const)(
+      'should map the reasoning text of an assistant turn in %s input',
+      async (version) => {
+        const baseModel = version === 'v3' ? createMockV3Model('test-model') : createMockV2Model('test-model')
+        const model = withTracing(baseModel, mockPostHogClient, { posthogDistinctId: 'test-user' })
+
+        await model.doGenerate({
+          prompt: [
+            { role: 'user', content: [{ type: 'text', text: 'What is 9 + 10?' }] },
+            {
+              role: 'assistant',
+              content: [
+                { type: 'reasoning', text: 'The user wants a sum: 9 + 10 = 19.' },
+                { type: 'text', text: '19' },
+              ],
+            },
+            { role: 'user', content: [{ type: 'text', text: 'And plus one?' }] },
+          ],
+        } as any)
+
+        const properties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+        expect(properties.$ai_input[1]).toEqual({
+          role: 'assistant',
+          content: [
+            { type: 'reasoning', text: 'The user wants a sum: 9 + 10 = 19.' },
+            { type: 'text', text: '19' },
+          ],
+        })
+      }
+    )
   })
 
   describe('Prototype getter preservation', () => {

@@ -1,5 +1,23 @@
 # @posthog/core
 
+## 1.46.8
+
+### Patch Changes
+
+- [#4380](https://github.com/PostHog/posthog-js/pull/4380) [`3c40b6c`](https://github.com/PostHog/posthog-js/commit/3c40b6cecd66633d16f3f94ec6614af656445f2e) Thanks [@marandaneto](https://github.com/marandaneto)! - Keep request timeouts active through response body consumption and clarify eventual event UUID deduplication semantics.
+  (2026-08-05)
+- Updated dependencies [[`3c40b6c`](https://github.com/PostHog/posthog-js/commit/3c40b6cecd66633d16f3f94ec6614af656445f2e)]:
+  - @posthog/types@1.401.1
+
+## 1.46.7
+
+### Patch Changes
+
+- [#4287](https://github.com/PostHog/posthog-js/pull/4287) [`d3c4538`](https://github.com/PostHog/posthog-js/commit/d3c4538b7c22aa468aa0ab9e0edb63d2966618e7) Thanks [@posthog](https://github.com/apps/posthog)! - Keep `$referring_domain` and canonical `utm_*`/campaign parameters on minimal `$feature_flag_called` events. Previously the minimal allowlist stripped every campaign parameter, so a flag-called event landing first in a session could set the session's UTM attribution and channel type to NULL in web analytics.
+  (2026-08-04)
+- Updated dependencies [[`43d1850`](https://github.com/PostHog/posthog-js/commit/43d18506565b491c4a1013f9237aa732ae3d6f4e)]:
+  - @posthog/types@1.401.0
+
 ## 1.46.6
 
 ### Patch Changes

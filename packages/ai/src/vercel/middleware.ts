@@ -128,7 +128,7 @@ const mapVercelPrompt = (messages: LanguageModelPrompt): PostHogInput[] => {
           } else if (c.type === 'reasoning') {
             return {
               type: 'reasoning',
-              text: truncate(c.reasoning),
+              text: truncate(c.text),
             }
           } else if (c.type === 'tool-call') {
             return {

@@ -287,6 +287,193 @@ describe('form', () => {
   });
 });
 
+describe('attribute masking', () => {
+  type AttributeMaskingOptions = {
+    maskAllElementAttributes?: boolean;
+    newlyAddedElement?: boolean;
+    maskAttributeFn?: (
+      name: string,
+      value: string,
+      element: Element,
+    ) => string;
+  };
+
+  const serializeElement = (
+    el: Element,
+    opts: AttributeMaskingOptions,
+  ): elementNode =>
+    serializeNodeWithId(el, {
+      doc: document,
+      mirror: new Mirror(),
+      blockClass: 'blockblock',
+      blockSelector: null,
+      maskTextClass: 'maskmask',
+      maskTextSelector: null,
+      skipChild: false,
+      inlineStylesheet: true,
+      maskTextFn: undefined,
+      maskInputFn: undefined,
+      slimDOMOptions: {},
+      ...opts,
+    }) as elementNode;
+
+  const serializeWith = (
+    html: string,
+    selector: string,
+    opts: AttributeMaskingOptions,
+  ): elementNode => {
+    document.write(html);
+    return serializeElement(document.querySelector(selector)!, opts);
+  };
+
+  it('leaves attributes untouched by default', () => {
+    const sn = serializeWith(
+      `<div id="d1" class="c1" aria-label="Jane Doe" title="secret"></div>`,
+      'div',
+      {},
+    );
+    expect(sn.attributes['aria-label']).toBe('Jane Doe');
+    expect(sn.attributes.title).toBe('secret');
+  });
+
+  it('maskAllElementAttributes masks PII-bearing rendering and form attributes', () => {
+    const sn = serializeWith(
+      `<input id="user@example.com" class="account-user@example.com" style="--user: user@example.com" src="/avatar/user@example.com" value="user@example.com" type="text" rr_width="user@example.com" />`,
+      'input',
+      { maskAllElementAttributes: true },
+    );
+    for (const name of [
+      'id',
+      'class',
+      'style',
+      'src',
+      'value',
+      'type',
+      'rr_width',
+    ]) {
+      expect(sn.attributes[name]).toMatch(/^\*+$/);
+    }
+    expect(Object.values(sn.attributes).join(' ')).not.toContain(
+      'user@example.com',
+    );
+  });
+
+  it('masks the synthesized live input value after form serialization', () => {
+    document.write(`<input value="stale" />`);
+    const input = document.querySelector('input')!;
+    input.value = 'alice@example.com';
+    const maskAttributeFn = vi.fn((name: string, value: string) =>
+      name === 'value' ? '[VALUE-MASKED]' : value,
+    );
+    const sn = serializeElement(input, { maskAttributeFn });
+    expect(sn.attributes.value).toBe('[VALUE-MASKED]');
+    expect(maskAttributeFn).toHaveBeenCalledWith(
+      'value',
+      'alice@example.com',
+      input,
+    );
+  });
+
+  it.each([
+    ['full snapshots', false],
+    ['newly added nodes', true],
+  ])(
+    'masks source rr_open_mode on closed dialogs in %s',
+    (_path, newlyAddedElement) => {
+      const dialog = document.createElement('dialog');
+      dialog.setAttribute('rr_open_mode', 'alice@example.com');
+
+      const sn = serializeElement(dialog, {
+        maskAllElementAttributes: true,
+        newlyAddedElement,
+      });
+
+      expect(sn.attributes.rr_open_mode).toMatch(/^\*+$/);
+      expect(sn.attributes.rr_open_mode).not.toContain('alice@example.com');
+    },
+  );
+
+  it.each([
+    ['modal', 'full snapshots', false],
+    ['non-modal', 'full snapshots', false],
+    ['modal', 'newly added nodes', true],
+    ['non-modal', 'newly added nodes', true],
+  ] as const)(
+    'preserves generated %s dialog mode in %s',
+    (openMode, _path, newlyAddedElement) => {
+      const dialog = document.createElement('dialog');
+      dialog.setAttribute('open', '');
+      dialog.setAttribute('rr_open_mode', 'alice@example.com');
+      vi.spyOn(dialog, 'matches').mockReturnValue(openMode === 'modal');
+
+      const sn = serializeElement(dialog, {
+        maskAllElementAttributes: true,
+        newlyAddedElement,
+      });
+
+      expect(sn.attributes.rr_open_mode).toBe(openMode);
+    },
+  );
+
+  it('maskAttributeFn takes precedence over maskAllElementAttributes', () => {
+    const maskAttributeFn = vi.fn((name: string, value: string) =>
+      name === 'aria-label' ? 'REDACTED' : value,
+    );
+    const sn = serializeWith(
+      `<div aria-label="Jane Doe" title="visible"></div>`,
+      'div',
+      { maskAllElementAttributes: true, maskAttributeFn },
+    );
+    expect(sn.attributes['aria-label']).toBe('REDACTED');
+    expect(sn.attributes.title).toBe('visible');
+    expect(maskAttributeFn).toHaveBeenCalledWith(
+      'title',
+      'visible',
+      expect.any(Element),
+    );
+  });
+
+  it('passes SVG and namespaced attributes with an Element to the callback', () => {
+    const sn = serializeWith(
+      `<svg><use xlink:href="/sprites.svg#user@example.com" data-owner="user@example.com"></use></svg>`,
+      'use',
+      {
+        maskAttributeFn: (name, _value, element) =>
+          `[${element.namespaceURI}:${name}]`,
+      },
+    );
+    expect(sn.attributes['xlink:href']).toBe(
+      '[http://www.w3.org/2000/svg:xlink:href]',
+    );
+    expect(sn.attributes['data-owner']).toBe(
+      '[http://www.w3.org/2000/svg:data-owner]',
+    );
+  });
+
+  it('masks an inaccessible iframe source under its final rr_src key', () => {
+    const iframe = document.createElement('iframe');
+    iframe.setAttribute('src', '/frame?email=alice@example.com');
+    Object.defineProperty(iframe, 'contentDocument', {
+      configurable: true,
+      value: null,
+    });
+    const maskAttributeFn = vi.fn((name: string) => `[${name}-MASKED]`);
+    const sn = serializeElement(iframe, { maskAttributeFn });
+    expect(sn.attributes.src).toBeUndefined();
+    expect(sn.attributes.rr_src).toBe('[rr_src-MASKED]');
+    expect(maskAttributeFn).toHaveBeenCalledWith(
+      'rr_src',
+      expect.stringContaining('alice@example.com'),
+      iframe,
+    );
+    expect(maskAttributeFn).not.toHaveBeenCalledWith(
+      'src',
+      expect.anything(),
+      iframe,
+    );
+  });
+});
+
 describe('blocked elements with CSS transforms', () => {
   const renderWithStyle = (html: string, styles: string): HTMLElement => {
     const styleEl = document.createElement('style');

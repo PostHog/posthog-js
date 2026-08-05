@@ -1,5 +1,17 @@
 # @posthog/convex
 
+## 2.1.0
+
+### Minor Changes
+
+- [#4342](https://github.com/PostHog/posthog-js/pull/4342) [`fa3457f`](https://github.com/PostHog/posthog-js/commit/fa3457fcb21acf7bb1c9f217bd4b6445d763bb88) Thanks [@haacked](https://github.com/haacked)! - Support the `starts_with`, `not_starts_with`, `ends_with`, and `not_ends_with` property filter operators in feature flag local evaluation. Matching is case-insensitive and mirrors `icontains`, so flags using these operators no longer fall back to remote evaluation.
+  (2026-08-05)
+
+### Patch Changes
+
+- Updated dependencies [[`fa3457f`](https://github.com/PostHog/posthog-js/commit/fa3457fcb21acf7bb1c9f217bd4b6445d763bb88)]:
+  - posthog-node@5.48.0
+
 ## 2.0.33
 
 ### Patch Changes

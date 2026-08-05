@@ -42,6 +42,9 @@ type MaskInputFn = (text: string, element: HTMLElement) => string
 // Replication of `MaskTextFn` from inside `@posthog/rrweb-record`/`@posthog/rrweb-snapshot`
 type MaskTextFn = (text: string, element: HTMLElement | null) => string
 
+// Replication of `MaskAttributeFn` from inside `@posthog/rrweb-record`/`@posthog/rrweb-snapshot`
+type MaskAttributeFn = (name: string, value: string, element: Element) => string
+
 // Replication of `CanvasMasking` from inside `@posthog/rrweb-types`
 type CanvasMasking = {
     regionsFn?: (
@@ -72,7 +75,7 @@ type DataURLOptions = Partial<{
 }>
 
 // Replication of `ErrorHandler` from inside `@posthog/rrweb-record`
-type ErrorHandler = (error: unknown) => void | boolean
+type ErrorHandler = (error: unknown, context?: 'rrweb' | 'host') => void | boolean
 
 // Replication of `recordOptions` from inside `@posthog/rrweb-record`
 export type recordOptions = {
@@ -89,10 +92,13 @@ export type recordOptions = {
     maskInputOptions?: MaskInputOptions
     maskInputFn?: MaskInputFn
     maskTextFn?: MaskTextFn
+    maskAllElementAttributes?: boolean
+    maskAttributeFn?: MaskAttributeFn
     slimDOMOptions?: SlimDOMOptions | 'all' | true
     ignoreCSSAttributes?: Set<string>
     attributeFilter?: string[]
     inlineStylesheet?: boolean
+    inlineStylesheetBudgetRules?: number
     hooks?: hooksParam
     packFn?: PackFn
     sampling?: SamplingStrategy

@@ -1,5 +1,35 @@
 # @posthog/types
 
+## 1.402.1
+
+### Patch Changes
+
+- [#4286](https://github.com/PostHog/posthog-js/pull/4286) [`d108d66`](https://github.com/PostHog/posthog-js/commit/d108d668d1fcae8fdc5834dd50230e5814f8023f) Thanks [@posthog](https://github.com/apps/posthog)! - fix(replay): preserve privacy masking for initial network metadata
+
+    Initial navigation and performance-timing entries are now passed through `maskCapturedNetworkRequestFn`, including when they have no method. URL rewrites are respected. When the callback returns nullish for an initial entry, replay-required timing metadata is retained without its URL, headers, or body so method-gated callbacks do not drop the metadata or expose deliberately filtered customer data. Derived server-timing entries are also suppressed when this strict fallback is used. Enforced PostHog filtering and payload cleaning still run first. (2026-08-05)
+
+## 1.402.0
+
+### Minor Changes
+
+- [#4376](https://github.com/PostHog/posthog-js/pull/4376) [`2da12b8`](https://github.com/PostHog/posthog-js/commit/2da12b8cbe7c3fa2354bfc157a4db927ef5a3ac1) Thanks [@posthog](https://github.com/apps/posthog)! - Add attribute-level masking to session replay: `maskAttributeFn` provides per-attribute control over the final serialized value, while `maskAllElementAttributes` masks all source DOM string attributes (including rendering attributes and synthesized form values) at the cost of replay fidelity.
+  (2026-08-05)
+
+## 1.401.1
+
+### Patch Changes
+
+- [#4380](https://github.com/PostHog/posthog-js/pull/4380) [`3c40b6c`](https://github.com/PostHog/posthog-js/commit/3c40b6cecd66633d16f3f94ec6614af656445f2e) Thanks [@marandaneto](https://github.com/marandaneto)! - Keep request timeouts active through response body consumption and clarify eventual event UUID deduplication semantics.
+  (2026-08-05)
+
+## 1.401.0
+
+### Minor Changes
+
+- [#4266](https://github.com/PostHog/posthog-js/pull/4266) [`43d1850`](https://github.com/PostHog/posthog-js/commit/43d18506565b491c4a1013f9237aa732ae3d6f4e) Thanks [@posthog](https://github.com/apps/posthog)! - feat: add opt-in `capture_performance.__preview_web_vitals_soft_navs` to fix inflated web vitals on single-page apps
+
+    Client-side route changes in SPAs previously left web vitals (LCP especially) accumulating against the original hard-navigation timestamp, inflating the top tail of Core Web Vitals. Setting `capture_performance: { __preview_web_vitals_soft_navs: true }` now scopes metrics to the browser's Soft Navigation entries so each route change starts a fresh measurement window. It's a preview option because it relies on Chrome's experimental Soft Navigation Detection API and loads pinned stable web-vitals 6.x callbacks; when disabled (the default), the existing web-vitals 5.x behavior remains unchanged. (2026-08-04)
+
 ## 1.400.2
 
 ### Patch Changes

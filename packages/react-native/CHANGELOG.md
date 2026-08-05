@@ -1,5 +1,28 @@
 # posthog-react-native
 
+## 4.62.0
+
+### Minor Changes
+
+- [#4415](https://github.com/PostHog/posthog-js/pull/4415) [`32434e4`](https://github.com/PostHog/posthog-js/commit/32434e403611bab48c91813cd12f542576711521) Thanks [@ioannisj](https://github.com/ioannisj)! - Add push notification support, so PostHog Workflows can target React Native apps.
+
+  With `@posthog/react-native-plugin` installed, device tokens register automatically on iOS and Android, and notification opens are captured as `$push_notification_opened`. Both are on by default; opt out with `capturePushNotificationSubscriptions: false` or `capturePushNotificationOpened: false`.
+  - `registerPushNotificationToken` and `unregisterPushNotificationToken` handle token refreshes and manual control.
+  - `capturePushNotificationOpened` covers the warm-start opens that auto-detection cannot see.
+  - `pushIdentityProvider` mints a signed token for projects that require identity-verified subscriptions.
+  - An opted-out user registers no token, and consent changes propagate to the native SDK at runtime: `optOut()` stops native auto-registration (e.g. on an OS token refresh) and requests removal of an already-registered subscription. Known limitation: the native SDKs gate that removal on their own consent state, so deleting an existing subscription may not complete until the next opted-in launch, and `optIn()` does not refetch a token on its own yet — tracked in PostHog/posthog-android#675 and PostHog/posthog-ios#746.
+  - `reset()` now propagates to the native SDK: it unregisters the logged-out user's subscription and re-registers under the new identity. The re-registration can briefly race the identity handoff on both platforms; the native SDKs converge it on the next flush. (2026-08-05)
+
+## 4.61.5
+
+### Patch Changes
+
+- [#4380](https://github.com/PostHog/posthog-js/pull/4380) [`3c40b6c`](https://github.com/PostHog/posthog-js/commit/3c40b6cecd66633d16f3f94ec6614af656445f2e) Thanks [@marandaneto](https://github.com/marandaneto)! - Keep request timeouts active through response body consumption and clarify eventual event UUID deduplication semantics.
+  (2026-08-05)
+- Updated dependencies [[`3c40b6c`](https://github.com/PostHog/posthog-js/commit/3c40b6cecd66633d16f3f94ec6614af656445f2e)]:
+  - @posthog/core@1.46.8
+  - @posthog/types@1.401.1
+
 ## 4.61.4
 
 ### Patch Changes

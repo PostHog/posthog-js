@@ -247,6 +247,25 @@ export interface PerformanceCaptureConfig {
      * @default false
      */
     web_vitals_attribution?: boolean
+
+    /**
+     * Scope web vitals metrics to the browser's Soft Navigation entries, so that
+     * client-side route changes in single-page apps each start a fresh measurement
+     * window instead of accumulating against the original hard-navigation timestamp.
+     *
+     * Without this, an SPA's LCP observer keeps treating the "largest paint so far"
+     * as belonging to the initial page load across every subsequent route change,
+     * which inflates LCP (and the other metrics) by the time spent on the app.
+     *
+     * This is a preview option (opt-in) because it relies on Chrome's Soft Navigation Detection API,
+     * which is still experimental. When enabled, PostHog loads a pinned stable web-vitals 6.x
+     * bundle and passes `reportSoftNavs` to the observers. The default path remains on the
+     * existing web-vitals 5.x bundle. In browsers without soft-nav support, metrics fall
+     * back to their existing hard-navigation behavior.
+     *
+     * @default false
+     */
+    __preview_web_vitals_soft_navs?: boolean
 }
 
 export interface DeadClickCandidate {
@@ -611,6 +630,26 @@ export interface SessionRecordingOptions {
     maskInputFn?: ((text: string, element?: HTMLElement) => string) | null
 
     /**
+     * Derived from `rrweb.record` options. Masks every string-valued source DOM attribute,
+     * including rendering attributes such as `class`, `id`, `style`, `src`, `href`, and
+     * synthesized form values. Only rrweb-generated layout metadata is retained, so this
+     * option intentionally reduces replay fidelity. `maskAttributeFn` takes precedence when
+     * both options are set.
+     * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     * @default false
+     */
+    maskAllElementAttributes?: boolean
+
+    /**
+     * Derived from `rrweb.record` options. Called with `(name, value, element)` for every
+     * non-empty string-valued attribute in the final serialized representation so you can mask
+     * specific attributes. Returning the original value leaves it visible. This callback
+     * takes precedence over `maskAllElementAttributes` when both options are set.
+     * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     */
+    maskAttributeFn?: ((name: string, value: string, element?: Element) => string) | null
+
+    /**
      * Derived from `rrweb.record` options
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
      * @default {}
@@ -630,6 +669,15 @@ export interface SessionRecordingOptions {
      * @default true
      */
     inlineStylesheet?: boolean
+
+    /**
+     * Max CSSRules inlined synchronously per full snapshot. Sheets past the
+     * budget keep their `rel`/`href` (so replay can load them remotely) and
+     * are inlined across idle callbacks instead of blocking the snapshot.
+     * Set 0 to inline everything up front (the pre-budget behaviour).
+     * @default 10000
+     */
+    inlineStylesheetBudgetRules?: number
 
     /**
      * Derived from `rrweb.record` options
@@ -746,7 +794,12 @@ export interface SessionRecordingOptions {
     }
 
     /**
-     * Modify the network request before it is captured. Returning null or undefined stops it being captured
+     * Modify the network request before it is captured. Returning null or undefined stops it being captured.
+     *
+     * Initial navigation and performance-timing entries are also passed to this function. They have
+     * `isInitial === true`, can have `method === undefined`, and contain the page URL in `name`. If the
+     * function returns null or undefined for an initial entry, PostHog retains the replay-required timing
+     * metadata but omits its URL, headers, and body. Return a modified entry to retain a redacted URL.
      */
     maskCapturedNetworkRequestFn?: ((data: CapturedNetworkRequest) => CapturedNetworkRequest | null | undefined) | null
 

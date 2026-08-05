@@ -3579,6 +3579,10 @@
           "name": "Props"
         },
         {
+          "type": "\"push_registered\"",
+          "name": "PushRegistered"
+        },
+        {
           "type": "\"queue\"",
           "name": "Queue"
         },

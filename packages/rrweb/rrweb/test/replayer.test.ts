@@ -32,6 +32,7 @@ import adoptedStyleSheetModification from './events/adopted-style-sheet-modifica
 import documentReplacementEvents from './events/document-replacement';
 import hoverInIframeShadowDom from './events/iframe-shadowdom-hover';
 import customElementDefineClass from './events/custom-element-define-class';
+import svgXlinkHrefEvents from './events/svg-xlink-href';
 import {
   EventType,
   IncrementalSource,
@@ -931,6 +932,23 @@ describe('replayer', function () {
     await page.waitForTimeout(50);
 
     await assertDomSnapshot(page);
+  });
+
+  it('applies xlink:href attribute mutations with their namespace', async () => {
+    await page.evaluate(`events = ${JSON.stringify(svgXlinkHrefEvents)}`);
+    await page.evaluate(`
+      const { Replayer } = rrweb;
+      const replayer = new Replayer(events);
+      replayer.play();
+    `);
+    await page.waitForTimeout(200);
+
+    const href = await page.evaluate(`
+      replayer.iframe.contentDocument
+        .querySelector('use')
+        .getAttributeNS('http://www.w3.org/1999/xlink', 'href');
+    `);
+    expect(href).toBe('#icon-b');
   });
 
   it('should destroy the replayer after calling destroy()', async () => {

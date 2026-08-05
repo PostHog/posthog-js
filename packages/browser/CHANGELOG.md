@@ -1,5 +1,83 @@
 # posthog-js
 
+## 1.413.2
+
+### Patch Changes
+
+- [#4425](https://github.com/PostHog/posthog-js/pull/4425) [`ee7fab0`](https://github.com/PostHog/posthog-js/commit/ee7fab03198fd6b2c21303e9e0274c92452903ab) Thanks [@posthog](https://github.com/apps/posthog)! - Fix a benign network failure (e.g. `TypeError: Failed to fetch`) in the async native-gzip request path surfacing as an unhandled promise rejection, which exception autocapture would otherwise pick up
+  (2026-08-05)
+
+## 1.413.1
+
+### Patch Changes
+
+- [#4390](https://github.com/PostHog/posthog-js/pull/4390) [`1160403`](https://github.com/PostHog/posthog-js/commit/11604031ef1ed3f816ab4bc59cb72b6e09f046d8) Thanks [@posthog](https://github.com/apps/posthog)! - Contain and log recorder-owned callback failures while preserving exceptions from patched native host APIs. Keep recording mutations from adopted cross-realm nodes.
+  (2026-08-05)
+
+- [#4286](https://github.com/PostHog/posthog-js/pull/4286) [`d108d66`](https://github.com/PostHog/posthog-js/commit/d108d668d1fcae8fdc5834dd50230e5814f8023f) Thanks [@posthog](https://github.com/apps/posthog)! - fix(replay): preserve privacy masking for initial network metadata
+
+    Initial navigation and performance-timing entries are now passed through `maskCapturedNetworkRequestFn`, including when they have no method. URL rewrites are respected. When the callback returns nullish for an initial entry, replay-required timing metadata is retained without its URL, headers, or body so method-gated callbacks do not drop the metadata or expose deliberately filtered customer data. Derived server-timing entries are also suppressed when this strict fallback is used. Enforced PostHog filtering and payload cleaning still run first. (2026-08-05)
+
+- Updated dependencies [[`d108d66`](https://github.com/PostHog/posthog-js/commit/d108d668d1fcae8fdc5834dd50230e5814f8023f)]:
+    - @posthog/types@1.402.1
+
+## 1.413.0
+
+### Minor Changes
+
+- [#4376](https://github.com/PostHog/posthog-js/pull/4376) [`2da12b8`](https://github.com/PostHog/posthog-js/commit/2da12b8cbe7c3fa2354bfc157a4db927ef5a3ac1) Thanks [@posthog](https://github.com/apps/posthog)! - Add attribute-level masking to session replay: `maskAttributeFn` provides per-attribute control over the final serialized value, while `maskAllElementAttributes` masks all source DOM string attributes (including rendering attributes and synthesized form values) at the cost of replay fidelity.
+  (2026-08-05)
+
+### Patch Changes
+
+- [#4376](https://github.com/PostHog/posthog-js/pull/4376) [`2da12b8`](https://github.com/PostHog/posthog-js/commit/2da12b8cbe7c3fa2354bfc157a4db927ef5a3ac1) Thanks [@posthog](https://github.com/apps/posthog)! - fix(replay): discard held interaction-less recordings when a background document unloads without ever becoming visible
+  (2026-08-05)
+- Updated dependencies [[`2da12b8`](https://github.com/PostHog/posthog-js/commit/2da12b8cbe7c3fa2354bfc157a4db927ef5a3ac1)]:
+    - @posthog/types@1.402.0
+    - @posthog/browser-common@0.4.0
+
+## 1.412.2
+
+### Patch Changes
+
+- [#4417](https://github.com/PostHog/posthog-js/pull/4417) [`3acadfe`](https://github.com/PostHog/posthog-js/commit/3acadfeb7ea238b92241eca11b437086fd184c4f) Thanks [@marandaneto](https://github.com/marandaneto)! - fix(replay): discard held interaction-less recordings when a background document unloads without ever becoming visible
+  (2026-08-05)
+
+## 1.412.1
+
+### Patch Changes
+
+- [#4404](https://github.com/PostHog/posthog-js/pull/4404) [`a348fb3`](https://github.com/PostHog/posthog-js/commit/a348fb3c3fb53f104b5f50d6c7f3e32258451958) Thanks [@dependabot](https://github.com/apps/dependabot)! - Update PostCSS to include upstream security fixes.
+  (2026-08-05)
+
+## 1.412.0
+
+### Minor Changes
+
+- [#4320](https://github.com/PostHog/posthog-js/pull/4320) [`837363e`](https://github.com/PostHog/posthog-js/commit/837363e16909663444fd41d8cd0bac846ed8f727) Thanks [@posthog](https://github.com/apps/posthog)! - Bound the main-thread cost of the recorder's initial full snapshot, and start measuring it.
+
+    `stringifyStylesheet` reads `cssText` for every CSSRule of every stylesheet, all inside the one uninterruptible task that takes the full snapshot. On CSS-heavy pages that is the dominant cost, and it has been observed freezing the UI (no rendering, scrolling, or cursor movement) for seconds. The existing `maxDepth` guard doesn't help, since it only bounds deep DOMs, not wide ones or heavy CSS.
+
+    Stylesheet inlining now stops after a budget of CSSRules per snapshot (`session_recording.inlineStylesheetBudgetRules`, default 10,000; set `0` for the previous unbounded behaviour). Sheets past the budget are serialized without `_cssText`, keeping `rel`/`href` so replay can load them remotely, and are then inlined one per idle callback and delivered as attribute mutations. Replay fidelity is preserved; the work is just no longer one long blocking task.
+
+    The snapshot's cost is also now measured and reported on captured events, so slow snapshots are visible without a browser profile: `$sdk_debug_replay_slowest_full_snapshot_ms`, `$sdk_debug_replay_slowest_full_snapshot_stylesheet_ms`, `$sdk_debug_replay_slowest_full_snapshot_nodes`, `$sdk_debug_replay_slowest_full_snapshot_css_rules`, `$sdk_debug_replay_deferred_stylesheets`, and, for the incremental path, `$sdk_debug_replay_slowest_mutation_batch_ms`. (2026-08-05)
+
+## 1.411.0
+
+### Minor Changes
+
+- [#4266](https://github.com/PostHog/posthog-js/pull/4266) [`43d1850`](https://github.com/PostHog/posthog-js/commit/43d18506565b491c4a1013f9237aa732ae3d6f4e) Thanks [@posthog](https://github.com/apps/posthog)! - feat: add opt-in `capture_performance.__preview_web_vitals_soft_navs` to fix inflated web vitals on single-page apps
+
+    Client-side route changes in SPAs previously left web vitals (LCP especially) accumulating against the original hard-navigation timestamp, inflating the top tail of Core Web Vitals. Setting `capture_performance: { __preview_web_vitals_soft_navs: true }` now scopes metrics to the browser's Soft Navigation entries so each route change starts a fresh measurement window. It's a preview option because it relies on Chrome's experimental Soft Navigation Detection API and loads pinned stable web-vitals 6.x callbacks; when disabled (the default), the existing web-vitals 5.x behavior remains unchanged. (2026-08-04)
+
+### Patch Changes
+
+- [#4287](https://github.com/PostHog/posthog-js/pull/4287) [`d3c4538`](https://github.com/PostHog/posthog-js/commit/d3c4538b7c22aa468aa0ab9e0edb63d2966618e7) Thanks [@posthog](https://github.com/apps/posthog)! - Keep `$referring_domain` and canonical `utm_*`/campaign parameters on minimal `$feature_flag_called` events. Previously the minimal allowlist stripped every campaign parameter, so a flag-called event landing first in a session could set the session's UTM attribution and channel type to NULL in web analytics.
+  (2026-08-04)
+- Updated dependencies [[`d3c4538`](https://github.com/PostHog/posthog-js/commit/d3c4538b7c22aa468aa0ab9e0edb63d2966618e7), [`43d1850`](https://github.com/PostHog/posthog-js/commit/43d18506565b491c4a1013f9237aa732ae3d6f4e)]:
+    - @posthog/core@1.46.7
+    - @posthog/types@1.401.0
+
 ## 1.410.10
 
 ### Patch Changes

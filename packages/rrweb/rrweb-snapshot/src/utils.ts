@@ -1,5 +1,6 @@
 import type {
   idNodeMap,
+  MaskAttributeFn,
   MaskInputFn,
   MaskInputOptions,
   nodeMetaMap,
@@ -16,6 +17,11 @@ import type {
   elementNode,
 } from '@posthog/rrweb-types';
 import dom from '@posthog/rrweb-utils';
+import {
+  countStylesheetRules,
+  nowMs,
+  recordStylesheetCost,
+} from './snapshot-cost';
 
 export function isElement(n: Node): n is Element {
   return n.nodeType === n.ELEMENT_NODE;
@@ -122,12 +128,20 @@ export function hasEmptyShorthandLonghand(css: string): boolean {
   return /(?:^|[\s;{}])-?[a-zA-Z][\w-]*\s*:\s*;/.test(css);
 }
 
+// `stringifyStylesheet` recurses into `@import`ed sheets, so only the outermost
+// call owns the wall-clock measurement - otherwise nested sheets get counted twice.
+let stringifyStylesheetDepth = 0;
+
 export function stringifyStylesheet(s: CSSStyleSheet): string | null {
+  const isOutermost = stringifyStylesheetDepth === 0;
+  const startedAt = isOutermost ? nowMs() : 0;
+  stringifyStylesheetDepth += 1;
   try {
     const rules = s.rules || s.cssRules;
     if (!rules) {
       return null;
     }
+    countStylesheetRules(rules);
     let sheetHref = s.href;
     if (!sheetHref && s.ownerNode) {
       // an inline <style> element
@@ -139,6 +153,11 @@ export function stringifyStylesheet(s: CSSStyleSheet): string | null {
     return fixBrowserCompatibilityIssuesInCSS(stringifiedRules);
   } catch (error) {
     return null;
+  } finally {
+    stringifyStylesheetDepth -= 1;
+    if (isOutermost) {
+      recordStylesheetCost(nowMs() - startedAt);
+    }
   }
 }
 
@@ -312,6 +331,53 @@ export function maskInputValue({
 
 export function toLowerCase<T extends string>(str: T): Lowercase<T> {
   return str.toLowerCase() as unknown as Lowercase<T>;
+}
+
+// Minimum rrweb-generated layout metadata that must retain its value for replay.
+// Unlike source DOM attributes, these values cannot contain application strings.
+const RENDERING_METADATA_ATTRIBUTES = new Set([
+  'rr_width',
+  'rr_height',
+  'rr_left',
+  'rr_top',
+  'rr_position',
+  'rr_transform',
+  'rr_display',
+  'rr_scrollleft',
+  'rr_scrolltop',
+  'rr_mediastate',
+  'rr_open_mode',
+]);
+
+export function maskAttributeValue({
+  element,
+  name,
+  value,
+  maskAllElementAttributes,
+  maskAttributeFn,
+  isGenerated = false,
+}: {
+  element: Element;
+  name: string;
+  value: string | null;
+  maskAllElementAttributes: boolean;
+  maskAttributeFn: MaskAttributeFn | undefined;
+  isGenerated?: boolean;
+}): string | null {
+  if (!value) {
+    return value;
+  }
+  // A custom callback takes precedence so callers can choose a stable mask.
+  if (maskAttributeFn) {
+    return maskAttributeFn(name, value, element);
+  }
+  if (
+    maskAllElementAttributes &&
+    !(isGenerated && RENDERING_METADATA_ATTRIBUTES.has(toLowerCase(name)))
+  ) {
+    return '*'.repeat(value.length);
+  }
+  return value;
 }
 
 const ORIGINAL_ATTRIBUTE_NAME = '__rrweb_original__';
