@@ -16,6 +16,11 @@ import type {
   elementNode,
 } from '@posthog/rrweb-types';
 import dom from '@posthog/rrweb-utils';
+import {
+  countStylesheetRules,
+  nowMs,
+  recordStylesheetCost,
+} from './snapshot-cost';
 
 export function isElement(n: Node): n is Element {
   return n.nodeType === n.ELEMENT_NODE;
@@ -122,12 +127,20 @@ export function hasEmptyShorthandLonghand(css: string): boolean {
   return /(?:^|[\s;{}])-?[a-zA-Z][\w-]*\s*:\s*;/.test(css);
 }
 
+// `stringifyStylesheet` recurses into `@import`ed sheets, so only the outermost
+// call owns the wall-clock measurement - otherwise nested sheets get counted twice.
+let stringifyStylesheetDepth = 0;
+
 export function stringifyStylesheet(s: CSSStyleSheet): string | null {
+  const isOutermost = stringifyStylesheetDepth === 0;
+  const startedAt = isOutermost ? nowMs() : 0;
+  stringifyStylesheetDepth += 1;
   try {
     const rules = s.rules || s.cssRules;
     if (!rules) {
       return null;
     }
+    countStylesheetRules(rules);
     let sheetHref = s.href;
     if (!sheetHref && s.ownerNode) {
       // an inline <style> element
@@ -139,6 +152,11 @@ export function stringifyStylesheet(s: CSSStyleSheet): string | null {
     return fixBrowserCompatibilityIssuesInCSS(stringifiedRules);
   } catch (error) {
     return null;
+  } finally {
+    stringifyStylesheetDepth -= 1;
+    if (isOutermost) {
+      recordStylesheetCost(nowMs() - startedAt);
+    }
   }
 }
 
