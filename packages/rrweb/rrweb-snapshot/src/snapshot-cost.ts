@@ -30,6 +30,18 @@ export type MutationCost = {
   slowestBatchMs: number;
 };
 
+/**
+ * Deferred sheets that never made it back into the recording. Both leave the
+ * `<link>` serialized with only `rel`/`href`, so replay falls back to loading
+ * the CSS from its original URL - which may 404 or have changed by then.
+ */
+export type DeferredStylesheetStats = {
+  /** deferred sheets whose idle-time stringification produced nothing */
+  failedCount: number;
+  /** deferred sheets dropped when a teardown flush hit its safety cap */
+  abandonedCount: number;
+};
+
 const emptyCost = (): SnapshotCost => ({
   durationMs: 0,
   stylesheetMs: 0,
@@ -62,6 +74,11 @@ let stylesheetBudgetRules: number | null = null;
 let deferredStylesheetLinks: HTMLLinkElement[] = [];
 
 let mutationCost: MutationCost = { slowestBatchMs: 0 };
+
+let deferredStylesheetStats: DeferredStylesheetStats = {
+  failedCount: 0,
+  abandonedCount: 0,
+};
 
 const positiveOrNull = (n: number | null | undefined) =>
   n && n > 0 ? n : null;
@@ -234,6 +251,20 @@ export function takeDeferredStylesheetLinks(): HTMLLinkElement[] {
   return links;
 }
 
+export function recordDeferredStylesheetFailure(): void {
+  deferredStylesheetStats.failedCount += 1;
+}
+
+export function recordDeferredStylesheetsAbandoned(count: number): void {
+  if (count > 0) {
+    deferredStylesheetStats.abandonedCount += count;
+  }
+}
+
+export function getDeferredStylesheetStats(): DeferredStylesheetStats {
+  return { ...deferredStylesheetStats };
+}
+
 export function recordMutationCost(ms: number): void {
   if (ms > mutationCost.slowestBatchMs) {
     mutationCost.slowestBatchMs = ms;
@@ -252,4 +283,5 @@ export function resetSnapshotCostState(): void {
   stylesheetBudgetRules = null;
   deferredStylesheetLinks = [];
   mutationCost = { slowestBatchMs: 0 };
+  deferredStylesheetStats = { failedCount: 0, abandonedCount: 0 };
 }

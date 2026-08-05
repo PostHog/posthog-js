@@ -1,6 +1,7 @@
 import {
   createStylesheetTextCursor,
   maskAttributeValue,
+  recordDeferredStylesheetFailure,
   resetStylesheetLoadTracking,
   stringifyRule,
 } from '@posthog/rrweb-snapshot';
@@ -97,6 +98,9 @@ export class StylesheetManager {
       //
     }
     if (!cursor) {
+      // the sheet is unreadable, so the link keeps its href and replay must
+      // load the CSS remotely - a fidelity risk worth counting, not hiding
+      recordDeferredStylesheetFailure();
       return null;
     }
     const readyCursor = cursor;
@@ -106,9 +110,14 @@ export class StylesheetManager {
           return false;
         }
         const cssText = readyCursor.text();
-        if (!cssText || !linkEl.isConnected) {
-          // nothing we can add (the link kept its href so replay still loads it
-          // remotely), or the link left the DOM while we were slicing
+        if (!linkEl.isConnected) {
+          // the link left the DOM while we were slicing; the replay drops it too
+          return true;
+        }
+        if (!cssText) {
+          // stringification produced nothing: the link keeps its href and replay
+          // must load the CSS remotely - a fidelity risk worth counting, not hiding
+          recordDeferredStylesheetFailure();
           return true;
         }
         this.emitCssTextMutation(linkEl, id, cssText);

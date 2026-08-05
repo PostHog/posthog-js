@@ -3,7 +3,11 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { StylesheetManager } from '../../src/record/stylesheet-manager';
-import { stringifyStylesheet } from '@posthog/rrweb-snapshot';
+import {
+  getDeferredStylesheetStats,
+  resetSnapshotCostState,
+  stringifyStylesheet,
+} from '@posthog/rrweb-snapshot';
 import type { mutationCallBack } from '@posthog/rrweb-types';
 
 describe('StylesheetManager.inlineDeferredLinkElement()', () => {
@@ -92,6 +96,7 @@ describe('StylesheetManager.beginDeferredLinkInlining()', () => {
     });
 
   beforeEach(() => {
+    resetSnapshotCostState();
     mutationCb = vi.fn();
     const rules: string[] = [];
     for (let i = 0; i < RULE_COUNT; i++) {
@@ -149,7 +154,7 @@ describe('StylesheetManager.beginDeferredLinkInlining()', () => {
     expect(emittedCssText()).toContain(`.rule-${RULE_COUNT - 1}`);
   });
 
-  it('emits nothing when the link is detached while slicing', () => {
+  it('emits nothing when the link is detached while slicing, and does not count it as failed', () => {
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const task = makeManager().beginDeferredLinkInlining(linkEl, LINK_ID)!;
     task.advance(RULES_PER_SLICE);
@@ -158,9 +163,52 @@ describe('StylesheetManager.beginDeferredLinkInlining()', () => {
       // drain
     }
     expect(mutationCb).not.toHaveBeenCalled();
+    // the replay drops the removed link too, so no fidelity was lost
+    expect(getDeferredStylesheetStats().failedCount).toBe(0);
   });
 
   it('returns null when the link never made it into the mirror', () => {
     expect(makeManager().beginDeferredLinkInlining(linkEl, -1)).toBeNull();
+    expect(getDeferredStylesheetStats().failedCount).toBe(0);
+  });
+
+  it('counts a failure when the sheet is unreadable at begin time', () => {
+    const brokenLink = document.createElement('link');
+    document.head.appendChild(brokenLink);
+    try {
+      // no sheet at all: nothing can ever be inlined, only the href remains
+      expect(
+        makeManager().beginDeferredLinkInlining(brokenLink, LINK_ID),
+      ).toBeNull();
+      expect(getDeferredStylesheetStats().failedCount).toBe(1);
+    } finally {
+      brokenLink.remove();
+    }
+  });
+
+  it('counts a failure when stringification produces nothing at idle time', () => {
+    const brokenLink = document.createElement('link');
+    document.head.appendChild(brokenLink);
+    const throwingSheet = {
+      get rules(): CSSRuleList {
+        throw new Error('cross-origin');
+      },
+      get cssRules(): CSSRuleList {
+        throw new Error('cross-origin');
+      },
+    };
+    Object.defineProperty(brokenLink, 'sheet', { value: throwingSheet });
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const task = makeManager().beginDeferredLinkInlining(
+        brokenLink,
+        LINK_ID,
+      )!;
+      expect(task.advance(RULES_PER_SLICE)).toBe(true);
+      expect(mutationCb).not.toHaveBeenCalled();
+      expect(getDeferredStylesheetStats().failedCount).toBe(1);
+    } finally {
+      brokenLink.remove();
+    }
   });
 });

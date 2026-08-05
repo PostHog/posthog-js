@@ -4,6 +4,7 @@ import {
   slimDOMDefaults,
   createMirror,
   takeDeferredStylesheetLinks,
+  recordDeferredStylesheetsAbandoned,
 } from '@posthog/rrweb-snapshot';
 import {
   initObservers,
@@ -120,6 +121,24 @@ const DEFERRED_STYLESHEET_RULES_PER_SLICE = 200;
 // still completes in seconds rather than minutes.
 const DEFERRED_STYLESHEET_SLICES_PER_FALLBACK_TICK = 10;
 
+// Safety cap for the synchronous teardown flush (stop() / pagehide): at most
+// this many slices, i.e. 10,000 rules - the same synchronous CSS work the
+// default snapshot budget allows, tens of ms at worst. Anything still queued
+// past the cap is abandoned and counted.
+const DEFERRED_STYLESHEET_SYNC_FLUSH_MAX_SLICES = 50;
+
+/** Controls one full snapshot's queue of budget-deferred stylesheets. */
+type DeferredStylesheetInlining = {
+  /** Drop everything still queued; nothing further is emitted. */
+  cancel: () => void;
+  /**
+   * Synchronously finish what remains - the partially-stringified sheet
+   * included - up to {@link DEFERRED_STYLESHEET_SYNC_FLUSH_MAX_SLICES}, so the
+   * `_cssText` mutations reach the recorder before teardown.
+   */
+  flush: () => void;
+};
+
 /**
  * Inline the `<link rel=stylesheet>` elements the snapshot skipped once it ran out
  * of stylesheet budget, emitting each as an attribute mutation. The unit of work is
@@ -137,13 +156,42 @@ export function inlineDeferredStylesheets(
   links: Array<HTMLLinkElement | null>,
   stylesheetManager: StylesheetManager,
   onDone: () => void,
-): () => void {
+): DeferredStylesheetInlining {
   let cancelled = false;
   let pending: IdleTask | null = null;
   let index = 0;
   // resumable stringification of the sheet currently being inlined; the
   // accumulated slices live inside the task, so dropping it drops them
   let task: DeferredLinkInliningTask | null = null;
+
+  const hasWork = () => task !== null || index < links.length;
+
+  const runOneSlice = () => {
+    if (!task) {
+      const link = links[index];
+      // release the element so completed entries aren't pinned by this closure
+      links[index] = null;
+      index += 1;
+      if (link) {
+        callSafely(() => {
+          task = stylesheetManager.beginDeferredLinkInlining(
+            link,
+            mirror.getId(link),
+          );
+        });
+      }
+    }
+    if (task) {
+      const activeTask = task;
+      let finished = true;
+      callSafely(() => {
+        finished = activeTask.advance(DEFERRED_STYLESHEET_RULES_PER_SLICE);
+      });
+      if (finished) {
+        task = null;
+      }
+    }
+  };
 
   const step = (deadline?: IdleDeadline) => {
     pending = null;
@@ -152,38 +200,15 @@ export function inlineDeferredStylesheets(
     }
     let slices = 0;
     do {
-      if (!task) {
-        const link = links[index];
-        // release the element so completed entries aren't pinned by this closure
-        links[index] = null;
-        index += 1;
-        if (link) {
-          callSafely(() => {
-            task = stylesheetManager.beginDeferredLinkInlining(
-              link,
-              mirror.getId(link),
-            );
-          });
-        }
-      }
-      if (task) {
-        const activeTask = task;
-        let finished = true;
-        callSafely(() => {
-          finished = activeTask.advance(DEFERRED_STYLESHEET_RULES_PER_SLICE);
-        });
-        if (finished) {
-          task = null;
-        }
-      }
+      runOneSlice();
       slices += 1;
     } while (
-      (task !== null || index < links.length) &&
+      hasWork() &&
       (deadline
         ? !deadline.didTimeout && deadline.timeRemaining() > 5
         : slices < DEFERRED_STYLESHEET_SLICES_PER_FALLBACK_TICK)
     );
-    if (task !== null || index < links.length) {
+    if (hasWork()) {
       pending = whenIdle(step);
     } else {
       onDone();
@@ -192,12 +217,39 @@ export function inlineDeferredStylesheets(
 
   pending = whenIdle(step);
 
-  return () => {
-    cancelled = true;
-    // drop the half-stringified sheet, if any; its mutation is never emitted
-    task = null;
-    pending?.cancel();
-    pending = null;
+  return {
+    cancel: () => {
+      cancelled = true;
+      // drop the half-stringified sheet, if any; its mutation is never emitted
+      task = null;
+      pending?.cancel();
+      pending = null;
+    },
+    flush: () => {
+      if (cancelled) {
+        return;
+      }
+      cancelled = true;
+      pending?.cancel();
+      pending = null;
+      let slices = 0;
+      while (hasWork() && slices < DEFERRED_STYLESHEET_SYNC_FLUSH_MAX_SLICES) {
+        runOneSlice();
+        slices += 1;
+      }
+      if (hasWork()) {
+        // cap tripped: whatever is left keeps only its href in the replay
+        let abandoned = task !== null ? 1 : 0;
+        for (let i = index; i < links.length; i++) {
+          if (links[i] !== null) {
+            abandoned += 1;
+          }
+        }
+        recordDeferredStylesheetsAbandoned(abandoned);
+        task = null;
+      }
+      onDone();
+    },
   };
 }
 
@@ -205,8 +257,8 @@ function record<T = eventWithTime>(
   options: recordOptions<T> = {},
 ): listenerHandler | undefined {
   // per-recorder, unlike its module-level siblings, so a stale recorder's stop
-  // handler can't cancel a newer recorder's pending deferred inlining
-  let cancelDeferredStylesheetInlining: (() => void) | undefined;
+  // handler can't touch a newer recorder's pending deferred inlining
+  let deferredStylesheetInlining: DeferredStylesheetInlining | undefined;
   const {
     emit,
     checkoutEveryNms,
@@ -564,8 +616,10 @@ function record<T = eventWithTime>(
 
     // Any deferred inlining from the previous snapshot targets mirror ids that this
     // snapshot is about to replace, so drop it rather than emitting stale mutations.
-    cancelDeferredStylesheetInlining?.();
-    cancelDeferredStylesheetInlining = undefined;
+    // No sheet is lost: this snapshot re-serializes every link, so a still-attached
+    // sheet is either inlined within the new budget or re-deferred into a new queue.
+    deferredStylesheetInlining?.cancel();
+    deferredStylesheetInlining = undefined;
 
     // When we take a full snapshot, old tracked StyleSheets need to be removed.
     stylesheetManager.reset();
@@ -645,12 +699,12 @@ function record<T = eventWithTime>(
     canvasManager.onFullSnapshot();
 
     if (deferredStylesheetLinks.length) {
-      cancelDeferredStylesheetInlining = inlineDeferredStylesheets(
+      deferredStylesheetInlining = inlineDeferredStylesheets(
         deferredStylesheetLinks,
         stylesheetManager,
         () => {
           // queue drained: drop the handle so the closure and its links can be collected
-          cancelDeferredStylesheetInlining = undefined;
+          deferredStylesheetInlining = undefined;
         },
       );
     }
@@ -669,6 +723,20 @@ function record<T = eventWithTime>(
 
   try {
     const handlers: listenerHandler[] = [];
+
+    // pagehide is the last event a dying page can rely on; flush the deferred
+    // CSS synchronously so it reaches the emitted stream while the SDK's own
+    // pagehide flush (registered after this one) can still ship it.
+    handlers.push(
+      on(
+        'pagehide',
+        () => {
+          deferredStylesheetInlining?.flush();
+          deferredStylesheetInlining = undefined;
+        },
+        window,
+      ),
+    );
 
     // Disposes per-iframe observer cleanups and unlinks them from `handlers`.
     runAndDetachIframeCleanup = (iframeId: number) => {
@@ -939,8 +1007,10 @@ function record<T = eventWithTime>(
       );
     }
     return () => {
-      cancelDeferredStylesheetInlining?.();
-      cancelDeferredStylesheetInlining = undefined;
+      // finish the deferred CSS while the emit path is still wired up, so the
+      // sheets this recording deferred don't silently vanish with it
+      deferredStylesheetInlining?.flush();
+      deferredStylesheetInlining = undefined;
       handlers.forEach((h) => callSafely(h));
       processedNodeManager.destroy();
       iframeManager.removeLoadListener();

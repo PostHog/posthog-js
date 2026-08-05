@@ -29,9 +29,13 @@ vi.mock(
 
 import record, { inlineDeferredStylesheets } from '../../src/record';
 import { StylesheetManager } from '../../src/record/stylesheet-manager';
-import { stringifyStylesheet } from '@posthog/rrweb-snapshot';
-import { NodeType } from '@posthog/rrweb-types';
-import type { mutationCallBack } from '@posthog/rrweb-types';
+import {
+  getDeferredStylesheetStats,
+  resetSnapshotCostState,
+  stringifyStylesheet,
+} from '@posthog/rrweb-snapshot';
+import { EventType, IncrementalSource, NodeType } from '@posthog/rrweb-types';
+import type { eventWithTime, mutationCallBack } from '@posthog/rrweb-types';
 
 type IdleDeadline = { didTimeout: boolean; timeRemaining: () => number };
 type IdleCallback = (deadline: IdleDeadline) => void;
@@ -59,7 +63,7 @@ describe('inlineDeferredStylesheets()', () => {
   let scheduled: Map<number, IdleCallback>;
   let nextHandle: number;
   let cleanupNodes: Element[];
-  let cancel: (() => void) | undefined;
+  let inlining: ReturnType<typeof inlineDeferredStylesheets> | undefined;
 
   const fireIdle = (deadline: IdleDeadline) => {
     const next = scheduled.entries().next().value as
@@ -101,6 +105,7 @@ describe('inlineDeferredStylesheets()', () => {
   };
 
   beforeEach(() => {
+    resetSnapshotCostState();
     mutationCb = vi.fn();
     scheduled = new Map();
     nextHandle = 1;
@@ -119,8 +124,8 @@ describe('inlineDeferredStylesheets()', () => {
   });
 
   afterEach(() => {
-    cancel?.();
-    cancel = undefined;
+    inlining?.cancel();
+    inlining = undefined;
     cleanupNodes.forEach((node) => node.remove());
     record.mirror.reset();
     delete (window as unknown as { requestIdleCallback?: unknown })
@@ -135,7 +140,7 @@ describe('inlineDeferredStylesheets()', () => {
     const singlePass = stringifyStylesheet(linkEl.sheet!);
     const onDone = vi.fn();
 
-    cancel = inlineDeferredStylesheets([linkEl], makeManager(), onDone);
+    inlining = inlineDeferredStylesheets([linkEl], makeManager(), onDone);
 
     let callbacks = 0;
     while (scheduled.size > 0 && callbacks < 100) {
@@ -162,7 +167,7 @@ describe('inlineDeferredStylesheets()', () => {
     const linkEl = makeLink(600, 1); // 3 slices, plus one callback to finish
     const onDone = vi.fn();
 
-    cancel = inlineDeferredStylesheets([linkEl], makeManager(), onDone);
+    inlining = inlineDeferredStylesheets([linkEl], makeManager(), onDone);
 
     let callbacks = 0;
     while (scheduled.size > 0 && callbacks < 100) {
@@ -180,7 +185,7 @@ describe('inlineDeferredStylesheets()', () => {
     const linkB = makeLink(50, 2);
     const onDone = vi.fn();
 
-    cancel = inlineDeferredStylesheets([linkA, linkB], makeManager(), onDone);
+    inlining = inlineDeferredStylesheets([linkA, linkB], makeManager(), onDone);
 
     fireIdle({ didTimeout: false, timeRemaining: () => 50 });
 
@@ -199,7 +204,7 @@ describe('inlineDeferredStylesheets()', () => {
       const linkEl = makeLink(5000, 1); // 25 slices, 10 allowed per fallback tick
       const onDone = vi.fn();
 
-      cancel = inlineDeferredStylesheets([linkEl], makeManager(), onDone);
+      inlining = inlineDeferredStylesheets([linkEl], makeManager(), onDone);
 
       vi.advanceTimersByTime(250);
       vi.advanceTimersByTime(250);
@@ -218,16 +223,246 @@ describe('inlineDeferredStylesheets()', () => {
     const linkEl = makeLink(5000, 1);
     const onDone = vi.fn();
 
-    cancel = inlineDeferredStylesheets([linkEl], makeManager(), onDone);
+    inlining = inlineDeferredStylesheets([linkEl], makeManager(), onDone);
 
     fireIdle(deadlineForSlices(3)); // partway into the sheet
     expect(scheduled.size).toBe(1);
 
-    cancel();
-    cancel = undefined;
+    inlining.cancel();
+    inlining = undefined;
 
     expect(scheduled.size).toBe(0);
     expect(mutationCb).not.toHaveBeenCalled();
     expect(onDone).not.toHaveBeenCalled();
+  });
+
+  it('flush() synchronously finishes a partially-advanced cursor task', () => {
+    const linkEl = makeLink(5000, 1);
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const singlePass = stringifyStylesheet(linkEl.sheet!);
+    const onDone = vi.fn();
+
+    inlining = inlineDeferredStylesheets([linkEl], makeManager(), onDone);
+
+    fireIdle(deadlineForSlices(3)); // partway into the sheet
+    expect(mutationCb).not.toHaveBeenCalled();
+
+    inlining.flush();
+
+    // the mid-sheet cursor was finished synchronously, byte-identical output
+    expect(mutationCb).toHaveBeenCalledTimes(1);
+    expect(mutationCb.mock.calls[0][0].attributes[0].attributes._cssText).toBe(
+      singlePass,
+    );
+    expect(onDone).toHaveBeenCalledTimes(1);
+    expect(scheduled.size).toBe(0);
+    expect(getDeferredStylesheetStats().abandonedCount).toBe(0);
+  });
+
+  it('flush() stops at the safety cap and counts the abandoned sheets', () => {
+    // 50 flush slices cover 10,000 rules: sheet A (31 slices incl. completion)
+    // finishes, sheet B is caught mid-cursor, sheet C is never started
+    const linkA = makeLink(6000, 1);
+    const linkB = makeLink(6000, 2);
+    const linkC = makeLink(50, 3);
+    const onDone = vi.fn();
+
+    inlining = inlineDeferredStylesheets(
+      [linkA, linkB, linkC],
+      makeManager(),
+      onDone,
+    );
+
+    inlining.flush();
+
+    expect(mutationCb).toHaveBeenCalledTimes(1);
+    expect(mutationCb.mock.calls[0][0].attributes[0].id).toBe(1);
+    expect(getDeferredStylesheetStats().abandonedCount).toBe(2);
+    expect(onDone).toHaveBeenCalledTimes(1);
+    expect(scheduled.size).toBe(0);
+  });
+
+  it('flush() after cancel() is a no-op', () => {
+    const linkEl = makeLink(600, 1);
+    const onDone = vi.fn();
+
+    inlining = inlineDeferredStylesheets([linkEl], makeManager(), onDone);
+    inlining.cancel();
+    inlining.flush();
+
+    expect(mutationCb).not.toHaveBeenCalled();
+    expect(getDeferredStylesheetStats().abandonedCount).toBe(0);
+  });
+});
+
+describe('record() teardown of deferred stylesheets', () => {
+  let scheduled: Map<number, IdleCallback>;
+  let nextHandle: number;
+  let cleanupNodes: Element[];
+  let events: eventWithTime[];
+  let stop: (() => void) | undefined;
+
+  const fireIdle = (deadline: IdleDeadline) => {
+    const next = scheduled.entries().next().value as
+      | [number, IdleCallback]
+      | undefined;
+    if (!next) {
+      throw new Error('no idle callback scheduled');
+    }
+    scheduled.delete(next[0]);
+    next[1](deadline);
+  };
+
+  const drainIdle = () => {
+    let callbacks = 0;
+    while (scheduled.size > 0 && callbacks < 500) {
+      fireIdle({ didTimeout: false, timeRemaining: () => 50 });
+      callbacks += 1;
+    }
+    expect(scheduled.size).toBe(0);
+  };
+
+  // unlike makeLink above, no manual mirror registration: the full snapshot
+  // inside record() serializes the link and assigns its id
+  const makeUnregisteredLink = (
+    ruleCount: number,
+    marker: string,
+  ): HTMLLinkElement => {
+    const rules: string[] = [];
+    for (let i = 0; i < ruleCount; i++) {
+      rules.push(`.${marker}-${i} { color: red; }`);
+    }
+    const styleEl = document.createElement('style');
+    styleEl.textContent = rules.join('\n');
+    document.head.appendChild(styleEl);
+    const linkEl = document.createElement('link');
+    document.head.appendChild(linkEl);
+    Object.defineProperty(linkEl, 'sheet', { value: styleEl.sheet });
+    cleanupNodes.push(styleEl, linkEl);
+    return linkEl;
+  };
+
+  const startRecording = () =>
+    record({
+      emit: (event) => {
+        events.push(event as eventWithTime);
+      },
+      // small enough that every test sheet is deferred
+      inlineStylesheetBudgetRules: 1,
+    });
+
+  const cssTextMutations = (from: eventWithTime[]): string[] => {
+    const texts: string[] = [];
+    for (const event of from) {
+      if (
+        event.type !== EventType.IncrementalSnapshot ||
+        event.data.source !== IncrementalSource.Mutation
+      ) {
+        continue;
+      }
+      for (const attribute of event.data.attributes ?? []) {
+        const cssText = (attribute.attributes as Record<string, unknown>)
+          ._cssText;
+        if (typeof cssText === 'string') {
+          texts.push(cssText);
+        }
+      }
+    }
+    return texts;
+  };
+
+  beforeEach(() => {
+    resetSnapshotCostState();
+    scheduled = new Map();
+    nextHandle = 1;
+    cleanupNodes = [];
+    events = [];
+    (
+      window as unknown as { requestIdleCallback: unknown }
+    ).requestIdleCallback = (cb: IdleCallback) => {
+      const handle = nextHandle++;
+      scheduled.set(handle, cb);
+      return handle;
+    };
+    (window as unknown as { cancelIdleCallback: unknown }).cancelIdleCallback =
+      (handle: number) => {
+        scheduled.delete(handle);
+      };
+  });
+
+  afterEach(() => {
+    stop?.();
+    stop = undefined;
+    cleanupNodes.forEach((node) => node.remove());
+    record.mirror.reset();
+    delete (window as unknown as { requestIdleCallback?: unknown })
+      .requestIdleCallback;
+    delete (window as unknown as { cancelIdleCallback?: unknown })
+      .cancelIdleCallback;
+  });
+
+  it('stop() mid-deferral flushes the queue synchronously, partially-advanced cursor included', () => {
+    const linkEl = makeUnregisteredLink(1000, 'stop-flush');
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const singlePass = stringifyStylesheet(linkEl.sheet!);
+    stop = startRecording();
+    expect(scheduled.size).toBe(1);
+
+    fireIdle(deadlineForSlices(2)); // partway into the sheet's cursor
+    expect(cssTextMutations(events)).toHaveLength(0);
+
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    stop!();
+    stop = undefined;
+
+    const flushed = cssTextMutations(events);
+    expect(flushed).toHaveLength(1);
+    expect(flushed[0]).toBe(singlePass);
+    expect(scheduled.size).toBe(0);
+    expect(getDeferredStylesheetStats().abandonedCount).toBe(0);
+  });
+
+  it('pagehide flushes the queue synchronously while recording continues', () => {
+    const linkEl = makeUnregisteredLink(1000, 'pagehide-flush');
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const singlePass = stringifyStylesheet(linkEl.sheet!);
+    stop = startRecording();
+
+    fireIdle(deadlineForSlices(2)); // partway into the sheet's cursor
+    expect(cssTextMutations(events)).toHaveLength(0);
+
+    window.dispatchEvent(new Event('pagehide'));
+
+    const flushed = cssTextMutations(events);
+    expect(flushed).toHaveLength(1);
+    expect(flushed[0]).toBe(singlePass);
+    expect(scheduled.size).toBe(0);
+  });
+
+  it('loses no sheet across a full snapshot boundary: the new snapshot re-defers them', () => {
+    makeUnregisteredLink(600, 'boundary-a');
+    makeUnregisteredLink(600, 'boundary-b');
+    stop = startRecording();
+
+    // finish sheet A (4 slices) and leave sheet B mid-cursor (1 slice)
+    fireIdle(deadlineForSlices(6));
+    expect(cssTextMutations(events)).toHaveLength(1);
+
+    // the new snapshot cancels the pending queue mid-sheet-B...
+    record.takeFullSnapshot();
+    const boundary = events.length;
+
+    // ...but re-serializes every link, so both sheets are deferred again
+    drainIdle();
+
+    const afterBoundary = cssTextMutations(events.slice(boundary));
+    expect(afterBoundary).toHaveLength(2);
+    expect(
+      afterBoundary.some((css) => css.includes('.boundary-a-599')),
+    ).toBe(true);
+    expect(
+      afterBoundary.some((css) => css.includes('.boundary-b-599')),
+    ).toBe(true);
+    expect(getDeferredStylesheetStats().abandonedCount).toBe(0);
   });
 });

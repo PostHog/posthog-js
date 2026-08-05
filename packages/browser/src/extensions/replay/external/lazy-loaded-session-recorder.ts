@@ -1195,6 +1195,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         // calling addEventListener multiple times is safe and will not add duplicates
         addEventListener(window, 'beforeunload', this._onBeforeUnload)
+        // registered after _startRecorder so rrweb's own pagehide listener runs first:
+        // it synchronously flushes deferred stylesheet mutations, and this later
+        // listener then ships them (beforeunload has already fired, so nothing else will)
+        addEventListener(window, 'pagehide', this._onPageHide)
         addEventListener(window, 'offline', this._onOffline)
         addEventListener(window, 'online', this._onOnline)
         addEventListener(document, 'visibilitychange', this._onVisibilityChange)
@@ -1341,6 +1345,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _teardown() {
         window?.removeEventListener('beforeunload', this._onBeforeUnload)
+        window?.removeEventListener('pagehide', this._onPageHide)
         window?.removeEventListener('offline', this._onOffline)
         window?.removeEventListener('online', this._onOnline)
         document?.removeEventListener('visibilitychange', this._onVisibilityChange)
@@ -2119,6 +2124,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._flushBuffer()
     }
 
+    // pagehide fires after beforeunload, i.e. after the flush above has emptied the
+    // buffer - but also after rrweb's own pagehide listener has synchronously emitted
+    // any remaining deferred stylesheet mutations. Repeat the drain+flush so those
+    // events ship instead of dying in a buffer nothing will ever flush again.
+    private _onPageHide = (): void => {
+        this._onBeforeUnload()
+    }
+
     private _onOffline = (): void => {
         this._tryAddCustomEvent('browser offline', {})
     }
@@ -2254,6 +2267,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     get sdkDebugProperties(): Properties {
         const { sessionStartTimestamp } = this._sessionManager.checkAndGetSessionAndWindowId(true)
+        // deferred sheets that never made it back into the recording (see rrweb-snapshot),
+        // undefined on recorder chunks that predate the counters
+        const deferredStylesheetStats = getRRWeb()?.getDeferredStylesheetStats?.()
 
         return {
             $recording_status: this.status,
@@ -2273,6 +2289,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $sdk_debug_replay_slowest_full_snapshot_nodes: this._slowestFullSnapshot?.nodeCount,
             $sdk_debug_replay_slowest_full_snapshot_css_rules: this._slowestFullSnapshot?.cssRuleCount,
             $sdk_debug_replay_deferred_stylesheets: this._slowestFullSnapshot?.deferredStylesheetCount,
+            $sdk_debug_replay_deferred_stylesheets_failed: deferredStylesheetStats?.failedCount,
+            $sdk_debug_replay_deferred_stylesheets_abandoned: deferredStylesheetStats?.abandonedCount,
             $sdk_debug_replay_slowest_mutation_batch_ms: roundOrUndefined(
                 getRRWeb()?.getMutationCost?.()?.slowestBatchMs
             ),

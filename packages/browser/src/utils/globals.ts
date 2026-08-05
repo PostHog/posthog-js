@@ -1,5 +1,5 @@
 import { window as commonWindow } from '@posthog/browser-common/utils/globals'
-import type { MutationCost, SnapshotCost } from '@posthog/rrweb-record'
+import type { DeferredStylesheetStats, MutationCost, SnapshotCost } from '@posthog/rrweb-record'
 import type { ErrorTracking } from '@posthog/core'
 
 import type { PostHog } from '../posthog-core'
@@ -264,6 +264,7 @@ interface PostHogExtensions {
         // see rrweb-snapshot/src/snapshot-cost.ts
         getLastSnapshotCost?: () => SnapshotCost | null
         getMutationCost?: () => MutationCost
+        getDeferredStylesheetStats?: () => DeferredStylesheetStats
         resetSnapshotCostState?: () => void
     }
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }

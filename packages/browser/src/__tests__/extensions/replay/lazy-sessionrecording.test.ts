@@ -4154,7 +4154,8 @@ describe('Lazy SessionRecording', () => {
                 })
             )
             expect(sessionRecording['_onBeforeUnload']).not.toBeNull()
-            expect(windowAddEventListener).toHaveBeenCalledTimes(3)
+            // beforeunload, pagehide, offline, online
+            expect(windowAddEventListener).toHaveBeenCalledTimes(4)
             expect(documentAddEventListener).toHaveBeenCalledWith(
                 'visibilitychange',
                 expect.any(Function),
@@ -7320,6 +7321,79 @@ describe('Lazy SessionRecording', () => {
 
             // Status should remain the same (no new trigger processing)
             expect(statusAfter).toBe(statusBefore)
+        })
+    })
+
+    describe('pagehide flush', () => {
+        // the mutation rrweb's own pagehide listener emits when it synchronously
+        // flushes the deferred stylesheet queue
+        const deferredCssMutation = createIncrementalSnapshot({
+            data: {
+                source: 0,
+                texts: [],
+                attributes: [{ id: 42, attributes: { _cssText: '.deferred { color: red; }' } }],
+                removes: [],
+                adds: [],
+            },
+            timestamp: Date.now(),
+        })
+
+        const startWithPagehideEmittingRecorder = () => {
+            loadScriptMock.mockImplementation((_ph, _path, callback) => {
+                addRRwebToWindow()
+                // mirror the real recorder: record() registers a pagehide listener that
+                // synchronously emits the still-deferred stylesheet mutations. It must be
+                // registered during record(), i.e. before the SDK's own pagehide listener.
+                const recordMock = assignableWindow.__PosthogExtensions__.rrweb.record as jest.Mock
+                recordMock.mockImplementation(({ emit }) => {
+                    _emit = emit
+                    const flushDeferredCss = () => emit(deferredCssMutation)
+                    // eslint-disable-next-line posthog-js/no-add-event-listener
+                    window!.addEventListener('pagehide', flushDeferredCss)
+                    return () => window!.removeEventListener('pagehide', flushDeferredCss)
+                })
+                // the mutation throttler resolves the mutated node through the mirror
+                recordMock.mirror = { getNode: () => null }
+                callback()
+            })
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            releaseInteractionHold()
+        }
+
+        it('ships mutations the recorder emits on pagehide, after beforeunload already flushed the buffer', () => {
+            startWithPagehideEmittingRecorder()
+            _emit(createFullSnapshot())
+
+            // beforeunload fires first on a real unload and empties the buffer
+            window!.dispatchEvent(new Event('beforeunload'))
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                expect.objectContaining({ $snapshot_data: expect.arrayContaining([createFullSnapshot()]) }),
+                expect.any(Object)
+            )
+            ;(posthog.capture as Mock).mockClear()
+
+            // pagehide: the recorder's listener emits into the (already flushed) buffer,
+            // then the SDK's later-registered listener drains and flushes again
+            window!.dispatchEvent(new Event('pagehide'))
+
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                expect.objectContaining({ $snapshot_data: expect.arrayContaining([deferredCssMutation]) }),
+                expect.any(Object)
+            )
+        })
+
+        it('stops flushing on pagehide once recording is stopped', () => {
+            startWithPagehideEmittingRecorder()
+            _emit(createFullSnapshot())
+
+            sessionRecording.stopRecording()
+            ;(posthog.capture as Mock).mockClear()
+
+            window!.dispatchEvent(new Event('pagehide'))
+
+            expect(posthog.capture).not.toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
         })
     })
 })
