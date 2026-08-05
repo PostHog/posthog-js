@@ -1,5 +1,6 @@
 package com.posthogreactnativeplugin
 
+import android.content.Intent
 import android.util.Log
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
@@ -190,6 +191,8 @@ class PosthogReactNativePluginModule(
           PostHogAndroid.setup(context, config)
 
           setIdentify(config.cachePreferences, distinctId, anonymousId)
+
+          captureColdStartPushOpenIfNeeded(config)
         } catch (e: Throwable) {
           logError(method, e)
         } finally {
@@ -473,6 +476,40 @@ class PosthogReactNativePluginModule(
     }
   }
 
+  // posthog-android's open-capture integration registers ActivityLifecycleCallbacks during
+  // setup(), which the bridge reaches only after the launch Activity was created — so the
+  // cold-start tray tap it exists for is the one creation it can never observe here. Read
+  // the launch intent directly, then strip the marker so the integration (or a re-run)
+  // can't capture the same tap again from this intent object.
+  private fun captureColdStartPushOpenIfNeeded(config: PostHogAndroidConfig) {
+    if (!config.capturePushNotificationOpened) {
+      return
+    }
+    val intent = currentActivity?.intent ?: return
+    // A relaunch from recents redelivers the original tray intent to a fresh activity;
+    // capturing it would count a days-old tap as a new open.
+    if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) {
+      return
+    }
+    try {
+      intent.getStringExtra(GOOGLE_MESSAGE_ID) ?: return
+      // Unmarshalling extras throws BadParcelableException on a Parcelable class this
+      // classloader lacks; read before stripping the marker so a failed read leaves the
+      // intent as the native integration expects it.
+      val payload =
+        intent.extras?.let { bundle ->
+          bundle.keySet().associateWith { key ->
+            @Suppress("DEPRECATION")
+            bundle.get(key)
+          }
+        }
+      intent.removeExtra(GOOGLE_MESSAGE_ID)
+      PostHog.capturePushNotificationOpened(null, null, payload, null)
+    } catch (e: Throwable) {
+      logError("capturePushNotificationOpened", e)
+    }
+  }
+
   @ReactMethod
   fun providePushIdentityToken(
     requestId: String?,
@@ -509,6 +546,10 @@ class PosthogReactNativePluginModule(
   companion object {
     const val NAME = "PosthogReactNativePlugin"
     const val POSTHOG_TAG = "PostHog"
+
+    // FCM stamps this extra on the tray-tap launch intent; mirrors posthog-android's
+    // PostHogActivityLifecycleCallbackIntegration.
+    private const val GOOGLE_MESSAGE_ID = "google.message_id"
 
     // Default session replay configuration values
     const val DEFAULT_MASK_ALL_TEXT_INPUTS = true
