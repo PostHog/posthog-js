@@ -1424,6 +1424,14 @@ export abstract class PostHogCoreStateless {
   }
 
   /**
+   * Compresses an outgoing payload. Runtime-specific clients can override this
+   * to avoid using the Web Streams compression implementation.
+   */
+  protected compressPayload(payload: string): Promise<Blob | null> {
+    return gzipCompress(payload, this.isDebug)
+  }
+
+  /**
    * Builds and sends one `/batch/` request for the given already-normalized
    * messages, throwing on transport/HTTP error. Batch-size (413) shrinking,
    * queue persistence, and error recovery stay with the callers (`_flush` and
@@ -1454,7 +1462,7 @@ export abstract class PostHogCoreStateless {
 
     const url = `${this.host}/batch/`
 
-    const gzippedPayload = !this.disableCompression ? await gzipCompress(payload, this.isDebug) : null
+    const gzippedPayload = !this.disableCompression ? await this.compressPayload(payload) : null
     const fetchOptions: PostHogFetchOptions = {
       method: 'POST',
       headers: {
@@ -1610,7 +1618,7 @@ export abstract class PostHogCoreStateless {
     const serialized = JSON.stringify(payload)
     const url = `${this.host}/i/v1/logs?token=${encodeURIComponent(this.apiKey)}`
 
-    const gzippedPayload = !this.disableCompression ? await gzipCompress(serialized, this.isDebug) : null
+    const gzippedPayload = !this.disableCompression ? await this.compressPayload(serialized) : null
     const fetchOptions: PostHogFetchOptions = {
       method: 'POST',
       headers: {
@@ -1661,7 +1669,7 @@ export abstract class PostHogCoreStateless {
     const serialized = JSON.stringify(payload)
     const url = `${this.host}/i/v1/metrics?token=${encodeURIComponent(this.apiKey)}`
 
-    const gzippedPayload = !this.disableCompression ? await gzipCompress(serialized, this.isDebug) : null
+    const gzippedPayload = !this.disableCompression ? await this.compressPayload(serialized) : null
     const fetchOptions: PostHogFetchOptions = {
       method: 'POST',
       headers: {
