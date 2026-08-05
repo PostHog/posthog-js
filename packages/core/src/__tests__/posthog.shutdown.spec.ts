@@ -1,4 +1,5 @@
 import { createTestClient, PostHogCoreTestClient, PostHogCoreTestClientMocks } from '@/testing'
+import { PostHogShutdownTimeoutError } from '../posthog-core-stateless'
 
 describe('PostHog Core', () => {
   let posthog: PostHogCoreTestClient
@@ -33,7 +34,8 @@ describe('PostHog Core', () => {
           throw new Error('Should not resolve')
         })
         .catch((e) => {
-          expect(e).toEqual('Timeout while shutting down PostHog. Some events may not have been sent.')
+          expect(e).toBeInstanceOf(PostHogShutdownTimeoutError)
+          expect(e).toEqual(new Error('Timeout while shutting down PostHog. Some events may not have been sent.'))
         })
       expect(mocks.fetch).toHaveBeenCalledTimes(1)
     })

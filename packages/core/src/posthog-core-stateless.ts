@@ -131,6 +131,14 @@ class PostHogFetchNetworkError extends Error {
   }
 }
 
+export class PostHogShutdownTimeoutError extends Error {
+  name = 'PostHogShutdownTimeoutError'
+
+  constructor() {
+    super('Timeout while shutting down PostHog. Some events may not have been sent.')
+  }
+}
+
 type RequiredResponseHandling<T> = {
   type: 'required'
   consume: (response: PostHogFetchResponse) => Promise<T>
@@ -1912,7 +1920,7 @@ export abstract class PostHogCoreStateless {
     return raceWithTimeout(doShutdown(), shutdownTimeoutMs, () => {
       this._logger.error('Timed out while shutting down PostHog')
       hasTimedOut = true
-      throw 'Timeout while shutting down PostHog. Some events may not have been sent.'
+      throw new PostHogShutdownTimeoutError()
     })
   }
 
