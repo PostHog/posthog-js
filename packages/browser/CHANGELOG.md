@@ -1,5 +1,46 @@
 # posthog-js
 
+## 1.413.0
+
+### Minor Changes
+
+- [#4376](https://github.com/PostHog/posthog-js/pull/4376) [`2da12b8`](https://github.com/PostHog/posthog-js/commit/2da12b8cbe7c3fa2354bfc157a4db927ef5a3ac1) Thanks [@posthog](https://github.com/apps/posthog)! - Add attribute-level masking to session replay: `maskAttributeFn` provides per-attribute control over the final serialized value, while `maskAllElementAttributes` masks all source DOM string attributes (including rendering attributes and synthesized form values) at the cost of replay fidelity.
+  (2026-08-05)
+
+### Patch Changes
+
+- [#4376](https://github.com/PostHog/posthog-js/pull/4376) [`2da12b8`](https://github.com/PostHog/posthog-js/commit/2da12b8cbe7c3fa2354bfc157a4db927ef5a3ac1) Thanks [@posthog](https://github.com/apps/posthog)! - fix(replay): discard held interaction-less recordings when a background document unloads without ever becoming visible
+  (2026-08-05)
+- Updated dependencies [[`2da12b8`](https://github.com/PostHog/posthog-js/commit/2da12b8cbe7c3fa2354bfc157a4db927ef5a3ac1)]:
+    - @posthog/types@1.402.0
+    - @posthog/browser-common@0.4.0
+
+## 1.412.2
+
+### Patch Changes
+
+- [#4417](https://github.com/PostHog/posthog-js/pull/4417) [`3acadfe`](https://github.com/PostHog/posthog-js/commit/3acadfeb7ea238b92241eca11b437086fd184c4f) Thanks [@marandaneto](https://github.com/marandaneto)! - fix(replay): discard held interaction-less recordings when a background document unloads without ever becoming visible
+  (2026-08-05)
+
+## 1.412.1
+
+### Patch Changes
+
+- [#4404](https://github.com/PostHog/posthog-js/pull/4404) [`a348fb3`](https://github.com/PostHog/posthog-js/commit/a348fb3c3fb53f104b5f50d6c7f3e32258451958) Thanks [@dependabot](https://github.com/apps/dependabot)! - Update PostCSS to include upstream security fixes.
+  (2026-08-05)
+
+## 1.412.0
+
+### Minor Changes
+
+- [#4320](https://github.com/PostHog/posthog-js/pull/4320) [`837363e`](https://github.com/PostHog/posthog-js/commit/837363e16909663444fd41d8cd0bac846ed8f727) Thanks [@posthog](https://github.com/apps/posthog)! - Bound the main-thread cost of the recorder's initial full snapshot, and start measuring it.
+
+    `stringifyStylesheet` reads `cssText` for every CSSRule of every stylesheet, all inside the one uninterruptible task that takes the full snapshot. On CSS-heavy pages that is the dominant cost, and it has been observed freezing the UI (no rendering, scrolling, or cursor movement) for seconds. The existing `maxDepth` guard doesn't help, since it only bounds deep DOMs, not wide ones or heavy CSS.
+
+    Stylesheet inlining now stops after a budget of CSSRules per snapshot (`session_recording.inlineStylesheetBudgetRules`, default 10,000; set `0` for the previous unbounded behaviour). Sheets past the budget are serialized without `_cssText`, keeping `rel`/`href` so replay can load them remotely, and are then inlined one per idle callback and delivered as attribute mutations. Replay fidelity is preserved; the work is just no longer one long blocking task.
+
+    The snapshot's cost is also now measured and reported on captured events, so slow snapshots are visible without a browser profile: `$sdk_debug_replay_slowest_full_snapshot_ms`, `$sdk_debug_replay_slowest_full_snapshot_stylesheet_ms`, `$sdk_debug_replay_slowest_full_snapshot_nodes`, `$sdk_debug_replay_slowest_full_snapshot_css_rules`, `$sdk_debug_replay_deferred_stylesheets`, and, for the incremental path, `$sdk_debug_replay_slowest_mutation_batch_ms`. (2026-08-05)
+
 ## 1.411.0
 
 ### Minor Changes

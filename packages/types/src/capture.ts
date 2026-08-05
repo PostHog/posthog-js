@@ -112,7 +112,8 @@ export interface CaptureOptions {
      * invalid values are ignored and a new UUID is generated. Useful for cross-source
      * idempotency (e.g. a server webhook and a browser success page both firing for the
      * same business transaction): emit both events with the same deterministic uuid so
-     * PostHog can dedupe them.
+     * storage can eventually deduplicate them. Capture itself does not deduplicate resent
+     * events, and PostHog does not guarantee strict immediate deduplication.
      */
     uuid?: string
 

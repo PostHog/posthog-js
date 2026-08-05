@@ -57,7 +57,10 @@ export type SessionRecordingRemoteConfig = SessionRecordingCanvasOptions & {
     minimumDurationMilliseconds?: number
     linkedFlag?: string | FlagVariant | null
     networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
-    masking?: Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector' | 'blockSelector'>
+    masking?: Pick<
+        SessionRecordingOptions,
+        'maskAllInputs' | 'maskTextSelector' | 'blockSelector' | 'maskAllElementAttributes'
+    >
     urlTriggers?: SessionRecordingUrlTrigger[]
     scriptConfig?: { script?: string | undefined }
     urlBlocklist?: SessionRecordingUrlTrigger[]
