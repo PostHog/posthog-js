@@ -13,7 +13,7 @@ import {
   isNodeMetaEqual,
   extractFileExtension,
 } from './utils';
-import postcss from 'postcss';
+import postcss, { type Parser } from 'postcss';
 
 const tagMap: tagMap = {
   script: 'noscript',
@@ -72,7 +72,10 @@ export function adaptCssForReplay(cssText: string, cache: BuildCache): string {
     const ast: { css: string } = postcss([
       mediaSelectorPlugin,
       pseudoClassPlugin,
-    ]).process(cssText, { parser: safeParser });
+    ]).process(cssText, {
+      // The DefinitelyTyped package can resolve a different PostCSS patch, but the parser API is compatible.
+      parser: safeParser as unknown as Parser,
+    });
     result = ast.css;
   } catch (error) {
     // on the replay side so should be ok to just log here

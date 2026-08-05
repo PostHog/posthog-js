@@ -22,6 +22,7 @@ assignableWindow.__PosthogExtensions__.rrweb = {
     getMutationCost,
     resetSnapshotCostState,
 }
-assignableWindow.__PosthogExtensions__.initSessionRecording = (ph) => new LazyLoadedSessionRecording(ph)
+assignableWindow.__PosthogExtensions__.initSessionRecording = (ph, documentWasEverVisible) =>
+    new LazyLoadedSessionRecording(ph, documentWasEverVisible)
 
 export default rrwebRecord
