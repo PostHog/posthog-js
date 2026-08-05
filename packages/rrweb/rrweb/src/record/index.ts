@@ -61,6 +61,11 @@ import {
 } from './error-handler';
 import dom from '@posthog/rrweb-utils';
 
+// Reassigned by every record() call, so they always point at the NEWEST
+// session. They exist only to route the public API (record.addCustomEvent,
+// record.takeFullSnapshot); internal code must use the session-local
+// bindings instead, or a stale continuation resumed after a rotation would
+// call into the new session's world.
 let wrappedEmit!: (
   e: eventWithoutTime,
   isCheckout?: boolean,
@@ -68,7 +73,6 @@ let wrappedEmit!: (
 ) => void;
 
 let takeFullSnapshot!: (isCheckout?: boolean) => boolean;
-let canvasManager!: CanvasManager;
 let recording = false;
 // Module-level on purpose, like the mirror it protects: `record()` can be
 // called again without stopping the previous session (the code below resets
@@ -405,7 +409,7 @@ function record<T = eventWithTime>(
   // the wire before anything that references the mirror it builds, so every
   // other event observed while one is in flight is held here — timestamped at
   // observation time — and delivered in order once the snapshot lands. See
-  // wrappedEmit for why holding rather than dropping is the only safe option.
+  // sessionEmit for why holding rather than dropping is the only safe option.
   let budgetedSnapshotInFlight = false;
   let budgetedSnapshotQueued: { isCheckout: boolean } | null = null;
   // True while the post-snapshot flush (held events + buffer unlock) runs:
@@ -440,7 +444,11 @@ function record<T = eventWithTime>(
     }
     return e as unknown as T;
   };
-  wrappedEmit = (
+  // Session-local on purpose: everything this record() call wires up emits
+  // through this exact function, so a continuation that outlives the session
+  // (e.g. a sliced walk completing after a rotation) can never resolve to a
+  // newer session's consumer through the module-level binding.
+  const sessionEmit = (
     r: eventWithoutTime,
     isCheckout?: boolean,
     preserveTimestamp = false,
@@ -564,10 +572,11 @@ function record<T = eventWithTime>(
         checkoutEveryNms &&
         e.timestamp - lastFullSnapshotWallTime > checkoutEveryNms;
       if (exceedCount || exceedTime) {
-        takeFullSnapshot(true);
+        sessionTakeFullSnapshot(true);
       }
     }
   };
+  wrappedEmit = sessionEmit;
 
   const wrappedMutationEmit = (m: mutationCallbackParam) => {
     // Clean up removed iframes (same-origin too). Detect reparenting by id
@@ -606,7 +615,7 @@ function record<T = eventWithTime>(
       iframeManager.cleanupDetachedIframes();
     }
 
-    wrappedEmit({
+    sessionEmit({
       type: EventType.IncrementalSnapshot,
       data: {
         source: IncrementalSource.Mutation,
@@ -615,7 +624,7 @@ function record<T = eventWithTime>(
     });
   };
   const wrappedScrollEmit: scrollCallback = (p) =>
-    wrappedEmit({
+    sessionEmit({
       type: EventType.IncrementalSnapshot,
       data: {
         source: IncrementalSource.Scroll,
@@ -623,7 +632,7 @@ function record<T = eventWithTime>(
       },
     });
   const wrappedCanvasMutationEmit = (p: canvasMutationParam) =>
-    wrappedEmit({
+    sessionEmit({
       type: EventType.IncrementalSnapshot,
       data: {
         source: IncrementalSource.CanvasMutation,
@@ -632,7 +641,7 @@ function record<T = eventWithTime>(
     });
 
   const wrappedAdoptedStyleSheetEmit = (a: adoptedStyleSheetParam) =>
-    wrappedEmit({
+    sessionEmit({
       type: EventType.IncrementalSnapshot,
       data: {
         source: IncrementalSource.AdoptedStyleSheet,
@@ -679,7 +688,7 @@ function record<T = eventWithTime>(
     mutationCb: wrappedMutationEmit,
     stylesheetManager: stylesheetManager,
     recordCrossOriginIframes,
-    wrappedEmit,
+    wrappedEmit: sessionEmit,
   });
 
   /**
@@ -699,7 +708,7 @@ function record<T = eventWithTime>(
 
   const canvasMaskingConfigured = canvasMasking?.configured;
 
-  canvasManager = new CanvasManager({
+  const canvasManager = new CanvasManager({
     recordCanvas,
     mutationCb: wrappedCanvasMutationEmit,
     win: window,
@@ -814,7 +823,7 @@ function record<T = eventWithTime>(
   });
 
   const emitMetaEvent = (isCheckout: boolean, timestamp?: number) => {
-    wrappedEmit(
+    sessionEmit(
       {
         type: EventType.Meta,
         // The budgeted path passes the walk's start time so Meta and the
@@ -841,7 +850,7 @@ function record<T = eventWithTime>(
     detail: Record<string, unknown> = {},
   ) => {
     try {
-      wrappedEmit({
+      sessionEmit({
         type: EventType.Custom,
         data: {
           tag: 'budgeted-full-snapshot',
@@ -867,9 +876,15 @@ function record<T = eventWithTime>(
   };
 
   const takeFullSnapshotSynchronous = (isCheckout: boolean): boolean => {
+    const generation = recordingGeneration;
     // Meta first, matching the pre-budget ordering — a throw from the
     // consumer's Meta handling must not leak a held buffer lock.
     emitMetaEvent(isCheckout);
+    // The consumer's Meta handling can synchronously stop() this recording or
+    // start a new one; the mirror and the buffers belong to that session now.
+    if (generation !== recordingGeneration) {
+      return false;
+    }
 
     stylesheetManager.reset();
     shadowDomManager.init();
@@ -888,7 +903,7 @@ function record<T = eventWithTime>(
         return false;
       }
 
-      wrappedEmit(
+      sessionEmit(
         {
           type: EventType.FullSnapshot,
           data: {
@@ -898,7 +913,18 @@ function record<T = eventWithTime>(
         },
         isCheckout,
       );
+      // Same reentrancy hazard as the Meta emit above: a rotation from the
+      // consumer's FullSnapshot handling owns the mirror now, so the commit,
+      // the canvas reset and finishFullSnapshot must not run. The discard is
+      // token-checked, a no-op when the new owner released it already.
+      if (generation !== recordingGeneration) {
+        discardMutationBuffers(bufferToken);
+        return false;
+      }
       commitMutationBuffers(bufferToken);
+      if (generation !== recordingGeneration) {
+        return false;
+      }
       canvasManager.onFullSnapshot();
       finishFullSnapshot();
       return true;
@@ -958,6 +984,29 @@ function record<T = eventWithTime>(
     return false;
   };
 
+  // True once this walk's recording has been replaced (by its own stop(), or
+  // by a newer record() call). Re-checked after EVERY callout that can run
+  // consumer code (emit, error handler, buffer commit): the consumer can
+  // rotate the recorder synchronously from inside any of them, and from that
+  // point the shared mirror, its id reservation and the buffers belong to the
+  // new session, possibly mid-walk.
+  const walkSuperseded = (transaction: BudgetedSnapshotTransaction) =>
+    transaction.generation !== recordingGeneration;
+
+  // Stand down without touching anything shared: no mirror, no reservation,
+  // no canvas manager, no emit. The new owner already reset the mirror; the
+  // buffer discard is token-checked, a no-op when it released this token too.
+  const abandonSupersededWalk = (transaction: BudgetedSnapshotTransaction) => {
+    budgetedSnapshotInFlight = false;
+    budgetedSnapshotFlushing = false;
+    budgetedSnapshotQueued = null;
+    transaction.eventQueue.length = 0;
+    discardMutationBuffers(transaction.bufferToken);
+    if (activeBudgetedSnapshot === transaction) {
+      activeBudgetedSnapshot = null;
+    }
+  };
+
   // Everything that has to happen once the walk produced a tree (or failed):
   // emit, flush the held window, release the transaction. One idempotent
   // function rather than promise-chain stages, because it has two callers
@@ -973,18 +1022,8 @@ function record<T = eventWithTime>(
       return;
     }
     transaction.completed = true;
-    if (transaction.generation !== recordingGeneration) {
-      // This walk's recording is gone — torn down, or replaced by a newer
-      // record() call. Leave EVERYTHING alone: the queue and buffers
-      // belong to whoever owns the current generation now, and the id
-      // reservation may be the new session's, mid-walk. Just stand down.
-      budgetedSnapshotInFlight = false;
-      budgetedSnapshotQueued = null;
-      transaction.eventQueue.length = 0;
-      discardMutationBuffers(transaction.bufferToken);
-      if (activeBudgetedSnapshot === transaction) {
-        activeBudgetedSnapshot = null;
-      }
+    if (walkSuperseded(transaction)) {
+      abandonSupersededWalk(transaction);
       return;
     }
 
@@ -1001,7 +1040,7 @@ function record<T = eventWithTime>(
         },
       };
       try {
-        wrappedEmit(
+        sessionEmit(
           fullSnapshotEvent as unknown as eventWithoutTime,
           transaction.isCheckout,
           true,
@@ -1013,6 +1052,13 @@ function record<T = eventWithTime>(
         transaction.error = error;
         reportError(error);
         console.warn('Budgeted full snapshot emit failed', error);
+      }
+      // The consumer just ran (its emit, or its error handler): a stop() /
+      // record() from inside it means the reservation this completion is
+      // about to pause and end is the NEW session's, live and mid-walk.
+      if (walkSuperseded(transaction)) {
+        abandonSupersededWalk(transaction);
+        return;
       }
     } else {
       // an overflow/watchdog abort already recorded its own error
@@ -1048,6 +1094,11 @@ function record<T = eventWithTime>(
             (transaction.overflow?.count ?? 0) + transaction.droppedAfterAbort,
           droppedHeldEventBytes: transaction.overflow?.bytes ?? 0,
         });
+        // the diagnostic went through the consumer too; a rotation from it
+        // means the retry would walk the new session's mirror
+        if (walkSuperseded(transaction)) {
+          return;
+        }
         try {
           takeFullSnapshotBudgeted(isCheckout, true);
         } catch (retryError) {
@@ -1067,6 +1118,9 @@ function record<T = eventWithTime>(
           (transaction.overflow?.count ?? 0) + transaction.droppedAfterAbort,
         droppedHeldEventBytes: transaction.overflow?.bytes ?? 0,
       });
+      if (walkSuperseded(transaction)) {
+        return;
+      }
 
       // A fallback failure must not tear recording down — incremental
       // events still flow against the last good snapshot, and the next
@@ -1110,6 +1164,11 @@ function record<T = eventWithTime>(
     // walk here would interleave its Meta with the flush and its unlock
     // with the new walk's locks.
     budgetedSnapshotFlushing = true;
+    // Every delivery below re-enters the consumer, and the consumer can
+    // rotate the recorder from any of them. The early returns land in the
+    // finally blocks, which release this transaction's own state either way
+    // but only touch the shared mirror and buffers while this walk still
+    // owns them.
     try {
       try {
         if (recordCrossOriginIframes) {
@@ -1117,6 +1176,9 @@ function record<T = eventWithTime>(
           // attached iframe documents; the replayer drops them as unknown
           // unless the reattach lands first.
           iframeManager.reattachIframes();
+          if (walkSuperseded(transaction)) {
+            return;
+          }
         }
         const queuedEvents = transaction.eventQueue.splice(0);
         const deferred: HeldEvent[] = [];
@@ -1128,7 +1190,7 @@ function record<T = eventWithTime>(
           preserveTimestamp: boolean,
         ) => {
           try {
-            wrappedEmit(event, isCheckout, preserveTimestamp);
+            sessionEmit(event, isCheckout, preserveTimestamp);
           } catch (emitError) {
             reportError(emitError);
             console.warn('Held event delivery failed', emitError);
@@ -1155,9 +1217,17 @@ function record<T = eventWithTime>(
             continue;
           }
           emitHeld(held.event, held.isCheckout, true);
+          if (walkSuperseded(transaction)) {
+            // the rest of the held window dies with this session; the
+            // commit that would make it resolvable will never run
+            return;
+          }
         }
 
         commitMutationBuffers(transaction.bufferToken); // generate & emit any mutations that happened during snapshotting, as can now apply against the newly built mirror
+        if (walkSuperseded(transaction)) {
+          return;
+        }
 
         if (deferred.length > 0) {
           // The commit just claimed the reserved ids for every node it
@@ -1173,6 +1243,9 @@ function record<T = eventWithTime>(
               // re-stamped at flush time: to the replayer these targets came
               // into existence with the commit, just now
               emitHeld(scrubbed, held.isCheckout, false);
+              if (walkSuperseded(transaction)) {
+                return;
+              }
             }
           }
         }
@@ -1180,9 +1253,15 @@ function record<T = eventWithTime>(
         // A consumer throw mid-flush must not leave the buffers locked: the
         // commit is the transaction's release, not an optional step. (A
         // second call after a successful commit is a token-mismatch no-op.)
-        commitMutationBuffers(transaction.bufferToken);
+        // A superseded walk leaves them alone (the rotation released them).
+        if (!walkSuperseded(transaction)) {
+          commitMutationBuffers(transaction.bufferToken);
+        }
       }
       canvasManager.onFullSnapshot();
+      if (walkSuperseded(transaction)) {
+        return;
+      }
       if (document.adoptedStyleSheets && document.adoptedStyleSheets.length > 0)
         stylesheetManager.adoptStyleSheets(
           document.adoptedStyleSheets,
@@ -1196,12 +1275,20 @@ function record<T = eventWithTime>(
       reportError(flushError);
       console.warn('Budgeted full snapshot flush failed', flushError);
     } finally {
-      mirror.endIdReservation();
-      budgetedSnapshotFlushing = false;
-      budgetedSnapshotInFlight = false;
-      activeBudgetedSnapshot = null;
+      if (walkSuperseded(transaction)) {
+        // the live reservation is the new session's, mid-walk; ending it
+        // would make its events resolve to -1
+        abandonSupersededWalk(transaction);
+      } else {
+        mirror.endIdReservation();
+        budgetedSnapshotFlushing = false;
+        budgetedSnapshotInFlight = false;
+        activeBudgetedSnapshot = null;
+      }
     }
 
+    // abandonSupersededWalk above cleared the coalesced follow-up too: it
+    // would have started a walk in the new session's world.
     const pending = budgetedSnapshotQueued;
     budgetedSnapshotQueued = null;
     if (pending) {
@@ -1232,7 +1319,7 @@ function record<T = eventWithTime>(
   //    the walk) are skipped by the walk itself — the buffer is their single
   //    source of truth, carrying their live position and final state;
   //  - everything observed in the meantime is held and delivered after the
-  //    FullSnapshot, in order (see wrappedEmit and completeBudgetedWalk).
+  //    FullSnapshot, in order (see sessionEmit and completeBudgetedWalk).
   const takeFullSnapshotBudgeted = (isCheckout: boolean, isRetry = false) => {
     if (budgetedSnapshotInFlight) {
       // coalesce concurrent requests into a single follow-up snapshot
@@ -1267,6 +1354,12 @@ function record<T = eventWithTime>(
     // promise chain to recover. It carries the walk's start time so it stays
     // ahead of the backdated FullSnapshot on the wire.
     emitMetaEvent(isCheckout, transaction.startedAt);
+    // A rotation from the consumer's Meta handling owns the buffers and the
+    // mirror now; locking them or starting a reservation here would collide
+    // with the new session's own snapshot.
+    if (walkSuperseded(transaction)) {
+      return;
+    }
 
     // When we take a full snapshot, old tracked StyleSheets need to be removed.
     stylesheetManager.reset();
@@ -1339,7 +1432,7 @@ function record<T = eventWithTime>(
     );
   };
 
-  takeFullSnapshot = (isCheckout = false) => {
+  const sessionTakeFullSnapshot = (isCheckout = false) => {
     if (!recordDOM) {
       return true;
     }
@@ -1349,6 +1442,7 @@ function record<T = eventWithTime>(
     }
     return takeFullSnapshotSynchronous(isCheckout);
   };
+  takeFullSnapshot = sessionTakeFullSnapshot;
 
   try {
     const handlers: listenerHandler[] = [];
@@ -1387,7 +1481,7 @@ function record<T = eventWithTime>(
         {
           mutationCb: wrappedMutationEmit,
           mousemoveCb: (positions, source) =>
-            wrappedEmit({
+            sessionEmit({
               type: EventType.IncrementalSnapshot,
               data: {
                 source,
@@ -1395,7 +1489,7 @@ function record<T = eventWithTime>(
               },
             }),
           mouseInteractionCb: (d) =>
-            wrappedEmit({
+            sessionEmit({
               type: EventType.IncrementalSnapshot,
               data: {
                 source: IncrementalSource.MouseInteraction,
@@ -1404,7 +1498,7 @@ function record<T = eventWithTime>(
             }),
           scrollCb: wrappedScrollEmit,
           viewportResizeCb: (d) =>
-            wrappedEmit({
+            sessionEmit({
               type: EventType.IncrementalSnapshot,
               data: {
                 source: IncrementalSource.ViewportResize,
@@ -1412,7 +1506,7 @@ function record<T = eventWithTime>(
               },
             }),
           inputCb: (v) =>
-            wrappedEmit({
+            sessionEmit({
               type: EventType.IncrementalSnapshot,
               data: {
                 source: IncrementalSource.Input,
@@ -1420,7 +1514,7 @@ function record<T = eventWithTime>(
               },
             }),
           mediaInteractionCb: (p) =>
-            wrappedEmit({
+            sessionEmit({
               type: EventType.IncrementalSnapshot,
               data: {
                 source: IncrementalSource.MediaInteraction,
@@ -1428,7 +1522,7 @@ function record<T = eventWithTime>(
               },
             }),
           styleSheetRuleCb: (r) =>
-            wrappedEmit({
+            sessionEmit({
               type: EventType.IncrementalSnapshot,
               data: {
                 source: IncrementalSource.StyleSheetRule,
@@ -1436,7 +1530,7 @@ function record<T = eventWithTime>(
               },
             }),
           styleDeclarationCb: (r) =>
-            wrappedEmit({
+            sessionEmit({
               type: EventType.IncrementalSnapshot,
               data: {
                 source: IncrementalSource.StyleDeclaration,
@@ -1445,7 +1539,7 @@ function record<T = eventWithTime>(
             }),
           canvasMutationCb: wrappedCanvasMutationEmit,
           fontCb: (p) =>
-            wrappedEmit({
+            sessionEmit({
               type: EventType.IncrementalSnapshot,
               data: {
                 source: IncrementalSource.Font,
@@ -1453,7 +1547,7 @@ function record<T = eventWithTime>(
               },
             }),
           selectionCb: (p) => {
-            wrappedEmit({
+            sessionEmit({
               type: EventType.IncrementalSnapshot,
               data: {
                 source: IncrementalSource.Selection,
@@ -1462,7 +1556,7 @@ function record<T = eventWithTime>(
             });
           },
           customElementCb: (c) => {
-            wrappedEmit({
+            sessionEmit({
               type: EventType.IncrementalSnapshot,
               data: {
                 source: IncrementalSource.CustomElement,
@@ -1507,7 +1601,7 @@ function record<T = eventWithTime>(
                 observer: p.observer!,
                 options: p.options,
                 callback: (payload: object) =>
-                  wrappedEmit({
+                  sessionEmit({
                     type: EventType.Plugin,
                     data: {
                       plugin: p.name,
@@ -1553,7 +1647,7 @@ function record<T = eventWithTime>(
     // `fullscreenElement` is already null.
     let lastFullscreenId = -1;
     const emitFullscreen = (payload: fullscreenEventPayload) =>
-      wrappedEmit({
+      sessionEmit({
         type: EventType.Custom,
         data: { tag: FullscreenCustomEventTag, payload },
       });
@@ -1635,7 +1729,7 @@ function record<T = eventWithTime>(
     };
 
     const init = () => {
-      if (!takeFullSnapshot()) {
+      if (!sessionTakeFullSnapshot()) {
         return;
       }
       handlers.push(observe(document));
@@ -1661,7 +1755,7 @@ function record<T = eventWithTime>(
     } else {
       handlers.push(
         on('DOMContentLoaded', () => {
-          wrappedEmit({
+          sessionEmit({
             type: EventType.DomContentLoaded,
             data: {},
           });
@@ -1672,7 +1766,7 @@ function record<T = eventWithTime>(
         on(
           'load',
           () => {
-            wrappedEmit({
+            sessionEmit({
               type: EventType.Load,
               data: {},
             });

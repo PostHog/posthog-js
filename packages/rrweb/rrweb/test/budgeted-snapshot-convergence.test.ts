@@ -1090,6 +1090,328 @@ describe('time-sliced full snapshot converges on replay', () => {
     }
   });
 
+  // Shared by the two rotation tests below: every id-bearing payload position
+  // in a stream, so `< 0` finds an event that resolved against a dead
+  // reservation, and the unknown-id walk finds references the replayer never
+  // receives. Runs inside the page.
+  const STREAM_CHECKERS = `
+    window.__collectNegativeIds = function (events) {
+      var negative = [];
+      function check(id) {
+        if (typeof id === 'number' && id < 0) negative.push(id);
+      }
+      events.forEach(function (e) {
+        var d = e.data || {};
+        if (e.type === 3) {
+          check(d.id);
+          (d.positions || []).forEach(function (p) { check(p.id); });
+          (d.removes || []).forEach(function (r) { check(r.id); check(r.parentId); });
+          (d.adds || []).forEach(function (a) { check(a.parentId); check(a.node && a.node.id); });
+          (d.texts || []).forEach(function (t) { check(t.id); });
+          (d.attributes || []).forEach(function (a) { check(a.id); });
+          (d.ranges || []).forEach(function (r) { check(r.start); check(r.end); });
+        } else if (e.type === 5 && d.payload) {
+          check(d.payload.id);
+        }
+      });
+      return negative;
+    };
+    window.__collectUnknownIds = function (events) {
+      var known = new Set();
+      var unknown = [];
+      function learn(sn) {
+        if (!sn) return;
+        known.add(sn.id);
+        (sn.childNodes || []).forEach(learn);
+      }
+      function check(id) {
+        if (typeof id === 'number' && id >= 0 && !known.has(id)) unknown.push(id);
+      }
+      events.forEach(function (e) {
+        if (e.type === 2) { learn(e.data.node); return; }
+        if (e.type !== 3) return;
+        var d = e.data || {};
+        (d.adds || []).forEach(function (a) { learn(a.node); });
+        check(d.id);
+        (d.positions || []).forEach(function (p) { check(p.id); });
+        (d.adds || []).forEach(function (a) { check(a.parentId); });
+        (d.texts || []).forEach(function (t) { check(t.id); });
+        (d.attributes || []).forEach(function (a) { check(a.id); });
+      });
+      return unknown;
+    };
+  `;
+
+  it('survives stop() + record() called from inside the FullSnapshot consumer callback', async () => {
+    // The reviewer's reentrancy case: the consumer synchronously rotates the
+    // recorder from the very emit that delivers the sliced FullSnapshot. The
+    // old walk's completion resumes AFTER record() has reset the mirror and
+    // begun the new session's id reservation, so it must stand down instead
+    // of pausing/ending that live reservation, flushing its held window
+    // through the new consumer, or poking the new canvas manager.
+    const page = await browser.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', (err) => errors.push(err.message));
+    try {
+      await fakeGoto(page, `${serverURL}/html/convergence.html`);
+      const doc = buildDocument('<button id="held-btn">h</button>', '');
+      const script = `
+        <script>globalThis.MessageChannel = undefined;</script>
+        <script>${snapshotCode}</script>
+        <script>${rrwebCode}</script>
+        <script>${STREAM_CHECKERS}</script>
+        <script>
+          window.snapshots = [];
+          window.snapshots2 = [];
+          window.__rotated = false;
+          window.__stop = rrweb.record({
+            emit: function (event) {
+              window.snapshots.push(event);
+              if (event.type === 2 && !window.__rotated) {
+                window.__rotated = true;
+                window.__stop();
+                window.__stop2 = rrweb.record({
+                  emit: function (e) { window.snapshots2.push(e); },
+                  fullSnapshotYieldBudgetMs: ${YIELD_BUDGET_MS},
+                });
+              }
+            },
+            fullSnapshotYieldBudgetMs: ${YIELD_BUDGET_MS},
+          });
+        </script>
+      `;
+      await page.setContent(doc.replace('</body>', `${script}</body>`));
+
+      // Bank held events in the FIRST session while its walk is in flight:
+      // real clicks plus a taggable custom event to trace leakage precisely.
+      const probe = (await page.evaluate(`
+        (function () {
+          var inFlight = !window.snapshots.some(function (e) {
+            return e.type === 2;
+          });
+          rrweb.record.addCustomEvent('held-in-first-session', {});
+          document.getElementById('held-btn').dispatchEvent(
+            new MouseEvent('click', { bubbles: true, clientX: 1, clientY: 1 })
+          );
+          return { inFlight: inFlight };
+        })()
+      `)) as { inFlight: boolean };
+      expect(probe.inFlight).toBe(true);
+
+      await page.waitForFunction('window.__rotated === true', {
+        timeout: 120_000,
+      });
+
+      // The second session's walk is now in flight with a live reservation.
+      // Click nodes it has not visited yet: if the old completion ended the
+      // reservation, these resolve to -1.
+      const midWalk = (await page.evaluate(`
+        (function () {
+          var inFlight = !window.snapshots2.some(function (e) {
+            return e.type === 2;
+          });
+          ['row-2900', 'row-2950'].forEach(function (id) {
+            document.getElementById(id).firstElementChild.dispatchEvent(
+              new MouseEvent('click', { bubbles: true, clientX: 2, clientY: 2 })
+            );
+          });
+          return { inFlight: inFlight };
+        })()
+      `)) as { inFlight: boolean };
+      expect(midWalk.inFlight).toBe(true);
+
+      await page.waitForFunction(
+        'window.snapshots2.some((e) => e.type === 2)',
+        { timeout: 120_000 },
+      );
+      await new Promise((r) => setTimeout(r, 800));
+
+      const after = (await page.evaluate(`
+        ({
+          firstFullSnapshots: window.snapshots.filter(function (e) {
+            return e.type === 2;
+          }).length,
+          secondFullSnapshots: window.snapshots2.filter(function (e) {
+            return e.type === 2;
+          }).length,
+          heldLeakedToSecond: window.snapshots2.some(function (e) {
+            return e.type === 5 && e.data && e.data.tag === 'held-in-first-session';
+          }),
+          heldFlushedToFirst: window.snapshots.some(function (e) {
+            return e.type === 5 && e.data && e.data.tag === 'held-in-first-session';
+          }),
+          negativeIdsFirst: window.__collectNegativeIds(window.snapshots),
+          negativeIdsSecond: window.__collectNegativeIds(window.snapshots2),
+          unknownIdsSecond: window.__collectUnknownIds(window.snapshots2),
+          secondClickCount: window.snapshots2.filter(function (e) {
+            return e.type === 3 && e.data && e.data.source === 2 && e.data.type === 2;
+          }).length,
+        })
+      `)) as {
+        firstFullSnapshots: number;
+        secondFullSnapshots: number;
+        heldLeakedToSecond: boolean;
+        heldFlushedToFirst: boolean;
+        negativeIdsFirst: number[];
+        negativeIdsSecond: number[];
+        unknownIdsSecond: number[];
+        secondClickCount: number;
+      };
+
+      // the new session's walk completed and owns exactly one FullSnapshot
+      expect(after.firstFullSnapshots).toBe(1);
+      expect(after.secondFullSnapshots).toBe(1);
+      // the old session's held window must not release through the new
+      // consumer; the abandoned completion drops it entirely
+      expect(after.heldLeakedToSecond).toBe(false);
+      expect(after.heldFlushedToFirst).toBe(false);
+      // no event on either wire resolved against a dead reservation
+      expect(after.negativeIdsFirst).toEqual([]);
+      expect(after.negativeIdsSecond).toEqual([]);
+      // and the new session's stream is fully resolvable by a replayer
+      expect(after.unknownIdsSecond).toEqual([]);
+      // the mid-walk clicks survived on reserved ids the walk then claimed,
+      // proof the old completion did not end the new session's reservation
+      expect(after.secondClickCount).toBeGreaterThanOrEqual(2);
+      expect(errors).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('abandons the rest of the flush when the consumer rotates on a held event (posthog stop/start shape)', async () => {
+    // posthog-js rotates by calling stop() then record() from inside its emit
+    // callback, which can fire on a HELD event mid-flush, after the
+    // FullSnapshot but before the buffer commit. Everything after that
+    // delivery (the held tail, the commit, endIdReservation, the canvas
+    // reset) must be abandoned, not applied to the new session.
+    const page = await browser.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', (err) => errors.push(err.message));
+    try {
+      await fakeGoto(page, `${serverURL}/html/convergence.html`);
+      const doc = buildDocument('', '');
+      const script = `
+        <script>globalThis.MessageChannel = undefined;</script>
+        <script>${snapshotCode}</script>
+        <script>${rrwebCode}</script>
+        <script>${STREAM_CHECKERS}</script>
+        <script>
+          window.snapshots = [];
+          window.snapshots2 = [];
+          window.__rotated = false;
+          window.__stop = rrweb.record({
+            emit: function (event) {
+              window.snapshots.push(event);
+              if (
+                !window.__rotated &&
+                event.type === 5 &&
+                event.data &&
+                event.data.tag === 'rotate-now'
+              ) {
+                window.__rotated = true;
+                window.__stop();
+                window.__stop2 = rrweb.record({
+                  emit: function (e) { window.snapshots2.push(e); },
+                  fullSnapshotYieldBudgetMs: ${YIELD_BUDGET_MS},
+                });
+              }
+            },
+            fullSnapshotYieldBudgetMs: ${YIELD_BUDGET_MS},
+          });
+        </script>
+      `;
+      await page.setContent(doc.replace('</body>', `${script}</body>`));
+
+      const probe = (await page.evaluate(`
+        (function () {
+          var inFlight = !window.snapshots.some(function (e) {
+            return e.type === 2;
+          });
+          // both are held; the first one's delivery rotates the recorder, so
+          // the second must never reach any consumer
+          rrweb.record.addCustomEvent('rotate-now', {});
+          rrweb.record.addCustomEvent('held-after-rotate', {});
+          return { inFlight: inFlight };
+        })()
+      `)) as { inFlight: boolean };
+      expect(probe.inFlight).toBe(true);
+
+      await page.waitForFunction('window.__rotated === true', {
+        timeout: 120_000,
+      });
+
+      const midWalk = (await page.evaluate(`
+        (function () {
+          var inFlight = !window.snapshots2.some(function (e) {
+            return e.type === 2;
+          });
+          document.getElementById('row-2900').firstElementChild.dispatchEvent(
+            new MouseEvent('click', { bubbles: true, clientX: 2, clientY: 2 })
+          );
+          return { inFlight: inFlight };
+        })()
+      `)) as { inFlight: boolean };
+      expect(midWalk.inFlight).toBe(true);
+
+      await page.waitForFunction(
+        'window.snapshots2.some((e) => e.type === 2)',
+        { timeout: 120_000 },
+      );
+      await new Promise((r) => setTimeout(r, 800));
+
+      const after = (await page.evaluate(`
+        ({
+          firstHasFullSnapshot: window.snapshots.some(function (e) {
+            return e.type === 2;
+          }),
+          firstHasRotateNow: window.snapshots.some(function (e) {
+            return e.type === 5 && e.data && e.data.tag === 'rotate-now';
+          }),
+          heldTailInFirst: window.snapshots.some(function (e) {
+            return e.type === 5 && e.data && e.data.tag === 'held-after-rotate';
+          }),
+          heldTailInSecond: window.snapshots2.some(function (e) {
+            return e.type === 5 && e.data && e.data.tag === 'held-after-rotate';
+          }),
+          secondFullSnapshots: window.snapshots2.filter(function (e) {
+            return e.type === 2;
+          }).length,
+          negativeIdsSecond: window.__collectNegativeIds(window.snapshots2),
+          unknownIdsSecond: window.__collectUnknownIds(window.snapshots2),
+          secondClickCount: window.snapshots2.filter(function (e) {
+            return e.type === 3 && e.data && e.data.source === 2 && e.data.type === 2;
+          }).length,
+        })
+      `)) as {
+        firstHasFullSnapshot: boolean;
+        firstHasRotateNow: boolean;
+        heldTailInFirst: boolean;
+        heldTailInSecond: boolean;
+        secondFullSnapshots: number;
+        negativeIdsSecond: number[];
+        unknownIdsSecond: number[];
+        secondClickCount: number;
+      };
+
+      // the first session got its FullSnapshot and the held event that
+      // triggered the rotation, in that order
+      expect(after.firstHasFullSnapshot).toBe(true);
+      expect(after.firstHasRotateNow).toBe(true);
+      // the held tail dies with the rotation: through NEITHER consumer
+      expect(after.heldTailInFirst).toBe(false);
+      expect(after.heldTailInSecond).toBe(false);
+      // and the new session is intact end to end
+      expect(after.secondFullSnapshots).toBe(1);
+      expect(after.negativeIdsSecond).toEqual([]);
+      expect(after.unknownIdsSecond).toEqual([]);
+      expect(after.secondClickCount).toBeGreaterThanOrEqual(1);
+      expect(errors).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('rolls a failed sliced walk back to a synchronous checkpoint', async () => {
     const page = await browser.newPage();
     const errors: string[] = [];
