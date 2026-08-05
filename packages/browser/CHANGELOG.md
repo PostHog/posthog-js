@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.412.2
+
+### Patch Changes
+
+- [#4417](https://github.com/PostHog/posthog-js/pull/4417) [`3acadfe`](https://github.com/PostHog/posthog-js/commit/3acadfeb7ea238b92241eca11b437086fd184c4f) Thanks [@marandaneto](https://github.com/marandaneto)! - fix(replay): discard held interaction-less recordings when a background document unloads without ever becoming visible
+  (2026-08-05)
+
 ## 1.412.1
 
 ### Patch Changes
