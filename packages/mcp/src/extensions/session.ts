@@ -87,10 +87,7 @@ export function getSessionId(
  * outright — servers MUST NOT mint or echo it — so this entire step becomes
  * legacy-only once era detection lands.
  */
-function readSessionIdFromRequest(
-  data: MCPAnalyticsData,
-  extra?: CompatibleRequestHandlerExtra
-): string | undefined {
+function readSessionIdFromRequest(data: MCPAnalyticsData, extra?: CompatibleRequestHandlerExtra): string | undefined {
   // 2a. A token we minted at `initialize` and the client replayed. It rides the
   // `mcp-session-id` header, which stateless transports don't surface as
   // extra.sessionId, so read the header ourselves. Decoding it also restores the
