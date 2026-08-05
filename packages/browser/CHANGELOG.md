@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.412.1
+
+### Patch Changes
+
+- [#4404](https://github.com/PostHog/posthog-js/pull/4404) [`a348fb3`](https://github.com/PostHog/posthog-js/commit/a348fb3c3fb53f104b5f50d6c7f3e32258451958) Thanks [@dependabot](https://github.com/apps/dependabot)! - Update PostCSS to include upstream security fixes.
+  (2026-08-05)
+
 ## 1.412.0
 
 ### Minor Changes
