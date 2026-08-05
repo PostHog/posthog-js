@@ -108,6 +108,14 @@ export type ConversationIdResolution =
  * is treated exactly as if the handle were absent: mint, and prompt back. Shape
  * rather than a registry of issued ids, because a per-request server has no
  * memory of what it minted.
+ *
+ * This narrows the problem, it does not prove provenance: a caller supplying a
+ * well-formed uuidv7 is trusted, so two that pick the *same* one still merge. That
+ * residue is far smaller than the case it replaces — an agent ignoring the
+ * parameter description reaches for `conv-1` or `1`, not a conforming uuidv7 — and
+ * closing it needs a signed handle, i.e. a secret shared by every pod. Worth doing
+ * if this ever anchors something security-bearing; `$session_id` is an analytics
+ * grouping key, so it does not today.
  */
 export function resolveConversationId(enabled: boolean, args: unknown): ConversationIdResolution {
   if (!enabled) {

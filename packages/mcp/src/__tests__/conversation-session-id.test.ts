@@ -144,6 +144,44 @@ describe('conversation_id as the session anchor', () => {
     })
   })
 
+  describe('client identity', () => {
+    it('still reads the token client identity when a handle wins the session', async () => {
+      // A stateless instance that never processed `initialize`: the client replays
+      // our token and the agent echoes a handle. The handle must decide the
+      // session *without* costing us the only client attribution the request
+      // carries — otherwise every tool call and $identify on that deployment goes
+      // out unattributed.
+      instrument(server, fakePostHog(), { enableConversationId: true })
+      const lowLevel = server.server as MCPServerLike
+      const data = getServerTrackingData(lowLevel)!
+      data.sessionInfo.clientName = undefined
+      data.sessionInfo.clientVersion = undefined
+      data.sessionInfo.protocolVersion = undefined
+
+      const extra = {
+        requestInfo: {
+          headers: {
+            [MCP_SESSION_HEADER]: encodeSessionId({
+              sessionId: 'ses_from_token',
+              clientName: 'acme-client',
+              clientVersion: '9.9.9',
+              protocolVersion: '2025-11-25',
+            }),
+          },
+        },
+      } as never
+
+      const derived = getSessionId(lowLevel, extra, CONVERSATION_HANDLE)
+
+      expect(derived).toBe(deterministicPrefixedId('ses', CONVERSATION_HANDLE))
+      expect(data.sessionInfo.clientName).toBe('acme-client')
+      expect(data.sessionInfo.clientVersion).toBe('9.9.9')
+      expect(data.sessionInfo.protocolVersion).toBe('2025-11-25')
+      // The token's own session id is per-chat, so the handle branch must not adopt it.
+      expect(derived).not.toBe('ses_from_token')
+    })
+  })
+
   describe('across server instances', () => {
     it('produces the same session id from the same handle with no shared state', async () => {
       instrument(server, fakePostHog())

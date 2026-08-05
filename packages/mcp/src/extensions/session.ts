@@ -15,6 +15,7 @@ import { INACTIVITY_TIMEOUT_IN_MINUTES } from './constants'
 import { deterministicPrefixedId, newPrefixedId } from './ids'
 import { getServerTrackingData, setServerTrackingData } from './internal'
 import { decodeSessionId, readMcpSessionHeader } from './session-token'
+import type { SessionTokenPayload } from './session-token'
 
 export function newSessionId(): string {
   return newPrefixedId('ses')
@@ -65,6 +66,13 @@ export function getSessionId(
   // and a later call carrying no handle rotates it. That is the honest reading:
   // the fallback session really has been idle for that whole time.
   if (conversationId) {
+    // The handle decides the *session*, but the request may still carry our token,
+    // and on a stateless instance that never processed `initialize` its payload is
+    // the only place client identity exists. Restore that before returning: the
+    // early return is about not persisting a session, not about ignoring what the
+    // request told us about the client. Without this, tool calls and `$identify`
+    // go out unattributed on exactly the deployments this branch exists for.
+    applyTokenClientIdentity(data, extra)
     return deterministicPrefixedId('ses', conversationId)
   }
 
@@ -83,6 +91,32 @@ export function getSessionId(
 }
 
 /**
+ * Restores the client name/version and protocol version baked into our token at
+ * mint time, and hands the decoded token back so the caller can also take the
+ * session id from it.
+ *
+ * Split out from step 2 because the two halves of the token have different
+ * scopes. The session id it carries is per-chat, so a conversation-anchored
+ * request must not adopt it. The client identity is per-connection — the same
+ * client for every request on it — so a conversation-anchored request should,
+ * and on a stateless instance that never saw `initialize` this is the only
+ * source of it.
+ */
+function applyTokenClientIdentity(
+  data: MCPAnalyticsData,
+  extra?: CompatibleRequestHandlerExtra
+): SessionTokenPayload | undefined {
+  const token = decodeSessionId(readMcpSessionHeader(extra?.requestInfo?.headers))
+  if (!token) {
+    return undefined
+  }
+  data.sessionInfo.clientName = token.clientName
+  data.sessionInfo.clientVersion = token.clientVersion
+  data.sessionInfo.protocolVersion = token.protocolVersion
+  return token
+}
+
+/**
  * 2. The session id a request carried. Two sources, tried in order: our own token
  * on the `mcp-session-id` header, then the raw session id a stateful transport
  * issued. Returns undefined when the request carried neither, which is what
@@ -95,15 +129,10 @@ export function getSessionId(
 function readSessionIdFromRequest(data: MCPAnalyticsData, extra?: CompatibleRequestHandlerExtra): string | undefined {
   // 2a. A token we minted at `initialize` and the client replayed. It rides the
   // `mcp-session-id` header, which stateless transports don't surface as
-  // extra.sessionId, so read the header ourselves. Decoding it also restores the
-  // client name/version and protocol version baked in at mint time.
-  const sessionHeader = readMcpSessionHeader(extra?.requestInfo?.headers)
-  const token = decodeSessionId(sessionHeader)
+  // extra.sessionId, so read the header ourselves.
+  const token = applyTokenClientIdentity(data, extra)
   if (token) {
     data.sessionSource = 'token'
-    data.sessionInfo.clientName = token.clientName
-    data.sessionInfo.clientVersion = token.clientVersion
-    data.sessionInfo.protocolVersion = token.protocolVersion
     return token.sessionId
   }
 
