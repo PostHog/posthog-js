@@ -46,6 +46,14 @@ describe('_mcp_instructions output schema declaration', () => {
       expect(canDeclareOutputInstructions({ $ref: '#/$defs/x' })).toBe(false)
     })
 
+    it('refuses a Zod schema or raw shape — only advertised JSON Schema can answer', () => {
+      // The high-level registry stores Zod, which has no `properties` bag, so
+      // every structural check would pass vacuously and wrongly report `true`.
+      expect(canDeclareOutputInstructions(z.object({ ok: z.boolean() }))).toBe(false)
+      expect(canDeclareOutputInstructions({ ok: z.boolean() })).toBe(false)
+      expect(canDeclareOutputInstructions({ [MCP_INSTRUCTIONS_KEY]: z.string() })).toBe(false)
+    })
+
     it('rejects a schema that already declares the key', () => {
       expect(
         canDeclareOutputInstructions({ type: 'object', properties: { [MCP_INSTRUCTIONS_KEY]: { type: 'object' } } })
@@ -191,15 +199,12 @@ describe('_mcp_instructions declaration over a real client', () => {
   it('still accepts a result that omits the declared key', async () => {
     const { client, cleanup } = await connect({ enableConversationId: true })
     try {
-      // The client caches the advertised schema from this call, then validates
-      // the result below against it. Nothing writes the key yet, so this is the
-      // regression that would catch declaring it as required.
-      await client.request({ method: 'tools/list' }, ListToolsResultSchema)
+      // callTool, not request: only callTool ajv-validates structuredContent
+      // against the cached output schema, which is the whole premise of
+      // declaring before writing. request() parses the envelope and no more.
+      await client.listTools()
 
-      const result = await client.request(
-        { method: 'tools/call', params: { name: 'get_issue', arguments: { issue_id: 'iss_7' } } },
-        CallToolResultSchema
-      )
+      const result = await client.callTool({ name: 'get_issue', arguments: { issue_id: 'iss_7' } })
 
       expect((result.structuredContent as any).ok).toBe(true)
     } finally {

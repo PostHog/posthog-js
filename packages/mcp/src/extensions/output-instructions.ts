@@ -46,11 +46,29 @@ export function canDeclareOutputInstructions(outputSchema: unknown): boolean {
   if (!outputSchema || typeof outputSchema !== 'object') {
     return false
   }
+
+  // Only the JSON Schema a tool advertises can answer this. A Zod schema or raw
+  // shape — what the high-level registry stores — has no `properties` bag, so
+  // every check below would pass vacuously and report `true` for a tool whose
+  // schema we actually skipped. Refuse rather than guess: callers holding a Zod
+  // value must read the recorded answer off the ownership registry instead.
+  if (isSchemaObjectLike(outputSchema)) {
+    return false
+  }
+
   const schema = outputSchema as AnalyticsInjectableJsonSchema
   if (schema.$ref || schema.oneOf || schema.allOf || schema.anyOf) {
     return false
   }
   return !schema.properties || !Object.prototype.hasOwnProperty.call(schema.properties, MCP_INSTRUCTIONS_KEY)
+}
+
+/** A Zod schema, or a raw shape whose values are Zod schemas. */
+function isSchemaObjectLike(value: unknown): boolean {
+  const candidate = value as Record<string, unknown>
+  const isZodLike = (entry: unknown): boolean =>
+    !!entry && typeof entry === 'object' && ('_def' in entry || '_zod' in entry || '~standard' in entry)
+  return isZodLike(candidate) || Object.values(candidate).some(isZodLike)
 }
 
 /**
