@@ -124,5 +124,5 @@ export const getBlockedUAMatch = function (
  * Block various web spiders from executing our JS and sending false capturing data
  */
 export const isBlockedUA = function (ua: string | undefined, customBlockedUserAgents: string[] = []): boolean {
-  return !!getBlockedUAMatch(ua, customBlockedUserAgents)
+  return getBlockedUAMatch(ua, customBlockedUserAgents) !== undefined
 }

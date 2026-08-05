@@ -405,9 +405,11 @@ export class PostHog implements PostHogInterface {
     _originalUserConfig?: Partial<PostHogConfig>
 
     rateLimiter: RateLimiter
-    // Number of events dropped by the user-agent bot filter this session. Useful for support
-    // to check whether bot filtering is the cause of a pageview count discrepancy, without
-    // needing to ask the customer to enable debug mode and redeploy.
+    /**
+     * Number of events dropped by the user-agent bot filter on this instance.
+     *
+     * Useful for checking whether bot filtering is causing an event count discrepancy.
+     */
     botEventsDropped = 0
     scrollManager: ScrollManager
     pageViewManager: PageViewManager
@@ -1366,7 +1368,7 @@ export class PostHog implements PostHogInterface {
             const reason = navigator
                 ? getBotDetectionReason(navigator, this.config.custom_blocked_useragents)
                 : undefined
-            logger.info(
+            logger.debug(
                 `Dropped "${event_name}" because it looks like a bot${reason ? ` (${reason})` : ''}. Set opt_out_useragent_filter: true to disable this filtering.`
             )
             return

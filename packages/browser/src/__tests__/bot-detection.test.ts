@@ -111,7 +111,7 @@ describe('bot detection and pageview collection', () => {
 
             expect(beforeSendMock).not.toHaveBeenCalled()
             expect(posthog.botEventsDropped).toBe(1)
-            expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('matched blocklist entry'))
+            expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('matched blocklist entry'))
 
             posthog.capture('$pageview')
             expect(posthog.botEventsDropped).toBe(2)
@@ -123,7 +123,7 @@ describe('bot detection and pageview collection', () => {
 
             posthog.capture('$pageview')
 
-            expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('navigator.webdriver'))
+            expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('navigator.webdriver'))
         })
     })
 

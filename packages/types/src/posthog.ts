@@ -65,6 +65,11 @@ export interface PostHog {
      */
     flagsEndpointWasHit: boolean
 
+    /**
+     * Number of events dropped by the user-agent bot filter on this instance.
+     */
+    botEventsDropped: number
+
     // ============================================================================
     // Initialization
     // ============================================================================

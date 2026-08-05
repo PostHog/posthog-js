@@ -1,5 +1,5 @@
 // Re-export shared bot detection logic from @posthog/core
-import { isBlockedUA as isBlockedUACore, getBlockedUAMatch } from '@posthog/core'
+import { getBlockedUAMatch, isBlockedUA as isBlockedUACore, isUndefined } from '@posthog/core'
 export { DEFAULT_BLOCKED_UA_STRS, isBlockedUA } from '@posthog/core'
 
 // There's more in the type, but this is all we use. It's currently experimental, see
@@ -69,7 +69,7 @@ export const getBotDetectionReason = function (
     }
 
     const uaMatch = getBlockedUAMatch(navigator.userAgent, customBlockedUserAgents)
-    if (uaMatch) {
+    if (!isUndefined(uaMatch)) {
         return `user agent matched blocklist entry "${uaMatch}"`
     }
 
@@ -80,7 +80,7 @@ export const getBotDetectionReason = function (
         // can't use Array.find here because IE 11 :/
         for (let i = 0; brands && i < brands.length; i++) {
             const brandMatch = getBlockedUAMatch(brands[i]?.brand, customBlockedUserAgents)
-            if (brandMatch) {
+            if (!isUndefined(brandMatch)) {
                 return `userAgentData brand matched blocklist entry "${brandMatch}"`
             }
         }
