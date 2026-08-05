@@ -139,6 +139,7 @@ export const PERSON_PROFILES_IDENTIFIED_ONLY = 'identified_only' as const
 
 /* DOM EVENT NAMES - interned to reduce bundle size */
 export const DOM_EVENT_VISIBILITYCHANGE = 'visibilitychange'
+export const DOM_EVENT_PRERENDERINGCHANGE = 'prerenderingchange'
 export const DOM_EVENT_BEFOREUNLOAD = 'beforeunload'
 
 export const EVENT_PAGEVIEW = '$pageview'
