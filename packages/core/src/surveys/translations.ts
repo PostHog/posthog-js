@@ -97,6 +97,9 @@ function hasAppearanceTranslation(translation: SurveyTranslation): boolean {
     !isUndefined(translation.thankYouMessageHeader) ||
     !isUndefined(translation.thankYouMessageDescription) ||
     !isUndefined(translation.thankYouMessageCloseButtonText) ||
+    !isUndefined(translation.introScreenHeader) ||
+    !isUndefined(translation.introScreenDescription) ||
+    !isUndefined(translation.introScreenButtonText) ||
     !isUndefined(translation.submitButtonText) ||
     !isUndefined(translation.backButtonText)
   )
@@ -106,6 +109,9 @@ type TranslatableSurveyAppearance = {
   thankYouMessageHeader?: string
   thankYouMessageDescription?: string | null
   thankYouMessageCloseButtonText?: string
+  introScreenHeader?: string
+  introScreenDescription?: string | null
+  introScreenButtonText?: string
   submitButtonText?: string
   backButtonText?: string
 }
@@ -217,6 +223,18 @@ export function applySurveyTranslation<
         }
         if (!isUndefined(translation.thankYouMessageCloseButtonText)) {
           translated.appearance.thankYouMessageCloseButtonText = translation.thankYouMessageCloseButtonText
+          hasTranslation = true
+        }
+        if (!isUndefined(translation.introScreenHeader)) {
+          translated.appearance.introScreenHeader = translation.introScreenHeader
+          hasTranslation = true
+        }
+        if (!isUndefined(translation.introScreenDescription)) {
+          translated.appearance.introScreenDescription = translation.introScreenDescription
+          hasTranslation = true
+        }
+        if (!isUndefined(translation.introScreenButtonText)) {
+          translated.appearance.introScreenButtonText = translation.introScreenButtonText
           hasTranslation = true
         }
         if (!isUndefined(translation.submitButtonText)) {

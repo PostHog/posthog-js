@@ -73,6 +73,14 @@ jest.mock('../src/surveys/components/ConfirmationMessage', () => {
   }
 })
 
+jest.mock('../src/surveys/components/IntroMessage', () => {
+  const RealReact = jest.requireActual('react')
+  return {
+    IntroMessage: ({ onStart }: { onStart: () => void }) =>
+      RealReact.createElement('div', { 'data-testid': 'intro-stub', onClick: onStart }, 'INTRO_RENDERED'),
+  }
+})
+
 jest.mock('../src/surveys/components/Cancel', () => {
   const RealReact = jest.requireActual('react')
   return {
@@ -285,5 +293,65 @@ describe('SurveyModal close behavior', () => {
     })
 
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('SurveyModal intro screen', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
+  const appearanceWithIntro: SurveyAppearanceTheme = {
+    ...defaultSurveyAppearance,
+    displayIntroScreen: true,
+    introScreenHeader: 'Welcome!',
+    thankYouMessageHeader: 'Thanks!',
+  }
+
+  const renderWithAppearance = (appearance: SurveyAppearanceTheme) =>
+    render(
+      <SurveyModal
+        survey={baseSurvey}
+        surveyLanguage={null}
+        appearance={appearance}
+        onShow={() => {}}
+        onClose={jest.fn()}
+      />
+    )
+
+  it('renders the intro screen before the questions and advances on start', () => {
+    const { queryByTestId, getByTestId } = renderWithAppearance(appearanceWithIntro)
+
+    expect(queryByTestId('intro-stub')).not.toBeNull()
+    expect(queryByTestId('questions-stub')).toBeNull()
+
+    act(() => {
+      fireEvent.click(getByTestId('intro-stub'))
+    })
+
+    expect(queryByTestId('intro-stub')).toBeNull()
+    expect(queryByTestId('questions-stub')).not.toBeNull()
+  })
+
+  it('does not render the intro screen when displayIntroScreen is off', () => {
+    const { queryByTestId } = renderWithAppearance(appearanceWithThankYou)
+
+    expect(queryByTestId('intro-stub')).toBeNull()
+    expect(queryByTestId('questions-stub')).not.toBeNull()
+  })
+
+  it('still shows the confirmation after submitting when the intro was used', () => {
+    const { queryByTestId, getByTestId } = renderWithAppearance(appearanceWithIntro)
+
+    act(() => {
+      fireEvent.click(getByTestId('intro-stub'))
+    })
+    act(() => {
+      fireEvent.click(getByTestId('questions-stub'))
+    })
+
+    expect(queryByTestId('confirmation-stub')).not.toBeNull()
+    expect(queryByTestId('intro-stub')).toBeNull()
+    expect(queryByTestId('questions-stub')).toBeNull()
   })
 })

@@ -33,6 +33,7 @@ import { Properties } from '../types'
 import { SURVEYS } from '../constants'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
+import { IntroScreen } from './surveys/components/IntroScreen'
 import { Cancel } from './surveys/components/QuestionHeader'
 import {
     CommonQuestionProps,
@@ -75,6 +76,13 @@ import { applySurveyTranslationForUser } from '../utils/survey-translations'
 
 // Re-export for surveys-preview entrypoint
 export { getNextSurveyStep }
+
+/**
+ * `previewPageIndex` sentinel for the intro screen — the leading mirror of the confirmation
+ * page's `survey.questions.length` sentinel. Also serves as a capability marker for the main
+ * app: bundles without this export cannot render the intro screen preview.
+ */
+export const INTRO_SCREEN_PREVIEW_INDEX = -1
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
@@ -1334,6 +1342,19 @@ export function SurveyPopup({
     const shouldShowConfirmation =
         isSurveySent || previewPageIndex === survey.questions.length || isSurveyCompleted === true
 
+    const [introScreenDismissed, setIntroScreenDismissed] = useState(false)
+    const hasInProgressState = useMemo(() => !!getInProgressSurveyState(survey), [survey])
+    /**
+     * The intro screen is a leading page, the mirror of the trailing confirmation message. It is
+     * skipped whenever the survey already has answers in progress (resumed session or URL
+     * prefill), and dismissing it only flips local state — no event, no response, no effect on
+     * completion or partial-response accounting. The confirmation check above always wins so a
+     * completed survey never shows the intro.
+     */
+    const shouldShowIntroScreen = isPreviewMode
+        ? previewPageIndex === INTRO_SCREEN_PREVIEW_INDEX
+        : !!survey.appearance?.displayIntroScreen && !introScreenDismissed && !hasInProgressState
+
     const surveyContextValue = useMemo(() => {
         const getInProgressSurvey = getInProgressSurveyState(survey)
         const surveySubmissionId = getInProgressSurvey?.surveySubmissionId || uuidv7()
@@ -1383,9 +1404,7 @@ export function SurveyPopup({
                 }}
                 ref={surveyContainerRef}
             >
-                {!shouldShowConfirmation ? (
-                    <Questions survey={survey} forceDisableHtml={!!forceDisableHtml} posthog={posthog} />
-                ) : (
+                {shouldShowConfirmation ? (
                     <ConfirmationMessage
                         header={survey.appearance?.thankYouMessageHeader || 'Thank you!'}
                         description={survey.appearance?.thankYouMessageDescription || ''}
@@ -1397,6 +1416,17 @@ export function SurveyPopup({
                             onCloseConfirmationMessage()
                         }}
                     />
+                ) : shouldShowIntroScreen ? (
+                    <IntroScreen
+                        header={survey.appearance?.introScreenHeader || ''}
+                        description={survey.appearance?.introScreenDescription || ''}
+                        forceDisableHtml={!!forceDisableHtml}
+                        contentType={survey.appearance?.introScreenDescriptionContentType}
+                        appearance={survey.appearance || defaultSurveyAppearance}
+                        onStart={() => setIntroScreenDismissed(true)}
+                    />
+                ) : (
+                    <Questions survey={survey} forceDisableHtml={!!forceDisableHtml} posthog={posthog} />
                 )}
             </div>
         </SurveyContext.Provider>
@@ -1461,7 +1491,9 @@ export function Questions({
         const savedIndex = initialInProgressState?.lastQuestionIndex
         const validSavedIndex =
             isNumber(savedIndex) && savedIndex >= 0 && savedIndex < survey.questions.length ? savedIndex : 0
-        return previewPageIndex || validSavedIndex
+        // The intro screen preview sentinel (INTRO_SCREEN_PREVIEW_INDEX) is handled at the
+        // SurveyPopup level and must never become a question index.
+        return isNumber(previewPageIndex) && previewPageIndex >= 0 ? previewPageIndex : validSavedIndex
     })
     const [visitedIndices, setVisitedIndices] = useState<number[]>(() => {
         // Drop any out-of-range visited indices so the Back button can never navigate to a
@@ -1472,9 +1504,10 @@ export function Questions({
     })
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
 
-    // Sync preview state
+    // Sync preview state. Negative sentinels (the intro screen page) are rendered by SurveyPopup
+    // instead of Questions, so they must never reach currentQuestionIndex.
     useEffect(() => {
-        if (isPreviewMode && !isUndefined(previewPageIndex)) {
+        if (isPreviewMode && !isUndefined(previewPageIndex) && previewPageIndex >= 0) {
             setCurrentQuestionIndex(previewPageIndex)
         }
     }, [previewPageIndex, isPreviewMode])

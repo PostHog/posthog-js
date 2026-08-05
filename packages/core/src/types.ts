@@ -629,6 +629,14 @@ export type SurveyAppearance = {
   thankYouMessageDescription?: string
   thankYouMessageDescriptionContentType?: SurveyQuestionDescriptionContentType
   thankYouMessageCloseButtonText?: string
+  // Optional intro screen shown before the first question — the leading mirror of the
+  // confirmation message. Dismissed with a button; records no response and does not count
+  // toward completion or partial-response metrics.
+  displayIntroScreen?: boolean
+  introScreenHeader?: string
+  introScreenDescription?: string
+  introScreenDescriptionContentType?: SurveyQuestionDescriptionContentType
+  introScreenButtonText?: string
   borderColor?: string
   position?: SurveyPosition
   placeholder?: string
@@ -700,6 +708,9 @@ export interface SurveyTranslation {
   thankYouMessageHeader?: string
   thankYouMessageDescription?: string
   thankYouMessageCloseButtonText?: string
+  introScreenHeader?: string
+  introScreenDescription?: string
+  introScreenButtonText?: string
   submitButtonText?: string
   backButtonText?: string
 }
