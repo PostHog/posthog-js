@@ -1054,7 +1054,7 @@ describe('replayer', function () {
     const state = await page.evaluate(() => {
       const iframe = document.querySelector('iframe') as HTMLIFrameElement;
       const host = iframe.contentDocument!.querySelector(
-        'shared-header',
+        'late-shadow-host',
       ) as HTMLElement;
       const anchor = host.shadowRoot!.querySelector('a')!;
       return {

@@ -54,7 +54,7 @@ const events: eventWithTime[] = [
                 childNodes: [
                   {
                     type: 2,
-                    tagName: 'shared-header',
+                    tagName: 'late-shadow-host',
                     attributes: {},
                     childNodes: [],
                     id: 6,
@@ -130,7 +130,7 @@ const events: eventWithTime[] = [
           nextId: null,
           node: {
             type: 3,
-            textContent: 'Products',
+            textContent: 'menu item',
             id: 9,
           },
         },
