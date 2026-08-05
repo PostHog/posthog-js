@@ -153,6 +153,10 @@ export class Replayer {
   // Used to track StyleSheetObjects adopted on multiple document hosts.
   private styleMirror: StyleSheetMirror = new StyleSheetMirror();
 
+  // Hosts whose AdoptedStyleSheet event was applied before their shadow root
+  // was attached, keyed by node id; adopted when the shadow root appears.
+  private pendingAdoptedStyleSheets: Map<number, number[]> = new Map();
+
   // Used to track video & audio elements, and keep them in sync with general playback.
   private mediaManager: MediaManager;
 
@@ -320,6 +324,16 @@ export class Replayer {
           this.applyAdoptedStyleSheet(data);
         });
         this.adoptedStyleSheets = [];
+
+        // the virtual dom diff attaches shadow roots without going through
+        // applyMutation, so finish any adoptions that were pending
+        this.pendingAdoptedStyleSheets.forEach((styleIds, id) => {
+          this.applyAdoptedStyleSheet({
+            source: IncrementalSource.AdoptedStyleSheet,
+            id,
+            styleIds,
+          });
+        });
       }
 
       if (this.mousePos) {
@@ -365,6 +379,7 @@ export class Replayer {
       this.firstFullSnapshot = null;
       this.mirror.reset();
       this.styleMirror.reset();
+      this.pendingAdoptedStyleSheets.clear();
       this.mediaManager.reset();
       this.lastScrollMap.clear();
     };
@@ -653,6 +668,7 @@ export class Replayer {
     // Reset caches and mirrors
     this.mirror.reset();
     this.styleMirror.reset();
+    this.pendingAdoptedStyleSheets.clear();
     this.mediaManager.reset();
     this.resetCache();
 
@@ -915,6 +931,7 @@ export class Replayer {
           }
           this.mediaManager.reset();
           this.styleMirror.reset();
+          this.pendingAdoptedStyleSheets.clear();
           this.rebuildFullSnapshot(event, isSync);
           // 'instant' so the offset is not animated when the page sets scroll-behavior: smooth
           this.iframe.contentWindow?.scrollTo({
@@ -1738,6 +1755,17 @@ export class Replayer {
           (parent as Element | RRElement).attachShadow({ mode: 'open' });
           parent = (parent as Element | RRElement).shadowRoot! as Node | RRNode;
         } else parent = parent.shadowRoot as Node | RRNode;
+        // adopt stylesheets whose event arrived before this shadow root existed
+        const pendingStyleIds = this.pendingAdoptedStyleSheets.get(
+          mutation.parentId,
+        );
+        if (pendingStyleIds && !this.usingVirtualDom) {
+          this.applyAdoptedStyleSheet({
+            source: IncrementalSource.AdoptedStyleSheet,
+            id: mutation.parentId,
+            styleIds: pendingStyleIds,
+          });
+        }
       }
 
       let previous: Node | RRNode | null = null;
@@ -2346,6 +2374,11 @@ export class Replayer {
         (targetHost as Document).adoptedStyleSheets = stylesToAdopt;
         adopted = true;
       }
+      // remember hosts that can't adopt yet so applyMutation can finish the
+      // adoption when it attaches the shadow root, independent of the
+      // wall-clock retries below (which pause/buffering can outlast)
+      if (adopted) this.pendingAdoptedStyleSheets.delete(data.id);
+      else this.pendingAdoptedStyleSheets.set(data.id, styleIds);
 
       /**
        * In the live mode where events are transferred over network without strict order guarantee, some newer events are applied before some old events and adopted stylesheets may haven't been created.

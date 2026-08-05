@@ -1070,6 +1070,30 @@ describe('replayer', function () {
     expect(state.anchorColor).toBe('rgb(255, 0, 0)');
   });
 
+  it('adopts stylesheets when playback pauses past the retry window before the shadow root attaches', async () => {
+    await page.evaluate(`
+      events = ${JSON.stringify(adoptedStyleSheetBeforeShadowRoot)};
+      const { Replayer } = rrweb;
+      var replayer = new Replayer(events,{showDebug:true});
+      replayer.pause(115);
+    `);
+    // sit between the AdoptedStyleSheet event (offset 110) and the
+    // shadow-attaching mutation (offset 120) until the wall-clock retry
+    // budget (~4.5s) is exhausted
+    await page.waitForTimeout(5000);
+    await page.evaluate('replayer.play(115);');
+    await page.waitForTimeout(500);
+
+    const adoptedSheetCount = await page.evaluate(() => {
+      const iframe = document.querySelector('iframe') as HTMLIFrameElement;
+      const host = iframe.contentDocument!.querySelector(
+        'late-shadow-host',
+      ) as HTMLElement;
+      return host.shadowRoot!.adoptedStyleSheets.length;
+    });
+    expect(adoptedSheetCount).toBe(1);
+  });
+
   it('can replay modification events for adoptedStyleSheet', async () => {
     await page.evaluate(`
     events = ${JSON.stringify(adoptedStyleSheetModification)};
