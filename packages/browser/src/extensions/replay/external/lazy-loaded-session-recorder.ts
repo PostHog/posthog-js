@@ -1,4 +1,5 @@
 import type { recordOptions, rrwebRecord as rrwebRecordType } from '../types/rrweb'
+import type { SnapshotCost } from '@posthog/rrweb-record'
 import {
     type customEvent,
     EventType,
@@ -106,6 +107,14 @@ const FIVE_MINUTES = ONE_MINUTE * 5
 const ONE_HOUR = ONE_MINUTE * 60
 const MIN_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS = 1000
 const MAX_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS = ONE_HOUR
+
+// A full snapshot runs as one uninterruptible task, so anything at this scale is a
+// visible freeze - no rendering, scrolling, or cursor movement - and worth a warning.
+const SLOW_FULL_SNAPSHOT_THRESHOLD_MS = 500
+
+function roundOrUndefined(value: number | undefined): number | undefined {
+    return isUndefined(value) ? undefined : Math.round(value)
+}
 
 /**
  * Extracts the network_timing value from a capturePerformance config.
@@ -476,9 +485,28 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
      */
     private _queuedRRWebEvents: QueuedRRWebEvent[] = []
     private _isIdle: boolean | 'unknown' = 'unknown'
+    // true while the current epoch has had no user interaction; a held epoch is
+    // discarded (not shipped) by stop or a subsequent rotation
+    private _holdFlushUntilInteraction = false
+    // fresh-start holds ship on a clean unload (passive visits are captured, matching
+    // pre-hold behavior); rotation-born holds don't — that unload ship was the incident
+    private _heldEpochShipsOnUnload = false
+    // set when a held buffer hit the size cap and was dropped to bound memory; a release
+    // then takes a fresh full snapshot so the recording resumes playable
+    private _heldBufferOverflowed = false
+    // a release while the recorder is stopped (e.g. an override during startSessionRecording's
+    // restart) must survive the next start(), whose fresh-start hold would otherwise swallow it
+    private _suppressNextFreshStartHold = false
     private _rrwebError = false
     private _rrwebStartAttempted = false
     private _maxDepthExceeded = false
+    /**
+     * Cost of the most expensive full snapshot this recorder has taken. A full snapshot
+     * is one uninterruptible task, so this doubles as "the longest freeze we caused".
+     * Reported on captured events so slow snapshots are visible in our own data rather
+     * than only via customer-supplied Chrome traces.
+     */
+    private _slowestFullSnapshot: SnapshotCost | undefined
     // only warn once per recorder instance that client-side masking is shadowing the project setting
     private _hasWarnedClientMaskingOverride = false
     private _maskRegionsFnFailed = false
@@ -870,7 +898,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }, interval)
     }
 
-    private _onTriggerActivated(): void {
+    private _onTriggerActivated(triggerType?: TriggerType): void {
+        // V2 event-trigger matches release the interaction hold here (V1's release lives in
+        // _activateTrigger). URL and linked-flag activations never release — they fire
+        // without a human present.
+        if (triggerType === 'event') {
+            this._releaseHoldAndFlush()
+        }
         if (this._urlTriggerMatching.urlBlocked || !['sampled', 'active'].includes(this.status)) {
             return
         }
@@ -912,6 +946,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private _activateTrigger(triggerType: TriggerType, matchDetail?: string) {
+        // Event triggers are explicit "this session matters" evidence and release the
+        // interaction hold; URL triggers only scope where recording is allowed and never do.
+        // Must run before the pending-trigger short-circuit below: with triggerMatchType
+        // 'any' a URL trigger may already have satisfied the combined status, making this
+        // activation a no-op — the hold release must still happen.
+        if (triggerType === 'event') {
+            this._releaseHoldAndFlush()
+        }
+
         // V1 only: V2 uses per-group activation and never calls this method
         // Prevent re-entry: if we're already activating a trigger, skip to avoid infinite recursion
         // This can happen when _reportStarted emits custom events that match the trigger condition
@@ -1001,6 +1044,20 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         if (!config) {
             logger.info('remote config must be stored in persistence before recording can start')
             return
+        }
+
+        // any epoch that starts without confirmed user activity is held until there's
+        // evidence someone cares (interaction, event trigger, or explicit override) —
+        // a tab nobody touches (prefetch, background load) must not ship a billable
+        // recording. Rotation-born epochs re-set this in _restartForSessionIdChange
+        // after this returns. Guarded on isStarted so a re-entrant start() on a live
+        // held recorder (e.g. a remote-config refresh) cannot release a hold that only
+        // interaction evidence should release.
+        if (!this.isStarted) {
+            this._holdFlushUntilInteraction = this._isIdle !== false && !this._suppressNextFreshStartHold
+            this._suppressNextFreshStartHold = false
+            this._heldEpochShipsOnUnload = this._holdFlushUntilInteraction
+            this._heldBufferOverflowed = false
         }
 
         // Invalidate any in-flight async cleanup queued by a prior stop(). On a session-id
@@ -1206,6 +1263,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._maxDepthExceeded = false
         getRRWeb()?.resetMaxDepthState?.()
 
+        // cost metrics are per-session, so the next session isn't tarred with this one's
+        this._slowestFullSnapshot = undefined
+        getRRWeb()?.resetSnapshotCostState?.()
+
         this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
 
         this._clearConditionalRecordingPersistence()
@@ -1220,9 +1281,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             (this._isIdle !== false || !this.isStarted) &&
             (this._sessionId !== sessionId || this._windowId !== windowId)
         ) {
+            // rotation while not confirmed-active: hold the new epoch's buffer until the
+            // user actually interacts, so idle tabs don't ship one recording per rotation.
+            // gated on a real session-id change (a windowId-only restart is not rotation-born)
+            // and read before _isIdle is overwritten with 'unknown'
+            const holdNextEpoch = this._sessionId !== sessionId && this._isIdle !== false
             this._isIdle = 'unknown'
-            this.stop()
-            this.start('session_id_changed')
+            this._restartForSessionIdChange(holdNextEpoch)
         }
 
         if (shouldLinkSessions) {
@@ -1333,10 +1398,41 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return
         }
 
+        // for a held (interaction-less) epoch the flush is suppressed, so this
+        // flush-then-clear discards it — correct for rotation restarts and opt-out alike
         this._flushBuffer()
         this._clearBuffer()
         this._teardown()
         logger.info('stopped')
+    }
+
+    // ordering matters: the hold is set after stop() (so the stop discards or ships the
+    // old epoch per its own flag) and after start() (whose fresh-start reset would
+    // otherwise clobber it); no flush can run synchronously in between
+    private _restartForSessionIdChange(holdNextEpoch: boolean) {
+        this.stop()
+        this.start('session_id_changed')
+        this._holdFlushUntilInteraction = holdNextEpoch
+        this._heldEpochShipsOnUnload = false
+    }
+
+    // releases run on evidence someone cares about the session: a user interaction, an event
+    // trigger match, or an explicit override. Scheduling instead of flushing synchronously keeps
+    // the release batched on the normal cadence and re-passes _flushBuffer's gates.
+    private _releaseHoldAndFlush() {
+        if (!this.isStarted) {
+            this._suppressNextFreshStartHold = true
+        }
+        if (!this._holdFlushUntilInteraction) {
+            return
+        }
+        this._holdFlushUntilInteraction = false
+        this._heldEpochShipsOnUnload = false
+        if (this._heldBufferOverflowed) {
+            this._heldBufferOverflowed = false
+            this._tryTakeFullSnapshot()
+        }
+        this._scheduleFlushBuffer()
     }
 
     discard() {
@@ -1359,10 +1455,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $window_id: targetWindowId,
         }
 
-        if (event.type === EventType.FullSnapshot && getRRWeb()?.wasMaxDepthReached?.()) {
-            this._maxDepthExceeded = true
-        }
-
         if (this.status === DISABLED) {
             this._clearBuffer()
             return
@@ -1371,6 +1463,25 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._ensureFullSnapshotForSession(event, targetSessionId)
 
         this._captureSnapshotBuffered(properties)
+    }
+
+    private _trackFullSnapshotCost() {
+        const cost = getRRWeb()?.getLastSnapshotCost?.()
+        if (!cost) {
+            return
+        }
+        if (!this._slowestFullSnapshot || cost.durationMs > this._slowestFullSnapshot.durationMs) {
+            this._slowestFullSnapshot = cost
+        }
+        if (cost.durationMs >= SLOW_FULL_SNAPSHOT_THRESHOLD_MS) {
+            logger.warn('full snapshot was slow, the page may have been unresponsive while it ran', {
+                durationMs: Math.round(cost.durationMs),
+                stylesheetMs: Math.round(cost.stylesheetMs),
+                nodeCount: cost.nodeCount,
+                cssRuleCount: cost.cssRuleCount,
+                deferredStylesheetCount: cost.deferredStylesheetCount,
+            })
+        }
     }
 
     // A session whose incrementals ship before any FullSnapshot is unplayable until the next periodic snapshot, so request one from rrweb (once per session id, to avoid loops if taking one keeps failing).
@@ -1538,6 +1649,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         // we're processing a full snapshot, so we should reset the timer
         if (rawEvent.type === EventType.FullSnapshot) {
+            // read the cost globals now, synchronously with the snapshot that produced
+            // them; by the time the event drains from the async compression queue a
+            // newer snapshot (or a session reset) may have replaced them
+            if (getRRWeb()?.wasMaxDepthReached?.()) {
+                this._maxDepthExceeded = true
+            }
+            this._trackFullSnapshotCost()
+
             this._scheduleFullSnapshot()
             // Full snapshots reset rrweb's node IDs, so clear any logged node tracking
             this._mutationThrottler?.reset()
@@ -1675,6 +1794,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     public overrideLinkedFlag() {
         this._linkedFlagMatching.linkedFlagSeen = true
         this._tryTakeFullSnapshot()
+        this._releaseHoldAndFlush()
         this._reportStarted('linked_flag_overridden')
     }
 
@@ -1691,6 +1811,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             [SESSION_RECORDING_SAMPLE_RATE]: null,
         })
         this._tryTakeFullSnapshot()
+        this._releaseHoldAndFlush()
         this._reportStarted('sampling_overridden')
     }
 
@@ -1702,6 +1823,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
      * */
     public overrideTrigger(triggerType: TriggerType) {
         this._activateTrigger(triggerType)
+        // unlike an organic URL trigger match, an explicit override releases the hold for both trigger types
+        this._releaseHoldAndFlush()
     }
 
     private _currentMaskedHostname(): string | undefined {
@@ -1731,8 +1854,21 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
     }
 
+    private _scheduleFlushBuffer() {
+        if (!this._flushBufferTimer) {
+            this._flushBufferTimer = setTimeout(() => {
+                this._flushBuffer()
+            }, RECORDING_BUFFER_TIMEOUT)
+        }
+    }
+
     private _flushBuffer(): SnapshotBuffer {
         this._clearFlushBufferTimer()
+
+        // hold the buffer rather than ship a billable recording for an epoch nobody touched
+        if (this._holdFlushUntilInteraction) {
+            return this._buffer
+        }
 
         // never flush while a sampling decision is missing (e.g. wiped by posthog.reset()) — an
         // undecided session reads as ACTIVE and would leak a batch it then decides not to record
@@ -1741,9 +1877,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         const isBelowMinimumDuration = this._isBelowMinimumDuration()
 
         if (this.status === BUFFERING || this.status === PAUSED || this.status === DISABLED || isBelowMinimumDuration) {
-            this._flushBufferTimer = setTimeout(() => {
-                this._flushBuffer()
-            }, RECORDING_BUFFER_TIMEOUT)
+            this._scheduleFlushBuffer()
             return this._buffer
         }
 
@@ -1840,10 +1974,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             // we never want to flush a healthy same-session buffer while confirmed idle, but
             // 'unknown' still captures so its buffer must respect the size cap or it grows unbounded
             (this._isIdle !== true &&
+                !this._holdFlushUntilInteraction &&
                 this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE)
         ) {
             this._buffer = this._flushBuffer()
-            // A suppressed flush (e.g. buffering, paused, below minimum duration) returns the buffer un-drained, and relabeling the prior session's events would mis-attribute them, so discard them instead.
+            // A suppressed flush (e.g. buffering, paused, held, below minimum duration) returns the buffer un-drained, and relabeling the prior session's events would mis-attribute them, so discard them instead.
             if (sessionChanged && this._buffer.data.length > 0) {
                 this._buffer = this._clearBuffer()
             }
@@ -1852,17 +1987,29 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._buffer.windowId = properties.$window_id as string
         }
 
+        // a held buffer can't ship at the cap, so bound memory instead: drop the epoch's data
+        // and stop collecting; a release takes a fresh full snapshot to resume playable
+        if (
+            this._holdFlushUntilInteraction &&
+            (this._heldBufferOverflowed ||
+                this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE)
+        ) {
+            if (!this._heldBufferOverflowed) {
+                this._heldBufferOverflowed = true
+                this._buffer = this._clearBuffer()
+            }
+            return
+        }
+
         this._buffer.size += properties.$snapshot_bytes
         this._buffer.data.push(properties.$snapshot_data)
         this._buffer.sizes.push(properties.$snapshot_bytes)
 
-        // Schedule the flush unless confirmed idle: a tab that never sees user interaction stays
-        // 'unknown' indefinitely, and without a timer its captured events (including the initial
-        // full snapshot after a session rotation) would never ship until the next rotation or unload.
-        if (!this._flushBufferTimer && this._isIdle !== true) {
-            this._flushBufferTimer = setTimeout(() => {
-                this._flushBuffer()
-            }, RECORDING_BUFFER_TIMEOUT)
+        // Schedule the flush unless confirmed idle or held — a held epoch can't ship anyway
+        // (scheduling would just churn a no-op timer every cycle) and every release path
+        // schedules its own flush.
+        if (this._isIdle !== true && !this._holdFlushUntilInteraction) {
+            this._scheduleFlushBuffer()
         }
     }
 
@@ -1923,6 +2070,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return
         }
 
+        // a clean unload releases a fresh-start hold so passive visits (reading, video)
+        // still ship, as they did before holds existed; rotation-born holds stay held,
+        // and an overflowed hold has nothing playable left to ship
+        if (this._holdFlushUntilInteraction && this._heldEpochShipsOnUnload && !this._heldBufferOverflowed) {
+            this._holdFlushUntilInteraction = false
+        }
+
         // beforeunload cannot wait for async CompressionStream work. Synchronously
         // compress any queued events so sendBeacon can include them in this flush.
         this._drainCompressionQueueSync()
@@ -1971,7 +2125,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         const isUserInteraction = this._isInteractiveEvent(event)
 
-        if (!isUserInteraction && !this._isIdle) {
+        if (!isUserInteraction && this._isIdle !== true) {
             // We check if the lastActivityTimestamp is old enough to go idle
             const timeSinceLastActivity = event.timestamp - this._lastActivityTimestamp
             if (timeSinceLastActivity > this._sessionIdleThresholdMilliseconds) {
@@ -2015,12 +2169,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             }
         }
 
-        // Only bail on confirmed idle: while 'unknown' the recorder still captures, so it must
-        // also keep checking for session changes or its events are stamped with a stale session id.
-        if (this._isIdle === true) {
-            return
-        }
-
+        // The session check runs in every idle state (it only reads in-memory persistence
+        // props, so it is cheap). While 'unknown' the recorder still captures, so it must keep
+        // checking or its events are stamped with a stale session id. While confirmed idle,
+        // the readOnly check below still enforces the 24-hour session cap
+        // (sessionPastMaximumLength rotates even on readOnly calls) and hears cross-tab
+        // rotations. Bailing here is how idle tabs used to accrete multi-day recordings that
+        // blew straight through SESSION_LENGTH_LIMIT under one session id.
         // We only want to extend the session if it is an interactive event.
         const { windowId, sessionId } = this._sessionManager.checkAndGetSessionAndWindowId(
             !isUserInteraction,
@@ -2034,10 +2189,23 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._sessionId = sessionId
 
         if (sessionIdChanged || windowIdChanged) {
-            this.stop()
-            this.start('session_id_changed')
-        } else if (returningFromIdle) {
-            this._scheduleFullSnapshot()
+            const holdNextEpoch = sessionIdChanged && this._isIdle !== false
+            if (holdNextEpoch) {
+                // same idle bookkeeping as the session-manager callback path: a rotation born
+                // without interaction starts its epoch in the 'unknown' state (this path can
+                // adopt a rotation with _isIdle === true now that confirmed-idle emits still
+                // run the session check for the 24-hour cap)
+                this._isIdle = 'unknown'
+            }
+            this._restartForSessionIdChange(holdNextEpoch)
+        } else {
+            if (isUserInteraction) {
+                // first interaction within a held session ships the buffer, playable from t=0
+                this._releaseHoldAndFlush()
+            }
+            if (returningFromIdle) {
+                this._scheduleFullSnapshot()
+            }
         }
     }
 
@@ -2057,6 +2225,18 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $sdk_debug_replay_flushed_size: this._flushedSizeTracker?.currentTrackedSize(this.sessionId),
             $sdk_debug_replay_full_snapshots: this._fullSnapshotTimestamps,
             $snapshot_max_depth_exceeded: this._maxDepthExceeded,
+            // slowest, not most recent: a full snapshot is one uninterruptible task, so
+            // the worst one is the freeze a user would actually have noticed
+            $sdk_debug_replay_slowest_full_snapshot_ms: roundOrUndefined(this._slowestFullSnapshot?.durationMs),
+            $sdk_debug_replay_slowest_full_snapshot_stylesheet_ms: roundOrUndefined(
+                this._slowestFullSnapshot?.stylesheetMs
+            ),
+            $sdk_debug_replay_slowest_full_snapshot_nodes: this._slowestFullSnapshot?.nodeCount,
+            $sdk_debug_replay_slowest_full_snapshot_css_rules: this._slowestFullSnapshot?.cssRuleCount,
+            $sdk_debug_replay_deferred_stylesheets: this._slowestFullSnapshot?.deferredStylesheetCount,
+            $sdk_debug_replay_slowest_mutation_batch_ms: roundOrUndefined(
+                getRRWeb()?.getMutationCost?.()?.slowestBatchMs
+            ),
             $sdk_debug_replay_rrweb_error: this._rrwebError,
             [SDK_DEBUG_REPLAY_RRWEB_ATTACHED]: !!this._stopRrweb,
             [SDK_DEBUG_REPLAY_RRWEB_START_ATTEMPTED]: this._rrwebStartAttempted,
@@ -2085,6 +2265,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             slimDOMOptions: {},
             collectFonts: false,
             inlineStylesheet: true,
+            // inlining every CSSRule of every sheet is the dominant cost of a full
+            // snapshot on CSS-heavy pages, and it runs as one uninterruptible task.
+            // rrweb caps it by default and inlines the overflow across idle callbacks;
+            // listed here so users can raise the cap, or set 0 to do it all up front.
+            inlineStylesheetBudgetRules: undefined,
             recordCrossOriginIframes: false,
             sampling: undefined,
             attributeFilter: undefined,

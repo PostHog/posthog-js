@@ -50,10 +50,15 @@ import {
 
 class PostHogFetchHttpError extends Error {
   name = 'PostHogFetchHttpError'
+  private responseBodyTextPromise?: Promise<string>
+  private responseBodyTimer?: ReturnType<typeof safeSetTimeout>
+  private _bodyReadTimedOut = false
 
   constructor(
     public response: PostHogFetchResponse,
-    public reqByteLength: number
+    public reqByteLength: number,
+    private responseBodyDeadline: number,
+    private abortController: AbortController
   ) {
     super('HTTP error while fetching PostHog: status=' + response.status + ', reqByteLength=' + reqByteLength)
   }
@@ -62,12 +67,57 @@ class PostHogFetchHttpError extends Error {
     return this.response.status
   }
 
+  get bodyReadTimedOut(): boolean {
+    return this._bodyReadTimedOut
+  }
+
   get text(): Promise<string> {
-    return this.response.text()
+    if (!this.responseBodyTextPromise) {
+      if (Date.now() >= this.responseBodyDeadline) {
+        this._bodyReadTimedOut = true
+        const timeoutError = new Error('Response body read timed out')
+        timeoutError.name = 'AbortError'
+        this.cancelResponseBody(timeoutError)
+        this.responseBodyTextPromise = Promise.reject(timeoutError)
+      } else {
+        const responseBodyTimeout = new Promise<never>((_resolve, reject) => {
+          this.responseBodyTimer = safeSetTimeout(() => {
+            this._bodyReadTimedOut = true
+            const timeoutError = new Error('Response body read timed out')
+            timeoutError.name = 'AbortError'
+            // Reject first so the timeout remains the diagnostic if abort rejects the body read synchronously.
+            reject(timeoutError)
+            this.cancelResponseBody(timeoutError)
+          }, this.responseBodyDeadline - Date.now())
+        })
+        let responseBodyText: Promise<string>
+        try {
+          responseBodyText = Promise.resolve(this.response.text())
+        } catch (error) {
+          responseBodyText = Promise.reject(error)
+        }
+        this.responseBodyTextPromise = Promise.race([responseBodyText, responseBodyTimeout]).finally(() =>
+          clearTimeout(this.responseBodyTimer)
+        )
+      }
+    }
+    return this.responseBodyTextPromise
   }
 
   get json(): Promise<any> {
-    return this.response.json()
+    return this.text.then((text) => JSON.parse(text))
+  }
+
+  cancelResponseBody(reason?: unknown): void {
+    clearTimeout(this.responseBodyTimer)
+    if (!this.abortController.signal.aborted) {
+      this.abortController.abort(reason)
+    }
+    void (async () => {
+      try {
+        await this.response.body?.cancel()
+      } catch {}
+    })()
   }
 }
 
@@ -79,6 +129,15 @@ class PostHogFetchNetworkError extends Error {
     // @ts-ignore
     super('Network error while fetching PostHog', error instanceof Error ? { cause: error } : {})
   }
+}
+
+type RequiredResponseHandling<T> = {
+  type: 'required'
+  consume: (response: PostHogFetchResponse) => Promise<T>
+}
+
+type SuccessfulWriteResponseHandling = {
+  type: 'successful-write'
 }
 
 export const maybeAdd = (key: string, value: JsonType | undefined): Record<string, JsonType> =>
@@ -101,7 +160,11 @@ export async function logFlushError(err: any): Promise<void> {
     let text = ''
     try {
       text = await err.text
-    } catch {}
+    } catch {
+      if (err.bodyReadTimedOut) {
+        text = '<response body read timed out>'
+      }
+    }
 
     console.error(`Error while flushing PostHog: message=${err.message}, response body=${text}`, err)
   } else {
@@ -612,13 +675,17 @@ export abstract class PostHogCoreStateless {
       headers: { ...this.getCustomHeaders(), 'Content-Type': 'application/json' },
     }
     // Don't retry remote config API calls
-    return this.fetchWithRetry(url, fetchOptions, { retryCount: 0 }, this.remoteConfigRequestTimeoutMs)
-      .then((response) => response.json() as Promise<PostHogRemoteConfig>)
-      .catch((error) => {
-        this._logger.error('Remote config could not be loaded', error)
-        this._events.emit('error', error)
-        return undefined
-      })
+    return this.fetchWithRetry(
+      url,
+      fetchOptions,
+      { type: 'required', consume: (response) => response.json() as Promise<PostHogRemoteConfig> },
+      { retryCount: 0 },
+      this.remoteConfigRequestTimeoutMs
+    ).catch((error) => {
+      this._logger.error('Remote config could not be loaded', error)
+      this._events.emit('error', error)
+      return undefined
+    })
   }
 
   /***
@@ -669,10 +736,13 @@ export abstract class PostHogCoreStateless {
     return this.fetchWithRetry(
       url,
       fetchOptions,
+      {
+        type: 'required',
+        consume: (response) => response.json() as Promise<PostHogV1FlagsResponse | PostHogV2FlagsResponse>,
+      },
       { retryCount: this.featureFlagsRequestMaxRetries, retryCheck: isRetryableFlagsFetchError },
       this.featureFlagsRequestTimeoutMs
     )
-      .then((response) => response.json() as Promise<PostHogV1FlagsResponse | PostHogV2FlagsResponse>)
       .then((response) => ({ success: true as const, response: normalizeFlagsResponse(response) }))
       .catch((error): GetFlagsResult => {
         this._events.emit('error', error)
@@ -972,25 +1042,26 @@ export abstract class PostHogCoreStateless {
       headers: { ...this.getCustomHeaders(), 'Content-Type': 'application/json' },
     }
 
-    const response = await this.fetchWithRetry(url, fetchOptions)
-      .then((response) => {
+    const response = await this.fetchWithRetry(url, fetchOptions, {
+      type: 'required',
+      consume: (response) => {
         if (response.status !== 200 || !response.json) {
           const msg = `Surveys API could not be loaded: ${response.status}`
           const error = new Error(msg)
           this._logger.error(error)
 
           this._events.emit('error', new Error(msg))
-          return undefined
+          return Promise.resolve(undefined)
         }
 
         return response.json() as Promise<SurveyResponse>
-      })
-      .catch((error) => {
-        this._logger.error('Surveys API could not be loaded', error)
+      },
+    }).catch((error) => {
+      this._logger.error('Surveys API could not be loaded', error)
 
-        this._events.emit('error', error)
-        return undefined
-      })
+      this._events.emit('error', error)
+      return undefined
+    })
 
     const newSurveys = response?.surveys
 
@@ -1394,11 +1465,10 @@ export abstract class PostHogCoreStateless {
       body: gzippedPayload || payload,
     }
 
-    const response = await this.fetchWithRetry(url, fetchOptions, retryOptions)
-    // Consume the response body to prevent cross-request promise warnings
+    await this.fetchWithRetry(url, fetchOptions, { type: 'successful-write' }, retryOptions)
+    // The response handler above cancels the body to prevent cross-request promise warnings
     // in runtimes like Cloudflare Workers that enforce body consumption.
     // See: https://github.com/PostHog/posthog-js/issues/3173
-    await response.body?.cancel()?.catch(() => {})
   }
 
   private async _flush(): Promise<void> {
@@ -1552,14 +1622,19 @@ export abstract class PostHogCoreStateless {
     }
 
     try {
-      await this.fetchWithRetry(url, fetchOptions, {
-        retryCheck: (err) => {
-          if (isPostHogFetchContentTooLargeError(err)) {
-            return false
-          }
-          return isPostHogFetchRetryableError(err)
-        },
-      })
+      await this.fetchWithRetry(
+        url,
+        fetchOptions,
+        { type: 'successful-write' },
+        {
+          retryCheck: (err) => {
+            if (isPostHogFetchContentTooLargeError(err)) {
+              return false
+            }
+            return isPostHogFetchRetryableError(err)
+          },
+        }
+      )
       return { kind: 'ok' }
     } catch (err) {
       if (isPostHogFetchContentTooLargeError(err)) {
@@ -1598,14 +1673,19 @@ export abstract class PostHogCoreStateless {
     }
 
     try {
-      await this.fetchWithRetry(url, fetchOptions, {
-        retryCheck: (err) => {
-          if (isPostHogFetchContentTooLargeError(err)) {
-            return false
-          }
-          return isPostHogFetchRetryableError(err)
-        },
-      })
+      await this.fetchWithRetry(
+        url,
+        fetchOptions,
+        { type: 'successful-write' },
+        {
+          retryCheck: (err) => {
+            if (isPostHogFetchContentTooLargeError(err)) {
+              return false
+            }
+            return isPostHogFetchRetryableError(err)
+          },
+        }
+      )
       return { kind: 'ok' }
     } catch (err) {
       if (isPostHogFetchContentTooLargeError(err)) {
@@ -1621,12 +1701,27 @@ export abstract class PostHogCoreStateless {
     }
   }
 
-  private async fetchWithRetry(
+  private fetchWithRetry<T>(
     url: string,
     options: PostHogFetchOptions,
+    responseHandling: RequiredResponseHandling<T>,
     retryOptions?: Partial<RetriableOptions>,
     requestTimeout?: number
-  ): Promise<PostHogFetchResponse> {
+  ): Promise<T>
+  private fetchWithRetry(
+    url: string,
+    options: PostHogFetchOptions,
+    responseHandling: SuccessfulWriteResponseHandling,
+    retryOptions?: Partial<RetriableOptions>,
+    requestTimeout?: number
+  ): Promise<void>
+  private async fetchWithRetry<T>(
+    url: string,
+    options: PostHogFetchOptions,
+    responseHandling: RequiredResponseHandling<T> | SuccessfulWriteResponseHandling,
+    retryOptions?: Partial<RetriableOptions>,
+    requestTimeout?: number
+  ): Promise<T | void> {
     const body = options.body ? options.body : ''
     let reqByteLength = -1
     try {
@@ -1644,34 +1739,115 @@ export abstract class PostHogCoreStateless {
       }
     }
 
+    const retriableOptions = { ...this._retryOptions, ...retryOptions }
+    let attempt = 0
+
     return await retriable(
       async () => {
+        attempt++
         const ctrl = new AbortController()
         const timeoutMs = requestTimeout ?? this.requestTimeout
-        const timer = safeSetTimeout(() => ctrl.abort(), timeoutMs)
+        const requestDeadline = Date.now() + timeoutMs
+        let timer: ReturnType<typeof safeSetTimeout>
+        // `fetch` is SDK-injectable, so it may ignore abort while resolving headers or
+        // consuming the body. Race both phases against one request deadline rather than
+        // relying only on standards-compliant AbortSignal behavior.
+        const deadline = new Promise<never>((_resolve, reject) => {
+          timer = safeSetTimeout(() => {
+            const timeoutError = new Error(`Request timed out after ${timeoutMs}ms`)
+            timeoutError.name = 'AbortError'
+            // Reject first so this error wins if an abort-aware injected fetch rejects synchronously.
+            reject(timeoutError)
+            ctrl.abort(timeoutError)
+          }, timeoutMs)
+        })
 
-        let res: PostHogFetchResponse | null = null
+        let res: PostHogFetchResponse | undefined
+        let responseAccepted = false
+        let cancellation: Promise<void> | undefined
+        const cancelBody = (): Promise<void> =>
+          (cancellation ??= (async () => {
+            try {
+              await res?.body?.cancel()
+            } catch {}
+          })())
+
         try {
-          res = await this.fetch(url, {
-            signal: ctrl.signal,
-            ...options,
-          })
-        } catch (e) {
-          // fetch will only throw on network errors or on timeouts
-          throw new PostHogFetchNetworkError(e)
+          let fetchPromise: Promise<PostHogFetchResponse>
+          try {
+            fetchPromise = this.fetch(url, {
+              signal: ctrl.signal,
+              ...options,
+            })
+          } catch (e) {
+            throw new PostHogFetchNetworkError(e)
+          }
+          void fetchPromise
+            .then((lateResponse) => {
+              if (ctrl.signal.aborted && !responseAccepted) {
+                // Release a late response from an injected fetch that ignored the header deadline.
+                void Promise.resolve(lateResponse.body?.cancel()).catch(() => {})
+              }
+            })
+            .catch(() => {})
+
+          try {
+            res = await Promise.race([fetchPromise, deadline])
+            responseAccepted = true
+          } catch (e) {
+            // Fetch only throws on network errors or timeouts. The explicit deadline also
+            // reaches injected fetch implementations that ignore the abort signal.
+            throw new PostHogFetchNetworkError(e)
+          }
+
+          // If we're in no-cors mode, we can't access the response status.
+          // We only throw on HTTP errors if we're not in no-cors mode.
+          // https://developer.mozilla.org/en-US/docs/Web/API/Request/mode#no-cors
+          const isNoCors = options.mode === 'no-cors'
+          if (!isNoCors && (res.status < 200 || res.status >= 400)) {
+            // Read error bodies lazily so retryable statuses are retried immediately. The
+            // getter still uses this attempt's deadline when diagnostics request the body.
+            throw new PostHogFetchHttpError(res, reqByteLength, requestDeadline, ctrl)
+          }
+
+          if (responseHandling.type === 'successful-write') {
+            try {
+              await Promise.race([cancelBody(), deadline])
+            } catch {
+              // Once a write endpoint has returned success, a stalled body cancellation
+              // must not retry the accepted payload. Cancellation was attempted for the
+              // full remaining deadline and continues best-effort in `finally`.
+            }
+            return
+          }
+
+          try {
+            return await Promise.race([responseHandling.consume(res), deadline])
+          } catch (e) {
+            if (ctrl.signal.aborted) {
+              throw new PostHogFetchNetworkError(e)
+            }
+            throw e
+          }
         } finally {
           clearTimeout(timer)
+          if (ctrl.signal.aborted && res) {
+            // Do not await after the deadline: injected body cancellation may itself never settle.
+            void cancelBody()
+          }
         }
-        // If we're in no-cors mode, we can't access the response status
-        // We only throw on HTTP errors if we're not in no-cors mode
-        // https://developer.mozilla.org/en-US/docs/Web/API/Request/mode#no-cors
-        const isNoCors = options.mode === 'no-cors'
-        if (!isNoCors && (res.status < 200 || res.status >= 400)) {
-          throw new PostHogFetchHttpError(res, reqByteLength)
-        }
-        return res
       },
-      { ...this._retryOptions, ...retryOptions }
+      {
+        ...retriableOptions,
+        retryCheck: (error) => {
+          const shouldRetry = retriableOptions.retryCheck(error)
+          if (shouldRetry && attempt <= retriableOptions.retryCount && error instanceof PostHogFetchHttpError) {
+            // This response will not be surfaced, so release its body without delaying the retry.
+            error.cancelResponseBody()
+          }
+          return shouldRetry
+        },
+      }
     )
   }
 

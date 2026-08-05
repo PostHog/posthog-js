@@ -93,6 +93,7 @@ export type recordOptions = {
     ignoreCSSAttributes?: Set<string>
     attributeFilter?: string[]
     inlineStylesheet?: boolean
+    inlineStylesheetBudgetRules?: number
     hooks?: hooksParam
     packFn?: PackFn
     sampling?: SamplingStrategy

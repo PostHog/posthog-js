@@ -2,11 +2,26 @@ import { window } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from '../utils/globals'
 import { ErrorEventArgs } from '../types'
 import { createLogger } from '@posthog/browser-common/utils/logger'
-import { isFunction, type ErrorTracking } from '@posthog/core'
+import { isFunction, isString, type ErrorTracking } from '@posthog/core'
 import { buildErrorPropertiesBuilder } from '../posthog-exceptions'
 
 const logger = createLogger('[ExceptionAutocapture]')
 const errorPropertiesBuilder = buildErrorPropertiesBuilder()
+
+// `window.onerror` exposes the location positionally, so preserve it when there is no Error object.
+const resolveOnErrorInput = ([event, source, lineno, colno, error]: ErrorEventArgs): unknown => {
+    if (error != null) {
+        return error
+    }
+    if (isString(event) && isString(source) && source.length > 0 && typeof ErrorEvent !== 'undefined') {
+        try {
+            return new ErrorEvent('error', { message: event, filename: source, lineno, colno })
+        } catch {
+            return event
+        }
+    }
+    return event
+}
 
 const wrapOnError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) => {
     const win = window as any
@@ -16,9 +31,7 @@ const wrapOnError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) 
     const originalOnError = win.onerror
 
     win.onerror = function (...args: ErrorEventArgs): boolean {
-        const error = args[4]
-        const event = args[0]
-        const errorProperties = errorPropertiesBuilder.buildFromUnknown(error || event, {
+        const errorProperties = errorPropertiesBuilder.buildFromUnknown(resolveOnErrorInput(args), {
             mechanism: { handled: false },
         })
         captureFn(errorProperties)

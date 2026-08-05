@@ -189,6 +189,33 @@ export const flagDetailsToResults = (flagDetails: Record<string, FeatureFlagDeta
  * The list is the union across client and server SDKs; entries are inert where an
  * SDK never sets them.
  */
+export const MINIMAL_FLAG_CALLED_EVENT_CAMPAIGN_PROPERTIES = [
+  'utm_source',
+  'utm_medium',
+  'utm_campaign',
+  'utm_content',
+  'utm_term',
+  'gad_source',
+  'mc_cid',
+  'gclid',
+  'gclsrc',
+  'dclid',
+  'gbraid',
+  'wbraid',
+  'fbclid',
+  'msclkid',
+  'twclid',
+  'li_fat_id',
+  'igshid',
+  'ttclid',
+  'rdt_cid',
+  'epik',
+  'qclid',
+  'sccid',
+  'irclid',
+  '_kx',
+] as const
+
 export const MINIMAL_FLAG_CALLED_EVENT_PROPERTIES: readonly string[] = [
   // Flag identity
   '$feature_flag',
@@ -209,6 +236,14 @@ export const MINIMAL_FLAG_CALLED_EVENT_PROPERTIES: readonly string[] = [
   // Debug location
   '$current_url',
   '$pathname',
+  // Session-level attribution. The server session table derives session-initial UTM
+  // and channel type from whichever event lands first in a session, so these keys must
+  // survive minimization. The full `$referrer` URL is intentionally excluded.
+  '$referring_domain',
+  // Campaign params are stored as super properties under their bare names (no `$`
+  // prefix). This list is kept in sync with the browser SDK's canonical `CAMPAIGN_PARAMS`
+  // by an exhaustive browser regression test. Entries are inert on SDKs that never set them.
+  ...MINIMAL_FLAG_CALLED_EVENT_CAMPAIGN_PROPERTIES,
   // Linkage / SDK identity
   '$session_id',
   '$window_id',

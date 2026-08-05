@@ -10,6 +10,8 @@ import {
   isNativeShadowDom,
   getInputType,
   toLowerCase,
+  nowMs,
+  recordMutationCost,
 } from '@posthog/rrweb-snapshot';
 import type { observerParam, MutationBufferParam } from '../types';
 import type {
@@ -295,6 +297,18 @@ export default class MutationBuffer {
       return;
     }
 
+    // Processing a burst serializes every added subtree inline, which on churn-heavy
+    // pages (virtualized lists, calendars) is where the recorder's main-thread time
+    // goes. Measure it so that cost is visible without a Chrome trace.
+    const startedAt = nowMs();
+    try {
+      this.processBufferedMutations();
+    } finally {
+      recordMutationCost(nowMs() - startedAt);
+    }
+  };
+
+  private processBufferedMutations = () => {
     // delay any modification of the mirror until this function
     // so that the mirror for takeFullSnapshot doesn't get mutated while it's event is being processed
 

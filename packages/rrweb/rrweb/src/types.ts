@@ -73,6 +73,21 @@ export type recordOptions<T> = {
    */
   attributeFilter?: string[];
   inlineStylesheet?: boolean;
+  /**
+   * Caps how many CSSRules a single full snapshot may stringify.
+   * `stringifyStylesheet` walks every CSSRule of every sheet, which on CSS-heavy
+   * pages is the dominant cost of the (uninterruptible) snapshot task and can
+   * freeze the UI for seconds.
+   *
+   * Once the cap is hit, remaining `<link rel=stylesheet>` elements are serialized
+   * without `_cssText` - they keep `rel`/`href`, so replay loads them remotely -
+   * and are then inlined one-per-idle-callback afterwards, arriving as attribute
+   * mutations. Fidelity is preserved; the work just stops being one long blocking
+   * task.
+   *
+   * Set to 0 to disable the cap and restore the previous unbounded behaviour.
+   */
+  inlineStylesheetBudgetRules?: number;
   hooks?: hooksParam;
   packFn?: PackFn;
   sampling?: SamplingStrategy;

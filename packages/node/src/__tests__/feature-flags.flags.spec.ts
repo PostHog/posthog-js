@@ -1,7 +1,7 @@
 import { PostHog } from '@/entrypoints/index.node'
 import { PostHogOptions } from '@/types'
 import { apiImplementation, apiImplementationV4, waitForPromises } from './utils'
-import { PostHogV2FlagsResponse, FeatureFlagError } from '@posthog/core'
+import { PostHogV2FlagsResponse, FeatureFlagError, MINIMAL_FLAG_CALLED_EVENT_CAMPAIGN_PROPERTIES } from '@posthog/core'
 
 jest.spyOn(console, 'debug').mockImplementation()
 
@@ -1274,6 +1274,36 @@ describe('minimal $feature_flag_called events', () => {
         $is_server: true,
         $geoip_disable: true,
       })
+
+      await posthog.shutdown()
+    })
+
+    it('keeps every campaign attribution property on the remote-evaluation minimization path', async () => {
+      mockedFetch.mockImplementation(
+        apiImplementationV4(remoteFlagsResponse({ minimalFlagCalledEvents: true, hasExperiment: false }))
+      )
+      const { posthog, captured } = createClient()
+      const campaignProperties = Object.fromEntries(
+        MINIMAL_FLAG_CALLED_EVENT_CAMPAIGN_PROPERTIES.map((key) => [key, `value-for-${key}`])
+      )
+      await posthog.register({
+        ...campaignProperties,
+        $referring_domain: 'referring.example',
+        $referrer: 'https://referring.example/path?private=value',
+        unrelated_superproperty: 'must-be-stripped',
+      })
+
+      await posthog.getFeatureFlagResult('test-flag', 'some-distinct-id')
+      await waitForPromises()
+
+      const message = findFlagCalledEvent(captured)
+      expect(message).toBeDefined()
+      expect(message.properties).toMatchObject({
+        ...campaignProperties,
+        $referring_domain: 'referring.example',
+      })
+      expect(message.properties).not.toHaveProperty('$referrer')
+      expect(message.properties).not.toHaveProperty('unrelated_superproperty')
 
       await posthog.shutdown()
     })

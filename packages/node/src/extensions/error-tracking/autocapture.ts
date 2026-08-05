@@ -4,7 +4,94 @@
 
 import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 
-type ErrorHandler = { _posthogErrorHandler: boolean } & ((error: Error) => void)
+type ErrorHandler = { _posthogErrorHandler: boolean } & NodeJS.UncaughtExceptionListener
+type UnhandledRejectionMode = 'throw' | 'strict' | 'warn' | 'warn-with-error-code' | 'none'
+
+const UNHANDLED_REJECTION_OPTION_NAMES = ['--unhandled-rejections', '--unhandled_rejections']
+const UNHANDLED_REJECTION_MODES = new Set<UnhandledRejectionMode>([
+  'throw',
+  'strict',
+  'warn',
+  'warn-with-error-code',
+  'none',
+])
+const STARTUP_EXEC_ARGV = [...(globalThis.process?.execArgv ?? [])]
+const STARTUP_NODE_OPTIONS = globalThis.process?.env?.NODE_OPTIONS
+
+function splitNodeOptions(nodeOptions: string): string[] {
+  const args: string[] = []
+  let current = ''
+  let isInString = false
+
+  for (let index = 0; index < nodeOptions.length; index++) {
+    const character = nodeOptions[index]
+
+    if (character === '\\' && isInString && index + 1 < nodeOptions.length) {
+      current += nodeOptions[++index]
+    } else if (character === ' ' && !isInString) {
+      if (current) {
+        args.push(current)
+        current = ''
+      }
+    } else if (character === '"') {
+      isInString = !isInString
+    } else {
+      current += character
+    }
+  }
+
+  if (current) {
+    args.push(current)
+  }
+
+  return args
+}
+
+function findUnhandledRejectionMode(args: string[]): UnhandledRejectionMode | undefined {
+  let mode: UnhandledRejectionMode | undefined
+
+  for (let index = 0; index < args.length; index++) {
+    const argument = args[index]
+    const optionName = UNHANDLED_REJECTION_OPTION_NAMES.find(
+      (name) => argument === name || argument.startsWith(`${name}=`)
+    )
+    if (!optionName) {
+      continue
+    }
+
+    const value = argument === optionName ? args[++index] : argument.slice(optionName.length + 1)
+    if (UNHANDLED_REJECTION_MODES.has(value as UnhandledRejectionMode)) {
+      mode = value as UnhandledRejectionMode
+    }
+  }
+
+  return mode
+}
+
+export function getUnhandledRejectionMode(
+  execArgv: string[] = STARTUP_EXEC_ARGV,
+  nodeOptions: string | undefined = STARTUP_NODE_OPTIONS
+): UnhandledRejectionMode {
+  // Command-line arguments take precedence over NODE_OPTIONS, and the last occurrence wins within each source.
+  return (
+    findUnhandledRejectionMode(execArgv) ?? findUnhandledRejectionMode(splitNodeOptions(nodeOptions ?? '')) ?? 'throw'
+  )
+}
+
+const STARTUP_UNHANDLED_REJECTION_MODE = getUnhandledRejectionMode()
+
+function captureUncaughtException(
+  captureFn: (exception: Error, hint: CoreErrorTracking.EventHint) => void,
+  error: Error,
+  origin: NodeJS.UncaughtExceptionOrigin
+): void {
+  captureFn(error, {
+    mechanism: {
+      type: origin === 'unhandledRejection' ? 'onunhandledrejection' : 'onuncaughtexception',
+      handled: false,
+    },
+  })
+}
 
 function makeUncaughtExceptionHandler(
   captureFn: (exception: Error, hint: CoreErrorTracking.EventHint) => void,
@@ -13,32 +100,19 @@ function makeUncaughtExceptionHandler(
   let calledFatalError: boolean = false
 
   return Object.assign(
-    (error: Error): void => {
-      // Attaching a listener to `uncaughtException` will prevent the node process from exiting. We generally do not
-      // want to alter this behaviour so we check for other listeners that users may have attached themselves and adjust
-      // exit behaviour of the SDK accordingly:
-      // - If other listeners are attached, do not exit.
-      // - If the only listener attached is ours, exit.
+    (error: Error, origin: NodeJS.UncaughtExceptionOrigin): void => {
+      // Like Sentry, we only consider listeners that are currently registered. We intentionally do not reconstruct
+      // participation by once listeners or listeners added or removed during dispatch.
       const userProvidedListenersCount = global.process.listeners('uncaughtException').filter((listener) => {
-        // There are 2 listeners we ignore:
         return (
-          // as soon as we're using domains this listener is attached by node itself
           listener.name !== 'domainUncaughtExceptionClear' &&
-          // the handler we register in this integration
-          (listener as ErrorHandler)._posthogErrorHandler !== true
+          (listener as Partial<ErrorHandler>)._posthogErrorHandler !== true
         )
       }).length
 
-      const processWouldExit = userProvidedListenersCount === 0
+      captureUncaughtException(captureFn, error, origin)
 
-      captureFn(error, {
-        mechanism: {
-          type: 'onuncaughtexception',
-          handled: false,
-        },
-      })
-
-      if (!calledFatalError && processWouldExit) {
+      if (!calledFatalError && userProvidedListenersCount === 0) {
         calledFatalError = true
         onFatalFn(error)
       }
@@ -49,16 +123,36 @@ function makeUncaughtExceptionHandler(
 
 export function addUncaughtExceptionListener(
   captureFn: (exception: Error, hint: CoreErrorTracking.EventHint) => void,
-  onFatalFn: (exception: Error) => void
+  onFatalFn: (exception: Error) => void,
+  mode: UnhandledRejectionMode = STARTUP_UNHANDLED_REJECTION_MODE
 ): void {
-  globalThis.process?.on('uncaughtException', makeUncaughtExceptionHandler(captureFn, onFatalFn))
+  const process = globalThis.process
+  if (!process) {
+    return
+  }
+
+  if (mode === 'strict') {
+    process.on('uncaughtExceptionMonitor', (error, origin) => captureUncaughtException(captureFn, error, origin))
+    return
+  }
+
+  process.on('uncaughtException', makeUncaughtExceptionHandler(captureFn, onFatalFn))
 }
 
 export function addUnhandledRejectionListener(
-  captureFn: (exception: unknown, hint: CoreErrorTracking.EventHint) => void
+  captureFn: (exception: unknown, hint: CoreErrorTracking.EventHint) => void,
+  mode: UnhandledRejectionMode = STARTUP_UNHANDLED_REJECTION_MODE
 ): void {
-  globalThis.process?.on('unhandledRejection', (reason: unknown) => {
-    return captureFn(reason, {
+  const process = globalThis.process
+
+  // Installing an unhandledRejection listener changes Node's behavior in these modes. We intentionally skip capture
+  // rather than reproducing Node's fatal handling or warn-with-error-code warning and exit-code semantics in the SDK.
+  if (!process || mode === 'throw' || mode === 'strict' || mode === 'warn-with-error-code') {
+    return
+  }
+
+  process.on('unhandledRejection', (reason: unknown) => {
+    captureFn(reason, {
       mechanism: {
         type: 'onunhandledrejection',
         handled: false,
