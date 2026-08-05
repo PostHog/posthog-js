@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4422](https://github.com/PostHog/posthog-js/issues/4422) | Likely Node SDK compression-path memory-retention bug; the reported workaround and current implementation make this credible, but a focused reproducer is needed before choosing a fix. | node, team/client-libraries |  | no | 2026-08-05T07:52:41.932Z |
 | PostHog/posthog-js | [issue 4409](https://github.com/PostHog/posthog-js/issues/4409) | Credible Android React Native session-replay privacy bug, but it needs confirmation on the currently supported native-plugin pairing before selecting a fix. | Android, react-native, feature/replay, team/client-libraries |  | no | 2026-08-04T03:33:38.960Z |
 | PostHog/posthog-js | [issue 4405](https://github.com/PostHog/posthog-js/issues/4405) | Confirmed bug in the shared AI generation error-status fallback. | team/llm-analytics | https://github.com/PostHog/posthog-js/pull/4406 | no | 2026-08-03T19:32:17.533Z |
 | PostHog/posthog-js | [issue 4391](https://github.com/PostHog/posthog-js/issues/4391) | Confirmed dependency-resolution bug: the React Native plugin caps posthog-ios at 3.64.x, preventing consumers from receiving the reported 3.68.2 rage-click fix. | react-native, iOS, feature/replay, team/client-libraries | https://github.com/PostHog/posthog-js/pull/4392 | no | 2026-08-03T04:43:06.898Z |
