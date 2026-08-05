@@ -9,14 +9,12 @@ import { RateLimiter } from '../rate-limiter'
 import { normalizeCaptureResult } from './helpers/normalize-capture-result'
 
 jest.mock('@posthog/browser-common/utils/globals', () => {
-    const orig = jest.requireActual('@posthog/browser-common/utils/globals')
-    const { SNAPSHOT_TEST_USER_AGENT } = jest.requireActual('./helpers/normalize-capture-result')
+    const orig = jest.requireActual('./helpers/snapshot-test-globals').snapshotTestGlobals
     const mockURL = jest.fn().mockReturnValue('https://example.com')
     const mockReferrer = jest.fn().mockReturnValue('https://referrer.com')
     const mockHostName = jest.fn().mockReturnValue('example.com')
     return {
         ...orig,
-        userAgent: SNAPSHOT_TEST_USER_AGENT,
         mockURL,
         mockReferrer,
         mockHostName,
