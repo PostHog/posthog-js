@@ -2906,6 +2906,12 @@ describe('Lazy SessionRecording', () => {
             }
         })
 
+        // This harness replaces the rrweb extension with jest mocks (addRRwebToWindow), so it
+        // cannot host a real rrweb record() run; the three budget tests below therefore pin the
+        // plumbing boundary instead: the configured value reaches the recorder options verbatim.
+        // What the shipped default then does inside record() (a sheet crossing 10,000 rules is
+        // deferred and later delivered as a _cssText mutation) is pinned end-to-end in
+        // packages/rrweb/rrweb/test/record/deferred-stylesheet-inlining.test.ts.
         it('passes the default stylesheet budget of 10,000 rules to rrweb.record', () => {
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
 

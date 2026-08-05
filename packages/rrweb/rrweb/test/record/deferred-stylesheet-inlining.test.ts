@@ -36,7 +36,12 @@ import {
   stringifyStylesheet,
 } from '@posthog/rrweb-snapshot';
 import { EventType, IncrementalSource, NodeType } from '@posthog/rrweb-types';
-import type { eventWithTime, mutationCallBack } from '@posthog/rrweb-types';
+import type {
+  eventWithTime,
+  mutationCallBack,
+  serializedElementNodeWithId,
+  serializedNodeWithId,
+} from '@posthog/rrweb-types';
 
 type IdleDeadline = { didTimeout: boolean; timeRemaining: () => number };
 type IdleCallback = (deadline: IdleDeadline) => void;
@@ -294,6 +299,72 @@ describe('inlineDeferredStylesheets()', () => {
     expect(mutationCb).not.toHaveBeenCalled();
     expect(getDeferredStylesheetStats().abandonedCount).toBe(0);
   });
+
+  it('stringifies at most 200 rules per slice through the production idle loop, each rule exactly once', () => {
+    // deterministic rule units instead of wall-clock: every cssText read is
+    // counted, and the production step loop probes timeRemaining() between
+    // slices, so each probe marks a slice boundary in rule units
+    const RULE_COUNT = 1000;
+    const RULES_PER_SLICE = 200; // DEFERRED_STYLESHEET_RULES_PER_SLICE
+    let cssTextReads = 0;
+    const rules = Array.from({ length: RULE_COUNT }, (_, i) => ({
+      get cssText() {
+        cssTextReads += 1;
+        return `.slice-${i} { color: red }`;
+      },
+    }));
+    const sheet = { href: null, rules, cssRules: rules } as unknown as CSSStyleSheet;
+    const linkEl = document.createElement('link');
+    document.head.appendChild(linkEl);
+    Object.defineProperty(linkEl, 'sheet', { value: sheet });
+    record.mirror.add(linkEl, {
+      type: NodeType.Element,
+      tagName: 'link',
+      attributes: {},
+      childNodes: [],
+      id: 1,
+    });
+    cleanupNodes.push(linkEl);
+    const onDone = vi.fn();
+
+    inlining = inlineDeferredStylesheets([linkEl], makeManager(), onDone);
+
+    const readsAtBoundaries: number[] = [];
+    const makeProbingDeadline = (slicesPerCallback: number): IdleDeadline => {
+      let checks = 0;
+      return {
+        didTimeout: false,
+        timeRemaining: () => {
+          readsAtBoundaries.push(cssTextReads);
+          checks += 1;
+          return checks < slicesPerCallback ? 50 : 0;
+        },
+      };
+    };
+    let callbacks = 0;
+    while (scheduled.size > 0 && callbacks < 100) {
+      readsAtBoundaries.push(cssTextReads); // callback entry is a boundary too
+      fireIdle(makeProbingDeadline(3));
+      callbacks += 1;
+    }
+    readsAtBoundaries.push(cssTextReads);
+
+    // the longest uninterrupted unit of work is one bounded slice: never more
+    // than the rule budget between two consecutive deadline checks
+    for (let i = 1; i < readsAtBoundaries.length; i++) {
+      expect(
+        readsAtBoundaries[i] - readsAtBoundaries[i - 1],
+      ).toBeLessThanOrEqual(RULES_PER_SLICE);
+    }
+    // resuming across slices and callbacks restringifies nothing
+    expect(cssTextReads).toBe(RULE_COUNT);
+    expect(callbacks).toBeGreaterThan(1); // the cursor really did resume across callbacks
+    expect(mutationCb).toHaveBeenCalledTimes(1);
+    expect(
+      mutationCb.mock.calls[0][0].attributes[0].attributes._cssText,
+    ).toContain(`.slice-${RULE_COUNT - 1}`);
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('record() teardown of deferred stylesheets', () => {
@@ -543,5 +614,277 @@ describe('record() teardown of deferred stylesheets', () => {
       delete (document as { adoptedStyleSheets?: unknown })
         .adoptedStyleSheets;
     }
+  });
+});
+
+describe('record() end-to-end delivery of deferred stylesheets', () => {
+  let scheduled: Map<number, IdleCallback>;
+  let nextHandle: number;
+  let cleanupNodes: Element[];
+  let events: eventWithTime[];
+  let stop: (() => void) | undefined;
+
+  const fireIdle = (deadline: IdleDeadline) => {
+    const next = scheduled.entries().next().value as
+      | [number, IdleCallback]
+      | undefined;
+    if (!next) {
+      throw new Error('no idle callback scheduled');
+    }
+    scheduled.delete(next[0]);
+    next[1](deadline);
+  };
+
+  const drainIdle = () => {
+    let callbacks = 0;
+    while (scheduled.size > 0 && callbacks < 500) {
+      fireIdle({ didTimeout: false, timeRemaining: () => 50 });
+      callbacks += 1;
+    }
+    expect(scheduled.size).toBe(0);
+  };
+
+  // An external-stylesheet fixture: a <link rel=stylesheet href=...> whose
+  // sheet is borrowed from a donor <style> that is then detached, so - like a
+  // real external sheet - only the link is serialized and only the link
+  // charges the budget. The full snapshot assigns the link's mirror id.
+  const makeExternalLink = (
+    ruleCount: number,
+    marker: string,
+  ): HTMLLinkElement => {
+    const rules: string[] = [];
+    for (let i = 0; i < ruleCount; i++) {
+      rules.push(`.${marker}-${i} { color: red; }`);
+    }
+    const styleEl = document.createElement('style');
+    styleEl.textContent = rules.join('\n');
+    document.head.appendChild(styleEl);
+    const sheet = styleEl.sheet;
+    styleEl.remove(); // the captured CSSStyleSheet object stays readable
+    const linkEl = document.createElement('link');
+    linkEl.setAttribute('rel', 'stylesheet');
+    linkEl.setAttribute('href', `/${marker}.css`);
+    document.head.appendChild(linkEl);
+    Object.defineProperty(linkEl, 'sheet', { value: sheet });
+    cleanupNodes.push(linkEl);
+    return linkEl;
+  };
+
+  const startRecording = (inlineStylesheetBudgetRules: number) =>
+    record({
+      emit: (event) => {
+        events.push(event as eventWithTime);
+      },
+      inlineStylesheetBudgetRules,
+    });
+
+  const fullSnapshots = () =>
+    events.filter((event) => event.type === EventType.FullSnapshot);
+
+  const collectLinks = (
+    snapshotEvent: eventWithTime,
+  ): serializedElementNodeWithId[] => {
+    const links: serializedElementNodeWithId[] = [];
+    const visit = (node: serializedNodeWithId) => {
+      if (node.type === NodeType.Element && node.tagName === 'link') {
+        links.push(node as serializedElementNodeWithId);
+      }
+      if ('childNodes' in node) {
+        node.childNodes.forEach(visit);
+      }
+    };
+    if (snapshotEvent.type === EventType.FullSnapshot) {
+      visit(snapshotEvent.data.node);
+    }
+    return links;
+  };
+
+  const cssTextAttributeMutations = (
+    from: eventWithTime[],
+  ): Array<{ id: number; cssText: string }> => {
+    const mutations: Array<{ id: number; cssText: string }> = [];
+    for (const event of from) {
+      if (
+        event.type !== EventType.IncrementalSnapshot ||
+        event.data.source !== IncrementalSource.Mutation
+      ) {
+        continue;
+      }
+      for (const attribute of event.data.attributes ?? []) {
+        const cssText = (attribute.attributes as Record<string, unknown>)
+          ._cssText;
+        if (typeof cssText === 'string') {
+          mutations.push({ id: attribute.id, cssText });
+        }
+      }
+    }
+    return mutations;
+  };
+
+  beforeEach(() => {
+    resetSnapshotCostState();
+    scheduled = new Map();
+    nextHandle = 1;
+    cleanupNodes = [];
+    events = [];
+    (
+      window as unknown as { requestIdleCallback: unknown }
+    ).requestIdleCallback = (cb: IdleCallback) => {
+      const handle = nextHandle++;
+      scheduled.set(handle, cb);
+      return handle;
+    };
+    (window as unknown as { cancelIdleCallback: unknown }).cancelIdleCallback =
+      (handle: number) => {
+        scheduled.delete(handle);
+      };
+  });
+
+  afterEach(() => {
+    stop?.();
+    stop = undefined;
+    cleanupNodes.forEach((node) => node.remove());
+    record.mirror.reset();
+    delete (window as unknown as { requestIdleCallback?: unknown })
+      .requestIdleCallback;
+    delete (window as unknown as { cancelIdleCallback?: unknown })
+      .cancelIdleCallback;
+  });
+
+  it('keeps rel/href on over-budget links in the FullSnapshot payload, then inlines exactly those ids', () => {
+    makeExternalLink(60, 'theme-a');
+    makeExternalLink(60, 'theme-b');
+    makeExternalLink(60, 'theme-c');
+
+    // 100 rules of budget: theme-a (60) fits, theme-b and theme-c must defer
+    stop = startRecording(100);
+
+    const snapshots = fullSnapshots();
+    expect(snapshots).toHaveLength(1);
+    const links = collectLinks(snapshots[0]);
+    expect(links).toHaveLength(3);
+
+    const inlined = links.filter((link) => '_cssText' in link.attributes);
+    const deferred = links.filter((link) => !('_cssText' in link.attributes));
+    expect(inlined).toHaveLength(1);
+    expect(String(inlined[0].attributes._cssText)).toContain('.theme-a-59');
+    // the inlined link is swapped for its css, exactly as without a budget
+    expect(inlined[0].attributes.rel).toBeUndefined();
+    expect(inlined[0].attributes.href).toBeUndefined();
+
+    // the deferred links keep rel/href in the snapshot itself, so the replayer
+    // can still load them remotely if the deferred mutations never arrive
+    const deferredIdByMarker = new Map<string, number>();
+    for (const link of deferred) {
+      expect(link.attributes.rel).toBe('stylesheet');
+      const href = String(link.attributes.href);
+      const marker = href.slice(href.lastIndexOf('/') + 1).replace('.css', '');
+      expect(['theme-b', 'theme-c']).toContain(marker);
+      deferredIdByMarker.set(marker, link.id);
+    }
+    expect(deferredIdByMarker.size).toBe(2);
+
+    drainIdle();
+
+    // every deferred link got exactly one _cssText mutation against its own
+    // snapshot id: an id mismatch would silently corrupt replay
+    const mutations = cssTextAttributeMutations(events);
+    expect(mutations).toHaveLength(2);
+    expect(new Set(mutations.map((m) => m.id))).toEqual(
+      new Set(deferredIdByMarker.values()),
+    );
+    for (const [marker, id] of deferredIdByMarker) {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const mutation = mutations.find((m) => m.id === id)!;
+      expect(mutation.cssText).toContain(`.${marker}-59`);
+      for (const other of ['theme-a', 'theme-b', 'theme-c']) {
+        if (other !== marker) {
+          expect(mutation.cssText).not.toContain(`.${other}-`);
+        }
+      }
+    }
+  });
+
+  it('re-defers with the new snapshot ids when a second snapshot lands before idle, emitting nothing for the old ids', () => {
+    const firstA = makeExternalLink(600, 'first-a');
+    const firstB = makeExternalLink(600, 'first-b');
+
+    stop = startRecording(1); // everything defers
+
+    const firstIds = collectLinks(fullSnapshots()[0]).map((link) => link.id);
+    expect(firstIds).toHaveLength(2);
+
+    // one idle callback: partway into first-a's cursor, nothing emitted yet
+    fireIdle(deadlineForSlices(2));
+    expect(cssTextAttributeMutations(events)).toHaveLength(0);
+
+    // a SPA-style stylesheet swap, then a new snapshot before the queue drains
+    firstA.remove();
+    firstB.remove();
+    makeExternalLink(300, 'second-x');
+    makeExternalLink(300, 'second-y');
+    record.takeFullSnapshot();
+
+    const snapshots = fullSnapshots();
+    expect(snapshots).toHaveLength(2);
+    const secondLinks = collectLinks(snapshots[1]);
+    const secondIds = secondLinks.map((link) => link.id);
+    expect(secondIds).toHaveLength(2);
+    expect(secondIds.some((id) => firstIds.includes(id))).toBe(false);
+
+    drainIdle();
+
+    const mutations = cssTextAttributeMutations(events);
+    // both mutations carry the second snapshot's ids...
+    expect(new Set(mutations.map((m) => m.id))).toEqual(new Set(secondIds));
+    // ...and nothing was ever emitted against the first snapshot's ids or
+    // sheets, which would corrupt the replayer's rebuilt mirror
+    expect(mutations.some((m) => firstIds.includes(m.id))).toBe(false);
+    expect(mutations.some((m) => m.cssText.includes('.first-'))).toBe(false);
+    for (const link of secondLinks) {
+      const href = String(link.attributes.href);
+      const marker = href.slice(href.lastIndexOf('/') + 1).replace('.css', '');
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const mutation = mutations.find((m) => m.id === link.id)!;
+      expect(mutation.cssText).toContain(`.${marker}-299`);
+    }
+  });
+
+  it('defers a sheet crossing the 10,000-rule budget posthog-js ships by default', () => {
+    // posthog-js passes inlineStylesheetBudgetRules: 10_000 unless configured
+    // otherwise (see lazy-loaded-session-recorder.ts; its jest suite pins that
+    // the value reaches record() verbatim); this pins what the shipped value
+    // actually does inside record()
+    makeExternalLink(10_050, 'past-default');
+    makeExternalLink(100, 'under-default');
+
+    stop = startRecording(10_000);
+
+    const links = collectLinks(fullSnapshots()[0]);
+    expect(links).toHaveLength(2);
+    const big = links.find((link) =>
+      String(link.attributes.href ?? '').includes('past-default'),
+    );
+    expect(big).toBeDefined();
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const small = links.find((link) => link !== big)!;
+
+    // the crossing sheet keeps rel/href and no _cssText in the snapshot
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    expect(big!.attributes._cssText).toBeUndefined();
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    expect(big!.attributes.rel).toBe('stylesheet');
+    // the ordinary sheet is untouched by the default budget
+    expect(String(small.attributes._cssText)).toContain('.under-default-99');
+    expect(small.attributes.href).toBeUndefined();
+    expect(getLastSnapshotCost()?.deferredStylesheetCount).toBe(1);
+
+    drainIdle();
+
+    const mutations = cssTextAttributeMutations(events);
+    expect(mutations).toHaveLength(1);
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    expect(mutations[0].id).toBe(big!.id);
+    expect(mutations[0].cssText).toContain('.past-default-10049');
   });
 });
