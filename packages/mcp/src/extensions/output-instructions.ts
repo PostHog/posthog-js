@@ -3,21 +3,23 @@ import { log } from './logger'
 import type { AnalyticsInjectableJsonSchema } from './analytics-parameters'
 
 /**
- * The `conversation_id` handle reaches the agent as a text block appended to the
+ * The `conversation_id` session handle reaches the agent as a text block appended to the
  * tool result. That block is invisible to any client that reads
  * `structuredContent` instead of `content` — which is what clients do whenever a
  * tool declares an `outputSchema`. Measured against Claude Code, correlation for
  * such tools drops to zero.
  *
- * The fix is to mirror the handle into `structuredContent` as well. This module
- * is the half that makes mirroring *safe*: the MCP client ajv-validates
- * `structuredContent` against the schema advertised in `tools/list`, and
- * `zod-to-json-schema` emits `additionalProperties: false` for a plain
- * `z.object`. An undeclared key there is not ignored — it fails the entire tool
- * result. So the property has to be declared before anything writes it.
+ * The fix is to mirror the session handle into `structuredContent` as well, which this
+ * module does in two halves that must stay in that order:
  *
- * Declaring alone is inert: nothing populates the field yet. Writing it is a
- * separate change, which must not ship until this one is live in clients.
+ *   1. declare `_mcp_instructions` on the tool's advertised `outputSchema`
+ *   2. write it into the result's `structuredContent`
+ *
+ * The declaration is what makes the write safe. The MCP client ajv-validates
+ * `structuredContent` against the schema from `tools/list`, and
+ * `zod-to-json-schema` emits `additionalProperties: false` for a plain
+ * `z.object`, so an undeclared key is not ignored — it fails the entire tool
+ * result. Only tools that got the declaration are ever written to.
  */
 export const MCP_INSTRUCTIONS_KEY = '_mcp_instructions'
 
@@ -129,7 +131,7 @@ export function addInstructionsToOutputSchema<TTool extends OutputInstructionsIn
   const toolName = tool.name || 'unknown'
   const original = tool.outputSchema
 
-  // No output schema means the client reads `content`, where the handle already
+  // No output schema means the client reads `content`, where the session handle already
   // rides. Nothing to declare, and nothing broken.
   if (!original || typeof original !== 'object') {
     return tool
@@ -143,7 +145,7 @@ export function addInstructionsToOutputSchema<TTool extends OutputInstructionsIn
       )
     } else {
       logger(
-        `WARN: Tool "${toolName}" has a complex output schema (oneOf/allOf/anyOf/$ref). Skipping '${MCP_INSTRUCTIONS_KEY}' declaration; its handle stays content-only.`
+        `WARN: Tool "${toolName}" has a complex output schema (oneOf/allOf/anyOf/$ref). Skipping '${MCP_INSTRUCTIONS_KEY}' declaration; its session handle stays content-only.`
       )
     }
     return tool
@@ -182,4 +184,48 @@ export function addInstructionsToOutputSchemas<TTool extends OutputInstructionsI
   logger: LoggerFn = log
 ): TTool[] {
   return tools.map((tool) => addInstructionsToOutputSchema(tool, logger))
+}
+
+export interface ConversationInstructions {
+  conversation_id: string
+  instructions: string
+}
+
+const ECHO_INSTRUCTION = 'Send this conversation_id as an argument on every subsequent tool call in this conversation.'
+
+/** The payload mirrored into `structuredContent` for a tool we declared the key on. */
+export function buildConversationInstructions(conversationId: string): ConversationInstructions {
+  return { conversation_id: conversationId, instructions: ECHO_INSTRUCTION }
+}
+
+/**
+ * Adds {@link MCP_INSTRUCTIONS_KEY} to a result's `structuredContent`, which is
+ * where clients look once a tool declares an `outputSchema` — the `content` text
+ * block carrying the session handle is invisible to them.
+ *
+ * Unlike the text block, this rides *every* response rather than only the one
+ * that minted the session handle, so an agent that drops it can read it back.
+ *
+ * Returns the result untouched when there is no plain-object `structuredContent`
+ * to extend, or when the tool already produced its own key — customer data wins.
+ * Never mutates the input.
+ */
+export function mirrorInstructionsIntoStructuredContent(result: unknown, conversationId: string): unknown {
+  if (!result || typeof result !== 'object') {
+    return result
+  }
+  const structuredContent = (result as { structuredContent?: unknown }).structuredContent
+  if (!structuredContent || typeof structuredContent !== 'object' || Array.isArray(structuredContent)) {
+    return result
+  }
+  if (Object.prototype.hasOwnProperty.call(structuredContent, MCP_INSTRUCTIONS_KEY)) {
+    return result
+  }
+  return {
+    ...result,
+    structuredContent: {
+      ...structuredContent,
+      [MCP_INSTRUCTIONS_KEY]: buildConversationInstructions(conversationId),
+    },
+  }
 }
