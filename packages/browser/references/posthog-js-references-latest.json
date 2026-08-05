@@ -3627,6 +3627,11 @@
           "name": "flagsEndpointWasHit"
         },
         {
+          "description": "Number of events dropped by the user-agent bot filter on this instance.",
+          "type": "number",
+          "name": "botEventsDropped"
+        },
+        {
           "description": "Capture an event.",
           "type": "(event_name: string, properties?: Properties | null, options?: CaptureOptions) => CaptureResult | undefined",
           "name": "capture"
