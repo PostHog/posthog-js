@@ -651,6 +651,15 @@ export interface SessionRecordingOptions {
     inlineStylesheet?: boolean
 
     /**
+     * Max CSSRules inlined synchronously per full snapshot. Sheets past the
+     * budget keep their `rel`/`href` (so replay can load them remotely) and
+     * are inlined across idle callbacks instead of blocking the snapshot.
+     * Set 0 to inline everything up front (the pre-budget behaviour).
+     * @default 10000
+     */
+    inlineStylesheetBudgetRules?: number
+
+    /**
      * Derived from `rrweb.record` options
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
      * @default false

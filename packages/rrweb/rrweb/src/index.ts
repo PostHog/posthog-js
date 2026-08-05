@@ -20,6 +20,11 @@ export {
 export {
   wasMaxDepthReached,
   resetMaxDepthState,
+  getLastSnapshotCost,
+  getMutationCost,
+  resetSnapshotCostState,
+  type SnapshotCost,
+  type MutationCost,
 } from '@posthog/rrweb-snapshot';
 
 // exports style.css from replay
