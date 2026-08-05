@@ -1,0 +1,124 @@
+import type { LoggerFn } from './logger'
+import { log } from './logger'
+import type { AnalyticsInjectableJsonSchema } from './analytics-parameters'
+
+/**
+ * The `conversation_id` handle reaches the agent as a text block appended to the
+ * tool result. That block is invisible to any client that reads
+ * `structuredContent` instead of `content` — which is what clients do whenever a
+ * tool declares an `outputSchema`. Measured against Claude Code, correlation for
+ * such tools drops to zero.
+ *
+ * The fix is to mirror the handle into `structuredContent` as well. This module
+ * is the half that makes mirroring *safe*: the MCP client ajv-validates
+ * `structuredContent` against the schema advertised in `tools/list`, and
+ * `zod-to-json-schema` emits `additionalProperties: false` for a plain
+ * `z.object`. An undeclared key there is not ignored — it fails the entire tool
+ * result. So the property has to be declared before anything writes it.
+ *
+ * Declaring alone is inert: nothing populates the field yet. Writing it is a
+ * separate change, which must not ship until this one is live in clients.
+ */
+export const MCP_INSTRUCTIONS_KEY = '_mcp_instructions'
+
+const INSTRUCTIONS_FIELD_DESCRIPTION =
+  'Server-issued handles for this conversation, and what to do with them. Read and follow.'
+
+const CONVERSATION_ID_FIELD_DESCRIPTION =
+  'Echo this exact value as the conversation_id argument on every subsequent tool call.'
+
+export interface OutputInstructionsInjectableTool {
+  name?: string
+  outputSchema?: unknown
+  [key: string]: unknown
+}
+
+/**
+ * True when we can safely declare {@link MCP_INSTRUCTIONS_KEY} on this tool's
+ * advertised output schema.
+ *
+ * Requires a plain-object schema we can extend. A tool with no `outputSchema`
+ * has nothing to mirror into and keeps working through `content`; a composed
+ * schema (`oneOf`/`allOf`/`anyOf`/`$ref`) has no single `properties` bag to add
+ * to. Both stay content-only, matching the policy on the input side.
+ */
+export function canDeclareOutputInstructions(outputSchema: unknown): boolean {
+  if (!outputSchema || typeof outputSchema !== 'object') {
+    return false
+  }
+  const schema = outputSchema as AnalyticsInjectableJsonSchema
+  if (schema.$ref || schema.oneOf || schema.allOf || schema.anyOf) {
+    return false
+  }
+  return !schema.properties || !Object.prototype.hasOwnProperty.call(schema.properties, MCP_INSTRUCTIONS_KEY)
+}
+
+/**
+ * Returns a copy of the tool with an optional {@link MCP_INSTRUCTIONS_KEY}
+ * property added to its output schema, or the tool untouched when it has no
+ * output schema to extend.
+ *
+ * The property is never added to `required` — a result without it must stay
+ * valid, since every tool result predating this change lacks it.
+ */
+export function addInstructionsToOutputSchema<TTool extends OutputInstructionsInjectableTool>(
+  tool: TTool,
+  logger: LoggerFn = log
+): TTool {
+  const toolName = tool.name || 'unknown'
+  const original = tool.outputSchema
+
+  // No output schema means the client reads `content`, where the handle already
+  // rides. Nothing to declare, and nothing broken.
+  if (!original || typeof original !== 'object') {
+    return tool
+  }
+
+  if (!canDeclareOutputInstructions(original)) {
+    const schema = original as AnalyticsInjectableJsonSchema
+    if (schema.properties && Object.prototype.hasOwnProperty.call(schema.properties, MCP_INSTRUCTIONS_KEY)) {
+      logger(
+        `WARN: Tool "${toolName}" already declares '${MCP_INSTRUCTIONS_KEY}' in its output schema. Leaving it alone.`
+      )
+    } else {
+      logger(
+        `WARN: Tool "${toolName}" has a complex output schema (oneOf/allOf/anyOf/$ref). Skipping '${MCP_INSTRUCTIONS_KEY}' declaration; its handle stays content-only.`
+      )
+    }
+    return tool
+  }
+
+  const modifiedTool = { ...tool }
+  // Deep copy: the server may reuse or freeze the schema object it handed us.
+  const outputSchema = JSON.parse(JSON.stringify(original)) as AnalyticsInjectableJsonSchema
+
+  if (!outputSchema.properties) {
+    outputSchema.properties = {}
+  }
+
+  outputSchema.properties[MCP_INSTRUCTIONS_KEY] = {
+    type: 'object',
+    description: INSTRUCTIONS_FIELD_DESCRIPTION,
+    properties: {
+      conversation_id: {
+        type: 'string',
+        description: CONVERSATION_ID_FIELD_DESCRIPTION,
+      },
+      instructions: { type: 'string' },
+    },
+  }
+
+  modifiedTool.outputSchema = outputSchema
+  return modifiedTool
+}
+
+/**
+ * Declares {@link MCP_INSTRUCTIONS_KEY} across a tool listing. Tools without an
+ * output schema, and tools whose schema we cannot extend, pass through unchanged.
+ */
+export function addInstructionsToOutputSchemas<TTool extends OutputInstructionsInjectableTool>(
+  tools: TTool[],
+  logger: LoggerFn = log
+): TTool[] {
+  return tools.map((tool) => addInstructionsToOutputSchema(tool, logger))
+}

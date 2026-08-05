@@ -24,6 +24,7 @@ import {
   resolveConversationId,
 } from './conversation-id'
 import { stampMetaClientInfo } from './client-identity'
+import { addInstructionsToOutputSchemas } from './output-instructions'
 import { captureEvent } from './capture'
 import { MCPAnalyticsEventType } from './event-types'
 import { captureException } from './exceptions'
@@ -163,6 +164,10 @@ function getActiveAnalyticsParameterOwnership(
     context: !isMissingCapabilityTool && isContextEnabled(data.options.context) && ownership?.context === true,
     conversationId:
       !isMissingCapabilityTool && data.options.enableConversationId === true && ownership?.conversationId === true,
+    // Whether `tools/list` declared `_mcp_instructions` on this tool, i.e. whether
+    // writing that key into `structuredContent` would validate client-side.
+    outputInstructions:
+      !isMissingCapabilityTool && data.options.enableConversationId === true && ownership?.outputInstructions === true,
   }
 }
 
@@ -478,7 +483,7 @@ function cacheToolAnalyticsParameterOwnership(
   // Merge pages and concurrent enumerations; repeated tool names overwrite stale schemas.
   for (const tool of tools) {
     if (tool?.name) {
-      cache.set(tool.name, getAnalyticsParameterOwnership(tool.inputSchema))
+      cache.set(tool.name, getAnalyticsParameterOwnership(tool.inputSchema, tool.outputSchema))
     }
   }
 }
@@ -530,6 +535,9 @@ async function getTracedToolsList(
 
       if (data.options.enableConversationId) {
         tools = addConversationIdToTools(tools, missingToolName, injectedMissingCapabilityTool, data.logger)
+        // Declares the key a later change will write into `structuredContent`.
+        // Inert on its own — nothing populates it yet.
+        tools = addInstructionsToOutputSchemas(tools, data.logger)
       }
     }
 
