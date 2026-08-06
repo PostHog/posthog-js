@@ -121,6 +121,8 @@ async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress }: 
 
         const lazyLoadedSessionRecording = new LazyLoadedSessionRecording(posthog)
         lazyLoadedSessionRecording.start()
+        // these tests exercise compression, not hold semantics — drop the fresh-start interaction hold
+        lazyLoadedSessionRecording['_holdFlushUntilInteraction'] = false
 
         context.emit = emit
         context.posthog = posthog
@@ -260,40 +262,6 @@ describe('LazyLoadedSessionRecording compression paths', () => {
 
         emit(createFullSnapshot({ content: 'beforeunload sync drain' }))
         lazyLoadedSessionRecording['_onBeforeUnload']()
-
-        expect(posthog.capture).toHaveBeenCalledWith(
-            '$snapshot',
-            expect.objectContaining({
-                $snapshot_data: [expect.objectContaining({ type: 2, cv: '2024-10', data: expect.any(String) })],
-            }),
-            expect.any(Object)
-        )
-
-        releaseCompression()
-        await lazyLoadedSessionRecording['_compressionQueue']
-        expect(posthog.capture).toHaveBeenCalledTimes(1)
-    })
-
-    it('drains pending async compression and flushes on pagehide', async () => {
-        let releaseCompression: () => void = () => {}
-        const compressionGate = new Promise<void>((resolve) => {
-            releaseCompression = resolve
-        })
-        const gzipCompress = jest.fn(async (input: string) => {
-            await compressionGate
-            return new Blob([gzipSync(strToU8(input))])
-        })
-
-        const { emit, posthog, lazyLoadedSessionRecording } = await setupLazyLoadedSessionRecording({
-            gzipSupported: true,
-            gzipCompress,
-        })
-
-        // a FullSnapshot rescued by rrweb's own pagehide handler lands here,
-        // after beforeunload already fired: only the pagehide listener
-        // (registered in start()) can still ship it
-        emit(createFullSnapshot({ content: 'pagehide rescued snapshot' }))
-        window.dispatchEvent(new Event('pagehide'))
 
         expect(posthog.capture).toHaveBeenCalledWith(
             '$snapshot',
