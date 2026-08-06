@@ -40,18 +40,6 @@
     "@posthog/plugin-utils": "workspace:^",
     "posthog-js": "workspace:^"
   },
-  "peerDependencies": {
-    "nitro": ">=3.0.0-beta.0 <4.0.0",
-    "nitropack": ">=2.0.0 <3.0.0"
-  },
-  "peerDependenciesMeta": {
-    "nitro": {
-      "optional": true
-    },
-    "nitropack": {
-      "optional": true
-    }
-  },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "nuxt": "^4.5.1",
