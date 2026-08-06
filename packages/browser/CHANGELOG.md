@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.413.2
+
+### Patch Changes
+
+- [#4425](https://github.com/PostHog/posthog-js/pull/4425) [`ee7fab0`](https://github.com/PostHog/posthog-js/commit/ee7fab03198fd6b2c21303e9e0274c92452903ab) Thanks [@posthog](https://github.com/apps/posthog)! - Fix a benign network failure (e.g. `TypeError: Failed to fetch`) in the async native-gzip request path surfacing as an unhandled promise rejection, which exception autocapture would otherwise pick up
+  (2026-08-05)
+
 ## 1.413.1
 
 ### Patch Changes
