@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.410.8
+
+### Patch Changes
+
+- [#4402](https://github.com/PostHog/posthog-js/pull/4402) [`a31bd1e`](https://github.com/PostHog/posthog-js/commit/a31bd1e006d6a6f7e5d6ba37019bb00fb180c4f3) Thanks [@NVolcz](https://github.com/NVolcz)! - Publish TypeScript declarations for browser extension entrypoints under their public `dist` paths.
+  (2026-08-04)
+
 ## 1.410.7
 
 ### Patch Changes
