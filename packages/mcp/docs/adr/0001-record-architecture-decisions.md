@@ -13,9 +13,9 @@ We record architecturally significant decisions as Architecture Decision Records
 
 Conventions:
 
-- One decision per record, numbered sequentially (`NNNN-short-title.md`).
+- One decision per record, numbered sequentially (`NNNN-short-title.md`). The filename doubles as the index entry — make it say what was decided, not just the topic. There is no separate index file to maintain.
 - ADRs are immutable once accepted. Reversing or amending a decision gets a **new** ADR; the old one's Status becomes `Superseded by ADR-NNNN`.
-- `docs/ARCHITECTURE.md` stays the source of truth for the **current state** of the system. A PR that changes an architectural decision ships the ADR and the (small) ARCHITECTURE.md diff together, including the ADR's one-line entry in the index there.
+- `docs/ARCHITECTURE.md` stays the source of truth for the **current state** of the system. A PR that changes an architectural decision ships the ADR and the (small) ARCHITECTURE.md diff together.
 - Inline comments state the constraint and point at the ADR for the full story, instead of retelling it.
 
 ### When to write one (and when not to)
