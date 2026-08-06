@@ -886,17 +886,52 @@ describe('Lazy SessionRecording', () => {
                     { blockSelector: 'div' },
                     { maskAllInputs: true, maskTextSelector: undefined, blockSelector: 'div' },
                 ],
+                [
+                    'uses client maskAllElementAttributes when server does not set it',
+                    undefined,
+                    { maskAllElementAttributes: true },
+                    { maskAllInputs: true, maskAllElementAttributes: true },
+                ],
+                [
+                    'uses server maskAllElementAttributes when client does not set it',
+                    { maskAllElementAttributes: true },
+                    undefined,
+                    { maskAllInputs: true, maskAllElementAttributes: true },
+                ],
+                [
+                    'client maskAllElementAttributes overrides server maskAllElementAttributes',
+                    { maskAllElementAttributes: true },
+                    { maskAllElementAttributes: false },
+                    { maskAllInputs: true, maskAllElementAttributes: false },
+                ],
             ])(
                 '%s',
                 (
                     _name: string,
                     serverConfig:
-                        | { maskAllInputs?: boolean; maskTextSelector?: string; blockSelector?: string }
+                        | {
+                              maskAllInputs?: boolean
+                              maskTextSelector?: string
+                              blockSelector?: string
+                              maskAllElementAttributes?: boolean
+                          }
                         | undefined,
                     clientConfig:
-                        | { maskAllInputs?: boolean; maskTextSelector?: string; blockSelector?: string }
+                        | {
+                              maskAllInputs?: boolean
+                              maskTextSelector?: string
+                              blockSelector?: string
+                              maskAllElementAttributes?: boolean
+                          }
                         | undefined,
-                    expected: { maskAllInputs: boolean; maskTextSelector?: string; blockSelector?: string } | undefined
+                    expected:
+                        | {
+                              maskAllInputs: boolean
+                              maskTextSelector?: string
+                              blockSelector?: string
+                              maskAllElementAttributes?: boolean
+                          }
+                        | undefined
                 ) => {
                     posthog.persistence?.register({
                         [SESSION_RECORDING_REMOTE_CONFIG]: {
@@ -908,6 +943,7 @@ describe('Lazy SessionRecording', () => {
                     posthog.config.session_recording.maskAllInputs = clientConfig?.maskAllInputs
                     posthog.config.session_recording.maskTextSelector = clientConfig?.maskTextSelector
                     posthog.config.session_recording.blockSelector = clientConfig?.blockSelector
+                    posthog.config.session_recording.maskAllElementAttributes = clientConfig?.maskAllElementAttributes
 
                     expect(sessionRecording['_lazyLoadedSessionRecording']['_masking']).toEqual(expected)
                 }
@@ -2819,8 +2855,11 @@ describe('Lazy SessionRecording', () => {
                 ignoreClass: 'ph-ignore-input',
                 maskTextClass: 'ph-mask',
                 maskTextSelector: undefined,
+                maskTextFn: undefined,
                 maskInputOptions: { password: true },
                 maskInputFn: undefined,
+                maskAllElementAttributes: false,
+                maskAttributeFn: undefined,
                 slimDOMOptions: {},
                 collectFonts: false,
                 plugins: [],
@@ -4557,6 +4596,48 @@ describe('Lazy SessionRecording', () => {
                 expect.objectContaining({
                     maskAllInputs: true,
                     maskTextSelector: '*',
+                })
+            )
+        })
+
+        it('passes remote maskAllElementAttributes to rrweb', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        masking: { maskAllElementAttributes: true },
+                    },
+                })
+            )
+
+            sessionRecording['_onScriptLoaded']()
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    maskAllElementAttributes: true,
+                })
+            )
+        })
+
+        it('passes client-side maskAllElementAttributes and maskAttributeFn to rrweb', () => {
+            const maskAttributeFn = (_name: string, value: string) => value
+            posthog.config.session_recording.maskAllElementAttributes = true
+            posthog.config.session_recording.maskAttributeFn = maskAttributeFn
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            sessionRecording['_onScriptLoaded']()
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    maskAllElementAttributes: true,
+                    maskAttributeFn,
                 })
             )
         })

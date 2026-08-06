@@ -1,8 +1,10 @@
 import {
+  maskAttributeValue,
   resetStylesheetLoadTracking,
   stringifyRule,
   stringifyStylesheet,
 } from '@posthog/rrweb-snapshot';
+import type { MaskAttributeFn } from '@posthog/rrweb-snapshot';
 import type {
   elementNode,
   serializedNodeWithId,
@@ -17,14 +19,20 @@ export class StylesheetManager {
   private trackedLinkElements: WeakSet<HTMLLinkElement> = new WeakSet();
   private mutationCb: mutationCallBack;
   private adoptedStyleSheetCb: adoptedStyleSheetCallback;
+  private maskAllElementAttributes: boolean;
+  private maskAttributeFn: MaskAttributeFn | undefined;
   public styleMirror = new StyleSheetMirror();
 
   constructor(options: {
     mutationCb: mutationCallBack;
     adoptedStyleSheetCb: adoptedStyleSheetCallback;
+    maskAllElementAttributes?: boolean;
+    maskAttributeFn?: MaskAttributeFn;
   }) {
     this.mutationCb = options.mutationCb;
     this.adoptedStyleSheetCb = options.adoptedStyleSheetCb;
+    this.maskAllElementAttributes = options.maskAllElementAttributes ?? false;
+    this.maskAttributeFn = options.maskAttributeFn;
   }
 
   public attachLinkElement(
@@ -74,11 +82,26 @@ export class StylesheetManager {
       // nothing we can add; the link kept its href so replay still loads it remotely
       return;
     }
+    // The snapshot path masks _cssText inside serializeElementNode; this path
+    // builds the value itself, so it has to mask it too.
     this.mutationCb({
       adds: [],
       removes: [],
       texts: [],
-      attributes: [{ id, attributes: { _cssText: cssText } }],
+      attributes: [
+        {
+          id,
+          attributes: {
+            _cssText: maskAttributeValue({
+              element: linkEl,
+              name: '_cssText',
+              value: cssText,
+              maskAllElementAttributes: this.maskAllElementAttributes,
+              maskAttributeFn: this.maskAttributeFn,
+            }),
+          },
+        },
+      ],
     });
   }
 

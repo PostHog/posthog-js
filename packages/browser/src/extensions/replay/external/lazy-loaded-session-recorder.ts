@@ -612,24 +612,34 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private get _masking():
-        | Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector' | 'blockSelector'>
+        | Pick<
+              SessionRecordingOptions,
+              'maskAllInputs' | 'maskTextSelector' | 'blockSelector' | 'maskAllElementAttributes'
+          >
         | undefined {
         const masking_server_side = this._remoteConfig?.masking
         const masking_client_side = {
             maskAllInputs: this._instance.config.session_recording?.maskAllInputs,
             maskTextSelector: this._instance.config.session_recording?.maskTextSelector,
             blockSelector: this._instance.config.session_recording?.blockSelector,
+            maskAllElementAttributes: this._instance.config.session_recording?.maskAllElementAttributes,
         }
 
         const maskAllInputs = masking_client_side?.maskAllInputs ?? masking_server_side?.maskAllInputs
         const maskTextSelector = masking_client_side?.maskTextSelector ?? masking_server_side?.maskTextSelector
         const blockSelector = masking_client_side?.blockSelector ?? masking_server_side?.blockSelector
+        const maskAllElementAttributes =
+            masking_client_side?.maskAllElementAttributes ?? masking_server_side?.maskAllElementAttributes
 
-        return !isUndefined(maskAllInputs) || !isUndefined(maskTextSelector) || !isUndefined(blockSelector)
+        return !isUndefined(maskAllInputs) ||
+            !isUndefined(maskTextSelector) ||
+            !isUndefined(blockSelector) ||
+            !isUndefined(maskAllElementAttributes)
             ? {
                   maskAllInputs: maskAllInputs ?? true,
                   maskTextSelector,
                   blockSelector,
+                  maskAllElementAttributes,
               }
             : undefined
     }
@@ -651,7 +661,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         const clientConfig = this._instance.config.session_recording
-        const divergentFields = (['maskAllInputs', 'maskTextSelector', 'blockSelector'] as const).filter((field) => {
+        const divergentFields = (
+            ['maskAllInputs', 'maskTextSelector', 'blockSelector', 'maskAllElementAttributes'] as const
+        ).filter((field) => {
             const clientValue = clientConfig?.[field]
             const serverValue = masking_server_side[field]
             // a client value that is set and disagrees with the project's value shadows it — an unset
@@ -676,6 +688,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     maskAllInputs: clientConfig?.maskAllInputs,
                     maskTextSelector: clientConfig?.maskTextSelector,
                     blockSelector: clientConfig?.blockSelector,
+                    maskAllElementAttributes: clientConfig?.maskAllElementAttributes,
                 },
                 project: masking_server_side,
             }
@@ -2286,6 +2299,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             maskAllInputs: true,
             maskInputOptions: { password: true },
             maskInputFn: undefined,
+            maskAllElementAttributes: false,
+            maskAttributeFn: undefined,
             slimDOMOptions: {},
             collectFonts: false,
             inlineStylesheet: true,
@@ -2368,6 +2383,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             sessionRecordingOptions.maskAllInputs = this._masking.maskAllInputs ?? true
             sessionRecordingOptions.maskTextSelector = this._masking.maskTextSelector ?? undefined
             sessionRecordingOptions.blockSelector = this._masking.blockSelector ?? undefined
+            sessionRecordingOptions.maskAllElementAttributes = this._masking.maskAllElementAttributes ?? false
         }
 
         this._warnIfClientMaskingShadowsServer()

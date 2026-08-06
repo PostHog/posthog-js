@@ -4,6 +4,7 @@ import type {
   SlimDOMOptions,
   MaskInputFn,
   MaskTextFn,
+  MaskAttributeFn,
 } from '@posthog/rrweb-snapshot';
 import type { IframeManager } from './record/iframe-manager';
 import type { ShadowDomManager } from './record/shadow-dom-manager';
@@ -56,6 +57,8 @@ export type recordOptions<T> = {
   maskInputOptions?: MaskInputOptions;
   maskInputFn?: MaskInputFn;
   maskTextFn?: MaskTextFn;
+  maskAllElementAttributes?: boolean;
+  maskAttributeFn?: MaskAttributeFn;
   slimDOMOptions?: SlimDOMOptions | 'all' | true;
   ignoreCSSAttributes?: Set<string>;
   /**
@@ -128,6 +131,8 @@ export type observerParam = {
   maskInputOptions: MaskInputOptions;
   maskInputFn?: MaskInputFn;
   maskTextFn?: MaskTextFn;
+  maskAllElementAttributes: boolean;
+  maskAttributeFn?: MaskAttributeFn;
   keepIframeSrcFn: KeepIframeSrcFn;
   inlineStylesheet: boolean;
   styleSheetRuleCb: styleSheetRuleCallback;
@@ -175,6 +180,8 @@ export type MutationBufferParam = Pick<
   | 'maskInputOptions'
   | 'maskTextFn'
   | 'maskInputFn'
+  | 'maskAllElementAttributes'
+  | 'maskAttributeFn'
   | 'keepIframeSrcFn'
   | 'recordCanvas'
   | 'canvasMaskingConfigured'

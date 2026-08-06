@@ -292,6 +292,7 @@ export type mutationRecord = Readonly<{
   addedNodes: NodeList;
   removedNodes: NodeList;
   attributeName: string | null;
+  attributeNamespace?: string | null;
 }>;
 
 export type textCursor = {

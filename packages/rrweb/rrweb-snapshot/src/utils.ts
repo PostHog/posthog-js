@@ -1,5 +1,6 @@
 import type {
   idNodeMap,
+  MaskAttributeFn,
   MaskInputFn,
   MaskInputOptions,
   nodeMetaMap,
@@ -330,6 +331,53 @@ export function maskInputValue({
 
 export function toLowerCase<T extends string>(str: T): Lowercase<T> {
   return str.toLowerCase() as unknown as Lowercase<T>;
+}
+
+// Minimum rrweb-generated layout metadata that must retain its value for replay.
+// Unlike source DOM attributes, these values cannot contain application strings.
+const RENDERING_METADATA_ATTRIBUTES = new Set([
+  'rr_width',
+  'rr_height',
+  'rr_left',
+  'rr_top',
+  'rr_position',
+  'rr_transform',
+  'rr_display',
+  'rr_scrollleft',
+  'rr_scrolltop',
+  'rr_mediastate',
+  'rr_open_mode',
+]);
+
+export function maskAttributeValue({
+  element,
+  name,
+  value,
+  maskAllElementAttributes,
+  maskAttributeFn,
+  isGenerated = false,
+}: {
+  element: Element;
+  name: string;
+  value: string | null;
+  maskAllElementAttributes: boolean;
+  maskAttributeFn: MaskAttributeFn | undefined;
+  isGenerated?: boolean;
+}): string | null {
+  if (!value) {
+    return value;
+  }
+  // A custom callback takes precedence so callers can choose a stable mask.
+  if (maskAttributeFn) {
+    return maskAttributeFn(name, value, element);
+  }
+  if (
+    maskAllElementAttributes &&
+    !(isGenerated && RENDERING_METADATA_ATTRIBUTES.has(toLowerCase(name)))
+  ) {
+    return '*'.repeat(value.length);
+  }
+  return value;
 }
 
 const ORIGINAL_ATTRIBUTE_NAME = '__rrweb_original__';
