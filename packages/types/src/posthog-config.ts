@@ -2001,7 +2001,13 @@ export interface PostHogConfig {
     process_person?: 'always' | 'never' | 'identified_only'
 
     /**
-     * Client side rate limiting
+     * Client side rate limiting.
+     *
+     * A token bucket, per browser, that stops a runaway loop on your site from flooding capture.
+     * When it drains, further `capture` calls are dropped and a one-off `$$client_ingestion_warning`
+     * is sent reporting how many events were dropped and the page and session that tripped it -
+     * usually the fastest way to find the loop. Raise these limits if you legitimately capture in
+     * bursts; a warning under the defaults is more often a bug on the page than a limit set too low.
      */
     rate_limiting?: {
         /**
