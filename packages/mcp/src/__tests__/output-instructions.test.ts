@@ -221,6 +221,25 @@ describe('_mcp_instructions declaration over a real client', () => {
     }
   })
 
+  it('mirrors a key that validates against the real advertised schema', async () => {
+    // The claim this whole two-PR split exists to satisfy: the key we write is
+    // one the client's cached schema accepts. Only `callTool` ajv-validates
+    // `structuredContent`, so asserting the mirrored key anywhere else proves
+    // the write happened but not that it survives validation.
+    const { client, cleanup } = await connect({ enableConversationId: true })
+    try {
+      await client.listTools()
+
+      const result = await client.callTool({ name: 'get_issue', arguments: { issue_id: 'iss_7' } })
+
+      const mirrored = (result.structuredContent as Record<string, any>)[MCP_INSTRUCTIONS_KEY]
+      expect(mirrored?.conversation_id).toEqual(expect.any(String))
+      expect((result.structuredContent as any).ok).toBe(true)
+    } finally {
+      await cleanup()
+    }
+  })
+
   it('still accepts a result that omits the declared key', async () => {
     const { client, cleanup } = await connect({ enableConversationId: true })
     try {

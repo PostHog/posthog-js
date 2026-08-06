@@ -168,9 +168,19 @@ function getActiveAnalyticsParameterOwnership(
     // Deliberately read off `listed`, never the override. This asks whether
     // `tools/list` actually declared `_mcp_instructions`, and only the advertised
     // JSON Schema can answer it — an override is built from the live registry,
-    // which on the high-level path holds Zod. A tool whose listing skipped the
-    // declaration, or that was called before any `tools/list`, has no entry here,
-    // so nothing is written.
+    // which on the high-level path holds Zod.
+    //
+    // The cache is per-instance, so this is not merely "before the first
+    // `tools/list`": an instance that never serves a listing never writes the
+    // mirror at all. That is the per-request server pattern — `tools/list` lands
+    // on one instance, `tools/call` on a cold one — where the handle falls back
+    // to the `content` block and a structuredContent-only client misses it.
+    //
+    // Failing closed is deliberate. Writing a key the advertised schema did not
+    // declare fails the *entire* tool result under `additionalProperties: false`,
+    // so guessing costs the caller their result, while not guessing costs us one
+    // delivery channel. The fix is a process-scoped ownership cache, so a listing
+    // served by any instance answers for the rest — not a per-call guess.
     outputInstructions:
       !isMissingCapabilityTool && data.options.enableConversationId === true && listed?.outputInstructions === true,
   }
