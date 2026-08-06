@@ -8,11 +8,12 @@ import {
 } from '../posthog-featureflags'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
-import { isUndefined } from '@posthog/core'
+import { isUndefined, MINIMAL_FLAG_CALLED_EVENT_CAMPAIGN_PROPERTIES } from '@posthog/core'
 import { PostHogConfig } from '../types'
 import { createMockPostHog, createPosthogInstance } from './helpers/posthog-instance'
 import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
+import { CAMPAIGN_PARAMS } from '@posthog/browser-common/utils/event-utils'
 
 jest.useFakeTimers()
 jest.spyOn(global, 'setTimeout')
@@ -4582,6 +4583,9 @@ describe('minimal $feature_flag_called events', () => {
                 '$groups',
                 '$current_url',
                 '$pathname',
+                // session-level attribution props survive minimization so a flag-called
+                // event firing first doesn't null out the session's UTM/channel
+                '$referring_domain',
                 '$session_id',
                 '$window_id',
                 '$lib',
@@ -4600,6 +4604,36 @@ describe('minimal $feature_flag_called events', () => {
             $groups: { organization: 'org-1' },
         })
         expect(event.$set_once).toBeUndefined()
+    })
+
+    it('keeps every canonical session-attribution campaign param without widening the minimal event', async () => {
+        const { posthog, events } = await createInstanceWithCapturedEvents()
+        const campaignProperties = Object.fromEntries(CAMPAIGN_PARAMS.map((key) => [key, `value-for-${key}`]))
+
+        // Keep the shared minimal-event set exhaustively synchronized with the canonical
+        // browser campaign set without copying that list into this test.
+        expect(MINIMAL_FLAG_CALLED_EVENT_CAMPAIGN_PROPERTIES).toEqual(CAMPAIGN_PARAMS)
+
+        posthog.register({
+            ...campaignProperties,
+            $referring_domain: 'referring.example',
+            $referrer: 'https://referring.example/path?private=value',
+            unrelated_superproperty: 'must-be-stripped',
+        })
+        posthog.featureFlags.receivedFeatureFlags(
+            gatedFlagsResponse({ minimalFlagCalledEvents: true, hasExperiment: false })
+        )
+
+        expect(posthog.getFeatureFlag('test-flag')).toBe(true)
+
+        const event = findFlagCalledEvent(events)
+        expect(event).toBeDefined()
+        expect(event.properties).toMatchObject({
+            ...campaignProperties,
+            $referring_domain: 'referring.example',
+        })
+        expect(event.properties).not.toHaveProperty('$referrer')
+        expect(event.properties).not.toHaveProperty('unrelated_superproperty')
     })
 
     it('strips the timestamp-override props when captured with an explicit timestamp', async () => {
@@ -4629,6 +4663,7 @@ describe('minimal $feature_flag_called events', () => {
                 '$feature_flag_request_id',
                 '$current_url',
                 '$pathname',
+                '$referring_domain',
                 '$session_id',
                 '$window_id',
                 '$lib',
