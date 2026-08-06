@@ -18,6 +18,7 @@ import {
   Properties,
   resolveMetricsConfig,
   RetriableOptions,
+  raceWithTimeout,
   safeSetTimeout,
   uuidv7,
 } from '@posthog/core'
@@ -2462,10 +2463,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       // this flush runs before super._shutdown starts its own timeout, so an
       // unresponsive transport must not be able to hold shutdown past the
       // caller's deadline (its retry stack alone can take ~49s).
-      await Promise.race([
+      await raceWithTimeout(
         this._metrics.flush().catch(() => {}),
-        new Promise<void>((resolve) => safeSetTimeout(resolve, Math.max(0, shutdownDeadlineMs - Date.now()))),
-      ])
+        Math.max(0, shutdownDeadlineMs - Date.now())
+      )
       // reset() also invalidates a flush that lost the race above: when its
       // send finally settles, the stale window is discarded instead of being
       // merged back onto a re-armed timer after teardown.

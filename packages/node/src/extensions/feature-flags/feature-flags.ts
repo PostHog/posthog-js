@@ -1,6 +1,6 @@
 import { FeatureFlagCondition, FlagProperty, FlagPropertyValue, PostHogFeatureFlag, PropertyGroup } from '../../types'
 import type { FeatureFlagValue, JsonType, PostHogFetchOptions, PostHogFetchResponse } from '@posthog/core'
-import { safeSetTimeout } from '@posthog/core'
+import { raceWithTimeout, safeSetTimeout } from '@posthog/core'
 import { hashSHA1 } from './crypto'
 import { FlagDefinitionCacheProvider, FlagDefinitionCacheData } from './cache'
 
@@ -1062,12 +1062,9 @@ class FeatureFlagsPoller {
           // This follows the same timeout logic defined in _shutdown.
           // We time out after some period of time to avoid hanging the entire
           // shutdown process if the cache provider misbehaves.
-          await Promise.race([
-            shutdownResult,
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error(`Cache shutdown timeout after ${timeoutMs}ms`)), timeoutMs)
-            ),
-          ])
+          await raceWithTimeout(shutdownResult, timeoutMs, () => {
+            throw new Error(`Cache shutdown timeout after ${timeoutMs}ms`)
+          })
         }
       } catch (err) {
         this.onError?.(new Error(`Error during cache shutdown: ${err}`))
