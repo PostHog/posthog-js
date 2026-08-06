@@ -206,6 +206,26 @@ describe('snapshot cost accounting', () => {
       expect(safeCssRuleCount(sheet)).toBe(1 + 1 + 50);
     });
 
+    it('counts a multi-level @import chain in full, so structure cannot hide bulk from the gate', () => {
+      // the review repro: A imports B imports C, and C holds the bulk. A
+      // one-level descent would price A at ~3 rules, wave it past any budget,
+      // and stringify all 50,003 rules synchronously inside the snapshot.
+      const c = {
+        href: 'http://localhost/c.css',
+        cssRules: { length: 50_000 },
+      };
+      const b = {
+        href: 'http://localhost/b.css',
+        cssRules: [{ styleSheet: c }],
+      };
+      const a = {
+        href: 'http://localhost/a.css',
+        cssRules: [{ cssText: '.a {}' }, { styleSheet: b }],
+      } as unknown as CSSStyleSheet;
+
+      expect(safeCssRuleCount(a)).toBe(2 + 1 + 50_000);
+    });
+
     it('terminates on cyclic @import graphs, counting each sheet once', () => {
       const a: { href: string; cssRules?: unknown } = {
         href: 'http://localhost/a.css',
