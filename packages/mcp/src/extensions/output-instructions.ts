@@ -60,15 +60,58 @@ export function canDeclareOutputInstructions(outputSchema: unknown): boolean {
   if (schema.$ref || schema.oneOf || schema.allOf || schema.anyOf) {
     return false
   }
-  return !schema.properties || !Object.prototype.hasOwnProperty.call(schema.properties, MCP_INSTRUCTIONS_KEY)
+
+  // `properties` must be a plain object if it is present at all. A tool that
+  // advertises something else is malformed, and harmlessly so until we try to
+  // declare into it — assigning a key to a boolean throws, and that throw
+  // surfaces inside the `tools/list` wrapper, failing the entire listing over a
+  // schema we only wanted to annotate.
+  const { properties } = schema
+  if (
+    properties !== undefined &&
+    (typeof properties !== 'object' || properties === null || Array.isArray(properties))
+  ) {
+    return false
+  }
+  return !properties || !Object.prototype.hasOwnProperty.call(properties, MCP_INSTRUCTIONS_KEY)
+}
+
+/** A single Zod schema — the internals every version brands its instances with. */
+function isZodLike(entry: unknown): boolean {
+  return !!entry && typeof entry === 'object' && ('_def' in entry || '_zod' in entry || '~standard' in entry)
+}
+
+/**
+ * Whether this is a JSON Schema, judged on the *value* of each marker rather
+ * than the key alone — a raw Zod shape is free to name a field `type` or
+ * `properties`, but its values are Zod schemas, not a string and a property bag.
+ */
+function looksLikeJsonSchema(candidate: Record<string, unknown>): boolean {
+  if (typeof candidate.type === 'string' || typeof candidate.$ref === 'string') {
+    return true
+  }
+  if (Array.isArray(candidate.oneOf) || Array.isArray(candidate.allOf) || Array.isArray(candidate.anyOf)) {
+    return true
+  }
+  const { properties } = candidate
+  return !!properties && typeof properties === 'object' && !isZodLike(properties)
 }
 
 /** A Zod schema, or a raw shape whose values are Zod schemas. */
 function isSchemaObjectLike(value: unknown): boolean {
   const candidate = value as Record<string, unknown>
-  const isZodLike = (entry: unknown): boolean =>
-    !!entry && typeof entry === 'object' && ('_def' in entry || '_zod' in entry || '~standard' in entry)
-  return isZodLike(candidate) || Object.values(candidate).some(isZodLike)
+  if (isZodLike(candidate)) {
+    return true
+  }
+
+  // Settle "is this a JSON Schema" before scanning the values, because a schema
+  // may legitimately declare a property named `_def` — and the scan below would
+  // read that property's schema object as a Zod value and skip a tool we could
+  // have annotated perfectly well.
+  if (looksLikeJsonSchema(candidate)) {
+    return false
+  }
+  return Object.values(candidate).some(isZodLike)
 }
 
 /**

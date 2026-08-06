@@ -34,6 +34,30 @@ describe('_mcp_instructions output schema declaration', () => {
       expect(canDeclareOutputInstructions(objectSchema())).toBe(true)
     })
 
+    it('rejects a malformed `properties` rather than crashing the listing', () => {
+      // Declaring into a non-object `properties` throws, and that throw surfaces
+      // inside the tools/list wrapper — failing the whole listing over a schema
+      // we only meant to annotate.
+      for (const properties of [true, 'nope', 42, null, []]) {
+        expect(canDeclareOutputInstructions({ type: 'object', properties })).toBe(false)
+      }
+      expect(() =>
+        addInstructionsToOutputSchema({ name: 'malformed', outputSchema: { properties: true } })
+      ).not.toThrow()
+    })
+
+    it('accepts a schema whose own property is named `_def`', () => {
+      // `_def` is a Zod internal, so a naive scan of the property values reads
+      // this legitimate schema as a Zod value and silently skips the tool.
+      expect(canDeclareOutputInstructions({ type: 'object', properties: { _def: { type: 'string' } } })).toBe(true)
+    })
+
+    it('still refuses a raw shape whose keys happen to be `type` and `properties`', () => {
+      // The JSON Schema check above must key off the *values*: a raw Zod shape is
+      // free to name its fields `type` or `properties`.
+      expect(canDeclareOutputInstructions({ type: z.string(), properties: z.object({}) })).toBe(false)
+    })
+
     it('rejects a missing schema — there is nothing to mirror into', () => {
       expect(canDeclareOutputInstructions(undefined)).toBe(false)
       expect(canDeclareOutputInstructions(null)).toBe(false)
