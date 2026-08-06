@@ -755,3 +755,132 @@ describe('LangChainCallbackHandler trace/span state sanitization', () => {
     expect(outputState).not.toContain('AAAAAAAA')
   })
 })
+
+describe('LangChainCallbackHandler LangGraph interrupts', () => {
+  const serializedChain = {
+    lc: 1,
+    type: 'constructor' as const,
+    id: ['langgraph', 'pregel', 'CompiledStateGraph'],
+    kwargs: {},
+  }
+  const serializedTool = {
+    lc: 1,
+    type: 'constructor' as const,
+    id: ['langchain', 'tools', 'DynamicStructuredTool'],
+    kwargs: {},
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  // Mirror LangGraph's error hierarchy: control-flow exceptions expose `is_bubble_up` as a
+  // prototype getter (class getters compile to the prototype), and GraphInterrupt carries the
+  // pending interrupts as an own property.
+  class FakeGraphBubbleUp extends Error {
+    constructor(name: string) {
+      super('LangGraph control flow')
+      this.name = name
+    }
+    get is_bubble_up(): boolean {
+      return true
+    }
+  }
+
+  class FakeGraphInterrupt extends FakeGraphBubbleUp {
+    interrupts: { value: unknown; id: string }[]
+    constructor(name: 'GraphInterrupt' | 'NodeInterrupt') {
+      super(name)
+      this.interrupts = [{ value: 'Approve the plan?', id: 'interrupt-1' }]
+    }
+  }
+
+  it('captures a GraphInterrupt chain without error properties, keeping the interrupt payload', () => {
+    const handler = new LangChainCallbackHandler({ client: mockPostHogClient })
+    const runId = 'graph-interrupt-chain'
+    const interrupt = new FakeGraphInterrupt('GraphInterrupt')
+
+    handler.handleChainStart(serializedChain, { messages: [] }, runId)
+    handler.handleChainError(interrupt, runId)
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    expect(captureCall[0]).toMatchObject({
+      event: '$ai_trace',
+      properties: {
+        $ai_span_id: runId,
+      },
+    })
+    expect(captureCall[0].properties).not.toHaveProperty('$ai_error')
+    expect(captureCall[0].properties).not.toHaveProperty('$ai_is_error')
+    expect(captureCall[0].properties['$ai_output_state']).toEqual({ __interrupt__: interrupt.interrupts })
+    expect(captureCall[0].properties['$ai_input_state']).toEqual({ messages: [] })
+    expect(captureCall[0].properties['$ai_span_name']).toBe('CompiledStateGraph')
+    expect(captureCall[0].properties['$ai_latency']).toBeGreaterThanOrEqual(0)
+  })
+
+  it('captures a GraphInterrupt tool without error properties, keeping the interrupt payload', () => {
+    const handler = new LangChainCallbackHandler({ client: mockPostHogClient })
+    const runId = 'graph-interrupt-tool'
+    const interrupt = new FakeGraphInterrupt('GraphInterrupt')
+
+    handler.handleToolStart(serializedTool, '{"action":"approve"}', runId, 'parent-run')
+    handler.handleToolError(interrupt, runId, 'parent-run')
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    expect(captureCall[0]).toMatchObject({
+      event: '$ai_span',
+      properties: {
+        $ai_span_id: runId,
+      },
+    })
+    expect(captureCall[0].properties).not.toHaveProperty('$ai_error')
+    expect(captureCall[0].properties).not.toHaveProperty('$ai_is_error')
+    expect(captureCall[0].properties['$ai_output_state']).toEqual({ __interrupt__: interrupt.interrupts })
+    expect(captureCall[0].properties['$ai_input_state']).toEqual('{"action":"approve"}')
+    expect(captureCall[0].properties['$ai_span_name']).toBe('DynamicStructuredTool')
+    expect(captureCall[0].properties['$ai_latency']).toBeGreaterThanOrEqual(0)
+  })
+
+  it('captures a legacy NodeInterrupt without error properties', () => {
+    const handler = new LangChainCallbackHandler({ client: mockPostHogClient })
+    const runId = 'node-interrupt-chain'
+
+    handler.handleChainStart(serializedChain, { messages: [] }, runId)
+    handler.handleChainError(new FakeGraphInterrupt('NodeInterrupt'), runId)
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    expect(captureCall[0].properties).not.toHaveProperty('$ai_error')
+    expect(captureCall[0].properties).not.toHaveProperty('$ai_is_error')
+  })
+
+  it('captures other bubble-up control flow (e.g. ParentCommand) without error properties', () => {
+    const handler = new LangChainCallbackHandler({ client: mockPostHogClient })
+    const runId = 'parent-command-chain'
+
+    handler.handleChainStart(serializedChain, { messages: [] }, runId)
+    handler.handleChainError(new FakeGraphBubbleUp('ParentCommand'), runId)
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    expect(captureCall[0].properties).not.toHaveProperty('$ai_error')
+    expect(captureCall[0].properties).not.toHaveProperty('$ai_is_error')
+    expect(captureCall[0].properties).not.toHaveProperty('$ai_output_state')
+  })
+
+  it('preserves ordinary chain errors', () => {
+    const handler = new LangChainCallbackHandler({ client: mockPostHogClient })
+    const runId = 'failed-chain'
+
+    handler.handleChainStart(serializedChain, { messages: [] }, runId)
+    handler.handleChainError(new Error('model invocation failed'), runId)
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    expect(captureCall[0].properties['$ai_is_error']).toBe(true)
+    expect(captureCall[0].properties['$ai_error']).toContain('model invocation failed')
+    expect(captureCall[0].properties).not.toHaveProperty('$ai_output_state')
+  })
+})
