@@ -48,7 +48,7 @@ import { RetryQueue } from './retry-queue'
 import { ScrollManager } from './scroll-manager'
 import { SessionPropsManager } from './session-props'
 import { SessionIdManager } from './sessionid'
-import { localStore } from './storage'
+import { localStore, sessionStore } from './storage'
 import {
     CaptureLogOptions,
     CaptureOptions,
@@ -454,6 +454,9 @@ export class PostHog implements PostHogInterface {
     analyticsDefaultEndpoint: string
     version: string = Config.LIB_VERSION
     _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
+    // Keys registered via register_for_session — cleared when the PostHog session rotates
+    _sessionRegisteredPropKeys: Set<string> = new Set()
+    _sessionRegisteredPropertiesStorageKey: string = ''
     _cachedPersonProperties: string | null
 
     SentryIntegration: typeof SentryIntegration
@@ -711,6 +714,21 @@ export class PostHog implements PostHogInterface {
                 : // sessionStorage sibling shares the primary's storage name; it must not own/clean the split group entries
                   new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' }, persistenceDisabled, false)
 
+        const persistenceName = this.config.persistence_name || this.config.token
+        this._sessionRegisteredPropertiesStorageKey = 'ph_' + persistenceName + '_session_registered_properties'
+        if (this.config.persistence !== 'memory' && !persistenceDisabled && sessionStore._is_supported()) {
+            const sessionRegisteredPropKeys = sessionStore._parse(this._sessionRegisteredPropertiesStorageKey)
+            if (isArray(sessionRegisteredPropKeys)) {
+                sessionRegisteredPropKeys.forEach((key) => {
+                    if (isString(key)) {
+                        this._sessionRegisteredPropKeys.add(key)
+                    }
+                })
+            }
+        } else {
+            sessionStore._remove(this._sessionRegisteredPropertiesStorageKey)
+        }
+
         // should I store the initial person profiles config in persistence?
         const initialPersistenceProps = { ...this.persistence.props }
         const initialSessionProps = { ...this.sessionPersistence.props }
@@ -729,6 +747,17 @@ export class PostHog implements PostHogInterface {
         if (!startInCookielessMode) {
             this.sessionManager = new SessionIdManager(this)
             this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager, this.persistence)
+            // Clear user-registered session properties when the current PostHog session is replaced.
+            // Browser sessionStorage can outlive multiple PostHog sessions in the same tab.
+            this.sessionManager.onSessionId((_sessionId, _windowId, changeReason) => {
+                if (
+                    changeReason?.activityTimeout ||
+                    changeReason?.sessionPastMaximumLength ||
+                    changeReason?.crossTabAdoption
+                ) {
+                    this._clearSessionRegisteredProps()
+                }
+            })
         }
 
         // Conditionally defer extension initialization based on config
@@ -1897,6 +1926,8 @@ export class PostHog implements PostHogInterface {
      */
     register_for_session(properties: Properties): void {
         this.sessionPersistence?.register(properties)
+        Object.keys(properties).forEach((key) => this._sessionRegisteredPropKeys.add(key))
+        this._persistSessionRegisteredPropKeys()
     }
 
     /**
@@ -1943,10 +1974,43 @@ export class PostHog implements PostHogInterface {
      */
     unregister_for_session(property: string): void {
         this.sessionPersistence?.unregister(property)
+        this._sessionRegisteredPropKeys.delete(property)
+        this._persistSessionRegisteredPropKeys()
     }
 
     _register_single(prop: string, value: Property) {
         this.register({ [prop]: value })
+    }
+
+    _clearSessionRegisteredProps(): void {
+        this._sessionRegisteredPropKeys.forEach((property) => {
+            this.sessionPersistence?.unregister(property)
+        })
+        this._sessionRegisteredPropKeys.clear()
+        this._persistSessionRegisteredPropKeys()
+    }
+
+    _persistSessionRegisteredPropKeys(): void {
+        if (!this._sessionRegisteredPropertiesStorageKey) {
+            return
+        }
+
+        if (
+            this.config.persistence === 'memory' ||
+            this.sessionPersistence?._disabled ||
+            !sessionStore._is_supported()
+        ) {
+            sessionStore._remove(this._sessionRegisteredPropertiesStorageKey)
+            return
+        }
+
+        const registeredProperties: string[] = []
+        this._sessionRegisteredPropKeys.forEach((property) => registeredProperties.push(property))
+        if (registeredProperties.length > 0) {
+            sessionStore._set(this._sessionRegisteredPropertiesStorageKey, registeredProperties)
+        } else {
+            sessionStore._remove(this._sessionRegisteredPropertiesStorageKey)
+        }
     }
 
     /**
@@ -3110,6 +3174,8 @@ export class PostHog implements PostHogInterface {
 
         this.persistence?.clear()
         this.sessionPersistence?.clear()
+        this._sessionRegisteredPropKeys.clear()
+        this._persistSessionRegisteredPropKeys()
 
         if (!isUndefined(recordingRemoteConfig)) {
             this.persistence?.register({ [SESSION_RECORDING_REMOTE_CONFIG]: recordingRemoteConfig })
@@ -3956,6 +4022,10 @@ export class PostHog implements PostHogInterface {
         }
         if (this.sessionPersistence?._disabled !== persistenceDisabled) {
             this.sessionPersistence?.set_disabled(persistenceDisabled)
+        }
+        if (persistenceDisabled) {
+            this._sessionRegisteredPropKeys.clear()
+            this._persistSessionRegisteredPropKeys()
         }
         return persistenceDisabled
     }

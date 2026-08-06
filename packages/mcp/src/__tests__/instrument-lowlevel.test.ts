@@ -113,6 +113,9 @@ async function setupLowLevelServer(realToolName?: string) {
   }
 }
 
+/** Shaped like a handle we would have minted, so it is echoed rather than replaced. */
+const ANALYTICS_CONVERSATION = '019fd2b0-3333-7333-8333-333333333333'
+
 describe('Low-level Server reportMissing ownership (e2e)', () => {
   let eventCapture: EventCapture
 
@@ -263,8 +266,9 @@ describe('Low-level Server reportMissing ownership (e2e)', () => {
 
       expect(first.tools.filter((tool) => tool.name === 'get_more_tools')).toHaveLength(1)
       expect(second.tools.filter((tool) => tool.name === 'get_more_tools')).toHaveLength(1)
-      expect((firstVirtual as any)?.inputSchema?.properties?.conversation_id).toBeUndefined()
-      expect((secondVirtual as any)?.inputSchema?.properties?.conversation_id).toBeUndefined()
+      // get_more_tools now carries the parameter like any other tool.
+      expect((firstVirtual as any)?.inputSchema?.properties?.conversation_id).toBeDefined()
+      expect((secondVirtual as any)?.inputSchema?.properties?.conversation_id).toBeDefined()
       expect(frozenTools.some((tool) => tool.name === 'get_more_tools')).toBe(false)
     } finally {
       await cleanup()
@@ -526,7 +530,7 @@ describe('Low-level Server tracing (e2e)', () => {
           method: 'tools/call',
           params: {
             name: 'echo',
-            arguments: { context: 'analytics intent', conversation_id: 'analytics conversation', text: 'hi' },
+            arguments: { context: 'analytics intent', conversation_id: ANALYTICS_CONVERSATION, text: 'hi' },
           },
         },
         CallToolResultSchema
@@ -536,7 +540,7 @@ describe('Low-level Server tracing (e2e)', () => {
       await new Promise((resolve) => setTimeout(resolve, 50))
       const event = eventCapture.getEvents().find((candidate) => candidate.resourceName === 'echo')
       expect(event?.userIntent).toBe('analytics intent')
-      expect(event?.conversationId).toBe('analytics conversation')
+      expect(event?.conversationId).toBe(ANALYTICS_CONVERSATION)
     } finally {
       await cleanup()
     }
@@ -620,7 +624,7 @@ describe('Low-level Server tracing (e2e)', () => {
           method: 'tools/call',
           params: {
             name: 'page_one_analytics',
-            arguments: { context: 'analytics context', conversation_id: 'analytics conversation', value: 'kept' },
+            arguments: { context: 'analytics context', conversation_id: ANALYTICS_CONVERSATION, value: 'kept' },
           },
         },
         CallToolResultSchema
@@ -646,7 +650,7 @@ describe('Low-level Server tracing (e2e)', () => {
       await new Promise((resolve) => setTimeout(resolve, 50))
       const analyticsEvent = eventCapture.getEvents().find((event) => event.resourceName === 'page_one_analytics')
       expect(analyticsEvent?.userIntent).toBe('analytics context')
-      expect(analyticsEvent?.conversationId).toBe('analytics conversation')
+      expect(analyticsEvent?.conversationId).toBe(ANALYTICS_CONVERSATION)
       const ownedEvent = eventCapture.getEvents().find((event) => event.resourceName === 'page_two_owned')
       expect(ownedEvent?.userIntent).toBeUndefined()
       expect(ownedEvent?.conversationId).toBeUndefined()

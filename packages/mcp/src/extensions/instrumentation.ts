@@ -24,6 +24,7 @@ import {
   resolveConversationId,
 } from './conversation-id'
 import { stampMetaClientInfo } from './client-identity'
+import { addInstructionsToOutputSchemas, mirrorInstructionsIntoStructuredContent } from './output-instructions'
 import { captureEvent } from './capture'
 import { MCPAnalyticsEventType } from './event-types'
 import { captureException } from './exceptions'
@@ -106,14 +107,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     parameterOwnership,
     resolvedEventType === MCPAnalyticsEventType.mcpMissingCapability
   )
-  const conversation = resolveConversationId(
-    ownership.conversationId,
-    request.params?.arguments,
-    request.params?.name,
-    resolvedEventType === MCPAnalyticsEventType.mcpMissingCapability
-      ? resolveMissingCapabilityToolName(data.options)
-      : ''
-  )
+  const conversation = resolveConversationId(ownership.conversationId, request.params?.arguments)
   const downstreamRequest = cloneRequestWithoutOwnedAnalyticsArguments(request, ownership)
 
   // Prepare the event in isolation: if identity/metadata/intent resolution
@@ -142,7 +136,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     throw error
   }
 
-  const finalResult = applyConversationPromptBack(preparedEvent?.event ?? null, result, conversation)
+  const finalResult = applyConversationInstructions(preparedEvent?.event ?? null, result, conversation, ownership)
   publishSuccessfulToolEvent(server, preparedEvent, finalResult, startTime, data.logger, takeCapturedError)
   return finalResult
 }
@@ -158,11 +152,28 @@ function getActiveAnalyticsParameterOwnership(
   override: AnalyticsParameterOwnership | undefined,
   isMissingCapabilityTool: boolean
 ): AnalyticsParameterOwnership {
-  const ownership = override ?? (toolName ? data.toolAnalyticsParameterOwnership.get(toolName) : undefined)
+  const listed = toolName ? data.toolAnalyticsParameterOwnership.get(toolName) : undefined
+  const ownership = override ?? listed
   return {
     context: !isMissingCapabilityTool && isContextEnabled(data.options.context) && ownership?.context === true,
-    conversationId:
-      !isMissingCapabilityTool && data.options.enableConversationId === true && ownership?.conversationId === true,
+    conversationId: data.options.enableConversationId === true && ownership?.conversationId === true,
+    // Deliberately read off `listed`, never the override. This asks whether
+    // `tools/list` actually declared `_mcp_instructions`, and only the advertised
+    // JSON Schema can answer it — an override is built from the live registry,
+    // which on the high-level path holds Zod.
+    //
+    // The cache is per-instance, so this is not merely "before the first
+    // `tools/list`": an instance that never serves a listing never writes the
+    // mirror at all. That is the per-request server pattern — `tools/list` lands
+    // on one instance, `tools/call` on a cold one — where the handle falls back
+    // to the `content` block and a structuredContent-only client misses it.
+    //
+    // Failing closed is deliberate. Writing a key the advertised schema did not
+    // declare fails the *entire* tool result under `additionalProperties: false`,
+    // so guessing costs the caller their result, while not guessing costs us one
+    // delivery channel. The fix is a process-scoped ownership cache, so a listing
+    // served by any instance answers for the rest — not a per-call guess.
+    outputInstructions: data.options.enableConversationId === true && listed?.outputInstructions === true,
   }
 }
 
@@ -196,11 +207,19 @@ async function prepareToolCallEvent(
   eventType: MCPAnalyticsEventType
 ): Promise<PreparedToolEvent | null> {
   try {
-    const sessionId = getSessionId(server, extra)
+    const sessionId = getSessionId(server, extra, conversation.conversationId)
     // Snapshot token/client/protocol metadata synchronously, before identify or
     // metadata callbacks can yield and let another request replace shared state.
     const sessionInfo = getSessionInfo(server, data, sessionId)
-    const identity = await handleIdentify(server, data, sessionId, request, sessionInfo, extra)
+    const identity = await handleIdentify(
+      server,
+      data,
+      sessionId,
+      request,
+      sessionInfo,
+      extra,
+      !!conversation.conversationId
+    )
     const requestAttribution = withIdentity(sessionInfo, identity)
 
     const toolName = request.params?.name
@@ -231,25 +250,51 @@ async function prepareToolCallEvent(
 }
 
 /**
- * When we minted a conversation id, append the prompt-back so the agent echoes
- * it on subsequent calls. If the result can't carry it, clear the id off the
- * event so analytics doesn't show an orphan the agent never received.
+ * Delivers the conversation session handle back to the agent, over both channels a tool
+ * result has:
+ *
+ * - `structuredContent`, on *every* response for a tool whose output schema we
+ *   declared the key on. Clients that read structured results never see the text
+ *   block, and re-sending it each time lets an agent that dropped the session handle read
+ *   it back.
+ * - `content`, as a text block, only on the response that minted the session handle.
+ *   Repeating it every call would put a `[SERVER]:` line in front of the user on
+ *   every single tool result.
+ *
+ * If neither channel could carry a session handle we minted, the agent never received it,
+ * so clear it off the event rather than showing analytics an id nobody has.
  */
-function applyConversationPromptBack(
+function applyConversationInstructions(
   event: McpEvent | null,
   result: unknown,
-  conversation: ConversationIdResolution
+  conversation: ConversationIdResolution,
+  ownership: AnalyticsParameterOwnership
 ): unknown {
-  if (!conversation.minted) {
+  const conversationId = conversation.conversationId
+  if (!conversationId) {
     return result
   }
-  if (canInjectConversationIdPromptBack(result)) {
-    return injectConversationIdPromptBack(result, conversation.conversationId)
+
+  let updated = result
+  let delivered = false
+
+  if (ownership.outputInstructions) {
+    const mirrored = mirrorInstructionsIntoStructuredContent(updated, conversationId)
+    delivered = mirrored !== updated
+    updated = mirrored
   }
-  if (event) {
+
+  if (conversation.minted && canInjectConversationIdPromptBack(updated)) {
+    updated = injectConversationIdPromptBack(updated, conversationId)
+    delivered = true
+  }
+
+  // Only a minted session handle can be lost this way — one the agent supplied, it has.
+  if (!delivered && conversation.minted && event) {
     event.conversationId = undefined
   }
-  return result
+
+  return updated
 }
 
 function publishSuccessfulToolEvent(
@@ -478,7 +523,7 @@ function cacheToolAnalyticsParameterOwnership(
   // Merge pages and concurrent enumerations; repeated tool names overwrite stale schemas.
   for (const tool of tools) {
     if (tool?.name) {
-      cache.set(tool.name, getAnalyticsParameterOwnership(tool.inputSchema))
+      cache.set(tool.name, getAnalyticsParameterOwnership(tool.inputSchema, tool.outputSchema))
     }
   }
 }
@@ -515,7 +560,6 @@ async function getTracedToolsList(
 
     if (data) {
       const missingToolName = resolveMissingCapabilityToolName(data.options)
-      let injectedMissingCapabilityTool = false
       if (data.options.reportMissing) {
         const alreadyPresent = tools.some((tool) => tool?.name === missingToolName)
         if (alreadyPresent) {
@@ -523,13 +567,17 @@ async function getTracedToolsList(
             `Warning: Cannot inject missing-capability tool "${missingToolName}" because a real tool already uses that name. The real tool will not be intercepted.`
           )
         } else {
-          tools.push(getReportMissingToolDescriptor(missingToolName))
-          injectedMissingCapabilityTool = true
+          const virtualTool = getReportMissingToolDescriptor(missingToolName)
+          tools.push(virtualTool)
+          // Cached separately because the virtual tool is added after the listing
+          // was cached, and its calls need ownership like any other tool's.
+          cacheToolAnalyticsParameterOwnership(data.toolAnalyticsParameterOwnership, [virtualTool])
         }
       }
 
       if (data.options.enableConversationId) {
-        tools = addConversationIdToTools(tools, missingToolName, injectedMissingCapabilityTool, data.logger)
+        tools = addConversationIdToTools(tools, data.logger)
+        tools = addInstructionsToOutputSchemas(tools, data.logger)
       }
     }
 

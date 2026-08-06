@@ -50,6 +50,14 @@ export interface V1CaptureSenderHooks {
   compress?: (payload: string, isDebug?: boolean) => Promise<Blob | null>
 }
 
+interface V1CaptureAttempt {
+  response: PostHogFetchResponse
+  signal: AbortSignal
+  waitFor<T>(operation: Promise<T>): Promise<T>
+  cancelBody: () => Promise<void>
+  cleanup: () => void
+}
+
 /**
  * Sends already-normalized events to the Capture V1 endpoint
  * (`POST /i/v1/analytics/events`), owning the full attempt loop: per-event
@@ -111,65 +119,73 @@ export class V1CaptureSender {
         batch: pending,
       })
 
-      let response: PostHogFetchResponse
+      let captureAttempt: V1CaptureAttempt | undefined
+      let retryDelayMs: number | undefined
       try {
-        response = await this.sendOnce(url, payload, attempt, requestId)
+        captureAttempt = await this.sendOnce(url, payload, attempt, requestId)
+        const { response, signal } = captureAttempt
+        const { status } = response
+        if (status < 200 || status >= 300) {
+          if (!isLastAttempt && RETRYABLE_STATUSES.has(status)) {
+            const retryAfterMs = this.parseRetryAfter(response)
+            await captureAttempt.waitFor(captureAttempt.cancelBody()).catch(() => {})
+            retryDelayMs = this.backoffDelay(attempt, retryAfterMs)
+          } else {
+            const httpError = await this.buildHttpError(response, status, captureAttempt.waitFor)
+            return this.surfaceBatchFailure(requestId, drops, pending, httpError)
+          }
+        } else {
+          let parsed: V1BatchResponse
+          try {
+            parsed = await captureAttempt.waitFor(this.parseResponse(response))
+          } catch (error) {
+            if (signal.aborted) {
+              throw error
+            }
+            // A 2xx we cannot parse is terminal — re-sending against a broken success would loop forever.
+            return this.surfaceBatchFailure(
+              requestId,
+              drops,
+              pending,
+              new Error(`Capture V1 returned an unparseable ${status} response body`)
+            )
+          }
+
+          const retryable = this.classify(pending, parsed, drops)
+          if (retryable.length === 0) {
+            return this.surfacePartialDrops(requestId, drops)
+          }
+          if (isLastAttempt) {
+            this.onError(new CaptureV1Error({ requestId, drops, retryExhausted: retryable.map((event) => event.uuid) }))
+            return
+          }
+          pending = retryable
+          // A 200 partial-retry body can also carry Retry-After (e.g. rate-limited
+          // retry events); honor it as a minimum the same way as on a retryable status.
+          const retryAfterMs = this.parseRetryAfter(response)
+          retryDelayMs = this.backoffDelay(attempt, retryAfterMs)
+        }
       } catch (transportError) {
-        // Connection/timeout with no HTTP response: retry until the budget runs out.
+        if (captureAttempt && !captureAttempt.signal.aborted) {
+          throw transportError
+        }
+        // Connection/timeouts, including a timeout while consuming the response body,
+        // are retried until the budget runs out.
         if (isLastAttempt) {
           return this.surfaceBatchFailure(requestId, drops, pending, transportError)
         }
-        await this.sleep(this.backoffDelay(attempt))
-        continue
+        retryDelayMs = this.backoffDelay(attempt)
+      } finally {
+        captureAttempt?.cleanup()
       }
 
-      const { status } = response
-      if (status < 200 || status >= 300) {
-        if (!isLastAttempt && RETRYABLE_STATUSES.has(status)) {
-          const retryAfterMs = this.parseRetryAfter(response)
-          await this.cancelBody(response)
-          await this.sleep(this.backoffDelay(attempt, retryAfterMs))
-          continue
-        }
-        const httpError = await this.buildHttpError(response, status)
-        return this.surfaceBatchFailure(requestId, drops, pending, httpError)
+      if (retryDelayMs !== undefined) {
+        await this.sleep(retryDelayMs)
       }
-
-      let parsed: V1BatchResponse
-      try {
-        parsed = await this.parseResponse(response)
-      } catch {
-        // A 2xx we cannot parse is terminal — re-sending against a broken success would loop forever.
-        return this.surfaceBatchFailure(
-          requestId,
-          drops,
-          pending,
-          new Error(`Capture V1 returned an unparseable ${status} response body`)
-        )
-      }
-
-      const retryable = this.classify(pending, parsed, drops)
-      if (retryable.length === 0) {
-        return this.surfacePartialDrops(requestId, drops)
-      }
-      if (isLastAttempt) {
-        this.onError(new CaptureV1Error({ requestId, drops, retryExhausted: retryable.map((event) => event.uuid) }))
-        return
-      }
-      pending = retryable
-      // A 200 partial-retry body can also carry Retry-After (e.g. rate-limited
-      // retry events); honor it as a minimum the same way as on a retryable status.
-      const retryAfterMs = this.parseRetryAfter(response)
-      await this.sleep(this.backoffDelay(attempt, retryAfterMs))
     }
   }
 
-  private async sendOnce(
-    url: string,
-    payload: string,
-    attempt: number,
-    requestId: string
-  ): Promise<PostHogFetchResponse> {
+  private async sendOnce(url: string, payload: string, attempt: number, requestId: string): Promise<V1CaptureAttempt> {
     const headers = this.buildHeaders(attempt, requestId)
     let body: string | Blob = payload
     if (this.config.compressionEnabled) {
@@ -182,11 +198,62 @@ export class V1CaptureSender {
     }
 
     const controller = new AbortController()
-    const timer = safeSetTimeout(() => controller.abort(), this.config.requestTimeoutMs)
+    let timeoutPhase = 'waiting for response headers'
+    let timer: ReturnType<typeof safeSetTimeout>
+    // hooks.fetch is user-injectable, so it may ignore an abort signal while
+    // resolving headers or reading the body. Race both phases against the same
+    // deadline rather than relying only on standards-compliant fetch behavior.
+    const deadline = new Promise<never>((_resolve, reject) => {
+      timer = safeSetTimeout(() => {
+        const timeoutError = new Error(
+          `Capture V1 request timed out ${timeoutPhase} after ${this.config.requestTimeoutMs}ms`
+        )
+        timeoutError.name = 'AbortError'
+        // Reject first so this phase-specific error wins even when an abort-aware
+        // custom fetch rejects synchronously from the abort event.
+        reject(timeoutError)
+        controller.abort(timeoutError)
+      }, this.config.requestTimeoutMs)
+    })
     try {
-      return await this.fetchFn(url, { method: 'POST', headers, body, signal: controller.signal })
-    } finally {
+      const fetchPromise = this.fetchFn(url, { method: 'POST', headers, body, signal: controller.signal })
+      let responseAccepted = false
+      void fetchPromise
+        .then((lateResponse) => {
+          if (controller.signal.aborted && !responseAccepted) {
+            // An injected fetch may ignore abort and resolve after the deadline.
+            // Cancel its otherwise unreachable body to release any held resources.
+            void this.cancelBody(lateResponse)
+          }
+        })
+        .catch(() => {})
+      const response = await Promise.race([fetchPromise, deadline])
+      responseAccepted = true
+      timeoutPhase = 'while reading the response body'
+      let cleanedUp = false
+      let cancellation: Promise<void> | undefined
+      const cancelBody = (): Promise<void> => (cancellation ??= this.cancelBody(response))
+      return {
+        response,
+        signal: controller.signal,
+        waitFor: <T>(operation: Promise<T>) => Promise.race([operation, deadline]),
+        cancelBody,
+        cleanup: () => {
+          if (cleanedUp) {
+            return
+          }
+          cleanedUp = true
+          clearTimeout(timer)
+          if (controller.signal.aborted) {
+            // The attempt deadline has already elapsed, so cleanup cannot wait
+            // for a custom response body's cancellation promise to settle.
+            void cancelBody()
+          }
+        },
+      }
+    } catch (error) {
       clearTimeout(timer)
+      throw error
     }
   }
 
@@ -271,12 +338,16 @@ export class V1CaptureSender {
     return { results: (results as V1BatchResponse['results']) ?? {} }
   }
 
-  private async buildHttpError(response: PostHogFetchResponse, status: number): Promise<Error> {
+  private async buildHttpError(
+    response: PostHogFetchResponse,
+    status: number,
+    waitFor: V1CaptureAttempt['waitFor']
+  ): Promise<Error> {
     let bodyText = ''
     try {
-      bodyText = (await response.text()).slice(0, 512)
+      bodyText = (await waitFor(response.text())).slice(0, 512)
     } catch {
-      // best-effort; a missing body should not mask the status
+      // best-effort; a missing or timed-out body should not mask the status
     }
     const suffix = bodyText ? `: ${bodyText}` : ''
     return new Error(`Capture V1 request failed with HTTP ${status}${suffix}`)
@@ -293,6 +364,10 @@ export class V1CaptureSender {
   }
 
   private async cancelBody(response: PostHogFetchResponse): Promise<void> {
-    await response.body?.cancel()?.catch(() => {})
+    try {
+      await response.body?.cancel()
+    } catch {
+      // Cancellation is best-effort and must never mask delivery handling.
+    }
   }
 }

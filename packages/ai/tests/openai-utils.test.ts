@@ -1,4 +1,9 @@
-import { extractRequestId, buildProviderMetadata, getResponseFailure } from '../src/openai/utils'
+import {
+  extractRequestId,
+  extractCacheWriteTokens,
+  buildProviderMetadata,
+  getResponseFailure,
+} from '../src/openai/utils'
 
 describe('extractRequestId', () => {
   it.each<[name: string, input: unknown, expected: string | undefined]>([
@@ -11,6 +16,20 @@ describe('extractRequestId', () => {
     ['returns undefined for numeric input', 42, undefined],
   ])('%s', (_name, input, expected) => {
     expect(extractRequestId(input)).toBe(expected)
+  })
+})
+
+describe('extractCacheWriteTokens', () => {
+  it.each<[name: string, input: unknown, expected: number]>([
+    ['reads `cache_write_tokens` when present', { cache_write_tokens: 3820 }, 3820],
+    ['returns 0 when `cache_write_tokens` is absent', { cached_tokens: 5 }, 0],
+    ['returns 0 when `cache_write_tokens` is null', { cache_write_tokens: null }, 0],
+    ['returns 0 for null input', null, 0],
+    ['returns 0 for undefined input', undefined, 0],
+    ['returns 0 for string input', 'not-an-object', 0],
+    ['returns 0 for numeric input', 42, 0],
+  ])('%s', (_name, input, expected) => {
+    expect(extractCacheWriteTokens(input)).toBe(expected)
   })
 })
 

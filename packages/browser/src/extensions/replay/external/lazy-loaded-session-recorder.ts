@@ -512,6 +512,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _slowestFullSnapshot: SnapshotCost | undefined
     // only warn once per recorder instance that client-side masking is shadowing the project setting
     private _hasWarnedClientMaskingOverride = false
+    // only warn once per recorder instance that maskAttributeFn is ignored
+    private _hasWarnedExclusiveAttributeMasking = false
     private _maskRegionsFnFailed = false
     // only log once per recorder instance so a repeatedly-throwing callback doesn't flood the console
     private _hasLoggedRecorderCallbackError = false
@@ -2386,6 +2388,20 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             sessionRecordingOptions.maskTextSelector = this._masking.maskTextSelector ?? undefined
             sessionRecordingOptions.blockSelector = this._masking.blockSelector ?? undefined
             sessionRecordingOptions.maskAllElementAttributes = this._masking.maskAllElementAttributes ?? false
+        }
+
+        if (sessionRecordingOptions.maskAllElementAttributes && sessionRecordingOptions.maskAttributeFn) {
+            // mutually exclusive, and the coarse option fails closed so a callback
+            // cannot accidentally unmask what it hides
+            sessionRecordingOptions.maskAttributeFn = undefined
+            if (!this._hasWarnedExclusiveAttributeMasking) {
+                this._hasWarnedExclusiveAttributeMasking = true
+                logger.warn(
+                    '`maskAllElementAttributes` and `maskAttributeFn` are mutually exclusive, and `maskAttributeFn` is being ignored. ' +
+                        'Remove one of the two. Note that `maskAllElementAttributes` can also come from your project\'s "Privacy and masking" settings. ' +
+                        'See https://posthog.com/docs/session-replay/privacy'
+                )
+            }
         }
 
         this._warnIfClientMaskingShadowsServer()

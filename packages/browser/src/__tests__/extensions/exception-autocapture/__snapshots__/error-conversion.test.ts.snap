@@ -1,0 +1,35 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Error conversion should use cause when it is an error 1`] = `
+{
+  "$exception_level": "error",
+  "$exception_list": [
+    {
+      "mechanism": {
+        "handled": true,
+        "synthetic": false,
+        "type": "generic",
+      },
+      "stacktrace": {
+        "frames": "<normalized stack frames>",
+        "type": "raw",
+      },
+      "type": "Error",
+      "value": "my error",
+    },
+    {
+      "mechanism": {
+        "handled": true,
+        "synthetic": false,
+        "type": "generic",
+      },
+      "stacktrace": {
+        "frames": "<normalized stack frames>",
+        "type": "raw",
+      },
+      "type": "CustomError",
+      "value": "my original error",
+    },
+  ],
+}
+`;

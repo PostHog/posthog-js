@@ -11,7 +11,6 @@ import {
 } from './analytics-parameters'
 import { DEFAULT_CONVERSATION_ID_DESCRIPTION } from './constants'
 import { log, type LoggerFn } from './logger'
-import { GET_MORE_TOOLS_NAME } from './tools'
 
 export const CONVERSATION_ID_PARAM_NAME = 'conversation_id'
 
@@ -70,19 +69,24 @@ export function addConversationIdToTool<TTool extends ConversationIdInjectableTo
   return modifiedTool
 }
 
+/**
+ * Injects `conversation_id` across a tool listing, including the virtual
+ * `get_more_tools` tool. Its calls publish `$mcp_missing_capability`, and a
+ * capability gap is only meaningful next to the work that hit it — so it belongs
+ * in the same session as the surrounding tool calls.
+ */
 export function addConversationIdToTools<TTool extends ConversationIdInjectableTool>(
   tools: TTool[],
-  missingCapabilityToolName: string = GET_MORE_TOOLS_NAME,
-  skipMissingCapabilityTool = true,
   logger: LoggerFn = log
 ): TTool[] {
-  return tools.map((tool) => {
-    if (skipMissingCapabilityTool && tool.name === missingCapabilityToolName) {
-      return tool
-    }
-    return addConversationIdToTool(tool, logger)
-  })
+  return tools.map((tool) => addConversationIdToTool(tool, logger))
 }
+
+/**
+ * The shape of every id we mint: a uuidv7. Used to tell an echo of our own handle
+ * from a value the agent made up.
+ */
+const MINTED_CONVERSATION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export type ConversationIdResolution =
   | { minted: false; conversationId: string | undefined }
@@ -90,40 +94,58 @@ export type ConversationIdResolution =
 
 /**
  * Decides which conversation_id to use for a tool call:
- *   - disabled or get_more_tools → none
- *   - agent supplied a value → use it
- *   - agent omitted → mint a UUID
+ *   - disabled → none
+ *   - agent echoed a handle we could have minted → use it
+ *   - anything else → mint a fresh one
+ *
+ * The shape check matters because this value becomes `$session_id`, and the
+ * derivation is deterministic so that two pods agree — which also means two
+ * *callers* sending the same string land in the same session. The strings agents
+ * invent are not random (`conv-1`, `1`, `session`), so trusting them verbatim
+ * would silently merge unrelated conversations, potentially across users.
+ *
+ * A compliant agent echoes the uuidv7 we minted and is unaffected. Anything else
+ * is treated exactly as if the handle were absent: mint, and prompt back. Shape
+ * rather than a registry of issued ids, because a per-request server has no
+ * memory of what it minted.
+ *
+ * This narrows the problem, it does not prove provenance: a caller supplying a
+ * well-formed uuidv7 is trusted, so two that pick the *same* one still merge. That
+ * residue is far smaller than the case it replaces — an agent ignoring the
+ * parameter description reaches for `conv-1` or `1`, not a conforming uuidv7 — and
+ * closing it needs a signed handle, i.e. a secret shared by every pod. Worth doing
+ * if this ever anchors something security-bearing; `$session_id` is an analytics
+ * grouping key, so it does not today.
  */
-export function resolveConversationId(
-  enabled: boolean,
-  args: unknown,
-  toolName: string | undefined,
-  missingCapabilityToolName: string = GET_MORE_TOOLS_NAME
-): ConversationIdResolution {
-  if (!enabled || toolName === missingCapabilityToolName) {
+export function resolveConversationId(enabled: boolean, args: unknown): ConversationIdResolution {
+  if (!enabled) {
     return { minted: false, conversationId: undefined }
   }
   const supplied = extractConversationId(args)
-  if (supplied) {
-    return { minted: false, conversationId: supplied }
+  if (supplied && MINTED_CONVERSATION_ID.test(supplied)) {
+    // Lowercased because the shape test is case-insensitive but the hash behind
+    // `$session_id` is not. Some hosts normalise uuids to uppercase, and an
+    // uppercased echo of our own handle would otherwise clear the gate and then
+    // land in a different session than the call that minted it.
+    return { minted: false, conversationId: supplied.toLowerCase() }
   }
   return { minted: true, conversationId: uuidv7() }
 }
 
 /**
- * Predicate matching the same eligibility checks injectConversationIdPromptBack uses,
- * exposed so callers can pre-decide whether the prompt-back will actually land
- * (and clear event.conversationId if not, to avoid orphan ids in analytics).
+ * Whether the prompt-back can ride this result's `content`. The only requirement
+ * is an array to append to.
+ *
+ * Errored results included on purpose. A tool that fails on the first call of a
+ * conversation is exactly when the agent needs the session handle: without it the
+ * retry starts a fresh conversation, so the failure and its fix land in different
+ * sessions.
  */
 export function canInjectConversationIdPromptBack(result: unknown): boolean {
   if (!(result && typeof result === 'object')) {
     return false
   }
-  const resultObj = result as { content?: unknown; isError?: unknown }
-  if (resultObj.isError === true) {
-    return false
-  }
-  return Array.isArray(resultObj.content)
+  return Array.isArray((result as { content?: unknown }).content)
 }
 
 export function extractConversationId(args: unknown): string | undefined {
