@@ -8,6 +8,15 @@
  * client identity — any pod can read them back from the header alone.
  *
  * The token is unsigned: it holds only what the client already self-reports.
+ *
+ * Legacy-era only, and permanently so. The 2026-07-28 revision removes
+ * protocol-level sessions: there is no `initialize` to mint at, and a server on
+ * that revision must "ignore [an `Mcp-Session-Id` header], and do not mint or
+ * echo session IDs". Modern-era identity rides `_meta` on every request instead
+ * (see `client-identity.ts`), and cross-call state is the agent-carried
+ * `conversation_id` handle. Everything here exists to serve 2025-era traffic,
+ * which the SDK v2 `legacy` era still accepts — the mint stays gated behind
+ * `initialize`, so it cannot fire on a modern request.
  */
 
 import type { CompatibleRequestHandlerExtra } from '../types'

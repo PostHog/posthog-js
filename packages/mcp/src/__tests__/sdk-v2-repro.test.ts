@@ -160,3 +160,61 @@ describe('MCP SDK v2 stateless HTTP — request headers (#4449)', () => {
     expect(toolCall?.properties.$mcp_client_version).toBe('4.5.0')
   })
 })
+
+/**
+ * The 2026-07-28 revision removes protocol-level sessions outright: no
+ * `initialize` handshake, and servers on that revision "ignore [an
+ * `Mcp-Session-Id` header], and do not mint or echo session IDs". Identity
+ * instead rides `_meta` on every request.
+ *
+ * So the session-token machinery must stay strictly legacy-era, and reading
+ * headers on v2 must not have quietly made it reachable on modern traffic.
+ */
+describe('MCP SDK v2 — 2026-07-28 modern era', () => {
+  let eventCapture: EventCapture
+
+  beforeEach(async () => {
+    eventCapture = new EventCapture()
+    await eventCapture.start()
+  })
+
+  afterEach(async () => {
+    await eventCapture.stop()
+  })
+
+  const MODERN_META = {
+    'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+    'io.modelcontextprotocol/clientCapabilities': {},
+    'io.modelcontextprotocol/clientInfo': { name: 'modern-client', version: '7.0.0' },
+  }
+
+  const postModernToolCall = () => {
+    const post = serveV2Http(() => {
+      const server = new Server({ name: 'modern', version: '1.0.0' }, { capabilities: { tools: {} } })
+      instrument(server as never, fakePostHog())
+      server.setRequestHandler('tools/list', (async () => ({ tools: TOOLS })) as never)
+      server.setRequestHandler('tools/call', (async () => ({ content: [{ type: 'text', text: 'ok' }] })) as never)
+      return server
+    })
+    return post(
+      { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'plan', arguments: {}, _meta: MODERN_META } },
+      { 'Mcp-Method': 'tools/call', 'Mcp-Name': 'plan' }
+    )
+  }
+
+  it('never mints a session id header on a revision that removed them', async () => {
+    const response = await postModernToolCall()
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('mcp-session-id')).toBeNull()
+  })
+
+  it('takes client identity from the per-request _meta envelope instead', async () => {
+    await postModernToolCall()
+
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    const toolCall = eventCapture.findCapturesByEvent('$mcp_tool_call')[0]
+    expect(toolCall?.properties.$mcp_client_name).toBe('modern-client')
+    expect(toolCall?.properties.$mcp_client_version).toBe('7.0.0')
+  })
+})
