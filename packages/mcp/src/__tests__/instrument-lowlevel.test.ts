@@ -263,8 +263,9 @@ describe('Low-level Server reportMissing ownership (e2e)', () => {
 
       expect(first.tools.filter((tool) => tool.name === 'get_more_tools')).toHaveLength(1)
       expect(second.tools.filter((tool) => tool.name === 'get_more_tools')).toHaveLength(1)
-      expect((firstVirtual as any)?.inputSchema?.properties?.conversation_id).toBeUndefined()
-      expect((secondVirtual as any)?.inputSchema?.properties?.conversation_id).toBeUndefined()
+      // get_more_tools now carries the parameter like any other tool.
+      expect((firstVirtual as any)?.inputSchema?.properties?.conversation_id).toBeDefined()
+      expect((secondVirtual as any)?.inputSchema?.properties?.conversation_id).toBeDefined()
       expect(frozenTools.some((tool) => tool.name === 'get_more_tools')).toBe(false)
     } finally {
       await cleanup()

@@ -107,14 +107,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     parameterOwnership,
     resolvedEventType === MCPAnalyticsEventType.mcpMissingCapability
   )
-  const conversation = resolveConversationId(
-    ownership.conversationId,
-    request.params?.arguments,
-    request.params?.name,
-    resolvedEventType === MCPAnalyticsEventType.mcpMissingCapability
-      ? resolveMissingCapabilityToolName(data.options)
-      : ''
-  )
+  const conversation = resolveConversationId(ownership.conversationId, request.params?.arguments)
   const downstreamRequest = cloneRequestWithoutOwnedAnalyticsArguments(request, ownership)
 
   // Prepare the event in isolation: if identity/metadata/intent resolution
@@ -163,8 +156,7 @@ function getActiveAnalyticsParameterOwnership(
   const ownership = override ?? listed
   return {
     context: !isMissingCapabilityTool && isContextEnabled(data.options.context) && ownership?.context === true,
-    conversationId:
-      !isMissingCapabilityTool && data.options.enableConversationId === true && ownership?.conversationId === true,
+    conversationId: data.options.enableConversationId === true && ownership?.conversationId === true,
     // Deliberately read off `listed`, never the override. This asks whether
     // `tools/list` actually declared `_mcp_instructions`, and only the advertised
     // JSON Schema can answer it — an override is built from the live registry,
@@ -181,8 +173,7 @@ function getActiveAnalyticsParameterOwnership(
     // so guessing costs the caller their result, while not guessing costs us one
     // delivery channel. The fix is a process-scoped ownership cache, so a listing
     // served by any instance answers for the rest — not a per-call guess.
-    outputInstructions:
-      !isMissingCapabilityTool && data.options.enableConversationId === true && listed?.outputInstructions === true,
+    outputInstructions: data.options.enableConversationId === true && listed?.outputInstructions === true,
   }
 }
 
@@ -561,7 +552,6 @@ async function getTracedToolsList(
 
     if (data) {
       const missingToolName = resolveMissingCapabilityToolName(data.options)
-      let injectedMissingCapabilityTool = false
       if (data.options.reportMissing) {
         const alreadyPresent = tools.some((tool) => tool?.name === missingToolName)
         if (alreadyPresent) {
@@ -569,15 +559,16 @@ async function getTracedToolsList(
             `Warning: Cannot inject missing-capability tool "${missingToolName}" because a real tool already uses that name. The real tool will not be intercepted.`
           )
         } else {
-          tools.push(getReportMissingToolDescriptor(missingToolName))
-          injectedMissingCapabilityTool = true
+          const virtualTool = getReportMissingToolDescriptor(missingToolName)
+          tools.push(virtualTool)
+          // Cached separately because the virtual tool is added after the listing
+          // was cached, and its calls need ownership like any other tool's.
+          cacheToolAnalyticsParameterOwnership(data.toolAnalyticsParameterOwnership, [virtualTool])
         }
       }
 
       if (data.options.enableConversationId) {
-        tools = addConversationIdToTools(tools, missingToolName, injectedMissingCapabilityTool, data.logger)
-        // Declares the key a later change will write into `structuredContent`.
-        // Inert on its own — nothing populates it yet.
+        tools = addConversationIdToTools(tools, data.logger)
         tools = addInstructionsToOutputSchemas(tools, data.logger)
       }
     }
