@@ -397,3 +397,19 @@ export interface SendMessagePayload {
      */
     identity_hash?: string
 }
+
+// Discrete causes behind `posthog.conversations.isAvailable()` being false, so a caller that falls
+// back to another channel can record the specific cause instead of collapsing every case into
+// "unavailable". Lives here rather than beside the class so consumers can import the name: the
+// entry points re-export this module, not the extension.
+export type ConversationsUnavailableReason =
+    | 'disabled_by_config'
+    | 'consent_opted_out'
+    | 'disabled_for_toolbar'
+    | 'remote_config_pending'
+    | 'disabled_in_project'
+    | 'missing_token'
+    | 'extensions_unavailable'
+    | 'load_failed'
+    | 'initializing'
+    | 'not_loaded'

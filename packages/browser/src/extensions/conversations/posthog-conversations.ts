@@ -16,25 +16,16 @@ import { assignableWindow, LazyLoadedConversationsInterface } from '../../utils/
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { isNullish, isUndefined, isBoolean, isNull } from '@posthog/core'
 import { isToolbarInstance } from '@posthog/browser-common/utils/general-utils'
+
+import type { ConversationsUnavailableReason } from '../../posthog-conversations-types'
+
+export type { ConversationsUnavailableReason }
 import { Extension } from '../types'
 
 const logger = createLogger('[Conversations]')
 const NOT_AVAILABLE = 'Conversations not available yet.'
 
 export type ConversationsManager = LazyLoadedConversationsInterface
-
-// Discrete causes behind isAvailable() being false, so callers that fall back to another
-// channel can record the specific cause instead of collapsing every case into "unavailable".
-export type ConversationsUnavailableReason =
-    | 'disabled_by_config'
-    | 'consent_opted_out'
-    | 'remote_config_pending'
-    | 'disabled_in_project'
-    | 'missing_token'
-    | 'extensions_unavailable'
-    | 'load_failed'
-    | 'initializing'
-    | 'not_loaded'
 
 export class PostHogConversations implements Extension {
     // This is set to undefined until the remote config is loaded
@@ -46,7 +37,9 @@ export class PostHogConversations implements Extension {
     private _remoteConfig: ConversationsRemoteConfig | null = null
     // Set when the lazy bundle fails to load or init (blocked, network, CSP, init throw); cleared on
     // successful load. Distinguishes a load failure from "still initializing" in getUnavailableReason().
-    private _lastLoadError: string | null = null
+    // A boolean rather than the message: only the fact of failure is read, and this class lands in the
+    // non-lazy bundle. The message is already logged at the point of failure.
+    private _loadFailed: boolean = false
 
     constructor(private _instance: PostHog) {}
 
@@ -91,7 +84,7 @@ export class PostHogConversations implements Extension {
         // Reset local state
         this._isConversationsEnabled = undefined
         this._remoteConfig = null
-        this._lastLoadError = null
+        this._loadFailed = false
     }
 
     loadIfEnabled() {
@@ -183,7 +176,7 @@ export class PostHogConversations implements Extension {
         try {
             // Pass config and PostHog instance to the extension
             this._conversationsManager = initConversationsFn(this._remoteConfig, this._instance)
-            this._lastLoadError = null
+            this._loadFailed = false
             logger.info('Conversations loaded successfully')
         } catch (e) {
             this._handleLoadError('Error completing conversations initialization', e)
@@ -195,7 +188,7 @@ export class PostHogConversations implements Extension {
         logger.error(message, error)
         this._conversationsManager = null
         this._isInitializing = false
-        this._lastLoadError = message
+        this._loadFailed = true
     }
 
     /**
@@ -240,9 +233,17 @@ export class PostHogConversations implements Extension {
         if (this._instance.config.disable_conversations) {
             return 'disabled_by_config'
         }
+        // Mirrors loadIfEnabled's toolbar bail: the toolbar's internal instance never owns the
+        // conversations manager, so its unavailability is deliberate rather than a failure.
+        if (isToolbarInstance(this._instance.config)) {
+            return 'disabled_for_toolbar'
+        }
         if (this._instance.config.cookieless_mode && this._instance.consent.isOptedOut()) {
             return 'consent_opted_out'
         }
+        // Deliberately diverges from loadIfEnabled, which checks __PosthogExtensions__ before remote
+        // config. Until remote config arrives we do not know conversations was ever meant to load, so
+        // reporting a missing extension bundle then would read as an ad blocker during normal startup.
         if (isUndefined(this._isConversationsEnabled)) {
             return 'remote_config_pending'
         }
@@ -255,7 +256,7 @@ export class PostHogConversations implements Extension {
         if (!assignableWindow?.__PosthogExtensions__) {
             return 'extensions_unavailable'
         }
-        if (this._lastLoadError) {
+        if (this._loadFailed) {
             return 'load_failed'
         }
         if (this._isInitializing) {

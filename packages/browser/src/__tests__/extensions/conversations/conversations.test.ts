@@ -186,6 +186,18 @@ describe('PostHogConversations', () => {
             expect(conversations.getUnavailableReason()).toBe('extensions_unavailable')
         })
 
+        // The toolbar's internal instance is deliberately never given the conversations manager, so
+        // reporting it as not_loaded would send someone hunting for a load failure that never happened.
+        it('returns disabled_for_toolbar for the toolbar internal instance', () => {
+            // Literal because TOOLBAR_INTERNAL_INSTANCE_NAME is private to general-utils. If it ever
+            // changes, isToolbarInstance stops matching and this test fails rather than going quiet.
+            mockPostHog.config.name = 'ph_toolbar_internal'
+            conversations.onRemoteConfig({ ok: true, config: validRemoteConfig as RemoteConfig })
+
+            expect(conversations.isAvailable()).toBe(false)
+            expect(conversations.getUnavailableReason()).toBe('disabled_for_toolbar')
+        })
+
         it('returns load_failed when the lazy bundle fails to load', () => {
             assignableWindow.__PosthogExtensions__!.loadExternalDependency = jest.fn((_instance, _path, callback) => {
                 callback(new Error('blocked'))
