@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.10.6
+
+### Patch Changes
+
+- [#4356](https://github.com/PostHog/posthog-js/pull/4356) [`1eab19a`](https://github.com/PostHog/posthog-js/commit/1eab19a7b80ed275059cb17d9b513e8fbac6d94e) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve real missing-capability tools when their names collide with the configured virtual tool.
+  Restore `$mcp_tool_call` analytics for low-level servers that register their tool dispatcher after instrumentation. (2026-08-04)
+
 ## 0.10.5
 
 ### Patch Changes
