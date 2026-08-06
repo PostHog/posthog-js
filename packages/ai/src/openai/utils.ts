@@ -28,6 +28,18 @@ export function extractRequestId(result: unknown): string | undefined {
 }
 
 /**
+ * Reads `cache_write_tokens` from a usage details object — Chat Completions'
+ * `prompt_tokens_details` or the Responses API's `input_tokens_details`, both of
+ * which carry the field — and returns 0 when it is absent. A defensive reader
+ * (mirroring `extractRequestId`) that tolerates the loosely-typed usage shapes
+ * OpenAI-compatible providers return, used to populate
+ * `$ai_cache_creation_input_tokens`.
+ */
+export function extractCacheWriteTokens(details: unknown): number {
+  return (details as { cache_write_tokens?: number } | null | undefined)?.cache_write_tokens ?? 0
+}
+
+/**
  * Assembles the `$ai_provider_metadata` blob for OpenAI / Azure OpenAI events.
  * Provider-specific fields (system fingerprint, request id) live here rather
  * than in the shared, provider-agnostic `$ai_*` namespace. Only keys with a

@@ -1040,6 +1040,76 @@ describe('PostHogAzureOpenAI - cache token reporting convention', () => {
     expect(properties['$ai_cache_reporting_exclusive']).toBe(expectedFlag)
     ;(ChatMock.Completions as any).prototype.create = originalCreate
   })
+
+  test('captures cache creation tokens for chat completions', async () => {
+    const mockPostHogClient = new (PostHog as any)()
+    const client = new PostHogAzureOpenAI({
+      apiKey: 'mock-azure-key',
+      posthog: mockPostHogClient as any,
+    })
+
+    const ChatMock: any = openaiModule.Chat
+    const originalCreate = (ChatMock.Completions as any).prototype.create
+    ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue({
+      id: 'chatcmpl-cache-write',
+      model: 'gpt-4',
+      object: 'chat.completion',
+      created: 1234567890,
+      choices: [
+        {
+          index: 0,
+          finish_reason: 'stop',
+          message: { role: 'assistant', content: 'Hello!', refusal: null },
+          logprobs: null,
+        },
+      ],
+      usage: {
+        prompt_tokens: 33400,
+        completion_tokens: 572,
+        total_tokens: 33972,
+        prompt_tokens_details: { cached_tokens: 29580, cache_write_tokens: 3820 },
+      },
+    })
+
+    await client.chat.completions.create({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: 'Hello' }],
+      posthogDistinctId: 'test-id',
+    })
+
+    const { properties } = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
+    expect(properties['$ai_cache_read_input_tokens']).toBe(29580)
+    expect(properties['$ai_cache_creation_input_tokens']).toBe(3820)
+    ;(ChatMock.Completions as any).prototype.create = originalCreate
+  })
+
+  test('captures cache creation tokens for responses create', async () => {
+    const mockPostHogClient = new (PostHog as any)()
+    const client = new PostHogAzureOpenAI({
+      apiKey: 'mock-azure-key',
+      posthog: mockPostHogClient as any,
+    })
+
+    const ResponsesMock: any = openaiModule.Responses
+    const originalCreate = ResponsesMock.prototype.create
+    ResponsesMock.prototype.create = jest.fn().mockResolvedValue({
+      id: 'resp-cache-write',
+      output: [{ type: 'message', role: 'assistant', content: [{ type: 'text', text: 'Hello!' }] }],
+      usage: {
+        input_tokens: 33400,
+        output_tokens: 572,
+        total_tokens: 33972,
+        input_tokens_details: { cached_tokens: 29580, cache_write_tokens: 3820 },
+      },
+    })
+
+    await client.responses.create({ model: 'gpt-4', input: 'Hello', posthogDistinctId: 'test-id' } as any)
+
+    const { properties } = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
+    expect(properties['$ai_cache_read_input_tokens']).toBe(29580)
+    expect(properties['$ai_cache_creation_input_tokens']).toBe(3820)
+    ResponsesMock.prototype.create = originalCreate
+  })
 })
 
 describe('PostHogAzureOpenAI - Responses terminal statuses', () => {

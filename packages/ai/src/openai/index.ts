@@ -27,6 +27,7 @@ import {
   isResponseTokenChunk,
   extractRequestId,
   buildProviderMetadata,
+  extractCacheWriteTokens,
   isTerminalResponse,
   getResponseFailure,
 } from './utils'
@@ -174,6 +175,7 @@ export class WrappedCompletions extends Completions {
                 outputTokens?: number
                 reasoningTokens?: number
                 cacheReadInputTokens?: number
+                cacheCreationInputTokens?: number
                 webSearchCount?: number
               } = {
                 inputTokens: 0,
@@ -272,6 +274,7 @@ export class WrappedCompletions extends Completions {
                     outputTokens: chunk.usage.completion_tokens ?? 0,
                     reasoningTokens: chunk.usage.completion_tokens_details?.reasoning_tokens ?? 0,
                     cacheReadInputTokens: chunk.usage.prompt_tokens_details?.cached_tokens ?? 0,
+                    cacheCreationInputTokens: extractCacheWriteTokens(chunk.usage.prompt_tokens_details),
                   }
                 }
               }
@@ -330,6 +333,7 @@ export class WrappedCompletions extends Completions {
                   outputTokens: usage.outputTokens,
                   reasoningTokens: usage.reasoningTokens,
                   cacheReadInputTokens: usage.cacheReadInputTokens,
+                  cacheCreationInputTokens: usage.cacheCreationInputTokens,
                   webSearchCount: usage.webSearchCount,
                   rawUsage: rawUsageData,
                 },
@@ -392,6 +396,7 @@ export class WrappedCompletions extends Completions {
                 outputTokens: result.usage?.completion_tokens ?? 0,
                 reasoningTokens: result.usage?.completion_tokens_details?.reasoning_tokens ?? 0,
                 cacheReadInputTokens: result.usage?.prompt_tokens_details?.cached_tokens ?? 0,
+                cacheCreationInputTokens: extractCacheWriteTokens(result.usage?.prompt_tokens_details),
                 webSearchCount: calculateWebSearchCount(result),
                 rawUsage: result.usage,
               },
@@ -468,6 +473,7 @@ export class WrappedResponses extends Responses {
         outputTokens: result.usage?.output_tokens ?? 0,
         reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
         cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
+        cacheCreationInputTokens: extractCacheWriteTokens(result.usage?.input_tokens_details),
         webSearchCount: calculateWebSearchCount(result),
         rawUsage: result.usage,
       },
@@ -535,6 +541,7 @@ export class WrappedResponses extends Responses {
                 outputTokens?: number
                 reasoningTokens?: number
                 cacheReadInputTokens?: number
+                cacheCreationInputTokens?: number
                 webSearchCount?: number
               } = {
                 inputTokens: 0,
@@ -584,6 +591,7 @@ export class WrappedResponses extends Responses {
                     outputTokens: chunk.response.usage.output_tokens ?? 0,
                     reasoningTokens: chunk.response.usage.output_tokens_details?.reasoning_tokens ?? 0,
                     cacheReadInputTokens: chunk.response.usage.input_tokens_details?.cached_tokens ?? 0,
+                    cacheCreationInputTokens: extractCacheWriteTokens(chunk.response.usage.input_tokens_details),
                   }
                 }
               }
@@ -620,6 +628,7 @@ export class WrappedResponses extends Responses {
                   outputTokens: usage.outputTokens,
                   reasoningTokens: usage.reasoningTokens,
                   cacheReadInputTokens: usage.cacheReadInputTokens,
+                  cacheCreationInputTokens: usage.cacheCreationInputTokens,
                   webSearchCount: usage.webSearchCount,
                   rawUsage: rawUsageData,
                 },
@@ -698,6 +707,7 @@ export class WrappedResponses extends Responses {
                 outputTokens: result.usage?.output_tokens ?? 0,
                 reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
                 cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
+                cacheCreationInputTokens: extractCacheWriteTokens(result.usage?.input_tokens_details),
                 webSearchCount: calculateWebSearchCount(result),
                 rawUsage: result.usage,
               },
@@ -856,6 +866,7 @@ export class WrappedResponses extends Responses {
             outputTokens: result.usage?.output_tokens ?? 0,
             reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
             cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
+            cacheCreationInputTokens: extractCacheWriteTokens(result.usage?.input_tokens_details),
             rawUsage: result.usage,
           },
           stopReason: result.status ?? undefined,

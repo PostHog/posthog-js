@@ -186,6 +186,8 @@ const createMockStreamChunks = (options: {
   toolCallName?: string
   toolCallArguments?: string
   includeUsage?: boolean
+  cachedTokens?: number
+  cacheWriteTokens?: number
 }): ChatCompletionChunk[] => {
   const chunks: ChatCompletionChunk[] = []
   const baseChunk: Partial<ChatCompletionChunk> = {
@@ -288,7 +290,11 @@ const createMockStreamChunks = (options: {
       prompt_tokens: 25,
       completion_tokens: 15,
       total_tokens: 40,
-    }
+      prompt_tokens_details: {
+        cached_tokens: options.cachedTokens ?? 0,
+        cache_write_tokens: options.cacheWriteTokens ?? 0,
+      },
+    } as ChatCompletionChunk['usage']
   }
 
   chunks.push(finalChunk)
@@ -961,6 +967,31 @@ describe('PostHogOpenAI - Jest test suite', () => {
     }
   )
 
+  test('tracks cache creation tokens', async () => {
+    mockOpenAiChatResponse.model = 'anthropic/claude-sonnet-4.6'
+    mockOpenAiChatResponse.usage = {
+      prompt_tokens: 33400,
+      completion_tokens: 572,
+      total_tokens: 33972,
+      prompt_tokens_details: {
+        cached_tokens: 29580,
+        cache_write_tokens: 3820,
+      },
+    } as ChatCompletion['usage']
+
+    await client.chat.completions.create({
+      model: 'anthropic/claude-sonnet-4.6',
+      messages: [{ role: 'user', content: 'Hello' }],
+      posthogDistinctId: 'test-id',
+    })
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { properties } = captureArgs[0]
+    expect(properties['$ai_cache_read_input_tokens']).toBe(29580)
+    expect(properties['$ai_cache_creation_input_tokens']).toBe(3820)
+  })
+
   test('declares inclusive cache token reporting on streaming completions', async () => {
     const stream = (await client.chat.completions.create({
       model: 'gpt-4',
@@ -978,6 +1009,33 @@ describe('PostHogOpenAI - Jest test suite', () => {
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
     const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
     expect(captureArgs[0].properties['$ai_cache_reporting_exclusive']).toBe(false)
+  })
+
+  test('captures cache creation tokens on streaming completions', async () => {
+    mockStreamChunks = createMockStreamChunks({
+      content: 'This is a streaming response',
+      includeUsage: true,
+      cachedTokens: 29580,
+      cacheWriteTokens: 3820,
+    })
+
+    const stream = (await client.chat.completions.create({
+      model: 'anthropic/claude-sonnet-4.6',
+      messages: [{ role: 'user', content: 'Hello' }],
+      stream: true,
+      posthogDistinctId: 'test-id',
+    })) as unknown as AsyncIterable<ChatCompletionChunk>
+
+    for await (const _chunk of stream) {
+      // no-op
+    }
+    await flushPromises()
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { properties } = captureArgs[0]
+    expect(properties['$ai_cache_read_input_tokens']).toBe(29580)
+    expect(properties['$ai_cache_creation_input_tokens']).toBe(3820)
   })
 
   // New test: ensure captureImmediate is used when flag is set
@@ -1223,6 +1281,67 @@ describe('PostHogOpenAI - Jest test suite', () => {
       expect(properties['$ai_is_error']).toBe(true)
       expect(properties['$ai_error']).toContain('provider response failed')
       expect(properties['$ai_provider_metadata']).toEqual({ request_id: 'req_failed' })
+    })
+  })
+
+  describe('Responses cache creation tokens', () => {
+    const usageWithCacheWrite = {
+      input_tokens: 33400,
+      output_tokens: 572,
+      total_tokens: 33972,
+      input_tokens_details: { cached_tokens: 29580, cache_write_tokens: 3820 },
+      output_tokens_details: { reasoning_tokens: 0 },
+    }
+    const ResponsesMock: any = openaiModule.Responses
+    let response: any
+
+    beforeEach(() => {
+      response = { ...mockOpenAiParsedResponse, status: 'completed', usage: usageWithCacheWrite }
+    })
+
+    test('non-streaming create captures cache creation tokens', async () => {
+      ResponsesMock.prototype.create = jest.fn().mockImplementation(() => createMockAPIPromise(response))
+
+      await client.responses.create({ model: 'gpt-4', input: 'Hello', posthogDistinctId: 'test-id' })
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const properties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+      expect(properties['$ai_cache_read_input_tokens']).toBe(29580)
+      expect(properties['$ai_cache_creation_input_tokens']).toBe(3820)
+    })
+
+    test('streaming create captures cache creation tokens', async () => {
+      const chunks = [{ type: 'response.completed', sequence_number: 0, response }]
+      ResponsesMock.prototype.create = jest
+        .fn()
+        .mockImplementation(() => createMockAPIPromise(createMockAsyncIterator(chunks)))
+
+      const stream = await client.responses.create({
+        model: 'gpt-4',
+        input: 'Hello',
+        stream: true,
+        posthogDistinctId: 'test-id',
+      })
+      for await (const _chunk of stream) {
+        // consume the returned stream while analytics consumes its monitored copy
+      }
+      await flushPromises()
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const properties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+      expect(properties['$ai_cache_read_input_tokens']).toBe(29580)
+      expect(properties['$ai_cache_creation_input_tokens']).toBe(3820)
+    })
+
+    test('parse captures cache creation tokens', async () => {
+      ResponsesMock.prototype.parse = jest.fn().mockImplementation(() => createMockAPIPromise(response))
+
+      await client.responses.parse({ model: 'gpt-4', input: 'Hello', posthogDistinctId: 'test-id' } as any)
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const properties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+      expect(properties['$ai_cache_read_input_tokens']).toBe(29580)
+      expect(properties['$ai_cache_creation_input_tokens']).toBe(3820)
     })
   })
 
