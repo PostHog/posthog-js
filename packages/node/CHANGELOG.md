@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.47.7
+
+### Patch Changes
+
+- [#4352](https://github.com/PostHog/posthog-js/pull/4352) [`1cf9c6d`](https://github.com/PostHog/posthog-js/commit/1cf9c6d555b3a774bfa0bd109de290656e64d662) Thanks [@marandaneto](https://github.com/marandaneto)! - Bound stack source context reads and skip non-regular or oversized files.
+  (2026-08-03)
+
 ## 5.47.6
 
 ### Patch Changes
