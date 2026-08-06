@@ -32,7 +32,6 @@ type MCPRequestExtra = Parameters<MCPRequestHandler>[1]
  */
 export function instrumentLowLevelServer(server: MCPServerLike, logger: LoggerFn): void {
   try {
-    // Patch already existing handlers, and patch setRequestHandler to capture dynamically created handlers.
     const hadCallToolHandler = server._requestHandlers.has('tools/call')
     const traceToolCall: HandlerPatch = (server, originalHandler, request, extra) =>
       handleToolCallRequest(server, originalHandler, request, extra, logger)

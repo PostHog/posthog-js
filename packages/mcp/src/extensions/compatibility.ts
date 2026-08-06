@@ -21,26 +21,22 @@ type ServerRecord = Record<string, unknown>
  * - Server info structure
  */
 
-// Function to log compatibility information
 export function logCompatibilityWarning(logger: LoggerFn): void {
   logger(
     'PostHog MCP analytics SDK Compatibility: This version only supports Model Context Protocol TypeScript SDK v1.11 and above. Please upgrade if using an older version.'
   )
 }
 
-// Check if server has high-level structure (wrapper with .server property)
 export function isHighLevelServer(server: unknown): server is ServerRecord & { server: ServerRecord } {
   return (
     !!server && typeof server === 'object' && 'server' in server && !!server.server && typeof server.server === 'object'
   )
 }
 
-// Check if server has low-level structure (no .server property)
 export function isLowLevelServer(server: unknown): server is ServerRecord {
   return !!server && typeof server === 'object' && !('server' in server)
 }
 
-// Type guard function that validates server compatibility and returns typed server
 export function isCompatibleServerType(server: unknown, logger: LoggerFn): MCPServerLike | HighLevelMCPServerLike {
   if (!server || typeof server !== 'object') {
     logCompatibilityWarning(logger)
@@ -50,7 +46,6 @@ export function isCompatibleServerType(server: unknown, logger: LoggerFn): MCPSe
   }
 
   if (isHighLevelServer(server)) {
-    // Validate high-level server requirements
     if (!server._registeredTools || typeof server._registeredTools !== 'object') {
       logCompatibilityWarning(logger)
       throw new Error(
@@ -64,18 +59,15 @@ export function isCompatibleServerType(server: unknown, logger: LoggerFn): MCPSe
       )
     }
 
-    // Validate the underlying low-level server
     const targetServer = server.server
     validateLowLevelServer(targetServer, logger)
 
     return server as unknown as HighLevelMCPServerLike
   }
-  // Direct low-level server validation
   validateLowLevelServer(server, logger)
   return server as MCPServerLike
 }
 
-// Helper function to validate low-level server requirements
 function validateLowLevelServer(server: unknown, logger: LoggerFn): void {
   if (!server || typeof server !== 'object') {
     logCompatibilityWarning(logger)
@@ -100,7 +92,6 @@ function validateLowLevelServer(server: unknown, logger: LoggerFn): void {
     )
   }
 
-  // Validate that _requestHandlers contains functions with compatible signatures
   if (typeof serverRecord._requestHandlers.get !== 'function') {
     logCompatibilityWarning(logger)
     throw new Error(
