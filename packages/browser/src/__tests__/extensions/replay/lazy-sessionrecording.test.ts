@@ -5545,6 +5545,41 @@ describe('Lazy SessionRecording', () => {
             expect(posthog.capture).toHaveBeenCalled()
             expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toBe(0)
         })
+
+        it('does not flush a buffer that only holds lifecycle custom events, however old the session id is', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { minimumDurationMilliseconds: 1500 },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('active')
+            const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
+
+            // a lone lifecycle event (e.g. $session_starting pushed in on rotation), timestamped
+            // well past the minimum duration - old non-strict logic only looked at this event's
+            // age relative to session start, so it would ship this as an empty recording
+            _emit(
+                createCustomSnapshot(
+                    { timestamp: sessionStartTimestamp + 5000 },
+                    { nextSessionId: sessionId },
+                    '$session_starting'
+                )
+            )
+
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toBe(1)
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_isBelowMinimumDuration']()).toBe(true)
+
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+            expect(posthog.capture).not.toHaveBeenCalled()
+
+            // once real content (a snapshot) arrives, the buffer is free to flush again on its own duration logic
+            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 5100 }))
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_isBelowMinimumDuration']()).toBe(false)
+
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+            expect(posthog.capture).toHaveBeenCalled()
+        })
     })
 
     describe('canvas', () => {
