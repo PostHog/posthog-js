@@ -75,7 +75,12 @@ async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress }: 
         const persistence = new PostHogPersistence(config)
         persistence.clear()
         persistence.register({
-            [SESSION_RECORDING_REMOTE_CONFIG]: { endpoint: '/s/', enabled: true, sampleRate: 1 },
+            [SESSION_RECORDING_REMOTE_CONFIG]: {
+                endpoint: '/s/',
+                enabled: true,
+                sampleRate: 1,
+                cache_timestamp: Date.now(),
+            },
             [SESSION_RECORDING_IS_SAMPLED]: 'sessionId',
         })
 
