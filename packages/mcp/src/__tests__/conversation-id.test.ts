@@ -218,7 +218,7 @@ describe('conversation-id', () => {
 import { CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { instrument } from '../index'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
-import type { HighLevelMCPServerLike } from '../types'
+import type { HighLevelMCPServerLike, MCPServerLike } from '../types'
 import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
 
@@ -381,6 +381,37 @@ describe('conversation_id tool parameter', () => {
       expect(hasPromptBack).toBe(true)
     })
 
+    it('clears event.conversationId when a minted handle reaches no channel at all', async () => {
+      // The `minted && !delivered` cell. Both delivery channels have to miss:
+      // no declared output schema means no mirror, and a result carrying no
+      // `content` array means no prompt-back. The handle then exists only in our
+      // event, describing a conversation the agent was never told about — so it
+      // is cleared rather than reported as one.
+      const capture = new EventCapture()
+      await capture.start()
+
+      // Replace the underlying handler *before* instrumenting, so our wrapper
+      // still runs and simply sees a result with no content array — bypassing the
+      // SDK's result normalisation, which would add one.
+      const lowLevel = server.server as unknown as MCPServerLike
+      lowLevel._requestHandlers.set('tools/call', async () => ({ structuredContent: { ok: true } }))
+      instrument(server, fakePostHog(), { enableConversationId: true })
+
+      const handler = lowLevel._requestHandlers.get('tools/call')!
+      const result = (await handler(
+        { method: 'tools/call', params: { name: 'add_todo', arguments: { text: 'x' } } },
+        {} as never
+      )) as { content?: unknown }
+
+      await new Promise((r) => setTimeout(r, 50))
+      const toolCall = capture.getEvents().find((e) => e.eventType === MCPAnalyticsEventType.mcpToolsCall)
+      // The event must exist, or this asserts nothing.
+      expect(toolCall).toBeDefined()
+      expect(result.content).toBeUndefined()
+      expect(toolCall?.conversationId).toBeUndefined()
+      await capture.stop()
+    })
+
     it('keeps event.conversationId on error, since the prompt-back now reaches the agent', async () => {
       const capture = new EventCapture()
       await capture.start()
@@ -503,7 +534,8 @@ describe('conversation_id edge cases', () => {
     // Same connection, so anything falling back to the transport or in-memory
     // session would report one id for both. Only the handle can separate them.
     // Both are shaped like handles the SDK would have minted, which is what a
-    // real agent echoes — an arbitrary string is treated as no handle at all.
+    // real agent echoes. On this branch any non-empty string would do; #4428
+    // adds the shape check that makes the distinction matter.
     const one = '019fd2b0-aaaa-7aaa-8aaa-aaaaaaaaaaaa'
     const two = '019fd2b0-bbbb-7bbb-8bbb-bbbbbbbbbbbb'
     for (const [handle, text] of [

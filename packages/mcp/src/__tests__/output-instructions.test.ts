@@ -346,7 +346,8 @@ describe('mirroring over a real client', () => {
     try {
       await client.request({ method: 'tools/list' }, ListToolsResultSchema)
       // Shaped like a handle the SDK would have minted, which is what a real
-      // agent echoes — an arbitrary string is treated as no handle at all.
+      // agent echoes. On this branch any non-empty string would do; #4428 adds
+      // the shape check that makes the distinction matter.
       const echoed = '019fd2b0-1111-7111-8111-111111111111'
       const second = await call(client, echoed)
 
