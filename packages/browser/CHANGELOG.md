@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.410.4
+
+### Patch Changes
+
+- [#4235](https://github.com/PostHog/posthog-js/pull/4235) [`7db0e8c`](https://github.com/PostHog/posthog-js/commit/7db0e8c2a46edfc180b1d13d3b23fbcac867e552) Thanks [@hpouillot](https://github.com/hpouillot)! - Preserve messages, source locations, and existing stacks from browser errors that do not provide a same-realm `Error` object.
+  (2026-08-03)
+- Updated dependencies [[`7db0e8c`](https://github.com/PostHog/posthog-js/commit/7db0e8c2a46edfc180b1d13d3b23fbcac867e552)]:
+    - @posthog/core@1.46.5
+
 ## 1.410.3
 
 ### Patch Changes
