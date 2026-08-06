@@ -513,6 +513,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // only warn once per recorder instance that client-side masking is shadowing the project setting
     private _hasWarnedClientMaskingOverride = false
     private _maskRegionsFnFailed = false
+    // only log once per recorder instance so a repeatedly-throwing callback doesn't flood the console
+    private _hasLoggedRecorderCallbackError = false
 
     private _linkedFlagMatching: LinkedFlagMatching
     private _urlTriggerMatching: URLTriggerMatching
@@ -2417,6 +2419,19 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 this.onRRwebEmit(event)
             },
             plugins: activePlugins,
+            errorHandler: (error, context) => {
+                // A host API patch shares its callback boundary with the native
+                // operation. Preserve the application's exception semantics when
+                // rrweb cannot reliably distinguish where that error originated.
+                if (context !== 'rrweb') {
+                    return false
+                }
+                if (!this._hasLoggedRecorderCallbackError) {
+                    this._hasLoggedRecorderCallbackError = true
+                    logger.error('rrweb internal error - recording will continue but may be incomplete', error)
+                }
+                return true
+            },
             ...sessionRecordingOptions,
         })
 

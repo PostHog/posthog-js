@@ -56,177 +56,6 @@ import dom, { mutationObserverCtor } from '@posthog/rrweb-utils';
 
 export const mutationBuffers: MutationBuffer[] = [];
 
-// A time-sliced full snapshot spans several tasks, so buffers can come into
-// existence while one is in flight: the document's own buffer is installed
-// right after `takeFullSnapshot()` returns, and shadow-root/iframe buffers are
-// created from the traversal itself. A buffer starts out unlocked, so without
-// this gate those buffers would emit mutations resolved against a half-built
-// mirror — and a MutationBuffer clears itself and drains `mapRemoves` into the
-// mirror *before* invoking its callback, so a dropped mutation event leaves the
-// recorder's mirror permanently ahead of the replay.
-// While the gate is armed a new buffer joins the snapshot already locked, and
-// is released together with all the others.
-let activeMutationBufferLockToken: number | null = null;
-let nextMutationBufferLockToken = 1;
-
-export function createMutationBufferLockToken(): number {
-  return nextMutationBufferLockToken++;
-}
-
-export function lockMutationBuffers(token: number): boolean {
-  if (
-    activeMutationBufferLockToken !== null &&
-    activeMutationBufferLockToken !== token
-  ) {
-    return false;
-  }
-  activeMutationBufferLockToken = token;
-  let locked = true;
-  for (const buffer of [...mutationBuffers]) {
-    try {
-      if (!buffer.lock(token)) {
-        locked = false;
-      }
-    } catch {
-      locked = false;
-    }
-  }
-  if (!locked) {
-    discardMutationBuffers(token);
-  }
-  return locked;
-}
-
-export interface CommitMutationBuffersResult {
-  // every holder was released and delivered its records
-  committed: boolean;
-  // records lost for good: a throwing commit, or the sweep cap force-discard
-  droppedRecordCount: number;
-  // records a frozen buffer kept back; its unfreeze() delivers them later
-  deferredRecordCount: number;
-}
-
-function safePendingRecordCount(buffer: MutationBuffer): number {
-  try {
-    return buffer.pendingRecordCount();
-  } catch {
-    return 0;
-  }
-}
-
-// commit() re-enters consumer code synchronously (emit → mutationCb →
-// wrappedEmit → the consumer's callback), which can throw, splice
-// `mutationBuffers` (iframe/shadow teardown), or attach an iframe whose new
-// buffer the still-armed gate locks with this same token. Each hazard would
-// otherwise strand buffers locked forever with no owner — so: iterate a
-// snapshot of the array, isolate per-buffer failures, keep the token armed
-// until every holder is released, and sweep for buffers born mid-commit.
-export function commitMutationBuffers(
-  token: number,
-): CommitMutationBuffersResult {
-  const result: CommitMutationBuffersResult = {
-    committed: true,
-    droppedRecordCount: 0,
-    deferredRecordCount: 0,
-  };
-  if (activeMutationBufferLockToken !== token) {
-    result.committed = false;
-    return result;
-  }
-  // a buffer whose discard also fails is retried every sweep; count its
-  // records as dropped exactly once
-  const countedAsDropped = new Set<MutationBuffer>();
-  let sweeps = 0;
-  while (sweeps++ < 4) {
-    const holding = [...mutationBuffers].filter((buffer) =>
-      buffer.hasLockToken(token),
-    );
-    if (holding.length === 0) {
-      break;
-    }
-    for (const buffer of holding) {
-      const pendingBefore = safePendingRecordCount(buffer);
-      try {
-        if (!buffer.commit(token)) {
-          result.committed = false;
-          // a frozen buffer keeps its records; unfreeze() delivers them
-          result.deferredRecordCount += safePendingRecordCount(buffer);
-        }
-      } catch {
-        result.committed = false;
-        if (!countedAsDropped.has(buffer)) {
-          countedAsDropped.add(buffer);
-          result.droppedRecordCount += pendingBefore;
-        }
-        try {
-          buffer.discard(token);
-        } catch {
-          // released below by the force-discard sweep
-        }
-      }
-    }
-  }
-  activeMutationBufferLockToken = null;
-  for (const buffer of [...mutationBuffers]) {
-    if (buffer.hasLockToken(token)) {
-      result.committed = false;
-      if (!countedAsDropped.has(buffer)) {
-        countedAsDropped.add(buffer);
-        result.droppedRecordCount += safePendingRecordCount(buffer);
-      }
-      try {
-        buffer.discard(token);
-      } catch {
-        // the buffer is unusable; splice-out and GC are its only exit
-      }
-    }
-  }
-  return result;
-}
-
-// Releases by token rather than by global ownership: recovery from a
-// half-failed lock or commit must work even when the owner slot was already
-// cleared, or the discarding paths become dead code exactly when needed.
-export function discardMutationBuffers(token: number): boolean {
-  if (activeMutationBufferLockToken === token) {
-    activeMutationBufferLockToken = null;
-  }
-  let discarded = true;
-  for (const buffer of [...mutationBuffers]) {
-    if (!buffer.hasLockToken(token)) {
-      continue;
-    }
-    try {
-      if (!buffer.discard(token)) {
-        discarded = false;
-      }
-    } catch {
-      discarded = false;
-    }
-  }
-  return discarded;
-}
-
-export function discardActiveMutationBufferTransaction(): void {
-  const token = activeMutationBufferLockToken;
-  if (token !== null) {
-    discardMutationBuffers(token);
-  }
-}
-
-/**
- * Whether any buffer holds a pending add for `n` — the time-sliced walker's
- * skip predicate (see MutationBuffer.hasPendingAdd).
- */
-export function anyMutationBufferHasPendingAdd(n: Node): boolean {
-  for (const buffer of mutationBuffers) {
-    if (buffer.hasPendingAdd(n)) {
-      return true;
-    }
-  }
-  return false;
-}
-
 // Event.path is non-standard and used in some older browsers
 type NonStandardEvent = Omit<Event, 'composedPath'> & {
   path: EventTarget[];
@@ -257,10 +86,6 @@ export function initMutationObserver(
   mutationBuffers.push(mutationBuffer);
   // see mutation.ts for details
   mutationBuffer.init(options);
-  if (activeMutationBufferLockToken !== null) {
-    // a time-sliced full snapshot is mid-flight — see lockMutationBuffers
-    mutationBuffer.lock(activeMutationBufferLockToken);
-  }
   const observer = new (mutationObserverCtor() as new (
     callback: MutationCallback,
   ) => MutationObserver)(
@@ -843,6 +668,7 @@ function initStyleSheetObserver(
         }
         return target.apply(thisArg, argumentsList);
       },
+      'host',
     ),
   });
 
@@ -883,6 +709,7 @@ function initStyleSheetObserver(
         }
         return target.apply(thisArg, argumentsList);
       },
+      'host',
     ),
   });
 
@@ -923,6 +750,7 @@ function initStyleSheetObserver(
           }
           return target.apply(thisArg, argumentsList);
         },
+        'host',
       ),
     });
   }
@@ -955,6 +783,7 @@ function initStyleSheetObserver(
           }
           return target.apply(thisArg, argumentsList);
         },
+        'host',
       ),
     });
   }
@@ -1029,6 +858,7 @@ function initStyleSheetObserver(
             }
             return target.apply(thisArg, argumentsList);
           },
+          'host',
         ),
       },
     );
@@ -1061,6 +891,7 @@ function initStyleSheetObserver(
             }
             return target.apply(thisArg, argumentsList);
           },
+          'host',
         ),
       },
     );
@@ -1218,6 +1049,7 @@ function initStyleDeclarationObserver(
         }
         return target.apply(thisArg, argumentsList);
       },
+      'host',
     ),
   });
 
@@ -1254,6 +1086,7 @@ function initStyleDeclarationObserver(
         }
         return target.apply(thisArg, argumentsList);
       },
+      'host',
     ),
   });
 

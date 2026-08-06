@@ -75,7 +75,7 @@ type DataURLOptions = Partial<{
 }>
 
 // Replication of `ErrorHandler` from inside `@posthog/rrweb-record`
-type ErrorHandler = (error: unknown) => void | boolean
+type ErrorHandler = (error: unknown, context?: 'rrweb' | 'host') => void | boolean
 
 // Replication of `recordOptions` from inside `@posthog/rrweb-record`
 export type recordOptions = {
