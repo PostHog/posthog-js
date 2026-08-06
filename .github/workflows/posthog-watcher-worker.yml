@@ -51,7 +51,7 @@ jobs:
                   sudo ln -sf "$(command -v fdfind)" /usr/local/bin/fd
 
             - name: Drain watcher queue
-              uses: PostHog/posthog-watcher-action@8b166434ccf42ce9da6ee1fda3f622268812aed5
+              uses: PostHog/posthog-watcher-action@2a52bc42a5c60b415218da3d9705fd4c4fc0e76c
               with:
                   openai-api-key: ${{ secrets.POSTHOG_WATCHER_OPENAI_API_KEY }}
                   mode: drain-queue
@@ -88,7 +88,7 @@ jobs:
                   sudo ln -sf "$(command -v fdfind)" /usr/local/bin/fd
 
             - name: Process watcher issue
-              uses: PostHog/posthog-watcher-action@8b166434ccf42ce9da6ee1fda3f622268812aed5
+              uses: PostHog/posthog-watcher-action@2a52bc42a5c60b415218da3d9705fd4c4fc0e76c
               with:
                   openai-api-key: ${{ secrets.POSTHOG_WATCHER_OPENAI_API_KEY }}
                   issue-number: ${{ inputs['issue-number'] }}
