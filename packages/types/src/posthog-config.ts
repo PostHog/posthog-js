@@ -530,6 +530,27 @@ export interface SlimDOMOptions {
     headTitleMutations?: boolean
 }
 
+/**
+ * Sampling options for session recording, a subset of rrweb's sampling strategy
+ */
+export interface SessionRecordingSamplingConfig {
+    /**
+     * Controls capture of mouse movement within a recorded session.
+     * `false` disables capture entirely; NB this also disables touchmove and drag capture.
+     * A number throttles capture so that positions are captured at most once every N milliseconds.
+     * When `undefined` (or `true`), rrweb's default applies: capture throttled to every 50ms.
+     * @default undefined
+     */
+    mousemove?: boolean | number
+    /**
+     * When `false`, disables capture of mouse interaction events
+     * (click, mouse up/down, hover, and touch start/end).
+     * NB replays will not show clicks when this is disabled.
+     * @default undefined
+     */
+    mouseInteraction?: boolean
+}
+
 export interface SessionRecordingOptions {
     /**
      * Derived from `rrweb.record` options
@@ -602,29 +623,6 @@ export interface SessionRecordingOptions {
      * @default false
      */
     collectFonts?: boolean
-
-    /**
-     * Milliseconds of continuous main-thread work while serializing a full
-     * snapshot before the recorder yields to the event loop. On pages with
-     * very large DOMs the full snapshot can otherwise block the main thread
-     * for seconds in a single long task.
-     *
-     * The budget is cooperative, not a hard bound: a single expensive node
-     * (a large stylesheet, a canvas capture, a same-origin iframe document)
-     * can overshoot it within one slice. Events observed while the sliced
-     * snapshot is in flight are delivered after it completes. If the
-     * snapshot cannot finish within its safety limits, the recorder retries
-     * once and then falls back to a synchronous snapshot; every degradation
-     * is reported as a replay custom event (tag: 'budgeted-full-snapshot').
-     *
-     * 0 (default) keeps the fully-synchronous behavior. Non-finite or
-     * non-positive values are treated as 0. This option is read from the
-     * client-side config only — it cannot be toggled remotely.
-     *
-     * Derived from `rrweb.record` options
-     * @default 0
-     */
-    fullSnapshotYieldBudgetMs?: number
 
     /**
      * Derived from `rrweb.record` options
@@ -826,6 +824,23 @@ export interface SessionRecordingOptions {
      * @default false
      */
     strictMinimumDuration?: boolean
+
+    /**
+     * Derived from `rrweb.record` options. Controls how often certain event types are captured
+     * within an already-recorded session, e.g. `{ mousemove: false }` stops recording mouse movement.
+     *
+     * Not to be confused with `sampleRate` below, which controls whether a session is recorded
+     * at all, or with `posthog.startSessionRecording({ sampling: true })`, which overrides that
+     * session-level sample rate.
+     *
+     * NB disabled event types no longer count as user activity for replay idle detection
+     * (`session_idle_threshold_ms`). For example, with `mousemove: false` pure mouse movement
+     * no longer keeps a session active, while clicks, scrolls, and inputs still do.
+     *
+     * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     * @default undefined
+     */
+    sampling?: SessionRecordingSamplingConfig
 
     /**
      * The sample rate for session recordings, a number between 0 and 1.

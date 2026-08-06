@@ -73,6 +73,7 @@ import {
     Properties,
     SessionIdChangedCallback,
     SessionRecordingOptions,
+    SessionRecordingSamplingConfig,
     SessionRecordingPersistedConfig,
     SessionStartReason,
 } from '../../../types'
@@ -444,22 +445,8 @@ function getSessionStartingPayload(e: eventWithTime): SessionStartingPayload | n
     return isSessionStartingEvent(e) ? (e.data.payload as SessionStartingPayload) : null
 }
 
-/** Recorder-emitted telemetry about a budgeted (time-sliced) full snapshot:
- *  one event per completed walk, plus one per degraded outcome. */
-function isBudgetedSnapshotDiagnosticEvent(e: eventWithTime): e is eventWithTime & customEvent {
-    return isCustomEvent(e, 'budgeted-full-snapshot')
-}
-
 function isAllowedWhenIdle(e: eventWithTime): boolean {
-    // budgeted snapshot diagnostics are allowed through: a walk that started while
-    // active can settle after the idle threshold flips, and dropping the report
-    // here would hide exactly the walks worth seeing in production
-    return (
-        isSessionIdleEvent(e) ||
-        isSessionEndingEvent(e) ||
-        isSessionStartingEvent(e) ||
-        isBudgetedSnapshotDiagnosticEvent(e)
-    )
+    return isSessionIdleEvent(e) || isSessionEndingEvent(e) || isSessionStartingEvent(e)
 }
 
 /** When we put the recording into a paused state, we add a custom event.
@@ -503,14 +490,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _strategy: RecordingStrategy | undefined
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
     private _fullSnapshotTimestamps: Array<[string, number]> = []
-    // headline numbers from completed budgeted (time-sliced) full snapshots,
-    // surfaced as $sdk_debug_replay_budgeted_snapshot_* session properties:
-    // per-metric worst case across the recording, except _dropped which accumulates
-    private _budgetedSnapshotMs: number | undefined
-    private _budgetedSnapshotSlices: number | undefined
-    private _budgetedSnapshotSlowestSliceMs: number | undefined
-    private _budgetedSnapshotHeldHighWater: number | undefined
-    private _budgetedSnapshotDropped: number | undefined
     // ship-time FullSnapshot tracking for _ensureFullSnapshotForSession (unlike _fullSnapshotTimestamps, which records emit-time debug telemetry)
     private _lastFullSnapshotSessionId: string | undefined = undefined
     private _fullSnapshotHealAttemptedFor: string | undefined = undefined
@@ -1128,12 +1107,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         // calling addEventListener multiple times is safe and will not add duplicates
         addEventListener(window, 'beforeunload', this._onBeforeUnload)
-        // Registered after rrweb's own pagehide handler (added when the recorder
-        // started above), which synchronously finishes any in-flight time-sliced
-        // FullSnapshot. beforeunload fires BEFORE pagehide, so this second drain
-        // is what actually ships that rescued snapshot; it also covers bfcache
-        // navigations where beforeunload may not fire at all.
-        addEventListener(window, 'pagehide', this._onPageHide)
         addEventListener(window, 'offline', this._onOffline)
         addEventListener(window, 'online', this._onOnline)
         addEventListener(window, 'visibilitychange', this._onVisibilityChange)
@@ -1272,7 +1245,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _teardown() {
         window?.removeEventListener('beforeunload', this._onBeforeUnload)
-        window?.removeEventListener('pagehide', this._onPageHide)
         window?.removeEventListener('offline', this._onOffline)
         window?.removeEventListener('online', this._onOnline)
         window?.removeEventListener('visibilitychange', this._onVisibilityChange)
@@ -1622,10 +1594,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             }
         }
 
-        if (isBudgetedSnapshotDiagnosticEvent(rawEvent)) {
-            this._trackBudgetedSnapshotTelemetry(rawEvent.data.payload)
-        }
-
         // Route lifecycle events using their payload IDs:
         // - $session_ending uses currentSessionId (the old session it's ending)
         // - $session_starting uses nextSessionId (the new session it's starting)
@@ -1961,12 +1929,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._flushBuffer()
     }
 
-    private _onPageHide = (): void => {
-        // same drain as beforeunload; by pagehide rrweb has rescued any
-        // in-flight FullSnapshot, and this is the last chance to ship it
-        this._onBeforeUnload()
-    }
-
     private _onOffline = (): void => {
         this._tryAddCustomEvent('browser offline', {})
     }
@@ -2083,28 +2045,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._strategy?.clearConditionalRecordingPersistence()
     }
 
-    private _trackBudgetedSnapshotTelemetry(payload: unknown): void {
-        if (!isObject(payload)) {
-            return
-        }
-        const p = payload as Record<string, unknown>
-        if (p.status !== 'completed') {
-            return
-        }
-        const maxOf = (current: number | undefined, value: unknown): number | undefined =>
-            isNumber(value) ? Math.max(current ?? 0, value) : current
-        this._budgetedSnapshotMs = maxOf(this._budgetedSnapshotMs, p.walkMs)
-        this._budgetedSnapshotSlices = maxOf(this._budgetedSnapshotSlices, p.sliceCount)
-        this._budgetedSnapshotSlowestSliceMs = maxOf(this._budgetedSnapshotSlowestSliceMs, p.slowestSliceMs)
-        this._budgetedSnapshotHeldHighWater = maxOf(this._budgetedSnapshotHeldHighWater, p.heldEventHighWater)
-        // deferred mutation records are freeze semantics (delivered on unfreeze), not losses
-        const dropped =
-            (isNumber(p.droppedHeldEventCount) ? p.droppedHeldEventCount : 0) +
-            (isNumber(p.droppedMutationRecords) ? p.droppedMutationRecords : 0) +
-            (isNumber(p.failedHeldEventDeliveries) ? p.failedHeldEventDeliveries : 0)
-        this._budgetedSnapshotDropped = (this._budgetedSnapshotDropped ?? 0) + dropped
-    }
-
     get sdkDebugProperties(): Properties {
         const { sessionStartTimestamp } = this._sessionManager.checkAndGetSessionAndWindowId(true)
 
@@ -2116,11 +2056,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $sdk_debug_session_start: sessionStartTimestamp,
             $sdk_debug_replay_flushed_size: this._flushedSizeTracker?.currentTrackedSize(this.sessionId),
             $sdk_debug_replay_full_snapshots: this._fullSnapshotTimestamps,
-            $sdk_debug_replay_budgeted_snapshot_ms: this._budgetedSnapshotMs,
-            $sdk_debug_replay_budgeted_snapshot_slices: this._budgetedSnapshotSlices,
-            $sdk_debug_replay_budgeted_snapshot_slowest_slice_ms: this._budgetedSnapshotSlowestSliceMs,
-            $sdk_debug_replay_budgeted_snapshot_held_high_water: this._budgetedSnapshotHeldHighWater,
-            $sdk_debug_replay_budgeted_snapshot_dropped: this._budgetedSnapshotDropped,
             $snapshot_max_depth_exceeded: this._maxDepthExceeded,
             $sdk_debug_replay_rrweb_error: this._rrwebError,
             [SDK_DEBUG_REPLAY_RRWEB_ATTACHED]: !!this._stopRrweb,
@@ -2151,8 +2086,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             collectFonts: false,
             inlineStylesheet: true,
             recordCrossOriginIframes: false,
+            sampling: undefined,
             attributeFilter: undefined,
-            fullSnapshotYieldBudgetMs: undefined,
         }
 
         // only allows user to set our allowlisted options
@@ -2162,6 +2097,18 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 if (key === 'maskInputOptions') {
                     // ensure password config is set if not included
                     sessionRecordingOptions.maskInputOptions = { password: true, ...value }
+                } else if (key === 'sampling') {
+                    // only allow a narrow subset of rrweb's sampling options;
+                    // canvas sampling is owned by the canvas recording config
+                    const userSampling = (value ?? {}) as SessionRecordingSamplingConfig
+                    const sampling: recordOptions['sampling'] = {}
+                    if (!isUndefined(userSampling.mousemove)) {
+                        sampling.mousemove = userSampling.mousemove
+                    }
+                    if (!isUndefined(userSampling.mouseInteraction)) {
+                        sampling.mouseInteraction = userSampling.mouseInteraction
+                    }
+                    sessionRecordingOptions.sampling = sampling
                 } else {
                     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                     // @ts-ignore
@@ -2172,7 +2119,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         if (this._canvasRecording && this._canvasRecording.enabled) {
             sessionRecordingOptions.recordCanvas = true
-            sessionRecordingOptions.sampling = { canvas: this._canvasRecording.fps }
+            // canvas fps is owned by the canvas recording config; merge so that
+            // user-provided sampling (e.g. mousemove) survives
+            sessionRecordingOptions.sampling = {
+                ...sessionRecordingOptions.sampling,
+                canvas: this._canvasRecording.fps,
+            }
             sessionRecordingOptions.dataURLOptions = { type: 'image/webp', quality: this._canvasRecording.quality }
             sessionRecordingOptions.canvasResolutionScale = this._canvasResolutionScale
             sessionRecordingOptions.canvasMasking = {

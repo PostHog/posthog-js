@@ -468,10 +468,6 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "false",
       "true"
     ],
-    "fullSnapshotYieldBudgetMs": [
-      "undefined",
-      "number"
-    ],
     "inlineStylesheet": [
       "undefined",
       "false",
@@ -548,6 +544,22 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "undefined",
       "false",
       "true"
+    ],
+    "sampling": [
+      "undefined",
+      {
+        "mousemove": [
+          "undefined",
+          "number",
+          "false",
+          "true"
+        ],
+        "mouseInteraction": [
+          "undefined",
+          "false",
+          "true"
+        ]
+      }
     ],
     "sampleRate": [
       "undefined",

@@ -901,81 +901,6 @@ describe('Lazy SessionRecording', () => {
                 expect(posthog.capture).not.toHaveBeenCalled()
             })
 
-            it('emits budgeted snapshot diagnostics even while idle', () => {
-                // force idle state
-                sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = true
-
-                const diagnostic = createCustomSnapshot(
-                    { timestamp: startingTimestamp + 100 },
-                    { status: 'completed', walkMs: 250, sliceCount: 12 },
-                    'budgeted-full-snapshot'
-                )
-                sessionRecording.onRRwebEmit(diagnostic as eventWithTime)
-
-                // recorder health telemetry is not user activity
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toBe(true)
-                // but it is buffered rather than swallowed by idle suppression
-                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([diagnostic])
-            })
-
-            it('tracks completed budgeted snapshot telemetry as sdk debug properties', () => {
-                sessionRecording.onRRwebEmit(
-                    createCustomSnapshot(
-                        { timestamp: startingTimestamp + 100 },
-                        {
-                            status: 'completed',
-                            walkMs: 120,
-                            sliceCount: 4,
-                            slowestSliceMs: 9,
-                            heldEventHighWater: 3,
-                            droppedHeldEventCount: 0,
-                            droppedMutationRecords: 0,
-                            failedHeldEventDeliveries: 0,
-                        },
-                        'budgeted-full-snapshot'
-                    ) as eventWithTime
-                )
-                sessionRecording.onRRwebEmit(
-                    createCustomSnapshot(
-                        { timestamp: startingTimestamp + 200 },
-                        {
-                            status: 'completed',
-                            walkMs: 80,
-                            sliceCount: 7,
-                            slowestSliceMs: 5,
-                            heldEventHighWater: 1,
-                            droppedHeldEventCount: 2,
-                            droppedMutationRecords: 1,
-                            failedHeldEventDeliveries: 0,
-                        },
-                        'budgeted-full-snapshot'
-                    ) as eventWithTime
-                )
-
-                // worst case per gauge across the recording; drops accumulate
-                const properties = sessionRecording.sdkDebugProperties
-                expect(properties.$sdk_debug_replay_budgeted_snapshot_ms).toBe(120)
-                expect(properties.$sdk_debug_replay_budgeted_snapshot_slices).toBe(7)
-                expect(properties.$sdk_debug_replay_budgeted_snapshot_slowest_slice_ms).toBe(9)
-                expect(properties.$sdk_debug_replay_budgeted_snapshot_held_high_water).toBe(3)
-                expect(properties.$sdk_debug_replay_budgeted_snapshot_dropped).toBe(3)
-            })
-
-            it('does not track failure diagnostics as completed telemetry', () => {
-                sessionRecording.onRRwebEmit(
-                    createCustomSnapshot(
-                        { timestamp: startingTimestamp + 100 },
-                        { status: 'sync-fallback', walkMs: 5000 },
-                        'budgeted-full-snapshot'
-                    ) as eventWithTime
-                )
-
-                const properties = sessionRecording.sdkDebugProperties
-                expect(properties.$sdk_debug_replay_budgeted_snapshot_ms).toBeUndefined()
-                expect(properties.$sdk_debug_replay_budgeted_snapshot_slices).toBeUndefined()
-                expect(properties.$sdk_debug_replay_budgeted_snapshot_dropped).toBeUndefined()
-            })
-
             it('drops full snapshots when idle - so we must make sure not to take them while idle!', () => {
                 // force idle state
                 sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = true
@@ -2231,27 +2156,6 @@ describe('Lazy SessionRecording', () => {
             )
         })
 
-        it('passes a configured fullSnapshotYieldBudgetMs through to rrweb.record', () => {
-            // the allowlist is the only route this option takes into the
-            // recorder — a silently dropped key would leave a customer who
-            // opted in running synchronous snapshots with no signal
-            posthog.config.session_recording.fullSnapshotYieldBudgetMs = 10
-
-            sessionRecording.onRemoteConfig(
-                makeFlagsResponse({
-                    sessionRecording: {
-                        endpoint: '/s/',
-                    },
-                })
-            )
-
-            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    fullSnapshotYieldBudgetMs: 10,
-                })
-            )
-        })
-
         it('still starts when the bundled core has no SessionIdManager.on (version skew with CDN recorder)', () => {
             // The recorder chunk is loaded from the CDN and can run against an older bundled core.
             // SessionIdManager.on was only added in posthog-js 1.268.6, so simulate an older core that
@@ -3410,8 +3314,8 @@ describe('Lazy SessionRecording', () => {
                 })
             )
             expect(sessionRecording['_onBeforeUnload']).not.toBeNull()
-            // we register 5 event listeners: beforeunload, pagehide, offline, online, visibilitychange
-            expect(window.addEventListener).toHaveBeenCalledTimes(5)
+            // we register 4 event listeners
+            expect(window.addEventListener).toHaveBeenCalledTimes(4)
 
             // window.addEventListener('blah', someFixedListenerInstance) is safe to call multiple times,
             // so we don't need to test if the addEvenListener registrations are called multiple times
@@ -3930,6 +3834,124 @@ describe('Lazy SessionRecording', () => {
                     })
                 )
             })
+        })
+    })
+
+    describe('sampling passthrough', () => {
+        it('passes user sampling for mousemove and mouseInteraction to rrweb.record', () => {
+            posthog.config.session_recording.sampling = { mousemove: false, mouseInteraction: false }
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    sampling: { mousemove: false, mouseInteraction: false },
+                })
+            )
+        })
+
+        it('passes a falsy numeric mousemove value of 0 to rrweb.record', () => {
+            posthog.config.session_recording.sampling = { mousemove: 0 }
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    sampling: { mousemove: 0 },
+                })
+            )
+        })
+
+        it('passes a numeric mousemove throttle to rrweb.record', () => {
+            posthog.config.session_recording.sampling = { mousemove: 250 }
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    sampling: { mousemove: 250 },
+                })
+            )
+        })
+
+        it('merges user sampling with canvas sampling', () => {
+            posthog.config.session_recording.sampling = { mousemove: false }
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        canvasQuality: '0.2',
+                        canvasFps: 6,
+                        recordCanvas: true,
+                    },
+                })
+            )
+
+            sessionRecording['_onScriptLoaded']()
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    recordCanvas: true,
+                    sampling: { mousemove: false, canvas: 6 },
+                })
+            )
+        })
+
+        it('ignores sampling keys that are not allowlisted', () => {
+            posthog.config.session_recording.sampling = {
+                canvas: 1,
+                scroll: 100,
+                mousemove: false,
+            } as any
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    sampling: { mousemove: false },
+                })
+            )
+        })
+
+        it('does not set sampling when not configured', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    sampling: undefined,
+                })
+            )
         })
     })
 
