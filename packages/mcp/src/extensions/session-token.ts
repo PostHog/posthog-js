@@ -124,12 +124,14 @@ function isWebHeaders(value: unknown): value is WebHeadersLike {
 export function readRequestHeaders(
   extra: CompatibleRequestHandlerExtra | undefined
 ): Record<string, unknown> | undefined {
-  const webHeaders = extra?.http?.req?.headers
-  if (isWebHeaders(webHeaders)) {
-    return Object.fromEntries(webHeaders.entries())
+  // Normalize by shape rather than by source: a framework is free to hand us a
+  // plain object where the SDK would hand us `Headers`, and reading the wrong
+  // one of those fails silently rather than loudly.
+  const headers = extra?.http?.req?.headers ?? extra?.requestInfo?.headers
+  if (isWebHeaders(headers)) {
+    return Object.fromEntries(headers.entries())
   }
-  const headers = extra?.requestInfo?.headers
-  return headers && typeof headers === 'object' ? headers : undefined
+  return headers && typeof headers === 'object' ? (headers as Record<string, unknown>) : undefined
 }
 
 /**
