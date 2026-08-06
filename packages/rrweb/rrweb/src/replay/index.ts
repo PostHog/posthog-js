@@ -157,6 +157,10 @@ export class Replayer {
   // was attached, keyed by node id; adopted when the shadow root appears.
   private pendingAdoptedStyleSheets: Map<number, number[]> = new Map();
 
+  // Latest adoption per host, keyed by node id; a wall-clock retry armed by
+  // an older AdoptedStyleSheet event must not overwrite a newer one.
+  private adoptedStyleSheetTokens: Map<number, object> = new Map();
+
   // Used to track video & audio elements, and keep them in sync with general playback.
   private mediaManager: MediaManager;
 
@@ -380,6 +384,7 @@ export class Replayer {
       this.mirror.reset();
       this.styleMirror.reset();
       this.pendingAdoptedStyleSheets.clear();
+      this.adoptedStyleSheetTokens.clear();
       this.mediaManager.reset();
       this.lastScrollMap.clear();
     };
@@ -669,6 +674,7 @@ export class Replayer {
     this.mirror.reset();
     this.styleMirror.reset();
     this.pendingAdoptedStyleSheets.clear();
+    this.adoptedStyleSheetTokens.clear();
     this.mediaManager.reset();
     this.resetCache();
 
@@ -932,6 +938,7 @@ export class Replayer {
           this.mediaManager.reset();
           this.styleMirror.reset();
           this.pendingAdoptedStyleSheets.clear();
+          this.adoptedStyleSheetTokens.clear();
           this.rebuildFullSnapshot(event, isSync);
           // 'instant' so the offset is not animated when the page sets scroll-behavior: smooth
           this.iframe.contentWindow?.scrollTo({
@@ -2326,6 +2333,9 @@ export class Replayer {
   private applyAdoptedStyleSheet(data: adoptedStyleSheetData) {
     const targetHost = this.mirror.getNode(data.id);
     if (!targetHost) return;
+    // supersede retries still pending from an older event for this host
+    const token = {};
+    this.adoptedStyleSheetTokens.set(data.id, token);
     // Create StyleSheet objects which will be adopted after.
     data.styles?.forEach((style) => {
       let newStyleSheet: CSSStyleSheet | null = null;
@@ -2361,6 +2371,8 @@ export class Replayer {
     const MAX_RETRY_TIME = 10;
     let count = 0;
     const adoptStyleSheets = (targetHost: Node, styleIds: number[]) => {
+      // a newer AdoptedStyleSheet event for this host supersedes this one
+      if (this.adoptedStyleSheetTokens.get(data.id) !== token) return;
       const stylesToAdopt = styleIds
         .map((styleId) => this.styleMirror.getStyle(styleId))
         .filter((style) => style !== null) as CSSStyleSheet[];

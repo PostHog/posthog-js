@@ -29,6 +29,7 @@ import StyleSheetTextMutation from './events/style-sheet-text-mutation';
 import canvasInIframe from './events/canvas-in-iframe';
 import adoptedStyleSheet from './events/adopted-style-sheet';
 import adoptedStyleSheetBeforeShadowRoot from './events/adopted-style-sheet-before-shadow-root';
+import adoptedStyleSheetStaleRetry from './events/adopted-style-sheet-stale-retry';
 import adoptedStyleSheetModification from './events/adopted-style-sheet-modification';
 import documentReplacementEvents from './events/document-replacement';
 import hoverInIframeShadowDom from './events/iframe-shadowdom-hover';
@@ -1092,6 +1093,36 @@ describe('replayer', function () {
       return host.shadowRoot!.adoptedStyleSheets.length;
     });
     expect(adoptedSheetCount).toBe(1);
+  });
+
+  it('does not let a stale adoption retry overwrite a newer stylesheet list', async () => {
+    await page.evaluate(`
+      events = ${JSON.stringify(adoptedStyleSheetStaleRetry)};
+      const { Replayer } = rrweb;
+      var replayer = new Replayer(events,{showDebug:true});
+      replayer.play();
+    `);
+    // wait past the first event's last surviving retry (~1610ms), which
+    // without the token guard re-adopts the stale stylesheet list
+    await page.waitForTimeout(2500);
+
+    const state = await page.evaluate(() => {
+      const iframe = document.querySelector('iframe') as HTMLIFrameElement;
+      const host = iframe.contentDocument!.querySelector(
+        'late-shadow-host',
+      ) as HTMLElement;
+      const anchor = host.shadowRoot!.querySelector('a')!;
+      return {
+        ruleCounts: host.shadowRoot!.adoptedStyleSheets.map(
+          (s) => s.cssRules.length,
+        ),
+        anchorColor: iframe.contentWindow!.getComputedStyle(anchor).color,
+      };
+    });
+    // the second AdoptedStyleSheet event (2 rules, blue anchor) must win over
+    // the first (3 rules, red anchor)
+    expect(state.ruleCounts).toEqual([2]);
+    expect(state.anchorColor).toBe('rgb(0, 0, 255)');
   });
 
   it('can replay modification events for adoptedStyleSheet', async () => {
