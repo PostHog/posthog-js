@@ -103,6 +103,11 @@ export class CanvasManager {
     this.locked = false;
   }
 
+  public discardPending() {
+    this.pendingCanvasMutations.clear();
+    this.locked = false;
+  }
+
   constructor(options: {
     recordCanvas: boolean;
     mutationCb: canvasMutationCallback;
@@ -228,6 +233,13 @@ export class CanvasManager {
 
       if (!('base64' in e.data)) return;
 
+      // A time-sliced full snapshot locks this manager; frames landing during
+      // the walk are dropped rather than held (a multi-second walk at 4fps
+      // per canvas would flood the held-event queue). Nothing is lost: the
+      // snapshot's dedup reset forces a fresh frame for every canvas as soon
+      // as the walk completes.
+      if (this.locked) return;
+
       const { base64, type, displayWidth, displayHeight } = e.data;
       // the encoded image may be downscaled; draw it stretched back to the canvas's display
       // size — carried through the worker with the frame, so playback keeps the original
@@ -296,6 +308,12 @@ export class CanvasManager {
     const takeCanvasSnapshots = (timestamp: DOMHighResTimeStamp) => {
       // the worker failed to load (e.g. CSP blocked the blob script); stop capturing.
       if (workerErrored) {
+        return;
+      }
+      // Skip capture work entirely while a time-sliced snapshot has this
+      // manager locked — the frames would be dropped at delivery anyway.
+      if (this.locked) {
+        rafId = requestAnimationFrame(takeCanvasSnapshots);
         return;
       }
       if (lastSnapshotTime && timestamp - lastSnapshotTime < timeBetweenSnapshots) {
