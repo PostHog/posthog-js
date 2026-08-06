@@ -28,14 +28,15 @@ export function extractRequestId(result: unknown): string | undefined {
 }
 
 /**
- * Reads the `cache_write_tokens` field from a Chat Completions
- * `usage.prompt_tokens_details` object. OpenAI-compatible providers (and OpenAI
- * itself on newer models) report cache-creation tokens here, but the field is
- * absent from the pinned SDK's types, so it has to be read through a cast. Used
- * to populate `$ai_cache_creation_input_tokens`.
+ * Reads `cache_write_tokens` from a usage details object — Chat Completions'
+ * `prompt_tokens_details` or the Responses API's `input_tokens_details`, both of
+ * which carry the field — and returns 0 when it is absent. A defensive reader
+ * (mirroring `extractRequestId`) that tolerates the loosely-typed usage shapes
+ * OpenAI-compatible providers return, used to populate
+ * `$ai_cache_creation_input_tokens`.
  */
-export function extractCacheWriteTokens(promptTokensDetails: unknown): number {
-  return (promptTokensDetails as { cache_write_tokens?: number } | null | undefined)?.cache_write_tokens ?? 0
+export function extractCacheWriteTokens(details: unknown): number {
+  return (details as { cache_write_tokens?: number } | null | undefined)?.cache_write_tokens ?? 0
 }
 
 /**
