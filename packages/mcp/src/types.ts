@@ -274,6 +274,12 @@ export interface SessionInfo {
 export interface AnalyticsParameterOwnership {
   context: boolean
   conversationId: boolean
+  /**
+   * True when we declared `_mcp_instructions` on this tool's advertised output
+   * schema, so writing that key into `structuredContent` will validate. False
+   * for tools with no output schema, or one we could not extend.
+   */
+  outputInstructions: boolean
 }
 
 export interface MCPAnalyticsData {
