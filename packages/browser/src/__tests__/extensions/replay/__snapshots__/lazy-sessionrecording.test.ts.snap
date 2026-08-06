@@ -1,0 +1,35 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Lazy SessionRecording recording records events emitted before and after starting recording 1`] = `
+[
+  "$snapshot",
+  {
+    "$lib": "web",
+    "$lib_version": "0.0.1",
+    "$session_id": "<generated-session-id>",
+    "$snapshot_bytes": 60,
+    "$snapshot_data": [
+      {
+        "data": {
+          "source": 1,
+        },
+        "type": 3,
+      },
+      {
+        "data": {
+          "source": 2,
+        },
+        "type": 3,
+      },
+    ],
+    "$snapshot_host": "localhost",
+    "$window_id": "windowId",
+  },
+  {
+    "_batchKey": "recordings",
+    "_noTruncate": true,
+    "_url": "https://test.com/s/",
+    "skip_client_rate_limiting": true,
+  },
+]
+`;

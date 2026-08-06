@@ -14,10 +14,13 @@ const capturedRequests: { '/e/': any[]; '/engage/': any[]; '/flags/': any[] } = 
     '/flags/': [],
 }
 
+const capturedFlagsWireRequests: any[] = []
+
 const isGzipData = (data: Uint8Array): boolean => data[0] === 0x1f && data[1] === 0x8b
 
 const handleRequest = (group: string) => (req: RestRequest, res: ResponseComposition, ctx: RestContext) => {
     let body = req.body
+    const rawBody = body
 
     if (typeof body === 'string') {
         try {
@@ -39,6 +42,16 @@ const handleRequest = (group: string) => (req: RestRequest, res: ResponseComposi
 
     const requests = group === '/e/' ? (isArray(body) ? body : isArray(body.batch) ? body.batch : [body]) : [body]
     capturedRequests[group] = [...(capturedRequests[group] || []), ...requests]
+
+    if (group === '/flags/') {
+        capturedFlagsWireRequests.push({
+            bodyWrapper: typeof rawBody === 'string' && rawBody.startsWith('data=') ? 'data=<base64>' : '<unknown>',
+            compression: req.url.searchParams.get('compression'),
+            contentType: req.headers.get('content-type'),
+            decodedBody: body,
+            path: `${req.url.pathname}${req.url.search}`,
+        })
+    }
 
     return res(ctx.json({}))
 }
@@ -72,6 +85,9 @@ export const getRequests = (token: string) => {
     }
 }
 
+export const getFlagsWireRequests = (token: string) =>
+    capturedFlagsWireRequests.filter((request) => request.decodedBody.token === token)
+
 export const resetRequests = (token: string) => {
     Object.assign(capturedRequests, {
         '/e/': (capturedRequests['/e/'] = capturedRequests['/e/'].filter(
@@ -84,4 +100,10 @@ export const resetRequests = (token: string) => {
             (request) => request.token !== token
         )),
     })
+
+    for (let index = capturedFlagsWireRequests.length - 1; index >= 0; index--) {
+        if (capturedFlagsWireRequests[index].decodedBody.token === token) {
+            capturedFlagsWireRequests.splice(index, 1)
+        }
+    }
 }

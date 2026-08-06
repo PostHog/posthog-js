@@ -199,6 +199,7 @@ describe('Error conversion', () => {
         const error = new Error('my error', { cause: originalError })
         const errorProperties: ErrorProperties = errorToProperties({ error, event: undefined })
         expect(Object.keys(errorProperties)).toHaveLength(2)
+        expect(errorProperties.$exception_list).toHaveLength(2)
         expect(errorProperties.$exception_list[0].type).toEqual('Error')
         expect(errorProperties.$exception_list[0].value).toEqual('my error')
         expect(errorProperties.$exception_level).toEqual('error')
@@ -206,6 +207,15 @@ describe('Error conversion', () => {
         expect(errorProperties.$exception_list[0].mechanism.handled).toEqual(true)
         expect(errorProperties.$exception_list[1].type).toEqual('CustomError')
         expect(errorProperties.$exception_list[1].value).toEqual('my original error')
+        expect(errorProperties.$exception_list.every((exception) => exception.stacktrace.frames.length > 0)).toBe(true)
+
+        expect({
+            ...errorProperties,
+            $exception_list: errorProperties.$exception_list.map(({ stacktrace, ...exception }) => ({
+                ...exception,
+                stacktrace: { ...stacktrace, frames: '<normalized stack frames>' },
+            })),
+        }).toMatchSnapshot()
     })
 
     it('should not use cause prop when it is a string', () => {
