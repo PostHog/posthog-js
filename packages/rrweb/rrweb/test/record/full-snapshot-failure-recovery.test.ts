@@ -14,7 +14,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { EventType, type eventWithTime } from '@posthog/rrweb-types';
 
-const snapshotControl = vi.hoisted(() => ({ failNextSnapshot: false }));
+const snapshotControl = vi.hoisted(() => ({
+  failNextSnapshot: false,
+  rejectNextWalkWithWatchdog: false,
+}));
 
 vi.mock('@posthog/rrweb-snapshot', async (importOriginal) => {
   const actual =
@@ -30,6 +33,19 @@ vi.mock('@posthog/rrweb-snapshot', async (importOriginal) => {
       }
       return actual.snapshot(...args);
     },
+    // the watchdog needs MAX_WALK_WALL_CLOCK_MS (30s) of stalled wall clock,
+    // so its rejection is injected rather than waited for
+    snapshotWithBudget: (
+      ...args: Parameters<typeof actual.snapshotWithBudget>
+    ) => {
+      if (snapshotControl.rejectNextWalkWithWatchdog) {
+        snapshotControl.rejectNextWalkWithWatchdog = false;
+        return Promise.reject(
+          new Error('Budgeted full snapshot exceeded its wall-clock limit'),
+        );
+      }
+      return actual.snapshotWithBudget(...args);
+    },
   };
 });
 
@@ -44,6 +60,7 @@ describe('full snapshot failure recovery', () => {
     stop?.();
     stop = undefined;
     snapshotControl.failNextSnapshot = false;
+    snapshotControl.rejectNextWalkWithWatchdog = false;
     vi.restoreAllMocks();
     document.body.innerHTML = '';
   });
@@ -140,6 +157,46 @@ describe('full snapshot failure recovery', () => {
       ),
     ).toBe(true);
   });
+
+  it('a watchdog rejection unwinds the walk with a diagnostic and recovers via the retry', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const events: eventWithTime[] = [];
+    snapshotControl.rejectNextWalkWithWatchdog = true;
+    stop = record({
+      emit: (event) => {
+        events.push(event as eventWithTime);
+      },
+      fullSnapshotYieldBudgetMs: 25,
+    });
+
+    await vi.waitFor(
+      () => {
+        expect(events.some((e) => e.type === EventType.FullSnapshot)).toBe(
+          true,
+        );
+      },
+      { timeout: 10_000 },
+    );
+
+    const retryDiagnostics = events
+      .filter((e) => e.type === EventType.Custom)
+      .map(
+        (e) =>
+          (
+            e as {
+              data: { tag: string; payload?: { status?: string; reason?: string } };
+            }
+          ).data,
+      )
+      .filter((d) => d.tag === 'budgeted-full-snapshot')
+      .map((d) => d.payload);
+    const retry = retryDiagnostics.find((p) => p?.status === 'budgeted-retry');
+    expect(retry).toBeDefined();
+    expect(retry?.reason).toBe('watchdog-timeout');
+    expect(
+      events.filter((e) => e.type === EventType.FullSnapshot).length,
+    ).toBe(1);
+  }, 15_000);
 
   it('falls back to a synchronous snapshot when the consumer emit throws on the retry Meta', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});

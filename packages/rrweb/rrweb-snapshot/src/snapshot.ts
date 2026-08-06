@@ -1633,7 +1633,7 @@ function snapshot(
  * (~4% over MessageChannel), but a recorder is a guest in the host app;
  * starving the app's own timers to serialize faster is the wrong trade.
  */
-function createYielder(): {
+export function createYielder(): {
   doYield: () => Promise<void>;
   dispose: () => void;
 } {
@@ -1651,9 +1651,14 @@ function createYielder(): {
           pending = resolve;
           channel.port2.postMessage(null);
         }),
-      // entangled ports pin scheduler resources until closed; a recording that
-      // snapshots on a checkout interval creates one channel per walk
+      // Entangled ports pin scheduler resources until closed; a recording that
+      // snapshots on a checkout interval creates one channel per walk. A
+      // parked resolver is settled first, so no caller stays awaiting a
+      // message the closed ports can no longer deliver.
       dispose: () => {
+        const resolve = pending;
+        pending = null;
+        resolve?.();
         channel.port1.close();
         channel.port2.close();
       },
@@ -1737,7 +1742,9 @@ export type SnapshotWithBudgetOptions = NonNullable<
   /**
    * Hard wall-clock bound on the whole walk. A page that mutates continuously
    * can stretch a cooperative walk arbitrarily; past this limit the walk
-   * throws (the recorder falls back to a synchronous snapshot).
+   * throws (the recorder falls back to a synchronous snapshot). Enforced by
+   * a real timer, not just an in-loop probe, so a walk parked on a yield
+   * that never settles is still expired and woken to unwind.
    */
   maxWalkWallClockMs?: number;
   /**
@@ -1884,6 +1891,32 @@ export async function snapshotWithBudget(
   let nodesSinceCheck = 0;
   let finished = false;
   let aborted = false;
+  // Settles the driver's pending yield from the outside. A parked yield can
+  // otherwise never settle (a dying page's MessageChannel message, a frozen
+  // tab's timers), and both the watchdog below and flushSync need the driver
+  // to wake so it unwinds and releases the yielder. Every wake first sets a
+  // terminal state (finished or aborted), so a single latched promise is
+  // enough: the woken driver exits its loop and never races this again.
+  let wakeParkedDriver: (() => void) | null = null;
+  const parkedDriverWoken = new Promise<void>((resolve) => {
+    wakeParkedDriver = resolve;
+  });
+  // The in-loop deadline probe below only runs while the driver is awake. If
+  // the pending yield never settles, held events keep accumulating behind a
+  // walk nothing can end. A real timer is the only bound that still holds,
+  // so it expires the walk AND wakes the parked driver to observe it.
+  let watchdogExpired = false;
+  const watchdogTimer =
+    maxWalkWallClockMs !== undefined
+      ? setTimeout(() => {
+          if (finished || aborted) {
+            return;
+          }
+          watchdogExpired = true;
+          aborted = true;
+          wakeParkedDriver?.();
+        }, maxWalkWallClockMs)
+      : undefined;
   const serializedThisWalk = new WeakSet<Node>();
   // Progress floor: input can arrive continuously (a 125Hz+ mouse reports
   // several times per frame), and ending a slice after every single node
@@ -2025,12 +2058,17 @@ export async function snapshotWithBudget(
       }
       if (shouldAbort?.()) {
         aborted = true;
+        wakeParkedDriver?.();
         return null;
       }
       while (stack.length > 0) {
         processNode();
       }
       finished = true;
+      // The driver may be parked on a yield that will never fire on a dying
+      // page; wake it so it unwinds, disposes the yielder and settles the
+      // walk's promise instead of retaining them all forever.
+      wakeParkedDriver?.();
       return root;
     },
   });
@@ -2071,7 +2109,12 @@ export async function snapshotWithBudget(
           // — and a tab freeze would park the walk (and the buffer locks and
           // held queue behind it) indefinitely. Finish in one task instead.
           if (n.visibilityState !== 'hidden') {
-            await doYield();
+            await Promise.race([doYield(), parkedDriverWoken]);
+            if (watchdogExpired) {
+              throw new Error(
+                'Budgeted full snapshot exceeded its wall-clock limit',
+              );
+            }
             if (shouldAbort?.()) {
               aborted = true;
               break;
@@ -2087,6 +2130,9 @@ export async function snapshotWithBudget(
       processNode();
     }
   } finally {
+    if (watchdogTimer !== undefined) {
+      clearTimeout(watchdogTimer);
+    }
     yielder.dispose();
   }
 

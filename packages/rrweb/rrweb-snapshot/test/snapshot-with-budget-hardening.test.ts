@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import snapshot, {
   snapshotWithBudget,
   cleanupSnapshot,
+  createYielder,
   type BudgetedSnapshotController,
 } from '../src/snapshot';
 import type { serializedNodeWithId } from '../src/types';
@@ -206,6 +207,53 @@ describe('snapshotWithBudget hardening', () => {
         yieldFn: async () => undefined,
       }),
     ).rejects.toThrow('wall-clock');
+  });
+
+  it('the watchdog expires a walk parked on a yield that never settles', async () => {
+    const doc = buildDocument(120);
+
+    cleanupSnapshot();
+    // nothing else touches this walk: without the timer waking the driver,
+    // this promise would simply never settle
+    await expect(
+      snapshotWithBudget(doc, {
+        ...OPTIONS,
+        mirror: new Mirror(),
+        yieldBudgetMs: 0.0001,
+        maxWalkWallClockMs: 30,
+        yieldFn: () => new Promise<void>(() => undefined),
+      }),
+    ).rejects.toThrow('wall-clock');
+  });
+
+  it('flushSync wakes the parked driver so the walk promise settles on its own', async () => {
+    const doc = buildDocument(60);
+
+    cleanupSnapshot();
+    let controller: BudgetedSnapshotController | null = null;
+    const walkPromise = snapshotWithBudget(doc, {
+      ...OPTIONS,
+      mirror: new Mirror(),
+      yieldBudgetMs: 0.0001,
+      yieldFn: () => new Promise<void>(() => undefined),
+      onController: (c) => {
+        controller = c;
+      },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const root = controller!.flushSync();
+    expect(root).not.toBeNull();
+    // no external help: flushSync itself must release the parked driver, or
+    // the yielder and this promise are retained for the life of the page
+    await expect(walkPromise).resolves.toBe(root);
+  });
+
+  it('createYielder dispose settles a parked yield', async () => {
+    const yielder = createYielder();
+    const parked = yielder.doYield();
+    yielder.dispose();
+    await expect(parked).resolves.toBeUndefined();
   });
 
   it('reports whether a <style> text serialization inlined the live CSSOM', async () => {
