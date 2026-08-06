@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.410.6
+
+### Patch Changes
+
+- [#4407](https://github.com/PostHog/posthog-js/pull/4407) [`6d5e314`](https://github.com/PostHog/posthog-js/commit/6d5e314c1e1b2ee493edb1f96a7e3779d75852e4) Thanks [@ioannisj](https://github.com/ioannisj)! - Fix session replay shipping one billable recording per session rotation for tabs the user never interacts with. A session born from an idle rotation now holds its buffer until the first user interaction, then ships a recording playable from the session's start; without interaction nothing is sent — a further rotation, stop, opt-out, or page unload discards the held data instead of shipping it. An event trigger match (for example record-on-exception) also releases the hold, since it is explicit intent to record the session.
+  (2026-08-03)
+
 ## 1.410.5
 
 ### Patch Changes
