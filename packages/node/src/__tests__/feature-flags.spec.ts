@@ -6779,6 +6779,82 @@ describe('ETag support for local evaluation polling', () => {
   })
 })
 
+describe('local evaluation poll scheduling', () => {
+  let posthog: PostHog
+
+  jest.useFakeTimers()
+
+  afterEach(async () => {
+    jest.useRealTimers()
+    await posthog.shutdown(100).catch(() => undefined)
+    jest.useFakeTimers()
+  })
+
+  it('schedules the next poll after a slow fetch completes', async () => {
+    let resolveFetch!: (response: any) => void
+    const deferredFetch = new Promise<any>((resolve) => {
+      resolveFetch = resolve
+    })
+    const mockFetch = jest.fn(() => deferredFetch)
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: mockFetch,
+      featureFlagsPollingInterval: 1000,
+      ...posthogImmediateResolveOptions,
+    })
+
+    const initialLoad = posthog.reloadFeatureFlags()
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+
+    await jest.advanceTimersByTimeAsync(1000)
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+
+    resolveFetch({
+      status: 200,
+      json: () => Promise.resolve({ flags: [], group_type_mapping: {}, cohorts: {} }),
+      headers: { get: () => null },
+    })
+    await initialLoad
+
+    await jest.advanceTimersByTimeAsync(999)
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+
+    await jest.advanceTimersByTimeAsync(1)
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not schedule another poll when stopped during a slow fetch', async () => {
+    let resolveFetch!: (response: any) => void
+    const deferredFetch = new Promise<any>((resolve) => {
+      resolveFetch = resolve
+    })
+    const mockFetch = jest.fn(() => deferredFetch)
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: mockFetch,
+      featureFlagsPollingInterval: 1000,
+      ...posthogImmediateResolveOptions,
+    })
+
+    const initialLoad = posthog.reloadFeatureFlags()
+    await posthog.featureFlagsPoller?.stopPoller()
+
+    resolveFetch({
+      status: 200,
+      json: () => Promise.resolve({ flags: [], group_type_mapping: {}, cohorts: {} }),
+      headers: { get: () => null },
+    })
+    await initialLoad
+    await jest.advanceTimersByTimeAsync(1000)
+
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('error handling and backoff', () => {
   let posthog: PostHog
 
@@ -6824,6 +6900,27 @@ describe('error handling and backoff', () => {
 
     return mockFetch
   }
+
+  it.each([401, 403, 429])('should schedule the next poll using updated backoff after %i', async (statusCode) => {
+    const mockFetch = createMockFetch(statusCode)
+
+    posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      fetch: mockFetch,
+      featureFlagsPollingInterval: 1000,
+      ...posthogImmediateResolveOptions,
+    })
+
+    await posthog.reloadFeatureFlags()
+    expect(mockFetch.callCount).toBe(1)
+
+    await jest.advanceTimersByTimeAsync(1999)
+    expect(mockFetch.callCount).toBe(1)
+
+    await jest.advanceTimersByTimeAsync(1)
+    expect(mockFetch.callCount).toBe(2)
+  })
 
   it('should block on-demand fetches during backoff period after 401', async () => {
     const mockFetch = createMockFetch(401)
