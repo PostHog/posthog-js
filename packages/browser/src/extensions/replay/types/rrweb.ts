@@ -79,7 +79,6 @@ export type recordOptions = {
     emit?: (e: eventWithTime, isCheckout?: boolean) => void
     checkoutEveryNth?: number
     checkoutEveryNms?: number
-    fullSnapshotYieldBudgetMs?: number
     blockClass?: blockClass
     blockSelector?: string
     ignoreClass?: string
@@ -94,6 +93,7 @@ export type recordOptions = {
     ignoreCSSAttributes?: Set<string>
     attributeFilter?: string[]
     inlineStylesheet?: boolean
+    inlineStylesheetBudgetRules?: number
     hooks?: hooksParam
     packFn?: PackFn
     sampling?: SamplingStrategy

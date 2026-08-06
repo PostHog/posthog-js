@@ -10,6 +10,8 @@ import {
   isNativeShadowDom,
   getInputType,
   toLowerCase,
+  nowMs,
+  recordMutationCost,
 } from '@posthog/rrweb-snapshot';
 import type { observerParam, MutationBufferParam } from '../types';
 import type {
@@ -139,7 +141,7 @@ const moveKey = (id: number, parentId: number) => `${id}@${parentId}`;
  */
 export default class MutationBuffer {
   private frozen = false;
-  private lockToken: number | null = null;
+  private locked = false;
 
   private texts: textCursor[] = [];
   private attributes: attributeCursor[] = [];
@@ -193,7 +195,6 @@ export default class MutationBuffer {
   private shadowDomManager: observerParam['shadowDomManager'];
   private canvasManager: observerParam['canvasManager'];
   private processedNodeManager: observerParam['processedNodeManager'];
-  private onStylesheetTextSerialized: observerParam['onStylesheetTextSerialized'];
   private unattachedDoc: HTMLDocument;
   private canvasManagerReleased = false;
 
@@ -222,7 +223,6 @@ export default class MutationBuffer {
         'shadowDomManager',
         'canvasManager',
         'processedNodeManager',
-        'onStylesheetTextSerialized',
       ] as const
     ).forEach((key) => {
       // just a type trick, the runtime result is correct
@@ -247,97 +247,18 @@ export default class MutationBuffer {
     return this.frozen;
   }
 
-  public lock(token: number): boolean {
-    if (this.lockToken !== null && this.lockToken !== token) {
-      return false;
-    }
-    if (this.lockToken === token) {
-      return true;
-    }
-    this.lockToken = token;
+  public lock() {
+    this.locked = true;
     this.canvasManager.lock();
-    return true;
   }
 
-  /**
-   * Whether this (locked) buffer is going to deliver `n` as an add on commit.
-   * The time-sliced walker skips such nodes — the buffer's add carries their
-   * live position, so the buffer is their single source of truth. (The
-   * inverse — serializing them and forgetting the pending add — froze them
-   * into the snapshot at stale positions and lost whole subtrees whenever a
-   * serialized ancestor moved before its children were reached.)
-   */
-  public hasPendingAdd(n: Node): boolean {
-    return this.addedSet.has(n);
-  }
-
-  public hasLockToken(token: number): boolean {
-    return this.lockToken === token;
-  }
-
-  /**
-   * Approximate count of records a locked buffer is retaining, used to bound
-   * how much a time-sliced snapshot lets accumulate before giving up.
-   */
-  public pendingRecordCount(): number {
-    return (
-      this.texts.length +
-      this.attributes.length +
-      this.removes.length +
-      this.addedSet.size +
-      this.movedSet.size
-    );
-  }
-
-  public commit(token: number): boolean {
-    if (this.lockToken !== token) {
-      return false;
-    }
-    this.lockToken = null;
+  public unlock() {
+    this.locked = false;
     this.canvasManager.unlock();
-    if (this.frozen) {
-      // freezePage defers delivery: the records stay buffered and unfreeze()
-      // emits them, so this commit must not claim they went out
-      return false;
-    }
     this.emit();
-    return true;
-  }
-
-  public discard(token: number): boolean {
-    if (this.lockToken !== token) {
-      return false;
-    }
-    this.lockToken = null;
-    // symmetric with commit(): a failed transaction must not leave the
-    // shared canvas manager locked, or every frame is dropped until the
-    // next successful snapshot's commit
-    this.canvasManager.unlock();
-    // drain mapRemoves through the mirror exactly like emit() does: these
-    // nodes left the DOM, and skipping removeNodeFromMap here would leave
-    // them resolvable in the idNodeMap forever, a leak that grows on every
-    // aborted snapshot of exactly the huge, busy pages budgeted mode targets
-    while (this.mapRemoves.length) {
-      this.mirror.removeNodeFromMap(this.mapRemoves.shift()!);
-    }
-    this.texts = [];
-    this.attributes = [];
-    this.attributeMap = new WeakMap<Node, attributeCursor>();
-    this.removes = [];
-    this.mapRemoves = [];
-    this.addedSet = new Set<Node>();
-    this.movedSet = new Set<Node>();
-    this.droppedSet = new Set<Node>();
-    this.removesSubTreeCache = new Set<Node>();
-    this.movedMap = {};
-    this.canvasManager.discardPending();
-    return true;
   }
 
   public reset() {
-    // A buffer torn down mid-snapshot must not stay a lock holder: a stale
-    // token here would fail every future lockMutationBuffers sweep.
-    this.lockToken = null;
     // Don't reset the shared shadowDomManager here — that would disconnect every shadow-root observer on the page when any single buffer is torn down.
     this.releaseCanvasManager();
   }
@@ -372,10 +293,22 @@ export default class MutationBuffer {
   };
 
   public emit = () => {
-    if (this.frozen || this.lockToken !== null) {
+    if (this.frozen || this.locked) {
       return;
     }
 
+    // Processing a burst serializes every added subtree inline, which on churn-heavy
+    // pages (virtualized lists, calendars) is where the recorder's main-thread time
+    // goes. Measure it so that cost is visible without a Chrome trace.
+    const startedAt = nowMs();
+    try {
+      this.processBufferedMutations();
+    } finally {
+      recordMutationCost(nowMs() - startedAt);
+    }
+  };
+
+  private processBufferedMutations = () => {
     // delay any modification of the mirror until this function
     // so that the mirror for takeFullSnapshot doesn't get mutated while it's event is being processed
 
@@ -426,7 +359,6 @@ export default class MutationBuffer {
         recordCanvas: this.recordCanvas,
         canvasMaskingConfigured: this.canvasMaskingConfigured,
         inlineImages: this.inlineImages,
-        onStylesheetTextSerialized: this.onStylesheetTextSerialized,
         onSerialize: (currentN) => {
           if (isSerializedIframe(currentN, this.mirror)) {
             this.iframeManager.addIframe(currentN as HTMLIFrameElement);
@@ -827,23 +759,15 @@ export default class MutationBuffer {
             : this.mirror.getId(m.target);
           if (
             isBlocked(m.target, this.blockClass, this.blockSelector, false) ||
-            isIgnored(n, this.mirror, this.slimDOMOptions)
+            isIgnored(n, this.mirror, this.slimDOMOptions) ||
+            !isSerialized(n, this.mirror)
           ) {
             return;
           }
           // removed node has not been serialized yet, just remove it from the Set
-          //
-          // Checked before bailing out on an unserialized node: a node added
-          // and removed before it was ever serialized still has to cancel its
-          // own pending add, or the add goes out alone and the replay keeps a
-          // node the page no longer has. A time-sliced full snapshot makes this
-          // reachable far more often, because the buffer stays locked — and so
-          // nothing gets serialized — for the whole length of the walk.
-          if (this.lockToken !== null && this.addedSet.has(n)) {
+          if (this.addedSet.has(n)) {
             deepDelete(this.addedSet, n);
             this.droppedSet.add(n);
-          } else if (!isSerialized(n, this.mirror)) {
-            return;
           } else if (this.addedSet.has(m.target) && nodeId === -1) {
             /**
              * If target was newly added and removed child node was

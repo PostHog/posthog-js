@@ -1,6 +1,4 @@
 import snapshot, {
-  snapshotWithBudget,
-  type SnapshotWithBudgetOptions,
   serializeNodeWithId,
   transformAttribute,
   ignoreAttribute,
@@ -18,11 +16,10 @@ import snapshot, {
 } from './snapshot';
 export * from './types';
 export * from './utils';
+export * from './snapshot-cost';
 
 export {
   snapshot,
-  snapshotWithBudget,
-  type SnapshotWithBudgetOptions,
   serializeNodeWithId,
   transformAttribute,
   ignoreAttribute,

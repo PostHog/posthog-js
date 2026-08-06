@@ -34,6 +34,13 @@ import {
   absolutifyURLs,
 } from './utils';
 import dom from '@posthog/rrweb-utils';
+import {
+  beginSnapshotCostTracking,
+  countSerializedNode,
+  deferStylesheetLink,
+  endSnapshotCostTracking,
+  shouldDeferStylesheetInlining,
+} from './snapshot-cost';
 
 let _id = 1;
 const tagNameRegex = new RegExp('[^a-z0-9-_:]');
@@ -522,7 +529,6 @@ function serializeNode(
      * `newlyAddedElement: true` skips scrollTop and scrollLeft check
      */
     newlyAddedElement?: boolean;
-    onStylesheetTextSerialized?: (textNode: Text, inlined: boolean) => void;
   },
 ): serializedNode | false {
   const {
@@ -541,7 +547,6 @@ function serializeNode(
     canvasMaskingConfigured,
     keepIframeSrcFn,
     newlyAddedElement = false,
-    onStylesheetTextSerialized,
   } = options;
   // Only record root id when document object is not the base document
   const rootId = getRootId(doc, mirror);
@@ -589,7 +594,6 @@ function serializeNode(
         needsMask,
         maskTextFn,
         rootId,
-        onStylesheetTextSerialized,
       });
     case n.CDATA_SECTION_NODE:
       return {
@@ -621,10 +625,9 @@ function serializeTextNode(
     needsMask: boolean;
     maskTextFn: MaskTextFn | undefined;
     rootId: number | undefined;
-    onStylesheetTextSerialized?: (textNode: Text, inlined: boolean) => void;
   },
 ): serializedNode {
-  const { needsMask, maskTextFn, rootId, onStylesheetTextSerialized } = options;
+  const { needsMask, maskTextFn, rootId } = options;
   // The parent node may not be a html element which has a tagName attribute.
   // So just let it be undefined which is ok in this use case.
   const parent = dom.parentNode(n);
@@ -633,12 +636,6 @@ function serializeTextNode(
   const isStyle = parentTagName === 'STYLE' ? true : undefined;
   const isScript = parentTagName === 'SCRIPT' ? true : undefined;
   if (isStyle && text) {
-    // Whether the output carries the live CSSOM (rules read at serialization
-    // time) or the raw author text. A time-sliced snapshot needs this to
-    // decide which held CSSOM deltas the snapshot already contains — with the
-    // raw text kept, an insertRule from during the walk is NOT in the output
-    // and its delta must be replayed, not dropped.
-    let inlinedCssom = false;
     try {
       // try to read style sheet
       if (n.nextSibling || n.previousSibling) {
@@ -646,6 +643,12 @@ function serializeTextNode(
         // We can't read all of the sheet's .cssRules and expect them
         // to _only_ include the current rule(s) added by the text node.
         // So we'll be conservative and keep textContent as-is.
+      } else if (
+        shouldDeferStylesheetInlining((parent as HTMLStyleElement).sheet)
+      ) {
+        // Budget spent - keep the raw textContent, which is what we already fall
+        // back to for sheets we can't read. Costs us `@import` expansion and the
+        // browser's rule normalisation, not the CSS itself.
       } else if ((parent as HTMLStyleElement).sheet?.cssRules) {
         const stringified = stringifyStylesheet(
           (parent as HTMLStyleElement).sheet!,
@@ -655,7 +658,6 @@ function serializeTextNode(
         // when stringifyStylesheet would emit that corruption.
         if (stringified && !hasEmptyShorthandLonghand(stringified)) {
           text = stringified;
-          inlinedCssom = true;
         }
       }
     } catch (err) {
@@ -664,7 +666,6 @@ function serializeTextNode(
         n,
       );
     }
-    onStylesheetTextSerialized?.(n, inlinedCssom);
     text = absolutifyURLs(text, getHref(options.doc));
   }
   if (isScript) {
@@ -754,7 +755,9 @@ function serializeElementNode(
     }
   }
   // remote css
-  if (tagName === 'link' && inlineStylesheet) {
+  // a blocked link is serialized as a dimensions-only placeholder, so reading its
+  // sheet would be wasted work - and deferring it would leak CSS the block excluded
+  if (tagName === 'link' && inlineStylesheet && !needBlock) {
     // Direct sheet reference survives baseURI drift; href lookup is the fallback.
     let stylesheet: CSSStyleSheet | null | undefined = (n as HTMLLinkElement)
       .sheet;
@@ -772,7 +775,14 @@ function serializeElementNode(
     }
     let cssText: string | null = null;
     if (stylesheet) {
-      cssText = stringifyStylesheet(stylesheet);
+      if (shouldDeferStylesheetInlining(stylesheet)) {
+        // This snapshot has already spent its stylesheet budget. Leave `rel`/`href`
+        // in place so the replayer can still load the sheet remotely, and hand the
+        // element to the caller to inline off the critical path.
+        deferStylesheetLink(n as HTMLLinkElement);
+      } else {
+        cssText = stringifyStylesheet(stylesheet);
+      }
     }
     if (cssText) {
       delete attributes.rel;
@@ -1159,7 +1169,6 @@ export function serializeNodeWithId(
     depth?: number;
     maxDepth?: number;
     onMaxDepthReached?: () => void;
-    onStylesheetTextSerialized?: (textNode: Text, inlined: boolean) => void;
   },
 ): serializedNodeWithId | null {
   const {
@@ -1189,7 +1198,6 @@ export function serializeNodeWithId(
     newlyAddedElement = false,
     depth = 0,
     maxDepth = DEFAULT_MAX_DEPTH,
-    onStylesheetTextSerialized,
   } = options;
   let { needsMask } = options;
   let { preserveWhiteSpace = true } = options;
@@ -1218,6 +1226,8 @@ export function serializeNodeWithId(
     );
   }
 
+  countSerializedNode();
+
   const _serializedNode = serializeNode(n, {
     doc,
     mirror,
@@ -1234,7 +1244,6 @@ export function serializeNodeWithId(
     canvasMaskingConfigured,
     keepIframeSrcFn,
     newlyAddedElement,
-    onStylesheetTextSerialized,
   });
   if (!_serializedNode) {
     // TODO: dev only
@@ -1256,11 +1265,7 @@ export function serializeNodeWithId(
   ) {
     id = IGNORED_NODE;
   } else {
-    // A sliced snapshot may already have handed this id out to an event that
-    // fired before the traversal reached this node. Claimed after the slimDOM
-    // branch above so exclusion still wins: an excluded node stays
-    // IGNORED_NODE and its reservation is simply never claimed.
-    id = mirror.getReservedId(n) ?? genId();
+    id = genId();
   }
 
   const serializedNode = Object.assign(_serializedNode, { id });
@@ -1465,35 +1470,6 @@ export function serializeNodeWithId(
   return serializedNode;
 }
 
-export function normalizeMaskInputOptions(
-  maskAllInputs: boolean | MaskInputOptions,
-): MaskInputOptions {
-  return maskAllInputs === true
-    ? {
-        color: true,
-        date: true,
-        'datetime-local': true,
-        email: true,
-        month: true,
-        number: true,
-        range: true,
-        search: true,
-        tel: true,
-        text: true,
-        time: true,
-        url: true,
-        week: true,
-        textarea: true,
-        select: true,
-        password: true,
-      }
-    : maskAllInputs === false
-    ? {
-        password: true,
-      }
-    : maskAllInputs;
-}
-
 export function slimDOMDefaults(
   slimDOM: 'all' | boolean | SlimDOMOptions,
 ): SlimDOMOptions {
@@ -1553,6 +1529,13 @@ function snapshot(
     stylesheetLoadTimeout?: number;
     keepIframeSrcFn?: KeepIframeSrcFn;
     maxDepth?: number;
+    /**
+     * Cap on the number of CSSRules this snapshot may stringify. Sheets past the
+     * cap are left un-inlined and reported by `takeDeferredStylesheetLinks()` so
+     * the caller can inline them off the critical path. Omit or pass 0 for the
+     * previous unbounded behaviour.
+     */
+    inlineStylesheetBudgetRules?: number;
   },
 ): serializedNodeWithId | null {
   const {
@@ -1579,629 +1562,67 @@ function snapshot(
     stylesheetLoadTimeout,
     keepIframeSrcFn = () => false,
     maxDepth,
+    inlineStylesheetBudgetRules,
   } = options || {};
   const maskInputOptions: MaskInputOptions =
-    normalizeMaskInputOptions(maskAllInputs);
-  const slimDOMOptions: SlimDOMOptions = slimDOMDefaults(slimDOM);
-  return serializeNodeWithId(n, {
-    doc: n,
-    mirror,
-    blockClass,
-    blockSelector,
-    maskTextClass,
-    maskTextSelector,
-    skipChild: false,
-    inlineStylesheet,
-    maskInputOptions,
-    maskTextFn,
-    maskInputFn,
-    slimDOMOptions,
-    dataURLOptions,
-    inlineImages,
-    recordCanvas,
-    canvasMaskingConfigured,
-    preserveWhiteSpace,
-    onSerialize,
-    onIframeLoad,
-    iframeLoadTimeout,
-    onIframeListenerRegistered,
-    onStylesheetLoad,
-    stylesheetLoadTimeout,
-    keepIframeSrcFn,
-    newlyAddedElement: false,
-    maxDepth,
-  });
-}
-
-/**
- * The cheapest *fair* way to give the event loop a turn, feature-detected once
- * per walk. `setTimeout(0)` is the wrong default here: Chrome clamps it to
- * ~1ms, and to 4ms once timeouts nest five deep — which a sliced walk hits
- * immediately, since every slice ends in another timeout. Across the hundreds
- * of slices of a large document that clamp is pure dead time (~26% of the walk
- * measured at a 10ms budget), and it holds the snapshot in flight longer,
- * which widens the very window in which page events have to be queued.
- *
- * A `MessageChannel` message is a macrotask with no nesting clamp — the same
- * trick React's scheduler uses. One channel per walk; a walk awaits each yield
- * before requesting the next, so the single `pending` slot is safe.
- *
- * `scheduler.yield()` was measured and rejected, so nobody re-proposes it: its
- * continuations resume ahead of other same-priority tasks, so while the walk
- * ran, a `setTimeout` loop in the host page did not get a single turn — a
- * 1.5s starvation window on a 152k-node document. It is faster for the walk
- * (~4% over MessageChannel), but a recorder is a guest in the host app;
- * starving the app's own timers to serialize faster is the wrong trade.
- */
-export function createYielder(): {
-  doYield: () => Promise<void>;
-  dispose: () => void;
-} {
-  if (typeof MessageChannel === 'function') {
-    const channel = new MessageChannel();
-    let pending: (() => void) | null = null;
-    channel.port1.onmessage = () => {
-      const resolve = pending;
-      pending = null;
-      resolve?.();
-    };
-    return {
-      doYield: () =>
-        new Promise<void>((resolve) => {
-          pending = resolve;
-          channel.port2.postMessage(null);
-        }),
-      // Entangled ports pin scheduler resources until closed; a recording that
-      // snapshots on a checkout interval creates one channel per walk. A
-      // parked resolver is settled first, so no caller stays awaiting a
-      // message the closed ports can no longer deliver.
-      dispose: () => {
-        const resolve = pending;
-        pending = null;
-        resolve?.();
-        channel.port1.close();
-        channel.port2.close();
-      },
-    };
-  }
-  return {
-    doYield: () => new Promise<void>((resolve) => setTimeout(resolve, 0)),
-    dispose: () => undefined,
-  };
-}
-
-/**
- * `isInputPending` lets a slice end early the moment real input is waiting,
- * instead of making the user wait out the rest of the budget. Chrome-only for
- * now; everywhere else the budget alone decides. `includeContinuous` counts
- * mousemove/wheel too — for a recorder those matter as much as clicks.
- */
-function createInputPendingCheck(): () => boolean {
-  const scheduling = (
-    globalThis.navigator as
-      | (Navigator & {
-          scheduling?: {
-            isInputPending?: (options?: {
-              includeContinuous?: boolean;
-            }) => boolean;
-          };
-        })
-      | undefined
-  )?.scheduling;
-  if (scheduling && typeof scheduling.isInputPending === 'function') {
-    return () => scheduling.isInputPending!({ includeContinuous: true });
-  }
-  return () => false;
-}
-
-export type BudgetedWalkStats = {
-  /**
-   * Between-yield work windows the walk ran, including the final one (a
-   * pagehide drain counts as one window). This is the number of main-thread
-   * tasks the snapshot cost the page.
-   */
-  sliceCount: number;
-  /**
-   * The longest single work window in milliseconds: what the longest
-   * recorder-caused task actually became.
-   */
-  longestSliceMs: number;
-};
-
-export type BudgetedSnapshotController = {
-  /**
-   * Synchronously drains the rest of the walk and returns the completed root
-   * (or null if the walk was aborted / already finished). Built for pagehide:
-   * a parked yield never fires on a dying page, so the recorder needs a way
-   * to finish the snapshot inside the unload handler's task. Idempotent with
-   * the async driver — whichever side finishes first wins, the other no-ops.
-   */
-  flushSync: () => serializedNodeWithId | null;
-  /**
-   * Slice telemetry for the walk so far; final once the walk has settled.
-   */
-  getStats: () => BudgetedWalkStats;
-};
-
-export type SnapshotWithBudgetOptions = NonNullable<
-  Parameters<typeof snapshot>[1]
-> & {
-  /**
-   * Milliseconds of continuous main-thread work before yielding to the event
-   * loop. Must be > 0 — callers wanting a fully synchronous snapshot should
-   * use `snapshot()` instead. The budget is cooperative, not a hard bound:
-   * the clock is only consulted between nodes, so a single expensive node (a
-   * large stylesheet, a canvas capture, a same-origin iframe document) can
-   * overshoot it within one slice.
-   */
-  yieldBudgetMs: number;
-  /**
-   * Overridable for tests. Defaults to a `MessageChannel` macrotask (no
-   * nesting clamp), falling back to `setTimeout(0)` — see `createYielder`.
-   */
-  yieldFn?: () => Promise<void>;
-  /**
-   * Checked after every yield. Returning true abandons the walk and resolves
-   * with null. The mirror is shared across recording sessions, so a walk whose
-   * recording has been torn down must stop writing to it rather than just have
-   * its result discarded.
-   */
-  shouldAbort?: () => boolean;
-  /**
-   * Consulted at pop time, before a captured reference is serialized. Nodes
-   * the recorder's locked mutation buffers are already going to deliver (they
-   * were added or moved while the walk was in flight) must be skipped here:
-   * serializing them would freeze them into the snapshot at a stale position,
-   * and the buffer's own add — the one carrying their live position — would
-   * then have to be suppressed, losing whichever of the two descriptions was
-   * right. Skipping makes the buffer the single source of truth for them.
-   */
-  shouldSkipNode?: (n: Node) => boolean;
-  /**
-   * Hard wall-clock bound on the whole walk. A page that mutates continuously
-   * can stretch a cooperative walk arbitrarily; past this limit the walk
-   * throws (the recorder falls back to a synchronous snapshot). Enforced by
-   * a real timer, not just an in-loop probe, so a walk parked on a yield
-   * that never settles is still expired and woken to unwind.
-   */
-  maxWalkWallClockMs?: number;
-  /**
-   * Receives the controller once, synchronously, before the first slice.
-   */
-  onController?: (controller: BudgetedSnapshotController) => void;
-};
-
-/**
- * Async variant of {@link snapshot} that yields to the event loop whenever
- * it has spent more than `yieldBudgetMs` of continuous main-thread time, so
- * serializing a large document doesn't block the page in one long task.
- *
- * Output parity: nodes are visited in the same pre-order as the recursive
- * path (light subtree first, then shadow subtree), and every node is
- * serialized through the same `serializeNodeWithId` used everywhere else
- * (with `skipChild: true` — the exact code path incremental mutation adds
- * already use), so ids, structure and semantic flags are identical to a
- * synchronous `snapshot()` of the same document state.
- *
- * The DOM may mutate between slices. The recorder is expected to hold its
- * mutation buffers locked around the full snapshot (as it already does for
- * the synchronous path). Captured-but-not-yet-serialized references are
- * revalidated at pop time: a node that left the tree, or moved elsewhere, is
- * skipped rather than serialized stale — its removal produced no buffered
- * event (it was never in the mirror), so a stale serialization would be a
- * ghost node nothing ever cleans up. Whatever the observers did buffer
- * replays against the new mirror on unlock — the same convergence contract
- * as today, where the comment on unlock reads "as can now apply against the
- * newly built mirror".
- */
-export async function snapshotWithBudget(
-  n: Document,
-  options: SnapshotWithBudgetOptions,
-): Promise<serializedNodeWithId | null> {
-  const {
-    yieldBudgetMs,
-    yieldFn,
-    shouldAbort,
-    shouldSkipNode,
-    maxWalkWallClockMs,
-    onController,
-    ...snapshotOptions
-  } = options;
-  const {
-    mirror = new Mirror(),
-    blockClass = 'rr-block',
-    blockSelector = null,
-    maskTextClass = 'rr-mask',
-    maskTextSelector = null,
-    inlineStylesheet = true,
-    inlineImages = false,
-    recordCanvas = false,
-    maskAllInputs = false,
-    maskTextFn,
-    maskInputFn,
-    slimDOM = false,
-    dataURLOptions,
-    preserveWhiteSpace,
-    onSerialize,
-    onIframeLoad,
-    iframeLoadTimeout,
-    onIframeListenerRegistered,
-    onStylesheetLoad,
-    stylesheetLoadTimeout,
-    keepIframeSrcFn = () => false,
-    maxDepth = DEFAULT_MAX_DEPTH,
-  } = snapshotOptions;
-  const maskInputOptions: MaskInputOptions =
-    normalizeMaskInputOptions(maskAllInputs);
-  const slimDOMOptions: SlimDOMOptions = slimDOMDefaults(slimDOM);
-  const yielder = yieldFn
-    ? { doYield: yieldFn, dispose: () => undefined }
-    : createYielder();
-  const doYield = yielder.doYield;
-  // A custom yieldFn means a test harness that wants deterministic slicing;
-  // input-driven early yields would make slice boundaries environmental.
-  const inputPending = yieldFn ? () => false : createInputPendingCheck();
-
-  const perNodeOptions = {
-    // Keep the public snapshot option bag intact. Scheduler controls were
-    // removed above, and the normalized/internal forms below deliberately
-    // override their public counterparts. Spreading the canonical bag here
-    // prevents a newly-added serializer option from silently working in
-    // snapshot() while being dropped by snapshotWithBudget().
-    ...snapshotOptions,
-    doc: n,
-    mirror,
-    blockClass,
-    blockSelector,
-    maskTextClass,
-    maskTextSelector,
-    skipChild: true,
-    inlineStylesheet,
-    maskInputOptions,
-    maskTextFn,
-    maskInputFn,
-    slimDOMOptions,
-    dataURLOptions,
-    inlineImages,
-    recordCanvas,
-    onSerialize,
-    onIframeLoad,
-    iframeLoadTimeout,
-    onIframeListenerRegistered,
-    onStylesheetLoad,
-    stylesheetLoadTimeout,
-    keepIframeSrcFn,
-    newlyAddedElement: false,
-    maxDepth,
-  };
-
-  type SerializedParent = serializedNodeWithId & {
-    childNodes: serializedNodeWithId[];
-  };
-  type WalkItem = {
-    node: Node;
-    parent: SerializedParent | null;
-    /**
-     * The DOM container whose child list this node was read from (the parent
-     * element, or the shadow root for shadow children). Stale entries are
-     * detected by comparing against the node's *current* container at pop
-     * time — see below. Null only for the document root.
-     */
-    container: Node | null;
-    depth: number;
-    needsMask: boolean | undefined;
-    preserveWhiteSpace: boolean;
-  };
-
-  let root: serializedNodeWithId | null = null;
-  const stack: WalkItem[] = [
-    {
-      node: n,
-      parent: null,
-      container: null,
-      depth: 0,
-      needsMask: undefined,
-      preserveWhiteSpace: preserveWhiteSpace ?? true,
-    },
-  ];
-  let sliceStart = performance.now();
-  const walkStart = sliceStart;
-  // Captured once: only a walk that STARTS hidden may finish in one task
-  // (see the yield-skip below). A page that merely becomes hidden mid-walk
-  // is an ordinary tab switch and must keep yielding.
-  const startedHidden = n.visibilityState === 'hidden';
-  let nodesSinceCheck = 0;
-  let finished = false;
-  let aborted = false;
-  // Set when the synchronous drain dies mid-serialization; the woken driver
-  // rethrows it so the failure surfaces on the walk's promise too.
-  let drainError: unknown = null;
-  // Settles the driver's pending yield from the outside. A parked yield can
-  // otherwise never settle (a dying page's MessageChannel message, a frozen
-  // tab's timers), and both the watchdog below and flushSync need the driver
-  // to wake so it unwinds and releases the yielder. Every wake first sets a
-  // terminal state (finished or aborted), so a single latched promise is
-  // enough: the woken driver exits its loop and never races this again.
-  let wakeParkedDriver: (() => void) | null = null;
-  const parkedDriverWoken = new Promise<void>((resolve) => {
-    wakeParkedDriver = resolve;
-  });
-  // The in-loop deadline probe below only runs while the driver is awake. If
-  // the pending yield never settles, held events keep accumulating behind a
-  // walk nothing can end. A real timer is the only bound that still holds,
-  // so it expires the walk AND wakes the parked driver to observe it.
-  let watchdogExpired = false;
-  const watchdogTimer =
-    maxWalkWallClockMs !== undefined
-      ? setTimeout(() => {
-          if (finished || aborted) {
-            return;
-          }
-          watchdogExpired = true;
-          aborted = true;
-          wakeParkedDriver?.();
-        }, maxWalkWallClockMs)
-      : undefined;
-  const serializedThisWalk = new WeakSet<Node>();
-  // Progress floor: input can arrive continuously (a 125Hz+ mouse reports
-  // several times per frame), and ending a slice after every single node
-  // would stretch the walk — and the queue and locked buffers behind it —
-  // without bound. Guaranteeing at least this much serialization per slice
-  // bounds the stretch to a small multiple of the ideal walk time while
-  // still bounding input latency to the floor.
-  const minSliceMs = Math.min(4, yieldBudgetMs);
-  // Success-path telemetry: how many work windows the walk ran and the
-  // longest one, so a completed snapshot's real main-thread cost is
-  // observable in production instead of inferred from missing failures.
-  let sliceCount = 0;
-  let longestSliceMs = 0;
-  const endSlice = (start: number) => {
-    const sliceMs = performance.now() - start;
-    sliceCount++;
-    if (sliceMs > longestSliceMs) {
-      longestSliceMs = sliceMs;
-    }
-  };
-
-  const processNode = (): void => {
-    // LIFO pop with children pushed in reverse ⇒ same pre-order as recursion.
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const item = stack.pop()!;
-    const { node, parent, depth } = item;
-
-    // The stack holds *captured references*: a child list is read when its
-    // parent is visited, and served slices later. The page runs in between,
-    // so by pop time a captured node may be gone or live somewhere else, and
-    // in both cases the observer already reported it against the state it
-    // could see. A removed not-yet-serialized node produced no removal
-    // (nothing referenced it); a reparented one produced an add at its new
-    // home. Serializing the stale reference would put a node into the
-    // FullSnapshot that no event ever cleans up — so serialize a node only
-    // at its current place in the tree, or, if it left the tree, not at all
-    // (its subtree drops with it, since children are only pushed when the
-    // parent is serialized).
-    if (item.container) {
-      if (!node.isConnected) {
-        return;
-      }
-      const currentContainer = dom.parentNode(node);
-      if (currentContainer !== item.container) {
-        return;
-      }
-      // A node serialized earlier in this walk and then moved under a parent
-      // the walk hadn't reached yet would be encountered — and serialized —
-      // a second time, putting the same id in the snapshot twice. Its move
-      // was observed as remove+add and reconciles through the mutation
-      // buffer instead.
-      if (serializedThisWalk.has(node)) {
-        return;
-      }
-      // Nodes the locked buffers will deliver at commit (added or moved while
-      // the walk was in flight) are theirs alone to describe — see the
-      // shouldSkipNode option doc.
-      if (shouldSkipNode?.(node)) {
-        return;
-      }
-    }
-
-    const sn = serializeNodeWithId(node, {
-      ...perNodeOptions,
-      needsMask: item.needsMask,
-      preserveWhiteSpace: item.preserveWhiteSpace,
-      depth,
-    });
-    if (!sn) {
-      // slimDOM-excluded / ignorable whitespace / max depth — the recursive
-      // path skips these nodes' children too.
-      return;
-    }
-    // Every node that made it into the FullSnapshot must participate in the
-    // duplicate guard, including leaves (text/comments) and blocked-element
-    // placeholders that return before the descend section below.
-    serializedThisWalk.add(node);
-    if (parent) {
-      parent.childNodes.push(sn);
-    } else {
-      root = sn;
-    }
-
-    // ---- descend decision: mirrors serializeNodeWithId's recursive section ----
-    if (sn.type !== NodeType.Document && sn.type !== NodeType.Element) {
-      return;
-    }
-    if (
-      sn.type === NodeType.Element &&
-      _isBlockedElement(node as HTMLElement, blockClass, blockSelector)
-    ) {
-      // blocked elements record a placeholder only; children get no ids
-      return;
-    }
-
-    // children inherit needsMask exactly as the recursive path computes it
-    let childNeedsMask = item.needsMask;
-    if (!childNeedsMask) {
-      const checkAncestors = childNeedsMask === undefined;
-      childNeedsMask = needMaskingText(
-        node as Element,
-        maskTextClass,
-        maskTextSelector,
-        checkAncestors,
-      );
-    }
-    let childPreserveWhiteSpace = item.preserveWhiteSpace;
-    if (
-      slimDOMOptions.headWhitespace &&
-      sn.type === NodeType.Element &&
-      (sn as elementNode).tagName === 'head'
-    ) {
-      childPreserveWhiteSpace = false;
-    }
-
-    const serializedParent = sn as SerializedParent;
-    const pushChildren = (children: Node[], childContainer: Node) => {
-      for (let i = children.length - 1; i >= 0; i--) {
-        stack.push({
-          node: children[i],
-          parent: serializedParent,
-          container: childContainer,
-          depth: depth + 1,
-          needsMask: childNeedsMask,
-          preserveWhiteSpace: childPreserveWhiteSpace,
-        });
-      }
-    };
-
-    // Shadow children are pushed first and light children second: light pops
-    // first and its whole subtree drains before shadow surfaces, appending
-    // shadow-serialized children after the light ones — the recursive order.
-    // (`isShadow` is self-derived inside serializeNodeWithId from parentNode.)
-    let shadowRootEl: ShadowRoot | null = null;
-    if (isElement(node) && (shadowRootEl = dom.shadowRoot(node))) {
-      pushChildren(Array.from(dom.childNodes(shadowRootEl)), shadowRootEl);
-    }
-    const skipLightChildren =
-      sn.type === NodeType.Element &&
-      (sn as elementNode).tagName === 'textarea' &&
-      (sn as elementNode).attributes.value !== undefined;
-    if (!skipLightChildren) {
-      pushChildren(Array.from(dom.childNodes(node)), node);
-    }
-  };
-
-  onController?.({
-    flushSync: () => {
-      if (finished || aborted) {
-        return finished ? root : null;
-      }
-      if (shouldAbort?.()) {
-        aborted = true;
-        wakeParkedDriver?.();
-        return null;
-      }
-      // the drain is its own work window (the driver is parked, so its
-      // sliceStart is stale); count it so a pagehide drain shows up in the
-      // completed walk's slice telemetry
-      const drainStart = performance.now();
-      try {
-        while (stack.length > 0) {
-          processNode();
+    maskAllInputs === true
+      ? {
+          color: true,
+          date: true,
+          'datetime-local': true,
+          email: true,
+          month: true,
+          number: true,
+          range: true,
+          search: true,
+          tel: true,
+          text: true,
+          time: true,
+          url: true,
+          week: true,
+          textarea: true,
+          select: true,
+          password: true,
         }
-        finished = true;
-        endSlice(drainStart);
-      } catch (error) {
-        // A mid-drain throw (e.g. a consumer mask fn) already lost the
-        // popped node, so letting the driver resume from this stack would
-        // emit a silently truncated tree. Abort instead; the woken driver
-        // rethrows so the failure also surfaces on the walk's promise.
-        drainError = error;
-        aborted = true;
-        return null;
-      } finally {
-        // The driver may be parked on a yield that will never fire on a
-        // dying page; wake it so it unwinds, disposes the yielder and
-        // settles the walk's promise instead of retaining them all forever.
-        wakeParkedDriver?.();
-      }
-      return root;
-    },
-    getStats: () => ({ sliceCount, longestSliceMs }),
-  });
-
+      : maskAllInputs === false
+      ? {
+          password: true,
+        }
+      : maskAllInputs;
+  const slimDOMOptions: SlimDOMOptions = slimDOMDefaults(slimDOM);
+  beginSnapshotCostTracking(inlineStylesheetBudgetRules);
   try {
-    while (!finished && !aborted) {
-      if (stack.length === 0) {
-        // checked before the deadline probe: yielding with a complete tree
-        // in hand would let an abort discard a finished walk
-        finished = true;
-        endSlice(sliceStart);
-        break;
-      }
-      // The budget is the ceiling (rendering needs a turn even on an idle
-      // page); pending input ends the slice early — once the progress floor
-      // is met — so a click doesn't wait out the rest of a slice. The clock
-      // and the input queue are probed every 16 nodes, not every node: both
-      // cost real time at 100k+ nodes, and a 16-node stride bounds the
-      // overshoot to well under a millisecond.
-      if (++nodesSinceCheck >= 16) {
-        nodesSinceCheck = 0;
-        const elapsed = performance.now() - sliceStart;
-        if (
-          elapsed >= yieldBudgetMs ||
-          (elapsed >= minSliceMs && inputPending())
-        ) {
-          if (
-            maxWalkWallClockMs !== undefined &&
-            performance.now() - walkStart > maxWalkWallClockMs
-          ) {
-            // A page mutating continuously can stretch a cooperative walk
-            // without bound; the caller falls back to a synchronous snapshot.
-            throw new Error(
-              'Budgeted full snapshot exceeded its wall-clock limit',
-            );
-          }
-          // A walk that STARTS on a hidden page finishes in one task: no
-          // frames are painted and no user is waiting on the main thread,
-          // so there is nothing to yield for. A page that becomes hidden
-          // MID-walk (an ordinary tab switch) keeps yielding instead:
-          // draining the rest of a large document synchronously here would
-          // be the very stall this walker exists to avoid, and the user may
-          // be back in 300ms. MessageChannel yields are not background
-          // throttled, and the wall-clock watchdog backstops a tab that
-          // stays parked anyway; a page that is truly going away gets the
-          // synchronous drain from the recorder's pagehide handler.
-          if (!(startedHidden && n.visibilityState === 'hidden')) {
-            endSlice(sliceStart);
-            await Promise.race([doYield(), parkedDriverWoken]);
-            if (drainError) {
-              throw drainError;
-            }
-            if (watchdogExpired) {
-              throw new Error(
-                'Budgeted full snapshot exceeded its wall-clock limit',
-              );
-            }
-            if (shouldAbort?.()) {
-              aborted = true;
-              break;
-            }
-            sliceStart = performance.now();
-          }
-        }
-      }
-      if (finished || aborted) {
-        // flushSync may have completed the walk while this driver was parked
-        break;
-      }
-      processNode();
-    }
+    return serializeNodeWithId(n, {
+      doc: n,
+      mirror,
+      blockClass,
+      blockSelector,
+      maskTextClass,
+      maskTextSelector,
+      skipChild: false,
+      inlineStylesheet,
+      maskInputOptions,
+      maskTextFn,
+      maskInputFn,
+      slimDOMOptions,
+      dataURLOptions,
+      inlineImages,
+      recordCanvas,
+      canvasMaskingConfigured,
+      preserveWhiteSpace,
+      onSerialize,
+      onIframeLoad,
+      iframeLoadTimeout,
+      onIframeListenerRegistered,
+      onStylesheetLoad,
+      stylesheetLoadTimeout,
+      keepIframeSrcFn,
+      newlyAddedElement: false,
+      maxDepth,
+    });
   } finally {
-    if (watchdogTimer !== undefined) {
-      clearTimeout(watchdogTimer);
-    }
-    yielder.dispose();
+    endSnapshotCostTracking();
   }
-
-  return finished && !aborted ? root : null;
 }
 
 export function visitSnapshot(

@@ -473,6 +473,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "false",
       "true"
     ],
+    "inlineStylesheetBudgetRules": [
+      "undefined",
+      "number"
+    ],
     "recordCrossOriginIframes": [
       "undefined",
       "false",
