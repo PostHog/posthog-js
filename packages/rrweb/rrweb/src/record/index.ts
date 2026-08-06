@@ -221,6 +221,11 @@ interface BudgetedSnapshotTransaction {
   abortReason: string | null;
   heldEventBytes: number;
   eventQueue: HeldEvent[];
+  // Deepest the held queue got during the walk; the success diagnostic
+  // reports it so operators can see how close a healthy walk runs to the cap.
+  heldEventHighWater: number;
+  // How many held events a failed predecessor carried into this walk.
+  carriedHeldEventCount: number;
   serializedCount: number;
   // Per stylesheet carrier (<style>/<link>): when its CSS was read (walk
   // sequence) and whether the output carries live CSSOM or raw author text.
@@ -638,6 +643,9 @@ function record<T = eventWithTime>(
         seq: transaction.serializedCount,
       });
       transaction.heldEventBytes += retainedBytes;
+      if (transaction.eventQueue.length > transaction.heldEventHighWater) {
+        transaction.heldEventHighWater = transaction.eventQueue.length;
+      }
       return;
     }
     if (
@@ -1557,6 +1565,32 @@ function record<T = eventWithTime>(
       }
     }
 
+    // The success counterpart of the failure diagnostics: without it the
+    // longest recorder-caused task a completed walk produced in production
+    // is not computable, only inferable from the absence of failures.
+    // Emitted after the flush released all transaction state, so it rides
+    // the wire immediately rather than through any held window.
+    if (!walkSuperseded(transaction)) {
+      const stats = transaction.controller?.getStats();
+      emitBudgetedSnapshotDiagnostic('completed', {
+        isRetry: transaction.isRetry,
+        walkMs: nowTimestamp() - transaction.startedAt,
+        sliceCount: stats?.sliceCount ?? 0,
+        slowestSliceMs: Math.ceil(stats?.longestSliceMs ?? 0),
+        heldEventHighWater: transaction.heldEventHighWater,
+        carriedHeldEventCount: transaction.carriedHeldEventCount,
+        droppedMutationRecords,
+        deferredMutationRecords,
+        droppedHeldEventCount: droppedHeldEvents,
+        failedHeldEventDeliveries,
+      });
+      // the diagnostic went through the consumer; a rotation from it owns
+      // the recorder now, including the coalesced follow-up
+      if (walkSuperseded(transaction)) {
+        return;
+      }
+    }
+
     if (
       !walkSuperseded(transaction) &&
       (droppedMutationRecords > 0 ||
@@ -1649,6 +1683,8 @@ function record<T = eventWithTime>(
       abortReason: null,
       heldEventBytes: carriedHeldEventBytes,
       eventQueue: carriedHeldEvents.slice(),
+      heldEventHighWater: carriedHeldEvents.length,
+      carriedHeldEventCount: carriedHeldEvents.length,
       serializedCount: 0,
       styleTargets: new Map(),
       overflow: null,

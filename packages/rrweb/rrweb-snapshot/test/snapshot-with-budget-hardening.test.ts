@@ -357,4 +357,57 @@ describe('snapshotWithBudget hardening', () => {
       expect(report.inlined).toBe(false);
     }
   });
+
+  it('getStats reports the slice telemetry of a completed walk', async () => {
+    const doc = buildDocument(60);
+
+    cleanupSnapshot();
+    let controller: BudgetedSnapshotController | null = null;
+    let yields = 0;
+    const node = await snapshotWithBudget(doc, {
+      ...OPTIONS,
+      mirror: new Mirror(),
+      yieldBudgetMs: 0.0001,
+      yieldFn: async () => {
+        yields++;
+      },
+      onController: (c) => {
+        controller = c;
+      },
+    });
+
+    expect(node).not.toBeNull();
+    const stats = controller!.getStats();
+    // one work window per yield plus the final one
+    expect(stats.sliceCount).toBe(yields + 1);
+    expect(stats.sliceCount).toBeGreaterThanOrEqual(2);
+    expect(stats.longestSliceMs).toBeGreaterThan(0);
+  });
+
+  it('a flushSync drain counts as a work window in the stats', async () => {
+    const doc = buildDocument(60);
+
+    cleanupSnapshot();
+    let controller: BudgetedSnapshotController | null = null;
+    const walkPromise = snapshotWithBudget(doc, {
+      ...OPTIONS,
+      mirror: new Mirror(),
+      yieldBudgetMs: 0.0001,
+      yieldFn: () => new Promise<void>(() => undefined),
+      onController: (c) => {
+        controller = c;
+      },
+    });
+    // let the walk reach its first yield and park
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const before = controller!.getStats();
+    expect(before.sliceCount).toBeGreaterThanOrEqual(1);
+    const root = controller!.flushSync();
+    expect(root).not.toBeNull();
+    const after = controller!.getStats();
+    expect(after.sliceCount).toBe(before.sliceCount + 1);
+    expect(after.longestSliceMs).toBeGreaterThanOrEqual(before.longestSliceMs);
+    await expect(walkPromise).resolves.toBe(root);
+  });
 });

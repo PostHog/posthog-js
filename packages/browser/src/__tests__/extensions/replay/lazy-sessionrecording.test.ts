@@ -901,6 +901,81 @@ describe('Lazy SessionRecording', () => {
                 expect(posthog.capture).not.toHaveBeenCalled()
             })
 
+            it('emits budgeted snapshot diagnostics even while idle', () => {
+                // force idle state
+                sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = true
+
+                const diagnostic = createCustomSnapshot(
+                    { timestamp: startingTimestamp + 100 },
+                    { status: 'completed', walkMs: 250, sliceCount: 12 },
+                    'budgeted-full-snapshot'
+                )
+                sessionRecording.onRRwebEmit(diagnostic as eventWithTime)
+
+                // recorder health telemetry is not user activity
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toBe(true)
+                // but it is buffered rather than swallowed by idle suppression
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([diagnostic])
+            })
+
+            it('tracks completed budgeted snapshot telemetry as sdk debug properties', () => {
+                sessionRecording.onRRwebEmit(
+                    createCustomSnapshot(
+                        { timestamp: startingTimestamp + 100 },
+                        {
+                            status: 'completed',
+                            walkMs: 120,
+                            sliceCount: 4,
+                            slowestSliceMs: 9,
+                            heldEventHighWater: 3,
+                            droppedHeldEventCount: 0,
+                            droppedMutationRecords: 0,
+                            failedHeldEventDeliveries: 0,
+                        },
+                        'budgeted-full-snapshot'
+                    ) as eventWithTime
+                )
+                sessionRecording.onRRwebEmit(
+                    createCustomSnapshot(
+                        { timestamp: startingTimestamp + 200 },
+                        {
+                            status: 'completed',
+                            walkMs: 80,
+                            sliceCount: 7,
+                            slowestSliceMs: 5,
+                            heldEventHighWater: 1,
+                            droppedHeldEventCount: 2,
+                            droppedMutationRecords: 1,
+                            failedHeldEventDeliveries: 0,
+                        },
+                        'budgeted-full-snapshot'
+                    ) as eventWithTime
+                )
+
+                // worst case per gauge across the recording; drops accumulate
+                const properties = sessionRecording.sdkDebugProperties
+                expect(properties.$sdk_debug_replay_budgeted_snapshot_ms).toBe(120)
+                expect(properties.$sdk_debug_replay_budgeted_snapshot_slices).toBe(7)
+                expect(properties.$sdk_debug_replay_budgeted_snapshot_slowest_slice_ms).toBe(9)
+                expect(properties.$sdk_debug_replay_budgeted_snapshot_held_high_water).toBe(3)
+                expect(properties.$sdk_debug_replay_budgeted_snapshot_dropped).toBe(3)
+            })
+
+            it('does not track failure diagnostics as completed telemetry', () => {
+                sessionRecording.onRRwebEmit(
+                    createCustomSnapshot(
+                        { timestamp: startingTimestamp + 100 },
+                        { status: 'sync-fallback', walkMs: 5000 },
+                        'budgeted-full-snapshot'
+                    ) as eventWithTime
+                )
+
+                const properties = sessionRecording.sdkDebugProperties
+                expect(properties.$sdk_debug_replay_budgeted_snapshot_ms).toBeUndefined()
+                expect(properties.$sdk_debug_replay_budgeted_snapshot_slices).toBeUndefined()
+                expect(properties.$sdk_debug_replay_budgeted_snapshot_dropped).toBeUndefined()
+            })
+
             it('drops full snapshots when idle - so we must make sure not to take them while idle!', () => {
                 // force idle state
                 sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = true

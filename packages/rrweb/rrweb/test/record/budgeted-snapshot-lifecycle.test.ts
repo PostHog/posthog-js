@@ -478,6 +478,15 @@ describe('budgeted snapshot lifecycle hardening', () => {
     expect(retry?.reason).toBe('mutation-backlog');
     expect(retry?.carriedHeldEventCount).toBe(1);
 
+    // the retry that recovered reports its own success telemetry, and the
+    // carry shows up there instead of vanishing into the failure report
+    const completed = diagnostics(events).find(
+      (p) => p?.status === 'completed',
+    );
+    expect(completed).toBeDefined();
+    expect(completed?.isRetry).toBe(true);
+    expect(completed?.carriedHeldEventCount).toBe(1);
+
     // the click was not lost to the abort: it went out after the retry's
     // FullSnapshot, where the id it references is valid again
     const fullIndex = events.findIndex(
@@ -769,6 +778,8 @@ describe('budgeted snapshot lifecycle hardening', () => {
     expect(statuses).toContain('sync-fallback');
     // and not via a budgeted retry no dying page could finish
     expect(statuses).not.toContain('budgeted-retry');
+    // an aborted walk must not claim success telemetry
+    expect(statuses).not.toContain('completed');
   }, 20_000);
 
   it('a throwing mask fn during the pagehide drain aborts with a diagnostic, not a truncated tree', async () => {
@@ -814,6 +825,93 @@ describe('budgeted snapshot lifecycle hardening', () => {
       { timeout: 10_000 },
     );
   }, 20_000);
+
+  it('a completed budgeted walk reports success telemetry on the wire', async () => {
+    fillBody();
+    const events: eventWithTime[] = [];
+
+    stop = record({
+      emit: (event) => {
+        events.push(event as eventWithTime);
+      },
+      fullSnapshotYieldBudgetMs: 1,
+    });
+
+    // the walk spans several tasks, so this event lands in the held window
+    expect(events.some((e) => e.type === EventType.FullSnapshot)).toBe(false);
+    record.addCustomEvent('held-during-walk', {});
+
+    await vi.waitFor(
+      () => {
+        expect(events.some((e) => e.type === EventType.FullSnapshot)).toBe(
+          true,
+        );
+      },
+      { timeout: 10_000 },
+    );
+
+    const completed = diagnostics(events).find(
+      (p) => p?.status === 'completed',
+    );
+    expect(completed).toBeDefined();
+    // the walk yielded at least once, so it ran at least two slices, and
+    // every headline number is a real measurement rather than a placeholder
+    expect(completed?.budgetMs).toBe(1);
+    expect(completed?.isRetry).toBe(false);
+    expect(completed?.walkMs as number).toBeGreaterThanOrEqual(0);
+    expect(completed?.sliceCount as number).toBeGreaterThanOrEqual(2);
+    expect(completed?.slowestSliceMs as number).toBeGreaterThanOrEqual(1);
+    expect(completed?.heldEventHighWater as number).toBeGreaterThanOrEqual(1);
+    // happy path: nothing dropped, nothing carried
+    expect(completed?.carriedHeldEventCount).toBe(0);
+    expect(completed?.droppedMutationRecords).toBe(0);
+    expect(completed?.deferredMutationRecords).toBe(0);
+    expect(completed?.droppedHeldEventCount).toBe(0);
+    expect(completed?.failedHeldEventDeliveries).toBe(0);
+
+    // delivered right behind the snapshot it describes, not held anywhere
+    const fullIndex = events.findIndex(
+      (e) => e.type === EventType.FullSnapshot,
+    );
+    const completedIndex = events.findIndex(
+      (e) =>
+        e.type === EventType.Custom &&
+        (e as { data: { tag: string; payload?: { status?: string } } }).data
+          .tag === 'budgeted-full-snapshot' &&
+        (e as { data: { payload?: { status?: string } } }).data.payload
+          ?.status === 'completed',
+    );
+    expect(completedIndex).toBeGreaterThan(fullIndex);
+
+    // one success report per completed walk
+    record.takeFullSnapshot();
+    await vi.waitFor(
+      () => {
+        expect(
+          diagnostics(events).filter((p) => p?.status === 'completed').length,
+        ).toBe(2);
+      },
+      { timeout: 10_000 },
+    );
+  }, 20_000);
+
+  it('the synchronous budget-0 path emits no success diagnostic', () => {
+    fillBody(200);
+    const events: eventWithTime[] = [];
+
+    stop = record({
+      emit: (event) => {
+        events.push(event as eventWithTime);
+      },
+    });
+
+    // both the initial snapshot and an explicit checkout are synchronous
+    record.takeFullSnapshot();
+    expect(
+      events.filter((e) => e.type === EventType.FullSnapshot).length,
+    ).toBe(2);
+    expect(diagnostics(events)).toEqual([]);
+  });
 
   it('isIgnored does not mint an id reservation for an unserialized mutation target', () => {
     const mirror = createMirror();

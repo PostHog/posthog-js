@@ -1694,6 +1694,20 @@ function createInputPendingCheck(): () => boolean {
   return () => false;
 }
 
+export type BudgetedWalkStats = {
+  /**
+   * Between-yield work windows the walk ran, including the final one (a
+   * pagehide drain counts as one window). This is the number of main-thread
+   * tasks the snapshot cost the page.
+   */
+  sliceCount: number;
+  /**
+   * The longest single work window in milliseconds: what the longest
+   * recorder-caused task actually became.
+   */
+  longestSliceMs: number;
+};
+
 export type BudgetedSnapshotController = {
   /**
    * Synchronously drains the rest of the walk and returns the completed root
@@ -1703,6 +1717,10 @@ export type BudgetedSnapshotController = {
    * the async driver — whichever side finishes first wins, the other no-ops.
    */
   flushSync: () => serializedNodeWithId | null;
+  /**
+   * Slice telemetry for the walk so far; final once the walk has settled.
+   */
+  getStats: () => BudgetedWalkStats;
 };
 
 export type SnapshotWithBudgetOptions = NonNullable<
@@ -1932,6 +1950,18 @@ export async function snapshotWithBudget(
   // bounds the stretch to a small multiple of the ideal walk time while
   // still bounding input latency to the floor.
   const minSliceMs = Math.min(4, yieldBudgetMs);
+  // Success-path telemetry: how many work windows the walk ran and the
+  // longest one, so a completed snapshot's real main-thread cost is
+  // observable in production instead of inferred from missing failures.
+  let sliceCount = 0;
+  let longestSliceMs = 0;
+  const endSlice = (start: number) => {
+    const sliceMs = performance.now() - start;
+    sliceCount++;
+    if (sliceMs > longestSliceMs) {
+      longestSliceMs = sliceMs;
+    }
+  };
 
   const processNode = (): void => {
     // LIFO pop with children pushed in reverse ⇒ same pre-order as recursion.
@@ -2068,11 +2098,16 @@ export async function snapshotWithBudget(
         wakeParkedDriver?.();
         return null;
       }
+      // the drain is its own work window (the driver is parked, so its
+      // sliceStart is stale); count it so a pagehide drain shows up in the
+      // completed walk's slice telemetry
+      const drainStart = performance.now();
       try {
         while (stack.length > 0) {
           processNode();
         }
         finished = true;
+        endSlice(drainStart);
       } catch (error) {
         // A mid-drain throw (e.g. a consumer mask fn) already lost the
         // popped node, so letting the driver resume from this stack would
@@ -2089,6 +2124,7 @@ export async function snapshotWithBudget(
       }
       return root;
     },
+    getStats: () => ({ sliceCount, longestSliceMs }),
   });
 
   try {
@@ -2097,6 +2133,7 @@ export async function snapshotWithBudget(
         // checked before the deadline probe: yielding with a complete tree
         // in hand would let an abort discard a finished walk
         finished = true;
+        endSlice(sliceStart);
         break;
       }
       // The budget is the ceiling (rendering needs a turn even on an idle
@@ -2133,6 +2170,7 @@ export async function snapshotWithBudget(
           // stays parked anyway; a page that is truly going away gets the
           // synchronous drain from the recorder's pagehide handler.
           if (!(startedHidden && n.visibilityState === 'hidden')) {
+            endSlice(sliceStart);
             await Promise.race([doYield(), parkedDriverWoken]);
             if (drainError) {
               throw drainError;
