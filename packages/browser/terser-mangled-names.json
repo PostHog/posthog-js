@@ -294,6 +294,7 @@
         "_hasLoadedFlags",
         "_hasLoggedDeprecationWarning",
         "_hasLoggedRecorderCallbackError",
+        "_hasOnlyLifecycleEvents",
         "_hasPassedMinimumDuration",
         "_hasPersonProcessing",
         "_hasProcessedRestoreToken",
