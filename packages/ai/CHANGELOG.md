@@ -1,5 +1,18 @@
 # posthog-ai
 
+## 8.6.8
+
+### Patch Changes
+
+- [#4189](https://github.com/PostHog/posthog-js/pull/4189) [`2831de1`](https://github.com/PostHog/posthog-js/commit/2831de1450da3126b6d8f1b6e7b72a7018a9e3bb) Thanks [@Fortiz2305](https://github.com/Fortiz2305)! - Report cache-write tokens for the OpenAI wrapper. OpenAI-compatible providers that follow Anthropic's cache-write convention (e.g. Claude via OpenRouter) return cache-write tokens in the response usage (`prompt_tokens_details.cache_write_tokens` for Chat Completions, `input_tokens_details.cache_write_tokens` for Responses), but the wrapper only surfaced cache reads. It now populates `$ai_cache_creation_input_tokens` across Chat Completions and Responses (streaming, non-streaming, and `parse()`), so ingestion can price the cache-write premium for Claude/Anthropic models instead of under-reporting cost on cache-heavy calls. Completes the cache-aware cost fix started in #4071 (#3615).
+  (2026-08-06)
+
+- [#4236](https://github.com/PostHog/posthog-js/pull/4236) [`d36a421`](https://github.com/PostHog/posthog-js/commit/d36a42186ade2c6eae957ae13020fd1af6a4bdcb) Thanks [@gouveags](https://github.com/gouveags)! - Preserve Anthropic cache creation TTL breakdowns in streaming and LangChain generation events.
+  (2026-08-06)
+- Updated dependencies [[`4751b33`](https://github.com/PostHog/posthog-js/commit/4751b33a0498fa36a9d2e11a98d4ef94ca60c5dc), [`64ba193`](https://github.com/PostHog/posthog-js/commit/64ba19370e4a974596712296c8a7f80ddbcc13b1)]:
+  - posthog-node@5.48.1
+  - @posthog/core@1.46.9
+
 ## 8.6.7
 
 ### Patch Changes

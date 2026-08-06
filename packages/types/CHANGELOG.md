@@ -1,5 +1,12 @@
 # @posthog/types
 
+## 1.402.2
+
+### Patch Changes
+
+- [#4434](https://github.com/PostHog/posthog-js/pull/4434) [`75fb719`](https://github.com/PostHog/posthog-js/commit/75fb719bafd4eeb22ed41e10958d32a388c9883e) Thanks [@arnohillen](https://github.com/arnohillen)! - Make the session replay attribute masking options mutually exclusive: when both `maskAllElementAttributes` and `maskAttributeFn` are set, the coarse option wins and the callback is ignored (with a console warning), so a callback can no longer accidentally unmask what `maskAllElementAttributes` hides.
+  (2026-08-06)
+
 ## 1.402.1
 
 ### Patch Changes
