@@ -338,9 +338,21 @@ The SDK does **not**: call an LLM, inspect tool arguments, build heuristics, or 
 
    ```ts
    intentFallback: (request, extra) => {
-     const ua = extra?.requestInfo?.headers?.['user-agent']
+     // MCP SDK v1 attaches the headers as a plain object; v2 hands over the
+     // whole request as a web-standard `Request`. Read both — see below.
+     const ua = extra?.requestInfo?.headers?.['user-agent'] ?? extra?.http?.req?.headers?.get('user-agent')
      return `${ua ?? 'unknown client'} invoked ${request.params?.name}`
    }
+   ```
+
+   The same applies to any callback that reads request headers, `identify` most
+   of all. An implementation written against v1's `extra.requestInfo.headers`
+   returns `null` on a v2 server and every event goes out anonymous, with
+   nothing logged — v2 puts the HTTP request at `extra.http.req` instead, and a
+   `Headers` object does not answer to property access:
+
+   ```ts
+   const authHeader = extra?.requestInfo?.headers?.authorization ?? extra?.http?.req?.headers?.get('authorization')
    ```
 
 3. **LLM-derived** (async, expensive — push back unless the value is high). Sits on the hot path of every uncontextualized tool call.

@@ -14,7 +14,7 @@ import type {
 import { INACTIVITY_TIMEOUT_IN_MINUTES } from './constants'
 import { deterministicPrefixedId, newPrefixedId } from './ids'
 import { getServerTrackingData, setServerTrackingData } from './internal'
-import { decodeSessionId, readMcpSessionHeader } from './session-token'
+import { decodeSessionId, readMcpSessionHeader, readRequestHeaders } from './session-token'
 import type { SessionTokenPayload } from './session-token'
 
 export function newSessionId(): string {
@@ -123,7 +123,7 @@ function applyTokenClientIdentity(
   data: MCPAnalyticsData,
   extra?: CompatibleRequestHandlerExtra
 ): SessionTokenPayload | undefined {
-  const token = decodeSessionId(readMcpSessionHeader(extra?.requestInfo?.headers))
+  const token = decodeSessionId(readMcpSessionHeader(readRequestHeaders(extra)))
   if (!token) {
     return undefined
   }

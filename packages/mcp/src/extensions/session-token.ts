@@ -10,6 +10,8 @@
  * The token is unsigned: it holds only what the client already self-reports.
  */
 
+import type { CompatibleRequestHandlerExtra } from '../types'
+
 export const MCP_SESSION_HEADER = 'mcp-session-id'
 
 /** What a session token carries. */
@@ -100,9 +102,39 @@ export function decodeSessionId(value: unknown): SessionTokenPayload | null {
   return payload
 }
 
+interface WebHeadersLike {
+  entries(): Iterable<[string, string]>
+}
+
+function isWebHeaders(value: unknown): value is WebHeadersLike {
+  return !!value && typeof value === 'object' && typeof (value as WebHeadersLike).entries === 'function'
+}
+
 /**
- * Reads the `mcp-session-id` header off `extra.requestInfo.headers`. The SDK
- * transports lowercase header keys; the fallback scan covers hand-built extras.
+ * The HTTP request headers behind this call, whichever SDK major built the
+ * `extra`, or undefined on a transport that carries no HTTP request at all
+ * (stdio, in-memory).
+ *
+ * v1 attaches them as a plain object on `requestInfo`. v2 hands over the whole
+ * request as `http.req`, a web-standard `Request`, so its headers are a
+ * `Headers` — an object whose keys are invisible to `Object.keys`. Reading v1's
+ * shape against a v2 extra therefore finds nothing and reports "not HTTP",
+ * which silently costs every stateless server its session token.
+ */
+export function readRequestHeaders(
+  extra: CompatibleRequestHandlerExtra | undefined
+): Record<string, unknown> | undefined {
+  const webHeaders = extra?.http?.req?.headers
+  if (isWebHeaders(webHeaders)) {
+    return Object.fromEntries(webHeaders.entries())
+  }
+  const headers = extra?.requestInfo?.headers
+  return headers && typeof headers === 'object' ? headers : undefined
+}
+
+/**
+ * Reads the `mcp-session-id` header out of a header bag. The SDK transports
+ * lowercase header keys; the fallback scan covers hand-built extras.
  */
 export function readMcpSessionHeader(headers: unknown): string | undefined {
   if (!headers || typeof headers !== 'object') {

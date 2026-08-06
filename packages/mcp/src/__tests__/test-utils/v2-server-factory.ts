@@ -1,4 +1,4 @@
-import { InMemoryTransport } from '@modelcontextprotocol/server'
+import { InMemoryTransport, createMcpHandler } from '@modelcontextprotocol/server'
 
 /**
  * Drives an MCP SDK v2 server over a linked in-memory transport by speaking raw
@@ -63,3 +63,34 @@ export const INITIALIZE_PARAMS = {
   capabilities: {},
   clientInfo: { name: 'v2 test client', version: '3.2.1' },
 }
+
+/**
+ * A stateless SDK v2 HTTP endpoint: `createMcpHandler` builds a fresh server per
+ * request, which is the deployment shape where the `extra` differences actually
+ * bite — no connection to remember anything on, so every request has to carry
+ * its own identity in headers.
+ */
+export function serveV2Http(
+  buildServer: () => unknown
+): (body: Record<string, unknown>, headers?: Record<string, string>) => Promise<Response> {
+  const handler = createMcpHandler(() => buildServer() as never)
+  return (body, headers = {}) =>
+    handler.fetch(
+      new Request('http://localhost/mcp', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+          ...headers,
+        },
+        body: JSON.stringify(body),
+      })
+    )
+}
+
+export const rpc = (id: number, method: string, params: Record<string, unknown> = {}) => ({
+  jsonrpc: '2.0',
+  id,
+  method,
+  params,
+})

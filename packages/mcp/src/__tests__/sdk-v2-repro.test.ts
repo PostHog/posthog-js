@@ -1,7 +1,8 @@
 import { McpServer, Server } from '@modelcontextprotocol/server'
 import { instrument } from '../index'
 import { EventCapture, fakePostHog } from './test-utils'
-import { connectV2Server, INITIALIZE_PARAMS } from './test-utils/v2-server-factory'
+import { MCP_SESSION_HEADER, encodeSessionId } from '../extensions/session-token'
+import { connectV2Server, INITIALIZE_PARAMS, rpc, serveV2Http } from './test-utils/v2-server-factory'
 
 const TOOLS = [{ name: 'plan', description: 'plans things', inputSchema: { type: 'object', properties: {} } }]
 
@@ -113,5 +114,49 @@ describe('MCP SDK v2 support (#4449)', () => {
     }
 
     expect(seen).toEqual([{ text: 'hi' }])
+  })
+})
+
+describe('MCP SDK v2 stateless HTTP — request headers (#4449)', () => {
+  let eventCapture: EventCapture
+
+  beforeEach(async () => {
+    eventCapture = new EventCapture()
+    await eventCapture.start()
+  })
+
+  afterEach(async () => {
+    await eventCapture.stop()
+  })
+
+  it('recovers the session and client identity a replayed token carries', async () => {
+    const post = serveV2Http(() => {
+      const server = new Server({ name: 'v2 http', version: '1.0.0' }, { capabilities: { tools: {} } })
+      instrument(server as never, fakePostHog())
+      server.setRequestHandler('tools/list', (async () => ({ tools: TOOLS })) as never)
+      server.setRequestHandler('tools/call', (async () => ({ content: [{ type: 'text', text: 'ok' }] })) as never)
+      return server
+    })
+
+    // Every request gets its own server instance, so the only thing tying them
+    // together is the token on the header — which v2 exposes nowhere v1 looked.
+    const token = encodeSessionId({
+      sessionId: 'ses_v2_stateless',
+      clientName: 'claude-code',
+      clientVersion: '4.5.0',
+      protocolVersion: '2025-06-18',
+    })
+    const headers = { [MCP_SESSION_HEADER]: token }
+
+    await post(rpc(1, 'initialize', INITIALIZE_PARAMS), headers)
+    await post(rpc(2, 'tools/list'), headers)
+    const response = await post(rpc(3, 'tools/call', { name: 'plan', arguments: {} }), headers)
+    expect(response.status).toBe(200)
+
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    const toolCall = eventCapture.findCapturesByEvent('$mcp_tool_call')[0]
+    expect(toolCall?.properties.$session_id).toBe('ses_v2_stateless')
+    expect(toolCall?.properties.$mcp_client_name).toBe('claude-code')
+    expect(toolCall?.properties.$mcp_client_version).toBe('4.5.0')
   })
 })
