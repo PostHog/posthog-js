@@ -1,7 +1,16 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, test, expect } from 'vitest';
+import {
+  describe,
+  it,
+  test,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type MockInstance,
+} from 'vitest';
 import {
   createMirror,
   escapeImportStatement,
@@ -9,6 +18,7 @@ import {
   fixSafariColons,
   hasEmptyShorthandLonghand,
   isNodeMetaEqual,
+  recompressBase64Image,
   stringifyStylesheet,
 } from '../src/utils';
 import { NodeType } from '@posthog/rrweb-types';
@@ -460,61 +470,120 @@ describe('utils', () => {
     });
   });
 
-  describe('Mirror id reservation', () => {
-    it('keeps answering an existing reservation while the handout is paused', () => {
-      const mirror = createMirror();
-      let next = 10;
-      mirror.beginIdReservation(() => next++);
+  describe('recompressBase64Image()', () => {
+    const makeImg = (
+      naturalWidth: number,
+      naturalHeight: number,
+      complete = true,
+    ) => {
+      const img = document.createElement('img');
+      Object.defineProperty(img, 'complete', { value: complete });
+      Object.defineProperty(img, 'naturalWidth', { value: naturalWidth });
+      Object.defineProperty(img, 'naturalHeight', { value: naturalHeight });
+      return img;
+    };
+    // unique per call so the module-level memoization cache never leaks
+    // state between tests
+    let uniqueId = 0;
+    const makeDataURL = (length: number) =>
+      `data:image/png;base64,${'a'.repeat(length)}#${uniqueId++}`;
 
-      const reserved = document.createElement('div');
-      document.body.appendChild(reserved);
-      const id = mirror.getId(reserved);
-      expect(id).toBe(10);
+    let toDataURL: MockInstance;
+    let getContext: MockInstance;
 
-      mirror.pauseReservationHandout();
-
-      // the node that already holds a reservation keeps its id...
-      expect(mirror.getId(reserved)).toBe(id);
-      // ...while a node without one gets no NEW reservation
-      const fresh = document.createElement('div');
-      document.body.appendChild(fresh);
-      expect(mirror.getId(fresh)).toBe(-1);
-
-      mirror.endIdReservation();
-      document.body.removeChild(reserved);
-      document.body.removeChild(fresh);
+    beforeEach(() => {
+      getContext = vi
+        .spyOn(HTMLCanvasElement.prototype, 'getContext')
+        .mockReturnValue({
+          drawImage: vi.fn(),
+        } as unknown as CanvasRenderingContext2D);
+      toDataURL = vi
+        .spyOn(HTMLCanvasElement.prototype, 'toDataURL')
+        .mockReturnValue('data:image/webp;base64,tiny');
     });
 
-    it('keeps answering a reservation after its node was detached', () => {
-      const mirror = createMirror();
-      let next = 10;
-      mirror.beginIdReservation(() => next++);
-
-      const node = document.createElement('div');
-      document.body.appendChild(node);
-      const id = mirror.getId(node);
-      document.body.removeChild(node);
-
-      // events already held carry this id; it must stay answerable, and it
-      // stays pending so the flush scrub can drop those events for good
-      expect(mirror.getId(node)).toBe(id);
-      expect(mirror.getUnclaimedReservedIds()).toEqual([id]);
-
-      mirror.endIdReservation();
+    afterEach(() => {
+      vi.restoreAllMocks();
     });
 
-    it('answers -1 again once the reservation transaction ends', () => {
-      const mirror = createMirror();
-      let next = 10;
-      mirror.beginIdReservation(() => next++);
+    it('does not touch the canvas for data URLs too small to be worth recompressing', () => {
+      const dataURL = makeDataURL(50_000);
+      expect(
+        recompressBase64Image(makeImg(4096, 3072), dataURL, 'image/webp', 0.4),
+      ).toBe(dataURL);
+      expect(getContext).not.toHaveBeenCalled();
+      expect(toDataURL).not.toHaveBeenCalled();
+    });
 
-      const node = document.createElement('div');
-      document.body.appendChild(node);
-      expect(mirror.getId(node)).toBe(10);
+    it('recompresses large data URLs', () => {
+      const dataURL = makeDataURL(200_000);
+      expect(
+        recompressBase64Image(makeImg(800, 600), dataURL, 'image/webp', 0.4),
+      ).toBe('data:image/webp;base64,tiny');
+      expect(toDataURL).toHaveBeenCalledWith('image/webp', 0.4);
+    });
 
-      mirror.endIdReservation();
-      expect(mirror.getId(node)).toBe(-1);
-      document.body.removeChild(node);
+    it('keeps the original when recompression does not make it smaller', () => {
+      const dataURL = makeDataURL(200_000);
+      toDataURL.mockReturnValue(
+        `data:image/webp;base64,${'b'.repeat(300_000)}`,
+      );
+      expect(recompressBase64Image(makeImg(800, 600), dataURL)).toBe(dataURL);
+    });
+
+    it('encodes each unique data URL only once', () => {
+      const dataURL = makeDataURL(200_000);
+      const img = makeImg(800, 600);
+      const first = recompressBase64Image(img, dataURL, 'image/webp', 0.4);
+      const second = recompressBase64Image(img, dataURL, 'image/webp', 0.4);
+      expect(second).toBe(first);
+      expect(toDataURL).toHaveBeenCalledTimes(1);
+    });
+
+    it('re-encodes when type or quality changes', () => {
+      const dataURL = makeDataURL(200_000);
+      const img = makeImg(800, 600);
+      recompressBase64Image(img, dataURL, 'image/webp', 0.4);
+      recompressBase64Image(img, dataURL, 'image/webp', 0.8);
+      expect(toDataURL).toHaveBeenCalledTimes(2);
+    });
+
+    it('evicts only the oldest entry when the cache is full', () => {
+      const img = makeImg(800, 600);
+      // one more than MAX_RECOMPRESSION_CACHE_ENTRIES
+      const dataURLs = Array.from({ length: 11 }, () =>
+        makeDataURL(200_000),
+      );
+      for (const dataURL of dataURLs) {
+        recompressBase64Image(img, dataURL, 'image/webp', 0.4);
+      }
+      expect(toDataURL).toHaveBeenCalledTimes(11);
+
+      // the 10 most recent entries are still cached
+      for (const dataURL of dataURLs.slice(1)) {
+        recompressBase64Image(img, dataURL, 'image/webp', 0.4);
+      }
+      expect(toDataURL).toHaveBeenCalledTimes(11);
+
+      // only the oldest entry was evicted and needs re-encoding
+      recompressBase64Image(img, dataURLs[0], 'image/webp', 0.4);
+      expect(toDataURL).toHaveBeenCalledTimes(12);
+    });
+
+    it('returns the original for images that are not loaded', () => {
+      const dataURL = makeDataURL(200_000);
+      expect(recompressBase64Image(makeImg(0, 0, false), dataURL)).toBe(
+        dataURL,
+      );
+      expect(toDataURL).not.toHaveBeenCalled();
+    });
+
+    it('returns the original for images larger than the dimension cap', () => {
+      const dataURL = makeDataURL(200_000);
+      expect(recompressBase64Image(makeImg(5000, 3000), dataURL)).toBe(
+        dataURL,
+      );
+      expect(toDataURL).not.toHaveBeenCalled();
     });
   });
 });

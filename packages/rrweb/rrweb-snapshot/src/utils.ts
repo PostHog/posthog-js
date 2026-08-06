@@ -199,99 +199,14 @@ export function isCSSStyleRule(rule: CSSRule): rule is CSSStyleRule {
 export class Mirror implements IMirror<Node> {
   private idNodeMap: idNodeMap = new Map();
   private nodeMetaMap: nodeMetaMap = new WeakMap();
-  // Id reservation, used only while a time-sliced full snapshot is in flight.
-  // Handing out an id is cheap; serializing a node is not. A sliced snapshot
-  // spreads serialization over many tasks, so an observer can run against a
-  // node the traversal has not reached yet — `getId` would answer -1 and the
-  // event would be unusable. While reservation is on, such a node gets the id
-  // it is about to be serialized with, and `serializeNodeWithId` claims that
-  // same id when it gets there. Reservation is lazy — only nodes that events
-  // actually touch get one — so id numbering is untouched when nothing happens
-  // during the snapshot.
-  private reservedIds: Map<Node, number> | null = null;
-  // The subset of reserved ids whose node has not been serialized yet —
-  // an entry leaves this set the moment `add()` claims it. "Pending" is what
-  // callers usually need to ask about: an event that targets a pending id
-  // describes state the walk is still going to capture.
-  private pendingReservedIds: Set<number> | null = null;
-  private reserveNextId: (() => number) | null = null;
 
   getId(n: Node | undefined | null): number {
     if (!n) return -1;
 
     const id = this.getMeta(n)?.id;
-    if (id !== undefined) return id;
-
-    if (this.reservedIds) {
-      // An id already reserved stays answerable for the whole transaction,
-      // even while the handout of NEW ids is paused for the post-walk flush
-      // (see pauseReservationHandout) and even if the node has been detached
-      // since: events already held carry this id, and answering -1 would make
-      // an event nested inside the flush disagree with them.
-      const reserved = this.reservedIds.get(n);
-      if (reserved !== undefined) return reserved;
-
-      // Not reserved yet. Reserve the id this node is going to get, but only
-      // while it is still connected: a detached node will never be serialized,
-      // and callers such as `processRemoves` rely on -1 meaning "this never
-      // made it into the mirror".
-      if (this.reserveNextId && n.isConnected) {
-        const fresh = this.reserveNextId();
-        this.reservedIds.set(n, fresh);
-        this.pendingReservedIds?.add(fresh);
-        return fresh;
-      }
-    }
 
     // if n is not a serialized Node, use -1 as its id.
-    return -1;
-  }
-
-  beginIdReservation(genId: () => number) {
-    this.reserveNextId = genId;
-    this.reservedIds = new Map();
-    this.pendingReservedIds = new Set();
-  }
-
-  /**
-   * Stops handing out NEW reserved ids while keeping existing reservations
-   * claimable. Used around the post-walk buffer commit: the commit's
-   * re-serialization must claim the ids that held events already reference,
-   * but an unserialized parent probed by the mutation buffer's add-ordering
-   * must read as -1 so the add defers until the parent is serialized —
-   * a fresh reservation there would emit an add against a parent id the
-   * replayer never receives.
-   */
-  pauseReservationHandout() {
-    this.reserveNextId = null;
-  }
-
-  endIdReservation() {
-    this.reserveNextId = null;
-    this.reservedIds = null;
-    this.pendingReservedIds = null;
-  }
-
-  getReservedId(n: Node): number | undefined {
-    return this.reservedIds?.get(n);
-  }
-
-  /**
-   * True while a reservation is active and this id has been handed out to a
-   * node the walk has not serialized yet.
-   */
-  isPendingReservation(id: number): boolean {
-    return this.pendingReservedIds?.has(id) ?? false;
-  }
-
-  /**
-   * Reserved ids whose node never got serialized — it was created during the
-   * walk inside an already-visited part of the tree, so the traversal never
-   * reached it. Events carrying these ids reference a node the replayer will
-   * never receive; the caller uses this to weed them out before flushing.
-   */
-  getUnclaimedReservedIds(): number[] {
-    return this.pendingReservedIds ? Array.from(this.pendingReservedIds) : [];
+    return id ?? -1;
   }
 
   getNode(id: number): Node | null {
@@ -343,8 +258,6 @@ export class Mirror implements IMirror<Node> {
     const id = meta.id;
     this.idNodeMap.set(id, n);
     this.nodeMetaMap.set(n, meta);
-    // serialization claims any reservation this node held
-    this.pendingReservedIds?.delete(id);
   }
 
   replace(id: number, n: Node) {
@@ -359,7 +272,6 @@ export class Mirror implements IMirror<Node> {
   reset() {
     this.idNodeMap = new Map();
     this.nodeMetaMap = new WeakMap();
-    this.endIdReservation();
   }
 }
 
@@ -578,6 +490,21 @@ const STRIPED_PLACEHOLDER_SVG =
   'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgogIDxkZWZzPgogICAgPHBhdHRlcm4gaWQ9InN0cmlwZXMiIHBhdHRlcm5Vbml0cz0idXNlclNwYWNlT25Vc2UiIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiI+CiAgICAgIDxyZWN0IHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgZmlsbD0iYmxhY2siLz4KICAgICAgPHBhdGggZD0iTTggMEgxNkwwIDE2VjhMOCAwWiIgZmlsbD0iIzJEMkQyRCIvPgogICAgICA8cGF0aCBkPSJNMTYgOFYxNkg4TDE2IDhaIiBmaWxsPSIjMkQyRDJEIi8+CiAgICA8L3BhdHRlcm4+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjc3RyaXBlcykiLz4KPC9zdmc+Cg==';
 
 const MAX_IMAGE_DIMENSION_FOR_RECOMPRESSION = 4096;
+// below this, recompression cannot save enough payload to justify a
+// synchronous canvas encode, whose cost scales with pixel count (not bytes)
+// and can block the main thread for hundreds of ms per image
+const MIN_DATA_URL_LENGTH_FOR_RECOMPRESSION = 100_000;
+const MAX_RECOMPRESSION_CACHE_ENTRIES = 10;
+
+type RecompressionCacheEntry = {
+  type?: string;
+  quality?: number;
+  result: string;
+};
+
+// full snapshots and attribute mutations serialize the same image repeatedly,
+// so each unique data URL should only ever be encoded once
+const recompressionCache = new Map<string, RecompressionCacheEntry>();
 
 export function recompressBase64Image(
   img: HTMLImageElement,
@@ -585,6 +512,10 @@ export function recompressBase64Image(
   type?: string,
   quality?: number,
 ): string {
+  if (dataURL.length < MIN_DATA_URL_LENGTH_FOR_RECOMPRESSION) {
+    return dataURL;
+  }
+
   if (!img.complete || img.naturalWidth === 0) {
     return dataURL;
   }
@@ -595,6 +526,11 @@ export function recompressBase64Image(
     img.naturalHeight > MAX_IMAGE_DIMENSION_FOR_RECOMPRESSION
   ) {
     return dataURL;
+  }
+
+  const cached = recompressionCache.get(dataURL);
+  if (cached && cached.type === type && cached.quality === quality) {
+    return cached.result;
   }
 
   try {
@@ -609,8 +545,21 @@ export function recompressBase64Image(
 
     ctx.drawImage(img, 0, 0);
     const recompressed = canvas.toDataURL(type || 'image/webp', quality ?? 0.4);
+    // re-encoding an already optimized image can produce a larger file
+    const result =
+      recompressed.length < dataURL.length ? recompressed : dataURL;
 
-    return recompressed;
+    if (recompressionCache.size >= MAX_RECOMPRESSION_CACHE_ENTRIES) {
+      // evict only the oldest entry (Map preserves insertion order) so
+      // pages with many unique images keep the rest of the cache warm
+      const oldestKey = recompressionCache.keys().next().value;
+      if (oldestKey !== undefined) {
+        recompressionCache.delete(oldestKey);
+      }
+    }
+    recompressionCache.set(dataURL, { type, quality, result });
+
+    return result;
   } catch (err) {
     return dataURL;
   }
