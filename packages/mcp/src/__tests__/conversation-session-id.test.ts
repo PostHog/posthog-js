@@ -1,5 +1,6 @@
-import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'
+import { CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { instrument } from '../index'
+import { MCPAnalyticsEventType } from '../extensions/event-types'
 import { deterministicPrefixedId } from '../extensions/ids'
 import { MCP_SESSION_HEADER, encodeSessionId } from '../extensions/session-token'
 import { getServerTrackingData } from '../extensions/internal'
@@ -55,10 +56,14 @@ describe('conversation_id as the session anchor', () => {
   }
 
   function toolCallSessionIds(): string[] {
-    return capture
-      .getEvents()
-      .filter((e) => e.resourceName === 'add_todo')
-      .map((e) => e.sessionId)
+    return (
+      capture
+        .getEvents()
+        // `resourceName` alone is not enough: a `$identify` published during a tool
+        // call carries the same resource name, so it would be counted as a call.
+        .filter((e) => e.eventType === MCPAnalyticsEventType.mcpToolsCall && e.resourceName === 'add_todo')
+        .map((e) => e.sessionId)
+    )
   }
 
   describe('getSessionId', () => {
@@ -280,6 +285,39 @@ describe('conversation_id as the session anchor', () => {
       await callTool('first', CONVERSATION_HANDLE)
 
       expect(toolCallSessionIds()[0]).toBe(data.sessionId)
+    })
+
+    it('changes nothing at all when the feature is off', async () => {
+      // The no-regression contract. `enableConversationId` is the switch for the
+      // whole 2026-07-28 mechanism, so a server that never opts in must see the
+      // SDK behave exactly as it did before — including one that happens to send
+      // a handle-shaped argument of its own.
+      instrument(server, fakePostHog(), { enableConversationId: false, identify: async () => ({ distinctId: 'u1' }) })
+      const data = getServerTrackingData(server.server as MCPServerLike)!
+
+      const { tools } = (await client.request({ method: 'tools/list' }, ListToolsResultSchema)) as {
+        tools: Array<{ inputSchema?: { properties?: Record<string, unknown> } }>
+      }
+      await callTool('first', CONVERSATION_HANDLE)
+      await callTool('second')
+      await callTool('third')
+
+      // Nothing advertised.
+      for (const tool of tools) {
+        expect(tool.inputSchema?.properties?.conversation_id).toBeUndefined()
+      }
+      // Nothing anchored: every call resolves to this instance's session, even the
+      // one that carried a handle-shaped argument.
+      expect(toolCallSessionIds()).toEqual([data.sessionId, data.sessionId, data.sessionId])
+      // Nothing captured: the handle never reaches the event.
+      expect(
+        capture
+          .getEvents()
+          .map((e) => e.conversationId)
+          .filter(Boolean)
+      ).toEqual([])
+      // Nothing amplified: one session means one $identify, not one per call.
+      expect(capture.findCapturesByEvent('$identify')).toHaveLength(1)
     })
 
     it('reuses the minted handle across calls once the agent echoes it back', async () => {
