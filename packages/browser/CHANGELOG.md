@@ -1,5 +1,19 @@
 # posthog-js
 
+## 1.410.0
+
+### Minor Changes
+
+- [#4125](https://github.com/PostHog/posthog-js/pull/4125) [`fde7145`](https://github.com/PostHog/posthog-js/commit/fde7145e59b497a76b083d9bd173648e83de0400) Thanks [@DerGeraetK](https://github.com/DerGeraetK)! - Add `session_recording.sampling` to disable or throttle mousemove capture (and optionally mouseInteraction) in session replay. Canvas recording now merges its canvas sampling with user-provided sampling instead of overwriting it.
+  (2026-08-03)
+
+### Patch Changes
+
+- [#4387](https://github.com/PostHog/posthog-js/pull/4387) [`10ef759`](https://github.com/PostHog/posthog-js/commit/10ef7594d11f805742f4dbff5e7a87f88b6352c7) Thanks [@NVolcz](https://github.com/NVolcz)! - Share extension bundle types between the slim and slim no-external entrypoints.
+  (2026-08-03)
+- Updated dependencies [[`fde7145`](https://github.com/PostHog/posthog-js/commit/fde7145e59b497a76b083d9bd173648e83de0400)]:
+    - @posthog/types@1.400.0
+
 ## 1.409.6
 
 ### Patch Changes
