@@ -26,6 +26,7 @@ import {
   isResponseTokenChunk,
   extractRequestId,
   buildProviderMetadata,
+  extractCacheWriteTokens,
   isTerminalResponse,
   getResponseFailure,
 } from './utils'
@@ -148,6 +149,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 outputTokens?: number
                 reasoningTokens?: number
                 cacheReadInputTokens?: number
+                cacheCreationInputTokens?: number
               } = {
                 inputTokens: 0,
                 outputTokens: 0,
@@ -232,6 +234,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                     outputTokens: chunk.usage.completion_tokens ?? 0,
                     reasoningTokens: chunk.usage.completion_tokens_details?.reasoning_tokens ?? 0,
                     cacheReadInputTokens: chunk.usage.prompt_tokens_details?.cached_tokens ?? 0,
+                    cacheCreationInputTokens: extractCacheWriteTokens(chunk.usage.prompt_tokens_details),
                   }
                 }
               }
@@ -340,6 +343,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 outputTokens: result.usage?.completion_tokens ?? 0,
                 reasoningTokens: result.usage?.completion_tokens_details?.reasoning_tokens ?? 0,
                 cacheReadInputTokens: result.usage?.prompt_tokens_details?.cached_tokens ?? 0,
+                cacheCreationInputTokens: extractCacheWriteTokens(result.usage?.prompt_tokens_details),
               },
               completionId: result.id,
               providerMetadata: buildProviderMetadata({
@@ -412,6 +416,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
         outputTokens: result.usage?.output_tokens ?? 0,
         reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
         cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
+        cacheCreationInputTokens: extractCacheWriteTokens(result.usage?.input_tokens_details),
         rawUsage: result.usage,
       },
       stopReason: result.status ?? undefined,
@@ -476,6 +481,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 outputTokens?: number
                 reasoningTokens?: number
                 cacheReadInputTokens?: number
+                cacheCreationInputTokens?: number
               } = {
                 inputTokens: 0,
                 outputTokens: 0,
@@ -513,6 +519,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                     outputTokens: chunk.response.usage.output_tokens ?? 0,
                     reasoningTokens: chunk.response.usage.output_tokens_details?.reasoning_tokens ?? 0,
                     cacheReadInputTokens: chunk.response.usage.input_tokens_details?.cached_tokens ?? 0,
+                    cacheCreationInputTokens: extractCacheWriteTokens(chunk.response.usage.input_tokens_details),
                   }
                 }
               }
@@ -616,6 +623,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 outputTokens: result.usage?.output_tokens ?? 0,
                 reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
                 cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
+                cacheCreationInputTokens: extractCacheWriteTokens(result.usage?.input_tokens_details),
                 rawUsage: result.usage,
               },
               stopReason: result.status ?? undefined,
@@ -772,6 +780,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
             outputTokens: result.usage?.output_tokens ?? 0,
             reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
             cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
+            cacheCreationInputTokens: extractCacheWriteTokens(result.usage?.input_tokens_details),
             rawUsage: result.usage,
           },
           stopReason: result.status ?? undefined,

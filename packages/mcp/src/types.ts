@@ -57,7 +57,21 @@ export interface MCPAnalyticsOptions {
    * detected under the same name.
    */
   missingCapabilityToolName?: string
-  /** Enables the `conversation_id` tool parameter + prompt-back loop. */
+  /**
+   * Opt in to session correlation for the MCP **2026-07-28** revision, which removed
+   * protocol-level sessions: no `initialize`, no `mcp-session-id` header, and a fresh
+   * server instance per HTTP request. With none of those left to anchor on, the only
+   * thing that can carry a session across calls is the agent itself.
+   *
+   * Turning this on injects a `conversation_id` parameter into every tool, mints one
+   * on the first call, asks the agent to echo it back, and derives `$session_id` from
+   * that handle — so calls correlate across reconnects, restarts, and per-request
+   * instances.
+   *
+   * Off by default, and fully inert when off: no parameter is injected, no schema is
+   * touched, no prompt-back is appended, and `$session_id` resolves exactly as it did
+   * before (the request's own session id, else this instance's).
+   */
   enableConversationId?: boolean
   /**
    * Emit a `$exception` event alongside any failed tool call. Defaults to `true`.
@@ -123,6 +137,8 @@ export type RegisteredTool = {
   /** MCP tool `_meta` block (spec-allowed arbitrary metadata, e.g. `category`). */
   _meta?: Record<string, unknown>
   inputSchema?: unknown
+  /** Present when the tool was registered with a declared output schema. */
+  outputSchema?: unknown
   update?: (...args: unknown[]) => unknown
 } & ({ callback: ToolCallback; handler?: never } | { handler: ToolCallback; callback?: never })
 
@@ -274,6 +290,12 @@ export interface SessionInfo {
 export interface AnalyticsParameterOwnership {
   context: boolean
   conversationId: boolean
+  /**
+   * True when we declared `_mcp_instructions` on this tool's advertised output
+   * schema, so writing that key into `structuredContent` will validate. False
+   * for tools with no output schema, or one we could not extend.
+   */
+  outputInstructions: boolean
 }
 
 export interface MCPAnalyticsData {

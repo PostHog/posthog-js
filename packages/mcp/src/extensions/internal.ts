@@ -130,7 +130,14 @@ export async function handleIdentify(
   sessionId: string,
   request: MCPRequestLike,
   requestAttribution: SessionInfo,
-  extra?: CompatibleRequestHandlerExtra
+  extra?: CompatibleRequestHandlerExtra,
+  /**
+   * True when this session id came from an agent-carried `conversation_id`
+   * rather than the transport. Such a session is brand new and was never
+   * announced at `initialize`, whatever `data.sessionSource` still says about
+   * the connection.
+   */
+  sessionFromConversation = false
 ): Promise<UserIdentity | undefined> {
   const identityBeforeRequest = data.identifiedSessions.get(sessionId)
   const sessionSourceBeforeIdentify = data.sessionSource
@@ -166,7 +173,8 @@ export async function handleIdentify(
       // announced); revisit with the stateless-by-default rework.
       const changed = previousIdentity !== undefined && !areIdentitiesEqual(previousIdentity, mergedIdentity)
       const firstSeen = previousIdentity === undefined
-      const announcedAtInitialize = sessionSourceBeforeIdentify === 'token' && request.method !== 'initialize'
+      const announcedAtInitialize =
+        !sessionFromConversation && sessionSourceBeforeIdentify === 'token' && request.method !== 'initialize'
       const shouldPublish = changed || (firstSeen && !announcedAtInitialize)
 
       data.identifiedSessions.set(sessionId, mergedIdentity)

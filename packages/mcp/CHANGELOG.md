@@ -1,5 +1,32 @@
 # @posthog/mcp
 
+## 0.10.8
+
+### Patch Changes
+
+- [#4433](https://github.com/PostHog/posthog-js/pull/4433) [`c514a34`](https://github.com/PostHog/posthog-js/commit/c514a34e82c5ccd3995b64d6cf1f8b878413f52c) Thanks [@gesh](https://github.com/gesh)! - Deliver the `conversation_id` session handle on errored tool results, and inject it into
+  the virtual `get_more_tools` tool. A first call that fails no longer sends the agent's
+  retry into a different conversation, and a reported capability gap now groups with the
+  work that hit it. (2026-08-06)
+
+- [#4428](https://github.com/PostHog/posthog-js/pull/4428) [`7322893`](https://github.com/PostHog/posthog-js/commit/732289369cdfeee30b0c6dcbed9957b60e8c630f) Thanks [@gesh](https://github.com/gesh)! - Use an agent-supplied `conversation_id` as the session anchor, so tool calls in one
+  conversation share a `$session_id` across reconnects, restarts, and per-request server
+  instances. Only a handle the SDK could have minted is accepted; a value the agent invented
+  is replaced with a fresh one, so two callers cannot land in the same session by sending the
+  same string. (2026-08-06)
+
+- [#4431](https://github.com/PostHog/posthog-js/pull/4431) [`955df8d`](https://github.com/PostHog/posthog-js/commit/955df8d0feb2ff5ac494431295f738ea7af4e0cf) Thanks [@gesh](https://github.com/gesh)! - Mirror the `conversation_id` session handle into `structuredContent` for tools whose
+  output schema declares `_mcp_instructions`. Clients that read structured results never
+  saw the handle in `content`, so correlation for those tools was zero. (2026-08-06)
+
+- [#4430](https://github.com/PostHog/posthog-js/pull/4430) [`e6d9295`](https://github.com/PostHog/posthog-js/commit/e6d9295a5382dd6be7f6d87e2ddf65f57ed24e01) Thanks [@gesh](https://github.com/gesh)! - Declare an optional `_mcp_instructions` property on the output schema of tools that
+  advertise one, when `enableConversationId` is on. Inert by itself — it is the schema
+  declaration that makes a later change able to mirror the conversation handle into
+  `structuredContent` without failing client-side validation. (2026-08-06)
+- Updated dependencies [[`4751b33`](https://github.com/PostHog/posthog-js/commit/4751b33a0498fa36a9d2e11a98d4ef94ca60c5dc), [`64ba193`](https://github.com/PostHog/posthog-js/commit/64ba19370e4a974596712296c8a7f80ddbcc13b1)]:
+  - posthog-node@5.48.1
+  - @posthog/core@1.46.9
+
 ## 0.10.7
 
 ### Patch Changes

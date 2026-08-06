@@ -1,5 +1,21 @@
 # posthog-js
 
+## 1.413.3
+
+### Patch Changes
+
+- [#4414](https://github.com/PostHog/posthog-js/pull/4414) [`1b88c2f`](https://github.com/PostHog/posthog-js/commit/1b88c2fed8f5e634eb86041b96d8b97e2802b9d8) Thanks [@marandaneto](https://github.com/marandaneto)! - Clear properties registered for a session when the PostHog session rotates.
+  (2026-08-06)
+
+- [#4374](https://github.com/PostHog/posthog-js/pull/4374) [`b39b577`](https://github.com/PostHog/posthog-js/commit/b39b577071beb09cfaba21a3e1477f218d75bb1a) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Persist in-place object and array mutations when properties are re-registered.
+  (2026-08-06)
+
+- [#4434](https://github.com/PostHog/posthog-js/pull/4434) [`75fb719`](https://github.com/PostHog/posthog-js/commit/75fb719bafd4eeb22ed41e10958d32a388c9883e) Thanks [@arnohillen](https://github.com/arnohillen)! - Make the session replay attribute masking options mutually exclusive: when both `maskAllElementAttributes` and `maskAttributeFn` are set, the coarse option wins and the callback is ignored (with a console warning), so a callback can no longer accidentally unmask what `maskAllElementAttributes` hides.
+  (2026-08-06)
+- Updated dependencies [[`64ba193`](https://github.com/PostHog/posthog-js/commit/64ba19370e4a974596712296c8a7f80ddbcc13b1), [`75fb719`](https://github.com/PostHog/posthog-js/commit/75fb719bafd4eeb22ed41e10958d32a388c9883e)]:
+    - @posthog/core@1.46.9
+    - @posthog/types@1.402.2
+
 ## 1.413.2
 
 ### Patch Changes
