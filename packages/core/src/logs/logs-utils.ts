@@ -183,13 +183,18 @@ export function buildOtlpLogRecord(options: CaptureLogOptions, sdkContext: LogSd
  * drain). Having one builder keeps those paths from drifting.
  *
  * Layout: user `resourceAttributes` spread first, then SDK-controlled keys
- * (`service.name`, `deployment.environment`, `service.version`,
+ * (`service.name`, `deployment.environment{,.name}`, `service.version`,
  * `telemetry.sdk.*`) layered on top so a stray user key can't clobber the
  * ingestion-attribution keys. The dedicated `serviceName` / `environment` /
  * `serviceVersion` config fields are the supported way to override the first
  * three; each SDK resolves its own `service.name` default before this point, so
  * the `unknown_service` fallback here only fires if a config slips through with
  * an empty `serviceName`.
+ *
+ * `environment` goes out under both spellings: semconv 1.27 renamed
+ * `deployment.environment` to `deployment.environment.name`, and queries,
+ * saved views, and alerts already written against the old key have to keep
+ * matching. The old key can go in a future major.
  */
 export function buildResourceAttributes(
   config: ResolvedPostHogLogsConfig,
@@ -199,7 +204,10 @@ export function buildResourceAttributes(
   return {
     ...config.resourceAttributes,
     'service.name': config.serviceName || 'unknown_service',
-    ...(config.environment && { 'deployment.environment': config.environment }),
+    ...(config.environment && {
+      'deployment.environment.name': config.environment,
+      'deployment.environment': config.environment,
+    }),
     ...(config.serviceVersion && { 'service.version': config.serviceVersion }),
     'telemetry.sdk.name': sdkName,
     'telemetry.sdk.version': sdkVersion,

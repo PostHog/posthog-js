@@ -52,7 +52,7 @@ export interface PostHogMetricsConfig {
   /** Service version attached as OTLP `service.version`. */
   serviceVersion?: string
 
-  /** Deployment environment attached as OTLP `deployment.environment`. */
+  /** Deployment environment attached as OTLP `deployment.environment.name` and `deployment.environment`. */
   environment?: string
 
   /**

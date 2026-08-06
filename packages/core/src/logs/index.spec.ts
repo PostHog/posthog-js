@@ -440,6 +440,8 @@ describe('PostHogLogs', () => {
         payload.resourceLogs[0].resource.attributes.map((a: any) => [a.key, a.value])
       )
       expect(resourceAttrs['service.name']).toEqual({ stringValue: 'my-service' })
+      // Both spellings, so a consumer on either side of the semconv 1.27 rename can filter on it.
+      expect(resourceAttrs['deployment.environment.name']).toEqual({ stringValue: 'prod' })
       expect(resourceAttrs['deployment.environment']).toEqual({ stringValue: 'prod' })
       expect(resourceAttrs['service.version']).toEqual({ stringValue: '1.2.3' })
       // OTLP-standard SDK identification — pulled from the instance's

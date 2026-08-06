@@ -95,8 +95,9 @@ export interface PostHogLogsConfig {
   serviceVersion?: string
 
   /**
-   * Deployment environment attached as OTLP `deployment.environment`
-   * (e.g. `'production'`, `'staging'`, `'dev'`).
+   * Deployment environment attached as OTLP `deployment.environment.name`, and
+   * also as the pre-1.27 `deployment.environment` (e.g. `'production'`,
+   * `'staging'`, `'dev'`).
    */
   environment?: string
 

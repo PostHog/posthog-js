@@ -14,7 +14,11 @@ export function resolveMetricsConfig(config: MetricsConfig | undefined): Resolve
   return {
     serviceName: (resourceAttributes?.['service.name'] as string | undefined) ?? config?.serviceName,
     serviceVersion: (resourceAttributes?.['service.version'] as string | undefined) ?? config?.serviceVersion,
-    environment: (resourceAttributes?.['deployment.environment'] as string | undefined) ?? config?.environment,
+    // Either environment spelling is accepted, current semconv key first.
+    environment:
+      (resourceAttributes?.['deployment.environment.name'] as string | undefined) ??
+      (resourceAttributes?.['deployment.environment'] as string | undefined) ??
+      config?.environment,
     resourceAttributes,
     beforeSend: config?.beforeSend,
     flushIntervalMs: config?.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS,

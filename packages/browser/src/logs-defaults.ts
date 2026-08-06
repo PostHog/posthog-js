@@ -38,7 +38,11 @@ export function resolveLogsConfig(
             config?.serviceName ??
             opts?.serviceNameDefault,
         serviceVersion: (resourceAttributes?.['service.version'] as string | undefined) ?? config?.serviceVersion,
-        environment: (resourceAttributes?.['deployment.environment'] as string | undefined) ?? config?.environment,
+        // Either environment spelling is accepted, current semconv key first.
+        environment:
+            (resourceAttributes?.['deployment.environment.name'] as string | undefined) ??
+            (resourceAttributes?.['deployment.environment'] as string | undefined) ??
+            config?.environment,
         resourceAttributes,
         beforeSend: config?.beforeSend,
         flushIntervalMs,

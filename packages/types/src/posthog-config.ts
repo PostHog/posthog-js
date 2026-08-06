@@ -943,7 +943,7 @@ export interface LogCaptureOptions {
     serviceName?: string
     /**
      * The deployment environment for log records (e.g. 'production', 'staging').
-     * Maps to the OTel resource attribute 'deployment.environment'.
+     * Maps to the OTel resource attributes 'deployment.environment.name' and 'deployment.environment'.
      */
     environment?: string
     /**
@@ -1019,7 +1019,7 @@ export interface MetricsConfig {
     serviceName?: string
     /**
      * The deployment environment for metric series (e.g. 'production', 'staging').
-     * Maps to the OTel resource attribute 'deployment.environment'.
+     * Maps to the OTel resource attributes 'deployment.environment.name' and 'deployment.environment'.
      */
     environment?: string
     /**

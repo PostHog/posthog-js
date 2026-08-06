@@ -199,6 +199,11 @@ describe('PostHogMetrics', () => {
       const payload = sentPayloads()[0]
       const resourceAttrs = payload.resourceMetrics[0].resource.attributes
       expect(resourceAttrs).toContainEqual({ key: 'service.name', value: { stringValue: 'checkout-web' } })
+      // Both spellings, so a consumer on either side of the semconv 1.27 rename can filter on it.
+      expect(resourceAttrs).toContainEqual({
+        key: 'deployment.environment.name',
+        value: { stringValue: 'production' },
+      })
       expect(resourceAttrs).toContainEqual({ key: 'deployment.environment', value: { stringValue: 'production' } })
       expect(resourceAttrs).toContainEqual({ key: 'k8s.pod', value: { stringValue: 'web-1' } })
       expect(resourceAttrs).toContainEqual({ key: 'telemetry.sdk.name', value: { stringValue: 'posthog-core-tests' } })

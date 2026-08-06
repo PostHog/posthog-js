@@ -102,6 +102,20 @@ describe('resolveLogsConfig', () => {
         expect(resolved.environment).toBe('from-resource-env')
     })
 
+    // Both environment spellings are honored, so a user who set the current semconv key in
+    // resourceAttributes isn't silently ignored in favour of the named field.
+    it.each([
+        ['current semconv key', { 'deployment.environment.name': 'from-current' }, 'from-current'],
+        ['pre-1.27 key', { 'deployment.environment': 'from-legacy' }, 'from-legacy'],
+        [
+            'both keys, current wins',
+            { 'deployment.environment.name': 'from-current', 'deployment.environment': 'from-legacy' },
+            'from-current',
+        ],
+    ])('reads the environment from resourceAttributes: %s', (_, resourceAttributes, expected) => {
+        expect(resolveLogsConfig({ environment: 'from-named-env', resourceAttributes }).environment).toBe(expected)
+    })
+
     it('falls back to named fields when resourceAttributes omit them', () => {
         const resolved = resolveLogsConfig({
             serviceName: 'from-named',

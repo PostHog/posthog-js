@@ -52,7 +52,8 @@ export function bucketIndexFor(value: number, bounds: number[]): number {
 /**
  * OTLP resource attributes for every metrics batch. Same layering policy as
  * the logs builder: user `resourceAttributes` spread first, SDK-controlled
- * keys layered on top so a stray user key can't clobber attribution.
+ * keys layered on top so a stray user key can't clobber attribution, and
+ * `environment` emitted under both semconv spellings.
  */
 export function buildMetricsResourceAttributes(
   config: ResolvedPostHogMetricsConfig,
@@ -62,7 +63,10 @@ export function buildMetricsResourceAttributes(
   return {
     ...config.resourceAttributes,
     'service.name': config.serviceName || 'unknown_service',
-    ...(config.environment && { 'deployment.environment': config.environment }),
+    ...(config.environment && {
+      'deployment.environment.name': config.environment,
+      'deployment.environment': config.environment,
+    }),
     ...(config.serviceVersion && { 'service.version': config.serviceVersion }),
     'telemetry.sdk.name': scopeName,
     'telemetry.sdk.version': scopeVersion,
