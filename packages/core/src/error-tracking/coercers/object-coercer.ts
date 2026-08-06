@@ -21,7 +21,7 @@ export class ObjectCoercer implements ErrorTrackingCoercer<ObjectLike> {
       return {
         type: this.getType(candidate),
         value: this.getValue(candidate),
-        stack: ctx.syntheticException?.stack,
+        stack: this.getStack(candidate) ?? ctx.syntheticException?.stack,
         level: this.isSeverityLevel(candidate.level) ? candidate.level : 'error',
         synthetic: true,
       }
@@ -53,6 +53,17 @@ export class ObjectCoercer implements ErrorTrackingCoercer<ObjectLike> {
 
   private isSeverityLevel(x: unknown): x is SeverityLevel {
     return isString(x) && !isEmptyString(x) && severityLevels.indexOf(x as SeverityLevel) >= 0
+  }
+
+  private getStack(candidate: ObjectLike): string | undefined {
+    try {
+      if (isString(candidate.stacktrace) && candidate.stacktrace.length > 0) {
+        return candidate.stacktrace
+      }
+      return isString(candidate.stack) && candidate.stack.length > 0 ? candidate.stack : undefined
+    } catch {
+      return undefined
+    }
   }
 
   /** If a plain object has a property that is an `Error`, return this error. */
