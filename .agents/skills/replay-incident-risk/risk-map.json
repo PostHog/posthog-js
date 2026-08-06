@@ -29,7 +29,6 @@
         "^packages/browser/src/extensions/replay/external/mutation-throttler\\.ts$"
       ],
       "contentPatterns": [
-        "_isIdle",
         "isIdle",
         "sessionIdChanged|rotateSession|session.?rotation",
         "onSessionId|resetSessionId",
@@ -69,7 +68,8 @@
         "insertRule",
         "getComputedStyle"
       ],
-      "why": "Serializer bugs corrupt replays silently: no exception, no volume change. In May 2026 a cssText spec quirk silently dropped layout styles for sites using CSS custom properties. Test against framework-generated CSS (Chakra/Panda, Emotion speedy, Tailwind) in a real browser."
+      "why": "Serializer bugs corrupt replays silently: no exception, no volume change. In May 2026 a cssText spec quirk silently dropped layout styles for sites using CSS custom properties. Test against framework-generated CSS (Chakra/Panda, Emotion speedy, Tailwind) in a real browser.",
+      "contentScope": "^packages/rrweb/.*\\.(ts|tsx|js|mjs)$"
     },
     {
       "id": "replay-reconstruction",
@@ -78,7 +78,7 @@
       "paths": [
         "^packages/rrweb/.*replay"
       ],
-      "contentScope": "^packages/rrweb/.*\\.(ts|tsx|js|mjs)$",
+      "contentScope": "^packages/rrweb/.*replay.*\\.(ts|tsx|js|mjs)$",
       "contentPatterns": [
         "setAttribute\\(",
         "allow-scripts",
@@ -96,7 +96,7 @@
         "^packages/browser/src/extensions/replay/external/triggerMatching\\.ts$",
         "^packages/browser/src/extensions/replay/external/config\\.ts$",
         "^packages/browser/src/extensions/replay/external/denylist\\.ts$",
-        "^packages/browser/src/extensions/replay/external/sampling",
+        "^packages/browser/src/extensions/sampling\\.ts$",
         "^packages/browser/src/posthog-featureflags\\.ts$"
       ],
       "contentPatterns": [
@@ -118,7 +118,7 @@
       ],
       "contentPatterns": [
         "maskAllInputs|maskInputOptions|maskTextSelector|maskInputFn|maskTextFn",
-        "type=[\"']password|\\bpassword\\b",
+        "type=[\"']password",
         "opt_out|optedOut|has_opted_out",
         "disable_session_recording"
       ],
@@ -135,7 +135,7 @@
         "^packages/browser/src/request\\.ts$"
       ],
       "contentPatterns": [
-        "setInterval|setTimeout.*retry|retriesPerformedSoFar",
+        "retriesPerformedSoFar|RetryQueue|retry.?queue",
         "backoff|jitter"
       ],
       "why": "This code runs on every customer page. Retries without backoff and jitter become a coordinated fleet-wide flood against capture during any ingestion blip; queue bugs become silent event loss or duplicates. Walk a page through a 30-minute capture outage and count the requests."
