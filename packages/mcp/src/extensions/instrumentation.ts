@@ -207,11 +207,19 @@ async function prepareToolCallEvent(
   eventType: MCPAnalyticsEventType
 ): Promise<PreparedToolEvent | null> {
   try {
-    const sessionId = getSessionId(server, extra)
+    const sessionId = getSessionId(server, extra, conversation.conversationId)
     // Snapshot token/client/protocol metadata synchronously, before identify or
     // metadata callbacks can yield and let another request replace shared state.
     const sessionInfo = getSessionInfo(server, data, sessionId)
-    const identity = await handleIdentify(server, data, sessionId, request, sessionInfo, extra)
+    const identity = await handleIdentify(
+      server,
+      data,
+      sessionId,
+      request,
+      sessionInfo,
+      extra,
+      !!conversation.conversationId
+    )
     const requestAttribution = withIdentity(sessionInfo, identity)
 
     const toolName = request.params?.name

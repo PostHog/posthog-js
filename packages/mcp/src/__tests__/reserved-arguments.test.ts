@@ -21,6 +21,9 @@ async function connect(server: McpServer) {
   }
 }
 
+/** Shaped like a handle we would have minted, so it is echoed rather than replaced. */
+const ANALYTICS_CONVERSATION = '019fd2b0-3333-7333-8333-333333333333'
+
 describe('high-level reserved analytics arguments', () => {
   it('passes legitimate context and conversation_id fields to the callback when both features are disabled', async () => {
     const server = new McpServer({ name: 'disabled-reserved-arguments', version: '1.0.0' })
@@ -89,7 +92,7 @@ describe('high-level reserved analytics arguments', () => {
           method: 'tools/call',
           params: {
             name: 'record_schema',
-            arguments: { context: 'analytics context', conversation_id: 'analytics conversation', value: 'kept' },
+            arguments: { context: 'analytics context', conversation_id: ANALYTICS_CONVERSATION, value: 'kept' },
           },
         },
         CallToolResultSchema
@@ -121,7 +124,7 @@ describe('high-level reserved analytics arguments', () => {
           method: 'tools/call',
           params: {
             name: 'strict_schema',
-            arguments: { context: 'analytics context', conversation_id: 'analytics conversation', value: 'kept' },
+            arguments: { context: 'analytics context', conversation_id: ANALYTICS_CONVERSATION, value: 'kept' },
           },
         },
         CallToolResultSchema
@@ -132,7 +135,7 @@ describe('high-level reserved analytics arguments', () => {
       await new Promise((resolve) => setTimeout(resolve, 50))
       const event = capture.getEvents().find((candidate) => candidate.resourceName === 'strict_schema')
       expect(event?.userIntent).toBe('analytics context')
-      expect(event?.conversationId).toBe('analytics conversation')
+      expect(event?.conversationId).toBe(ANALYTICS_CONVERSATION)
     } finally {
       await capture.stop()
       await cleanup()

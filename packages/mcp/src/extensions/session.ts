@@ -15,6 +15,7 @@ import { INACTIVITY_TIMEOUT_IN_MINUTES } from './constants'
 import { deterministicPrefixedId, newPrefixedId } from './ids'
 import { getServerTrackingData, setServerTrackingData } from './internal'
 import { decodeSessionId, readMcpSessionHeader } from './session-token'
+import type { SessionTokenPayload } from './session-token'
 
 export function newSessionId(): string {
   return newPrefixedId('ses')
@@ -29,39 +30,77 @@ export function deriveSessionIdFromMCPSession(mcpSessionId: string): string {
 }
 
 /**
- * Resolves the session id for a request: from the replayed session token, from
- * the transport's MCP session id, or — when the request carries nothing — from
- * this instance's memory. Also saves the token's client name/version so events
- * built later in the request can use them (see getSessionInfo).
+ * Derives the SDK session id from the agent's conversation handle. Deterministic
+ * and unsalted on purpose: two pods that never met must agree on the session, and
+ * the 2026-07-28 revision leaves them no shared state to agree through.
+ *
+ * Hashed rather than used verbatim so an MCP session can never collide with a
+ * Session Replay id — a bare uuidv7 would render a "View recording" button that
+ * resolves to nothing.
+ *
+ * Exported because this *is* the cross-SDK contract: posthog-python has to
+ * reproduce it byte for byte or the same conversation splits into two sessions
+ * depending on which SDK served the call.
  */
-export function getSessionId(server: MCPServerLike, extra?: CompatibleRequestHandlerExtra): string {
+export function deriveSessionIdFromConversation(conversationId: string): string {
+  return deterministicPrefixedId('ses', conversationId)
+}
+
+/**
+ * Resolves the session id for a request. Three steps, first match wins:
+ *
+ *   1. the agent carried a `conversation_id` tool argument   — 2026-07-28
+ *   2. the request carried a session id                      — 2025-11-25
+ *   3. nothing was carried, so reuse this instance's own id  — stdio
+ *
+ * The split mirrors the two protocol revisions. 2026-07-28 removed protocol-level
+ * sessions, so the only thing that can carry a session across calls is the agent
+ * itself (1). 2025-11-25 kept the session on the connection, so the request
+ * carries it (2). 3 is for stdio, where neither applies — there is no
+ * HTTP request to carry anything, and no agent handle unless the host opted in.
+ */
+export function getSessionId(
+  server: MCPServerLike,
+  extra?: CompatibleRequestHandlerExtra,
+  conversationId?: string
+): string {
   const data = getServerTrackingData(server)
   if (!data) {
     throw new Error('Server tracking data not found')
   }
 
-  // Our token rides the `mcp-session-id` request header, which stateless
-  // transports ignore — so read it ourselves.
-  const sessionHeader = readMcpSessionHeader(extra?.requestInfo?.headers)
-  const token = decodeSessionId(sessionHeader)
-
-  let sessionId: string
-  if (token) {
-    // Token we minted at `initialize` (see session-token.ts).
-    data.sessionSource = 'token'
-    data.sessionInfo.clientName = token.clientName
-    data.sessionInfo.clientVersion = token.clientVersion
-    data.sessionInfo.protocolVersion = token.protocolVersion
-    sessionId = token.sessionId
-  } else if (extra?.sessionId) {
-    // Session id issued by a stateful transport: hash it so the same MCP
-    // session maps to the same SDK session across restarts.
-    data.sessionSource = 'mcp'
-    sessionId = deriveSessionIdFromMCPSession(extra.sessionId)
-  } else {
-    sessionId = getSessionIdFromMemory(data)
+  // 1. The agent's conversation handle. It outranks both steps below because it
+  // is the only id that survives reconnects, restarts, and the per-request
+  // server instances the 2026-07-28 revision introduces. Hashed rather than used
+  // verbatim so it can never collide with Session Replay ids.
+  //
+  // This returns instead of falling through to the shared-state writes at the
+  // end: the handle belongs to this one request, and persisting it would leak
+  // one chat's session onto a concurrent chat's `tools/list`.
+  //
+  // `lastActivity` therefore does not advance either, so a conversation that
+  // always echoes lets the in-memory fallback age past the inactivity timeout —
+  // and a later call carrying no handle rotates it. That is the honest reading:
+  // the fallback session really has been idle for that whole time.
+  if (conversationId) {
+    // The handle decides the *session*, but the request may still carry our token,
+    // and on a stateless instance that never processed `initialize` its payload is
+    // the only place client identity exists. Restore that before returning: the
+    // early return is about not persisting a session, not about ignoring what the
+    // request told us about the client. Without this, tool calls and `$identify`
+    // go out unattributed on exactly the deployments this branch exists for.
+    applyTokenClientIdentity(data, extra)
+    return deriveSessionIdFromConversation(conversationId)
   }
 
+  // 2. A session id the request itself carried (undefined if it carried none).
+  const carriedByRequest = readSessionIdFromRequest(data, extra)
+
+  // 3. Nothing carried, so fall back to the id this instance already holds.
+  const sessionId = carriedByRequest ?? getSessionIdFromMemory(data)
+
+  // 2 and 3 are connection-scoped, so their result is remembered for the
+  // next request on this instance. 1 never reaches here.
   data.sessionId = sessionId
   data.lastActivity = new Date()
   setServerTrackingData(server, data)
@@ -69,9 +108,69 @@ export function getSessionId(server: MCPServerLike, extra?: CompatibleRequestHan
 }
 
 /**
- * Nothing replayed on this request: keep the id we already have. Only
- * generated sessions roll over on inactivity — token/MCP ids live as long as
- * the client replays them, and regenerating one would split the session.
+ * Restores the client name/version and protocol version baked into our token at
+ * mint time, and hands the decoded token back so the caller can also take the
+ * session id from it.
+ *
+ * Split out from step 2 because the two halves of the token have different
+ * scopes. The session id it carries is per-chat, so a conversation-anchored
+ * request must not adopt it. The client identity is per-connection — the same
+ * client for every request on it — so a conversation-anchored request should,
+ * and on a stateless instance that never saw `initialize` this is the only
+ * source of it.
+ */
+function applyTokenClientIdentity(
+  data: MCPAnalyticsData,
+  extra?: CompatibleRequestHandlerExtra
+): SessionTokenPayload | undefined {
+  const token = decodeSessionId(readMcpSessionHeader(extra?.requestInfo?.headers))
+  if (!token) {
+    return undefined
+  }
+  data.sessionInfo.clientName = token.clientName
+  data.sessionInfo.clientVersion = token.clientVersion
+  data.sessionInfo.protocolVersion = token.protocolVersion
+  return token
+}
+
+/**
+ * 2. The session id a request carried. Two sources, tried in order: our own token
+ * on the `mcp-session-id` header, then the raw session id a stateful transport
+ * issued. Returns undefined when the request carried neither, which is what
+ * sends the caller on to 3.
+ *
+ * Both are 2025-11-25 mechanisms. The 2026-07-28 revision removed that header
+ * outright — servers MUST NOT mint or echo it — so this entire step becomes
+ * legacy-only once era detection lands.
+ */
+function readSessionIdFromRequest(data: MCPAnalyticsData, extra?: CompatibleRequestHandlerExtra): string | undefined {
+  // 2a. A token we minted at `initialize` and the client replayed. It rides the
+  // `mcp-session-id` header, which stateless transports don't surface as
+  // extra.sessionId, so read the header ourselves.
+  const token = applyTokenClientIdentity(data, extra)
+  if (token) {
+    data.sessionSource = 'token'
+    return token.sessionId
+  }
+
+  // 2b. No token, but a stateful transport issued its own session id. Hash it so
+  // the same MCP session maps to the same SDK session across restarts.
+  if (extra?.sessionId) {
+    data.sessionSource = 'mcp'
+    return deriveSessionIdFromMCPSession(extra.sessionId)
+  }
+
+  return undefined
+}
+
+/**
+ * 3. The request carried nothing, so keep the id this instance already holds —
+ * minted once at `instrument()`. This is what groups a stdio server's calls,
+ * where there is no header and no transport session to read.
+ *
+ * Only self-generated ids roll over on inactivity. Token and transport ids live
+ * as long as the client replays them, so regenerating one would split a session
+ * that is still very much alive.
  */
 function getSessionIdFromMemory(data: MCPAnalyticsData): string {
   const timeoutMs = INACTIVITY_TIMEOUT_IN_MINUTES * 60 * 1000

@@ -57,7 +57,21 @@ export interface MCPAnalyticsOptions {
    * detected under the same name.
    */
   missingCapabilityToolName?: string
-  /** Enables the `conversation_id` tool parameter + prompt-back loop. */
+  /**
+   * Opt in to session correlation for the MCP **2026-07-28** revision, which removed
+   * protocol-level sessions: no `initialize`, no `mcp-session-id` header, and a fresh
+   * server instance per HTTP request. With none of those left to anchor on, the only
+   * thing that can carry a session across calls is the agent itself.
+   *
+   * Turning this on injects a `conversation_id` parameter into every tool, mints one
+   * on the first call, asks the agent to echo it back, and derives `$session_id` from
+   * that handle — so calls correlate across reconnects, restarts, and per-request
+   * instances.
+   *
+   * Off by default, and fully inert when off: no parameter is injected, no schema is
+   * touched, no prompt-back is appended, and `$session_id` resolves exactly as it did
+   * before (the request's own session id, else this instance's).
+   */
   enableConversationId?: boolean
   /**
    * Emit a `$exception` event alongside any failed tool call. Defaults to `true`.

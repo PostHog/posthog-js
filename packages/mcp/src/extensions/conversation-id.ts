@@ -82,6 +82,12 @@ export function addConversationIdToTools<TTool extends ConversationIdInjectableT
   return tools.map((tool) => addConversationIdToTool(tool, logger))
 }
 
+/**
+ * The shape of every id we mint: a uuidv7. Used to tell an echo of our own handle
+ * from a value the agent made up.
+ */
+const MINTED_CONVERSATION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 export type ConversationIdResolution =
   | { minted: false; conversationId: string | undefined }
   | { minted: true; conversationId: string }
@@ -89,16 +95,39 @@ export type ConversationIdResolution =
 /**
  * Decides which conversation_id to use for a tool call:
  *   - disabled → none
- *   - agent supplied a value → use it
- *   - agent omitted → mint a UUID
+ *   - agent echoed a handle we could have minted → use it
+ *   - anything else → mint a fresh one
+ *
+ * The shape check matters because this value becomes `$session_id`, and the
+ * derivation is deterministic so that two pods agree — which also means two
+ * *callers* sending the same string land in the same session. The strings agents
+ * invent are not random (`conv-1`, `1`, `session`), so trusting them verbatim
+ * would silently merge unrelated conversations, potentially across users.
+ *
+ * A compliant agent echoes the uuidv7 we minted and is unaffected. Anything else
+ * is treated exactly as if the handle were absent: mint, and prompt back. Shape
+ * rather than a registry of issued ids, because a per-request server has no
+ * memory of what it minted.
+ *
+ * This narrows the problem, it does not prove provenance: a caller supplying a
+ * well-formed uuidv7 is trusted, so two that pick the *same* one still merge. That
+ * residue is far smaller than the case it replaces — an agent ignoring the
+ * parameter description reaches for `conv-1` or `1`, not a conforming uuidv7 — and
+ * closing it needs a signed handle, i.e. a secret shared by every pod. Worth doing
+ * if this ever anchors something security-bearing; `$session_id` is an analytics
+ * grouping key, so it does not today.
  */
 export function resolveConversationId(enabled: boolean, args: unknown): ConversationIdResolution {
   if (!enabled) {
     return { minted: false, conversationId: undefined }
   }
   const supplied = extractConversationId(args)
-  if (supplied) {
-    return { minted: false, conversationId: supplied }
+  if (supplied && MINTED_CONVERSATION_ID.test(supplied)) {
+    // Lowercased because the shape test is case-insensitive but the hash behind
+    // `$session_id` is not. Some hosts normalise uuids to uppercase, and an
+    // uppercased echo of our own handle would otherwise clear the gate and then
+    // land in a different session than the call that minted it.
+    return { minted: false, conversationId: supplied.toLowerCase() }
   }
   return { minted: true, conversationId: uuidv7() }
 }
