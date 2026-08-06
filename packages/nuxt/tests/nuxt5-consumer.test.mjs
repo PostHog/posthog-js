@@ -1,15 +1,35 @@
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const packageDir = dirname(fileURLToPath(import.meta.url))
 const fixtureDir = mkdtempSync(join(tmpdir(), 'posthog-nuxt5-consumer-'))
+const packageRoot = join(packageDir, '..')
+const packageStageDir = join(fixtureDir, 'package')
 
 try {
+  const packageManifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'))
+  packageManifest.dependencies = Object.fromEntries(
+    Object.entries(packageManifest.dependencies).map(([name, version]) => {
+      if (version !== 'catalog:' && !version.startsWith('workspace:')) {
+        return [name, version]
+      }
+
+      const dependencyManifest = JSON.parse(
+        readFileSync(join(packageRoot, 'node_modules', ...name.split('/'), 'package.json'), 'utf8'),
+      )
+      const range = version === 'workspace:^' ? '^' : version === 'workspace:~' ? '~' : ''
+      return [name, `${range}${dependencyManifest.version}`]
+    }),
+  )
+  delete packageManifest.scripts
+  cpSync(join(packageRoot, 'dist'), join(packageStageDir, 'dist'), { recursive: true })
+  writeFileSync(join(packageStageDir, 'package.json'), JSON.stringify(packageManifest, null, 2))
+
   execFileSync('pnpm', ['pack', '--pack-destination', fixtureDir], {
-    cwd: join(packageDir, '..'),
+    cwd: packageStageDir,
     stdio: 'inherit',
   })
 
