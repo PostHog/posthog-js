@@ -1669,7 +1669,7 @@
         },
         {
           "category": "Identification",
-          "description": "Resets all user data and starts a fresh session.\n⚠️ **Warning**: Only call this when a user logs out. Calling at the wrong time can cause split sessions.\nThis clears: - Session ID and super properties - User identification (sets new random distinct_id) - Cached data and consent settings",
+          "description": "Resets all user data and starts a fresh session.\n⚠️ **Warning**: Only call this when a user logs out. Calling at the wrong time can cause split sessions.\nThis clears: - Session ID and super properties - User identification (sets new random distinct_id) - Cached data and consent settings\n⚠️ **Warning**: because consent is cleared, `reset()` returns the instance to the default consent state. With `opt_out_capturing_by_default` that default is opted out, so calling `reset()` *after* `opt_in_capturing()` silently stops capturing. Always `reset()` first, then opt in.",
           "details": null,
           "id": "reset",
           "showDocs": true,
@@ -1683,7 +1683,12 @@
             {
               "id": "reset_and_generate_new_device_id",
               "name": "reset and generate new device ID",
-              "code": "\n\n// reset and generate new device ID\nposthog.reset(true)  // also resets device_id\n\n\n\n"
+              "code": "\n\n// reset and generate new device ID\nposthog.reset(true)  // also resets device_id\n\n\n"
+            },
+            {
+              "id": "with_opt_out_capturing_by_default,_reset()_before_opting_in,_never_after",
+              "name": "with opt_out_capturing_by_default, reset() before opting in, never after",
+              "code": "\n\n// with opt_out_capturing_by_default, reset() before opting in, never after\nposthog.reset()\nposthog.opt_in_capturing()\n\n\n\n"
             }
           ],
           "releaseTag": "public",

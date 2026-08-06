@@ -565,6 +565,7 @@
         "_requestQueue",
         "_requirePersonProcessing",
         "_requiredConfig",
+        "_reset",
         "_resetConversationState",
         "_resetCounter",
         "_resetIdleTimer",
