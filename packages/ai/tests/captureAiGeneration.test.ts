@@ -291,6 +291,12 @@ describe('captureAiGeneration', () => {
       expected: 503,
     },
     {
+      name: 'derives httpStatus from error.statusCode',
+      error: Object.assign(new Error('boom'), { statusCode: 400 }),
+      httpStatus: undefined,
+      expected: 400,
+    },
+    {
       name: 'falls back to 500 when the error has no status',
       error: new Error('plain'),
       httpStatus: undefined,
