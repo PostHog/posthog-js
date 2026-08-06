@@ -2,6 +2,8 @@
 
 This document describes the internals of the `@posthog/mcp` SDK and the exact PostHog event/property contract it emits.
 
+It documents the **current state** only. The reasoning behind architectural decisions — what problem forced them, what was rejected, what trade-offs were accepted — lives in [`docs/adr/`](./adr/) (see [ADR-0001](./adr/0001-record-architecture-decisions.md) for the conventions). When this document says "see ADR-NNNN", that's where the why is.
+
 ## TL;DR
 
 - `instrument(server, posthog, options?)` wraps an MCP server, intercepts request handlers, and pushes structured events through a small in-memory pipeline into PostHog via the host's `posthog-node` client (`posthog.capture()`). It returns an `McpAnalytics` handle.
@@ -73,24 +75,23 @@ The pipeline lives in an exported `processMcpEvent()` function in `src/extension
 ## 4. Session & identity
 
 - **Session ID format**: `ses_<uuidv7>` (`src/extensions/ids.ts`). Uses `uuidv7` from `@posthog/core`.
-- **Session resolution** (`getSessionId`, `src/extensions/session.ts`) — three sources, in order:
-  1. **Session token** (the replayed `mcp-session-id` request header): use the session id inside it and save the token's client name/version for events. See "Session tokens" below.
-  2. **Transport session id** (`extra.sessionId`, stateful servers): hash it (`deriveSessionIdFromMCPSession`) so the same MCP session maps to the same PostHog session across restarts.
-  3. **Memory**: keep the current id. Only generated sessions roll over, after **30 minutes of inactivity**; token/MCP sessions live as long as the client replays them.
-- **Session tokens — stateless / multi-pod continuity** (`src/extensions/session-token.ts`):
-  - **Problem**: a stateless server keeps nothing between requests, so sessions fragment to one per request and `$mcp_client_name`/`$mcp_client_version` go missing after `initialize`.
-  - **Mechanism**: the `Mcp-Session-Id` header is the only value clients replay on every request (spec: MUST; any visible-ASCII string is allowed). At `initialize`, when neither the client nor the transport supplied a session id, `mintStatelessSessionOnInitialize` sets the response header to `base64url(JSON)` with shortened keys (`sid` = session id, `cn`/`cv` = client name/version, `pv` = protocol version). Any pod decodes the replayed header — no store, no sticky routing, no client changes. The mint runs before the handler negotiates, so it first writes the client's _requested_ `pv`; once the handler returns, `initialize` re-mints the token with the _negotiated_ version, so every pod that replays it reports the version the session actually uses (not the requested one, which differs on a server downgrade).
+- **Session resolution** (`getSessionId`, `src/extensions/session.ts`) — four sources, first match wins:
+  1. **Conversation handle** (an agent-carried `conversation_id` tool argument, `enableConversationId: true`): hash it (`deriveSessionIdFromConversation`) — the 2026-07-28 anchor. Never persisted to shared state. See ADR-0004.
+  2. **Session token** (the replayed `mcp-session-id` request header): use the session id inside it and save the token's client name/version for events. See "Session tokens" below.
+  3. **Transport session id** (`extra.sessionId`, stateful servers): hash it (`deriveSessionIdFromMCPSession`) so the same MCP session maps to the same PostHog session across restarts.
+  4. **Memory**: keep the current id. Only generated sessions roll over, after **30 minutes of inactivity**; conversation/token/MCP sessions live as long as the client replays them.
+- **Session tokens — stateless / multi-pod continuity on MCP 2025-11-25** (`src/extensions/session-token.ts`, ADR-0003):
+  - At `initialize`, when neither the client nor the transport supplied a session id, `mintStatelessSessionOnInitialize` sets the `Mcp-Session-Id` response header to `base64url(JSON)` with shortened keys (`sid` = session id, `cn`/`cv` = client name/version, `pv` = protocol version). Any pod decodes the replayed header — no store, no sticky routing, no client changes. The token is unsigned and re-minted after the handler runs so it carries the _negotiated_ protocol version, not the requested one.
   - **JSON-mode constraint**: the auto-mint reaches the wire only with `enableJsonResponse: true` (headers are built after handlers run). SSE flushes headers first, so SSE servers set the header themselves with the exported `encodeSessionId`; the SDK still decodes it. Stateless mode also needs the SDK's usual fresh-transport-per-request pattern.
-  - **Trust**: unsigned — it carries only what the client already self-reports at `initialize`. A stateless server answering `DELETE` with 405 is spec-compliant.
   - **Degradation**: clients that don't replay the header fall back to the pre-token behavior — a generated session per request.
-  - **Shelf life**: the MCP 2026-07-28 revision (RC) removes `Mcp-Session-Id` and moves client info into per-request `_meta`; supporting it will be its own change.
+- **MCP 2026-07-28 (stateless revision)**: the revision removes `initialize` and the `Mcp-Session-Id` header, so the token machinery is legacy-only there. The session anchor is the agent-carried `conversation_id` (source 1 above), and client name/version + protocol version travel in every request's `params._meta` (`src/extensions/client-identity.ts`), stamped per-event so concurrent requests can't cross-attribute. `$mcp_initialize` is no longer a universal session anchor — anchor analysis on the first `$mcp_tool_call`. Era detection (suppressing the header for these clients) is an open follow-up. See ADR-0004.
 - **`distinct_id`** (`posthog-events.ts`): `identifyActorGivenId || sessionId || "anonymous"`. Pre-identify events are session-scoped; once `options.identify()` returns a user, subsequent events attribute to that user and PostHog's standard identity merge takes over.
 - **Person processing**: events for sessions with **no resolved identity** carry `$process_person_profile: false`, so anonymous MCP sessions don't each mint a throwaway person profile (the distinct id is just the session id). Once an identity is resolved, person processing stays on so `$set` lands on a real person.
 - **`$identify` event** (`handleIdentify`, `src/extensions/internal.ts`): `options.identify()` is resolved on **every** request (that's what stamps `distinct_id`/`$set`), but the standalone `$identify` event is published **at most once per session**. It fires when either:
   - the identity **materially changed** vs. the one cached for this session, or
   - the identity is **first-seen** for this server instance _and_ the session wasn't already announced at `initialize` (i.e. not a token session replaying past its handshake).
 
-  "First-seen" is decided by an `IdentityCache` (bounded LRU, max 1000 entries) keyed by session id and **per-server** (one instance per server's tracking data via the `WeakMap`) — which a stateless pod resets on every request. So on a token session, a first-seen identity on a non-`initialize` request is treated as already announced at the handshake and suppressed. **Consequences on stateless deployments**: an identity that only becomes resolvable after `initialize`, or that changes mid-session (each pod's cache is empty, so "changed" can't be detected), gets no `$identify` of its own. Person **properties** are still safe — every event carries `distinct_id`/`$set`, so `$set` lands on the person regardless. What a suppressed `$identify` skips is the identity **transition**: any pre-identify (anonymous, session-scoped) events emitted before the user resolved — e.g. a `$mcp_initialize` handled while `identify()` returned `null` — are not aliased/merged onto that person. This is inherent to statelessness (no pod can know a sibling already announced the session, and the replayed token is minted once at `initialize`), and is deferred to the planned stateless-by-default rework rather than worked around here. To drop `$identify` entirely, return `null` from `beforeSend` for `event === '$identify'`.
+  "First-seen" is decided by an `IdentityCache` (bounded LRU, max 1000 entries) keyed by session id and **per-server** (one instance per server's tracking data via the `WeakMap`) — which a stateless pod resets on every request. So on a token session, a first-seen identity on a non-`initialize` request is treated as already announced at the handshake and suppressed. On stateless deployments this means an identity that only resolves after `initialize`, or changes mid-session, gets no standalone `$identify`; person properties still land, because every event carries `distinct_id`/`$set`. Accepted as inherent to statelessness — see ADR-0003's consequences. To drop `$identify` entirely, return `null` from `beforeSend` for `event === '$identify'`.
 
 - **Groups (`$groups`)**: if `options.identify()` returns a `groups?: Record<string, string>` field (groupType → groupKey), it is stamped onto every event for that session as `$groups`. Callers never hand-write the `$groups` dollar-key themselves — they just return `groups` from `identify`.
 - **Person properties (`$set`)**: the `properties` object returned from `options.identify()` is written verbatim to `$set` (same as posthog-node's `identify({ distinctId, properties })`). Put `name`/`email`/etc in there.
@@ -304,11 +305,7 @@ An explicit SDK-owned context always wins. If the SDK injected `context` and its
 
 ### Why the fallback exists
 
-The `context` parameter is advertised as required in JSON Schema but **not enforced at the SDK validation layer** — a tool call with `arguments: {}` succeeds and lands in PostHog with `$mcp_intent` empty.
-
-The MCP SDK validates against the Zod schema the tool was originally registered with, and `@posthog/mcp` does not (and can't safely) re-derive Zod from the mutated JSON Schema. So for clients that ignore the JSON Schema hint — raw cURL, in-house agents, schema-blind crawlers — `intentFallback` is the only way to keep intent coverage non-zero.
-
-For a tightly-controlled internal MCP server with a single well-behaved client, the fallback is dead code.
+The `context` parameter is advertised as required in JSON Schema but **not enforced at the SDK validation layer** — a tool call with `arguments: {}` succeeds and lands in PostHog with `$mcp_intent` empty (ADR-0002 records why enforcement isn't possible). For clients that ignore the JSON Schema hint — raw cURL, in-house agents, schema-blind crawlers — `intentFallback` is the only way to keep intent coverage non-zero. For a tightly-controlled internal MCP server with a single well-behaved client, the fallback is dead code.
 
 ### What the SDK does NOT do
 
@@ -371,7 +368,11 @@ The SDK does **not**: call an LLM, inspect tool arguments, build heuristics, or 
 | Intent resolution (context arg + fallback)                            | `src/extensions/intent.ts`                                            |
 | Identity cache + identify dispatch                                    | `src/extensions/internal.ts`                                          |
 | Session id derivation & timeout                                       | `src/extensions/session.ts`, `src/extensions/ids.ts`                  |
+| Self-encoded session tokens (`Mcp-Session-Id`)                        | `src/extensions/session-token.ts`                                     |
 | `conversation_id` injection + minting                                 | `src/extensions/conversation-id.ts`                                   |
+| `_mcp_instructions` output-schema mirror                              | `src/extensions/output-instructions.ts`                               |
+| Client identity from request `_meta` (2026-07-28)                     | `src/extensions/client-identity.ts`                                   |
+| Injected-argument ownership tracking                                  | `src/extensions/analytics-parameters.ts`                              |
 | `get_more_tools` virtual tool                                         | `src/extensions/tools.ts`                                             |
 | Auto-redaction & binary stubbing                                      | `src/extensions/sanitization.ts`, `src/extensions/mcp-payloads.ts`    |
 | Size / depth / breadth caps                                           | `src/extensions/truncation.ts`                                        |
