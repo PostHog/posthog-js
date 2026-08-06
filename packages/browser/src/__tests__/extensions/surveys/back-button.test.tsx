@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/pr
 import { SurveyPopup } from '../../../extensions/surveys'
 import * as surveyUtils from '../../../extensions/surveys/surveys-extension-utils'
 import { Survey, SurveyQuestionBranchingType, SurveyQuestionType, SurveyType } from '../../../posthog-surveys-types'
-import * as uuid from '../../../uuidv7'
+import * as uuid from '@posthog/browser-common/utils/uuidv7'
 
 jest.mock('../../../extensions/surveys/surveys-extension-utils', () => ({
     ...jest.requireActual('../../../extensions/surveys/surveys-extension-utils'),
@@ -15,11 +15,12 @@ jest.mock('../../../extensions/surveys/surveys-extension-utils', () => ({
 
 const mockedSendSurveyEvent = surveyUtils.sendSurveyEvent as jest.Mock
 
-jest.mock('../../../uuidv7')
+jest.mock('@posthog/browser-common/utils/uuidv7')
 
 const mockPosthog = {
     capture: jest.fn(),
     get_session_replay_url: jest.fn().mockReturnValue('http://example.com/replay'),
+    reloadFeatureFlags: jest.fn(),
 }
 
 const baseSurvey: Survey = {

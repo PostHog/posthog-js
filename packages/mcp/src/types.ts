@@ -165,6 +165,12 @@ export interface Event {
   listedToolNames?: string[]
   parameters?: unknown
   properties?: JsonRecord | null
+  /**
+   * Negotiated MCP protocol (spec) version → `$mcp_protocol_version`. Learned at
+   * `initialize` and carried onto every event for the session (see SessionInfo) —
+   * used to track spec adoption and to slice event metrics by spec version.
+   */
+  protocolVersion?: string
   resourceName?: string
   response?: unknown
   sdkLanguage?: string
@@ -254,21 +260,34 @@ export interface SessionInfo {
   identifyActorGivenId?: string
   identifyActorGroups?: Record<string, string>
   ipAddress?: string
+  /**
+   * Negotiated MCP protocol (spec) version, learned at `initialize` and carried
+   * forward for the session (across pods via the session token) → `$mcp_protocol_version`.
+   */
+  protocolVersion?: string
   sdkLanguage?: string
   sdkVersion?: string
   serverName?: string
   serverVersion?: string
 }
 
+export interface AnalyticsParameterOwnership {
+  context: boolean
+  conversationId: boolean
+}
+
 export interface MCPAnalyticsData {
   sink: McpEventSink | undefined
   identifiedSessions: IdentityCache
+  /** Safe logger bound to this server; a no-op when no logger was configured. */
+  logger: LoggerFn
   lastActivity: Date
   options: MCPAnalyticsOptions
   sessionId: string
   sessionInfo: SessionInfo
   /** `token` = recovered from a self-encoded `Mcp-Session-Id` token (see session-token.ts). */
   sessionSource: 'generated' | 'mcp' | 'token'
+  toolAnalyticsParameterOwnership: Map<string, AnalyticsParameterOwnership>
   toolCategories: Map<string, string>
   toolDescriptions: Map<string, string>
 }
@@ -297,6 +316,12 @@ export interface McpCaptureCommon {
   distinctId?: string
   /** Session id → `$session_id`. Omitted from the event entirely when not provided. */
   sessionId?: string
+  /**
+   * Negotiated MCP protocol (spec) version → `$mcp_protocol_version`. Pass it on
+   * every capture for the session (like `sessionId`) so later events carry it too,
+   * not just the initialize event — the `PostHogMCP` client holds no per-session state.
+   */
+  protocolVersion?: string
   /** Person properties → `$set` (e.g. `{ name, email, plan }`). */
   setProperties?: JsonRecord
   /** Group memberships → `$groups`. */

@@ -518,6 +518,7 @@ describe('PostHog Feature Flags v1', () => {
           evaluatedAt: undefined,
           errorsWhileComputingFlags: undefined,
           quotaLimited: undefined,
+          minimalFlagCalledEvents: false,
         })
       })
 

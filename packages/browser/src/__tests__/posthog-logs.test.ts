@@ -10,7 +10,7 @@ const mockLogger = {
     error: jest.fn(),
 }
 
-jest.mock('../utils/logger', () => ({
+jest.mock('@posthog/browser-common/utils/logger', () => ({
     createLogger: jest.fn(() => mockLogger),
 }))
 
@@ -122,7 +122,7 @@ describe('posthog-logs', () => {
                     logs: { captureConsoleLogs: false },
                 }
 
-                logs.onRemoteConfig(response)
+                logs.onRemoteConfig({ ok: true, config: response })
 
                 expect((logs as any)._isLogsEnabled).toBeFalsy()
             })
@@ -137,7 +137,7 @@ describe('posthog-logs', () => {
                     logs: null,
                 } as any
 
-                logs.onRemoteConfig(response)
+                logs.onRemoteConfig({ ok: true, config: response })
 
                 expect((logs as any)._isLogsEnabled).toBeFalsy()
             })
@@ -151,7 +151,7 @@ describe('posthog-logs', () => {
                     siteApps: [],
                 }
 
-                logs.onRemoteConfig(response)
+                logs.onRemoteConfig({ ok: true, config: response })
 
                 expect((logs as any)._isLogsEnabled).toBeFalsy()
             })
@@ -166,7 +166,7 @@ describe('posthog-logs', () => {
                     logs: { captureConsoleLogs: true },
                 }
 
-                logs.onRemoteConfig(response)
+                logs.onRemoteConfig({ ok: true, config: response })
 
                 expect((logs as any)._isLogsEnabled).toBe(true)
             })
@@ -182,7 +182,7 @@ describe('posthog-logs', () => {
                     logs: { captureConsoleLogs: true },
                 }
 
-                logs.onRemoteConfig(response)
+                logs.onRemoteConfig({ ok: true, config: response })
 
                 expect(loadIfEnabledSpy).toHaveBeenCalled()
             })
@@ -288,7 +288,7 @@ describe('posthog-logs', () => {
                     logs: { captureConsoleLogs: true },
                 }
 
-                logs.onRemoteConfig(response)
+                logs.onRemoteConfig({ ok: true, config: response })
 
                 expect((logs as any)._isLogsEnabled).toBe(true)
                 expect(mockLoadExternalDependency).toHaveBeenCalledWith(mockPostHog, 'logs', expect.any(Function))
@@ -305,7 +305,7 @@ describe('posthog-logs', () => {
                     logs: { captureConsoleLogs: false },
                 }
 
-                logs.onRemoteConfig(response)
+                logs.onRemoteConfig({ ok: true, config: response })
                 logs.loadIfEnabled()
 
                 expect(mockLoadExternalDependency).not.toHaveBeenCalled()
@@ -331,15 +331,15 @@ describe('posthog-logs', () => {
                 }
 
                 // First enable
-                logs.onRemoteConfig(enabledResponse)
+                logs.onRemoteConfig({ ok: true, config: enabledResponse })
                 expect((logs as any)._isLogsEnabled).toBe(true)
 
                 // Then disable (should not change the enabled state)
-                logs.onRemoteConfig(disabledResponse)
+                logs.onRemoteConfig({ ok: true, config: disabledResponse })
                 expect((logs as any)._isLogsEnabled).toBe(true) // Still enabled from first call
 
                 // Enable again
-                logs.onRemoteConfig(enabledResponse)
+                logs.onRemoteConfig({ ok: true, config: enabledResponse })
                 expect((logs as any)._isLogsEnabled).toBe(true)
             })
 
@@ -359,7 +359,7 @@ describe('posthog-logs', () => {
 
                 configs.forEach((config) => {
                     const testLogs = new PostHogLogs(mockPostHog)
-                    testLogs.onRemoteConfig(config)
+                    testLogs.onRemoteConfig({ ok: true, config: config })
                     expect((testLogs as any)._isLogsEnabled).toBe(true)
                 })
             })
@@ -377,7 +377,7 @@ describe('posthog-logs', () => {
                     logs: { captureConsoleLogs: true },
                 }
 
-                expect(() => logsWithNullPostHog.onRemoteConfig(response)).not.toThrow()
+                expect(() => logsWithNullPostHog.onRemoteConfig({ ok: true, config: response })).not.toThrow()
                 expect(() => logsWithNullPostHog.loadIfEnabled()).not.toThrow()
                 expect(() => logsWithNullPostHog.reset()).not.toThrow()
             })
@@ -423,7 +423,7 @@ describe('posthog-logs', () => {
 
                 malformedResponses.forEach((response) => {
                     const testLogs = new PostHogLogs(mockPostHog)
-                    expect(() => testLogs.onRemoteConfig(response as any)).not.toThrow()
+                    expect(() => testLogs.onRemoteConfig({ ok: true, config: response as any })).not.toThrow()
                     expect((testLogs as any)._isLogsEnabled).toBeFalsy()
                 })
 
@@ -431,7 +431,7 @@ describe('posthog-logs', () => {
                 const nullUndefinedResponses = [null, undefined]
                 nullUndefinedResponses.forEach((response) => {
                     const testLogs = new PostHogLogs(mockPostHog)
-                    expect(() => testLogs.onRemoteConfig(response as any)).toThrow()
+                    expect(() => testLogs.onRemoteConfig({ ok: true, config: response as any })).toThrow()
                 })
             })
 
@@ -1134,10 +1134,93 @@ describe('posthog-logs', () => {
                     opts.callback?.({ statusCode: 429 })
                 )
                 logs.captureLog({ body: 'x' })
+                mockLogger.error.mockClear()
 
                 await jest.advanceTimersByTimeAsync(3000)
 
                 expect((logs as any)._queue).toHaveLength(1)
+                expect(mockLogger.error).toHaveBeenCalledWith(
+                    'PostHog logs flush failed:',
+                    expect.objectContaining({ message: 'logs request failed with status 429' })
+                )
+            })
+
+            it('does not re-log timer-driven transport failures handled by the request layer', async () => {
+                ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) =>
+                    opts.callback?.({ statusCode: 0, error: new TypeError('Failed to fetch') })
+                )
+                logs.captureLog({ body: 'x' })
+                mockLogger.warn.mockClear()
+                mockLogger.error.mockClear()
+
+                await jest.advanceTimersByTimeAsync(3000)
+
+                expect((logs as any)._queue).toHaveLength(1)
+                expect(mockLogger.warn).not.toHaveBeenCalled()
+                expect(mockLogger.error).not.toHaveBeenCalled()
+            })
+
+            it('warns once for a bare status-zero logs response', async () => {
+                ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) =>
+                    opts.callback?.({ statusCode: 0 })
+                )
+                logs.captureLog({ body: 'x' })
+                mockLogger.warn.mockClear()
+                mockLogger.error.mockClear()
+
+                await jest.advanceTimersByTimeAsync(3000)
+
+                expect(mockLogger.warn).toHaveBeenCalledTimes(1)
+                expect(mockLogger.warn).toHaveBeenCalledWith('Logs request failed before receiving an HTTP response')
+                expect(mockLogger.error).not.toHaveBeenCalled()
+            })
+
+            it.each([400, 500])('keeps HTTP status %s at error severity', async (statusCode) => {
+                ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) =>
+                    opts.callback?.({ statusCode })
+                )
+                logs.captureLog({ body: 'x' })
+                mockLogger.error.mockClear()
+
+                await jest.advanceTimersByTimeAsync(3000)
+
+                expect(mockLogger.error).toHaveBeenCalledWith(
+                    'PostHog logs flush failed:',
+                    expect.objectContaining({ message: `logs request failed with status ${statusCode}` })
+                )
+            })
+
+            it('does not re-log handled failures from an explicit flush', async () => {
+                ;(mockPostHog._send_request as jest.Mock).mockImplementation((opts: any) =>
+                    opts.callback?.({ statusCode: 0, error: new TypeError('Failed to fetch') })
+                )
+                logs.captureLog({ body: 'x' })
+                mockLogger.error.mockClear()
+
+                logs.flushLogs()
+                const flushPromise = (logs as any)._core._flushPromise as Promise<void>
+                await flushPromise.catch(() => {})
+                await Promise.resolve()
+
+                expect(mockLogger.error).not.toHaveBeenCalled()
+            })
+
+            it('logs unhandled failures from an explicit flush', async () => {
+                const error = { statusCode: 500 }
+                const flush = jest.fn().mockRejectedValue(error)
+                const core = (logs as any)._core
+                ;(logs as any)._core = { flush }
+                mockLogger.error.mockClear()
+
+                try {
+                    logs.flushLogs()
+                    await flush.mock.results[0].value.catch(() => {})
+                    await Promise.resolve()
+
+                    expect(mockLogger.error).toHaveBeenCalledWith('PostHog logs flush failed:', error)
+                } finally {
+                    ;(logs as any)._core = core
+                }
             })
         })
 
@@ -1497,7 +1580,7 @@ describe('posthog-logs', () => {
                     isAuthenticated: false,
                     siteApps: [],
                 }
-                logs.onRemoteConfig({ ...baseConfig, logs: { captureConsoleLogs: true } })
+                logs.onRemoteConfig({ ok: true, config: { ...baseConfig, logs: { captureConsoleLogs: true } } })
                 expect((logs as any)._isLogsEnabled).toBe(true)
                 expect((logs as any)._isLoaded).toBe(true)
 
@@ -1519,16 +1602,16 @@ describe('posthog-logs', () => {
                     siteApps: [],
                 }
 
-                logs.onRemoteConfig({ ...baseConfig, logs: { captureConsoleLogs: false } })
+                logs.onRemoteConfig({ ok: true, config: { ...baseConfig, logs: { captureConsoleLogs: false } } })
                 expect(mockLoadExternalDependency).toHaveBeenCalledTimes(0)
 
-                logs.onRemoteConfig({ ...baseConfig, logs: { captureConsoleLogs: true } })
+                logs.onRemoteConfig({ ok: true, config: { ...baseConfig, logs: { captureConsoleLogs: true } } })
                 expect(mockLoadExternalDependency).toHaveBeenCalledTimes(1)
 
-                logs.onRemoteConfig({ ...baseConfig, logs: { captureConsoleLogs: true } })
+                logs.onRemoteConfig({ ok: true, config: { ...baseConfig, logs: { captureConsoleLogs: true } } })
                 expect(mockLoadExternalDependency).toHaveBeenCalledTimes(1)
 
-                logs.onRemoteConfig({ ...baseConfig, logs: { captureConsoleLogs: false } })
+                logs.onRemoteConfig({ ok: true, config: { ...baseConfig, logs: { captureConsoleLogs: false } } })
                 expect(mockLoadExternalDependency).toHaveBeenCalledTimes(1)
             })
         })

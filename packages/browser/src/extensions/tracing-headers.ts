@@ -1,6 +1,6 @@
 import { PostHog } from '../posthog-core'
 import { assignableWindow } from '../utils/globals'
-import { createLogger } from '../utils/logger'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 import { isArray, isUndefined } from '@posthog/core'
 import type { TracingHeadersHostnames } from './tracing-headers-types'
 import type { Extension } from './types'

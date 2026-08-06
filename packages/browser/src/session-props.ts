@@ -8,12 +8,12 @@
  * properties (such as browser, OS, etc) here, as usually getting the current value of those from event properties is
  * sufficient.
  */
-import { getPersonInfo, getPersonPropsFromInfo } from './utils/event-utils'
+import { getPersonInfo, getPersonPropsFromInfo } from '@posthog/browser-common/utils/event-utils'
 import type { SessionIdManager } from './sessionid'
 import type { PostHogPersistence } from './posthog-persistence'
 import { CLIENT_SESSION_PROPS } from './constants'
 import type { PostHog } from './posthog-core'
-import { each, stripEmptyProperties } from './utils'
+import { each, stripEmptyProperties } from '@posthog/browser-common/utils/general-utils'
 import { stripLeadingDollar } from '@posthog/core'
 
 interface LegacySessionSourceProps {

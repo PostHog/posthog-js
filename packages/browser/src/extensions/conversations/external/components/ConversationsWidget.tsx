@@ -7,7 +7,7 @@ import {
     UserProvidedTraits,
     Ticket,
 } from '../../../../posthog-conversations-types'
-import { createLogger } from '../../../../utils/logger'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 import { getStyles } from './styles'
 import { OpenChatButton } from './OpenChatButton'
 import { CloseChatButton } from './CloseChatButton'
@@ -15,6 +15,7 @@ import { TicketListView } from './TicketListView'
 import { IdentificationFormView } from './IdentificationFormView'
 import { RestoreRequestView } from './RestoreRequestView'
 import { MessagesView } from './MessagesView'
+import { isConversationsError } from '../errors'
 
 const logger = createLogger('[ConversationsWidget]')
 
@@ -344,7 +345,9 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
                 restoreRequestSuccess: true,
             })
         } catch (error) {
-            logger.error('Failed to request restore link', error)
+            if (!isConversationsError(error)) {
+                logger.error('Failed to request restore link', error)
+            }
             this.setState({
                 restoreRequestLoading: false,
                 restoreEmailError: error instanceof Error ? error.message : 'Failed to request restore link',
@@ -382,7 +385,11 @@ export class ConversationsWidget extends Component<WidgetProps, WidgetState> {
             // Success - message will be updated via addMessage()
             this.setState({ isLoading: false })
         } catch (error) {
-            logger.error('Failed to send message', error)
+            // Known failures are logged once by the manager (or request layer). Only surface
+            // unexpected callback failures here so handled errors are not captured twice.
+            if (!isConversationsError(error)) {
+                logger.error('Failed to send message', error)
+            }
             this.setState((prevState) => ({
                 isLoading: false,
                 error: error instanceof Error ? error.message : 'Failed to send message',

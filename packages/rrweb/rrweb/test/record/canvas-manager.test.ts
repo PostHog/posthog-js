@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createMirror } from '@posthog/rrweb-snapshot';
+import type { CanvasMaskRegion } from '@posthog/rrweb-types';
 import { CanvasManager } from '../../src/record/observers/canvas/canvas-manager';
 import MutationBuffer from '../../src/record/mutation';
 
@@ -152,6 +153,25 @@ describe('CanvasManager FPS observer', () => {
     expect(rafCallbacks.size).toBe(0);
   });
 
+  it('should terminate the worker on normal teardown, exactly once', () => {
+    const win = {
+      document: { querySelectorAll: vi.fn(() => []) },
+      OffscreenCanvas: class {},
+    };
+
+    const manager = createCanvasManager(win);
+    manager.acquire();
+    const worker = workerControl.instances[0];
+    expect(worker).toBeDefined();
+
+    manager.reset();
+    // A second reset must not double-terminate (teardown is latched).
+    manager.reset();
+
+    expect(worker.terminate).toHaveBeenCalledTimes(1);
+    expect(rafCallbacks.size).toBe(0);
+  });
+
   it('should recover from createImageBitmap errors', async () => {
     const fakeCanvas = {
       width: 300,
@@ -280,6 +300,104 @@ describe('CanvasManager FPS observer', () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     expect(createImageBitmapMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('should drop a frame the mask provider cannot compute, then resume', async () => {
+    const fakeCanvas = {
+      width: 300,
+      height: 150,
+      clientWidth: 300,
+      clientHeight: 150,
+      getContext: vi.fn(),
+    } as unknown as HTMLCanvasElement;
+
+    const mirror = createMirror();
+    // @ts-expect-error -- using internal method to set up mirror state
+    mirror.add(fakeCanvas, { id: 101 });
+
+    const win = {
+      document: {
+        querySelectorAll: vi.fn((selector: string) =>
+          selector === 'canvas' ? [fakeCanvas] : [],
+        ),
+      },
+      OffscreenCanvas: class {},
+      HTMLCanvasElement: { prototype: { getContext: vi.fn() } },
+    };
+
+    let regions: CanvasMaskRegion[] | null = null;
+    new CanvasManager({
+      recordCanvas: true,
+      mutationCb: vi.fn(),
+      win,
+      blockClass: 'rr-block',
+      blockSelector: null,
+      mirror,
+      sampling: 4,
+      dataURLOptions: {},
+      canvasMasking: { regionsFn: () => regions },
+    });
+
+    const createImageBitmapMock = vi.fn();
+    vi.stubGlobal('createImageBitmap', createImageBitmapMock);
+
+    flushRaf(1000);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    // an unmaskable frame is dropped before the bitmap is even created, so no
+    // unmasked pixels can reach the encode worker
+    expect(createImageBitmapMock).not.toHaveBeenCalled();
+    expect(workerControl.instances[0].postMessage).not.toHaveBeenCalled();
+
+    regions = [];
+    const fakeBitmap = { close: vi.fn() } as unknown as ImageBitmap;
+    createImageBitmapMock.mockResolvedValue(fakeBitmap);
+
+    flushRaf(2000);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    // the dropped frame must not leave the canvas latched as in-progress
+    expect(createImageBitmapMock).toHaveBeenCalledTimes(1);
+    expect(workerControl.instances[0].postMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('posts a frame-dedup reset to the worker on a full snapshot', () => {
+    const win = {
+      document: { querySelectorAll: vi.fn(() => []) },
+      OffscreenCanvas: class {},
+    };
+
+    const manager = createCanvasManager(win);
+    manager.onFullSnapshot();
+
+    expect(workerControl.instances[0].postMessage).toHaveBeenCalledWith({
+      resetFrameDedup: true,
+    });
+  });
+
+  it('onFullSnapshot is a no-op without an FPS worker', () => {
+    const win = { document: { querySelectorAll: vi.fn(() => []) } };
+
+    const manager = createCanvasManager(win);
+
+    expect(workerControl.instances).toHaveLength(0);
+    expect(() => manager.onFullSnapshot()).not.toThrow();
+  });
+
+  it('stops posting dedup resets after teardown', () => {
+    const win = {
+      document: { querySelectorAll: vi.fn(() => []) },
+      OffscreenCanvas: class {},
+    };
+
+    const manager = createCanvasManager(win);
+    manager.acquire();
+    manager.reset();
+
+    manager.onFullSnapshot();
+
+    // the worker is terminated; a post-teardown snapshot must not message it
+    expect(workerControl.instances[0].postMessage).not.toHaveBeenCalled();
   });
 
   it('should keep the rAF loop alive when getCanvas throws', async () => {

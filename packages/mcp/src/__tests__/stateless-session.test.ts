@@ -86,6 +86,8 @@ describe('Stateless session minting', () => {
     expect(decoded).not.toBeNull()
     expect(decoded?.clientName).toBe('Claude')
     expect(decoded?.clientVersion).toBe('1.2.3')
+    // Token is re-minted with the negotiated version after the handler runs.
+    expect(decoded?.protocolVersion).toBe('2025-06-18')
 
     const data = getServerTrackingData(lowLevel)
     expect(data?.sessionSource).toBe('token')
@@ -96,6 +98,9 @@ describe('Stateless session minting', () => {
     expect(initEvents[0].properties.$session_id).toBe(decoded?.sessionId)
     expect(initEvents[0].properties.$mcp_client_name).toBe('Claude')
     expect(initEvents[0].properties.$mcp_client_version).toBe('1.2.3')
+    // Negotiated spec version off the real SDK initialize response (echoes the
+    // requested version, which the SDK supports).
+    expect(initEvents[0].properties.$mcp_protocol_version).toBe('2025-06-18')
   })
 
   it('mints through a getter-only wrapper transport (Node StreamableHTTP shape)', async () => {
@@ -201,6 +206,58 @@ describe('Stateless session minting', () => {
     expect(toolCalls[0].properties.$session_id).toBe(initEvents[0].properties.$session_id)
     expect(toolCalls[0].properties.$mcp_client_name).toBe('Claude')
     expect(toolCalls[0].properties.$mcp_client_version).toBe('1.2.3')
+    // Spec version also rides the token, so pod B stamps it despite never seeing initialize.
+    expect(toolCalls[0].properties.$mcp_protocol_version).toBe('2025-06-18')
+  })
+
+  it('stamps $mcp_protocol_version on same-pod tool calls after initialize (no token replay)', async () => {
+    const { server, lowLevel } = createPod('pod-persist')
+    setFakeTransport(server, {})
+
+    await invokeHandler(lowLevel, 'initialize', INITIALIZE_REQUEST, { requestInfo: { headers: {} } })
+    // A later request with no session header falls back to in-memory session state;
+    // the negotiated version persisted at initialize must still be stamped.
+    await invokeHandler(lowLevel, 'tools/call', {
+      method: 'tools/call',
+      params: { name: 'get_plan', arguments: {} },
+    })
+
+    const toolCalls = eventCapture.findCapturesByEvent('$mcp_tool_call')
+    expect(toolCalls).toHaveLength(1)
+    expect(toolCalls[0].properties.$mcp_protocol_version).toBe('2025-06-18')
+  })
+
+  it('reports the negotiated version (not the requested one) after a server downgrade', async () => {
+    // The client requests a version the server does not support, so the SDK
+    // downgrades to its own latest — requested !== negotiated.
+    const downgradeRequest: MCPRequestLike = {
+      method: 'initialize',
+      params: { protocolVersion: '1999-01-01', capabilities: {}, clientInfo: { name: 'Claude', version: '1.2.3' } },
+    }
+
+    const podA = createPod('pod-downgrade-a')
+    const transportA: { sessionId?: string } = {}
+    setFakeTransport(podA.server, transportA)
+    await invokeHandler(podA.lowLevel, 'initialize', downgradeRequest, { requestInfo: { headers: {} } })
+
+    const initEvents = eventCapture.findCapturesByEvent('$mcp_initialize')
+    const negotiated = initEvents[0].properties.$mcp_protocol_version as string
+    expect(negotiated).not.toBe('1999-01-01') // server downgraded
+    // The re-minted token carries the negotiated version, not the requested one.
+    expect(decodeSessionId(transportA.sessionId)?.protocolVersion).toBe(negotiated)
+
+    // A different pod replaying the token reports the negotiated version too.
+    const podB = createPod('pod-downgrade-b')
+    await invokeHandler(
+      podB.lowLevel,
+      'tools/call',
+      { method: 'tools/call', params: { name: 'get_plan', arguments: {} } },
+      { requestInfo: { headers: { 'mcp-session-id': transportA.sessionId } } }
+    )
+    const toolCalls = eventCapture.findCapturesByEvent('$mcp_tool_call')
+    expect(toolCalls).toHaveLength(1)
+    expect(toolCalls[0].properties.$mcp_protocol_version).toBe(negotiated)
+    expect(toolCalls[0].properties.$mcp_protocol_version).not.toBe('1999-01-01')
   })
 
   describe('identify across stateless pods', () => {

@@ -1,10 +1,11 @@
-import type { Disposable } from './disposable'
+import { createDisposable, type Disposable } from './disposable'
 
 /**
  * Call it with a handler to start listening; dispose the returned
  * {@link Disposable} to stop. There is one `Listener` per event type, so every
- * event carries its own payload type. The handler is called synchronously for
- * each future payload, and the returned disposable unregisters it.
+ * event carries its own payload type. The handler is called synchronously, and
+ * stateful listeners may replay their current value during registration when
+ * documented. The returned disposable unregisters it from future payloads.
  */
 export type Listener<T> = (handler: (payload: T) => void) => Disposable
 
@@ -28,20 +29,14 @@ export class Publisher<T> implements Disposable {
 
         this._subscriptions.push(subscription)
 
-        return {
-            dispose: () => {
-                if (!subscription.isActive) {
-                    return
-                }
+        return createDisposable(() => {
+            subscription.isActive = false
 
-                subscription.isActive = false
-
-                const index = this._subscriptions.indexOf(subscription)
-                if (index !== -1) {
-                    this._subscriptions.splice(index, 1)
-                }
-            },
-        }
+            const index = this._subscriptions.indexOf(subscription)
+            if (index !== -1) {
+                this._subscriptions.splice(index, 1)
+            }
+        })
     }
 
     /** Notify every currently registered listener with the provided payload. */

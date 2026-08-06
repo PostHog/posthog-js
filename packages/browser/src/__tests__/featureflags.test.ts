@@ -8,13 +8,38 @@ import {
 } from '../posthog-featureflags'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
-import { isUndefined } from '@posthog/core'
+import { isUndefined, MINIMAL_FLAG_CALLED_EVENT_CAMPAIGN_PROPERTIES } from '@posthog/core'
 import { PostHogConfig } from '../types'
 import { createMockPostHog, createPosthogInstance } from './helpers/posthog-instance'
-import { SimpleEventEmitter } from '../utils/simple-event-emitter'
+import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
+import { CAMPAIGN_PARAMS } from '@posthog/browser-common/utils/event-utils'
+import { normalizeCaptureResult } from './helpers/normalize-capture-result'
+
+jest.mock(
+    '@posthog/browser-common/utils/globals',
+    () => jest.requireActual('./helpers/snapshot-test-globals').snapshotTestGlobals
+)
 
 jest.useFakeTimers()
 jest.spyOn(global, 'setTimeout')
+
+const expectedFeatureFlagDebugMessages = new Set([
+    'All overrides cleared',
+    'Flag overrides cleared',
+    'Flag overrides set',
+    'Payload overrides cleared',
+    'Payload overrides set',
+])
+
+const mockExpectedFeatureFlagDebugLogs = (): void => {
+    const failOnUnexpectedLog = console.log
+    jest.spyOn(console, 'log').mockImplementation((...args) => {
+        if (args[0] !== '[PostHog.js] [FeatureFlags]' || !expectedFeatureFlagDebugMessages.has(args[1])) {
+            failOnUnexpectedLog(...args)
+        }
+    })
+}
 
 describe('featureflags', () => {
     let instance
@@ -29,6 +54,9 @@ describe('featureflags', () => {
     let mockWarn
 
     beforeEach(() => {
+        window.POSTHOG_DEBUG = true
+        mockExpectedFeatureFlagDebugLogs()
+
         const internalEventEmitter = new SimpleEventEmitter()
         instance = {
             config: { ...config },
@@ -220,6 +248,33 @@ describe('featureflags', () => {
 
             // With fresh option, undefined is returned
             expect(featureFlags.getFeatureFlag('beta-feature', { fresh: true })).toEqual(undefined)
+        })
+    })
+
+    describe('defaultValue option', () => {
+        it('should return defaultValue for a missing flag', () => {
+            expect(featureFlags.isFeatureEnabled('random', { defaultValue: true })).toEqual(true)
+            expect(featureFlags.isFeatureEnabled('random', { defaultValue: false })).toEqual(false)
+        })
+
+        it('should be ignored when the flag has a value', () => {
+            expect(featureFlags.isFeatureEnabled('disabled-flag', { defaultValue: true })).toEqual(false)
+            expect(featureFlags.isFeatureEnabled('multivariate-flag', { defaultValue: false })).toEqual(true)
+        })
+
+        it('should return defaultValue when flags have not loaded', () => {
+            featureFlags._hasLoadedFlags = false
+            instance.persistence.unregister('$enabled_feature_flags')
+            instance.persistence.unregister('$active_feature_flags')
+
+            expect(featureFlags.isFeatureEnabled('beta-feature', { defaultValue: true })).toEqual(true)
+        })
+
+        it('should return defaultValue when fresh: true and flags have not been loaded from remote', () => {
+            featureFlags._hasLoadedFlags = true
+            featureFlags._flagsLoadedFromRemote = false
+
+            expect(featureFlags.isFeatureEnabled('beta-feature', { fresh: true, defaultValue: false })).toEqual(false)
         })
     })
 
@@ -1061,7 +1116,47 @@ describe('featureflags', () => {
             jest.runOnlyPendingTimers()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0]).toEqual(
+                expect.objectContaining({ method: 'POST', timestampMode: 'body' })
+            )
             expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(undefined)
+        })
+
+        it('builds a representative flags request', () => {
+            instance.getGroups = () => ({ organization: 'org-42', project: 'project-7' })
+            instance.persistence.register({ $device_id: 'device-123' })
+            featureFlags.setAnonymousDistinctId('anonymous-456')
+            featureFlags.setPersonPropertiesForFlags({ plan: 'enterprise', seats: 25 }, false)
+            featureFlags.setGroupPropertiesForFlags(
+                {
+                    organization: { industry: 'technology', employee_count: 120 },
+                    project: { region: 'eu-west' },
+                },
+                false
+            )
+            instance.config.evaluation_contexts = ['production', 'web']
+            instance.config.flag_keys = ['checkout-redesign', 'new-dashboard']
+
+            featureFlags.reloadFeatureFlags()
+            jest.runOnlyPendingTimers()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            const request = instance._send_request.mock.calls[0][0]
+            expect(request.callback).toEqual(expect.any(Function))
+            expect(request.data.timezone).toEqual(expect.any(String))
+            expect(request.data.person_properties.$lib_version).toEqual(expect.any(String))
+            expect({
+                ...request,
+                callback: '<request-callback>',
+                data: {
+                    ...request.data,
+                    timezone: '<runtime-timezone>',
+                    person_properties: {
+                        ...request.data.person_properties,
+                        $lib_version: '<sdk-version>',
+                    },
+                },
+            }).toMatchSnapshot()
         })
 
         it('should call /flags with flags disabled if advanced_disable_feature_flags is set', () => {
@@ -1514,6 +1609,7 @@ describe('featureflags', () => {
             expect(instance._send_request).toHaveBeenCalledWith({
                 url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
                 method: 'GET',
+                timestampMode: 'query',
                 callback: expect.any(Function),
             })
             expect(instance._send_request).toHaveBeenCalledTimes(1)
@@ -1544,6 +1640,7 @@ describe('featureflags', () => {
             expect(instance._send_request).toHaveBeenCalledWith({
                 url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
                 method: 'GET',
+                timestampMode: 'query',
                 callback: expect.any(Function),
             })
             expect(instance._send_request).toHaveBeenCalledTimes(1)
@@ -1578,6 +1675,7 @@ describe('featureflags', () => {
             expect(instance._send_request).toHaveBeenCalledWith({
                 url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token&stage=concept&stage=beta',
                 method: 'GET',
+                timestampMode: 'query',
                 callback: expect.any(Function),
             })
         })
@@ -1769,6 +1867,8 @@ describe('featureflags', () => {
                 group_properties: undefined,
                 person_properties: {
                     '$feature_enrollment/x-flag': true,
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
                 },
                 timezone: expect.any(String),
             })
@@ -1818,7 +1918,10 @@ describe('featureflags', () => {
                 $device_id: 'test-device-uuid-123',
                 groups: undefined,
                 group_properties: undefined,
-                person_properties: {},
+                person_properties: {
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 timezone: expect.any(String),
             })
         })
@@ -1838,7 +1941,10 @@ describe('featureflags', () => {
                 $anon_distinct_id: undefined,
                 groups: undefined,
                 group_properties: undefined,
-                person_properties: {},
+                person_properties: {
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 timezone: expect.any(String),
             })
             expect(instance._send_request.mock.calls[0][0].data).not.toHaveProperty('$device_id')
@@ -1856,7 +1962,10 @@ describe('featureflags', () => {
                 $anon_distinct_id: undefined,
                 groups: undefined,
                 group_properties: undefined,
-                person_properties: {},
+                person_properties: {
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 timezone: expect.any(String),
             })
             expect(instance._send_request.mock.calls[0][0].data).not.toHaveProperty('$device_id')
@@ -1879,7 +1988,10 @@ describe('featureflags', () => {
                 $anon_distinct_id: 'anon_id_789',
                 groups: undefined,
                 group_properties: undefined,
-                person_properties: {},
+                person_properties: {
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 timezone: expect.any(String),
             })
         })
@@ -1900,7 +2012,12 @@ describe('featureflags', () => {
                 $device_id: 'device-uuid-999',
                 groups: undefined,
                 group_properties: undefined,
-                person_properties: { plan: 'pro', beta_tester: true },
+                person_properties: {
+                    plan: 'pro',
+                    beta_tester: true,
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 timezone: expect.any(String),
             })
         })
@@ -1920,7 +2037,10 @@ describe('featureflags', () => {
                 $anon_distinct_id: undefined,
                 $device_id: 'device-uuid-888',
                 groups: undefined,
-                person_properties: {},
+                person_properties: {
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 group_properties: { company: { name: 'Acme', seats: 50 } },
                 timezone: expect.any(String),
             })
@@ -1960,7 +2080,10 @@ describe('featureflags', () => {
                 $anon_distinct_id: 'rando_id',
                 groups: undefined,
                 group_properties: undefined,
-                person_properties: {},
+                person_properties: {
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 timezone: expect.any(String),
             })
         })
@@ -1984,7 +2107,10 @@ describe('featureflags', () => {
                 $anon_distinct_id: 'rando_id',
                 groups: undefined,
                 group_properties: undefined,
-                person_properties: {},
+                person_properties: {
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 timezone: expect.any(String),
             })
 
@@ -1999,7 +2125,10 @@ describe('featureflags', () => {
                 $anon_distinct_id: undefined,
                 groups: undefined,
                 group_properties: undefined,
-                person_properties: {},
+                person_properties: {
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 timezone: expect.any(String),
             })
 
@@ -2013,7 +2142,10 @@ describe('featureflags', () => {
                 $anon_distinct_id: undefined,
                 groups: undefined,
                 group_properties: undefined,
-                person_properties: {},
+                person_properties: {
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 timezone: expect.any(String),
             })
         })
@@ -2038,7 +2170,12 @@ describe('featureflags', () => {
                 $anon_distinct_id: undefined,
                 groups: undefined,
                 group_properties: undefined,
-                person_properties: { a: 'b', c: 'd' },
+                person_properties: {
+                    a: 'b',
+                    c: 'd',
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 timezone: expect.any(String),
             })
         })
@@ -2127,7 +2264,13 @@ describe('featureflags', () => {
                 $anon_distinct_id: undefined,
                 groups: undefined,
                 group_properties: undefined,
-                person_properties: { a: 'b', c: 'e', x: 'y' },
+                person_properties: {
+                    a: 'b',
+                    c: 'e',
+                    x: 'y',
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 timezone: expect.any(String),
             })
         })
@@ -2167,7 +2310,10 @@ describe('featureflags', () => {
                 $anon_distinct_id: undefined,
                 groups: undefined,
                 group_properties: undefined,
-                person_properties: {},
+                person_properties: {
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 timezone: expect.any(String),
             })
         })
@@ -2199,7 +2345,10 @@ describe('featureflags', () => {
             // resetPersonPropertiesForFlags followed by reloadFeatureFlags. we will still
             // guarantee a single /flags request.
             expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0].data.person_properties).toEqual({})
+            expect(instance._send_request.mock.calls[0][0].data.person_properties).toEqual({
+                $lib: 'web',
+                $lib_version: expect.any(String),
+            })
         })
 
         it('set_once properties skip keys that already exist in the cache', () => {
@@ -2264,7 +2413,12 @@ describe('featureflags', () => {
                 $anon_distinct_id: undefined,
                 groups: undefined,
                 group_properties: undefined,
-                person_properties: { plan: 'pro', first_date: '2025-01-01' },
+                person_properties: {
+                    plan: 'pro',
+                    first_date: '2025-01-01',
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 timezone: expect.any(String),
             })
 
@@ -2293,7 +2447,10 @@ describe('featureflags', () => {
                 distinct_id: 'blah id',
                 $anon_distinct_id: undefined,
                 groups: undefined,
-                person_properties: {},
+                person_properties: {
+                    $lib: 'web',
+                    $lib_version: expect.any(String),
+                },
                 group_properties: { orgs: { a: 'b', c: 'd' }, projects: { x: 'y', c: 'e' } },
                 timezone: expect.any(String),
             })
@@ -2749,11 +2906,11 @@ describe('featureflags', () => {
             )
         })
 
-        it('includes version in feature flag called event', () => {
+        it('captures rich feature flag called event properties', () => {
             // Setup flags with requestId and evaluatedAt
             featureFlags.receivedFeatureFlags({
                 featureFlags: { 'test-flag': true },
-                featureFlagPayloads: {},
+                featureFlagPayloads: { 'test-flag': { layout: 'compact', max_items: 12 } },
                 requestId: TEST_REQUEST_ID,
                 evaluatedAt: TEST_EVALUATED_AT,
                 flags: {
@@ -2770,16 +2927,21 @@ describe('featureflags', () => {
                         metadata: {
                             id: 23,
                             version: 42,
+                            description: 'Compact dashboard experiment',
+                            payload: { layout: 'compact', max_items: 12 },
+                            has_experiment: true,
                         },
                     },
                 },
             })
             featureFlags._hasLoadedFlags = true
+            featureFlags._flagsLoadedFromRemote = true
+            instance.persistence.unregister('$feature_flag_errors')
 
             // Test flag call
             featureFlags.getFeatureFlag('test-flag')
 
-            // Verify capture call includes requestId and evaluatedAt
+            expect(instance.capture).toHaveBeenCalledTimes(1)
             expect(instance.capture).toHaveBeenCalledWith(
                 '$feature_flag_called',
                 expect.objectContaining({
@@ -2792,6 +2954,7 @@ describe('featureflags', () => {
                     $feature_flag_id: 23,
                 })
             )
+            expect(instance.capture.mock.calls[0]).toMatchSnapshot()
         })
 
         it('updates requestId when new /flags response is received', () => {
@@ -2918,12 +3081,53 @@ describe('featureflags', () => {
             )
         })
     })
+
+    describe('minimal flag called events gate persistence', () => {
+        const receiveFlags = (response: Record<string, any>) => {
+            featureFlags.receivedFeatureFlags({
+                featureFlags: { 'test-flag': true },
+                featureFlagPayloads: {},
+                flags: {
+                    'test-flag': {
+                        key: 'test-flag',
+                        enabled: true,
+                        variant: undefined,
+                        reason: undefined,
+                        metadata: undefined,
+                    },
+                },
+                ...response,
+            })
+        }
+
+        it('persists the gate from the flags response and never exposes it as an event property', () => {
+            receiveFlags({ minimalFlagCalledEvents: true })
+
+            expect(instance.persistence.props['$minimal_flag_called_events']).toBe(true)
+            expect(instance.persistence.properties()).not.toHaveProperty('$minimal_flag_called_events')
+        })
+
+        it('flips the gate off when a new flags response omits the field', () => {
+            receiveFlags({ minimalFlagCalledEvents: true })
+            receiveFlags({})
+
+            expect(instance.persistence.props['$minimal_flag_called_events']).toBe(false)
+        })
+
+        it('flips the gate off on a legacy v1 array response', () => {
+            receiveFlags({ minimalFlagCalledEvents: true })
+            featureFlags.receivedFeatureFlags({ featureFlags: ['test-flag'] } as any)
+
+            expect(instance.persistence.props['$minimal_flag_called_events']).toBe(false)
+        })
+    })
 })
 
 describe('parseFlagsResponse', () => {
     let persistence
 
     beforeEach(() => {
+        window.POSTHOG_DEBUG = true
         persistence = { register: jest.fn(), unregister: jest.fn() }
     })
 
@@ -2944,6 +3148,7 @@ describe('parseFlagsResponse', () => {
         parseFlagsResponse(flagsResponse, persistence)
 
         expect(persistence.register).toHaveBeenCalledWith({
+            $minimal_flag_called_events: false,
             $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
             $enabled_feature_flags: {
                 'beta-feature': true,
@@ -2979,6 +3184,7 @@ describe('parseFlagsResponse', () => {
         parseFlagsResponse(flagsResponse, persistence)
 
         expect(persistence.register).toHaveBeenCalledWith({
+            $minimal_flag_called_events: false,
             $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
             $enabled_feature_flags: {
                 'beta-feature': true,
@@ -3069,6 +3275,7 @@ describe('parseFlagsResponse', () => {
         parseFlagsResponse(flagsResponse, persistence)
 
         expect(persistence.register).toHaveBeenCalledWith({
+            $minimal_flag_called_events: false,
             $active_feature_flags: ['beta-feature', 'alpha-feature', 'multivariate-flag'],
             $enabled_feature_flags: {
                 'alpha-feature': true,
@@ -3158,6 +3365,7 @@ describe('parseFlagsResponse', () => {
         parseFlagsResponse(flagsResponse, persistence)
 
         expect(persistence.register).toHaveBeenLastCalledWith({
+            $minimal_flag_called_events: false,
             $active_feature_flags: ['beta-feature', 'alpha-feature-2'],
             $enabled_feature_flags: { 'beta-feature': true, 'alpha-feature-2': true },
         })
@@ -3218,6 +3426,7 @@ describe('parseFlagsResponse', () => {
         parseFlagsResponse(flagsResponse, persistence)
 
         expect(persistence.register).toHaveBeenCalledWith({
+            $minimal_flag_called_events: false,
             $active_feature_flags: ['test-flag'],
             $enabled_feature_flags: { 'test-flag': true },
             $feature_flag_details: {},
@@ -3256,6 +3465,7 @@ describe('parseFlagsResponse', () => {
         parseFlagsResponse(flagsResponse, persistence)
 
         expect(persistence.register).toHaveBeenCalledWith({
+            $minimal_flag_called_events: false,
             $active_feature_flags: ['test-flag'],
             $enabled_feature_flags: { 'test-flag': true },
             $feature_flag_details: {
@@ -3391,6 +3601,7 @@ describe('getRemoteConfigPayload', () => {
     let featureFlags: PostHogFeatureFlags
 
     beforeEach(() => {
+        window.POSTHOG_DEBUG = true
         instance = createMockPostHog({
             config: {
                 token: 'test-token',
@@ -3412,6 +3623,13 @@ describe('getRemoteConfigPayload', () => {
         const callback = jest.fn()
         featureFlags.getRemoteConfigPayload('test-flag', callback)
 
+        const requestData = instance._send_request.mock.calls[0][0].data
+        expect(requestData.person_properties).toEqual({
+            $lib: 'web',
+            $lib_version: expect.any(String),
+        })
+        expect(requestData).not.toHaveProperty('$lib')
+        expect(requestData).not.toHaveProperty('$lib_version')
         expect(instance._send_request).toHaveBeenCalledWith(
             expect.objectContaining({
                 method: 'POST',
@@ -3601,6 +3819,7 @@ describe('updateFlags', () => {
     it('merge does not bake an active override into the stored flags', async () => {
         const posthog = await createPosthogInstance()
         posthog.updateFlags({ 'base-flag': 'control' })
+        mockExpectedFeatureFlagDebugLogs()
         posthog.featureFlags.overrideFeatureFlags({ flags: { 'base-flag': 'test' } })
         expect(posthog.getFeatureFlag('base-flag')).toBe('test')
 
@@ -4164,6 +4383,8 @@ describe('$feature_flag_error tracking', () => {
 
     describe('feature flag cache TTL', () => {
         beforeEach(() => {
+            window.POSTHOG_DEBUG = true
+
             // Set up flags in persistence for TTL tests
             instance.persistence.register({
                 $enabled_feature_flags: {
@@ -4332,5 +4553,266 @@ describe('$feature_flag_error tracking', () => {
 
             reloadSpy.mockRestore()
         })
+    })
+})
+
+describe('minimal $feature_flag_called events', () => {
+    beforeEach(() => {
+        // Events are dropped via before_send (expected warn) and bootstrap flags go through
+        // the legacy-shape path (expected upgrade warn).
+        jest.spyOn(window.console, 'warn').mockImplementation()
+        jest.spyOn(window.console, 'error').mockImplementation()
+    })
+
+    const gatedFlagsResponse = (options: { minimalFlagCalledEvents?: boolean; hasExperiment?: boolean } = {}) => ({
+        flags: {
+            'test-flag': {
+                key: 'test-flag',
+                enabled: true,
+                variant: undefined,
+                reason: undefined,
+                metadata: {
+                    id: 42,
+                    version: 3,
+                    description: undefined,
+                    payload: undefined,
+                    ...(isUndefined(options.hasExperiment) ? {} : { has_experiment: options.hasExperiment }),
+                },
+            },
+        },
+        requestId: 'minimal-request-id',
+        evaluatedAt: 1700000000000,
+        ...(isUndefined(options.minimalFlagCalledEvents)
+            ? {}
+            : { minimalFlagCalledEvents: options.minimalFlagCalledEvents }),
+    })
+
+    const createInstanceWithCapturedEvents = async (config: Record<string, any> = {}, token?: string) => {
+        const events: any[] = []
+        const posthog = await createPosthogInstance(token, {
+            advanced_disable_feature_flags: true,
+            before_send: (event) => {
+                events.push(event)
+                return null
+            },
+            ...config,
+        })
+        return { posthog, events }
+    }
+
+    const findFlagCalledEvent = (events: any[]) => events.find((e) => e.event === '$feature_flag_called')
+
+    it('sends exactly the allowlisted properties when gated and the flag has no experiment', async () => {
+        const { posthog, events } = await createInstanceWithCapturedEvents({}, 'minimal-flag-snapshot-token')
+        // Super properties must be structurally excluded from the minimal event
+        posthog.register({ super_prop: 'super_value' })
+        // $groups must survive minimization — it feeds ingestion dedup and group-flag routing
+        posthog.group('organization', 'org-1')
+        posthog.featureFlags.receivedFeatureFlags(
+            gatedFlagsResponse({ minimalFlagCalledEvents: true, hasExperiment: false })
+        )
+
+        expect(posthog.getFeatureFlag('test-flag')).toBe(true)
+
+        const event = findFlagCalledEvent(events)
+        expect(event).toBeDefined()
+        expect(Object.keys(event.properties).sort()).toEqual(
+            [
+                // transport-level keys the browser SDK carries inside properties
+                'token',
+                'distinct_id',
+                // the strict allowlist
+                '$feature_flag',
+                '$feature_flag_response',
+                '$feature_flag_has_experiment',
+                '$feature_flag_id',
+                '$feature_flag_version',
+                '$feature_flag_request_id',
+                '$feature_flag_evaluated_at',
+                '$groups',
+                '$current_url',
+                '$pathname',
+                // session-level attribution props survive minimization so a flag-called
+                // event firing first doesn't null out the session's UTM/channel
+                '$referring_domain',
+                '$session_id',
+                '$window_id',
+                '$lib',
+                '$lib_version',
+                '$device_id',
+                '$process_person_profile',
+            ].sort()
+        )
+        expect(event.properties).toMatchObject({
+            $feature_flag: 'test-flag',
+            $feature_flag_response: true,
+            $feature_flag_has_experiment: false,
+            $feature_flag_id: 42,
+            $feature_flag_version: 3,
+            $feature_flag_request_id: 'minimal-request-id',
+            $feature_flag_evaluated_at: 1700000000000,
+            $groups: { organization: 'org-1' },
+        })
+        expect(event.$set_once).toBeUndefined()
+        expect(
+            normalizeCaptureResult(event, ['distinct_id', '$device_id', '$session_id', '$window_id', '$lib_version'])
+        ).toMatchSnapshot()
+    })
+
+    it('keeps every canonical session-attribution campaign param without widening the minimal event', async () => {
+        const { posthog, events } = await createInstanceWithCapturedEvents()
+        const campaignProperties = Object.fromEntries(CAMPAIGN_PARAMS.map((key) => [key, `value-for-${key}`]))
+
+        // Keep the shared minimal-event set exhaustively synchronized with the canonical
+        // browser campaign set without copying that list into this test.
+        expect(MINIMAL_FLAG_CALLED_EVENT_CAMPAIGN_PROPERTIES).toEqual(CAMPAIGN_PARAMS)
+
+        posthog.register({
+            ...campaignProperties,
+            $referring_domain: 'referring.example',
+            $referrer: 'https://referring.example/path?private=value',
+            unrelated_superproperty: 'must-be-stripped',
+        })
+        posthog.featureFlags.receivedFeatureFlags(
+            gatedFlagsResponse({ minimalFlagCalledEvents: true, hasExperiment: false })
+        )
+
+        expect(posthog.getFeatureFlag('test-flag')).toBe(true)
+
+        const event = findFlagCalledEvent(events)
+        expect(event).toBeDefined()
+        expect(event.properties).toMatchObject({
+            ...campaignProperties,
+            $referring_domain: 'referring.example',
+        })
+        expect(event.properties).not.toHaveProperty('$referrer')
+        expect(event.properties).not.toHaveProperty('unrelated_superproperty')
+    })
+
+    it('strips the timestamp-override props when captured with an explicit timestamp', async () => {
+        const { posthog, events } = await createInstanceWithCapturedEvents()
+        posthog.featureFlags.receivedFeatureFlags(
+            gatedFlagsResponse({ minimalFlagCalledEvents: true, hasExperiment: false })
+        )
+
+        const overrideTimestamp = new Date(Date.now() - 1000)
+        posthog.capture(
+            '$feature_flag_called',
+            { $feature_flag: 'test-flag', $feature_flag_response: true, $feature_flag_has_experiment: false },
+            { timestamp: overrideTimestamp }
+        )
+
+        const event = findFlagCalledEvent(events)
+        expect(event).toBeDefined()
+        expect(event.properties).not.toHaveProperty('$event_time_override_provided')
+        expect(event.properties).not.toHaveProperty('$event_time_override_system_time')
+        expect(Object.keys(event.properties).sort()).toEqual(
+            [
+                'token',
+                'distinct_id',
+                '$feature_flag',
+                '$feature_flag_response',
+                '$feature_flag_has_experiment',
+                '$feature_flag_request_id',
+                '$current_url',
+                '$pathname',
+                '$referring_domain',
+                '$session_id',
+                '$window_id',
+                '$lib',
+                '$lib_version',
+                '$device_id',
+                '$process_person_profile',
+            ].sort()
+        )
+        // The transport-level timestamp itself is untouched by minimization
+        expect(event.timestamp).toEqual(overrideTimestamp)
+    })
+
+    it('sends the full event when gated but the flag has an experiment', async () => {
+        const { posthog, events } = await createInstanceWithCapturedEvents({}, 'full-flag-snapshot-token')
+        posthog.register({ super_prop: 'super_value' })
+        posthog.featureFlags.receivedFeatureFlags(
+            gatedFlagsResponse({ minimalFlagCalledEvents: true, hasExperiment: true })
+        )
+
+        posthog.getFeatureFlag('test-flag')
+
+        const event = findFlagCalledEvent(events)
+        expect(event.properties).toMatchObject({
+            $feature_flag_has_experiment: true,
+            super_prop: 'super_value',
+            '$feature/test-flag': true,
+            $active_feature_flags: ['test-flag'],
+            $used_bootstrap_value: expect.any(Boolean),
+        })
+        expect(normalizeCaptureResult(event)).toMatchSnapshot()
+    })
+
+    it.each([
+        ['the gate field is absent', gatedFlagsResponse({ hasExperiment: false })],
+        ['the gate field is false', gatedFlagsResponse({ minimalFlagCalledEvents: false, hasExperiment: false })],
+        ['has_experiment is absent', gatedFlagsResponse({ minimalFlagCalledEvents: true })],
+    ])('sends the full event when %s', async (_, response) => {
+        const { posthog, events } = await createInstanceWithCapturedEvents()
+        posthog.register({ super_prop: 'super_value' })
+        posthog.featureFlags.receivedFeatureFlags(response)
+
+        posthog.getFeatureFlag('test-flag')
+
+        const event = findFlagCalledEvent(events)
+        expect(event.properties).toMatchObject({
+            super_prop: 'super_value',
+            '$feature/test-flag': true,
+        })
+    })
+
+    it('sends the full event for bootstrap-only flags (no gate until a real flags response)', async () => {
+        const { posthog, events } = await createInstanceWithCapturedEvents({
+            bootstrap: { featureFlags: { 'test-flag': true } },
+        })
+
+        posthog.getFeatureFlag('test-flag')
+
+        const event = findFlagCalledEvent(events)
+        expect(event.properties).toMatchObject({
+            $feature_flag: 'test-flag',
+            $used_bootstrap_value: true,
+            '$feature/test-flag': true,
+        })
+    })
+
+    it('keeps sending minimal events after a reload backed by the same persistence', async () => {
+        const persistenceName = `reload-test-${uuidv7()}`
+        const { posthog: firstInstance } = await createInstanceWithCapturedEvents({
+            persistence: 'localstorage',
+            persistence_name: persistenceName,
+        })
+        // First page load receives the gated flags but never evaluates them.
+        firstInstance.featureFlags.receivedFeatureFlags(
+            gatedFlagsResponse({ minimalFlagCalledEvents: true, hasExperiment: false })
+        )
+
+        // Simulated reload: fresh instance backed by the same persisted state, no flags response.
+        const events: any[] = []
+        const reloadedInstance = await createPosthogInstance(undefined, {
+            persistence: 'localstorage',
+            persistence_name: persistenceName,
+            advanced_disable_feature_flags: true,
+            before_send: (event) => {
+                events.push(event)
+                return null
+            },
+        })
+
+        expect(reloadedInstance.getFeatureFlag('test-flag')).toBe(true)
+
+        const event = findFlagCalledEvent(events)
+        expect(event).toBeDefined()
+        expect(event.properties.$feature_flag_has_experiment).toBe(false)
+        expect(event.properties).not.toHaveProperty('$feature/test-flag')
+        expect(event.properties).not.toHaveProperty('$active_feature_flags')
+        expect(event.properties).not.toHaveProperty('$used_bootstrap_value')
+        expect(event.properties).not.toHaveProperty('$browser')
     })
 })

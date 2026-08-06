@@ -8,7 +8,8 @@ import {
 } from '../../../posthog-conversations-types'
 import { PostHog } from '../../../posthog-core'
 import '@testing-library/jest-dom'
-import { act } from '@testing-library/preact'
+import { act, fireEvent, screen } from '@testing-library/preact'
+import Config from '../../../config'
 
 // Mock the persistence layer
 jest.mock('../../../extensions/conversations/external/persistence', () => {
@@ -522,6 +523,176 @@ describe('ConversationsManager', () => {
         })
     })
 
+    describe('request failure logging', () => {
+        beforeEach(async () => {
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+            jest.clearAllMocks()
+        })
+
+        it.each(['getMessages', 'markAsRead', 'getTickets', 'requestRestoreLink', 'restoreFromToken'] as const)(
+            'does not re-log handled status-zero failures from %s',
+            async (method) => {
+                const networkError = new TypeError('Failed to fetch')
+                ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+                    options.callback({ statusCode: 0, error: networkError })
+                })
+
+                const requests = {
+                    getMessages: () => manager.getMessages('ticket-123'),
+                    markAsRead: () => manager.markAsRead('ticket-123'),
+                    getTickets: () => manager.getTickets(),
+                    requestRestoreLink: () => manager.requestRestoreLink('person@example.com'),
+                    restoreFromToken: () => manager.restoreFromToken('restore-token'),
+                }
+
+                const previousDebug = Config.DEBUG
+                Config.DEBUG = true
+                const infoSpy = jest.spyOn(console, 'log').mockImplementation()
+                const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+                const errorSpy = jest.spyOn(console, 'error').mockImplementation()
+
+                try {
+                    await expect(requests[method]()).rejects.toMatchObject({
+                        kind: 'network',
+                        message: 'Unable to reach the server. Please check your connection and try again.',
+                    })
+                    expect(warnSpy).not.toHaveBeenCalled()
+                    expect(errorSpy).not.toHaveBeenCalled()
+                } finally {
+                    infoSpy.mockRestore()
+                    warnSpy.mockRestore()
+                    errorSpy.mockRestore()
+                    Config.DEBUG = previousDebug
+                }
+            }
+        )
+
+        it.each([
+            {
+                failure: 'HTTP',
+                response: { statusCode: 500, json: { detail: 'Internal server error' } },
+                kind: 'http',
+                message: 'Internal server error',
+            },
+            {
+                failure: 'rate limit',
+                response: { statusCode: 429 },
+                kind: 'rate_limit',
+                message: 'Too many requests. Please wait before trying again.',
+            },
+            {
+                failure: 'invalid response',
+                response: { statusCode: 200 },
+                kind: 'invalid_response',
+                message: 'Invalid response from server',
+            },
+        ])(
+            'logs restore retries once at warning severity for $failure failures',
+            async ({ response, kind, message }) => {
+                ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+                    options.callback(response)
+                })
+
+                const previousDebug = Config.DEBUG
+                Config.DEBUG = true
+                const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+                const errorSpy = jest.spyOn(console, 'error').mockImplementation()
+
+                try {
+                    await expect(manager.restoreFromToken('restore-token')).rejects.toMatchObject({ kind, message })
+                    expect(mockPosthog._send_request).toHaveBeenCalledTimes(2)
+                    expect(warnSpy).toHaveBeenCalledTimes(1)
+                    expect(warnSpy).toHaveBeenCalledWith(
+                        expect.stringContaining('[ConversationsManager]'),
+                        'Restore token exchange failed, retrying once',
+                        expect.objectContaining({ kind, message })
+                    )
+                    expect(errorSpy).not.toHaveBeenCalled()
+                } finally {
+                    warnSpy.mockRestore()
+                    errorSpy.mockRestore()
+                    Config.DEBUG = previousDebug
+                }
+            }
+        )
+
+        it('warns once for a bare status-zero polling response', async () => {
+            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+                options.callback({ statusCode: 0 })
+            })
+
+            const previousDebug = Config.DEBUG
+            Config.DEBUG = true
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+            const errorSpy = jest.spyOn(console, 'error').mockImplementation()
+
+            try {
+                await expect(manager.getTickets()).rejects.toMatchObject({ kind: 'network' })
+                expect(warnSpy).toHaveBeenCalledTimes(1)
+                expect(warnSpy).toHaveBeenCalledWith(
+                    expect.stringContaining('[ConversationsManager]'),
+                    'Network error fetching tickets'
+                )
+                expect(errorSpy).not.toHaveBeenCalled()
+            } finally {
+                warnSpy.mockRestore()
+                errorSpy.mockRestore()
+                Config.DEBUG = previousDebug
+            }
+        })
+
+        it('warns once for a bare status-zero restore response', async () => {
+            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+                options.callback({ statusCode: 0 })
+            })
+
+            const previousDebug = Config.DEBUG
+            Config.DEBUG = true
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+            const errorSpy = jest.spyOn(console, 'error').mockImplementation()
+
+            try {
+                await expect(manager.restoreFromToken('restore-token')).rejects.toMatchObject({ kind: 'network' })
+                expect(mockPosthog._send_request).toHaveBeenCalledTimes(2)
+                expect(warnSpy).toHaveBeenCalledTimes(1)
+                expect(warnSpy).toHaveBeenCalledWith(
+                    expect.stringContaining('[ConversationsManager]'),
+                    'Restore token exchange failed, retrying once',
+                    expect.objectContaining({ kind: 'network' })
+                )
+                expect(errorSpy).not.toHaveBeenCalled()
+            } finally {
+                warnSpy.mockRestore()
+                errorSpy.mockRestore()
+                Config.DEBUG = previousDebug
+            }
+        })
+
+        it.each([429, 500])('logs HTTP polling status %s only once', async (statusCode) => {
+            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+                options.callback({ statusCode })
+            })
+
+            const previousDebug = Config.DEBUG
+            Config.DEBUG = true
+            const errorSpy = jest.spyOn(console, 'error').mockImplementation()
+
+            try {
+                await (manager as any)._loadTickets()
+                expect(errorSpy).toHaveBeenCalledTimes(1)
+                expect(errorSpy).toHaveBeenCalledWith(
+                    expect.stringContaining('[ConversationsManager]'),
+                    'Failed to fetch tickets',
+                    { status: statusCode }
+                )
+            } finally {
+                errorSpy.mockRestore()
+                Config.DEBUG = previousDebug
+            }
+        })
+    })
+
     describe('sendMessage', () => {
         beforeEach(async () => {
             manager = new ConversationsManager(mockConfig, mockPosthog)
@@ -545,6 +716,86 @@ describe('ConversationsManager', () => {
                     }),
                 })
             )
+        })
+
+        it('should reject with a handled network error without relogging the transport failure', async () => {
+            const networkError = new TypeError('Failed to fetch')
+            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+                options.callback({ statusCode: 0, error: networkError })
+            })
+
+            const previousDebug = Config.DEBUG
+            Config.DEBUG = true
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+            const errorSpy = jest.spyOn(console, 'error').mockImplementation()
+
+            try {
+                await expect(manager.sendMessage('Hello!')).rejects.toMatchObject({
+                    kind: 'network',
+                    message: 'Unable to reach the server. Please check your connection and try again.',
+                })
+                expect(warnSpy).not.toHaveBeenCalled()
+                expect(errorSpy).not.toHaveBeenCalled()
+            } finally {
+                warnSpy.mockRestore()
+                errorSpy.mockRestore()
+                Config.DEBUG = previousDebug
+            }
+        })
+
+        it('should keep send-message rate limits at warning severity', async () => {
+            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+                options.callback({ statusCode: 429 })
+            })
+
+            const previousDebug = Config.DEBUG
+            Config.DEBUG = true
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+            const errorSpy = jest.spyOn(console, 'error').mockImplementation()
+
+            try {
+                await expect(manager.sendMessage('Hello!')).rejects.toMatchObject({
+                    kind: 'rate_limit',
+                    message: 'Too many requests. Please wait before trying again.',
+                })
+                expect(warnSpy).toHaveBeenCalledWith(
+                    expect.stringContaining('[ConversationsManager]'),
+                    'Rate limited sending message'
+                )
+                expect(errorSpy).not.toHaveBeenCalled()
+            } finally {
+                warnSpy.mockRestore()
+                errorSpy.mockRestore()
+                Config.DEBUG = previousDebug
+            }
+        })
+
+        it('should log and reject with a handled HTTP error for a server failure', async () => {
+            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options) => {
+                options.callback({ statusCode: 500, json: { detail: 'Server unavailable' } })
+            })
+
+            const previousDebug = Config.DEBUG
+            Config.DEBUG = true
+            const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+            const errorSpy = jest.spyOn(console, 'error').mockImplementation()
+
+            try {
+                await expect(manager.sendMessage('Hello!')).rejects.toMatchObject({
+                    kind: 'http',
+                    message: 'Server unavailable',
+                })
+                expect(errorSpy).toHaveBeenCalledWith(
+                    expect.stringContaining('[ConversationsManager]'),
+                    'Failed to send message',
+                    { status: 500 }
+                )
+                expect(warnSpy).not.toHaveBeenCalled()
+            } finally {
+                warnSpy.mockRestore()
+                errorSpy.mockRestore()
+                Config.DEBUG = previousDebug
+            }
         })
 
         it('should track message sent event', async () => {
@@ -756,6 +1007,7 @@ describe('ConversationsManager', () => {
                 expect.objectContaining({
                     url: expect.stringContaining('/widget/messages/ticket-123'),
                     method: 'GET',
+                    timestampMode: 'query',
                 })
             )
         })
@@ -980,6 +1232,7 @@ describe('ConversationsManager', () => {
                 expect(mockPosthog._send_request).toHaveBeenCalledWith(
                     expect.objectContaining({
                         method: 'GET',
+                        timestampMode: 'query',
                         url: expect.stringContaining('/api/conversations/v1/widget/messages/ticket-123'),
                         headers: {
                             'X-Conversations-Token': 'test-token',
@@ -1143,6 +1396,63 @@ describe('ConversationsManager', () => {
             expect(manager.isVisible()).toBe(true)
             // Widget state is loaded from persistence in _initializeWidget
             // The persistence mock returns 'closed' for loadWidgetState
+        })
+    })
+
+    describe('single open ticket navigation', () => {
+        const openTicket = {
+            id: 'ticket-open-1',
+            status: 'open',
+            message_count: 2,
+            created_at: '2023-01-01T00:00:00Z',
+            last_message_at: '2023-01-01T00:05:00Z',
+            last_message: 'still waiting on this',
+            unread_count: 0,
+        }
+
+        // Serve a fixed set of tickets for the tickets endpoint, keeping the other
+        // endpoint responses from the default mock so message/greeting flows still work.
+        const serveTickets = (tickets: unknown[]): void => {
+            ;(mockPosthog._send_request as jest.Mock).mockImplementation((options: any) => {
+                const url = options.url as string
+                const method = options.method as string
+                if (method === 'GET' && url.includes('/widget/tickets')) {
+                    options.callback({ statusCode: 200, json: { results: tickets, has_more: false } })
+                } else if (method === 'GET' && url.includes('/widget/messages/')) {
+                    options.callback({ statusCode: 200, json: createMockGetMessagesResponse() })
+                } else if (method === 'POST' && url.includes('/read')) {
+                    options.callback({ statusCode: 200, json: createMockMarkAsReadResponse() })
+                }
+            })
+        }
+
+        // Flush pending microtasks without running the recurring polling timers
+        // (jest.runAllTimers would loop forever once _startPolling has set intervals).
+        const flushMicrotasks = async (): Promise<void> => {
+            await act(async () => {
+                await Promise.resolve()
+                await Promise.resolve()
+            })
+        }
+
+        it('lets a user with one open ticket reach the ticket list to start a new conversation', async () => {
+            serveTickets([openTicket])
+            manager = new ConversationsManager(mockConfig, mockPosthog)
+            await flushPromises()
+
+            // The widget boots straight into the single open conversation
+            fireEvent.click(screen.getByLabelText('Open chat'))
+            await flushMicrotasks()
+
+            // Back-to-tickets navigation must be present so the user isn't locked in
+            const backButton = screen.getByLabelText('Back to conversations')
+            expect(backButton).toBeInTheDocument()
+
+            // Going back reveals the ticket list, which exposes "New conversation"
+            fireEvent.click(backButton)
+            await flushMicrotasks()
+
+            expect(screen.getByText('New conversation')).toBeInTheDocument()
         })
     })
 })

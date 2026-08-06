@@ -1,11 +1,27 @@
-import { assignableWindow, window } from '../utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../utils/globals'
 import { ErrorEventArgs } from '../types'
-import { createLogger } from '../utils/logger'
-import type { ErrorTracking } from '@posthog/core'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { isFunction, isString, type ErrorTracking } from '@posthog/core'
 import { buildErrorPropertiesBuilder } from '../posthog-exceptions'
 
 const logger = createLogger('[ExceptionAutocapture]')
 const errorPropertiesBuilder = buildErrorPropertiesBuilder()
+
+// `window.onerror` exposes the location positionally, so preserve it when there is no Error object.
+const resolveOnErrorInput = ([event, source, lineno, colno, error]: ErrorEventArgs): unknown => {
+    if (error != null) {
+        return error
+    }
+    if (isString(event) && isString(source) && source.length > 0 && typeof ErrorEvent !== 'undefined') {
+        try {
+            return new ErrorEvent('error', { message: event, filename: source, lineno, colno })
+        } catch {
+            return event
+        }
+    }
+    return event
+}
 
 const wrapOnError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) => {
     const win = window as any
@@ -15,13 +31,11 @@ const wrapOnError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) 
     const originalOnError = win.onerror
 
     win.onerror = function (...args: ErrorEventArgs): boolean {
-        const error = args[4]
-        const event = args[0]
-        const errorProperties = errorPropertiesBuilder.buildFromUnknown(error || event, {
+        const errorProperties = errorPropertiesBuilder.buildFromUnknown(resolveOnErrorInput(args), {
             mechanism: { handled: false },
         })
         captureFn(errorProperties)
-        return originalOnError?.(...args) ?? false
+        return isFunction(originalOnError) ? (originalOnError(...args) ?? false) : false
     }
     win.onerror.__POSTHOG_INSTRUMENTED__ = true
 
@@ -44,7 +58,7 @@ const wrapUnhandledRejection = (captureFn: (props: ErrorTracking.ErrorProperties
             mechanism: { handled: false },
         })
         captureFn(errorProperties)
-        return originalOnUnhandledRejection?.(ev) ?? false
+        return isFunction(originalOnUnhandledRejection) ? (originalOnUnhandledRejection(ev) ?? false) : false
     }
     win.onunhandledrejection.__POSTHOG_INSTRUMENTED__ = true
 
@@ -76,7 +90,9 @@ const wrapConsoleError = (captureFn: (props: ErrorTracking.ErrorProperties) => v
             skipFirstLines: 2,
         })
         captureFn(errorProperties)
-        return originalConsoleError?.(...args)
+        if (isFunction(originalConsoleError)) {
+            originalConsoleError(...args)
+        }
     }
     con.error.__POSTHOG_INSTRUMENTED__ = true
 

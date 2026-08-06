@@ -18,11 +18,13 @@ import {
     SurveyQuestion,
     SurveyQuestionBranchingType,
     SurveyQuestionType,
+    SurveySchedule,
     SurveyType,
 } from '../posthog-surveys-types'
 import { FlagsResponse, PostHogConfig, Properties, RemoteConfig } from '../types'
-import * as globals from '../utils/globals'
-import { assignableWindow, window } from '../utils/globals'
+import * as globals from '@posthog/browser-common/utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../utils/globals'
 import { RequestRouter } from '../utils/request-router'
 import { SurveyEventReceiver } from '../utils/survey-event-receiver'
 import { SURVEY_LOGGER as logger } from '../utils/survey-utils'
@@ -43,6 +45,8 @@ describe('surveys', () => {
             'survey-targeting-flag-key2': false,
             'enabled-internal-targeting-flag-key': true,
             'disabled-internal-targeting-flag-key': false,
+            'survey-targeting-835605292e': true,
+            'survey-targeting-b3276efeb6-custom': true,
         },
         surveys: true,
     } as unknown as FlagsResponse
@@ -202,6 +206,7 @@ describe('surveys', () => {
                 .fn()
                 .mockImplementation(({ callback }) => callback({ statusCode: 200, json: surveysResponse })),
             featureFlags: {
+                hasLoadedFlags: true,
                 _send_request: jest
                     .fn()
                     .mockImplementation(({ callback }) => callback({ statusCode: 200, json: flagsResponse })),
@@ -258,6 +263,7 @@ describe('surveys', () => {
             url: 'https://us.i.posthog.com/api/surveys/?token=testtoken',
             timeout: SURVEYS_REQUEST_TIMEOUT_MS,
             method: 'GET',
+            timestampMode: 'query',
             callback: expect.any(Function),
         })
         expect(instance._send_request).toHaveBeenCalledTimes(1)
@@ -304,6 +310,7 @@ describe('surveys', () => {
             url: 'https://us.i.posthog.com/api/surveys/?token=testtoken',
             timeout: SURVEYS_REQUEST_TIMEOUT_MS,
             method: 'GET',
+            timestampMode: 'query',
             callback: expect.any(Function),
         })
         expect(instance._send_request).toHaveBeenCalledTimes(1)
@@ -562,6 +569,75 @@ describe('surveys', () => {
             linked_flag_key: 'linked-flag-key',
             targeting_flag_key: 'survey-targeting-flag-key',
         } as unknown as Survey
+
+        const apiSurveyWithCachedTargetingFlags: Survey = {
+            id: 'api-survey-with-cached-targeting-flags',
+            name: 'API survey with cached targeting flags',
+            type: SurveyType.API,
+            schedule: SurveySchedule.Once,
+            start_date: new Date().toISOString(),
+            end_date: null,
+            targeting_flag_key: 'survey-targeting-835605292e',
+            internal_targeting_flag_key: 'survey-targeting-b3276efeb6-custom',
+            questions: [
+                {
+                    type: SurveyQuestionType.Rating,
+                    question: 'How satisfied are you?',
+                    display: 'number',
+                    scale: 5,
+                    lowerBoundLabel: 'Not satisfied',
+                    upperBoundLabel: 'Very satisfied',
+                },
+            ],
+        } as unknown as Survey
+
+        // Waiting for flags before trusting the internal targeting flag is only safe for
+        // iteration-based surveys, whose stored seen key rolls over. Applying it to a `once`
+        // survey with a cached enabled flag denies eligibility for the whole pre-flags window,
+        // and API surveys never get a second evaluation to recover on.
+        const deferredBeforeFlagsLoad = {
+            eligible: false,
+            reason: 'Feature flags have not loaded yet; deferring internal targeting flag check',
+        }
+
+        it.each([
+            { schedule: SurveySchedule.Once, currentIteration: null, expected: { eligible: true } },
+            { schedule: SurveySchedule.Once, currentIteration: 0, expected: { eligible: true } },
+            { schedule: SurveySchedule.Once, currentIteration: 1, expected: deferredBeforeFlagsLoad },
+            { schedule: SurveySchedule.Recurring, currentIteration: null, expected: deferredBeforeFlagsLoad },
+            { schedule: SurveySchedule.Recurring, currentIteration: 2, expected: deferredBeforeFlagsLoad },
+        ])(
+            'checks a $schedule survey on iteration $currentIteration against a cached internal targeting flag before flags load',
+            ({ schedule, currentIteration, expected }) => {
+                instance.featureFlags.hasLoadedFlags = false
+                const surveyManager = (surveys as any)._surveyManager as SurveyManager
+
+                expect(
+                    surveyManager.checkSurveyEligibility({
+                        ...apiSurveyWithCachedTargetingFlags,
+                        schedule,
+                        current_iteration: currentIteration,
+                    } as Survey)
+                ).toEqual(expected)
+            }
+        )
+
+        // A caller that asks once gets exactly one answer, so a `once` survey wrongly deferred here
+        // is lost for that page rather than delayed. Both rows share one fixture and one call, which
+        // keeps the result attributable to the flag-loading state.
+        it.each([
+            { state: 'have not loaded', hasLoadedFlags: false },
+            { state: 'have loaded', hasLoadedFlags: true },
+        ])('returns a cached-eligible API survey to a one-shot caller when flags $state', ({ hasLoadedFlags }) => {
+            instance.featureFlags.hasLoadedFlags = hasLoadedFlags
+            instance.persistence?.register({ $surveys: [apiSurveyWithCachedTargetingFlags] })
+            const callback = jest.fn()
+
+            surveys.getActiveMatchingSurveys(callback)
+
+            expect(callback).toHaveBeenCalledTimes(1)
+            expect(callback).toHaveBeenCalledWith([apiSurveyWithCachedTargetingFlags])
+        })
 
         it('returns surveys that are active', () => {
             surveysResponse = { surveys: [draftSurvey, activeSurvey, completedSurvey] }
@@ -1539,24 +1615,33 @@ describe('surveys', () => {
 
         it('is disabled by having no results in onRemoteConfig', () => {
             surveys.onRemoteConfig({
-                surveys: [],
-            } as Partial<RemoteConfig> as RemoteConfig)
+                ok: true,
+                config: {
+                    surveys: [],
+                } as Partial<RemoteConfig> as RemoteConfig,
+            })
             expect(surveys['_isSurveysEnabled']).toBe(false)
         })
 
         it('is enabled by having results in onRemoteConfig', () => {
             expect(surveys['_isSurveysEnabled']).toBe(undefined)
             surveys.onRemoteConfig({
-                surveys: ['example' as unknown as Survey],
-            } as Partial<RemoteConfig> as RemoteConfig)
+                ok: true,
+                config: {
+                    surveys: ['example' as unknown as Survey],
+                } as Partial<RemoteConfig> as RemoteConfig,
+            })
             expect(surveys['_isSurveysEnabled']).toBe(true)
         })
 
         it('can be disabled by config despite results of onRemoteConfig', () => {
             surveys['_instance'].config.disable_surveys = true
             surveys.onRemoteConfig({
-                surveys: ['example' as unknown as Survey],
-            } as Partial<RemoteConfig> as RemoteConfig)
+                ok: true,
+                config: {
+                    surveys: ['example' as unknown as Survey],
+                } as Partial<RemoteConfig> as RemoteConfig,
+            })
             expect(surveys['_isSurveysEnabled']).toBe(undefined)
         })
     })

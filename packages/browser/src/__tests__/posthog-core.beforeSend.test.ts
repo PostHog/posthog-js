@@ -1,6 +1,6 @@
 import { mockLogger } from './helpers/mock-logger'
 
-import { uuidv7 } from '../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { defaultPostHog } from './helpers/posthog-instance'
 import { CaptureResult, PostHogConfig } from '../types'
 import { PostHog } from '../posthog-core'
@@ -80,6 +80,7 @@ describe('posthog core - before send', () => {
             compression: 'best-available',
             data: capturedData,
             method: 'POST',
+            timestampMode: 'capture-body',
             url: 'https://us.i.posthog.com/e/',
         })
     })
@@ -148,6 +149,7 @@ describe('posthog core - before send', () => {
             compression: 'best-available',
             data: capturedData[0],
             method: 'POST',
+            timestampMode: 'capture-body',
             url: 'https://us.i.posthog.com/e/',
         })
     })
@@ -170,6 +172,7 @@ describe('posthog core - before send', () => {
             compression: 'best-available',
             data: capturedData,
             method: 'POST',
+            timestampMode: 'capture-body',
             url: 'https://us.i.posthog.com/e/',
         })
     })
@@ -192,6 +195,7 @@ describe('posthog core - before send', () => {
             compression: 'best-available',
             data: capturedData,
             method: 'POST',
+            timestampMode: 'capture-body',
             url: 'https://us.i.posthog.com/e/',
         })
         expect(mockLogger.warn).toHaveBeenCalledWith(

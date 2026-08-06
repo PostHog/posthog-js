@@ -105,7 +105,10 @@ export interface TokenUsage {
 export interface GetPromptOptions {
   cacheTtlSeconds?: number
   fallback?: string
+  /** Specific prompt version to fetch. Mutually exclusive with label. */
   version?: number
+  /** Fetch the version this label currently points to, e.g. 'production'. Mutually exclusive with version. */
+  label?: string
 }
 
 /**
@@ -115,6 +118,8 @@ export interface CachedPrompt {
   prompt: string
   name: string
   version: number
+  label?: string
+  config: Record<string, unknown> | null
   fetchedAt: number
 }
 
@@ -126,6 +131,10 @@ export interface PromptApiResponse {
   name: string
   prompt: string
   version: number
+  /** Present when the prompt was fetched by label. */
+  label?: string
+  /** Model parameters or agent configuration stored with the version. Absent on older servers. */
+  config?: unknown
   created_by: string
   created_at: string
   updated_at: string
@@ -140,6 +149,14 @@ export interface PromptRemoteResult {
   prompt: string
   name: string
   version: number
+  /** The label the prompt was fetched by, when fetching with the label option. */
+  label?: string
+  /**
+   * JSON object of model parameters or agent configuration stored with the
+   * prompt version, or null when the version has none. Use defensive access,
+   * e.g. `result.config ?? {}` — fallback results carry no config.
+   */
+  config: Record<string, unknown> | null
 }
 
 /**
@@ -152,6 +169,8 @@ export interface PromptCodeFallbackResult {
   prompt: string
   name: undefined
   version: undefined
+  label: undefined
+  config: undefined
 }
 
 /**

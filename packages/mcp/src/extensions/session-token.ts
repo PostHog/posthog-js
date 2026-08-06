@@ -20,10 +20,18 @@ export interface SessionTokenPayload {
   clientName?: string
   /** MCP client version → `$mcp_client_version`. */
   clientVersion?: string
+  /**
+   * MCP protocol (spec) version → `$mcp_protocol_version`. The client's
+   * *requested* version — the only one known when the token is minted (before
+   * the initialize handler negotiates). Lets pods that never saw `initialize`
+   * still stamp the spec version on their events.
+   */
+  protocolVersion?: string
 }
 
 // On the wire the token is base64url(JSON) with shortened keys to keep the
-// header small: sid = sessionId, cn = clientName, cv = clientVersion.
+// header small: sid = sessionId, cn = clientName, cv = clientVersion,
+// pv = protocolVersion.
 const MAX_TOKEN_LENGTH = 4096
 const MAX_SESSION_ID_LENGTH = 128
 const MAX_CLIENT_FIELD_LENGTH = 200
@@ -45,6 +53,9 @@ export function encodeSessionId(payload: SessionTokenPayload): string {
   }
   if (typeof payload.clientVersion === 'string' && payload.clientVersion.length > 0) {
     wire.cv = payload.clientVersion.slice(0, MAX_CLIENT_FIELD_LENGTH)
+  }
+  if (typeof payload.protocolVersion === 'string' && payload.protocolVersion.length > 0) {
+    wire.pv = payload.protocolVersion.slice(0, MAX_CLIENT_FIELD_LENGTH)
   }
   return utf8ToBase64Url(JSON.stringify(wire))
 }
@@ -82,6 +93,9 @@ export function decodeSessionId(value: unknown): SessionTokenPayload | null {
   }
   if (typeof wire.cv === 'string' && wire.cv.length > 0) {
     payload.clientVersion = wire.cv.slice(0, MAX_CLIENT_FIELD_LENGTH)
+  }
+  if (typeof wire.pv === 'string' && wire.pv.length > 0) {
+    payload.protocolVersion = wire.pv.slice(0, MAX_CLIENT_FIELD_LENGTH)
   }
   return payload
 }

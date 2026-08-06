@@ -1,7 +1,9 @@
 import { CAPTURE_RATE_LIMIT } from './constants'
 import type { PostHog } from './posthog-core'
 import { RequestResponse } from './types'
-import { createLogger } from './utils/logger'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { location } from '@posthog/browser-common/utils/globals'
+import { isArray, isNumber } from '@posthog/core'
 
 const logger = createLogger('[RateLimiter]')
 
@@ -62,16 +64,19 @@ export class RateLimiter {
             bucket.tokens = Math.max(0, bucket.tokens - 1)
         }
 
-        if (isRateLimited && !this.lastEventRateLimited && !checkOnly) {
-            this.instance.capture(
-                RATE_LIMIT_EVENT,
-                {
-                    $$client_ingestion_warning_message: `posthog-js client rate limited. Config is set to ${captureEventsPerSecond} events per second and ${captureEventsBurstLimit} events burst limit.`,
-                },
-                {
-                    skip_client_rate_limiting: true,
-                }
-            )
+        if (isRateLimited && !checkOnly) {
+            // Count every drop, not just the ones in this page's lifetime: a runaway loop that reloads
+            // the page loses the in-memory state, so the tally lives on the persisted bucket and is
+            // reported (then reset) by the next warning - "dropped since the last warning".
+            const droppedSinceLastWarning = (isNumber(bucket.dropped) ? bucket.dropped : 0) + 1
+            bucket.dropped = droppedSinceLastWarning
+
+            if (!this.lastEventRateLimited && this._captureWarning(droppedSinceLastWarning)) {
+                // `capture` returns the accepted event after the full local pipeline has run. Keep
+                // the tally when (for example) `before_send` rejects the warning so the next
+                // accepted warning still accounts for every dropped event.
+                bucket.dropped = 0
+            }
         }
 
         this.lastEventRateLimited = isRateLimited
@@ -81,6 +86,50 @@ export class RateLimiter {
             isRateLimited,
             remainingTokens: bucket.tokens,
         }
+    }
+
+    private _isPropertyAllowed(property: string): boolean {
+        const denylist = this.instance.config.property_denylist
+        return !isArray(denylist) || !denylist.includes(property)
+    }
+
+    /**
+     * The page the limiter tripped on, without the query string or hash - enough to spot a
+     * self-reloading 404 without putting whatever a customer keeps in their query params into
+     * an ingestion warning. Because this value recombines `$current_url` and `$pathname`, omit it
+     * if either standard property has been denylisted rather than reintroducing denied context.
+     */
+    private _triggeringPage(): string | undefined {
+        if (!this._isPropertyAllowed('$current_url') || !this._isPropertyAllowed('$pathname') || !location?.pathname) {
+            return undefined
+        }
+        return `${location.origin ?? ''}${location.pathname}`
+    }
+
+    private _captureWarning(droppedSinceLastWarning: number): boolean {
+        const { captureEventsBurstLimit, captureEventsPerSecond } = this
+        const page = this._triggeringPage()
+        const sessionId = this._isPropertyAllowed('$session_id') ? this.instance.get_session_id?.() : undefined
+
+        // Ingestion currently retains only this message for client ingestion warnings. Keep the
+        // diagnostics here instead of adding structured properties that the backend discards.
+        const context = [
+            `${droppedSinceLastWarning} event(s) dropped since the last warning`,
+            page ? `triggered on ${page}` : undefined,
+            sessionId ? `session ${sessionId}` : undefined,
+        ]
+            .filter(Boolean)
+            .join(', ')
+
+        return !!this.instance.capture(
+            RATE_LIMIT_EVENT,
+            {
+                $$client_ingestion_warning_message: `posthog-js client rate limited: ${context}. Config is set to ${captureEventsPerSecond} events per second and ${captureEventsBurstLimit} events burst limit.`,
+            },
+            {
+                skip_client_rate_limiting: true,
+            }
+        )
     }
 
     public isServerRateLimited(batchKey: string | undefined): boolean {

@@ -1,9 +1,9 @@
 /* eslint camelcase: "off" */
 
-import { each, extend, stripEmptyProperties, addEventListener } from './utils'
+import { each, extend, stripEmptyProperties, addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { cookieStore, createLocalPlusCookieStore, localStore, memoryStore, sessionStore } from './storage'
 import { PersistentStore, PostHogConfig, Properties } from './types'
-import { window } from './utils/globals'
+import { document, window } from '@posthog/browser-common/utils/globals'
 import {
     ENABLED_FEATURE_FLAGS,
     EVENT_TIMERS_KEY,
@@ -31,15 +31,15 @@ const GROUP_FRESHNESS_KEY: Partial<Record<PersistenceStorageGroup, string>> = {
     surveys: SURVEYS_LOADED_AT,
 }
 
-import { isNumber, isUndefined } from '@posthog/core'
+import { isArray, isNumber, isUndefined } from '@posthog/core'
 import {
     getCampaignParams,
     getInitialPersonPropsFromInfo,
     getPersonInfo,
     getReferrerInfo,
     getSearchInfo,
-} from './utils/event-utils'
-import { logger } from './utils/logger'
+} from '@posthog/browser-common/utils/event-utils'
+import { logger } from '@posthog/browser-common/utils/logger'
 import { stripLeadingDollar, isEmptyObject, isObject } from '@posthog/core'
 
 const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['persistence']>[] = [
@@ -104,7 +104,7 @@ export class PostHogPersistence {
     private _config: PostHogConfig
     props: Properties
     private _storage: PersistentStore
-    private _campaign_params_saved: boolean
+    private _campaign_params_url: string | undefined
     private readonly _name: string
     _disabled: boolean | undefined
     private _secure: boolean | undefined
@@ -145,7 +145,7 @@ export class PostHogPersistence {
         this._config = config
         this._ownsSplitStorage = ownsSplitStorage
         this.props = {}
-        this._campaign_params_saved = false
+        this._campaign_params_url = undefined
         this._name = parseName(config)
         this._storage = this._buildStorage(config)
         this._splitStorage = this._resolveSplitStorage(config)
@@ -495,10 +495,7 @@ export class PostHogPersistence {
 
     private _partitionProps(): { main: Properties; groups: Record<PersistenceStorageGroup, Properties> } {
         const main: Properties = {}
-        const groups = {} as Record<PersistenceStorageGroup, Properties>
-        for (const group of PERSISTENCE_STORAGE_GROUPS) {
-            groups[group] = {}
-        }
+        const groups: Record<PersistenceStorageGroup, Properties> = { flags: {}, surveys: {} }
         each(this.props, (value, key) => {
             const group = getPersistenceKeyPolicy(key)?.storageGroup
             if (group) {
@@ -692,7 +689,7 @@ export class PostHogPersistence {
             let hasChanges = false
 
             each(props, (val, prop) => {
-                if (props.hasOwnProperty(prop) && this.props[prop] !== val) {
+                if (props.hasOwnProperty(prop) && (this.props[prop] !== val || isObject(val) || isArray(val))) {
                     this._setProp(prop, val)
                     hasChanges = true
                 }
@@ -714,18 +711,21 @@ export class PostHogPersistence {
     }
 
     update_campaign_params(): void {
-        if (!this._campaign_params_saved) {
-            const campaignParams = getCampaignParams(
-                this._config.custom_campaign_params,
-                this._config.mask_personal_data_properties,
-                this._config.custom_personal_data_properties
-            )
-            // only save campaign params if there were any
-            if (!isEmptyObject(stripEmptyProperties(campaignParams))) {
-                this.register(campaignParams)
-            }
-            this._campaign_params_saved = true
+        const currentUrl = document?.URL
+        if (currentUrl === this._campaign_params_url) {
+            return
         }
+
+        const campaignParams = getCampaignParams(
+            this._config.custom_campaign_params,
+            this._config.mask_personal_data_properties,
+            this._config.custom_personal_data_properties
+        )
+        // only save campaign params if there were any
+        if (!isEmptyObject(stripEmptyProperties(campaignParams))) {
+            this.register(campaignParams)
+        }
+        this._campaign_params_url = currentUrl
     }
     update_search_keyword(): void {
         this.register(getSearchInfo())

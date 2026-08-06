@@ -9,6 +9,7 @@ import {
     SurveyEventName,
     SurveySchedule,
 } from '../../posthog-surveys-types'
+import { SURVEYS_ACTIVATED_TIMESTAMPS } from '../../constants'
 import { PostHogPersistence } from '../../posthog-persistence'
 import { PostHog } from '../../posthog-core'
 import { CaptureResult, PostHogConfig, PropertyMatchType } from '../../types'
@@ -178,6 +179,14 @@ describe('survey-event-receiver', () => {
         let config: PostHogConfig
         let instance: PostHog
         let mockAddCaptureHook: jest.Mock
+        // Mutable so tests can simulate a session rollover between reloads.
+        let currentSessionId: string
+        // Captures the receiver's onSessionId subscription so tests can drive a live rotation.
+        let sessionIdListeners: Array<(sessionId: string) => void>
+        const rotateSession = (sessionId: string): void => {
+            currentSessionId = sessionId
+            sessionIdListeners.forEach((listener) => listener(sessionId))
+        }
 
         const makeSurvey = (overrides: Partial<Survey>): Survey =>
             ({
@@ -209,6 +218,11 @@ describe('survey-event-receiver', () => {
                 persistence: new PostHogPersistence(config),
                 _addCaptureHook: mockAddCaptureHook,
                 getSurveys: jest.fn((callback) => callback([survey])),
+                get_session_id: () => currentSessionId,
+                onSessionId: (listener: (sessionId: string) => void) => {
+                    sessionIdListeners.push(listener)
+                    return () => {}
+                },
             })
             const receiver = new SurveyEventReceiver(instance)
             receiver.register([survey])
@@ -218,6 +232,8 @@ describe('survey-event-receiver', () => {
 
         beforeEach(() => {
             mockAddCaptureHook = jest.fn()
+            currentSessionId = 'session-1'
+            sessionIdListeners = []
         })
 
         afterEach(() => {
@@ -288,6 +304,62 @@ describe('survey-event-receiver', () => {
             expect(new SurveyEventReceiver(instance).getSurveys()).not.toContain('lifecycle-survey')
         })
 
+        it('does not re-display a shown-but-unanswered survey in a brand-new session', () => {
+            const { hook } = setup(makeSurvey({}))
+
+            // Triggered and shown in session-1 (persisted so it survives a reload)...
+            hook('trigger_event')
+            hook(SurveyEventName.SHOWN, surveyEventPayload('lifecycle-survey', SurveyEventName.SHOWN))
+            expect(new SurveyEventReceiver(instance).getSurveys()).toContain('lifecycle-survey')
+
+            // ...but a brand-new session (no fresh trigger event) must not re-display it.
+            currentSessionId = 'session-2'
+            expect(new SurveyEventReceiver(instance).getSurveys()).not.toContain('lifecycle-survey')
+        })
+
+        it('re-arms in a new session only when the trigger fires again', () => {
+            const { hook } = setup(makeSurvey({}))
+
+            hook('trigger_event')
+            hook(SurveyEventName.SHOWN, surveyEventPayload('lifecycle-survey', SurveyEventName.SHOWN))
+
+            // New session: stale activation is dropped until the trigger fires again.
+            currentSessionId = 'session-2'
+            const afterRollover = new SurveyEventReceiver(instance)
+            afterRollover.register([makeSurvey({})])
+            expect(afterRollover.getSurveys()).not.toContain('lifecycle-survey')
+
+            const rearmHook = mockAddCaptureHook.mock.calls.at(-1)?.[0]
+            rearmHook('trigger_event')
+            expect(afterRollover.getSurveys()).toContain('lifecycle-survey')
+        })
+
+        it('drops a shown survey when the session rotates live (idle timeout), without a reload', () => {
+            const { receiver, hook } = setup(makeSurvey({}))
+
+            hook('trigger_event')
+            hook(SurveyEventName.SHOWN, surveyEventPayload('lifecycle-survey', SurveyEventName.SHOWN))
+            expect(receiver.getSurveys()).toContain('lifecycle-survey')
+
+            // The session rotates in-place (e.g. idle timeout) on the same receiver — a case the
+            // read-only session read cannot observe, so the onSessionId subscription must handle it.
+            rotateSession('session-2')
+            expect(receiver.getSurveys()).not.toContain('lifecycle-survey')
+            // Cleared from persistence too, so a subsequent reload doesn't resurrect it.
+            expect(new SurveyEventReceiver(instance).getSurveys()).not.toContain('lifecycle-survey')
+        })
+
+        it('keeps a shown survey when the session id fires but is unchanged (e.g. window-id-only change)', () => {
+            const { receiver, hook } = setup(makeSurvey({}))
+
+            hook('trigger_event')
+            hook(SurveyEventName.SHOWN, surveyEventPayload('lifecycle-survey', SurveyEventName.SHOWN))
+
+            // onSessionId can fire without the session id actually changing; that must not clear it.
+            sessionIdListeners.forEach((listener) => listener('session-1'))
+            expect(receiver.getSurveys()).toContain('lifecycle-survey')
+        })
+
         it.each([
             [
                 'repeatedActivation',
@@ -336,6 +408,7 @@ describe('survey-event-receiver', () => {
                 persistence: new PostHogPersistence(config),
                 _addCaptureHook: mockAddCaptureHook,
                 getSurveys: jest.fn((callback) => callback([armed, shown])),
+                get_session_id: () => currentSessionId,
             })
             const receiver = new SurveyEventReceiver(instance)
             receiver.register([armed, shown])
@@ -373,6 +446,202 @@ describe('survey-event-receiver', () => {
             receiver.reset()
             expect(receiver.getSurveys()).not.toContain('lifecycle-survey')
             expect(new SurveyEventReceiver(instance).getSurveys()).not.toContain('lifecycle-survey')
+        })
+    })
+
+    // A delayed survey's popup delay is an in-memory timer that a full navigation discards, so the
+    // countdown restarts from zero on every page. To let the delay resume, an armed delayed survey
+    // is persisted (session-scoped) with the time it was triggered, so a fresh receiver on the next
+    // page re-arms it and can compute the remaining wait.
+    describe('delayed survey activation (survives navigation)', () => {
+        let config: PostHogConfig
+        let instance: PostHog
+        let mockAddCaptureHook: jest.Mock
+        let currentSessionId: string
+        let sessionIdListeners: Array<(sessionId: string) => void>
+        let nowSpy: jest.SpyInstance
+
+        const rotateSession = (sessionId: string): void => {
+            currentSessionId = sessionId
+            sessionIdListeners.forEach((listener) => listener(sessionId))
+        }
+
+        const makeDelayedSurvey = (overrides: Partial<Survey> = {}): Survey =>
+            ({
+                name: 'delayed survey',
+                id: 'delayed-survey',
+                description: 'delayed survey description',
+                type: SurveyType.Popover,
+                questions: [{ type: SurveyQuestionType.Open, question: 'how is it going?' }],
+                appearance: { surveyPopupDelaySeconds: 60 },
+                conditions: { events: { values: [{ name: 'trigger_event' }] } },
+                ...overrides,
+            }) as unknown as Survey
+
+        const surveyEventPayload = (surveyId: string, event: string): CaptureResult =>
+            ({ event, properties: { $survey_id: surveyId } }) as unknown as CaptureResult
+
+        const setup = (survey: Survey, hasSession = true) => {
+            config = createMockConfig({
+                token: 'testtoken',
+                api_host: 'https://app.posthog.com',
+                persistence: 'memory',
+            })
+            instance = createMockPostHog({
+                config,
+                persistence: new PostHogPersistence(config),
+                _addCaptureHook: mockAddCaptureHook,
+                getSurveys: jest.fn((callback) => callback([survey])),
+                get_session_id: () => (hasSession ? currentSessionId : undefined),
+                cancelPendingSurvey: jest.fn(),
+                onSessionId: (listener: (sessionId: string) => void) => {
+                    sessionIdListeners.push(listener)
+                    return () => {}
+                },
+            })
+            const receiver = new SurveyEventReceiver(instance)
+            receiver.register([survey])
+            const hook = mockAddCaptureHook.mock.calls.at(-1)?.[0]
+            return { receiver, hook }
+        }
+
+        beforeEach(() => {
+            mockAddCaptureHook = jest.fn()
+            currentSessionId = 'session-1'
+            sessionIdListeners = []
+            nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1_000_000)
+        })
+
+        afterEach(() => {
+            nowSpy.mockRestore()
+            instance.persistence?.clear()
+        })
+
+        it('persists an armed delayed survey and records the activation time, so it survives a reload', () => {
+            const { receiver, hook } = setup(makeDelayedSurvey())
+
+            hook('trigger_event')
+            expect(receiver.getSurveys()).toContain('delayed-survey')
+            expect(receiver.getActivationTimestamp('delayed-survey')).toBe(1_000_000)
+
+            // A fresh receiver reading the same persistence models the next page load.
+            const afterNav = new SurveyEventReceiver(instance)
+            expect(afterNav.getSurveys()).toContain('delayed-survey')
+            expect(afterNav.getActivationTimestamp('delayed-survey')).toBe(1_000_000)
+        })
+
+        it('keeps the first activation time when the trigger fires again before the survey is shown', () => {
+            const { receiver, hook } = setup(makeDelayedSurvey())
+
+            hook('trigger_event')
+            nowSpy.mockReturnValue(1_050_000)
+            hook('trigger_event')
+
+            expect(receiver.getActivationTimestamp('delayed-survey')).toBe(1_000_000)
+        })
+
+        it('replaces a stale activation timestamp when starting a new activation', () => {
+            const { receiver, hook } = setup(makeDelayedSurvey())
+            instance.persistence?.register({
+                [SURVEYS_ACTIVATED_TIMESTAMPS]: { 'delayed-survey': 900_000 },
+            })
+
+            hook('trigger_event')
+
+            expect(receiver.getActivationTimestamp('delayed-survey')).toBe(1_000_000)
+        })
+
+        it('does not persist an armed survey without a delay (keeps the exit-intent scoping)', () => {
+            const { receiver, hook } = setup(makeDelayedSurvey({ appearance: {} }))
+
+            hook('trigger_event')
+            expect(receiver.getSurveys()).toContain('delayed-survey')
+            // In-memory only: no timestamp and it does not survive a reload.
+            expect(receiver.getActivationTimestamp('delayed-survey')).toBeUndefined()
+            expect(new SurveyEventReceiver(instance).getSurveys()).not.toContain('delayed-survey')
+        })
+
+        it('drops the delayed activation and pending timer when the session rotates', () => {
+            const { receiver, hook } = setup(makeDelayedSurvey())
+
+            hook('trigger_event')
+            expect(receiver.getSurveys()).toContain('delayed-survey')
+
+            rotateSession('session-2')
+            expect(receiver.getSurveys()).not.toContain('delayed-survey')
+            expect(receiver.getActivationTimestamp('delayed-survey')).toBeUndefined()
+            expect(new SurveyEventReceiver(instance).getActivationTimestamp('delayed-survey')).toBeUndefined()
+            expect(instance.cancelPendingSurvey).toHaveBeenCalledWith('delayed-survey')
+        })
+
+        it.each([
+            ['dismissed', SurveyEventName.DISMISSED],
+            ['sent', SurveyEventName.SENT],
+        ])('removes the activation once the survey is %s', (_label, interactionEvent) => {
+            const { receiver, hook } = setup(makeDelayedSurvey())
+
+            hook('trigger_event')
+            hook(SurveyEventName.SHOWN, surveyEventPayload('delayed-survey', SurveyEventName.SHOWN))
+
+            hook(interactionEvent, surveyEventPayload('delayed-survey', interactionEvent))
+            expect(receiver.getSurveys()).not.toContain('delayed-survey')
+        })
+
+        // A cancel event deactivates a survey that was never shown, so it is the one path that
+        // still has a timestamp to clean up. Asserted on persistence directly because
+        // getActivationTimestamp reads through the activation set and would hide a leaked entry.
+        it('forgets the stored activation time when a cancel event fires before the survey is shown', () => {
+            const { receiver, hook } = setup(
+                makeDelayedSurvey({
+                    conditions: {
+                        events: { values: [{ name: 'trigger_event' }] },
+                        cancelEvents: { values: [{ name: 'cancel_event' }] },
+                    },
+                } as Partial<Survey>)
+            )
+
+            hook('trigger_event')
+            expect(receiver.getActivationTimestamp('delayed-survey')).toBe(1_000_000)
+
+            hook('cancel_event')
+            expect(receiver.getSurveys()).not.toContain('delayed-survey')
+            expect(instance.persistence?.props[SURVEYS_ACTIVATED_TIMESTAMPS]).toBeUndefined()
+        })
+
+        it('drops the activation time once the survey is shown, so a later page waits the full delay', () => {
+            const { receiver, hook } = setup(makeDelayedSurvey())
+
+            hook('trigger_event')
+            hook(SurveyEventName.SHOWN, surveyEventPayload('delayed-survey', SurveyEventName.SHOWN))
+
+            // Still activated, so a reload re-displays it until the user dismisses or answers it...
+            expect(receiver.getSurveys()).toContain('delayed-survey')
+            // ...but with no activation time the next page counts the whole delay down again
+            // instead of re-rendering the survey instantly.
+            expect(receiver.getActivationTimestamp('delayed-survey')).toBeUndefined()
+            expect(new SurveyEventReceiver(instance).getActivationTimestamp('delayed-survey')).toBeUndefined()
+        })
+
+        it('does not record a new activation time when the trigger fires again after the survey is shown', () => {
+            const { receiver, hook } = setup(makeDelayedSurvey())
+
+            hook('trigger_event')
+            hook(SurveyEventName.SHOWN, surveyEventPayload('delayed-survey', SurveyEventName.SHOWN))
+            nowSpy.mockReturnValue(1_030_000)
+            hook('trigger_event')
+
+            expect(receiver.getActivationTimestamp('delayed-survey')).toBeUndefined()
+        })
+
+        it('falls back to in-memory arming for a delayed survey when no session id is resolvable', () => {
+            const { receiver, hook } = setup(makeDelayedSurvey(), false)
+
+            hook('trigger_event')
+            // Still armed in-session so the current page works...
+            expect(receiver.getSurveys()).toContain('delayed-survey')
+            // ...but with no session to scope it, it is not persisted across a reload.
+            expect(receiver.getActivationTimestamp('delayed-survey')).toBeUndefined()
+            expect(new SurveyEventReceiver(instance).getSurveys()).not.toContain('delayed-survey')
         })
     })
 

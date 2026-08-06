@@ -48,6 +48,7 @@ export const PostHogMCPAnalyticsProperty = {
   IntentSource: '$mcp_intent_source',
   ListedToolNames: '$mcp_listed_tool_names',
   Parameters: '$mcp_parameters',
+  ProtocolVersion: '$mcp_protocol_version',
   ResourceName: '$mcp_resource_name',
   Response: '$mcp_response',
   ServerName: '$mcp_server_name',

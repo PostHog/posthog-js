@@ -1,7 +1,7 @@
 import { mockLogger } from './helpers/mock-logger'
 
 import { createPosthogInstance } from './helpers/posthog-instance'
-import { uuidv7 } from '../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { INITIAL_CAMPAIGN_PARAMS, INITIAL_REFERRER_INFO } from '../constants'
 import { RemoteConfig } from '../types'
 
@@ -65,8 +65,8 @@ const CAMPAIGN_PARAMS_NULL = {
     wbraid: null,
 }
 
-jest.mock('../utils/globals', () => {
-    const orig = jest.requireActual('../utils/globals')
+jest.mock('@posthog/browser-common/utils/globals', () => {
+    const orig = jest.requireActual('@posthog/browser-common/utils/globals')
     const mockURLGetter = jest.fn()
     const mockReferrerGetter = jest.fn()
     let mockedCookieVal = ''
@@ -105,7 +105,7 @@ jest.mock('../utils/globals', () => {
 })
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { mockURLGetter, mockReferrerGetter, document } = require('../utils/globals')
+const { mockURLGetter, mockReferrerGetter, document } = require('@posthog/browser-common/utils/globals')
 
 describe('person processing', () => {
     const distinctId = '123'
@@ -262,6 +262,46 @@ describe('person processing', () => {
                 $referrer: 'https://referrer.com',
                 $referring_domain: 'referrer.com',
                 utm_source: 'foo',
+            })
+        })
+
+        it('should carry a later gclid landing from an anonymous pageview onto identify without changing direct first-touch attribution', async () => {
+            // arrange: persist a direct first touch, then simulate a later browser session and SDK instance
+            const persistenceName = uuidv7()
+            const directUrl = 'https://example.com/landing'
+            mockReferrerGetter.mockReturnValue('')
+            mockURLGetter.mockReturnValue(directUrl)
+            const { posthog: firstVisitPosthog } = await setup('identified_only', undefined, persistenceName)
+            firstVisitPosthog.capture('direct first visit')
+            firstVisitPosthog.sessionManager!.resetSessionId()
+            firstVisitPosthog.sessionPersistence!.clear()
+            window.sessionStorage.clear()
+
+            const gclid = 'google-click-id'
+            mockURLGetter.mockReturnValue(`https://example.com/landing?gclid=${gclid}`)
+            const { posthog, beforeSendMock } = await setup('identified_only', undefined, persistenceName)
+
+            // act
+            posthog.capture('$pageview')
+            posthog.identify(distinctId)
+
+            // assert
+            const anonymousPageview = beforeSendMock.mock.calls[0][0]
+            expect(anonymousPageview.event).toBe('$pageview')
+            expect(anonymousPageview.properties.gclid).toBe(gclid)
+            expect(anonymousPageview.properties.$process_person_profile).toBe(false)
+            expect(anonymousPageview.$set_once).toBeUndefined()
+
+            const identifyCall = beforeSendMock.mock.calls[1][0]
+            expect(identifyCall.event).toBe('$identify')
+            expect(identifyCall.properties.gclid).toBe(gclid)
+            expect(identifyCall.properties.$process_person_profile).toBe(true)
+            expect(identifyCall.$set_once).toMatchObject({
+                $initial_current_url: directUrl,
+                $initial_referrer: '$direct',
+                $initial_referring_domain: '$direct',
+                $initial_gclid: null,
+                gclid,
             })
         })
 
@@ -804,7 +844,7 @@ describe('person processing', () => {
             posthog.capture('startup page view')
 
             // act
-            posthog._onRemoteConfig({} as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: {} as RemoteConfig })
             posthog.capture('custom event')
 
             // assert
@@ -819,7 +859,7 @@ describe('person processing', () => {
             posthog.capture('startup page view')
 
             // act
-            posthog._onRemoteConfig({ defaultIdentifiedOnly: false } as RemoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: { defaultIdentifiedOnly: false } as RemoteConfig })
             posthog.capture('custom event')
 
             // assert

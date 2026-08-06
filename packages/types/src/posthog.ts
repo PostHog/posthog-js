@@ -15,6 +15,7 @@ import type {
     EarlyAccessFeatureStage,
     FeatureFlagResult,
     FeatureFlagOptions,
+    IsFeatureEnabledOptions,
     OverrideFeatureFlagsOptions,
 } from './feature-flags'
 import type { SessionIdChangedCallback } from './session-recording'
@@ -186,6 +187,10 @@ export interface PostHog {
     /**
      * Reset the user's identity and start a new session.
      *
+     * @remarks
+     * This also clears the stored consent, so with `opt_out_capturing_by_default` the instance
+     * is opted out again afterwards — call `reset()` before `opt_in_capturing()`, not after.
+     *
      * @param {boolean} [reset_device_id] Whether to generate a new device ID as well as a new distinct ID.
      */
     reset(reset_device_id?: boolean): void
@@ -331,9 +336,11 @@ export interface PostHog {
      * @param options - Options for the feature flag lookup
      * @param options.send_event - Whether to send a $feature_flag_called event (default: true)
      * @param options.fresh - If true, only return values loaded from the server, not cached localStorage values (default: false)
+     * @param options.defaultValue - Value to return when the flag has no value (default: undefined)
      * @returns Whether the feature flag is enabled
      */
-    isFeatureEnabled(key: string, options?: FeatureFlagOptions): boolean | undefined
+    isFeatureEnabled(key: string, options: IsFeatureEnabledOptions & { defaultValue: boolean }): boolean
+    isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined
 
     /**
      * Reload feature flags from the server.

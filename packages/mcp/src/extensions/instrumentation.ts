@@ -5,31 +5,34 @@
 
 import type { ListToolsResult } from '@modelcontextprotocol/sdk/types.js'
 import type {
+  AnalyticsParameterOwnership,
   CompatibleRequestHandlerExtra,
   MCPAnalyticsData,
   MCPRequestLike,
   MCPServerLike,
   McpEvent,
   ServerClientInfoLike,
+  SessionInfo,
 } from '../types'
+import { getAnalyticsParameterOwnership, stripOwnedAnalyticsArguments } from './analytics-parameters'
 import { addContextParameterToTools, getContextDescription, isContextEnabled } from './context-parameters'
 import {
   addConversationIdToTools,
   type ConversationIdResolution,
   canInjectConversationIdPromptBack,
-  cloneRequestWithoutConversationId,
   injectConversationIdPromptBack,
   resolveConversationId,
 } from './conversation-id'
+import { stampMetaClientInfo } from './client-identity'
 import { captureEvent } from './capture'
 import { MCPAnalyticsEventType } from './event-types'
 import { captureException } from './exceptions'
 import { resolveToolCallIntent, setEventIntent, setExplicitContextIntent } from './intent'
-import { getServerTrackingData, handleIdentify, setServerTrackingData } from './internal'
-import { log } from './logger'
+import { getServerTrackingData, handleIdentify, setServerTrackingData, withIdentity } from './internal'
+import type { LoggerFn } from './logger'
 import { buildCapturedMcpParameters } from './mcp-payloads'
 import { getLiteralValue, getObjectShape } from './mcp-sdk-compat'
-import { getSessionId, newSessionId } from './session'
+import { getSessionId, getSessionInfo, newSessionId } from './session'
 import { encodeSessionId, readMcpSessionHeader, writeSessionIdToTransport } from './session-token'
 import { getReportMissingToolDescriptor, resolveMissingCapabilityToolName } from './tools'
 import { applyResolvedMetadata, isToolResultError } from './tracing-helpers'
@@ -44,11 +47,7 @@ import { applyResolvedMetadata, isToolResultError } from './tracing-helpers'
 
 type MCPRequestHandler = (request: MCPRequestLike, extra?: CompatibleRequestHandlerExtra) => Promise<unknown>
 
-/**
- * Runs the underlying tool. Receives the request with the SDK-injected
- * `conversation_id` stripped; an adapter is free to ignore it (the high-level
- * path strips arguments inside the wrapped callback instead).
- */
+/** Runs the underlying tool with SDK-owned analytics arguments removed. */
 type ToolExecutor = (downstreamRequest: MCPRequestLike) => Promise<unknown>
 
 interface TraceToolCallParams {
@@ -57,6 +56,8 @@ interface TraceToolCallParams {
   request: MCPRequestLike
   extra?: CompatibleRequestHandlerExtra
   execute: ToolExecutor
+  /** Optional schema-derived ownership override for adapters with direct registry access. */
+  parameterOwnership?: AnalyticsParameterOwnership
   /**
    * Event type to capture. Defaults to a tool call; the `get_more_tools` virtual
    * tool passes `mcpMissingCapability` so it records a capability gap rather than
@@ -87,20 +88,38 @@ interface TraceToolCallParams {
  * throws, and the tool's own errors are always re-thrown to the caller.
  */
 export async function captureToolCall(params: TraceToolCallParams): Promise<unknown> {
-  const { server, data, request, extra, execute, eventType, explicitContextIntent, takeCapturedError } = params
-
+  const {
+    server,
+    data,
+    request,
+    extra,
+    execute,
+    parameterOwnership,
+    eventType,
+    explicitContextIntent,
+    takeCapturedError,
+  } = params
+  const resolvedEventType = eventType ?? MCPAnalyticsEventType.mcpToolsCall
+  const ownership = getActiveAnalyticsParameterOwnership(
+    data,
+    request.params?.name,
+    parameterOwnership,
+    resolvedEventType === MCPAnalyticsEventType.mcpMissingCapability
+  )
   const conversation = resolveConversationId(
-    data.options.enableConversationId ?? false,
+    ownership.conversationId,
     request.params?.arguments,
     request.params?.name,
-    resolveMissingCapabilityToolName(data.options)
+    resolvedEventType === MCPAnalyticsEventType.mcpMissingCapability
+      ? resolveMissingCapabilityToolName(data.options)
+      : ''
   )
-  const downstreamRequest = conversation.conversationId ? cloneRequestWithoutConversationId(request) : request
+  const downstreamRequest = cloneRequestWithoutOwnedAnalyticsArguments(request, ownership)
 
   // Prepare the event in isolation: if identity/metadata/intent resolution
   // throws, we drop instrumentation for this call but still run the tool.
   const startTime = new Date()
-  const event = await prepareToolCallEvent(
+  const preparedEvent = await prepareToolCallEvent(
     server,
     data,
     request,
@@ -108,23 +127,61 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     extra,
     startTime,
     conversation,
-    eventType ?? MCPAnalyticsEventType.mcpToolsCall
+    ownership,
+    resolvedEventType
   )
-  if (event && explicitContextIntent) {
-    setExplicitContextIntent(event, explicitContextIntent)
+  if (preparedEvent && explicitContextIntent) {
+    setExplicitContextIntent(preparedEvent.event, explicitContextIntent)
   }
 
   let result: unknown
   try {
     result = await execute(downstreamRequest)
   } catch (error) {
-    publishFailedToolEvent(server, event, error, startTime, conversation)
+    publishFailedToolEvent(server, preparedEvent, error, startTime, conversation, data.logger)
     throw error
   }
 
-  const finalResult = applyConversationPromptBack(event, result, conversation)
-  publishSuccessfulToolEvent(server, event, finalResult, startTime, takeCapturedError)
+  const finalResult = applyConversationPromptBack(preparedEvent?.event ?? null, result, conversation)
+  publishSuccessfulToolEvent(server, preparedEvent, finalResult, startTime, data.logger, takeCapturedError)
   return finalResult
+}
+
+interface PreparedToolEvent {
+  event: McpEvent
+  requestAttribution: SessionInfo
+}
+
+function getActiveAnalyticsParameterOwnership(
+  data: MCPAnalyticsData,
+  toolName: string | undefined,
+  override: AnalyticsParameterOwnership | undefined,
+  isMissingCapabilityTool: boolean
+): AnalyticsParameterOwnership {
+  const ownership = override ?? (toolName ? data.toolAnalyticsParameterOwnership.get(toolName) : undefined)
+  return {
+    context: !isMissingCapabilityTool && isContextEnabled(data.options.context) && ownership?.context === true,
+    conversationId:
+      !isMissingCapabilityTool && data.options.enableConversationId === true && ownership?.conversationId === true,
+  }
+}
+
+function cloneRequestWithoutOwnedAnalyticsArguments(
+  request: MCPRequestLike,
+  ownership: AnalyticsParameterOwnership
+): MCPRequestLike {
+  const args = request.params?.arguments
+  const cleanedArgs = stripOwnedAnalyticsArguments(args, ownership)
+  if (cleanedArgs === args || !request.params) {
+    return request
+  }
+  return {
+    ...request,
+    params: {
+      ...request.params,
+      arguments: cleanedArgs as typeof request.params.arguments,
+    },
+  }
 }
 
 async function prepareToolCallEvent(
@@ -135,11 +192,16 @@ async function prepareToolCallEvent(
   extra: CompatibleRequestHandlerExtra | undefined,
   startTime: Date,
   conversation: ConversationIdResolution,
+  ownership: AnalyticsParameterOwnership,
   eventType: MCPAnalyticsEventType
-): Promise<McpEvent | null> {
+): Promise<PreparedToolEvent | null> {
   try {
     const sessionId = getSessionId(server, extra)
-    await handleIdentify(server, data, sessionId, request, extra)
+    // Snapshot token/client/protocol metadata synchronously, before identify or
+    // metadata callbacks can yield and let another request replace shared state.
+    const sessionInfo = getSessionInfo(server, data, sessionId)
+    const identity = await handleIdentify(server, data, sessionId, request, sessionInfo, extra)
+    const requestAttribution = withIdentity(sessionInfo, identity)
 
     const toolName = request.params?.name
     const event: McpEvent = {
@@ -152,12 +214,16 @@ async function prepareToolCallEvent(
       toolCategory: toolName ? data.toolCategories.get(toolName) : undefined,
       toolDescription: toolName ? data.toolDescriptions.get(toolName) : undefined,
     }
+    // Modern (stateless) clients carry client name/version + protocol version in
+    // `_meta` on every request rather than at `initialize`; stamp them onto this
+    // event now so concurrent requests can't cross-attribute it.
+    stampMetaClientInfo(event, request)
 
     await applyResolvedMetadata(event, data, request, extra)
-    setEventIntent(event, await resolveToolCallIntent(data, request, extra))
-    return event
+    setEventIntent(event, await resolveToolCallIntent(data, request, ownership.context, extra))
+    return { event, requestAttribution }
   } catch (error) {
-    log(
+    data.logger(
       `Warning: PostHog MCP analytics instrumentation failed for tool ${request.params?.name}, the tool will still run - ${error}`
     )
     return null
@@ -188,14 +254,16 @@ function applyConversationPromptBack(
 
 function publishSuccessfulToolEvent(
   server: MCPServerLike,
-  event: McpEvent | null,
+  preparedEvent: PreparedToolEvent | null,
   result: unknown,
   startTime: Date,
+  logger: LoggerFn,
   takeCapturedError?: () => unknown
 ): void {
-  if (!event) {
+  if (!preparedEvent) {
     return
   }
+  const { event, requestAttribution } = preparedEvent
   try {
     if (isToolResultError(result)) {
       event.isError = true
@@ -206,22 +274,24 @@ function publishSuccessfulToolEvent(
     }
     event.response = result
     event.duration = Date.now() - startTime.getTime()
-    captureEvent(server, event)
+    captureEvent(server, event, logger, requestAttribution)
   } catch (error) {
-    log(`Warning: PostHog MCP analytics failed to publish tool event - ${error}`)
+    logger(`Warning: PostHog MCP analytics failed to publish tool event - ${error}`)
   }
 }
 
 function publishFailedToolEvent(
   server: MCPServerLike,
-  event: McpEvent | null,
+  preparedEvent: PreparedToolEvent | null,
   error: unknown,
   startTime: Date,
-  conversation: ConversationIdResolution
+  conversation: ConversationIdResolution,
+  logger: LoggerFn
 ): void {
-  if (!event) {
+  if (!preparedEvent) {
     return
   }
+  const { event, requestAttribution } = preparedEvent
   try {
     if (conversation.minted) {
       event.conversationId = undefined
@@ -229,9 +299,9 @@ function publishFailedToolEvent(
     event.isError = true
     event.error = captureException(error)
     event.duration = Date.now() - startTime.getTime()
-    captureEvent(server, event)
+    captureEvent(server, event, logger, requestAttribution)
   } catch (publishError) {
-    log(`Warning: PostHog MCP analytics failed to publish failed tool event - ${publishError}`)
+    logger(`Warning: PostHog MCP analytics failed to publish failed tool event - ${publishError}`)
   }
 }
 
@@ -256,11 +326,27 @@ export type HandlerPatch = (
  * that register handlers post-construction work — e.g. `@rekog/mcp-nest` hands a
  * bare server to instrument() and only then registers its handlers.
  */
+const originalRequestHandlers = new WeakMap<MCPServerLike, Map<string, MCPRequestHandler>>()
+
+function rememberOriginalRequestHandler(
+  server: MCPServerLike,
+  handlerName: string,
+  originalHandler: MCPRequestHandler
+): void {
+  let handlers = originalRequestHandlers.get(server)
+  if (!handlers) {
+    handlers = new Map()
+    originalRequestHandlers.set(server, handlers)
+  }
+  handlers.set(handlerName, originalHandler)
+}
+
 export function patchRequestHandlers(server: MCPServerLike, patches: Record<string, HandlerPatch>): void {
   // Monkey patch existing handlers.
   for (const [handlerName, patch] of Object.entries(patches)) {
     const originalHandler = server._requestHandlers.get(handlerName)
     if (originalHandler) {
+      rememberOriginalRequestHandler(server, handlerName, originalHandler)
       server._requestHandlers.set(handlerName, (request, extra) => patch(server, originalHandler, request, extra))
     }
   }
@@ -271,12 +357,53 @@ export function patchRequestHandlers(server: MCPServerLike, patches: Record<stri
     const shape = getObjectShape(requestSchema)
     const handlerName = shape?.method ? getLiteralValue(shape.method) : undefined
     const patch = typeof handlerName === 'string' ? patches[handlerName] : undefined
-    if (!patch) {
+    if (!patch || typeof handlerName !== 'string') {
       return originalSetRequestHandler(requestSchema, originalHandler)
     }
 
-    return originalSetRequestHandler(requestSchema, (request, extra) => patch(server, originalHandler, request, extra))
+    // Register first so the MCP SDK's request/result validation stays inside
+    // our analytics wrapper, matching handlers that existed before instrument().
+    const result = originalSetRequestHandler(requestSchema, originalHandler)
+    const registeredHandler = server._requestHandlers.get(handlerName)
+    if (registeredHandler) {
+      rememberOriginalRequestHandler(server, handlerName, registeredHandler)
+      server._requestHandlers.set(handlerName, (request, extra) => patch(server, registeredHandler, request, extra))
+    }
+    return result
   }) as MCPServerLike['setRequestHandler']
+}
+
+/**
+ * Checks the server's raw listing for a real owner of a candidate virtual tool.
+ * This does not depend on a previous client request and does not call the
+ * instrumented list wrapper, so it neither injects PostHog tools nor captures a
+ * synthetic tools/list event. `undefined` fails open to the real dispatcher.
+ */
+export async function isToolAdvertised(
+  server: MCPServerLike,
+  toolName: string,
+  extra: CompatibleRequestHandlerExtra | undefined,
+  logger: LoggerFn
+): Promise<boolean | undefined> {
+  const listHandler = originalRequestHandlers.get(server)?.get('tools/list')
+  if (!listHandler || !server._requestHandlers.has('tools/list')) {
+    return undefined
+  }
+
+  try {
+    const response = (await listHandler({ method: 'tools/list', params: {} }, extra)) as ListToolsResult
+    if (!response || !Array.isArray(response.tools)) {
+      return undefined
+    }
+    // Match the page the current list instrumentation can expose. Pagination
+    // passthrough is handled separately from missing-capability ownership.
+    return response.tools.some((tool) => tool?.name === toolName)
+  } catch (error) {
+    logger(
+      `Warning: PostHog MCP analytics could not determine whether "${toolName}" is advertised; delegating to the server - ${error}`
+    )
+    return undefined
+  }
 }
 
 /**
@@ -287,38 +414,52 @@ export async function handleListToolsRequest(
   server: MCPServerLike,
   originalListToolsHandler: MCPRequestHandler,
   request: MCPRequestLike,
-  extra?: CompatibleRequestHandlerExtra
+  extra: CompatibleRequestHandlerExtra | undefined,
+  logger: LoggerFn
 ): Promise<{ tools: ListToolsResult['tools'] }> {
   const data = getServerTrackingData(server)
   const startTime = new Date()
+  const sessionId = getSessionId(server, extra)
+  // Snapshot before metadata resolution or the list handler can yield to a
+  // concurrent request using the same instrumented server.
+  const requestAttribution = getSessionInfo(server, data, sessionId)
   const event: McpEvent = {
-    sessionId: getSessionId(server, extra),
+    sessionId,
     parameters: buildCapturedMcpParameters(request),
     eventType: MCPAnalyticsEventType.mcpToolsList,
     timestamp: startTime,
   }
+  stampMetaClientInfo(event, request)
 
   if (data) {
     await applyResolvedMetadata(event, data, request, extra)
   }
 
-  const tools = await getTracedToolsList(server, originalListToolsHandler, request, extra, event)
+  const tools = await getTracedToolsList(
+    server,
+    originalListToolsHandler,
+    request,
+    extra,
+    event,
+    logger,
+    requestAttribution
+  )
 
   if (!data) {
-    log(
+    logger(
       'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called instrument(server, options) before using tool calls.'
     )
     return { tools }
   }
 
   if (tools.length === 0) {
-    log(
+    data.logger(
       'Warning: No tools found in the original list. This is likely due to the tools not being registered before PostHog MCP analytics.instrument().'
     )
     event.error = captureException('No tools were sent to MCP client.')
     event.isError = true
     event.duration = Date.now() - startTime.getTime()
-    captureEvent(server, event)
+    captureEvent(server, event, data.logger, requestAttribution)
     return { tools }
   }
 
@@ -326,8 +467,20 @@ export async function handleListToolsRequest(
   event.listedToolNames = collectListedToolNames(tools)
   event.isError = false
   event.duration = Date.now() - startTime.getTime()
-  captureEvent(server, event)
+  captureEvent(server, event, data.logger, requestAttribution)
   return { tools }
+}
+
+function cacheToolAnalyticsParameterOwnership(
+  cache: Map<string, AnalyticsParameterOwnership>,
+  tools: ListToolsResult['tools']
+): void {
+  // Merge pages and concurrent enumerations; repeated tool names overwrite stale schemas.
+  for (const tool of tools) {
+    if (tool?.name) {
+      cache.set(tool.name, getAnalyticsParameterOwnership(tool.inputSchema))
+    }
+  }
 }
 
 function collectListedToolNames(tools: ListToolsResult['tools'] | undefined): string[] | undefined {
@@ -343,26 +496,40 @@ async function getTracedToolsList(
   originalListToolsHandler: MCPRequestHandler,
   request: MCPRequestLike,
   extra: CompatibleRequestHandlerExtra | undefined,
-  event: McpEvent
+  event: McpEvent,
+  logger: LoggerFn,
+  requestAttribution: SessionInfo
 ): Promise<ListToolsResult['tools']> {
   try {
     const data = getServerTrackingData(server)
     const originalResponse = (await originalListToolsHandler(request, extra)) as ListToolsResult
-    let tools = originalResponse.tools || []
+    // Injection must not mutate arrays reused or frozen by the server.
+    let tools = [...(originalResponse.tools || [])]
 
+    if (data) {
+      cacheToolAnalyticsParameterOwnership(data.toolAnalyticsParameterOwnership, tools)
+    }
     if (data && isContextEnabled(data.options.context)) {
-      tools = addContextParameterToTools(tools, getContextDescription(data.options.context))
+      tools = addContextParameterToTools(tools, getContextDescription(data.options.context), data.logger)
     }
 
-    if (data?.options.enableConversationId) {
-      tools = addConversationIdToTools(tools, resolveMissingCapabilityToolName(data.options))
-    }
-
-    if (data?.options.reportMissing) {
+    if (data) {
       const missingToolName = resolveMissingCapabilityToolName(data.options)
-      const alreadyPresent = tools.some((tool) => tool?.name === missingToolName)
-      if (!alreadyPresent) {
-        tools.push(getReportMissingToolDescriptor(missingToolName))
+      let injectedMissingCapabilityTool = false
+      if (data.options.reportMissing) {
+        const alreadyPresent = tools.some((tool) => tool?.name === missingToolName)
+        if (alreadyPresent) {
+          data.logger(
+            `Warning: Cannot inject missing-capability tool "${missingToolName}" because a real tool already uses that name. The real tool will not be intercepted.`
+          )
+        } else {
+          tools.push(getReportMissingToolDescriptor(missingToolName))
+          injectedMissingCapabilityTool = true
+        }
+      }
+
+      if (data.options.enableConversationId) {
+        tools = addConversationIdToTools(tools, missingToolName, injectedMissingCapabilityTool, data.logger)
       }
     }
 
@@ -373,13 +540,13 @@ async function getTracedToolsList(
 
     return tools
   } catch (error) {
-    log(
+    logger(
       `Warning: Original list tools handler failed, this suggests an error PostHog MCP analytics did not cause - ${error}`
     )
     event.error = captureException(error)
     event.isError = true
     event.duration = event.timestamp ? Date.now() - event.timestamp.getTime() : 0
-    captureEvent(server, event)
+    captureEvent(server, event, logger, requestAttribution)
     throw error
   }
 }
@@ -436,35 +603,77 @@ function mintStatelessSessionOnInitialize(
   data: MCPAnalyticsData,
   request: MCPRequestLike,
   extra: CompatibleRequestHandlerExtra | undefined
-): void {
+): string | undefined {
   try {
     const headers = extra?.requestInfo?.headers
     if (!headers || typeof headers !== 'object') {
-      return // not an HTTP transport (stdio/in-memory) — nothing to mint into
+      return undefined // not an HTTP transport (stdio/in-memory) — nothing to mint into
     }
     if (readMcpSessionHeader(headers)) {
-      return // client already replays a session id (ours or the transport's)
+      return undefined // client already replays a session id (ours or the transport's)
     }
     const transport = server.transport
     if (!transport || extra?.sessionId || transport.sessionId) {
-      return // stateful transports manage their own session id — leave it alone
+      return undefined // stateful transports manage their own session id — leave it alone
     }
 
     const sessionId = newSessionId()
     const clientInfo = readInitializeClientInfo(request)
-    const token = encodeSessionId({ sessionId, clientName: clientInfo?.name, clientVersion: clientInfo?.version })
+    // Minted before the handler negotiates, so only the client's *requested*
+    // version is available here; `handleInitializeRequest` re-mints the token
+    // with the negotiated version once the handler has run.
+    const requestedProtocolVersion = readProtocolVersion(undefined, request)
+    const token = encodeSessionId({
+      sessionId,
+      clientName: clientInfo?.name,
+      clientVersion: clientInfo?.version,
+      protocolVersion: requestedProtocolVersion,
+    })
     if (!writeSessionIdToTransport(transport, token)) {
-      return // transport can't carry a response session id — keep generated behavior
+      return undefined // transport can't carry a response session id — keep generated behavior
     }
 
     data.sessionId = sessionId
     data.sessionSource = 'token'
     data.sessionInfo.clientName = clientInfo?.name
     data.sessionInfo.clientVersion = clientInfo?.version
+    data.sessionInfo.protocolVersion = requestedProtocolVersion
     data.lastActivity = new Date()
     setServerTrackingData(server, data)
+    return sessionId
   } catch (error) {
-    log(`Warning: PostHog MCP analytics failed to mint a stateless session id - ${error}`)
+    data.logger(`Warning: PostHog MCP analytics failed to mint a stateless session id - ${error}`)
+    return undefined
+  }
+}
+
+/**
+ * Rewrite the minted token to carry the *negotiated* protocol version now that
+ * the handler has run. Without this, a server that downgrades the client's
+ * requested version would replay the requested one on later requests (and to
+ * other pods), reporting a version the session is not actually using.
+ */
+function upgradeMintedTokenToNegotiated(
+  server: MCPServerLike,
+  mintedSessionId: string,
+  sessionInfo: SessionInfo,
+  negotiatedProtocolVersion: string | undefined,
+  logger: LoggerFn
+): void {
+  try {
+    const transport = server.transport
+    if (!transport) {
+      return
+    }
+    const token = encodeSessionId({
+      sessionId: mintedSessionId,
+      clientName: sessionInfo.clientName,
+      clientVersion: sessionInfo.clientVersion,
+      protocolVersion: negotiatedProtocolVersion,
+    })
+    writeSessionIdToTransport(transport, token)
+  } catch (error) {
+    logger(`Warning: PostHog MCP analytics failed to upgrade the stateless session token - ${error}`)
   }
 }
 
@@ -492,20 +701,31 @@ export async function handleInitializeRequest(
   server: MCPServerLike,
   originalInitializeHandler: MCPRequestHandler,
   request: MCPRequestLike,
-  extra?: CompatibleRequestHandlerExtra
+  extra: CompatibleRequestHandlerExtra | undefined,
+  logger: LoggerFn
 ): Promise<unknown> {
   const data = getServerTrackingData(server)
   if (!data) {
-    log(
+    logger(
       'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called instrument(server, options) before using tool calls.'
     )
     return await originalInitializeHandler(request, extra)
   }
 
   // Mint first so the `$mcp_initialize` event below already carries the minted id.
-  mintStatelessSessionOnInitialize(server, data, request, extra)
+  const mintedSessionId = mintStatelessSessionOnInitialize(server, data, request, extra)
   const sessionId = getSessionId(server, extra)
-  await handleIdentify(server, data, sessionId, request, extra)
+  // Snapshot before identify, metadata, or the initialize handler can yield to
+  // another request using the same instrumented server.
+  const sessionInfo = getSessionInfo(server, data, sessionId)
+  const initializeClientInfo = readInitializeClientInfo(request)
+  const requestSessionInfo: SessionInfo = {
+    ...sessionInfo,
+    clientName: initializeClientInfo?.name ?? sessionInfo.clientName,
+    clientVersion: initializeClientInfo?.version ?? sessionInfo.clientVersion,
+  }
+  const identity = await handleIdentify(server, data, sessionId, request, requestSessionInfo, extra)
+  const requestAttribution = withIdentity(requestSessionInfo, identity)
 
   const event: McpEvent = {
     sessionId,
@@ -514,11 +734,47 @@ export async function handleInitializeRequest(
     parameters: buildCapturedMcpParameters(request),
     timestamp: new Date(),
   }
+  // Harmless for a legacy `initialize` (client info rides the body there, and the
+  // negotiated protocol version below overrides any `_meta` one); picks up client
+  // info if a client also sends it in `_meta`.
+  stampMetaClientInfo(event, request)
 
   await applyResolvedMetadata(event, data, request, extra)
 
   const result = await originalInitializeHandler(request, extra)
   event.response = result
-  captureEvent(server, event)
+  // The negotiated version (off the response) supersedes the requested one the
+  // mint stored — persist it so every later event on this pod carries it, and
+  // re-mint the token so pods replaying it report the negotiated version too.
+  const negotiatedProtocolVersion = readProtocolVersion(result, request)
+  event.protocolVersion = negotiatedProtocolVersion
+  // Do not let a delayed initialize overwrite whichever session became current
+  // while its callbacks or the original handler were awaiting.
+  if (data.sessionId === sessionId) {
+    data.sessionInfo = { ...data.sessionInfo, protocolVersion: negotiatedProtocolVersion }
+    setServerTrackingData(server, data)
+  }
+  if (mintedSessionId) {
+    upgradeMintedTokenToNegotiated(server, mintedSessionId, requestSessionInfo, negotiatedProtocolVersion, data.logger)
+  }
+  captureEvent(server, event, data.logger, {
+    ...requestAttribution,
+    protocolVersion: negotiatedProtocolVersion,
+  })
   return result
+}
+
+/**
+ * The MCP spec (protocol) version this session speaks. Prefer the negotiated
+ * version off the initialize response — the version the server committed to and
+ * the session actually runs on — falling back to the client's requested version
+ * if the response omits it. Used to track spec-revision adoption.
+ */
+function readProtocolVersion(result: unknown, request: MCPRequestLike): string | undefined {
+  const negotiated = (result as Record<string, unknown> | null | undefined)?.protocolVersion
+  if (typeof negotiated === 'string' && negotiated.length > 0) {
+    return negotiated
+  }
+  const requested = request.params?.protocolVersion
+  return typeof requested === 'string' && requested.length > 0 ? requested : undefined
 }

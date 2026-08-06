@@ -1,6 +1,6 @@
 import { PostHog } from '../../posthog-core'
 import { createPosthogInstance } from '../helpers/posthog-instance'
-import { uuidv7 } from '../../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
 import { RemoteConfig } from '../../types'
 
@@ -21,8 +21,8 @@ describe('ExceptionObserver', () => {
                 [EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]: true,
             })
 
-            // Call with empty config (simulating config fetch failure)
-            instance.exceptionObserver.onRemoteConfig({} as RemoteConfig)
+            // Call with empty config (server returned no setting for this feature)
+            instance.exceptionObserver.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
 
             // Should NOT have overwritten the existing value
             expect(instance.persistence?.props[EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]).toBe(true)
@@ -34,8 +34,11 @@ describe('ExceptionObserver', () => {
             })
 
             instance.exceptionObserver.onRemoteConfig({
-                autocaptureExceptions: false,
-            } as RemoteConfig)
+                ok: true,
+                config: {
+                    autocaptureExceptions: false,
+                } as RemoteConfig,
+            })
 
             expect(instance.persistence?.props[EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]).toBe(false)
         })
@@ -46,8 +49,11 @@ describe('ExceptionObserver', () => {
             })
 
             instance.exceptionObserver.onRemoteConfig({
-                autocaptureExceptions: true,
-            } as RemoteConfig)
+                ok: true,
+                config: {
+                    autocaptureExceptions: true,
+                } as RemoteConfig,
+            })
 
             expect(instance.persistence?.props[EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]).toBe(true)
         })

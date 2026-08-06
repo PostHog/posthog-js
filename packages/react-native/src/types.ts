@@ -209,3 +209,11 @@ export interface PostHogCustomStorage {
   getItem: (key: string) => string | null | Promise<string | null>
   setItem: (key: string, value: string) => void | Promise<void>
 }
+
+/**
+ * Mints a signed identity-verification token for a push subscription request.
+ *
+ * Called by the native SDK with the current `distinctId` and `appId`. Return
+ * `null` to send the request without an identity token.
+ */
+export type PostHogPushIdentityProvider = (distinctId: string, appId: string) => Promise<string | null>

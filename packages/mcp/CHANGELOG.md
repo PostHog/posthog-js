@@ -1,5 +1,69 @@
 # @posthog/mcp
 
+## 0.10.7
+
+### Patch Changes
+
+- [#4357](https://github.com/PostHog/posthog-js/pull/4357) [`632049c`](https://github.com/PostHog/posthog-js/commit/632049cc8b3ba3a9dc76d00be68ebe7de9eaa69d) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent concurrent MCP requests from leaking identity and session attribution.
+  (2026-08-04)
+- Updated dependencies [[`facb4c1`](https://github.com/PostHog/posthog-js/commit/facb4c1e173c0afc6b4c14154a0e65ed239d43f4)]:
+  - posthog-node@5.47.9
+
+## 0.10.6
+
+### Patch Changes
+
+- [#4356](https://github.com/PostHog/posthog-js/pull/4356) [`1eab19a`](https://github.com/PostHog/posthog-js/commit/1eab19a7b80ed275059cb17d9b513e8fbac6d94e) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve real missing-capability tools when their names collide with the configured virtual tool.
+  Restore `$mcp_tool_call` analytics for low-level servers that register their tool dispatcher after instrumentation. (2026-08-04)
+
+## 0.10.5
+
+### Patch Changes
+
+- [#4359](https://github.com/PostHog/posthog-js/pull/4359) [`d2f5041`](https://github.com/PostHog/posthog-js/commit/d2f504156faee7fe008388c70ec451339002cd3a) Thanks [@marandaneto](https://github.com/marandaneto)! - Isolate logger configuration per instrumented MCP server.
+  (2026-08-04)
+
+## 0.10.4
+
+### Patch Changes
+
+- [#4379](https://github.com/PostHog/posthog-js/pull/4379) [`4d8df50`](https://github.com/PostHog/posthog-js/commit/4d8df50bea343aee7626483d4c3be9703bafc024) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve tool-owned analytics arguments across event capture, low-level servers, and strict schemas.
+  (2026-08-04)
+
+## 0.10.3
+
+### Patch Changes
+
+- [#4355](https://github.com/PostHog/posthog-js/pull/4355) [`57f371e`](https://github.com/PostHog/posthog-js/commit/57f371e540968afaa8a0fe9aec8a53ef1db6b654) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve user-defined `context` and `conversation_id` tool arguments.
+  (2026-08-03)
+- Updated dependencies [[`7c3a9af`](https://github.com/PostHog/posthog-js/commit/7c3a9af42be80051705f7fe820623dd7e1b879d5)]:
+  - @posthog/core@1.46.2
+  - posthog-node@5.47.4
+
+## 0.10.2
+
+### Patch Changes
+
+- [#4358](https://github.com/PostHog/posthog-js/pull/4358) [`575c5e7`](https://github.com/PostHog/posthog-js/commit/575c5e75cc4f7ad39ac41001994e76194765bdbf) Thanks [@marandaneto](https://github.com/marandaneto)! - Redact sensitive exception messages and large binary payload encodings from MCP analytics.
+  (2026-07-31)
+
+## 0.10.1
+
+### Patch Changes
+
+- [#4237](https://github.com/PostHog/posthog-js/pull/4237) [`23ce761`](https://github.com/PostHog/posthog-js/commit/23ce761b44f51d1bb46aa07b0e1becbf31ae878c) Thanks [@gesh](https://github.com/gesh)! - Read the MCP client name/version and protocol version from each request's `_meta` (`io.modelcontextprotocol/clientInfo` and `io.modelcontextprotocol/protocolVersion`), so `$mcp_client_name`, `$mcp_client_version`, and `$mcp_protocol_version` keep populating under the MCP 2026-07-28 stateless revision, which removes the `initialize` handshake. Existing clients are unaffected — when `_meta` is absent, the values from the session token / `initialize` still apply.
+  (2026-07-27)
+
+## 0.10.0
+
+### Minor Changes
+
+- [#4210](https://github.com/PostHog/posthog-js/pull/4210) [`e732595`](https://github.com/PostHog/posthog-js/commit/e7325959c4c365895945ae06091fd74439ecb2db) Thanks [@gesh](https://github.com/gesh)! - feat(mcp): capture the negotiated MCP protocol version as `$mcp_protocol_version`
+
+  The SDK now stamps `$mcp_protocol_version` — the MCP spec version negotiated at `initialize` (read off the server's initialize response) — on the `$mcp_initialize` event and on **every** subsequent event for the session (tool calls, listings, and the `$exception` sibling). It's persisted in per-server session info and, on stateless / multi-pod deployments, recovered on other pods from the session token, which now carries the client's requested version in a new `pv` field. Use it to track MCP spec-revision adoption and to break event metrics (error rate, latency) down by spec version.
+
+  `SessionTokenPayload` gains an optional `protocolVersion`, and `PostHogMCP.captureInitialize` accepts an optional `protocolVersion`. (2026-07-21) (2026-07-22)
+
 ## 0.9.1
 
 ### Patch Changes

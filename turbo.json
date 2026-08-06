@@ -12,6 +12,10 @@
                 ".babelrc",
                 "babel.config.js",
                 "rollup.config.mjs",
+                "scripts/check-mangled-property-consistency.js",
+                "scripts/check-sourcemap-ignore-list.js",
+                "terser-cross-bundle-properties.cjs",
+                "terser-mangled-names.json",
                 "rslib.config.mjs",
                 "vite.config.ts",
                 "vite.config.js"
@@ -40,6 +44,11 @@
             "inputs": ["dist/**", "lib/**", "react/**"],
             "env": ["PACKAGE_DEST"],
             "cache": false
+        },
+        "@posthog/browser-common#build": {
+            "dependsOn": ["^build"],
+            "inputs": ["src/**", "tsconfig.json", "tsconfig.build.json", "package.json", "rslib.config.ts"],
+            "outputs": ["dist/**"]
         },
         "lint": {
             "dependsOn": []

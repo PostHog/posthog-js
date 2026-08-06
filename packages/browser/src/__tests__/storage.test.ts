@@ -1,4 +1,4 @@
-import { window } from '../../src/utils/globals'
+import { window } from '@posthog/browser-common/utils/globals'
 import {
     resetSessionStorageSupported,
     seekFirstNonPublicSubDomain,

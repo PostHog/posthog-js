@@ -86,6 +86,7 @@ export async function start(
         siteApps: [],
         supportedCompression: [Compression.GZipJS],
         autocaptureExceptions: false,
+        autocapture_opt_out: false,
         ...flagsResponseOverrides,
     }
 

@@ -1,5 +1,5 @@
 import { resetContext, getContext } from 'kea'
-import { posthogKeaLogger } from 'posthog-js/lib/src/customizations'
+import { posthogKeaLogger } from 'posthog-js/customizations'
 
 // Initialize Kea with PostHog logging plugin
 resetContext({

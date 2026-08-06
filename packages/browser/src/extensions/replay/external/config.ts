@@ -1,9 +1,9 @@
 import { CapturedNetworkRequest, NetworkRecordOptions, PostHogConfig } from '../../../types'
 import { isFunction, isNullish, isString, isUndefined } from '@posthog/core'
-import { convertToURL } from '../../../utils/request-utils'
-import { logger } from '../../../utils/logger'
-import { shouldCaptureValue } from '../../../autocapture-utils'
-import { each } from '../../../utils'
+import { convertToURL } from '@posthog/browser-common/utils/request-utils'
+import { logger } from '@posthog/browser-common/utils/logger'
+import { shouldCaptureValue } from '@posthog/browser-common/utils/autocapture-utils'
+import { each } from '@posthog/browser-common/utils/general-utils'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 
@@ -251,6 +251,11 @@ function scrubPayloads(capturedRequest: CapturedNetworkRequest | undefined): Cap
     return capturedRequest
 }
 
+const initialMaskFallbackRequests = new WeakSet<CapturedNetworkRequest>()
+
+export const isInitialMaskFallback = (request: CapturedNetworkRequest | undefined): boolean =>
+    !!request && initialMaskFallbackRequests.has(request)
+
 /**
  *  whether a maskRequestFn is provided or not,
  *  we ensure that we remove the denied header from requests
@@ -296,6 +301,13 @@ export const buildNetworkRequestOptions = (
     if (hasDeprecatedMaskFunction) {
         instanceConfig.session_recording.maskCapturedNetworkRequestFn = (data: CapturedNetworkRequest) => {
             const cleanedURL = instanceConfig.session_recording.maskNetworkRequestFn!({ url: data.name })
+            // Preserve the nullish signal for initial entries so the required-metadata fallback below can
+            // remove all customer-controlled content. Keep the deprecated URL-only behavior otherwise.
+            if (!cleanedURL && data.isInitial) {
+                return cleanedURL
+            }
+            // the deprecated mask fn can suppress the URL, leaving `name` undefined on purpose
+            // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
             return {
                 ...data,
                 name: cleanedURL?.url,
@@ -306,9 +318,34 @@ export const buildNetworkRequestOptions = (
     config.maskRequestFn = isFunction(instanceConfig.session_recording.maskCapturedNetworkRequestFn)
         ? (data) => {
               const cleanedRequest = enforcedCleaningFn(data)
-              return cleanedRequest
-                  ? (instanceConfig.session_recording.maskCapturedNetworkRequestFn?.(cleanedRequest) ?? undefined)
+              if (!cleanedRequest) {
+                  return undefined
+              }
+
+              // Initial entries are required performance metadata, but their URL is still customer data.
+              // Keep only required, non-content fields before invoking the callback because callbacks may
+              // mutate their argument. In particular, do not copy customer-controlled server timing data.
+              const requiredInitialMetadata: CapturedNetworkRequest | undefined = cleanedRequest.isInitial
+                  ? {
+                        name: '',
+                        entryType: cleanedRequest.entryType,
+                        startTime: cleanedRequest.startTime,
+                        duration: cleanedRequest.duration,
+                        endTime: cleanedRequest.endTime,
+                        timeOrigin: cleanedRequest.timeOrigin,
+                        timestamp: cleanedRequest.timestamp,
+                        isInitial: true,
+                    }
                   : undefined
+              const maskedRequest = instanceConfig.session_recording.maskCapturedNetworkRequestFn?.(cleanedRequest)
+
+              // A nullish result normally drops the request. Initial timing metadata must remain for replay,
+              // so retain it without the URL or any network content rather than exposing deliberately filtered data.
+              if (isNullish(maskedRequest) && requiredInitialMetadata) {
+                  initialMaskFallbackRequests.add(requiredInitialMetadata)
+                  return requiredInitialMetadata
+              }
+              return maskedRequest ?? undefined
           }
         : (data) => scrubPayloads(enforcedCleaningFn(data))
 

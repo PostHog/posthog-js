@@ -12,7 +12,9 @@ import postcssNesting from 'postcss-nesting'
 import cssnano from 'cssnano'
 import fs from 'fs'
 import path from 'path'
+import crossBundlePropertyConfig from './terser-cross-bundle-properties.cjs'
 
+const { crossBundlePrivateProperties, globallyReservedPrivateProperties } = crossBundlePropertyConfig
 const WRITE_MANGLED_PROPERTIES = process.env.WRITE_MANGLED_PROPERTIES
 const nameCachePath = './terser-mangled-names.json'
 let nameCache = {}
@@ -22,7 +24,7 @@ let nameCache = {}
 // Only property names (props) are shared; top-level variable names (vars) are
 // reset per-entry by the plugin below since each module has its own scope.
 
-const plugins = (es5, noExternal) => [
+const plugins = (es5, noExternal, preserveCrossBundleProperties) => [
     {
         name: 'reset-vars-name-cache',
         buildStart() {
@@ -77,6 +79,14 @@ const plugins = (es5, noExternal) => [
     babel({
         extensions: ['.mjs', '.js', '.jsx', '.ts', '.tsx'],
         babelHelpers: 'bundled',
+        overrides: [
+            {
+                // This prebuilt rrweb module intentionally exceeds Babel's 500 KB compacting threshold.
+                // Make the existing behavior explicit without hiding warnings for other unexpectedly large modules.
+                test: /[\\/]packages[\\/]rrweb[\\/]rrweb[\\/]dist[\\/]rrweb\.js$/,
+                compact: true,
+            },
+        ],
         plugins: [
             '@babel/plugin-transform-nullish-coalescing-operator',
             // Explicitly included so we transform 1 ** 2 to Math.pow(1, 2) for ES6 compatibility
@@ -169,13 +179,14 @@ const plugins = (es5, noExternal) => [
                               // we don't mangle _surveyManager as it's used by external surveys to paint them on the dom directly
                               '_surveyManager',
 
+                              // private ABI between independently emitted slim cores and extension bundles
+                              ...(preserveCrossBundleProperties
+                                  ? crossBundlePrivateProperties
+                                  : globallyReservedPrivateProperties),
+
                               // used in conversations - external bundle needs to access these on the posthog instance
                               '_conversationsManager',
                               '_conversations',
-                              '_send_request', // called by conversations external bundle
-
-                              // used in product-tours - external bundle needs to access this on the posthog instance
-                              '_addCaptureHook',
 
                               // part of setup/teardown code, preserve these out of caution
                               '_init',
@@ -338,9 +349,7 @@ const plugins = (es5, noExternal) => [
 
 const entryFilter = process.env.ENTRY
 const allEntrypoints = fs.readdirSync('./src/entrypoints')
-const entrypoints = entryFilter
-    ? allEntrypoints.filter((file) => file.startsWith(entryFilter))
-    : allEntrypoints
+const entrypoints = entryFilter ? allEntrypoints.filter((file) => file.startsWith(entryFilter)) : allEntrypoints
 
 const entrypointTargets = entrypoints.map((file) => {
     const fileParts = file.split('.')
@@ -357,7 +366,12 @@ const entrypointTargets = entrypoints.map((file) => {
 
     const fileName = fileParts.join('.')
 
-    const pluginsForThisFile = plugins(fileName.includes('es5'), fileName.includes('no-external'))
+    const preserveCrossBundleProperties = ['extension-bundles', 'module.slim'].includes(fileName)
+    const pluginsForThisFile = plugins(
+        fileName.includes('es5'),
+        fileName.includes('no-external'),
+        preserveCrossBundleProperties
+    )
 
     // we're allowed to console log in this file :)
     // eslint-disable-next-line no-console
@@ -370,6 +384,13 @@ const entrypointTargets = entrypoints.map((file) => {
             {
                 file: `dist/${fileName}.js`,
                 sourcemap: true,
+                // Mark every source in our bundles as third-party so devtools skip our frames.
+                // Without this, wrappers we install on globals (most visibly the console capture
+                // in entrypoints/logs.ts and rrweb's console plugin) become the reported location
+                // of the caller's own `console.*` calls (e.g. everything blamed on `logs.ts`).
+                // Rollup's default only ignore-lists paths containing node_modules, which misses
+                // both our `src/` and workspace packages (they resolve through symlinks).
+                sourcemapIgnoreList: () => true,
                 format,
                 ...(format === 'iife'
                     ? {
@@ -379,7 +400,7 @@ const entrypointTargets = entrypoints.map((file) => {
                           },
                       }
                     : {}),
-                ...(format === 'cjs' ? { exports: 'auto' } : {}),
+                ...(format === 'cjs' ? { exports: 'named' } : {}),
             },
         ],
         plugins: [...pluginsForThisFile, visualizer({ filename: `bundle-stats-${fileName}.html`, gzipSize: true })],
@@ -390,9 +411,25 @@ const entrypointTargets = entrypoints.map((file) => {
 // consumers don't need a runtime dep on the re-exported package to resolve them.
 const inlineExternalTypesEntries = new Set([
     'extension-bundles.es.ts',
+    'posthog-recorder.ts',
+    'recorder.ts',
     'rrweb.es.ts',
     'rrweb-types.es.ts',
     'rrweb-plugin-console-record.es.ts',
+])
+
+// Entries whose declarations use PostHog must reference the canonical class in
+// module.d.ts instead of inlining a nominally incompatible copy.
+const mainModuleTypesEntries = new Set([
+    'conversations.ts',
+    'customizations.es.ts',
+    'dead-clicks-autocapture.ts',
+    'main.cjs.ts',
+    'product-tours-preview.es.ts',
+    'product-tours.ts',
+    'surveys-preview.es.ts',
+    'surveys.ts',
+    'tracing-headers.ts',
 ])
 
 // rrdom's dts drops the local `RRNodeType` alias declaration; the renderChunk
@@ -400,14 +437,12 @@ const inlineExternalTypesEntries = new Set([
 const rewriteRrdomNodeTypeAlias = (file) => file === 'rrweb.es.ts'
 
 const typeTargets = entrypoints
-    .filter((file) => file.endsWith('.es.ts'))
+    .filter((file) => file.endsWith('.ts'))
     .map((file) => {
         const source = `./lib/src/entrypoints/${file.replace('.ts', '.d.ts')}`
         const isExtensionBundles = file === 'extension-bundles.es.ts'
-        // customizations types must reference the main module for the PostHog class —
-        // an inlined duplicate would be nominally incompatible with the consumer's
-        // `posthog` instance (same private-fields problem as extension-bundles).
-        const isCustomizations = file === 'customizations.es.ts'
+        const isSlimModule = file === 'module.slim.es.ts'
+        const referencesMainModuleTypes = mainModuleTypesEntries.has(file)
         const inlineExternalTypes = inlineExternalTypesEntries.has(file)
         const rewriteRrdomAlias = rewriteRrdomNodeTypeAlias(file)
         /** @type {import('rollup').RollupOptions} */
@@ -415,13 +450,17 @@ const typeTargets = entrypoints
             input: source,
             // extension-bundles types must reference module.slim rather than inlining
             // their own copies — classes with private fields are nominally typed, so
-            // duplicate declarations across .d.ts files are incompatible.
+            // duplicate declarations across .d.ts files are incompatible. For the same
+            // reason, module.slim must use a source-level re-export from
+            // module.slim.no-external and keep that module external here, so dts preserves
+            // the reference instead of inlining a second declaration graph.
             ...(isExtensionBundles ? { external: [/module\.slim/] } : {}),
-            ...(isCustomizations ? { external: [/posthog-core$/] } : {}),
+            ...(isSlimModule ? { external: [/module\.slim\.no-external/] } : {}),
+            ...(referencesMainModuleTypes ? { external: [/posthog-core$/] } : {}),
             output: [
                 {
                     dir: path.resolve('./dist'),
-                    entryFileNames: file.replace('.es.ts', '.d.ts'),
+                    entryFileNames: file.replace(/(?:\.(?:cjs|es|iife))?\.ts$/, '.d.ts'),
                 },
             ],
             plugins: [
@@ -430,25 +469,30 @@ const typeTargets = entrypoints
                     exclude: [],
                     ...(inlineExternalTypes ? { respectExternal: true } : {}),
                 }),
-                // dts preserves the tsc-era path (e.g. './module.slim.es') but the
-                // output has been renamed to module.slim.d.ts — fix the reference.
-                ...(isExtensionBundles
+                // dts preserves tsc-era paths ending in `.es`, but the output files
+                // omit that segment — fix references between the generated declarations.
+                ...(isExtensionBundles || isSlimModule
                     ? [
                           {
                               name: 'fix-dts-external-paths',
                               renderChunk(code) {
-                                  return code.replace(/\.\/module\.slim\.es(?=['"])/g, './module.slim')
+                                  return code
+                                      .replace(/\.\/module\.slim\.es(?=['"])/g, './module.slim')
+                                      .replace(
+                                          /\.\/module\.slim\.no-external\.es(?=['"])/g,
+                                          './module.slim.no-external'
+                                      )
                               },
                           },
                       ]
                     : []),
-                ...(isCustomizations
+                ...(referencesMainModuleTypes
                     ? [
                           {
-                              name: 'fix-customizations-dts-external-paths',
+                              name: 'fix-main-module-dts-external-paths',
                               renderChunk(code) {
-                                  // the external posthog-core import keeps its source-relative
-                                  // path; point it at dist/module.d.ts instead
+                                  // The external posthog-core import keeps its source-relative
+                                  // path; point it at the canonical PostHog in dist/module.d.ts.
                                   return code.replace(/['"](?:\.\.\/)+posthog-core['"]/g, "'./module'")
                               },
                           },

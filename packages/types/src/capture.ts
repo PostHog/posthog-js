@@ -71,16 +71,19 @@ export interface CaptureOptions {
 
     /**
      * Used to override the desired endpoint for the captured event
+     * @internal
      */
     _url?: string
 
     /**
      * key of queue, e.g. 'sessionRecording' vs 'event'
+     * @internal
      */
     _batchKey?: string
 
     /**
      * If set, overrides and disables config.properties_string_max_length
+     * @internal
      */
     _noTruncate?: boolean
 
@@ -109,7 +112,8 @@ export interface CaptureOptions {
      * invalid values are ignored and a new UUID is generated. Useful for cross-source
      * idempotency (e.g. a server webhook and a browser success page both firing for the
      * same business transaction): emit both events with the same deterministic uuid so
-     * PostHog can dedupe them.
+     * storage can eventually deduplicate them. Capture itself does not deduplicate resent
+     * events, and PostHog does not guarantee strict immediate deduplication.
      */
     uuid?: string
 
@@ -117,6 +121,7 @@ export interface CaptureOptions {
      * Internal flag set by captureException() / sendExceptionEvent() to indicate this $exception
      * event originated from the proper exception capture path. Used to warn users who call
      * capture('$exception') directly.
+     * @internal
      */
     _originatedFromCaptureException?: boolean
 }

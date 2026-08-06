@@ -4,12 +4,17 @@ import {
   addDsymUploadBuildPhase,
   addPostHogAndroidGradlePluginClasspath,
   addPostHogWithBundledScriptsToBundleShellScript,
+  applyDotenvFileBuildSetting,
   applyPostHogAndroidGradlePlugin,
+  buildAndroidDotenvFileGradleValue,
   buildAndroidSkipOnConflictGradleLine,
   buildDsymUploadShellScript,
+  buildIosDotenvFileBuildSetting,
   disableUserScriptSandboxing,
   modifyExistingXcodeBuildScript,
+  resolveDotenvFileProp,
   resolveNativeSymbolUpload,
+  updateDotenvFileGradleProperties,
 } from '../src/tooling/expoconfig'
 
 type MockBuildConfig = { buildSettings: Record<string, string> }
@@ -60,17 +65,16 @@ describe('disableUserScriptSandboxing', () => {
   })
 })
 
-// Extracts the argument that would become $1 inside posthog-xcode.sh when
-// the wrapped line is executed by the shell. The shell runs:
-//   /bin/sh <posthog-xcode.sh-path> <...rest>
-// so $1 is the token immediately after the posthog-xcode.sh path.
-const extractArg1 = (wrappedLine: string): string => {
-  // The line looks like: /bin/sh `<node eval>` <arg1> ...
-  // Split on the backtick-delimited posthog-xcode.sh path expression, then
-  // take the first whitespace-separated token from whatever follows it.
-  const afterPosthog = wrappedLine.split(/`[^`]+`/)[1] ?? ''
-  return afterPosthog.trim().split(/\s+/)[0]
-}
+const SENTRY_REACT_NATIVE_XCODE_PATH =
+  "`\"$NODE_BINARY\" --print \"require('path').dirname(require.resolve('@sentry/react-native/package.json')) + '/scripts/sentry-xcode.sh'\"`"
+
+// Mirrors @sentry/react-native's Expo config-plugin transformation so these
+// tests cover both plugin execution orders without adding Sentry as a dependency.
+const addSentryWithBundledScriptsToBundleShellScript = (script: string): string =>
+  script.replace(
+    /^.*?(packager|scripts)\/react-native-xcode\.sh\s*(\\'\\\\")?/m,
+    (match) => `/bin/sh ${SENTRY_REACT_NATIVE_XCODE_PATH} ${match}`
+  )
 
 const expectValidShellSyntax = (script: string): void => {
   const result = spawnSync('/bin/sh', ['-n'], { input: script, encoding: 'utf8' })
@@ -84,7 +88,7 @@ describe('addPostHogWithBundledScriptsToBundleShellScript', () => {
     const wrapped = addPostHogWithBundledScriptsToBundleShellScript(original)
     expect(wrapped).toContain('posthog-xcode.sh')
     expect(wrapped).toContain('react-native-xcode.sh')
-    expect(wrapped.startsWith('/bin/sh ')).toBe(true)
+    expect(wrapped.startsWith('/bin/sh ')).toBe(false)
     expect(wrapped.indexOf('posthog-xcode.sh')).toBeLessThan(wrapped.indexOf('react-native-xcode.sh'))
   })
 
@@ -95,22 +99,32 @@ describe('addPostHogWithBundledScriptsToBundleShellScript', () => {
     expect(wrapped).toContain('packager/react-native-xcode.sh')
   })
 
-  // Regression tests for issue #3682:
-  // When the Expo bundle phase already contains a /bin/sh prefix (common in
-  // Expo SDK 53+ and plain RN projects), posthog-xcode.sh receives /bin/sh as
-  // $1, which makes the REACT_NATIVE_XCODE variable resolve to /bin/sh instead
-  // of react-native-xcode.sh, silently breaking the PACKAGER_SOURCEMAP_FILE patch.
-  it.each([
-    ['simple path (no shell prefix)', '../node_modules/react-native/scripts/react-native-xcode.sh'],
-    [
-      'shell-prefixed command (Expo SDK 53+ / plain RN)',
-      '/bin/sh "$PODS_ROOT/../.."/node_modules/react-native/scripts/react-native-xcode.sh',
-    ],
-  ])('arg1 passed to posthog-xcode.sh is react-native-xcode.sh path, not /bin/sh — %s', (_desc, original) => {
+  it('preserves a shell-prefixed React Native command for argument forwarding', () => {
+    const original = '/bin/sh "$PODS_ROOT/../.."/node_modules/react-native/scripts/react-native-xcode.sh'
     const wrapped = addPostHogWithBundledScriptsToBundleShellScript(original)
-    const arg1 = extractArg1(wrapped)
-    expect(arg1).toContain('react-native-xcode.sh')
-    expect(arg1).not.toBe('/bin/sh')
+
+    expect(wrapped).toContain('/bin/sh "$PODS_ROOT/../.."/node_modules/react-native/scripts/react-native-xcode.sh')
+    expectValidShellSyntax(wrapped)
+  })
+
+  it('composes outside an existing Sentry wrapper', () => {
+    const reactNativeCommand = '../node_modules/react-native/scripts/react-native-xcode.sh'
+    const sentryWrapped = `/bin/sh ${SENTRY_REACT_NATIVE_XCODE_PATH} ${reactNativeCommand}`
+    const wrapped = addPostHogWithBundledScriptsToBundleShellScript(sentryWrapped)
+
+    expect(wrapped.indexOf('posthog-xcode.sh')).toBeLessThan(wrapped.indexOf('sentry-xcode.sh'))
+    expect(wrapped).toContain(`/bin/sh ${SENTRY_REACT_NATIVE_XCODE_PATH} ${reactNativeCommand}`)
+    expectValidShellSyntax(wrapped)
+  })
+
+  it('remains composable when Sentry wraps it afterwards', () => {
+    const reactNativeCommand = '../node_modules/react-native/scripts/react-native-xcode.sh'
+    const postHogWrapped = addPostHogWithBundledScriptsToBundleShellScript(reactNativeCommand)
+    const sentryWrapped = addSentryWithBundledScriptsToBundleShellScript(postHogWrapped)
+
+    expect(sentryWrapped).toBe(`/bin/sh ${SENTRY_REACT_NATIVE_XCODE_PATH} ${postHogWrapped}`)
+    expect(sentryWrapped).not.toContain(`${SENTRY_REACT_NATIVE_XCODE_PATH} /bin/sh`)
+    expectValidShellSyntax(sentryWrapped)
   })
 
   it('preserves the full Expo backtick command when wrapping react-native-xcode.sh', () => {
@@ -127,11 +141,12 @@ describe('addPostHogWithBundledScriptsToBundleShellScript', () => {
     expectValidShellSyntax(wrapped)
   })
 
-  it('passes skipOnConflict before the react-native-xcode.sh command', () => {
+  it('exports skipOnConflict before the wrapped command so outer wrappers inherit it', () => {
     const original = 'node_modules/react-native/scripts/react-native-xcode.sh'
     const wrapped = addPostHogWithBundledScriptsToBundleShellScript(original, true)
 
-    expect(wrapped).toContain('--posthog-skip-on-conflict -- node_modules/react-native/scripts/react-native-xcode.sh')
+    expect(wrapped).toContain('export POSTHOG_SKIP_ON_CONFLICT=1\n')
+    expect(wrapped).not.toContain('--posthog-skip-on-conflict')
     expectValidShellSyntax(wrapped)
   })
 })
@@ -148,7 +163,7 @@ describe('modifyExistingXcodeBuildScript', () => {
     const script = { shellScript: JSON.stringify('"../node_modules/react-native/scripts/react-native-xcode.sh"') }
     modifyExistingXcodeBuildScript(script, true)
     const parsed = JSON.parse(script.shellScript)
-    expect(parsed).toContain('--posthog-skip-on-conflict --')
+    expect(parsed).toContain('export POSTHOG_SKIP_ON_CONFLICT=1')
   })
 
   it('updates skipOnConflict on an already wrapped bundle phase', () => {
@@ -156,11 +171,41 @@ describe('modifyExistingXcodeBuildScript', () => {
     modifyExistingXcodeBuildScript(script)
     modifyExistingXcodeBuildScript(script, true)
     let parsed = JSON.parse(script.shellScript)
-    expect(parsed).toContain('--posthog-skip-on-conflict --')
+    expect(parsed).toContain('export POSTHOG_SKIP_ON_CONFLICT=1')
 
     modifyExistingXcodeBuildScript(script, false)
     parsed = JSON.parse(script.shellScript)
+    expect(parsed).not.toContain('POSTHOG_SKIP_ON_CONFLICT')
+  })
+
+  it('migrates an existing shell-prefixed PostHog wrapper to a composable invocation', () => {
+    const reactNativeCommand = '../node_modules/react-native/scripts/react-native-xcode.sh'
+    const oldWrapped = `/bin/sh ${addPostHogWithBundledScriptsToBundleShellScript(reactNativeCommand)}`
+    const script = { shellScript: JSON.stringify(oldWrapped) }
+
+    modifyExistingXcodeBuildScript(script)
+
+    const parsed = JSON.parse(script.shellScript)
+    expect(parsed.startsWith('/bin/sh ')).toBe(false)
+    expect(parsed).toContain('posthog-xcode.sh')
+  })
+
+  it('migrates a shell-prefixed wrapper and legacy skip argument together', () => {
+    const reactNativeCommand = '../node_modules/react-native/scripts/react-native-xcode.sh'
+    const currentWrapped = addPostHogWithBundledScriptsToBundleShellScript(reactNativeCommand)
+    const legacyWrapped = `/bin/sh ${currentWrapped.replace(
+      ` ${reactNativeCommand}`,
+      ` --posthog-skip-on-conflict -- ${reactNativeCommand}`
+    )}`
+    const script = { shellScript: JSON.stringify(legacyWrapped) }
+
+    modifyExistingXcodeBuildScript(script, true)
+
+    const parsed = JSON.parse(script.shellScript)
+    expect(parsed.startsWith('/bin/sh ')).toBe(false)
     expect(parsed).not.toContain('--posthog-skip-on-conflict --')
+    expect(parsed).toContain('export POSTHOG_SKIP_ON_CONFLICT=1')
+    expect(parsed).toContain(` ${reactNativeCommand}`)
   })
 
   it('wraps Expo backtick bundle phase shellScript without creating invalid shell syntax', () => {
@@ -398,13 +443,16 @@ describe('addPostHogAndroidGradlePluginClasspath', () => {
   })
 
   it('leaves contents unchanged and reports not present when there is no buildscript dependencies block', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
     const contents = 'plugins {\n  id "com.android.application"\n}'
     const result = addPostHogAndroidGradlePluginClasspath(contents)
     expect(result.contents).toBe(contents)
     expect(result.classpathPresent).toBe(false)
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Could not find a buildscript dependencies block'))
   })
 
   it('does not place the classpath in a later block when buildscript has no dependencies block', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
     const contents = [
       'buildscript {',
       '    repositories { google() }',
@@ -418,6 +466,113 @@ describe('addPostHogAndroidGradlePluginClasspath', () => {
     // The only dependencies block is in allprojects, outside buildscript — must not be used.
     expect(result.classpathPresent).toBe(false)
     expect(result.contents).toBe(contents)
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Could not find a buildscript dependencies block'))
+  })
+})
+
+describe('buildIosDotenvFileBuildSetting', () => {
+  it('anchors relative paths one level above the generated ios/ dir', () => {
+    expect(buildIosDotenvFileBuildSetting('.env')).toBe('"$(SRCROOT)/../.env"')
+    expect(buildIosDotenvFileBuildSetting('config/.env.posthog')).toBe('"$(SRCROOT)/../config/.env.posthog"')
+  })
+
+  it('strips a leading ./ before joining', () => {
+    expect(buildIosDotenvFileBuildSetting('./.env')).toBe('"$(SRCROOT)/../.env"')
+  })
+
+  it('passes absolute paths through unanchored', () => {
+    expect(buildIosDotenvFileBuildSetting('/secrets/.env')).toBe('"/secrets/.env"')
+  })
+
+  it('escapes quotes and backslashes for the pbxproj serialization', () => {
+    expect(buildIosDotenvFileBuildSetting('we"ird\\path.env')).toBe('"$(SRCROOT)/../we\\"ird\\\\path.env"')
+  })
+})
+
+describe('applyDotenvFileBuildSetting', () => {
+  it('sets POSTHOG_CLI_DOTENV_FILE on every build configuration', () => {
+    const xp = mockXcodeProject()
+    applyDotenvFileBuildSetting(xp, '.env')
+    for (const key of Object.keys(xp.configs)) {
+      expect(xp.configs[key].buildSettings.POSTHOG_CLI_DOTENV_FILE).toBe('"$(SRCROOT)/../.env"')
+    }
+  })
+
+  it('removes the setting again when the prop is absent', () => {
+    const xp = mockXcodeProject()
+    applyDotenvFileBuildSetting(xp, '.env')
+    applyDotenvFileBuildSetting(xp)
+    for (const key of Object.keys(xp.configs)) {
+      expect(xp.configs[key].buildSettings).not.toHaveProperty('POSTHOG_CLI_DOTENV_FILE')
+    }
+  })
+
+  it('preserves existing build settings', () => {
+    const xp = mockXcodeProject()
+    applyDotenvFileBuildSetting(xp, '.env')
+    expect(xp.configs['1A:Release'].buildSettings.PRODUCT_NAME).toBe('"MyApp"')
+  })
+
+  it('is idempotent — running twice yields the same result', () => {
+    const xp = mockXcodeProject()
+    applyDotenvFileBuildSetting(xp, '.env')
+    applyDotenvFileBuildSetting(xp, '.env')
+    expect(xp.configs['1A:Release'].buildSettings.POSTHOG_CLI_DOTENV_FILE).toBe('"$(SRCROOT)/../.env"')
+  })
+})
+
+describe('resolveDotenvFileProp', () => {
+  it('treats undefined, empty, and whitespace-only values as unset', () => {
+    expect(resolveDotenvFileProp(undefined)).toBeUndefined()
+    expect(resolveDotenvFileProp('')).toBeUndefined()
+    expect(resolveDotenvFileProp('   ')).toBeUndefined()
+  })
+
+  it('trims surrounding whitespace from real values', () => {
+    expect(resolveDotenvFileProp(' .env ')).toBe('.env')
+    expect(resolveDotenvFileProp('.env.production')).toBe('.env.production')
+  })
+})
+
+describe('buildAndroidDotenvFileGradleValue', () => {
+  it('anchors relative paths one level above the generated android/ dir', () => {
+    expect(buildAndroidDotenvFileGradleValue('.env')).toBe('../.env')
+    expect(buildAndroidDotenvFileGradleValue('./.env')).toBe('../.env')
+  })
+
+  it('passes absolute paths through unanchored', () => {
+    expect(buildAndroidDotenvFileGradleValue('/secrets/.env')).toBe('/secrets/.env')
+  })
+})
+
+describe('updateDotenvFileGradleProperties', () => {
+  const unrelated = [
+    { type: 'comment', value: 'Project-wide Gradle settings.' },
+    { type: 'property', key: 'android.useAndroidX', value: 'true' },
+    { type: 'empty' },
+  ]
+
+  it('appends the posthog.dotenvFile entry when the prop is set', () => {
+    const result = updateDotenvFileGradleProperties([...unrelated], '.env')
+    expect(result).toEqual([...unrelated, { type: 'property', key: 'posthog.dotenvFile', value: '../.env' }])
+  })
+
+  it('replaces an existing entry instead of duplicating it', () => {
+    const withEntry = updateDotenvFileGradleProperties([...unrelated], '.env')
+    const result = updateDotenvFileGradleProperties(withEntry, 'config/.env.posthog')
+    expect(result.filter((item) => item.key === 'posthog.dotenvFile')).toEqual([
+      { type: 'property', key: 'posthog.dotenvFile', value: '../config/.env.posthog' },
+    ])
+  })
+
+  it('removes the entry when the prop is absent', () => {
+    const withEntry = updateDotenvFileGradleProperties([...unrelated], '.env')
+    expect(updateDotenvFileGradleProperties(withEntry)).toEqual(unrelated)
+  })
+
+  it('leaves unrelated properties untouched', () => {
+    const result = updateDotenvFileGradleProperties([...unrelated], '.env')
+    expect(result.slice(0, unrelated.length)).toEqual(unrelated)
   })
 })
 

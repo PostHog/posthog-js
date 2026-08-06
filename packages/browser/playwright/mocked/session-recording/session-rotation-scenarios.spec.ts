@@ -422,3 +422,84 @@ test.describe('Session rotation scenarios', () => {
         expect(allCustomTags).not.toContain('$session_id_change')
     })
 })
+
+test.describe('Session rotation without user interaction', () => {
+    // Regression test for #4202: a tab with no user interaction keeps the recorder in the
+    // 'unknown' idle state. An analytics-driven activity-timeout rotation must still restart
+    // the recorder and re-sync ids — but the rotation-born session must NOT ship a billable
+    // recording until the user actually interacts; then it ships, playable from its start.
+    // Runs in both compression modes: the restart happens mid-stream, so it exercises the
+    // rotation + compression-queue interaction as well.
+    for (const compressEvents of [false, true]) {
+        test(`holds the rotation-born session until interaction, then ships a playable recording (compress_events: ${compressEvents})`, async ({
+            page,
+            context,
+        }) => {
+            const variantStartOptions = {
+                ...startOptions,
+                options: {
+                    ...startOptions.options,
+                    session_recording: { compress_events: compressEvents },
+                },
+            }
+            await page.waitingForNetworkCausedBy({
+                urlPatternsToWaitFor: ['**/*recorder.js*'],
+                action: async () => {
+                    await start(variantStartOptions, page, context)
+                },
+            })
+            await waitForSessionRecordingToStart(page)
+            await page.resetCapturedEvents()
+
+            const initialSessionId = await getSessionId(page)
+
+            await simulateFrozenTabIdle(page)
+
+            // an analytics event (e.g. a background tab capturing a network failure) rotates the session
+            await page.evaluate(() => {
+                ;(window as WindowWithPostHog).posthog?.capture('background_tab_event')
+            })
+
+            const newSessionId = await getSessionId(page)
+            expect(newSessionId).not.toEqual(initialSessionId)
+
+            const capturedAnalytics = await page.capturedEvents()
+            const backgroundEvent = capturedAnalytics.find((e) => e.event === 'background_tab_event')
+            expect(backgroundEvent?.properties.$session_id).toEqual(newSessionId)
+
+            // without interaction the rotation-born session must not ship anything —
+            // wait out a couple of flush cycles to prove the timer doesn't flush it
+            await page.waitForTimeout(5000)
+            const heldSnapshots = (await page.capturedEvents()).filter(
+                (e) => e.event === '$snapshot' && e.properties.$session_id === newSessionId
+            )
+            expect(heldSnapshots).toEqual([])
+
+            // first user interaction releases the held buffer
+            await page.waitingForNetworkCausedBy({
+                urlPatternsToWaitFor: ['**/ses/*'],
+                action: async () => {
+                    await page.locator('[data-cy-input]').type('first interaction!')
+                },
+            })
+
+            // allow a further flush cycle to land so a duplicated restart would be visible below
+            await page.waitForTimeout(2500)
+
+            const snapshots = (await page.capturedEvents()).filter((e) => e.event === '$snapshot')
+            const newSessionSnapshotData = snapshots
+                .filter((s) => s.properties.$session_id === newSessionId)
+                .flatMap((s: any) => s.properties.$snapshot_data)
+
+            // the new session must open with Meta then FullSnapshot so it is playable,
+            // and the rotation must restart the recorder exactly once — a single pair
+            const metaEvents = newSessionSnapshotData.filter((e: any) => e.type === 4)
+            const fullSnapshotEvents = newSessionSnapshotData.filter((e: any) => e.type === 2)
+            expect(metaEvents.length).toEqual(1)
+            expect(fullSnapshotEvents.length).toEqual(1)
+            const renderable = newSessionSnapshotData.filter((e: any) => e.type === 4 || e.type === 2)
+            expect(renderable[0]?.type).toEqual(4)
+            expect(renderable[1]?.type).toEqual(2)
+        })
+    }
+})

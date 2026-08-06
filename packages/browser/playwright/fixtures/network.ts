@@ -80,6 +80,7 @@ export class NetworkPage {
             siteApps: [],
             supportedCompression: [Compression.GZipJS],
             autocaptureExceptions: false,
+            autocapture_opt_out: false,
             ...flagsOverrides,
         }
 

@@ -27,13 +27,13 @@ import {
 } from './product-tours-utils'
 import { ProductTourTooltip } from './components/ProductTourTooltip'
 import { ProductTourBanner } from './components/ProductTourBanner'
-import { createLogger } from '../../utils/logger'
-import { document as _document, window as _window } from '../../utils/globals'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { document as _document, window as _window } from '@posthog/browser-common/utils/globals'
 import { localStore, sessionStore } from '../../storage'
-import { addEventListener } from '../../utils'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { isNull, isUndefined, SurveyMatchType } from '@posthog/core'
-import { propertyComparisons } from '../../utils/property-utils'
-import { getTargetingUrl } from '../../utils/url-targeting-utils'
+import { propertyComparisons } from '@posthog/browser-common/utils/property-utils'
+import { getTargetingUrl } from '@posthog/browser-common/utils/url-targeting-utils'
 import {
     TOUR_SHOWN_KEY_PREFIX,
     TOUR_COMPLETED_KEY_PREFIX,
@@ -42,10 +42,10 @@ import {
     LAST_SEEN_TOUR_DATE_KEY_PREFIX,
 } from './constants'
 import { doesTourActivateByAction, doesTourActivateByEvent } from '../../utils/product-tour-utils'
-import { TOOLBAR_ID } from '../../constants'
+import { TOOLBAR_ID } from '@posthog/browser-common/constants'
 import { ProductTourEventReceiver } from '../../utils/product-tour-event-receiver'
-import { getBrowserLanguage } from '../../utils/event-utils'
-import { doesDeviceTypeMatch } from '../utils/matcher-utils'
+import { getBrowserLanguage } from '@posthog/browser-common/utils/event-utils'
+import { doesDeviceTypeMatch } from '@posthog/browser-common/utils/matcher-utils'
 
 const logger = createLogger('[Product Tours]')
 

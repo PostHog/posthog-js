@@ -107,6 +107,16 @@ export type FeatureFlagOptions = {
 }
 
 /**
+ * Options for isFeatureEnabled.
+ */
+export type IsFeatureEnabledOptions = FeatureFlagOptions & {
+    /**
+     * Value to return when the flag has no value, e.g. flags have not loaded yet or no flag with that key exists.
+     */
+    defaultValue?: boolean
+}
+
+/**
  * Options for overriding feature flags on the client-side.
  *
  * Can be:

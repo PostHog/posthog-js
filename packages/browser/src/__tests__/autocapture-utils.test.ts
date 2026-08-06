@@ -14,8 +14,8 @@ import {
     getElementsChainString,
     getClassNames,
     makeSafeText,
-} from '../autocapture-utils'
-import { document } from '../utils/globals'
+} from '@posthog/browser-common/utils/autocapture-utils'
+import { document } from '@posthog/browser-common/utils/globals'
 import { makeMouseEvent } from './autocapture.test'
 import { createMockPostHog } from './helpers/posthog-instance'
 import { AutocaptureConfig, PostHogConfig } from '../types'

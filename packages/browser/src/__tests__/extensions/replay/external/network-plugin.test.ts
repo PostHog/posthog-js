@@ -2,7 +2,9 @@
 
 import { expect } from '@jest/globals'
 import { TextDecoder as NodeTextDecoder, TextEncoder as NodeTextEncoder } from 'util'
-import { NetworkRecordOptions } from '../../../../types'
+import { buildNetworkRequestOptions } from '../../../../extensions/replay/external/config'
+import { CapturedNetworkRequest, NetworkRecordOptions } from '../../../../types'
+import { defaultConfig } from '../../../../posthog-core'
 import {
     _contentLengthExceedsLimit,
     _readBody,
@@ -84,6 +86,26 @@ function createMockWindow() {
     mockWindow.PerformanceObserver.supportedEntryTypes = ['navigation', 'resource']
 
     return { mockWindow, performanceEntries, observerCallbacks }
+}
+
+function createResourceTimingEntry(name: string, serverTimingName: string, serverTimingDuration: number) {
+    return {
+        name,
+        entryType: 'resource',
+        initiatorType: 'fetch',
+        startTime: 10,
+        responseEnd: 20,
+        serverTiming: [{ name: serverTimingName, duration: serverTimingDuration }],
+        toJSON() {
+            return {
+                name: this.name,
+                entryType: this.entryType,
+                initiatorType: this.initiatorType,
+                startTime: this.startTime,
+                duration: 10,
+            }
+        },
+    }
 }
 
 const blobUrlTestCases = [
@@ -296,6 +318,194 @@ describe('network plugin', () => {
     })
 
     describe('network observer lifecycle', () => {
+        it('emits URL-less initial timing metadata when a method-gated mask filters it', () => {
+            jest.isolateModules(() => {
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
+                const { mockWindow, performanceEntries } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+
+                const entry = createResourceTimingEntry(
+                    'https://example.com/page?token=secret',
+                    'application',
+                    5
+                ) as PerformanceEntry
+                performanceEntries.push(entry)
+                const callback = jest.fn()
+                const posthogConfig = defaultConfig()
+                const maskCapturedNetworkRequestFn = jest.fn((request: CapturedNetworkRequest) =>
+                    request.method === 'GET' ? request : undefined
+                )
+                posthogConfig.session_recording.maskCapturedNetworkRequestFn = maskCapturedNetworkRequestFn
+                const networkOptions = buildNetworkRequestOptions(posthogConfig, { recordPerformance: true })
+                const plugin = getRecordNetworkPlugin(networkOptions)
+                const cleanup = plugin.observer(callback, mockWindow, networkOptions)
+
+                expect(maskCapturedNetworkRequestFn).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        name: 'https://example.com/page?token=secret',
+                        method: undefined,
+                        isInitial: true,
+                    })
+                )
+                expect(callback).toHaveBeenCalledWith({
+                    isInitial: true,
+                    requests: [
+                        expect.objectContaining({
+                            name: '',
+                            entryType: 'resource',
+                            isInitial: true,
+                        }),
+                    ],
+                })
+                cleanup()
+            })
+        })
+
+        it('drops initial server timings when the current mask filters only their parent URL', () => {
+            jest.isolateModules(() => {
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
+                // Use the config module from this isolated module registry so its private fallback tracking is shared.
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                const replayConfig = require('../../../../extensions/replay/external/config')
+                const { mockWindow, performanceEntries } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+
+                const entry = createResourceTimingEntry(
+                    'https://example.com/page?token=secret',
+                    'customer-controlled-timing',
+                    5
+                ) as PerformanceEntry
+                performanceEntries.push(entry)
+                const callback = jest.fn()
+                const posthogConfig = defaultConfig()
+                const maskCapturedNetworkRequestFn = jest.fn((request: CapturedNetworkRequest) =>
+                    request.name === entry.name ? null : request
+                )
+                posthogConfig.session_recording.maskCapturedNetworkRequestFn = maskCapturedNetworkRequestFn
+                const networkOptions = replayConfig.buildNetworkRequestOptions(posthogConfig, {
+                    recordPerformance: true,
+                })
+                const plugin = getRecordNetworkPlugin(networkOptions)
+                const cleanup = plugin.observer(callback, mockWindow, networkOptions)
+
+                expect(maskCapturedNetworkRequestFn).toHaveBeenCalledTimes(1)
+                expect(callback).toHaveBeenCalledWith({
+                    isInitial: true,
+                    requests: [
+                        expect.objectContaining({
+                            name: '',
+                            entryType: 'resource',
+                            startTime: 10,
+                            duration: 10,
+                            endTime: 20,
+                            isInitial: true,
+                        }),
+                    ],
+                })
+                cleanup()
+            })
+        })
+
+        it('drops initial server timings when the deprecated mask filters only their parent URL', () => {
+            jest.isolateModules(() => {
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
+                // Use the config module from this isolated module registry so its private fallback tracking is shared.
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                const replayConfig = require('../../../../extensions/replay/external/config')
+                const { mockWindow, performanceEntries } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+
+                const entry = createResourceTimingEntry(
+                    'https://example.com/page?token=secret',
+                    'customer-controlled-timing',
+                    5
+                ) as PerformanceEntry
+                performanceEntries.push(entry)
+                const callback = jest.fn()
+                const posthogConfig = defaultConfig()
+                const maskNetworkRequestFn = jest.fn(({ url }: { url: string }) =>
+                    url === entry.name ? null : { url }
+                )
+                posthogConfig.session_recording.maskNetworkRequestFn = maskNetworkRequestFn
+                const networkOptions = replayConfig.buildNetworkRequestOptions(posthogConfig, {
+                    recordPerformance: true,
+                })
+                const plugin = getRecordNetworkPlugin(networkOptions)
+                const cleanup = plugin.observer(callback, mockWindow, networkOptions)
+
+                expect(maskNetworkRequestFn).toHaveBeenCalledTimes(1)
+                expect(callback).toHaveBeenCalledWith({
+                    isInitial: true,
+                    requests: [
+                        expect.objectContaining({
+                            name: '',
+                            entryType: 'resource',
+                            startTime: 10,
+                            duration: 10,
+                            endTime: 20,
+                            isInitial: true,
+                        }),
+                    ],
+                })
+                cleanup()
+            })
+        })
+
+        it('drops server timings derived from a masked PostHog ingestion request', () => {
+            jest.isolateModules(() => {
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
+                const { mockWindow, observerCallbacks } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+
+                const callback = jest.fn()
+                const networkOptions = buildNetworkRequestOptions(
+                    { ...defaultConfig(), api_host: 'https://example.com/ingest' },
+                    { recordPerformance: true }
+                )
+                const plugin = getRecordNetworkPlugin(networkOptions)
+                const cleanup = plugin.observer(callback, mockWindow, networkOptions)
+                const entry = createResourceTimingEntry('https://example.com/ingest/s/?ver=1.406.2', 'proxy', 5)
+
+                observerCallbacks[0]({ getEntries: () => [entry] } as PerformanceObserverEntryList)
+
+                expect(callback).not.toHaveBeenCalled()
+                cleanup()
+            })
+        })
+
+        it('does not let a dropped parent suppress the next request in a performance observer batch', () => {
+            jest.isolateModules(() => {
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                const { getRecordNetworkPlugin } = require('../../../../extensions/replay/external/network-plugin')
+                const { mockWindow, observerCallbacks } = createMockWindow()
+                global.PerformanceObserver = mockWindow.PerformanceObserver
+
+                const callback = jest.fn()
+                const networkOptions = buildNetworkRequestOptions(
+                    { ...defaultConfig(), api_host: 'https://example.com/ingest' },
+                    { recordPerformance: true }
+                )
+                const plugin = getRecordNetworkPlugin(networkOptions)
+                const cleanup = plugin.observer(callback, mockWindow, networkOptions)
+                const droppedEntry = createResourceTimingEntry('https://example.com/ingest/s/', 'proxy', 5)
+                const allowedEntry = createResourceTimingEntry('https://example.com/api/data', 'allowed-proxy', 3)
+
+                observerCallbacks[0]({ getEntries: () => [droppedEntry, allowedEntry] } as PerformanceObserverEntryList)
+
+                expect(callback).toHaveBeenCalledWith({
+                    requests: [
+                        expect.objectContaining({ name: allowedEntry.name, entryType: 'resource' }),
+                        expect.objectContaining({ name: 'allowed-proxy', entryType: 'serverTiming' }),
+                    ],
+                })
+                cleanup()
+            })
+        })
+
         describe('singleton initialization and cleanup', () => {
             it('should initialize successfully on first call', () => {
                 jest.isolateModules(() => {

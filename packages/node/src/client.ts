@@ -5,6 +5,7 @@ import {
   isBlockedUA,
   isPlainObject,
   JsonType,
+  minimizeFlagCalledEventProperties,
   PostHogCaptureOptions,
   PostHogCoreStateless,
   PostHogEventProperties,
@@ -14,8 +15,10 @@ import {
   PostHogFlagsResponse,
   PostHogMetrics,
   PostHogPersistedProperty,
+  Properties,
   resolveMetricsConfig,
   RetriableOptions,
+  raceWithTimeout,
   safeSetTimeout,
   uuidv7,
 } from '@posthog/core'
@@ -145,6 +148,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private _flagOverrides?: Record<string, FeatureFlagValue>
   private _payloadOverrides?: Record<string, JsonType>
 
+  // Server-controlled gate for minimal $feature_flag_called events. Single client-level gate,
+  // last-writer-wins across the two signal sources (v2 /flags responses and the poller's
+  // flag-definition loads) — both derive from the same per-team server config and converge.
+  private _minimalFlagCalledEvents: boolean = false
+
   distinctIdHasSentFlagCalls: Record<string, Set<string>>
 
   // waitUntil debounce state (per-instance)
@@ -238,6 +246,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           },
           onLoad: (count: number) => {
             this._events.emit('localEvaluationFlagsLoaded', count)
+          },
+          onMinimalFlagCalledEvents: (enabled: boolean) => {
+            this._minimalFlagCalledEvents = enabled
           },
           customHeaders: this.getCustomHeaders(),
           cacheProvider: normalizedOptions.flagDefinitionCacheProvider,
@@ -474,6 +485,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         {
           fetch: (url, fetchOptions) => this.fetch(url, fetchOptions),
           onError: (error) => this._events.emit('error', error),
+          compress: (payload) => this.compressPayload(payload),
         }
       )
     }
@@ -1067,8 +1079,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     distinctId: string,
     options: {
       groups?: Record<string, string>
-      personProperties?: Record<string, string>
-      groupProperties?: Record<string, Record<string, string>>
+      personProperties?: Properties
+      groupProperties?: Record<string, Properties>
       onlyEvaluateLocally?: boolean
       sendFeatureFlagEvents?: boolean
       disableGeoip?: boolean
@@ -1181,6 +1193,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       if (flagsResponse === undefined) {
         featureFlagError = FeatureFlagError.UNKNOWN_ERROR
       } else {
+        this._minimalFlagCalledEvents = flagsResponse.minimalFlagCalledEvents === true
         requestId = flagsResponse.requestId
         evaluatedAt = flagsResponse.evaluatedAt
 
@@ -1333,8 +1346,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     distinctId: string,
     options?: {
       groups?: Record<string, string>
-      personProperties?: Record<string, string>
-      groupProperties?: Record<string, Record<string, string>>
+      personProperties?: Properties
+      groupProperties?: Record<string, Properties>
       onlyEvaluateLocally?: boolean
       sendFeatureFlagEvents?: boolean
       disableGeoip?: boolean
@@ -1404,8 +1417,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     matchValue?: FeatureFlagValue,
     options?: {
       groups?: Record<string, string>
-      personProperties?: Record<string, string>
-      groupProperties?: Record<string, Record<string, string>>
+      personProperties?: Properties
+      groupProperties?: Record<string, Properties>
       onlyEvaluateLocally?: boolean
       /** @deprecated THIS OPTION HAS NO EFFECT, kept here for backwards compatibility reasons. */
       sendFeatureFlagEvents?: boolean
@@ -1591,8 +1604,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     distinctId: string,
     options?: {
       groups?: Record<string, string>
-      personProperties?: Record<string, string>
-      groupProperties?: Record<string, Record<string, string>>
+      personProperties?: Properties
+      groupProperties?: Record<string, Properties>
       onlyEvaluateLocally?: boolean
       sendFeatureFlagEvents?: boolean
       disableGeoip?: boolean
@@ -1963,6 +1976,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         flagKeys
       )
       if (details) {
+        this._minimalFlagCalledEvents = details.minimalFlagCalledEvents === true
         requestId = details.requestId
         evaluatedAt = details.evaluatedAt
         errorsWhileComputing = Boolean((details as any).errorsWhileComputingFlags)
@@ -2036,6 +2050,21 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       errorsWhileComputing,
       quotaLimited,
     })
+  }
+
+  /**
+   * Minimal iff this is a `$feature_flag_called` event, the server gate is on, and the flag
+   * is known to not be linked to an experiment. Any missing signal — no gate seen yet,
+   * `$feature_flag_has_experiment` absent — falls back to the full event.
+   *
+   * @internal
+   */
+  private _shouldSendMinimalFlagCalledEvent(event: string, properties: PostHogEventProperties): boolean {
+    return (
+      event === '$feature_flag_called' &&
+      this._minimalFlagCalledEvents &&
+      properties.$feature_flag_has_experiment === false
+    )
   }
 
   /**
@@ -2435,10 +2464,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       // this flush runs before super._shutdown starts its own timeout, so an
       // unresponsive transport must not be able to hold shutdown past the
       // caller's deadline (its retry stack alone can take ~49s).
-      await Promise.race([
+      await raceWithTimeout(
         this._metrics.flush().catch(() => {}),
-        new Promise<void>((resolve) => safeSetTimeout(resolve, Math.max(0, shutdownDeadlineMs - Date.now()))),
-      ])
+        Math.max(0, shutdownDeadlineMs - Date.now())
+      )
       // reset() also invalidates a flush that lost the race above: when its
       // send finally settles, the stale window is discarded instead of being
       // merged back onto a re-armed timer after teardown.
@@ -2594,12 +2623,12 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private addLocalPersonAndGroupProperties(
     distinctId: string,
     groups?: Record<string, string>,
-    personProperties?: Record<string, string>,
-    groupProperties?: Record<string, Record<string, string>>
-  ): { allPersonProperties: Record<string, string>; allGroupProperties: Record<string, Record<string, string>> } {
+    personProperties?: Properties,
+    groupProperties?: Record<string, Properties>
+  ): { allPersonProperties: Properties; allGroupProperties: Record<string, Properties> } {
     const allPersonProperties = { ...(personProperties || {}) }
 
-    const allGroupProperties: Record<string, Record<string, string>> = {}
+    const allGroupProperties: Record<string, Properties> = {}
     if (groups) {
       for (const groupName of Object.keys(groups)) {
         allGroupProperties[groupName] = {
@@ -2612,18 +2641,15 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     return { allPersonProperties, allGroupProperties }
   }
 
-  private personPropertiesForLocalEvaluation(
-    distinctId: string,
-    personProperties?: Record<string, any>
-  ): Record<string, any> {
+  private personPropertiesForLocalEvaluation(distinctId: string, personProperties?: Properties): Record<string, any> {
     return { distinct_id: distinctId, ...(personProperties || {}) }
   }
 
   private createFeatureFlagEvaluationContext(
     distinctId: string,
     groups?: Record<string, string>,
-    personProperties?: Record<string, any>,
-    groupProperties?: Record<string, Record<string, any>>
+    personProperties?: Properties,
+    groupProperties?: Record<string, Properties>
   ): FeatureFlagEvaluationContext {
     return {
       distinctId,
@@ -2799,11 +2825,19 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       mergedProperties.$session_id = contextData.sessionId
     }
 
+    // Minimal $feature_flag_called events: rebuild from the strict allowlist before before_send
+    // runs, so a customer hook may deliberately re-add stripped properties. Everything the SDK
+    // itself adds after this point ($groups, $lib/$lib_version/$is_server, $geoip_disable) is
+    // allowlisted — no SDK enrichment may reintroduce stripped properties.
+    const finalProperties = this._shouldSendMinimalFlagCalledEvent(event, mergedProperties)
+      ? minimizeFlagCalledEventProperties(mergedProperties)
+      : mergedProperties
+
     // Run before_send if configured
     const eventMessage = this._runBeforeSend({
       distinctId: mergedDistinctId,
       event,
-      properties: mergedProperties,
+      properties: finalProperties,
       groups,
       flags,
       sendFeatureFlags,
@@ -2859,7 +2893,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         // Something went wrong getting the flag info - we should capture the event anyways
         return {}
       })
-      .then((additionalProperties) => {
+      .then((additionalProperties): PostHogEventProperties => {
         // No matter what - capture the event
         const resolvedGroups = eventMessage.groups || groups
 
@@ -2871,7 +2905,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           ...(resolvedGroups !== undefined && Object.keys(resolvedGroups).length > 0
             ? { $groups: resolvedGroups }
             : {}),
-        } as PostHogEventProperties
+        }
       })
 
     // Handle bot pageview collection based on preview flag

@@ -1,10 +1,10 @@
 import type { PostHogConfig } from '../types'
-import { uuidv7 } from '../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { createPosthogInstance } from './helpers/posthog-instance'
 const uuidV7Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-jest.mock('../utils/globals', () => {
-    const orig = jest.requireActual('../utils/globals')
+jest.mock('@posthog/browser-common/utils/globals', () => {
+    const orig = jest.requireActual('@posthog/browser-common/utils/globals')
     const mockURLGetter = jest.fn()
     const mockReferrerGetter = jest.fn()
     const mockedCookieBox = { cookie: '' }
@@ -56,7 +56,7 @@ jest.mock('../utils/globals', () => {
 })
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { mockURLGetter, mockedCookieBox, mockedFetch, document } = require('../utils/globals')
+const { mockURLGetter, mockedCookieBox, mockedFetch, document } = require('@posthog/browser-common/utils/globals')
 
 const delay = (timeoutMs: number) => new Promise((resolve) => setTimeout(resolve, timeoutMs))
 
@@ -71,7 +71,6 @@ describe('cookieless', () => {
             ...config,
             before_send: beforeSendMock,
         })!
-        posthog.debug()
         return { posthog, beforeSendMock }
     }
 
@@ -101,8 +100,34 @@ describe('cookieless', () => {
             expect(document.cookie).toBe('')
             expect(posthog.sessionRecording).toBeFalsy()
 
-            // should ignore cookie consent, and throw in test code due to logging an error
-            expect(() => posthog.opt_in_capturing()).toThrow()
+            // should ignore cookie consent
+            posthog.opt_in_capturing()
+            expect(posthog.has_opted_in_capturing()).toBe(false)
+        })
+
+        it('emits a rate-limit warning without session context or durable storage', async () => {
+            const token = uuidv7()
+            const { posthog, beforeSendMock } = await setup(
+                {
+                    cookieless_mode: 'always',
+                    capture_pageview: false,
+                    persistence: 'memory',
+                    persistence_name: token,
+                    rate_limiting: { events_per_second: 1, events_burst_limit: 1 },
+                },
+                token
+            )
+
+            console.error = jest.fn()
+            posthog.capture(eventName, eventProperties)
+            posthog.capture(eventName, eventProperties)
+
+            const warning = beforeSendMock.mock.calls.find(([event]) => event.event === '$$client_ingestion_warning')[0]
+            expect(warning.properties.$$client_ingestion_warning_message).not.toContain('session ')
+            expect(warning.properties.$$client_ingestion_warning_session_id).toBeUndefined()
+            expect(posthog.persistence?.get_property('$capture_rate_limit').dropped).toBe(0)
+            expect(localStorage.getItem(`ph_${token}`)).toBeNull()
+            expect(document.cookie).toBe('')
         })
 
         it.each([[true], ['history_change']])(
@@ -127,8 +152,9 @@ describe('cookieless', () => {
                 expect(document.cookie).toBe('')
                 expect(posthog.sessionRecording).toBeFalsy()
 
-                // should ignore cookie consent, and throw in test code due to logging an error
-                expect(() => posthog.opt_in_capturing()).toThrow()
+                // should ignore cookie consent
+                posthog.opt_in_capturing()
+                expect(posthog.has_opted_in_capturing()).toBe(false)
             }
         )
     })
@@ -396,13 +422,13 @@ describe('cookieless', () => {
 
             posthog.opt_in_capturing()
             expect(mockedFetch).toBeCalledTimes(3) // flags + opt in + pageview
-            expect(JSON.parse(mockedFetch.mock.calls[1][1].body).event).toEqual('$opt_in')
-            expect(JSON.parse(mockedFetch.mock.calls[2][1].body).event).toEqual('$pageview')
+            expect(JSON.parse(mockedFetch.mock.calls[1][1].body).batch[0].event).toEqual('$opt_in')
+            expect(JSON.parse(mockedFetch.mock.calls[2][1].body).batch[0].event).toEqual('$pageview')
 
             posthog.capture('custom event')
             jest.advanceTimersByTime(5000) // flush the batch queue (3s interval) without triggering 5-min remote config refresh
             expect(mockedFetch).toBeCalledTimes(4) // flags + opt in + pageview + custom event
-            expect(JSON.parse(mockedFetch.mock.calls[3][1].body)[0].event).toEqual('custom event')
+            expect(JSON.parse(mockedFetch.mock.calls[3][1].body).batch[0].event).toEqual('custom event')
         })
 
         it('should start the request queue when opting out (cookieless transport regression #3680)', async () => {
@@ -420,14 +446,16 @@ describe('cookieless', () => {
             posthog.opt_out_capturing()
             // opt_out triggers an initial $pageview in cookieless mode — it should be sent immediately (non-batched)
             expect(mockedFetch).toBeCalledTimes(2) // flags + pageview
-            expect(JSON.parse(mockedFetch.mock.calls[1][1].body).event).toEqual('$pageview')
-            expect(JSON.parse(mockedFetch.mock.calls[1][1].body).properties.distinct_id).toEqual('$posthog_cookieless')
+            expect(JSON.parse(mockedFetch.mock.calls[1][1].body).batch[0].event).toEqual('$pageview')
+            expect(JSON.parse(mockedFetch.mock.calls[1][1].body).batch[0].properties.distinct_id).toEqual(
+                '$posthog_cookieless'
+            )
 
             posthog.capture('custom event')
             jest.advanceTimersByTime(5000) // flush the batch queue
             expect(mockedFetch).toBeCalledTimes(3) // flags + pageview + custom event
-            expect(JSON.parse(mockedFetch.mock.calls[2][1].body)[0].event).toEqual('custom event')
-            expect(JSON.parse(mockedFetch.mock.calls[2][1].body)[0].properties.distinct_id).toEqual(
+            expect(JSON.parse(mockedFetch.mock.calls[2][1].body).batch[0].event).toEqual('custom event')
+            expect(JSON.parse(mockedFetch.mock.calls[2][1].body).batch[0].properties.distinct_id).toEqual(
                 '$posthog_cookieless'
             )
         })

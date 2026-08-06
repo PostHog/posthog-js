@@ -1,6 +1,6 @@
 import { PostHog } from '../src/posthog-rn'
 import { OptionalReactNativePlugin } from '../src/optional/OptionalPlugin'
-import { waitForExpect } from './test-utils'
+import { setupFetch, waitForExpect, waitForNativePluginEvaluation } from './test-utils'
 
 jest.mock('../src/optional/OptionalPlugin', () => ({
   OptionalReactNativePlugin: {
@@ -30,12 +30,6 @@ const mockPlugin = OptionalReactNativePlugin as unknown as {
   addExceptionStep: jest.Mock
 }
 
-type PostHogInternalAccess = { _sessionReplayEvalChain: Promise<void> }
-
-const waitForNativePluginEvaluation = async (posthog: PostHog): Promise<void> => {
-  await (posthog as unknown as PostHogInternalAccess)._sessionReplayEvalChain
-}
-
 const resetMockPlugin = (): void => {
   mockPlugin.start.mockImplementation(() => Promise.resolve())
   // `setup` may have been deleted by the legacy-plugin test; restore it if so.
@@ -50,17 +44,6 @@ const resetMockPlugin = (): void => {
   mockPlugin.addExceptionStep.mockImplementation(() => Promise.resolve())
 }
 
-const setupFetch = (): void => {
-  ;(globalThis as any).window = (globalThis as any).window ?? {}
-  ;(globalThis as any).window.fetch = jest.fn(async (url: unknown) => {
-    const res = String(url).includes('flags') ? { featureFlags: {} } : { status: 'ok' }
-    return {
-      status: 200,
-      json: () => Promise.resolve(res),
-    }
-  })
-}
-
 describe('native error tracking', () => {
   beforeEach(() => {
     resetMockPlugin()
@@ -68,8 +51,15 @@ describe('native error tracking', () => {
     setupFetch()
   })
 
-  it('does not initialize the native plugin by default', async () => {
-    const posthog = new PostHog('test-token', { persistence: 'memory', flushInterval: 0 })
+  it('does not initialize the native plugin when push is also opted out', async () => {
+    // Push defaults to on and initializes the native plugin on its own (see
+    // push-notifications.spec.ts); opt it out so this asserts error tracking alone.
+    const posthog = new PostHog('test-token', {
+      persistence: 'memory',
+      flushInterval: 0,
+      capturePushNotificationSubscriptions: false,
+      capturePushNotificationOpened: false,
+    })
 
     await posthog.ready()
     await waitForNativePluginEvaluation(posthog)
@@ -298,7 +288,12 @@ describe('native error tracking', () => {
   })
 
   it('does not forward exception steps to native when native error tracking is not enabled', async () => {
-    const posthog = new PostHog('test-token', { persistence: 'memory', flushInterval: 0 })
+    const posthog = new PostHog('test-token', {
+      persistence: 'memory',
+      flushInterval: 0,
+      capturePushNotificationSubscriptions: false,
+      capturePushNotificationOpened: false,
+    })
 
     await posthog.ready()
     await waitForNativePluginEvaluation(posthog)

@@ -1,3 +1,11 @@
+jest.mock('@posthog/browser-common/utils/logger', () => ({
+    createLogger: jest.fn().mockReturnValue({
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+    }),
+}))
+
 import { RemoteConfigLoader } from '../remote-config'
 import { RequestRouter } from '../utils/request-router'
 import { PostHog } from '../posthog-core'
@@ -6,11 +14,14 @@ import '../entrypoints/external-scripts-loader'
 import { assignableWindow } from '../utils/globals'
 import { createMockPostHog } from './helpers/posthog-instance'
 
+const mockLogger = jest.requireMock('@posthog/browser-common/utils/logger').createLogger.mock.results[0].value
+
 describe('RemoteConfigLoader', () => {
     let posthog: PostHog
 
     beforeEach(() => {
         jest.useFakeTimers()
+        jest.clearAllMocks()
 
         const defaultConfig: Partial<PostHogConfig> = {
             token: 'testtoken',
@@ -45,7 +56,6 @@ describe('RemoteConfigLoader', () => {
 
         beforeEach(() => {
             assignableWindow._POSTHOG_REMOTE_CONFIG = undefined
-            assignableWindow.POSTHOG_DEBUG = true
 
             assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(
                 (_ph: PostHog, _name: string, cb: (err?: any) => void) => {
@@ -73,7 +83,7 @@ describe('RemoteConfigLoader', () => {
             expect(assignableWindow.__PosthogExtensions__.loadExternalDependency).not.toHaveBeenCalled()
             expect(posthog._send_request).not.toHaveBeenCalled()
 
-            expect(posthog._onRemoteConfig).toHaveBeenCalledWith(config)
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({ ok: true, config })
         })
 
         it('loads the script if window config not set', () => {
@@ -85,7 +95,7 @@ describe('RemoteConfigLoader', () => {
                 expect.any(Function)
             )
             expect(posthog._send_request).not.toHaveBeenCalled()
-            expect(posthog._onRemoteConfig).toHaveBeenCalledWith(config)
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({ ok: true, config })
         })
 
         it('loads the json if window config not set and js failed', () => {
@@ -103,7 +113,7 @@ describe('RemoteConfigLoader', () => {
                 url: 'https://test.com/array/testtoken/config',
                 callback: expect.any(Function),
             })
-            expect(posthog._onRemoteConfig).toHaveBeenCalledWith(config)
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({ ok: true, config })
         })
 
         it.each([
@@ -127,6 +137,52 @@ describe('RemoteConfigLoader', () => {
             }
         })
 
+        it('does not retry or rethrow synchronous config application errors', () => {
+            assignableWindow._POSTHOG_REMOTE_CONFIG = {
+                [posthog.config.token]: {
+                    config,
+                    siteApps: [],
+                },
+            }
+            posthog._onRemoteConfig = jest.fn(() => {
+                throw new Error('config application failed')
+            })
+
+            expect(() => new RemoteConfigLoader(posthog).load()).not.toThrow()
+
+            expect(posthog._onRemoteConfig).toHaveBeenCalledTimes(1)
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({ ok: true, config })
+            expect(posthog.featureFlags.ensureFlagsLoaded).toHaveBeenCalled()
+        })
+
+        it('does not rethrow feature flag initialization errors', () => {
+            assignableWindow._POSTHOG_REMOTE_CONFIG = {
+                [posthog.config.token]: {
+                    config,
+                    siteApps: [],
+                },
+            }
+            posthog.featureFlags.ensureFlagsLoaded = jest.fn(() => {
+                throw new Error('feature flag initialization failed')
+            })
+
+            expect(() => new RemoteConfigLoader(posthog).load()).not.toThrow()
+
+            expect(posthog._onRemoteConfig).toHaveBeenCalledTimes(1)
+            expect(posthog.featureFlags.ensureFlagsLoaded).toHaveBeenCalledTimes(1)
+        })
+
+        it('reports synchronous loading errors as a failed outcome', () => {
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(() => {
+                throw new Error('loader failed')
+            })
+
+            new RemoteConfigLoader(posthog).load()
+
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({ ok: false })
+            expect(posthog.featureFlags.ensureFlagsLoaded).toHaveBeenCalled()
+        })
+
         it('still initializes extensions and loads flags when config fetch fails', () => {
             assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(
                 (_ph: PostHog, _name: string, cb: (err?: any) => void) => {
@@ -137,10 +193,50 @@ describe('RemoteConfigLoader', () => {
 
             new RemoteConfigLoader(posthog).load()
 
-            // Should still call _onRemoteConfig with empty object so extensions start
-            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({})
+            // Should still call _onRemoteConfig, marked as failed, so extensions start
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({ ok: false })
             // Should still attempt to load flags
             expect(posthog.featureFlags.ensureFlagsLoaded).toHaveBeenCalled()
+        })
+
+        it('does not re-log status-zero failures already handled by the request layer', () => {
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(
+                (_ph: PostHog, _name: string, cb: (err?: any) => void) => cb()
+            )
+            posthog._send_request = jest
+                .fn()
+                .mockImplementation(({ callback }) =>
+                    callback?.({ statusCode: 0, error: new TypeError('Failed to fetch') })
+                )
+
+            new RemoteConfigLoader(posthog).load()
+
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({ ok: false })
+            expect(mockLogger.warn).not.toHaveBeenCalled()
+            expect(mockLogger.error).not.toHaveBeenCalled()
+        })
+
+        it('warns once for a bare status-zero response', () => {
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(
+                (_ph: PostHog, _name: string, cb: (err?: any) => void) => cb()
+            )
+            posthog._send_request = jest.fn().mockImplementation(({ callback }) => callback?.({ statusCode: 0 }))
+
+            new RemoteConfigLoader(posthog).load()
+
+            expect(mockLogger.warn).toHaveBeenCalledWith('Failed to fetch remote config from PostHog.')
+            expect(mockLogger.error).not.toHaveBeenCalled()
+        })
+
+        it('keeps HTTP failures at error severity', () => {
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(
+                (_ph: PostHog, _name: string, cb: (err?: any) => void) => cb()
+            )
+            posthog._send_request = jest.fn().mockImplementation(({ callback }) => callback?.({ statusCode: 500 }))
+
+            new RemoteConfigLoader(posthog).load()
+
+            expect(mockLogger.error).toHaveBeenCalledWith('Failed to fetch remote config from PostHog.')
         })
 
         it('does not call ensureFlagsLoaded when advanced_disable_feature_flags_on_first_load is true', () => {
@@ -155,7 +251,10 @@ describe('RemoteConfigLoader', () => {
 
             new RemoteConfigLoader(posthog).load()
 
-            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({ ...config, hasFeatureFlags: true })
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({
+                ok: true,
+                config: { ...config, hasFeatureFlags: true },
+            })
             expect(posthog.featureFlags.ensureFlagsLoaded).not.toHaveBeenCalled()
         })
     })
@@ -251,8 +350,8 @@ describe('RemoteConfigLoader', () => {
         it('skips refresh when no document is available', async () => {
             try {
                 await jest.isolateModulesAsync(async () => {
-                    jest.doMock('../utils/globals', () => ({
-                        ...jest.requireActual('../utils/globals'),
+                    jest.doMock('@posthog/browser-common/utils/globals', () => ({
+                        ...jest.requireActual('@posthog/browser-common/utils/globals'),
                         document: undefined,
                     }))
 
@@ -268,7 +367,7 @@ describe('RemoteConfigLoader', () => {
                     expect(reloadFeatureFlags).not.toHaveBeenCalled()
                 })
             } finally {
-                jest.dontMock('../utils/globals')
+                jest.dontMock('@posthog/browser-common/utils/globals')
             }
         })
     })

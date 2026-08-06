@@ -1,6 +1,6 @@
 import { PostHog } from '../posthog-core'
 import { createPosthogInstance } from './helpers/posthog-instance'
-import { uuidv7 } from '../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { USER_STATE } from '../constants'
 
 describe('reset()', () => {
@@ -42,6 +42,26 @@ describe('reset()', () => {
         instance.reset()
 
         expect(instance.persistence!.get_property(USER_STATE)).toEqual('anonymous')
+    })
+
+    it('warns through the real console path when reset opts out with debug disabled', async () => {
+        instance = await createPosthogInstance(uuidv7(), {
+            api_host: 'https://test.com',
+            token: 'testtoken',
+            before_send: beforeSendMock,
+            debug: false,
+            opt_out_capturing_by_default: true,
+        })
+        instance.opt_in_capturing({ captureEventName: false })
+        console.warn = jest.fn()
+
+        instance.reset()
+
+        expect(instance.config.debug).toBe(false)
+        expect(console.warn).toHaveBeenCalledWith(
+            '[PostHog.js]',
+            expect.stringContaining('reset() cleared the stored consent')
+        )
     })
 
     it('resets the logs extension so buffered logs are dropped', () => {

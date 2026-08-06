@@ -2,7 +2,7 @@ import { render, JSX } from 'preact'
 
 import { PostHog } from '../../posthog-core'
 import { ProductTourStep, ProductTourAppearance } from '../../posthog-product-tours-types'
-import { document as _document } from '../../utils/globals'
+import { document as _document } from '@posthog/browser-common/utils/globals'
 import { ProductTourBanner } from './components/ProductTourBanner'
 import { ProductTourSurveyStepInner } from './components/ProductTourSurveyStepInner'
 import { ProductTourTooltipInner } from './components/ProductTourTooltipInner'

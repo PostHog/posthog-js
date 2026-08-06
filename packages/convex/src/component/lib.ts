@@ -244,6 +244,7 @@ export const evaluateFlag = action({
       flagKeys: args.flagKeys ?? [args.key],
     })
     const value = snapshot.getFlag(args.key)
+    await client.flush().catch(() => {})
     return value ?? null
   },
 })
@@ -278,6 +279,7 @@ export const evaluateAllFlags = action({
       const payload = snapshot.getFlagPayload(key)
       if (payload !== undefined) featureFlagPayloads[key] = payload
     }
+    await client.flush().catch(() => {})
     return { featureFlags, featureFlagPayloads }
   },
 })

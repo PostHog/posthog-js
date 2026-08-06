@@ -1,7 +1,7 @@
 import type { LogAttributeValue } from '@posthog/types'
 import { buildOtlpLogRecord, buildOtlpLogsPayload, buildResourceAttributes } from './logs-utils'
 import { Logger, PostHogPersistedProperty } from '../types'
-import { isArray, safeSetTimeout } from '../utils'
+import { isArray, raceWithTimeout, safeSetTimeout } from '../utils'
 import type { BufferedLogEntry, CaptureLogOptions, LogSdkContext, LogsHost, ResolvedPostHogLogsConfig } from './types'
 
 // Caps the retry backoff at 2^6 = 64× the flush interval.
@@ -383,7 +383,7 @@ export class PostHogLogs {
       await flushPromise
       return
     }
-    await Promise.race([flushPromise, new Promise<void>((resolve) => safeSetTimeout(resolve, timeoutMs))])
+    await raceWithTimeout(flushPromise, timeoutMs)
   }
 
   /**
@@ -399,23 +399,12 @@ export class PostHogLogs {
    * unhandled-rejection logs — the next regular flush cycle will retry.
    */
   async flushWithTimeout(timeoutMs: number): Promise<void> {
-    let timedOut = false
     const flushPromise = this.flush()
-    const timerPromise = new Promise<void>((resolve) =>
-      safeSetTimeout(() => {
-        timedOut = true
-        resolve()
-      }, timeoutMs)
-    )
-    try {
-      await Promise.race([flushPromise, timerPromise])
-    } finally {
-      if (timedOut) {
-        // Race lost — flush is still in flight. Attach a no-op rejection
-        // handler so a late failure isn't logged as unhandled.
-        void flushPromise.catch(() => {})
-      }
-    }
+    await raceWithTimeout(flushPromise, timeoutMs, () => {
+      // Race lost — flush is still in flight. Attach a no-op rejection
+      // handler so a late failure isn't logged as unhandled.
+      void flushPromise.catch(() => {})
+    })
   }
 
   private _flushInBackground(): void {

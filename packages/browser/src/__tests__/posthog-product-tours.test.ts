@@ -1,13 +1,31 @@
+jest.mock('@posthog/browser-common/utils/logger', () => {
+    const childLogger: Record<string, jest.Mock> = {
+        debug: jest.fn(),
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+        critical: jest.fn(),
+    }
+    childLogger.createLogger = jest.fn().mockReturnValue(childLogger)
+    return {
+        createLogger: childLogger.createLogger,
+        logger: childLogger,
+    }
+})
+
 import { PostHog } from '../posthog-core'
 import { createPosthogInstance } from './helpers/posthog-instance'
-import { uuidv7 } from '../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { PRODUCT_TOURS, PRODUCT_TOURS_ENABLED_SERVER_SIDE } from '../constants'
 import { RemoteConfig } from '../types'
+
+const mockLogger = jest.requireMock('@posthog/browser-common/utils/logger').createLogger.mock.results[0].value
 
 describe('PostHogProductTours', () => {
     let instance: PostHog
 
     beforeEach(async () => {
+        jest.clearAllMocks()
         instance = await createPosthogInstance(uuidv7(), {
             api_host: 'https://test.com',
             token: 'testtoken',
@@ -21,8 +39,8 @@ describe('PostHogProductTours', () => {
                 [PRODUCT_TOURS_ENABLED_SERVER_SIDE]: true,
             })
 
-            // Call with empty config (simulating config fetch failure)
-            instance.productTours.onRemoteConfig({} as RemoteConfig)
+            // Call with empty config (server returned no setting for this feature)
+            instance.productTours.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
 
             // Should NOT have overwritten the existing value
             expect(instance.persistence?.props[PRODUCT_TOURS_ENABLED_SERVER_SIDE]).toBe(true)
@@ -34,8 +52,11 @@ describe('PostHogProductTours', () => {
             })
 
             instance.productTours.onRemoteConfig({
-                productTours: false,
-            } as RemoteConfig)
+                ok: true,
+                config: {
+                    productTours: false,
+                } as RemoteConfig,
+            })
 
             expect(instance.persistence?.props[PRODUCT_TOURS_ENABLED_SERVER_SIDE]).toBe(false)
         })
@@ -46,8 +67,11 @@ describe('PostHogProductTours', () => {
             })
 
             instance.productTours.onRemoteConfig({
-                productTours: true,
-            } as RemoteConfig)
+                ok: true,
+                config: {
+                    productTours: true,
+                } as RemoteConfig,
+            })
 
             expect(instance.persistence?.props[PRODUCT_TOURS_ENABLED_SERVER_SIDE]).toBe(true)
         })
@@ -74,7 +98,7 @@ describe('PostHogProductTours', () => {
                 [PRODUCT_TOURS]: [{ id: 'tour-1', name: 'stale cached tour' }],
             })
 
-            instance.productTours.onRemoteConfig(response as RemoteConfig)
+            instance.productTours.onRemoteConfig({ ok: true, config: response as RemoteConfig })
 
             expect(instance.persistence?.props[PRODUCT_TOURS]).toBeUndefined()
         })
@@ -86,7 +110,7 @@ describe('PostHogProductTours', () => {
                 [PRODUCT_TOURS]: tours,
             })
 
-            instance.productTours.onRemoteConfig({ productTours: true } as RemoteConfig)
+            instance.productTours.onRemoteConfig({ ok: true, config: { productTours: true } as RemoteConfig })
 
             expect(instance.persistence?.props[PRODUCT_TOURS]).toEqual(tours)
         })
@@ -99,8 +123,9 @@ describe('PostHogProductTours', () => {
             const consumer = jest.fn()
             instance.productTours.getProductTours(consumer, true)
             expect(requests).toHaveLength(1)
+            expect(requests[0]).toEqual(expect.objectContaining({ method: 'GET', timestampMode: 'query' }))
 
-            instance.productTours.onRemoteConfig({ productTours: false } as RemoteConfig)
+            instance.productTours.onRemoteConfig({ ok: true, config: { productTours: false } as RemoteConfig })
 
             requests[0].callback({ statusCode: 200, json: { product_tours: [{ id: 'tour-1' }] } })
 
@@ -108,12 +133,51 @@ describe('PostHogProductTours', () => {
             expect(consumer).toHaveBeenCalledWith([], { isLoaded: true })
         })
 
+        it('does not re-log status-zero failures already handled by the request layer', () => {
+            instance.persistence?.register({ [PRODUCT_TOURS_ENABLED_SERVER_SIDE]: true })
+            instance._send_request = jest.fn(({ callback }) =>
+                callback({ statusCode: 0, error: new TypeError('Failed to fetch') })
+            ) as any
+
+            const consumer = jest.fn()
+            jest.clearAllMocks()
+            instance.productTours.getProductTours(consumer, true)
+
+            expect(consumer).toHaveBeenCalledWith([], {
+                isLoaded: false,
+                error: 'Product Tours API could not be loaded, status: 0',
+            })
+            expect(mockLogger.warn).not.toHaveBeenCalled()
+            expect(mockLogger.error).not.toHaveBeenCalled()
+        })
+
+        it('warns once for a bare status-zero response', () => {
+            instance.persistence?.register({ [PRODUCT_TOURS_ENABLED_SERVER_SIDE]: true })
+            instance._send_request = jest.fn(({ callback }) => callback({ statusCode: 0 })) as any
+
+            jest.clearAllMocks()
+            instance.productTours.getProductTours(jest.fn(), true)
+
+            expect(mockLogger.warn).toHaveBeenCalledWith('Product Tours API could not be loaded, status: 0')
+            expect(mockLogger.error).not.toHaveBeenCalled()
+        })
+
+        it('keeps HTTP failures at error severity', () => {
+            instance.persistence?.register({ [PRODUCT_TOURS_ENABLED_SERVER_SIDE]: true })
+            instance._send_request = jest.fn(({ callback }) => callback({ statusCode: 500 })) as any
+
+            jest.clearAllMocks()
+            instance.productTours.getProductTours(jest.fn(), true)
+
+            expect(mockLogger.error).toHaveBeenCalledWith('Product Tours API could not be loaded, status: 500')
+        })
+
         it('stops a running tour manager when product tours is disabled mid-session', () => {
             const stop = jest.fn()
             ;(instance.productTours as any)._productTourManager = { stop }
             instance.persistence?.register({ [PRODUCT_TOURS_ENABLED_SERVER_SIDE]: true })
 
-            instance.productTours.onRemoteConfig({ productTours: false } as RemoteConfig)
+            instance.productTours.onRemoteConfig({ ok: true, config: { productTours: false } as RemoteConfig })
 
             expect(stop).toHaveBeenCalled()
             expect((instance.productTours as any)._productTourManager).toBeNull()
@@ -126,7 +190,7 @@ describe('PostHogProductTours', () => {
                 [PRODUCT_TOURS]: tours,
             })
 
-            instance.productTours.onRemoteConfig({} as RemoteConfig)
+            instance.productTours.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
 
             expect(instance.persistence?.props[PRODUCT_TOURS]).toEqual(tours)
         })

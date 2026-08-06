@@ -457,6 +457,16 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "null",
       "(text: string, element?: HTMLElement | undefined) => string"
     ],
+    "maskAllElementAttributes": [
+      "undefined",
+      "false",
+      "true"
+    ],
+    "maskAttributeFn": [
+      "undefined",
+      "null",
+      "(name: string, value: string, element?: Element | undefined) => string"
+    ],
     "slimDOMOptions": [
       "undefined",
       "true",
@@ -472,6 +482,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "undefined",
       "false",
       "true"
+    ],
+    "inlineStylesheetBudgetRules": [
+      "undefined",
+      "number"
     ],
     "recordCrossOriginIframes": [
       "undefined",
@@ -503,7 +517,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
     ],
     "canvasCapture": [
       "undefined",
-      "{ resolutionScale?: number | undefined; }"
+      "{ resolutionScale?: number | undefined; maskRegionsFn?: ((canvas: HTMLCanvasElement) => CanvasMaskRegion[] | null | undefined) | null | undefined; }"
     ],
     "maskCapturedNetworkRequestFn": [
       "undefined",
@@ -516,6 +530,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "(data: NetworkRequest) => NetworkRequest | null | undefined"
     ],
     "full_snapshot_interval_millis": [
+      "undefined",
+      "number"
+    ],
+    "trigger_pending_buffer_interval_millis": [
       "undefined",
       "number"
     ],
@@ -540,6 +558,22 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "undefined",
       "false",
       "true"
+    ],
+    "sampling": [
+      "undefined",
+      {
+        "mousemove": [
+          "undefined",
+          "number",
+          "false",
+          "true"
+        ],
+        "mouseInteraction": [
+          "undefined",
+          "false",
+          "true"
+        ]
+      }
     ],
     "sampleRate": [
       "undefined",
@@ -691,6 +725,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
         "number"
       ],
       "web_vitals_attribution": [
+        "undefined",
+        "false",
+        "true"
+      ],
+      "__preview_web_vitals_soft_navs": [
         "undefined",
         "false",
         "true"

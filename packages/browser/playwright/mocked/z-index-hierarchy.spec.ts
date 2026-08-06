@@ -46,10 +46,13 @@ test.describe('z-index hierarchy', () => {
             const posthog = (window as any).posthog
             if (posthog?.conversations) {
                 posthog.conversations.onRemoteConfig({
-                    conversations: {
-                        enabled: true,
-                        token: 'test-token',
-                        widgetEnabled: true,
+                    ok: true,
+                    config: {
+                        conversations: {
+                            enabled: true,
+                            token: 'test-token',
+                            widgetEnabled: true,
+                        },
                     },
                 })
             }

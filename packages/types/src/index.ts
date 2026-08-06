@@ -29,6 +29,7 @@ export type {
     EvaluationReason,
     FeatureFlagResult,
     FeatureFlagOptions,
+    IsFeatureEnabledOptions,
     RemoteConfigFeatureFlagCallback,
     EarlyAccessFeature,
     EarlyAccessFeatureStage,
@@ -46,6 +47,7 @@ export type { Headers, RequestResponse, RequestCallback } from './request'
 // Session recording types
 export type {
     SessionRecordingCanvasOptions,
+    CanvasMaskRegion,
     InitiatorType,
     NetworkRequest,
     CapturedNetworkRequest,
@@ -73,6 +75,7 @@ export type {
     ExceptionRateLimiterConfig,
     MaskInputOptions,
     SlimDOMOptions,
+    SessionRecordingSamplingConfig,
     SessionRecordingOptions,
     RequestQueueConfig,
     LogCaptureOptions,

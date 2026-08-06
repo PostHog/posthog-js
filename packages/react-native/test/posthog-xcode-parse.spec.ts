@@ -1,5 +1,6 @@
 import { execFileSync, execSync } from 'child_process'
 import * as fs from 'fs'
+import * as os from 'os'
 import * as path from 'path'
 
 /**
@@ -79,43 +80,98 @@ describe('posthog-xcode.sh remote URL parsing', () => {
   })
 })
 
-// Regression tests for issue #3682:
-// The Expo plugin wraps the bundle phase as:
-//   /bin/sh posthog-xcode.sh /bin/sh react-native-xcode.sh ...
-// making $1 = /bin/sh inside posthog-xcode.sh.  REACT_NATIVE_XCODE then
-// resolves to /bin/sh (a binary), so the grep/sed patch against it silently
-// no-ops and the packager sourcemap is deleted before posthog-cli reads it.
-describe('posthog-xcode.sh REACT_NATIVE_XCODE resolution', () => {
+describe('posthog-xcode.sh bundle command composition', () => {
   const scriptContents = fs.readFileSync(SCRIPT_PATH, 'utf8')
 
-  // Extract the REACT_NATIVE_XCODE_DEFAULT + resolution block from the script
-  // so the tests track the actual source and cannot silently diverge from it.
-  const extractAssignmentBlock = (): string => {
-    // Match from REACT_NATIVE_XCODE_DEFAULT=... through the closing `fi` of
-    // the if/else guard (or a plain assignment if the structure changes again).
-    const match = scriptContents.match(
-      /REACT_NATIVE_XCODE_DEFAULT="[^"]+"[\s\S]+?(?:fi|REACT_NATIVE_XCODE="\$\{[^}]+\}")/
-    )
-    if (!match) throw new Error('Could not locate REACT_NATIVE_XCODE assignment in posthog-xcode.sh')
+  const extractReactNativeXcodeResolutionBlock = (): string => {
+    const match = scriptContents.match(/REACT_NATIVE_XCODE_DEFAULT="[^"]+"[\s\S]+?\n\s*done/)
+    if (!match) throw new Error('Could not locate REACT_NATIVE_XCODE resolution in posthog-xcode.sh')
     return match[0]
   }
 
-  const resolveReactNativeXcode = (arg1: string): string => {
-    const block = extractAssignmentBlock()
-    // Run the extracted shell fragment with $1 set to the provided value and
-    // print the resulting REACT_NATIVE_XCODE variable.
-    const script = `${block}\nprintf '%s' "$REACT_NATIVE_XCODE"`
-    const escaped = arg1.replace(/'/g, `'\\''`)
-    return execSync(`/bin/bash -c 'set -- '"'"'${escaped}'"'"'; ${script}'`).toString()
+  const resolveReactNativeXcode = (args: string[]): string => {
+    const script = `${extractReactNativeXcodeResolutionBlock()}\nprintf '%s' "$REACT_NATIVE_XCODE"`
+    return execFileSync('/bin/bash', ['-c', script, 'posthog-xcode-test', ...args]).toString()
   }
 
   it.each([
-    ['RN script path', '../node_modules/react-native/scripts/react-native-xcode.sh'],
-    ['/bin/sh (issue #3682 — Expo shell-prefixed bundle phase)', '/bin/sh'],
-  ])('REACT_NATIVE_XCODE resolves to react-native-xcode.sh path when $1 is %s', (_desc, arg1) => {
-    const result = resolveReactNativeXcode(arg1)
-    expect(result).not.toBe('/bin/sh')
-    expect(result).toContain('react-native-xcode.sh')
+    ['direct RN script', ['../node_modules/react-native/scripts/react-native-xcode.sh']],
+    ['shell-prefixed RN script', ['/bin/sh', '../node_modules/react-native/scripts/react-native-xcode.sh']],
+    [
+      'nested source-map wrapper',
+      [
+        '/bin/sh',
+        '../node_modules/@sentry/react-native/scripts/sentry-xcode.sh',
+        '../node_modules/react-native/scripts/react-native-xcode.sh',
+      ],
+    ],
+  ])('locates react-native-xcode.sh in a %s command', (_desc, args) => {
+    expect(resolveReactNativeXcode(args)).toBe('../node_modules/react-native/scripts/react-native-xcode.sh')
+  })
+
+  it('falls back to the standard RN script when an outer wrapper does not forward arguments', () => {
+    expect(resolveReactNativeXcode([])).toBe('../node_modules/react-native/scripts/react-native-xcode.sh')
+  })
+
+  it('forwards nested commands, preserves the Hermes map, and resolves a hoisted fallback', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-xcode-composition-'))
+    const derivedDir = path.join(tempDir, 'derived')
+    const configurationDir = path.join(tempDir, 'configuration')
+    const homeDir = path.join(tempDir, 'home')
+    const iosDir = path.join(tempDir, 'packages', 'example', 'ios')
+    const tracePath = path.join(tempDir, 'trace.log')
+    const wrapperPath = path.join(tempDir, 'sentry-xcode.sh')
+    const reactNativeRoot = path.join(tempDir, 'node_modules', 'react-native')
+    const reactNativePath = path.join(reactNativeRoot, 'scripts', 'react-native-xcode.sh')
+    const cliPath = path.join(homeDir, '.posthog', 'posthog-cli')
+
+    try {
+      for (const directory of [
+        derivedDir,
+        configurationDir,
+        iosDir,
+        path.dirname(reactNativePath),
+        path.dirname(cliPath),
+      ]) {
+        fs.mkdirSync(directory, { recursive: true })
+      }
+      fs.writeFileSync(wrapperPath, '#!/bin/sh\necho wrapper >> "$TRACE_PATH"\n"$@"\n', { mode: 0o755 })
+      fs.writeFileSync(path.join(reactNativeRoot, 'package.json'), '{}')
+      fs.writeFileSync(
+        reactNativePath,
+        '#!/bin/sh\necho react-native >> "$TRACE_PATH"\nrm "$PACKAGER_SOURCEMAP_FILE"\n',
+        { mode: 0o755 }
+      )
+      fs.writeFileSync(cliPath, '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+
+      const env = {
+        ...process.env,
+        CONFIGURATION_BUILD_DIR: configurationDir,
+        DERIVED_FILE_DIR: derivedDir,
+        HOME: homeDir,
+        NODE_BINARY: process.execPath,
+        SKIP_BUNDLING: '1',
+        TRACE_PATH: tracePath,
+      }
+
+      execFileSync(SCRIPT_PATH, ['/bin/sh', wrapperPath, reactNativePath], {
+        cwd: iosDir,
+        env,
+        stdio: 'pipe',
+      })
+
+      expect(fs.readFileSync(tracePath, 'utf8').trim().split('\n')).toEqual(['wrapper', 'react-native'])
+      expect(fs.readFileSync(reactNativePath, 'utf8')).toContain('#rm "$PACKAGER_SOURCEMAP_FILE"')
+
+      // Sentry only passes its $1 script path to sentry-cli. When Sentry wraps
+      // PostHog, posthog-xcode.sh is therefore invoked without the original RN
+      // argument and must execute the standard script itself.
+      fs.writeFileSync(tracePath, '')
+      execFileSync(SCRIPT_PATH, [], { cwd: iosDir, env, stdio: 'pipe' })
+      expect(fs.readFileSync(tracePath, 'utf8').trim()).toBe('react-native')
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
   })
 })
 

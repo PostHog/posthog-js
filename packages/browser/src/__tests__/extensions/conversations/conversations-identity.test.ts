@@ -83,7 +83,7 @@ describe('Conversations Identity Verification', () => {
     })
 
     function loadConversations() {
-        conversations.onRemoteConfig(remoteConfig as RemoteConfig)
+        conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
     }
 
     describe('posthog.setIdentity', () => {

@@ -5,7 +5,7 @@
 function loadPolyfill(): void {
     jest.isolateModules(() => {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        require('../../utils/array-at-polyfill')
+        require('@posthog/browser-common/utils/array-at-polyfill')
     })
 }
 

@@ -1,11 +1,12 @@
-import './helpers/mock-logger'
+import { clearLoggerMocks } from './helpers/mock-logger'
 
 import { PostHog } from '../posthog-core'
 import { defaultPostHog } from './helpers/posthog-instance'
-import { uuidv7 } from '../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
 import { isNull } from '@posthog/core'
-import { document, assignableWindow, navigator } from '../utils/globals'
+import { document, navigator } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from '../utils/globals'
 import { PostHogConfig } from '../types'
 
 const DEFAULT_PERSISTENCE_PREFIX = `__ph_opt_in_out_`
@@ -31,7 +32,6 @@ describe('consentManager', () => {
             (resolve) =>
                 defaultPostHog().init('testtoken', { ...config, loaded: (posthog) => resolve(posthog) }, uuidv7())!
         )
-        posthog.debug()
         return posthog
     }
 
@@ -40,6 +40,7 @@ describe('consentManager', () => {
     beforeEach(async () => {
         posthog = await createPostHog()
         posthog.reset()
+        clearLoggerMocks()
 
         // we don't want unexpected console errors/warnings to fail these tests
         console.error = jest.fn()
@@ -192,6 +193,105 @@ describe('consentManager', () => {
             posthog.opt_in_capturing()
             expect(beforeSendMock).toHaveBeenCalledTimes(3)
             expect(beforeSendMock).not.lastCalledWith(expect.objectContaining({ event: '$pageview' }))
+        })
+    })
+
+    describe('reset() and consent', () => {
+        it('warns when a caller directly resets after opting in and capturing changes from on to off', async () => {
+            const beforeSendMock = jest.fn().mockImplementation((e) => e)
+            posthog = await createPostHog({ opt_out_capturing_by_default: true, before_send: beforeSendMock })
+
+            posthog.opt_in_capturing({ captureEventName: false })
+            expect(posthog.has_opted_in_capturing()).toBe(true)
+
+            // reset() clears the stored consent, so consent falls back to the opt-out default and
+            // subsequent events are dropped. That's easy to get wrong, so it must warn loudly.
+            posthog.reset()
+
+            expect(posthog.has_opted_in_capturing()).toBe(false)
+            expect(posthog.get_explicit_consent_status()).toBe('pending')
+            expect(console.warn).toHaveBeenCalledWith(
+                '[PostHog.js]',
+                expect.stringContaining('reset() cleared the stored consent')
+            )
+
+            beforeSendMock.mockClear()
+            posthog.capture('after-reset')
+            expect(beforeSendMock).not.toHaveBeenCalled()
+        })
+
+        it.each([
+            ['opt out to opt in', false, true, 'granted'],
+            ['opt in to opt out', true, false, 'denied'],
+        ] as const)(
+            'does not warn during an SDK-owned on_reject transition from %s',
+            async (_description, startsOptedIn, endsOptedIn, expectedConsentStatus) => {
+                posthog = await createPostHog({ cookieless_mode: 'on_reject' })
+                if (startsOptedIn) {
+                    posthog.opt_in_capturing({ captureEventName: false })
+                } else {
+                    posthog.opt_out_capturing()
+                }
+                ;(console.warn as jest.Mock).mockClear()
+
+                if (endsOptedIn) {
+                    posthog.opt_in_capturing({ captureEventName: false })
+                } else {
+                    posthog.opt_out_capturing()
+                }
+
+                expect(posthog.get_explicit_consent_status()).toBe(expectedConsentStatus)
+                expect(posthog.is_capturing()).toBe(true)
+                expect(console.warn).not.toHaveBeenCalledWith(
+                    '[PostHog.js]',
+                    expect.stringContaining('reset() cleared the stored consent')
+                )
+            }
+        )
+
+        it('keeps capturing when reset() is called before opting in', async () => {
+            const beforeSendMock = jest.fn().mockImplementation((e) => e)
+            posthog = await createPostHog({ opt_out_capturing_by_default: true, before_send: beforeSendMock })
+
+            posthog.reset()
+            posthog.opt_in_capturing({ captureEventName: false })
+
+            expect(posthog.has_opted_in_capturing()).toBe(true)
+            expect(console.warn).not.toHaveBeenCalledWith(
+                '[PostHog.js]',
+                expect.stringContaining('reset() cleared the stored consent')
+            )
+
+            beforeSendMock.mockClear()
+            posthog.capture('after-opt-in')
+            expect(beforeSendMock).toHaveBeenCalledWith(expect.objectContaining({ event: 'after-opt-in' }))
+        })
+
+        it('does not warn when capturing is opted in by default', async () => {
+            posthog = await createPostHog()
+
+            posthog.opt_in_capturing({ captureEventName: false })
+            posthog.reset()
+
+            expect(posthog.has_opted_in_capturing()).toBe(true)
+            expect(console.warn).not.toHaveBeenCalledWith(
+                '[PostHog.js]',
+                expect.stringContaining('reset() cleared the stored consent')
+            )
+        })
+
+        it.each(['always', 'on_reject'] as const)('does not warn in cookieless %s mode', async (cookieless_mode) => {
+            posthog = await createPostHog({ cookieless_mode, opt_out_capturing_by_default: true })
+            posthog.opt_in_capturing({ captureEventName: false })
+            ;(console.warn as jest.Mock).mockClear()
+
+            posthog.reset()
+
+            expect(posthog.is_capturing()).toBe(true)
+            expect(console.warn).not.toHaveBeenCalledWith(
+                '[PostHog.js]',
+                expect.stringContaining('reset() cleared the stored consent')
+            )
         })
     })
 

@@ -1,7 +1,7 @@
 import { mockLogger } from './helpers/mock-logger'
 
 import { createPosthogInstance } from './helpers/posthog-instance'
-import { uuidv7 } from '../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
 describe('identify', () => {
     // Note that there are other tests for identify in posthog-core.identify.js

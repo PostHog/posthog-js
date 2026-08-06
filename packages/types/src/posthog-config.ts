@@ -7,7 +7,12 @@ import type { LogAttributes, BeforeSendLogFn } from './capture-log'
 import type { MetricAttributes, BeforeSendMetricFn } from './capture-metric'
 import type { BeforeSendFn, CaptureResult } from './capture'
 import type { RequestResponse } from './request'
-import type { CapturedNetworkRequest, NetworkRequest, SessionRecordingCanvasOptions } from './session-recording'
+import type {
+    CanvasMaskRegion,
+    CapturedNetworkRequest,
+    NetworkRequest,
+    SessionRecordingCanvasOptions,
+} from './session-recording'
 import type { SegmentAnalytics } from './segment'
 import type { PostHog } from './posthog'
 
@@ -242,6 +247,25 @@ export interface PerformanceCaptureConfig {
      * @default false
      */
     web_vitals_attribution?: boolean
+
+    /**
+     * Scope web vitals metrics to the browser's Soft Navigation entries, so that
+     * client-side route changes in single-page apps each start a fresh measurement
+     * window instead of accumulating against the original hard-navigation timestamp.
+     *
+     * Without this, an SPA's LCP observer keeps treating the "largest paint so far"
+     * as belonging to the initial page load across every subsequent route change,
+     * which inflates LCP (and the other metrics) by the time spent on the app.
+     *
+     * This is a preview option (opt-in) because it relies on Chrome's Soft Navigation Detection API,
+     * which is still experimental. When enabled, PostHog loads a pinned stable web-vitals 6.x
+     * bundle and passes `reportSoftNavs` to the observers. The default path remains on the
+     * existing web-vitals 5.x bundle. In browsers without soft-nav support, metrics fall
+     * back to their existing hard-navigation behavior.
+     *
+     * @default false
+     */
+    __preview_web_vitals_soft_navs?: boolean
 }
 
 export interface DeadClickCandidate {
@@ -525,6 +549,27 @@ export interface SlimDOMOptions {
     headTitleMutations?: boolean
 }
 
+/**
+ * Sampling options for session recording, a subset of rrweb's sampling strategy
+ */
+export interface SessionRecordingSamplingConfig {
+    /**
+     * Controls capture of mouse movement within a recorded session.
+     * `false` disables capture entirely; NB this also disables touchmove and drag capture.
+     * A number throttles capture so that positions are captured at most once every N milliseconds.
+     * When `undefined` (or `true`), rrweb's default applies: capture throttled to every 50ms.
+     * @default undefined
+     */
+    mousemove?: boolean | number
+    /**
+     * When `false`, disables capture of mouse interaction events
+     * (click, mouse up/down, hover, and touch start/end).
+     * NB replays will not show clicks when this is disabled.
+     * @default undefined
+     */
+    mouseInteraction?: boolean
+}
+
 export interface SessionRecordingOptions {
     /**
      * Derived from `rrweb.record` options
@@ -585,6 +630,27 @@ export interface SessionRecordingOptions {
     maskInputFn?: ((text: string, element?: HTMLElement) => string) | null
 
     /**
+     * Derived from `rrweb.record` options. Masks every string-valued source DOM attribute,
+     * including rendering attributes such as `class`, `id`, `style`, `src`, `href`, and
+     * synthesized form values. Only rrweb-generated layout metadata is retained, so this
+     * option intentionally reduces replay fidelity. Mutually exclusive with
+     * `maskAttributeFn`: when both are set this option wins and the callback is ignored.
+     * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     * @default false
+     */
+    maskAllElementAttributes?: boolean
+
+    /**
+     * Derived from `rrweb.record` options. Called with `(name, value, element)` for every
+     * non-empty string-valued attribute in the final serialized representation so you can mask
+     * specific attributes. Returning the original value leaves it visible. Mutually exclusive
+     * with `maskAllElementAttributes`: when both are set that option wins and this callback
+     * is ignored, so a callback cannot accidentally unmask what the coarse option hides.
+     * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     */
+    maskAttributeFn?: ((name: string, value: string, element?: Element) => string) | null
+
+    /**
      * Derived from `rrweb.record` options
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
      * @default {}
@@ -604,6 +670,15 @@ export interface SessionRecordingOptions {
      * @default true
      */
     inlineStylesheet?: boolean
+
+    /**
+     * Max CSSRules inlined synchronously per full snapshot. Sheets past the
+     * budget keep their `rel`/`href` (so replay can load them remotely) and
+     * are inlined across idle callbacks instead of blocking the snapshot.
+     * Set 0 to inline everything up front (the pre-budget behaviour).
+     * @default 10000
+     */
+    inlineStylesheetBudgetRules?: number
 
     /**
      * Derived from `rrweb.record` options
@@ -651,7 +726,8 @@ export interface SessionRecordingOptions {
     streamNetworkBody?: boolean
 
     /**
-     * Allows local config to override remote canvas recording settings from the flags response
+     * Allows local config to override remote canvas recording settings from the flags response.
+     * To mask content inside a recorded canvas, see `canvasCapture.maskRegionsFn`.
      */
     captureCanvas?: SessionRecordingCanvasOptions
 
@@ -665,13 +741,66 @@ export interface SessionRecordingOptions {
      *   preserved and replay upscales the frame back to the original display size, so playback
      *   dimensions are unchanged, just softer. Resolution is the highest-leverage lever for canvas
      *   byte size, since bytes scale with pixel area.
+     * - `maskRegionsFn`: mask regions of a recorded canvas — see its doc comment.
      */
     canvasCapture?: {
         resolutionScale?: number
+
+        /**
+         * If set, called once per canvas per captured frame; the returned regions
+         * (CSS pixels, relative to the canvas element) are painted black before the
+         * frame is encoded. Lets apps that render into canvas (e.g. Flutter web)
+         * mask content that DOM-based masking cannot see. Re-read from config on
+         * every frame, so the real provider can be swapped in after recording has
+         * started.
+         *
+         * Return `[]` for a frame with nothing to mask (recorded as is), or `null`
+         * if regions could not be computed — that frame is skipped rather than
+         * recorded unmasked. Anything other than an array — `null`, a thrown error,
+         * or an implicit `undefined` from an untyped caller — skips that frame.
+         * Not setting this at all records the canvas unmasked.
+         *
+         * The provider is called for every canvas on the page, including
+         * canvases inside shadow DOM. For a canvas it does not manage, return
+         * `[]` ("nothing to mask") — returning `null` skips that canvas's
+         * frames entirely.
+         *
+         * Called synchronously on the main thread for every captured frame (canvas
+         * FPS is 4 by default, 12 max), so keep it cheap — avoid forcing layout,
+         * and return few regions.
+         *
+         * Setting this also changes DOM full snapshots (taken at recording start and
+         * at each `full_snapshot_interval_millis`): they normally serialize canvas
+         * pixels on a separate path (`rr_dataURL`) that never sees these regions, so
+         * when this option is set that serialization is skipped entirely. Whether
+         * to skip is re-evaluated at each snapshot, so a provider installed via
+         * `set_config` after recording started is honored at the next snapshot
+         * without a recorder restart. A canvas appears blank in a snapshot until
+         * the next canvas frame paints it — ~250ms at the default 4 fps while its
+         * pixels are changing, and at most 30s otherwise, because every canvas
+         * the provider answers (with regions or `[]`) re-sends an unchanged frame
+         * as a keyframe every 30s; a canvas whose frames are skipped (`null`)
+         * stays blank. Without this option, snapshot behavior is unchanged.
+         *
+         * An app whose real provider only exists once its runtime has booted picks
+         * what happens in between by what it declares in `posthog.init`: a function
+         * covering the whole canvas blacks those frames out, `() => null` skips
+         * them, and declaring nothing records them.
+         *
+         * Client-side only, cannot be set via remote configuration.
+         *
+         * @default undefined
+         */
+        maskRegionsFn?: ((canvas: HTMLCanvasElement) => CanvasMaskRegion[] | null | undefined) | null
     }
 
     /**
-     * Modify the network request before it is captured. Returning null or undefined stops it being captured
+     * Modify the network request before it is captured. Returning null or undefined stops it being captured.
+     *
+     * Initial navigation and performance-timing entries are also passed to this function. They have
+     * `isInitial === true`, can have `method === undefined`, and contain the page URL in `name`. If the
+     * function returns null or undefined for an initial entry, PostHog retains the replay-required timing
+     * metadata but omits its URL, headers, and body. Return a modified entry to retain a redacted URL.
      */
     maskCapturedNetworkRequestFn?: ((data: CapturedNetworkRequest) => CapturedNetworkRequest | null | undefined) | null
 
@@ -686,6 +815,18 @@ export interface SessionRecordingOptions {
      * @default 1000 * 60 * 5 (5 minutes)
      */
     full_snapshot_interval_millis?: number
+
+    /**
+     * ADVANCED: controls how much recent replay data is kept in memory while session recording waits for a
+     * conditional trigger. The recorder periodically takes a full snapshot and discards older buffered events,
+     * so increasing this interval retains more pre-trigger history but can increase memory usage and
+     * CPU usage. Performance impacts on your site can start to be visible to users with larger values.
+     * Values must be between 1,000 ms and 3,600,000 ms (1 hour, inclusive); values outside this range,
+     * or non-finite values, are ignored.
+     *
+     * @default 1000 * 60 (1 minute)
+     */
+    trigger_pending_buffer_interval_millis?: number
 
     /**
      * ADVANCED: whether to partially compress rrweb events before sending them to the server,
@@ -737,6 +878,23 @@ export interface SessionRecordingOptions {
      * @default false
      */
     strictMinimumDuration?: boolean
+
+    /**
+     * Derived from `rrweb.record` options. Controls how often certain event types are captured
+     * within an already-recorded session, e.g. `{ mousemove: false }` stops recording mouse movement.
+     *
+     * Not to be confused with `sampleRate` below, which controls whether a session is recorded
+     * at all, or with `posthog.startSessionRecording({ sampling: true })`, which overrides that
+     * session-level sample rate.
+     *
+     * NB disabled event types no longer count as user activity for replay idle detection
+     * (`session_idle_threshold_ms`). For example, with `mousemove: false` pure mouse movement
+     * no longer keeps a session active, while clicks, scrolls, and inputs still do.
+     *
+     * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     * @default undefined
+     */
+    sampling?: SessionRecordingSamplingConfig
 
     /**
      * The sample rate for session recordings, a number between 0 and 1.
@@ -1897,7 +2055,13 @@ export interface PostHogConfig {
     process_person?: 'always' | 'never' | 'identified_only'
 
     /**
-     * Client side rate limiting
+     * Client side rate limiting.
+     *
+     * A token bucket, per browser, that stops a runaway loop on your site from flooding capture.
+     * When it drains, further `capture` calls are dropped and a one-off `$$client_ingestion_warning`
+     * is sent reporting how many events were dropped and the page and session that tripped it -
+     * usually the fastest way to find the loop. Raise these limits if you legitimately capture in
+     * bursts; a warning under the defaults is more often a bug on the page than a limit set too low.
      */
     rate_limiting?: {
         /**

@@ -6,10 +6,13 @@ import {
   isShadowRoot,
   needMaskingText,
   maskInputValue,
+  maskAttributeValue,
   Mirror,
   isNativeShadowDom,
   getInputType,
   toLowerCase,
+  nowMs,
+  recordMutationCost,
 } from '@posthog/rrweb-snapshot';
 import type { observerParam, MutationBufferParam } from '../types';
 import type {
@@ -134,6 +137,28 @@ class DoubleLinkedList {
 
 const moveKey = (id: number, parentId: number) => `${id}@${parentId}`;
 
+const XML_NAMESPACE = 'http://www.w3.org/XML/1998/namespace';
+const XMLNS_NAMESPACE = 'http://www.w3.org/2000/xmlns/';
+const XLINK_NAMESPACE = 'http://www.w3.org/1999/xlink';
+
+function getSerializedAttributeName(
+  target: Element,
+  localName: string,
+  namespace: string | null,
+): string {
+  if (!namespace) return localName;
+  const attribute = target.getAttributeNodeNS(namespace, localName);
+  if (attribute) return attribute.name;
+  // Removed attributes no longer expose their prefix, so retain standard ones.
+  if (namespace === XLINK_NAMESPACE) return `xlink:${localName}`;
+  if (namespace === XML_NAMESPACE) return `xml:${localName}`;
+  if (namespace === XMLNS_NAMESPACE) {
+    return localName === 'xmlns' ? localName : `xmlns:${localName}`;
+  }
+  const prefix = target.lookupPrefix(namespace);
+  return prefix ? `${prefix}:${localName}` : localName;
+}
+
 /**
  * controls behaviour of a MutationObserver
  */
@@ -144,6 +169,7 @@ export default class MutationBuffer {
   private texts: textCursor[] = [];
   private attributes: attributeCursor[] = [];
   private attributeMap = new WeakMap<Node, attributeCursor>();
+  private generatedAttributes = new WeakMap<Node, Set<string>>();
   private removes: removedNodeMutation[] = [];
   private mapRemoves: Node[] = [];
 
@@ -180,8 +206,11 @@ export default class MutationBuffer {
   private maskInputOptions: observerParam['maskInputOptions'];
   private maskTextFn: observerParam['maskTextFn'];
   private maskInputFn: observerParam['maskInputFn'];
+  private maskAllElementAttributes: observerParam['maskAllElementAttributes'];
+  private maskAttributeFn: observerParam['maskAttributeFn'];
   private keepIframeSrcFn: observerParam['keepIframeSrcFn'];
   private recordCanvas: observerParam['recordCanvas'];
+  private canvasMaskingConfigured: observerParam['canvasMaskingConfigured'];
   private inlineImages: observerParam['inlineImages'];
   private slimDOMOptions: observerParam['slimDOMOptions'];
   private dataURLOptions: observerParam['dataURLOptions'];
@@ -207,8 +236,11 @@ export default class MutationBuffer {
         'maskInputOptions',
         'maskTextFn',
         'maskInputFn',
+        'maskAllElementAttributes',
+        'maskAttributeFn',
         'keepIframeSrcFn',
         'recordCanvas',
+        'canvasMaskingConfigured',
         'inlineImages',
         'slimDOMOptions',
         'dataURLOptions',
@@ -293,6 +325,18 @@ export default class MutationBuffer {
       return;
     }
 
+    // Processing a burst serializes every added subtree inline, which on churn-heavy
+    // pages (virtualized lists, calendars) is where the recorder's main-thread time
+    // goes. Measure it so that cost is visible without a Chrome trace.
+    const startedAt = nowMs();
+    try {
+      this.processBufferedMutations();
+    } finally {
+      recordMutationCost(nowMs() - startedAt);
+    }
+  };
+
+  private processBufferedMutations = () => {
     // delay any modification of the mirror until this function
     // so that the mirror for takeFullSnapshot doesn't get mutated while it's event is being processed
 
@@ -338,9 +382,12 @@ export default class MutationBuffer {
         maskInputOptions: this.maskInputOptions,
         maskTextFn: this.maskTextFn,
         maskInputFn: this.maskInputFn,
+        maskAllElementAttributes: this.maskAllElementAttributes,
+        maskAttributeFn: this.maskAttributeFn,
         slimDOMOptions: this.slimDOMOptions,
         dataURLOptions: this.dataURLOptions,
         recordCanvas: this.recordCanvas,
+        canvasMaskingConfigured: this.canvasMaskingConfigured,
         inlineImages: this.inlineImages,
         onSerialize: (currentN) => {
           if (isSerializedIframe(currentN, this.mirror)) {
@@ -493,7 +540,11 @@ export default class MutationBuffer {
       attributes: this.attributes
         .map((attribute) => {
           const { attributes } = attribute;
-          if (typeof attributes.style === 'string') {
+          if (
+            !this.maskAllElementAttributes &&
+            !this.maskAttributeFn &&
+            typeof attributes.style === 'string'
+          ) {
             const diffAsStr = JSON.stringify(attribute.styleDiff);
             const unchangedAsStr = JSON.stringify(attribute._unchangedStyles);
             // check if the style diff is actually shorter than the regular string based mutation
@@ -506,6 +557,24 @@ export default class MutationBuffer {
                 attributes.style.split('var(').length
               ) {
                 attributes.style = attribute.styleDiff;
+              }
+            }
+          }
+          // Mask after synthesis and style compaction decisions. Compact style
+          // objects are disabled whenever string attribute masking is configured.
+          if (this.maskAllElementAttributes || this.maskAttributeFn) {
+            for (const [name, value] of Object.entries(attributes)) {
+              if (typeof value === 'string' || value === null) {
+                attributes[name] = maskAttributeValue({
+                  element: attribute.node as Element,
+                  name,
+                  value,
+                  maskAllElementAttributes: this.maskAllElementAttributes,
+                  maskAttributeFn: this.maskAttributeFn,
+                  isGenerated: this.generatedAttributes
+                    .get(attribute.node)
+                    ?.has(name),
+                });
               }
             }
           }
@@ -535,6 +604,7 @@ export default class MutationBuffer {
     this.texts = [];
     this.attributes = [];
     this.attributeMap = new WeakMap<Node, attributeCursor>();
+    this.generatedAttributes = new WeakMap<Node, Set<string>>();
     this.removes = [];
     this.addedSet = new Set<Node>();
     this.movedSet = new Set<Node>();
@@ -605,15 +675,24 @@ export default class MutationBuffer {
         break;
       }
       case 'attributes': {
-        const target = m.target as HTMLElement;
-        let attributeName = m.attributeName as string;
-        let value = (m.target as HTMLElement).getAttribute(attributeName);
+        const target = m.target as Element;
+        const sourceAttributeName = m.attributeName as string;
+        const attributeNamespace = m.attributeNamespace ?? null;
+        let attributeName = getSerializedAttributeName(
+          target,
+          sourceAttributeName,
+          attributeNamespace,
+        );
+        let value = attributeNamespace
+          ? target.getAttributeNS(attributeNamespace, sourceAttributeName)
+          : (m.target as Element).getAttribute(sourceAttributeName);
 
         if (attributeName === 'value') {
-          const type = getInputType(target);
+          const htmlTarget = target as HTMLElement;
+          const type = getInputType(htmlTarget);
 
           value = maskInputValue({
-            element: target,
+            element: htmlTarget,
             maskInputOptions: this.maskInputOptions,
             tagName: target.tagName,
             type,
@@ -629,18 +708,14 @@ export default class MutationBuffer {
         }
 
         let item = this.attributeMap.get(m.target);
+        const isIframeSrc =
+          target.tagName === 'IFRAME' && attributeName === 'src';
         if (
-          target.tagName === 'IFRAME' &&
-          attributeName === 'src' &&
-          !this.keepIframeSrcFn(value as string)
+          isIframeSrc &&
+          !this.keepIframeSrcFn(value as string) &&
+          (target as HTMLIFrameElement).contentDocument
         ) {
-          if (!(target as HTMLIFrameElement).contentDocument) {
-            // we can't record it directly as we can't see into it
-            // preserve the src attribute so a decision can be taken at replay time
-            attributeName = 'rr_src';
-          } else {
-            return;
-          }
+          return;
         }
         if (!item) {
           item = {
@@ -664,8 +739,9 @@ export default class MutationBuffer {
         }
 
         if (!ignoreAttribute(target.tagName, attributeName, value)) {
-          // overwrite attribute if the mutations was triggered in same time
-          item.attributes[attributeName] = transformAttribute(
+          // Transform with the source name before representing an inaccessible
+          // iframe's source under the final rr_src key.
+          const transformedValue = transformAttribute(
             this.doc,
             toLowerCase(target.tagName),
             toLowerCase(attributeName),
@@ -673,6 +749,12 @@ export default class MutationBuffer {
             target,
             this.dataURLOptions,
           );
+          if (isIframeSrc && !this.keepIframeSrcFn(value as string)) {
+            attributeName = 'rr_src';
+          }
+          // overwrite attribute if the mutation was triggered in same time
+          item.attributes[attributeName] = transformedValue;
+          this.generatedAttributes.get(m.target)?.delete(attributeName);
           if (attributeName === 'style') {
             if (!this.unattachedDoc) {
               try {
@@ -685,12 +767,13 @@ export default class MutationBuffer {
               }
             }
             const old = this.unattachedDoc.createElement('span');
+            const targetStyle = (target as HTMLElement | SVGElement).style;
             if (m.oldValue) {
               old.style.cssText = m.oldValue;
             }
-            for (const pname of Array.from(target.style)) {
-              const newValue = target.style.getPropertyValue(pname);
-              const newPriority = target.style.getPropertyPriority(pname);
+            for (const pname of Array.from(targetStyle)) {
+              const newValue = targetStyle.getPropertyValue(pname);
+              const newPriority = targetStyle.getPropertyPriority(pname);
               if (
                 newValue !== old.style.getPropertyValue(pname) ||
                 newPriority !== old.style.getPropertyPriority(pname)
@@ -706,7 +789,7 @@ export default class MutationBuffer {
               }
             }
             for (const pname of Array.from(old.style)) {
-              if (target.style.getPropertyValue(pname) === '') {
+              if (targetStyle.getPropertyValue(pname) === '') {
                 // "if not set, returns the empty string"
                 item.styleDiff[pname] = false; // delete
               }
@@ -717,6 +800,12 @@ export default class MutationBuffer {
             } else {
               item.attributes['rr_open_mode'] = 'non-modal';
             }
+            let generated = this.generatedAttributes.get(m.target);
+            if (!generated) {
+              generated = new Set();
+              this.generatedAttributes.set(m.target, generated);
+            }
+            generated.add('rr_open_mode');
           }
         }
         break;

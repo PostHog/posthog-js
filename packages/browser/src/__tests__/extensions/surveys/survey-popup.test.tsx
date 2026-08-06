@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/pr
 import { SurveyPopup } from '../../../extensions/surveys'
 import * as surveyUtils from '../../../extensions/surveys/surveys-extension-utils' // Import all utils
 import { Survey, SurveyQuestionType, SurveyType } from '../../../posthog-surveys-types'
-import * as uuid from '../../../uuidv7' // Import uuidv7
+import * as uuid from '@posthog/browser-common/utils/uuidv7' // Import uuidv7
 
 // Mock the utility functions
 jest.mock('../../../extensions/surveys/surveys-extension-utils', () => ({
@@ -14,12 +14,13 @@ jest.mock('../../../extensions/surveys/surveys-extension-utils', () => ({
 }))
 
 // Mock uuidv7
-jest.mock('../../../uuidv7')
+jest.mock('@posthog/browser-common/utils/uuidv7')
 
 // Mock PostHog instance needed by event handlers
 const mockPosthog = {
     capture: jest.fn(),
     get_session_replay_url: jest.fn().mockReturnValue('http://example.com/replay'),
+    reloadFeatureFlags: jest.fn(),
 }
 
 describe('SurveyPopup', () => {
@@ -165,6 +166,38 @@ describe('SurveyPopup', () => {
         expect(mockedUuidv7).not.toHaveBeenCalled()
     })
 
+    // A persisted index that is absent or non-numeric predates the persisted-index feature and
+    // must keep the restored responses, while an index that is present but out of range means the
+    // record is stale (e.g. left over from a completion) and its responses should be dropped.
+    test.each([
+        { label: 'missing index', lastQuestionIndex: undefined, keepsResponses: true },
+        { label: 'NaN index', lastQuestionIndex: NaN, keepsResponses: true },
+        { label: 'negative index', lastQuestionIndex: -1, keepsResponses: false },
+        { label: 'index at questions.length', lastQuestionIndex: mockSurvey.questions.length, keepsResponses: false },
+        {
+            label: 'index past questions.length',
+            lastQuestionIndex: mockSurvey.questions.length + 10,
+            keepsResponses: false,
+        },
+    ])('restores responses only for an absent or in-range index ($label)', ({ lastQuestionIndex, keepsResponses }) => {
+        mockedGetInProgressSurveyState.mockReturnValue({
+            surveySubmissionId: 'existing-uuid-range',
+            lastQuestionIndex,
+            responses: { $survey_response_q1: 'Previous answer' },
+        } as any)
+        render(
+            <SurveyPopup
+                survey={mockSurvey}
+                removeSurveyFromFocus={mockRemoveSurveyFromFocus}
+                isPopup={true}
+                posthog={mockPosthog as any}
+            />
+        )
+        // Either way the first question renders (never an empty container).
+        expect(screen.getByText('Question 1')).toBeVisible()
+        expect(screen.getByRole('textbox')).toHaveValue(keepsResponses ? 'Previous answer' : '')
+    })
+
     test('saves partial response to localStorage when moving to next question', () => {
         const initialState = null
         const generatedId = 'newly-generated-id'
@@ -199,6 +232,8 @@ describe('SurveyPopup', () => {
             surveySubmissionId: generatedId,
             isSurveyCompleted: false,
             posthog: mockPosthog,
+            properties: undefined,
+            surveyLanguage: undefined,
         })
         expect(screen.getByText('Question 2')).toBeVisible()
     })
@@ -242,6 +277,8 @@ describe('SurveyPopup', () => {
             surveySubmissionId: existingState.surveySubmissionId,
             isSurveyCompleted: true,
             posthog: mockPosthog,
+            properties: undefined,
+            surveyLanguage: undefined,
         })
 
         // *** Manually dispatch the event that the real function would dispatch ***

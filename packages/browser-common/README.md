@@ -1,25 +1,24 @@
 # @posthog/browser-common
 
-The shared contract for PostHog browser-SDK extensions: the interface an
-extension implements (`Extension`), the host capabilities it is handed
-(`Client`), and small shared runtime primitives such as `Publisher`.
+Internal shared browser utilities and extension primitives for PostHog JavaScript
+SDKs. This package is published so unbundled SDK outputs can resolve it at
+runtime, but it is not a public API surface and does not provide compatibility
+guarantees outside PostHog SDK packages.
 
-An extension written against this contract runs unchanged across major versions of the web SDK:
+The shared extension contract includes the interface an extension implements
+(`Extension`), the host adapter it receives (`Client`), and small shared runtime
+primitives such as `Publisher`.
 
-- **v1** is synchronous; extensions are registered statically.
-- **v2** is asynchronous; extensions are loaded dynamically.
-
-Each SDK provides a _client adapter_ that implements `Client` over its own
-internals, so extension code never depends on a specific SDK.
-
-This is a source-only package: it does not publish built output. Consumers are
-responsible for bundling/transpiling the TypeScript sources they import.
+This contract is designed so an extension can run unchanged across major
+versions of the web SDK. Concrete host adapters remain owned by their SDK
+packages; browser-v1 and browser-v2 composition and loading integration are
+separate from this shared runtime.
 
 ## Concepts
 
 ### `Extension`
 
-What you implement. The host calls only `setup` and `dispose`:
+What you implement. The host calls `setup` once and optional `dispose` for final cleanup:
 
 ```ts
 import type { Disposable, Extension } from '@posthog/browser-common'
@@ -41,76 +40,78 @@ export function webContext(): Extension {
 }
 ```
 
-`setup(client)` may be async (read async state before you're ready); `dispose()`
-may be async (final flush). Static config the app sets goes in your constructor,
-not on the `Client`.
+`setup(client)` may be async to read state before the extension is ready. Async
+extensions must guard work after each `await` so cleanup cannot be followed by
+late listener or timer installation. `dispose()` is synchronous, optional,
+idempotent, and best-effort. Static app config goes in the constructor, not on
+`Client`.
 
 Anything in `setup` that returns a `Disposable` must be held by the extension
-and disposed in `dispose()`.
+and disposed in `dispose()`. Use `createDisposable(teardown)` when adapting a
+synchronous callback into idempotent teardown.
 
 ### `Client`
 
-What an extension is given in `setup` — the host's capability surface:
+What an extension is given in `setup` — the adapter shared by extensions on that host SDK instance:
 
-- **identity & session** (synchronous reads): `distinctId`, `anonymousId`, `groups`, `session`
-- **events**: `capture(...)`, `registerDynamicEventProperties(...)` (contribute properties), `onEvent(...)` (observe)
-- **transport**: `apiRequest(path, init?)`
-- **server config**: `getRemoteConfig()` (current), `onRemoteConfig(...)` (changes)
-- **lifecycle**: `onNewSession(...)`
-- **registry**: `getExtension(token)`
-- **storage & logging**: `kv`, `logger`
+- **identity and session**: `distinctId`, `anonymousId`, `groups`, `session`
+- **events**: `capture(...)`, `registerDynamicEventProperties(...)`, `onEvent(...)`
+- **server config**: `onRemoteConfig(...)`
+- **transport**: `projectToken`, `sendRequest(path, init?)`
+- **storage and logging**: `kv`, `logger`
 
-Synchronous members are always-ready in-memory reads; everything that does I/O
-or waits for readiness (`capture`, `apiRequest`, `kv`, `getRemoteConfig`) is
-asynchronous.
+Identity, session, and the public project token are always-ready synchronous
+reads. Operations that may perform I/O, including `capture`, `sendRequest`,
+and `kv`, are awaitable. `onRemoteConfig` immediately replays the latest known
+success or failure and then reports subsequent outcomes. Extensions that want a
+named log prefix can create a child with `client.logger.createLogger('[myExtension]')`.
+
+### Host runtime
+
+PostHog browser SDK implementations share extension registration and teardown
+through `ExtensionRuntime`, imported from the dedicated
+`@posthog/browser-common/extension-runtime` subpath. It reserves extension names
+during setup, rolls back failed setup, and disposes extensions once in reverse
+registration order without waiting for pending setup. Concrete SDKs still own
+their `Client` adapter and SDK lifecycle hooks.
+
+`ExtensionRuntime` is host infrastructure, not part of the extension-author
+surface exported from the package root.
 
 ### `Publisher`
 
-Use `Publisher<T>` when an extension provides its own event stream to other
-extensions or to app-facing controls. Keep the publisher private, expose only its
-`listener`, and dispose it when the extension is torn down:
+Use `Publisher<T>` when an extension exposes an event stream. Keep the publisher
+private, expose only its listener, and dispose it with the extension:
 
 ```ts
 import { Publisher, type Listener } from '@posthog/browser-common'
 
-const changes = new Publisher<FeatureFlagsChange>()
+const changes = new Publisher<{ enabled: boolean }>()
+export const onChange: Listener<{ enabled: boolean }> = changes.listener
 
-export const onChange: Listener<FeatureFlagsChange> = changes.listener
-
-changes.publish({ flag: 'beta-ui', value: true })
+changes.publish({ enabled: true })
 changes.dispose()
 ```
 
-## Cross-extension dependencies
+## Utilities
 
-Extensions depend on one another through tokens, never implementation imports:
+Reusable browser utilities are exposed through `utils/*` subpaths, but they are
+intentionally not re-exported from the package root or a utility barrel. Import
+the exact file needed so lazy extension bundles do not pull in unrelated helpers:
 
 ```ts
-import { FeatureFlags } from './feature-flags/token'
-
-const flags = client.getExtension(FeatureFlags) // FeatureFlagsExtension | undefined
-if (flags && (await flags.getFeatureFlag('beta-ui'))) {
-    /* … */
-}
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { formDataToQuery } from '@posthog/browser-common/utils/request-utils'
 ```
-
-A token is implementation-free, so importing it never pulls the provider's code
-into your bundle — each extension stays independently tree-shakable and lazily
-loadable. An extension that provides a capability declares its token(s) in
-`provides`.
 
 ## Authoring
 
 See the **`develop-extension`** skill
 ([`.agents/skills/develop-extension/SKILL.md`](./.agents/skills/develop-extension/SKILL.md))
-for the full guide: the capability cheatsheet, the rules (enrichers are
-synchronous, dispose your disposables, design for asynchronous readiness,
-cross-extension state goes through `getExtension`, not shared storage), and the
-v1 → `Client` porting map.
+for the complete authoring and browser-v1 porting guide.
 
 ## Status
 
-Early. The package currently defines the extension contract and the shared
-`Publisher` helper. Additional shared runtime helpers — key-value stores, the
-registry implementation, and a test `Client` — will land alongside the first
-ported extension.
+Early and internal. The package currently defines the extension and client
+contracts, a shared host runtime, lifecycle helpers, and directly imported
+browser utilities under `utils/*` subpaths.

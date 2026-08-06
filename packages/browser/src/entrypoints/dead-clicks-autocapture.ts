@@ -1,12 +1,17 @@
-import { assignableWindow, document, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
+import { document } from '@posthog/browser-common/utils/globals'
+import { assignableWindow, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { PostHog } from '../posthog-core'
 import { isNull, isNumber, isUndefined } from '@posthog/core'
-import { getEventTarget, shouldCaptureDeadClick, shouldSkipDeadClick } from '../autocapture-utils'
+import {
+    getEventTarget,
+    shouldCaptureDeadClick,
+    shouldSkipDeadClick,
+} from '@posthog/browser-common/utils/autocapture-utils'
 import { DeadClickCandidate, DeadClicksAutoCaptureConfig, Properties } from '../types'
 import { autocapturePropertiesForElement } from '../autocapture'
-import { isElementInToolbar, isElementNode, isTag } from '../utils/element-utils'
-import { getNativeMutationObserverImplementation } from '../utils/prototype-utils'
-import { addEventListener } from '../utils'
+import { isElementInToolbar, isElementNode, isTag } from '@posthog/browser-common/utils/element-utils'
+import { getNativeMutationObserverImplementation } from '@posthog/browser-common/utils/prototype-utils'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 
 function asCandidate(event: MouseEvent | TouchEvent, extra: Partial<DeadClickCandidate>): DeadClickCandidate | null {
     const eventTarget = getEventTarget(event)

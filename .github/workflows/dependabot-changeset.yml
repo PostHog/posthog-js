@@ -9,17 +9,93 @@ jobs:
     steps:
       - name: Get app token
         id: app-token
-        uses: getsentry/action-github-app-token@97c9e23528286821f97fba885c1b1123284b29cc # v2.0.0
+        uses: getsentry/action-github-app-token@5c1e90706fe007857338ac1bfbd7a4177db2f789 # v4.0.0
         with:
           app_id: ${{ secrets.GH_APP_POSTHOG_JS_TESTS_APP_ID }}
           private_key: ${{ secrets.GH_APP_POSTHOG_JS_TESTS_PRIVATE_KEY }}
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
+      # The action writes the changeset and then commits it with plain `git`, which
+      # the signed-commits ruleset on this repo rejects. continue-on-error keeps the
+      # job alive through that rejected push; the changeset file it wrote is still in
+      # the workspace, and the next step commits it through the GitHub API instead.
+      # The guard below makes sure this only tolerates the rejected push, not a real
+      # failure of the action.
       - name: Generate changeset
+        id: generate
+        continue-on-error: true
         uses: the-guild-org/changesets-dependencies-action@f11b16181c79e07d62b112c2f32c9db534a9df09 # v1.2.2
         env:
           # this commits to the branch so we can't use the default GITHUB_TOKEN, otherwise Actions won't trigger
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      # The action leaves a local commit behind that it could not push. ghcommit sends
+      # `git rev-parse HEAD` as the mutation's expectedHeadOid, so HEAD has to be
+      # rewound off that commit or the commit below is rejected. --mixed keeps the
+      # generated changeset in the working tree.
+      #
+      # Rewinding decouples HEAD from the working tree, which defeats the
+      # expectedHeadOid guard, so the invariants of the one tolerated failure are
+      # checked first: exactly one local commit, sitting on the current remote tip,
+      # touching nothing outside `.changeset/`. Without that, a partial write that
+      # never committed, or a branch that advanced mid-run, would be replayed onto the
+      # new tip — resurrecting changesets the branch has since deleted.
+      #
+      # The reset targets HEAD^ rather than the fetched ref so the retained working
+      # tree is exactly that commit's diff by construction.
+      - name: Rewind the failed local commit
+        if: steps.generate.outcome == 'failure'
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          git fetch origin "+refs/heads/$HEAD_REF:refs/remotes/origin/$HEAD_REF"
+          remote=$(git rev-parse "refs/remotes/origin/$HEAD_REF")
+
+          if [ "$(git rev-parse HEAD)" = "$remote" ]; then
+            echo "::error::generation failed without committing; refusing to commit a partial result"
+            exit 1
+          fi
+          if [ "$(git rev-parse HEAD^)" != "$remote" ]; then
+            echo "::error::$HEAD_REF advanced during generation; rerun against the new branch state"
+            exit 1
+          fi
+          if git diff --name-only HEAD^ HEAD | grep -qv '^\.changeset/'; then
+            echo "::error::the generated commit touches files outside .changeset/"
+            exit 1
+          fi
+
+          git reset --mixed HEAD^
+
+      - name: Check for a generated changeset
+        id: changes
+        env:
+          GENERATE_OUTCOME: ${{ steps.generate.outcome }}
+        run: |
+          if [ -z "$(git status --porcelain -- .changeset)" ]; then
+            # The only failure we tolerate is the rejected push, which still leaves the
+            # changeset behind. Nothing to commit plus a failed step means the action
+            # itself broke, so surface it instead of passing a job that did nothing.
+            if [ "$GENERATE_OUTCOME" = "failure" ]; then
+              echo "::error::changesets-dependencies-action failed without writing a changeset"
+              exit 1
+            fi
+            echo "No changeset generated"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit changeset
+        if: steps.changes.outputs.changed == 'true'
+        uses: planetscale/ghcommit-action@a6b150b81dca5dd027baa898604418eec9e11465 # v0.2.22
+        with:
+          commit_message: 'chore(deps): add changeset'
+          repo: ${{ github.repository }}
+          branch: ${{ github.event.pull_request.head.ref }}
+          file_pattern: .changeset
+        env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}

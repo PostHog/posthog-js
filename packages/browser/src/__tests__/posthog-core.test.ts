@@ -1,13 +1,16 @@
-import { defaultPostHog } from './helpers/posthog-instance'
-import type { PostHogConfig } from '../types'
-import { uuidv7 } from '../uuidv7'
+import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
+import { PostHog } from '../posthog-core'
+import type { PostHogConfig, SessionIdChangedCallback } from '../types'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { SurveyEventName, SurveyEventProperties } from '../posthog-surveys-types'
 import { ProductTourEventName, ProductTourEventProperties } from '../posthog-product-tours-types'
 import { SURVEY_SEEN_PREFIX } from '../utils/survey-utils'
 import { beforeEach } from '@jest/globals'
+import { RateLimiter } from '../rate-limiter'
+import { normalizeCaptureResult } from './helpers/normalize-capture-result'
 
-jest.mock('../utils/globals', () => {
-    const orig = jest.requireActual('../utils/globals')
+jest.mock('@posthog/browser-common/utils/globals', () => {
+    const orig = jest.requireActual('./helpers/snapshot-test-globals').snapshotTestGlobals
     const mockURL = jest.fn().mockReturnValue('https://example.com')
     const mockReferrer = jest.fn().mockReturnValue('https://referrer.com')
     const mockHostName = jest.fn().mockReturnValue('example.com')
@@ -27,9 +30,12 @@ jest.mock('../utils/globals', () => {
             },
         },
         get location() {
+            const url = new URL(mockURL())
             return {
-                href: mockURL(),
-                toString: () => mockURL(),
+                href: url.href,
+                origin: url.origin,
+                pathname: url.pathname,
+                toString: () => url.href,
                 hostname: mockHostName(),
             }
         },
@@ -37,7 +43,7 @@ jest.mock('../utils/globals', () => {
 })
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { mockURL, mockReferrer, mockHostName } = require('../utils/globals')
+const { mockURL, mockReferrer, mockHostName } = require('@posthog/browser-common/utils/globals')
 
 describe('posthog core', () => {
     beforeEach(() => {
@@ -92,7 +98,6 @@ describe('posthog core', () => {
         const setup = (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
             const beforeSendMock = jest.fn().mockImplementation((e) => e)
             const posthog = defaultPostHog().init(token, { ...config, before_send: beforeSendMock }, token)!
-            posthog.debug()
             return { posthog, beforeSendMock }
         }
 
@@ -122,6 +127,38 @@ describe('posthog core', () => {
             expect(beforeSendMock.mock.calls[0][0]).toMatchObject({
                 $unset: ['email'],
             })
+        })
+
+        it('produces a representative custom event capture', () => {
+            const { posthog, beforeSendMock } = setup({}, 'snapshot-token')
+            posthog.register({ plan: 'growth', workspace_id: 'workspace-42' })
+
+            posthog.capture('report exported', {
+                export_format: 'csv',
+                row_count: 42,
+                filters: { date_range: 'last_30_days', teams: ['analytics', 'growth'] },
+            })
+
+            const capturedEvent = beforeSendMock.mock.calls[0][0]
+            expect(normalizeCaptureResult(capturedEvent)).toMatchSnapshot()
+        })
+
+        it('produces a representative $groupidentify capture from a real instance', () => {
+            const { posthog, beforeSendMock } = setup({}, 'group-snapshot-token')
+
+            posthog.group('organization', 'org::5', { group: 'property', foo: 5 })
+
+            expect(beforeSendMock).toHaveBeenCalledTimes(1)
+            const capturedEvent = beforeSendMock.mock.calls[0][0]
+            expect(capturedEvent).toMatchObject({
+                event: '$groupidentify',
+                properties: {
+                    $group_type: 'organization',
+                    $group_key: 'org::5',
+                    $group_set: { group: 'property', foo: 5 },
+                },
+            })
+            expect(normalizeCaptureResult(capturedEvent)).toMatchSnapshot()
         })
 
         describe('rate limiting', () => {
@@ -159,6 +196,94 @@ describe('posthog core', () => {
                     '[PostHog.js]',
                     'This capture call is ignored due to client rate limiting.'
                 )
+            })
+
+            it('does not reintroduce denylisted page or session context into a warning', () => {
+                jest.useFakeTimers()
+                jest.setSystemTime(Date.now())
+                mockURL.mockReturnValue('https://example.com/users/alice@example.com/private?token=secret#private')
+                const { posthog, beforeSendMock } = setup({
+                    rate_limiting: { events_per_second: 1, events_burst_limit: 1 },
+                    property_denylist: ['$current_url', '$pathname', '$session_id'],
+                })
+
+                posthog.capture(eventName, eventProperties)
+                posthog.capture(eventName, eventProperties)
+
+                const warning = beforeSendMock.mock.calls.find(
+                    ([event]) => event.event === '$$client_ingestion_warning'
+                )[0]
+                expect(warning.properties.$$client_ingestion_warning_message).toBe(
+                    'posthog-js client rate limited: 1 event(s) dropped since the last warning. Config is set to 1 events per second and 1 events burst limit.'
+                )
+                expect(warning.properties).not.toHaveProperty('$$client_ingestion_warning_page')
+                expect(warning.properties).not.toHaveProperty('$$client_ingestion_warning_session_id')
+                expect(warning.properties).not.toHaveProperty('$current_url')
+                expect(warning.properties).not.toHaveProperty('$pathname')
+                expect(warning.properties).not.toHaveProperty('$session_id')
+            })
+
+            it('keeps the persisted tally across a rate limiter reload', () => {
+                jest.useFakeTimers()
+                const now = Date.now()
+                jest.setSystemTime(now)
+                console.error = jest.fn()
+                const { posthog, beforeSendMock } = setup({
+                    rate_limiting: { events_per_second: 1, events_burst_limit: 1 },
+                })
+
+                posthog.capture(eventName, eventProperties)
+                posthog.capture(eventName, eventProperties) // accepted warning resets the tally
+                for (let i = 0; i < 19; i++) {
+                    posthog.capture(eventName, eventProperties)
+                }
+                expect(posthog.persistence?.get_property('$capture_rate_limit').dropped).toBe(19)
+
+                beforeSendMock.mockClear()
+                posthog.rateLimiter = new RateLimiter(posthog)
+                jest.setSystemTime(now + 1000)
+                posthog.capture(eventName, eventProperties)
+                posthog.capture(eventName, eventProperties)
+
+                const warning = beforeSendMock.mock.calls.find(
+                    ([event]) => event.event === '$$client_ingestion_warning'
+                )[0]
+                expect(warning.properties.$$client_ingestion_warning_message).toContain(
+                    '20 event(s) dropped since the last warning'
+                )
+            })
+
+            it('resets the tally only after before_send accepts the warning', () => {
+                jest.useFakeTimers()
+                const now = Date.now()
+                jest.setSystemTime(now)
+                const { posthog, beforeSendMock } = setup({
+                    rate_limiting: { events_per_second: 1, events_burst_limit: 1 },
+                })
+                let rejectWarning = true
+                beforeSendMock.mockImplementation((event) => {
+                    if (event.event === '$$client_ingestion_warning' && rejectWarning) {
+                        rejectWarning = false
+                        return null
+                    }
+                    return event
+                })
+
+                posthog.capture(eventName, eventProperties)
+                posthog.capture(eventName, eventProperties) // warning rejected, dropped tally is 1
+                posthog.capture(eventName, eventProperties) // another drop, tally is 2
+                jest.setSystemTime(now + 1000)
+                posthog.capture(eventName, eventProperties) // token refilled
+                posthog.capture(eventName, eventProperties) // accepted warning reports all 3 drops
+
+                const warningMessages = beforeSendMock.mock.calls
+                    .filter(([event]) => event.event === '$$client_ingestion_warning')
+                    .map(([event]) => event.properties.$$client_ingestion_warning_message)
+                expect(warningMessages).toEqual([
+                    expect.stringContaining('1 event(s) dropped since the last warning'),
+                    expect.stringContaining('3 event(s) dropped since the last warning'),
+                ])
+                expect(posthog.persistence?.get_property('$capture_rate_limit').dropped).toBe(0)
             })
         })
 
@@ -266,6 +391,88 @@ describe('posthog core', () => {
                 expect(properties['$referrer']).toBe('$direct')
                 expect(properties['$referring_domain']).toBe('$direct')
             })
+
+            it('should not overwrite a referrer that was registered via register()', () => {
+                // arrange
+                mockReferrer.mockReturnValue('https://iframe-origin.example.com/some/path')
+                const { posthog, beforeSendMock } = setup()
+                posthog.register({
+                    $referrer: 'https://blabla.fr/',
+                    $referring_domain: 'blabla.fr',
+                })
+
+                // act
+                posthog.capture(eventName, eventProperties)
+
+                // assert
+                const { properties } = beforeSendMock.mock.calls[0][0]
+                expect(properties['$referrer']).toBe('https://blabla.fr/')
+                expect(properties['$referring_domain']).toBe('blabla.fr')
+                // and the registered values keep surviving on subsequent captures
+                posthog.capture(eventName, eventProperties)
+                const { properties: laterProperties } = beforeSendMock.mock.calls[1][0]
+                expect(laterProperties['$referrer']).toBe('https://blabla.fr/')
+                expect(laterProperties['$referring_domain']).toBe('blabla.fr')
+            })
+
+            it('should let a register() called after a capture win over the already-stored session referrer', () => {
+                // arrange: a first capture stores document.referrer in session persistence
+                mockReferrer.mockReturnValue('https://iframe-origin.example.com/some/path')
+                const { posthog, beforeSendMock } = setup()
+                posthog.capture(eventName, eventProperties)
+                const { properties: firstProperties } = beforeSendMock.mock.calls[0][0]
+                expect(firstProperties['$referrer']).toBe('https://iframe-origin.example.com/some/path')
+
+                // act: register a custom referrer after the session value is already present
+                posthog.register({
+                    $referrer: 'https://blabla.fr/',
+                    $referring_domain: 'blabla.fr',
+                })
+                posthog.capture(eventName, eventProperties)
+
+                // assert: the registered value wins over the stale session value
+                const { properties } = beforeSendMock.mock.calls[1][0]
+                expect(properties['$referrer']).toBe('https://blabla.fr/')
+                expect(properties['$referring_domain']).toBe('blabla.fr')
+            })
+
+            it('should only override the referrer key that was registered, leaving the other automatic', () => {
+                // arrange
+                mockReferrer.mockReturnValue('https://iframe-origin.example.com/some/path')
+                const { posthog, beforeSendMock } = setup()
+                posthog.register({ $referrer: 'https://blabla.fr/' })
+
+                // act
+                posthog.capture(eventName, eventProperties)
+
+                // assert: registered key is preserved, the other still comes from document.referrer
+                const { properties } = beforeSendMock.mock.calls[0][0]
+                expect(properties['$referrer']).toBe('https://blabla.fr/')
+                expect(properties['$referring_domain']).toBe('iframe-origin.example.com')
+            })
+
+            it('should fall back to document.referrer after the registered value is unregistered', () => {
+                // arrange
+                mockReferrer.mockReturnValue('https://iframe-origin.example.com/some/path')
+                const { posthog, beforeSendMock } = setup()
+                posthog.register({
+                    $referrer: 'https://blabla.fr/',
+                    $referring_domain: 'blabla.fr',
+                })
+                posthog.capture(eventName, eventProperties)
+                const { properties: registeredProperties } = beforeSendMock.mock.calls[0][0]
+                expect(registeredProperties['$referrer']).toBe('https://blabla.fr/')
+
+                // act
+                posthog.unregister('$referrer')
+                posthog.unregister('$referring_domain')
+                posthog.capture(eventName, eventProperties)
+
+                // assert
+                const { properties } = beforeSendMock.mock.calls[1][0]
+                expect(properties['$referrer']).toBe('https://iframe-origin.example.com/some/path')
+                expect(properties['$referring_domain']).toBe('iframe-origin.example.com')
+            })
         })
 
         describe('campaign params', () => {
@@ -301,6 +508,64 @@ describe('posthog core', () => {
                 //assert
                 expect(beforeSendMock.mock.calls[0][0].properties.utm_source).toBe('source')
                 expect(beforeSendMock.mock.calls[0][0].properties.utm_medium).toBe(null)
+            })
+
+            it('should refresh campaign params after an SPA URL change', () => {
+                // arrange
+                const token = uuidv7()
+                const { posthog, beforeSendMock } = setup({
+                    token,
+                    persistence_name: token,
+                })
+
+                // act
+                posthog.capture('$pageview')
+                const registerSpy = jest.spyOn(posthog.sessionPersistence!, 'register')
+                mockURL.mockReturnValue('https://www.example.com/some/path?gclid=abc')
+                posthog.capture('$pageview')
+                posthog.capture('$pageview')
+
+                // assert
+                expect(beforeSendMock.mock.calls[1][0].properties.gclid).toBe('abc')
+                expect(beforeSendMock.mock.calls[2][0].properties.gclid).toBe('abc')
+                expect(registerSpy.mock.calls.filter(([props]) => props.gclid === 'abc')).toHaveLength(1)
+            })
+
+            it('should replace campaign params after navigating to a new campaign URL', () => {
+                // arrange
+                const token = uuidv7()
+                mockURL.mockReturnValue('https://www.example.com/some/path?gclid=first-campaign')
+                const { posthog, beforeSendMock } = setup({
+                    token,
+                    persistence_name: token,
+                })
+                posthog.capture('$pageview')
+
+                // act
+                mockURL.mockReturnValue('https://www.example.com/another/path?utm_source=second-campaign')
+                posthog.capture('$pageview')
+
+                // assert
+                expect(beforeSendMock.mock.calls[1][0].properties.utm_source).toBe('second-campaign')
+                expect(beforeSendMock.mock.calls[1][0].properties.gclid).toBe(null)
+            })
+
+            it('should retain campaign params after navigating to a direct URL', () => {
+                // arrange
+                const token = uuidv7()
+                mockURL.mockReturnValue('https://www.example.com/some/path?utm_source=campaign')
+                const { posthog, beforeSendMock } = setup({
+                    token,
+                    persistence_name: token,
+                })
+                posthog.capture('$pageview')
+
+                // act
+                mockURL.mockReturnValue('https://www.example.com/another/path')
+                posthog.capture('$pageview')
+
+                // assert
+                expect(beforeSendMock.mock.calls[1][0].properties.utm_source).toBe('campaign')
             })
         })
 
@@ -611,6 +876,143 @@ describe('posthog core', () => {
             expect(captureSpy).toHaveBeenCalledWith('test-event')
             captureSpy.mockRestore()
             delete (posthog as any).parseInvalidJson
+        })
+    })
+
+    describe('register_for_session()', () => {
+        const emitSessionChange = (
+            posthog: PostHog,
+            changeReason: NonNullable<Parameters<SessionIdChangedCallback>[2]>
+        ): void => {
+            const handlers = (posthog.sessionManager as any)._sessionIdChangedHandlers as SessionIdChangedCallback[]
+            handlers.forEach((handler) => handler('new-session-id', 'window-id', changeReason))
+        }
+
+        const createReloadedPosthogInstance = (token: string): Promise<PostHog> =>
+            new Promise((resolve) => {
+                const posthog = new PostHog()
+                posthog._init(
+                    token,
+                    {
+                        persistence: 'localStorage',
+                        request_batching: false,
+                        api_host: 'http://localhost',
+                        disable_surveys: true,
+                        disable_conversations: true,
+                        before_send: () => null,
+                        loaded: (instance) => resolve(instance as PostHog),
+                    },
+                    `reload-${token}`
+                )
+            })
+
+        it('clears session-registered props when PostHog session rotates due to activity timeout', async () => {
+            const posthog = await createPosthogInstance(uuidv7(), { persistence: 'localStorage' })
+
+            posthog.register_for_session({ link_id: 'abc123', flow: 'signup' })
+            expect(posthog.sessionPersistence?.props['link_id']).toBe('abc123')
+            expect(posthog.sessionPersistence?.props['flow']).toBe('signup')
+
+            emitSessionChange(posthog, {
+                noSessionId: false,
+                activityTimeout: true,
+                sessionPastMaximumLength: false,
+                crossTabAdoption: false,
+            })
+
+            expect(posthog.sessionPersistence?.props['link_id']).toBeUndefined()
+            expect(posthog.sessionPersistence?.props['flow']).toBeUndefined()
+        })
+
+        it('does not collide with user-provided session property names', async () => {
+            const posthog = await createPosthogInstance(uuidv7(), { persistence: 'localStorage' })
+
+            posthog.register_for_session({ $session_registered_properties: 'user-value' })
+
+            expect(posthog.sessionPersistence?.props['$session_registered_properties']).toBe('user-value')
+            expect(posthog.sessionPersistence?.properties()['$session_registered_properties']).toBe('user-value')
+        })
+
+        it('clears session-registered props after a page reload and later session rotation', async () => {
+            const token = uuidv7()
+            const posthog = await createPosthogInstance(token, { persistence: 'localStorage' })
+            posthog.register_for_session({ link_id: 'abc123' })
+
+            const reloadedPosthog = await createReloadedPosthogInstance(token)
+            expect(reloadedPosthog.sessionPersistence?.props['link_id']).toBe('abc123')
+
+            emitSessionChange(reloadedPosthog, {
+                noSessionId: false,
+                activityTimeout: true,
+                sessionPastMaximumLength: false,
+                crossTabAdoption: false,
+            })
+
+            expect(reloadedPosthog.sessionPersistence?.props['link_id']).toBeUndefined()
+        })
+
+        it('clears session-registered props when adopting another tab session', async () => {
+            const posthog = await createPosthogInstance(uuidv7(), { persistence: 'localStorage' })
+            posthog.register_for_session({ link_id: 'abc123' })
+
+            emitSessionChange(posthog, {
+                noSessionId: false,
+                activityTimeout: false,
+                sessionPastMaximumLength: false,
+                crossTabAdoption: true,
+            })
+
+            expect(posthog.sessionPersistence?.props['link_id']).toBeUndefined()
+        })
+
+        it('does not clear session-registered props on initial session creation', async () => {
+            const posthog = await createPosthogInstance(uuidv7(), { persistence: 'localStorage' })
+
+            posthog.register_for_session({ link_id: 'abc123' })
+            expect(posthog.sessionPersistence?.props['link_id']).toBe('abc123')
+
+            emitSessionChange(posthog, {
+                noSessionId: true,
+                activityTimeout: false,
+                sessionPastMaximumLength: false,
+                crossTabAdoption: false,
+            })
+
+            expect(posthog.sessionPersistence?.props['link_id']).toBe('abc123')
+        })
+
+        it('clears only user-registered keys, not system-managed session storage keys', async () => {
+            const posthog = await createPosthogInstance(uuidv7(), { persistence: 'localStorage' })
+
+            posthog.register_for_session({ my_prop: 'user-value' })
+            posthog.sessionPersistence?.register({ $referring_domain: 'google.com' })
+
+            emitSessionChange(posthog, {
+                noSessionId: false,
+                activityTimeout: true,
+                sessionPastMaximumLength: false,
+                crossTabAdoption: false,
+            })
+
+            expect(posthog.sessionPersistence?.props['my_prop']).toBeUndefined()
+            expect(posthog.sessionPersistence?.props['$referring_domain']).toBe('google.com')
+        })
+
+        it('removes keys from the tracked set when unregister_for_session is called', async () => {
+            const posthog = await createPosthogInstance(uuidv7(), { persistence: 'localStorage' })
+
+            posthog.register_for_session({ link_id: 'abc123', flow: 'signup' })
+            posthog.unregister_for_session('flow')
+
+            emitSessionChange(posthog, {
+                noSessionId: false,
+                activityTimeout: true,
+                sessionPastMaximumLength: false,
+                crossTabAdoption: false,
+            })
+
+            expect(posthog.sessionPersistence?.props['flow']).toBeUndefined()
+            expect(posthog.sessionPersistence?.props['link_id']).toBeUndefined()
         })
     })
 })

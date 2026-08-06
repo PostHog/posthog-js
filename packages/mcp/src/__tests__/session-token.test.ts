@@ -22,6 +22,16 @@ describe('session token codec', () => {
       expect(decodeSessionId(encodeSessionId(payload))).toEqual(payload)
     })
 
+    it('round-trips the protocol version', () => {
+      const payload: SessionTokenPayload = {
+        sessionId: 'ses_0199aabb',
+        clientName: 'Claude',
+        clientVersion: '1.2.3',
+        protocolVersion: '2025-06-18',
+      }
+      expect(decodeSessionId(encodeSessionId(payload))).toEqual(payload)
+    })
+
     it('round-trips unicode client names', () => {
       const payload: SessionTokenPayload = {
         sessionId: 'ses_0199aabb',

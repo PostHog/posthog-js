@@ -1,6 +1,6 @@
 import { FeatureFlagCondition, FlagProperty, FlagPropertyValue, PostHogFeatureFlag, PropertyGroup } from '../../types'
 import type { FeatureFlagValue, JsonType, PostHogFetchOptions, PostHogFetchResponse } from '@posthog/core'
-import { safeSetTimeout } from '@posthog/core'
+import { raceWithTimeout, safeSetTimeout } from '@posthog/core'
 import { hashSHA1 } from './crypto'
 import { FlagDefinitionCacheProvider, FlagDefinitionCacheData } from './cache'
 
@@ -61,6 +61,13 @@ type FeatureFlagsPollerOptions = {
   fetch?: (url: string, options: PostHogFetchOptions) => Promise<PostHogFetchResponse>
   onError?: (error: Error) => void
   onLoad?: (count: number) => void
+  /**
+   * Called whenever flag definitions are (re)loaded — from the API, the cache provider, or a
+   * quota reset — with the server gate for minimal `$feature_flag_called` events carried by
+   * that payload. Lets the client keep a single last-writer-wins gate across the local-eval
+   * and remote `/flags` signal sources.
+   */
+  onMinimalFlagCalledEvents?: (enabled: boolean) => void
   customHeaders?: { [key: string]: string }
   cacheProvider?: FlagDefinitionCacheProvider
   strictLocalEvaluation?: boolean
@@ -100,10 +107,12 @@ class FeatureFlagsPoller {
   onLoad?: (count: number) => void
   private cacheProvider?: FlagDefinitionCacheProvider
   private loadingPromise?: Promise<void>
+  private pollerStopped: boolean = false
   private flagsEtag?: string
   private nextFetchAllowedAt?: number
   private strictLocalEvaluation: boolean
   private flagDefinitionsLoadedAt?: number
+  private onMinimalFlagCalledEvents?: (enabled: boolean) => void
 
   constructor({
     pollingInterval,
@@ -129,6 +138,7 @@ class FeatureFlagsPoller {
     this.onError = options.onError
     this.customHeaders = customHeaders
     this.onLoad = options.onLoad
+    this.onMinimalFlagCalledEvents = options.onMinimalFlagCalledEvents
     this.cacheProvider = options.cacheProvider
     this.strictLocalEvaluation = options.strictLocalEvaluation ?? false
     void this.loadFeatureFlags()
@@ -672,13 +682,15 @@ class FeatureFlagsPoller {
    */
   private updateFlagState(flagData: FlagDefinitionCacheData): void {
     this.featureFlags = flagData.flags
-    this.featureFlagsByKey = flagData.flags.reduce(
+    this.featureFlagsByKey = flagData.flags.reduce<Record<string, PostHogFeatureFlag>>(
       (acc, curr) => ((acc[curr.key] = curr), acc),
-      <Record<string, PostHogFeatureFlag>>{}
+      {}
     )
     this.groupTypeMapping = flagData.groupTypeMapping
     this.cohorts = flagData.cohorts
     this.loadedSuccessfullyOnce = true
+    // Absence of the field (older cached data, older servers) always means full events.
+    this.onMinimalFlagCalledEvents?.(flagData.minimalFlagCalledEvents === true)
   }
 
   /**
@@ -812,8 +824,6 @@ class FeatureFlagsPoller {
       this.poller = undefined
     }
 
-    this.poller = setTimeout(() => this.loadFeatureFlags(true), this.getPollingInterval())
-
     try {
       let shouldFetch = true
       if (this.cacheProvider) {
@@ -896,6 +906,7 @@ class FeatureFlagsPoller {
           this.featureFlagsByKey = {}
           this.groupTypeMapping = {}
           this.cohorts = {}
+          this.onMinimalFlagCalledEvents?.(false)
           return
 
         case 403:
@@ -928,6 +939,8 @@ class FeatureFlagsPoller {
             flags: (responseJson.flags as PostHogFeatureFlag[]) ?? [],
             groupTypeMapping: (responseJson.group_type_mapping as Record<string, string>) || {},
             cohorts: (responseJson.cohorts as Record<string, PropertyGroup>) || {},
+            // Absence of the field always flips the gate off — fail safe to full events.
+            minimalFlagCalledEvents: responseJson.minimal_flag_called_events === true,
           }
 
           this.updateFlagState(flagData)
@@ -961,6 +974,10 @@ class FeatureFlagsPoller {
       if (err instanceof ClientError) {
         this.onError?.(err)
       }
+    } finally {
+      if (!this.pollerStopped) {
+        this.poller = setTimeout(() => this.loadFeatureFlags(true), this.getPollingInterval())
+      }
     }
   }
 
@@ -984,7 +1001,7 @@ class FeatureFlagsPoller {
     }
   }
 
-  _requestFeatureFlagDefinitions(): Promise<PostHogFetchResponse> {
+  async _requestFeatureFlagDefinitions(): Promise<PostHogFetchResponse> {
     const url = `${this.host}/flags/definitions?token=${this.projectApiKey}&send_cohorts`
 
     const options = this.getPersonalApiKeyRequestOptions('GET', this.flagsEtag)
@@ -999,18 +1016,48 @@ class FeatureFlagsPoller {
       options.signal = controller.signal
     }
 
+    const clearAbortTimeout = () => clearTimeout(abortTimeout)
+
     try {
       // Unbind fetch from `this` to avoid potential issues in edge environments, e.g., Cloudflare Workers:
       // https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors
       const fetch = this.fetch
-      return fetch(url, options)
-    } finally {
-      clearTimeout(abortTimeout)
+      const res = await fetch(url, options)
+
+      if (res.status !== 200) {
+        clearAbortTimeout()
+        return res
+      }
+
+      return {
+        status: res.status,
+        headers: res.headers,
+        body: res.body,
+        text: async () => {
+          try {
+            return await res.text()
+          } finally {
+            clearAbortTimeout()
+          }
+        },
+        json: async () => {
+          try {
+            return await res.json()
+          } finally {
+            clearAbortTimeout()
+          }
+        },
+      }
+    } catch (err) {
+      clearAbortTimeout()
+      throw err
     }
   }
 
   async stopPoller(timeoutMs: number = 30000): Promise<void> {
+    this.pollerStopped = true
     clearTimeout(this.poller)
+    this.poller = undefined
 
     if (this.cacheProvider) {
       try {
@@ -1020,12 +1067,9 @@ class FeatureFlagsPoller {
           // This follows the same timeout logic defined in _shutdown.
           // We time out after some period of time to avoid hanging the entire
           // shutdown process if the cache provider misbehaves.
-          await Promise.race([
-            shutdownResult,
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error(`Cache shutdown timeout after ${timeoutMs}ms`)), timeoutMs)
-            ),
-          ])
+          await raceWithTimeout(shutdownResult, timeoutMs, () => {
+            throw new Error(`Cache shutdown timeout after ${timeoutMs}ms`)
+          })
         }
       } catch (err) {
         this.onError?.(new Error(`Error during cache shutdown: ${err}`))
@@ -1106,6 +1150,14 @@ function matchProperty(
       return String(overrideValue).toLowerCase().includes(String(value).toLowerCase())
     case 'not_icontains':
       return !String(overrideValue).toLowerCase().includes(String(value).toLowerCase())
+    case 'starts_with':
+      return String(overrideValue).toLowerCase().startsWith(String(value).toLowerCase())
+    case 'not_starts_with':
+      return !String(overrideValue).toLowerCase().startsWith(String(value).toLowerCase())
+    case 'ends_with':
+      return String(overrideValue).toLowerCase().endsWith(String(value).toLowerCase())
+    case 'not_ends_with':
+      return !String(overrideValue).toLowerCase().endsWith(String(value).toLowerCase())
     case 'regex':
       return isValidRegex(String(value)) && String(overrideValue).match(String(value)) !== null
     case 'not_regex':

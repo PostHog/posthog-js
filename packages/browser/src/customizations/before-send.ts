@@ -1,7 +1,7 @@
 import { BeforeSendFn, CaptureResult, KnownEventName } from '../types'
 import { includes, clampToRange } from '@posthog/core'
 import { appendArray, sampleOnProperty, updateThreshold } from '../extensions/sampling'
-import { logger } from '../utils/logger'
+import { logger } from '@posthog/browser-common/utils/logger'
 
 /**
  * Provides an implementation of sampling that samples based on the distinct ID.

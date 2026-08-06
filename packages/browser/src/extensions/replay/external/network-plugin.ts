@@ -26,12 +26,12 @@ import {
     isUndefined,
     isObject,
 } from '@posthog/core'
-import { isDocument } from '../../../utils/type-utils'
-import { createLogger } from '../../../utils/logger'
-import { formDataToQuery } from '../../../utils/request-utils'
+import { isDocument } from '@posthog/browser-common/utils/type-utils'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { formDataToQuery } from '@posthog/browser-common/utils/request-utils'
 import { patch } from '../rrweb-plugins/patch'
 import { isHostOnDenyList } from '../../../extensions/replay/external/denylist'
-import { defaultNetworkOptions, effectivePayloadLimitBytes } from './config'
+import { defaultNetworkOptions, effectivePayloadLimitBytes, isInitialMaskFallback } from './config'
 
 const logger = createLogger('[Recorder]')
 
@@ -888,8 +888,23 @@ function initNetworkObserver(
 
     const cb: networkCallback = (data) => {
         const requests: CapturedNetworkRequest[] = []
+        let parentRequestDropped = false
         data.requests.forEach((request) => {
+            const isServerTiming = request.entryType === 'serverTiming'
+
+            // Server timings are emitted immediately after their resource or navigation entry.
+            // If a parent is dropped (i.e. a PostHog ingestion request), derived timings must too or an endless capture loop ensues.
+            if (isServerTiming && parentRequestDropped) {
+                return
+            }
+
             const maskedRequest = networkOptions.maskRequestFn(request)
+            if (!isServerTiming) {
+                // A null-filtered initial parent is replaced by a strict URL-less fallback so replay keeps its
+                // required timing metadata. Treat that fallback as dropped for derived server timings, which
+                // can still contain customer-controlled names and durations.
+                parentRequestDropped = !maskedRequest || isInitialMaskFallback(maskedRequest)
+            }
             if (maskedRequest) {
                 requests.push(maskedRequest)
             }

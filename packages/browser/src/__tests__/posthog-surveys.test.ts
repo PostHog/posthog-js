@@ -1,4 +1,4 @@
-jest.mock('../utils/logger', () => ({
+jest.mock('@posthog/browser-common/utils/logger', () => ({
     createLogger: jest.fn().mockReturnValue({
         info: jest.fn(),
         warn: jest.fn(),
@@ -16,6 +16,8 @@ import { FlagsResponse } from '../types'
 import { assignableWindow } from '../utils/globals'
 import { SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '../utils/survey-utils'
 import { createMockPostHog } from './helpers/posthog-instance'
+
+const mockLogger = jest.requireMock('@posthog/browser-common/utils/logger').createLogger.mock.results[0].value
 
 describe('posthog-surveys', () => {
     describe('PostHogSurveys Class', () => {
@@ -115,6 +117,7 @@ describe('posthog-surveys', () => {
                     onConsentChange: jest.fn(),
                 },
                 featureFlags: {
+                    hasLoadedFlags: true,
                     _send_request: jest
                         .fn()
                         .mockImplementation(({ callback }) => callback({ statusCode: 200, json: flagsResponse })),
@@ -706,6 +709,7 @@ describe('posthog-surveys', () => {
                     isLoaded: false,
                     error: 'Surveys API could not be loaded, status: 500',
                 })
+                expect(mockLogger.error).toHaveBeenCalledWith('Surveys API could not be loaded, status: 500')
             })
 
             it('should clear promise when request times out', () => {
@@ -722,6 +726,19 @@ describe('posthog-surveys', () => {
                     isLoaded: false,
                     error: 'Surveys API could not be loaded, status: 0',
                 })
+                expect(mockLogger.warn).toHaveBeenCalledWith('Surveys API could not be loaded, status: 0')
+                expect(mockLogger.error).not.toHaveBeenCalled()
+            })
+
+            it('does not re-log status-zero failures already handled by the request layer', () => {
+                mockPostHog._send_request.mockImplementation(({ callback }) => {
+                    callback({ statusCode: 0, error: new TypeError('Failed to fetch') })
+                })
+
+                surveys.getSurveys(mockCallback)
+
+                expect(mockLogger.warn).not.toHaveBeenCalled()
+                expect(mockLogger.error).not.toHaveBeenCalled()
             })
 
             it('should handle delayed successful responses correctly', () => {

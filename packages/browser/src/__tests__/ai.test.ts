@@ -1,6 +1,6 @@
 import { defaultPostHog } from './helpers/posthog-instance'
 import type { PostHogConfig } from '../types'
-import { uuidv7 } from '../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
 describe('ai', () => {
     beforeEach(() => {
@@ -10,7 +10,6 @@ describe('ai', () => {
     const setup = (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
         const beforeSendMock = jest.fn().mockImplementation((e) => e)
         const posthog = defaultPostHog().init(token, { ...config, before_send: beforeSendMock }, token)!
-        posthog.debug()
         return { posthog, beforeSendMock }
     }
 

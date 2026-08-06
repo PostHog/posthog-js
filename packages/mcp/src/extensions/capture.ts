@@ -3,10 +3,10 @@
 // Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
-import type { MCPServerLike, McpEvent } from '../types'
+import type { MCPServerLike, McpEvent, SessionInfo } from '../types'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
-import { log } from './logger'
+import type { LoggerFn } from './logger'
 import { getSessionInfo } from './session'
 
 /**
@@ -19,10 +19,15 @@ import { getSessionInfo } from './session'
  * Auto-capture callers (tool calls, listings, identify) intentionally ignore the
  * return value, keeping the tool path isolated from analytics latency/errors.
  */
-export function captureEvent(server: MCPServerLike, eventInput: McpEvent): Promise<void> | undefined {
+export function captureEvent(
+  server: MCPServerLike,
+  eventInput: McpEvent,
+  logger: LoggerFn,
+  requestAttribution?: SessionInfo
+): Promise<void> | undefined {
   const data = getServerTrackingData(server)
   if (!data) {
-    log('Warning: Server tracking data not found. Event will not be published.')
+    logger('Warning: Server tracking data not found. Event will not be published.')
     return
   }
 
@@ -31,7 +36,10 @@ export function captureEvent(server: MCPServerLike, eventInput: McpEvent): Promi
     return
   }
 
-  const sessionInfo = getSessionInfo(server, data, eventInput.sessionId)
+  // Instrumented request paths pass an immutable snapshot resolved before any
+  // user callback or handler can yield to a concurrent request. Custom capture
+  // has no request context, so it intentionally falls back to current state.
+  const sessionInfo = requestAttribution ?? getSessionInfo(server, data, eventInput.sessionId)
 
   const duration =
     eventInput.duration || (eventInput.timestamp ? Date.now() - eventInput.timestamp.getTime() : undefined)
@@ -48,12 +56,18 @@ export function captureEvent(server: MCPServerLike, eventInput: McpEvent): Promi
     sdkVersion: sessionInfo.sdkVersion,
     serverName: sessionInfo.serverName,
     serverVersion: sessionInfo.serverVersion,
-    clientName: sessionInfo.clientName,
-    clientVersion: sessionInfo.clientVersion,
+    // Prefer client metadata stamped onto this event from the request's `_meta`
+    // over sessionInfo, so concurrent stateless requests stay isolated.
+    clientName: eventInput.clientName ?? sessionInfo.clientName,
+    clientVersion: eventInput.clientVersion ?? sessionInfo.clientVersion,
     identifyActorGivenId: sessionInfo.identifyActorGivenId,
     identifyActorData: sessionInfo.identifyActorData,
     groups: sessionInfo.identifyActorGroups,
     resourceName: eventInput.resourceName,
+    // The `initialize` event sets the negotiated version directly; every other
+    // event inherits it from sessionInfo (persisted at initialize, recovered
+    // cross-pod from the session token).
+    protocolVersion: eventInput.protocolVersion ?? sessionInfo.protocolVersion,
     toolCategory: eventInput.toolCategory,
     toolDescription: eventInput.toolDescription,
     listedToolNames: eventInput.listedToolNames,

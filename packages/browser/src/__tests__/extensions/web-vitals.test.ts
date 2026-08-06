@@ -1,7 +1,7 @@
 import '../helpers/mock-logger'
 
 import { createPosthogInstance } from '../helpers/posthog-instance'
-import { uuidv7 } from '../../uuidv7'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { PostHog } from '../../posthog-core'
 import { FlagsResponse, PerformanceCaptureConfig, RemoteConfig, SupportedWebVitalsMetrics } from '../../types'
 import { assignableWindow } from '../../utils/globals'
@@ -21,8 +21,8 @@ jest.useFakeTimers()
 // eslint-disable-next-line no-var
 var mockLocation: jest.Mock
 
-jest.mock('../../utils/globals', () => {
-    const original = jest.requireActual('../../utils/globals')
+jest.mock('@posthog/browser-common/utils/globals', () => {
+    const original = jest.requireActual('@posthog/browser-common/utils/globals')
     mockLocation = jest.fn().mockReturnValue({
         protocol: 'http:',
         host: 'localhost',
@@ -171,8 +171,11 @@ describe('web vitals', () => {
 
                 // need to force this to get the web vitals script loaded
                 posthog.webVitalsAutocapture!.onRemoteConfig({
-                    capturePerformance: { web_vitals: true },
-                } as unknown as FlagsResponse)
+                    ok: true,
+                    config: {
+                        capturePerformance: { web_vitals: true },
+                    } as unknown as FlagsResponse,
+                })
 
                 expect(posthog.webVitalsAutocapture.allowedMetrics).toEqual(expectedAllowedMetrics)
             })
@@ -299,8 +302,11 @@ describe('web vitals', () => {
             assignableWindow.__PosthogExtensions__.loadExternalDependency = loadScriptMock
 
             posthog.webVitalsAutocapture!.onRemoteConfig({
-                capturePerformance: { web_vitals: true },
-            } as unknown as FlagsResponse)
+                ok: true,
+                config: {
+                    capturePerformance: { web_vitals: true },
+                } as unknown as FlagsResponse,
+            })
 
             expect(posthog.webVitalsAutocapture!.allowedMetrics).toEqual(['CLS', 'FCP'])
         })
@@ -387,8 +393,11 @@ describe('web vitals', () => {
             assignableWindow.__PosthogExtensions__.loadExternalDependency = loadScriptMock
 
             posthog.webVitalsAutocapture!.onRemoteConfig({
-                capturePerformance: { web_vitals: true },
-            } as unknown as FlagsResponse)
+                ok: true,
+                config: {
+                    capturePerformance: { web_vitals: true },
+                } as unknown as FlagsResponse,
+            })
 
             expect(posthog.webVitalsAutocapture!.allowedMetrics).toEqual(['CLS', 'FCP'])
         })
@@ -454,10 +463,231 @@ describe('web vitals', () => {
             })
 
             posthog.webVitalsAutocapture!.onRemoteConfig({
-                capturePerformance: { web_vitals: true },
-            } as RemoteConfig)
+                ok: true,
+                config: {
+                    capturePerformance: { web_vitals: true },
+                } as RemoteConfig,
+            })
 
             expect(loadScriptMock).toHaveBeenCalledWith(expect.anything(), expectedBundle, expect.any(Function))
+        })
+    })
+
+    describe('__preview_web_vitals_soft_navs config', () => {
+        it.each([
+            [undefined, false],
+            [true, true],
+            [false, false],
+        ])(
+            'when __preview_web_vitals_soft_navs is %p, useSoftNavs should be %p',
+            async (softNavsConfig, expectedUseSoftNavs) => {
+                posthog = await createPosthogInstance(uuidv7(), {
+                    capture_performance: { web_vitals: true, __preview_web_vitals_soft_navs: softNavsConfig },
+                    capture_pageview: false,
+                })
+
+                expect(posthog.webVitalsAutocapture!.useSoftNavs).toBe(expectedUseSoftNavs)
+            }
+        )
+
+        it.each([
+            // [soft_navs, attribution, expected bundle]
+            [undefined, undefined, 'web-vitals'],
+            [false, false, 'web-vitals'],
+            [true, undefined, 'web-vitals-soft-navs'],
+            [true, false, 'web-vitals-soft-navs'],
+            [true, true, 'web-vitals-with-attribution-soft-navs'],
+            [false, true, 'web-vitals-with-attribution'],
+        ])(
+            'when __preview_web_vitals_soft_navs is %p and web_vitals_attribution is %p, should load %s bundle',
+            async (softNavsConfig, attributionConfig, expectedBundle) => {
+                const loadScriptMock = jest.fn().mockImplementation((_ph, kind, callback) => {
+                    assignableWindow.__PosthogExtensions__ = {
+                        postHogWebVitalsCallbacksByFlavor: {
+                            [kind]: {
+                                onLCP: jest.fn(),
+                                onCLS: jest.fn(),
+                                onFCP: jest.fn(),
+                                onINP: jest.fn(),
+                            },
+                        },
+                    }
+                    callback()
+                })
+
+                assignableWindow.__PosthogExtensions__ = {}
+                assignableWindow.__PosthogExtensions__.loadExternalDependency = loadScriptMock
+
+                posthog = await createPosthogInstance(uuidv7(), {
+                    capture_performance: {
+                        web_vitals: true,
+                        __preview_web_vitals_soft_navs: softNavsConfig,
+                        web_vitals_attribution: attributionConfig,
+                    },
+                    capture_pageview: false,
+                })
+
+                posthog.webVitalsAutocapture!.onRemoteConfig({
+                    ok: true,
+                    config: {
+                        capturePerformance: { web_vitals: true },
+                    } as RemoteConfig,
+                })
+
+                expect(loadScriptMock).toHaveBeenCalledWith(expect.anything(), expectedBundle, expect.any(Function))
+            }
+        )
+
+        it.each([
+            [undefined, false],
+            [true, true],
+            [false, false],
+        ])(
+            'when __preview_web_vitals_soft_navs is %p, passes reportSoftNavs=%p to the observers',
+            async (softNavsConfig, expectedReportSoftNavs) => {
+                const onLCP = jest.fn()
+                const onCLS = jest.fn()
+                const onFCP = jest.fn()
+                const onINP = jest.fn()
+
+                const loadScriptMock = jest.fn().mockImplementation((_ph, kind, callback) => {
+                    assignableWindow.__PosthogExtensions__ = {
+                        postHogWebVitalsCallbacksByFlavor: {
+                            [kind]: { onLCP, onCLS, onFCP, onINP },
+                        },
+                    }
+                    callback()
+                })
+
+                assignableWindow.__PosthogExtensions__ = {}
+                assignableWindow.__PosthogExtensions__.loadExternalDependency = loadScriptMock
+
+                posthog = await createPosthogInstance(uuidv7(), {
+                    capture_performance: { web_vitals: true, __preview_web_vitals_soft_navs: softNavsConfig },
+                    capture_pageview: false,
+                })
+
+                posthog.webVitalsAutocapture!.onRemoteConfig({
+                    ok: true,
+                    config: {
+                        capturePerformance: { web_vitals: true },
+                    } as RemoteConfig,
+                })
+
+                for (const observer of [onLCP, onCLS, onFCP, onINP]) {
+                    expect(observer).toHaveBeenCalledWith(expect.any(Function), {
+                        reportSoftNavs: expectedReportSoftNavs,
+                    })
+                }
+            }
+        )
+
+        it('loads soft-nav callbacks when stable callbacks were preloaded by another instance', async () => {
+            const stableOnLCP = jest.fn()
+            const softOnLCP = jest.fn()
+            const softCallbacks = {
+                onLCP: softOnLCP,
+                onCLS: jest.fn(),
+                onFCP: jest.fn(),
+                onINP: jest.fn(),
+            }
+            const stableCallbacks = {
+                onLCP: stableOnLCP,
+                onCLS: jest.fn(),
+                onFCP: jest.fn(),
+                onINP: jest.fn(),
+            }
+            const loadExternalDependency = jest.fn((_ph, kind, callback) => {
+                assignableWindow.__PosthogExtensions__!.postHogWebVitalsCallbacksByFlavor![kind] = softCallbacks
+                callback()
+            })
+            assignableWindow.__PosthogExtensions__ = {
+                postHogWebVitalsCallbacks: stableCallbacks,
+                postHogWebVitalsCallbacksByFlavor: { 'web-vitals': stableCallbacks },
+                loadExternalDependency,
+            }
+
+            posthog = await createPosthogInstance(uuidv7(), {
+                capture_performance: { web_vitals: true, __preview_web_vitals_soft_navs: true },
+                capture_pageview: false,
+            })
+
+            expect(loadExternalDependency).toHaveBeenCalledWith(
+                expect.anything(),
+                'web-vitals-soft-navs',
+                expect.any(Function)
+            )
+            expect(softOnLCP).toHaveBeenCalledWith(expect.any(Function), { reportSoftNavs: true })
+            expect(stableOnLCP).not.toHaveBeenCalled()
+        })
+
+        it('loads default callbacks when a non-default flavor overwrote the legacy callback slot', async () => {
+            const softAttributionOnLCP = jest.fn()
+            const stableOnLCP = jest.fn()
+            const softAttributionCallbacks = {
+                onLCP: softAttributionOnLCP,
+                onCLS: jest.fn(),
+                onFCP: jest.fn(),
+                onINP: jest.fn(),
+            }
+            const stableCallbacks = {
+                onLCP: stableOnLCP,
+                onCLS: jest.fn(),
+                onFCP: jest.fn(),
+                onINP: jest.fn(),
+            }
+            const loadExternalDependency = jest.fn((_ph, kind, callback) => {
+                assignableWindow.__PosthogExtensions__!.postHogWebVitalsCallbacksByFlavor![kind] = stableCallbacks
+                callback()
+            })
+            assignableWindow.__PosthogExtensions__ = {
+                postHogWebVitalsCallbacks: softAttributionCallbacks,
+                postHogWebVitalsCallbacksByFlavor: {
+                    'web-vitals-with-attribution-soft-navs': softAttributionCallbacks,
+                },
+                loadExternalDependency,
+            }
+
+            posthog = await createPosthogInstance(uuidv7(), {
+                capture_performance: { web_vitals: true },
+                capture_pageview: false,
+            })
+
+            expect(loadExternalDependency).toHaveBeenCalledWith(expect.anything(), 'web-vitals', expect.any(Function))
+            expect(stableOnLCP).toHaveBeenCalledWith(expect.any(Function), { reportSoftNavs: false })
+            expect(softAttributionOnLCP).not.toHaveBeenCalled()
+        })
+
+        it('uses the requested preloaded callback flavor without loading another bundle', async () => {
+            const stableOnLCP = jest.fn()
+            const softOnLCP = jest.fn()
+            const loadExternalDependency = jest.fn()
+            assignableWindow.__PosthogExtensions__ = {
+                postHogWebVitalsCallbacksByFlavor: {
+                    'web-vitals': {
+                        onLCP: stableOnLCP,
+                        onCLS: jest.fn(),
+                        onFCP: jest.fn(),
+                        onINP: jest.fn(),
+                    },
+                    'web-vitals-soft-navs': {
+                        onLCP: softOnLCP,
+                        onCLS: jest.fn(),
+                        onFCP: jest.fn(),
+                        onINP: jest.fn(),
+                    },
+                },
+                loadExternalDependency,
+            }
+
+            posthog = await createPosthogInstance(uuidv7(), {
+                capture_performance: { web_vitals: true, __preview_web_vitals_soft_navs: true },
+                capture_pageview: false,
+            })
+
+            expect(loadExternalDependency).not.toHaveBeenCalled()
+            expect(softOnLCP).toHaveBeenCalledWith(expect.any(Function), { reportSoftNavs: true })
+            expect(stableOnLCP).not.toHaveBeenCalled()
         })
     })
 
@@ -476,8 +706,8 @@ describe('web vitals', () => {
                 [WEB_VITALS_ALLOWED_METRICS]: ['LCP', 'FCP'],
             })
 
-            // Call with empty config (simulating config fetch failure)
-            posthog.webVitalsAutocapture!.onRemoteConfig({} as RemoteConfig)
+            // Call with empty config (server returned no setting for this feature)
+            posthog.webVitalsAutocapture!.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
 
             // Should NOT have overwritten the existing values
             expect(posthog.persistence!.props[WEB_VITALS_ENABLED_SERVER_SIDE]).toBe(true)
@@ -491,8 +721,11 @@ describe('web vitals', () => {
             })
 
             posthog.webVitalsAutocapture!.onRemoteConfig({
-                capturePerformance: { web_vitals: false, web_vitals_allowed_metrics: ['CLS'] },
-            } as RemoteConfig)
+                ok: true,
+                config: {
+                    capturePerformance: { web_vitals: false, web_vitals_allowed_metrics: ['CLS'] },
+                } as RemoteConfig,
+            })
 
             expect(posthog.persistence!.props[WEB_VITALS_ENABLED_SERVER_SIDE]).toBe(false)
             expect(posthog.persistence!.props[WEB_VITALS_ALLOWED_METRICS]).toEqual(['CLS'])
@@ -550,8 +783,11 @@ describe('web vitals', () => {
             (clientSideOptIn, serverSideOptIn, expected) => {
                 posthog.config.capture_performance = { web_vitals: clientSideOptIn }
                 posthog.webVitalsAutocapture!.onRemoteConfig({
-                    capturePerformance: { web_vitals: serverSideOptIn },
-                } as FlagsResponse)
+                    ok: true,
+                    config: {
+                        capturePerformance: { web_vitals: serverSideOptIn },
+                    } as FlagsResponse,
+                })
                 expect(posthog.webVitalsAutocapture!.isEnabled).toBe(expected)
             }
         )
@@ -573,10 +809,13 @@ describe('web vitals', () => {
         })
 
         posthog.webVitalsAutocapture!.onRemoteConfig({
-            capturePerformance: {
-                web_vitals: true,
-            },
-        } as RemoteConfig)
+            ok: true,
+            config: {
+                capturePerformance: {
+                    web_vitals: true,
+                },
+            } as RemoteConfig,
+        })
 
         expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
     })
@@ -597,8 +836,11 @@ describe('web vitals', () => {
         })
 
         posthog.webVitalsAutocapture!.onRemoteConfig({
-            capturePerformance: { web_vitals: true },
-        } as RemoteConfig)
+            ok: true,
+            config: {
+                capturePerformance: { web_vitals: true },
+            } as RemoteConfig,
+        })
 
         expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
     })
@@ -651,8 +893,11 @@ describe('web vitals', () => {
         })
 
         posthog.webVitalsAutocapture!.onRemoteConfig({
-            capturePerformance: { web_vitals: true },
-        } as RemoteConfig)
+            ok: true,
+            config: {
+                capturePerformance: { web_vitals: true },
+            } as RemoteConfig,
+        })
 
         expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
     })
@@ -673,10 +918,119 @@ describe('web vitals', () => {
         })
 
         posthog.webVitalsAutocapture!.onRemoteConfig({
-            capturePerformance: { web_vitals: true },
-        } as FlagsResponse)
+            ok: true,
+            config: {
+                capturePerformance: { web_vitals: true },
+            } as FlagsResponse,
+        })
 
         expect(posthog.webVitalsAutocapture!.isEnabled).toBe(true)
+    })
+
+    describe('soft-navigation metric attribution', () => {
+        const initializeWebVitals = async () => {
+            beforeSendMock = jest.fn().mockImplementation((event) => event)
+            assignableWindow.__PosthogExtensions__ = {
+                postHogWebVitalsCallbacksByFlavor: {
+                    'web-vitals-soft-navs': {
+                        onLCP: (callback) => {
+                            onLCPCallback = callback
+                        },
+                        onCLS: (callback) => {
+                            onCLSCallback = callback
+                        },
+                        onFCP: jest.fn(),
+                        onINP: jest.fn(),
+                    },
+                },
+            }
+            posthog = await createPosthogInstance(uuidv7(), {
+                before_send: beforeSendMock,
+                capture_performance: {
+                    web_vitals: true,
+                    web_vitals_allowed_metrics: ['LCP', 'CLS'],
+                    __preview_web_vitals_soft_navs: true,
+                },
+                capture_pageview: false,
+                mask_personal_data_properties: true,
+            })
+        }
+
+        it('attributes a delayed metric to its masked navigation URL after the live URL changes', async () => {
+            mockLocation.mockReturnValue({
+                protocol: 'http:',
+                host: 'localhost',
+                pathname: '/new',
+                search: '',
+                hash: '',
+                href: 'http://localhost/new',
+            })
+            await initializeWebVitals()
+
+            onLCPCallback?.({
+                name: 'LCP',
+                value: 123.45,
+                navigationId: 1,
+                navigationURL: 'http://localhost/old?gclid=secret',
+            })
+            onCLSCallback?.({
+                name: 'CLS',
+                value: 0.1,
+                navigationId: 2,
+                navigationURL: 'http://localhost/new?gclid=secret',
+            })
+            jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+
+            expect(beforeSendMock).toHaveBeenCalledTimes(2)
+            expect(beforeSendMock.mock.calls[0][0]).toMatchObject({
+                event: '$web_vitals',
+                properties: {
+                    $current_url: 'http://localhost/old?gclid=<masked>',
+                    $web_vitals_LCP_event: {
+                        $current_url: 'http://localhost/old?gclid=<masked>',
+                        navigationURL: 'http://localhost/old?gclid=<masked>',
+                        navigationId: 1,
+                    },
+                },
+            })
+            expect(beforeSendMock.mock.calls[1][0]).toMatchObject({
+                event: '$web_vitals',
+                properties: {
+                    $current_url: 'http://localhost/new?gclid=<masked>',
+                    $web_vitals_CLS_event: {
+                        $current_url: 'http://localhost/new?gclid=<masked>',
+                        navigationURL: 'http://localhost/new?gclid=<masked>',
+                        navigationId: 2,
+                    },
+                },
+            })
+        })
+
+        it('separates buffers by navigation identity even when the navigation URL is unchanged', async () => {
+            await initializeWebVitals()
+
+            onLCPCallback?.({
+                name: 'LCP',
+                value: 100,
+                navigationId: 'soft-navigation-10',
+                navigationURL: 'http://localhost/route',
+            })
+            onCLSCallback?.({
+                name: 'CLS',
+                value: 0.1,
+                navigationId: 'soft-navigation-11',
+                navigationURL: 'http://localhost/route',
+            })
+            jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+
+            expect(beforeSendMock).toHaveBeenCalledTimes(2)
+            expect(beforeSendMock.mock.calls[0][0].properties.$web_vitals_LCP_event.navigationId).toBe(
+                'soft-navigation-10'
+            )
+            expect(beforeSendMock.mock.calls[1][0].properties.$web_vitals_CLS_event.navigationId).toBe(
+                'soft-navigation-11'
+            )
+        })
     })
 
     describe.each([
@@ -735,8 +1089,11 @@ describe('web vitals', () => {
 
                 // need to force this to get the web vitals script loaded
                 posthog.webVitalsAutocapture!.onRemoteConfig({
-                    capturePerformance: { web_vitals: true },
-                } as unknown as FlagsResponse)
+                    ok: true,
+                    config: {
+                        capturePerformance: { web_vitals: true },
+                    } as unknown as FlagsResponse,
+                })
             })
 
             it('masks properties accordingly', async () => {

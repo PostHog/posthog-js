@@ -11,11 +11,11 @@ import {
     SendMessageResponse,
     UserProvidedTraits,
 } from '../../posthog-conversations-types'
-import { RemoteConfig } from '../../types'
+import { RemoteConfigResult } from '../../types'
 import { assignableWindow, LazyLoadedConversationsInterface } from '../../utils/globals'
-import { createLogger } from '../../utils/logger'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 import { isNullish, isUndefined, isBoolean, isNull } from '@posthog/core'
-import { isToolbarInstance } from '../../utils'
+import { isToolbarInstance } from '@posthog/browser-common/utils/general-utils'
 import { Extension } from '../types'
 
 const logger = createLogger('[Conversations]')
@@ -38,13 +38,18 @@ export class PostHogConversations implements Extension {
         this.loadIfEnabled()
     }
 
-    onRemoteConfig(response: RemoteConfig) {
+    onRemoteConfig(result: RemoteConfigResult) {
         // Don't load conversations if disabled via config
         if (this._instance.config.disable_conversations) {
             return
         }
 
-        const conversations = response['conversations']
+        if (!result.ok) {
+            // Failure behaves like a response without a conversations key.
+            return
+        }
+
+        const conversations = result.config['conversations']
         if (isNullish(conversations)) {
             return
         }

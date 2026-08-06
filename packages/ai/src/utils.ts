@@ -106,7 +106,8 @@ export const getModelParams = (
         | TranscriptionCreateParams
       ) &
         MonitoringParams)
-    | null
+    | null,
+  responseServiceTier?: string | null
 ): Record<string, any> => {
   if (!params) {
     return {}
@@ -126,12 +127,16 @@ export const getModelParams = (
     'language',
     'response_format',
     'timestamp_granularities',
+    'service_tier',
   ] as const
 
   for (const key of paramKeys) {
     if (key in params && (params as any)[key] !== undefined) {
       modelParams[key] = (params as any)[key]
     }
+  }
+  if (responseServiceTier != null) {
+    modelParams.service_tier = responseServiceTier
   }
   return modelParams
 }
@@ -329,7 +334,7 @@ export const formatResponseGemini = (response: any): FormattedMessage[] => {
             }
 
             // Sanitize base64 data for images and other large inline data
-            data = redactBase64DataUrl(data)
+            data = redactBase64DataUrl(data, mimeType)
 
             content.push(buildInlineDataBlock(mimeType, data))
           }

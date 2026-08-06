@@ -3,7 +3,7 @@ import { PostHog } from './posthog-core'
 import type { CaptureMetricOptions, OtlpMetricsPayload } from './types'
 import { PostHogMetrics as CorePostHogMetrics, resolveMetricsConfig } from '@posthog/core'
 import type { SendMetricsBatchOutcome } from '@posthog/core'
-import { createLogger } from './utils/logger'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 import { Extension } from './extensions/types'
 
 const METRICS_ENDPOINT = '/i/v1/metrics'

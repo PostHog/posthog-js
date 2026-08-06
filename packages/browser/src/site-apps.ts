@@ -1,9 +1,10 @@
 import type { Extension } from './extensions/types'
 import { PostHog } from './posthog-core'
 import { isNull } from '@posthog/core'
-import { CaptureResult, Properties, RemoteConfig, SiteApp, SiteAppGlobals, SiteAppLoader } from './types'
-import { assignableWindow, document } from './utils/globals'
-import { createLogger } from './utils/logger'
+import { CaptureResult, Properties, RemoteConfigResult, SiteApp, SiteAppGlobals, SiteAppLoader } from './types'
+import { document } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from './utils/globals'
+import { createLogger } from '@posthog/browser-common/utils/logger'
 
 const logger = createLogger('[SiteApps]')
 const APP_INIT_ERROR = 'Error while initializing PostHog app with config id '
@@ -375,7 +376,7 @@ export class SiteApps implements Extension {
         }
     }
 
-    onRemoteConfig(response: RemoteConfig): void {
+    onRemoteConfig(result: RemoteConfigResult): void {
         if (this.siteAppLoaders?.length) {
             if (!this.isEnabled) {
                 logger.error(`PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.`)
@@ -394,6 +395,13 @@ export class SiteApps implements Extension {
 
         this._stopBuffering?.()
 
+        // On a failed fetch there are no legacy site apps to load; buffering has
+        // already been stopped above, same as for a response without site apps.
+        if (!result.ok) {
+            return
+        }
+
+        const response = result.config
         if (!response['siteApps']?.length) {
             return
         }

@@ -64,7 +64,7 @@ export function createWrappedTool(originalTool: RegisteredTool, wrappedFunction:
   return {
     ...originalTool,
     [key]: wrappedFunction,
-  } as RegisteredTool
+  }
 }
 
 // --- Zod schema internal property helpers ---
@@ -95,6 +95,21 @@ export function isZ4Schema(schema: unknown): boolean {
     return false
   }
   return !!(schema as ZodV4Internal)._zod
+}
+
+function isZodTypeLike(value: unknown): boolean {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    'parse' in value &&
+    typeof value.parse === 'function' &&
+    'safeParse' in value &&
+    typeof value.safeParse === 'function'
+  )
+}
+
+export function isZodRawShapeCompat(schema: unknown): schema is Record<string, unknown> {
+  return !!schema && typeof schema === 'object' && Object.values(schema).some(isZodTypeLike)
 }
 
 export function getObjectShape(schema: unknown): Record<string, unknown> | undefined {

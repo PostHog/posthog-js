@@ -1,9 +1,9 @@
 import { createPosthogInstance } from './helpers/posthog-instance'
-import { uuidv7 } from '../uuidv7'
-import { RemoteConfig } from '../types'
+import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
+import { RemoteConfig, RemoteConfigResult } from '../types'
 
-jest.mock('../utils/globals', () => {
-    const orig = jest.requireActual('../utils/globals')
+jest.mock('@posthog/browser-common/utils/globals', () => {
+    const orig = jest.requireActual('@posthog/browser-common/utils/globals')
     const mockURLGetter = jest.fn()
     const mockReferrerGetter = jest.fn()
     return {
@@ -32,7 +32,7 @@ jest.mock('../utils/globals', () => {
 })
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { mockURLGetter, mockReferrerGetter } = require('../utils/globals')
+const { mockURLGetter, mockReferrerGetter } = require('@posthog/browser-common/utils/globals')
 
 describe('deferred extension initialization', () => {
     beforeEach(() => {
@@ -56,10 +56,10 @@ describe('deferred extension initialization', () => {
             })
 
             // Simulate remote config arriving synchronously before extensions init
-            posthog._onRemoteConfig(remoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: remoteConfig })
 
             // The config should be stored in _pendingRemoteConfig
-            expect((posthog as any)._pendingRemoteConfig).toEqual(remoteConfig)
+            expect((posthog as any)._pendingRemoteConfig).toEqual({ ok: true, config: remoteConfig })
 
             // Wait for extensions to initialize (time-sliced, may take multiple ticks)
             await new Promise((resolve) => setTimeout(resolve, 200))
@@ -87,10 +87,10 @@ describe('deferred extension initialization', () => {
             await new Promise((resolve) => setTimeout(resolve, 200))
 
             // Now send remote config after extensions are ready
-            posthog._onRemoteConfig(remoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: remoteConfig })
 
             // Config should be stored
-            expect((posthog as any)._pendingRemoteConfig).toEqual(remoteConfig)
+            expect((posthog as any)._pendingRemoteConfig).toEqual({ ok: true, config: remoteConfig })
         })
 
         it('should not store pending config when deferred init is disabled', async () => {
@@ -107,7 +107,7 @@ describe('deferred extension initialization', () => {
             })
 
             // With sync init, extensions are already ready, no need to store config
-            posthog._onRemoteConfig(remoteConfig)
+            posthog._onRemoteConfig({ ok: true, config: remoteConfig })
 
             // Config should NOT be stored when deferred init is disabled
             expect((posthog as any)._pendingRemoteConfig).toBeUndefined()
@@ -118,26 +118,42 @@ describe('deferred extension initialization', () => {
             const remoteConfig: RemoteConfig = {
                 supportedCompression: ['gzip'],
             } as RemoteConfig
+            const legacyRemoteConfigs: RemoteConfigResult[] = []
+            class TestAutocapture {
+                initialize(): void {}
+
+                onRemoteConfig(result: RemoteConfigResult): void {
+                    legacyRemoteConfigs.push(result)
+                }
+            }
 
             const posthog = await createPosthogInstance(token, {
                 __preview_deferred_init_extensions: true,
+                __extensionClasses: { autocapture: TestAutocapture as any },
                 advanced_disable_decide: false,
                 capture_pageview: false,
                 disable_session_recording: true,
             })
 
-            // Call _onRemoteConfig before extensions are ready
-            posthog._onRemoteConfig(remoteConfig)
-            expect((posthog as any)._pendingRemoteConfig).toEqual(remoteConfig)
+            const sharedRemoteConfigs: RemoteConfigResult[] = []
+            posthog
+                ._getBrowserClientAdapter()
+                .onRemoteConfig((result) => sharedRemoteConfigs.push(result as RemoteConfigResult))
+            const initialSharedRemoteConfigCount = sharedRemoteConfigs.length
 
-            // Spy on _onRemoteConfig to see if it gets called again during replay
-            const onRemoteConfigSpy = jest.spyOn(posthog as any, '_onRemoteConfig')
+            // Call _onRemoteConfig before extensions are ready
+            posthog._onRemoteConfig({ ok: true, config: remoteConfig })
+            expect((posthog as any)._pendingRemoteConfig).toEqual({ ok: true, config: remoteConfig })
+            expect(legacyRemoteConfigs).toEqual([])
 
             // Wait for extensions to initialize
             await new Promise((resolve) => setTimeout(resolve, 200))
 
-            // _onRemoteConfig should have been called again with the pending config during replay
-            expect(onRemoteConfigSpy).toHaveBeenCalledWith(remoteConfig)
+            // Legacy extensions receive the post-initialization replay, while shared listeners
+            // receive each remote config outcome only once.
+            expect(legacyRemoteConfigs).toEqual([{ ok: true, config: remoteConfig }])
+            expect(sharedRemoteConfigs).toHaveLength(initialSharedRemoteConfigCount + 1)
+            expect(sharedRemoteConfigs.at(-1)).toEqual({ ok: true, config: remoteConfig })
             // Extensions should be initialized, proving the replay worked
             expect(posthog.sessionRecording).toBeDefined()
             expect(posthog.autocapture).toBeDefined()

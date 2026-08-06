@@ -23,17 +23,68 @@ import { STORED_PERSON_PROPERTIES_KEY } from '../../../constants'
 import { ConversationsManager as ConversationsManagerInterface } from '../posthog-conversations'
 import { ConversationsPersistence } from './persistence'
 import { ConversationsWidget, WidgetView } from './components/ConversationsWidget'
-import { createLogger } from '../../../utils/logger'
-import { document, window } from '../../../utils/globals'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { document, window } from '@posthog/browser-common/utils/globals'
 import {
     formDataToQuery,
     isStatusZeroFailureCircuitBreakerTripped,
     updateStatusZeroFailureCount,
-} from '../../../utils/request-utils'
+} from '@posthog/browser-common/utils/request-utils'
 import { isCurrentDomainAllowed, getRestoreTokenFromUrl, clearRestoreTokenFromUrl } from './url-utils'
-import { addEventListener } from '../../../utils'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
+import { createConversationsError, isConversationsError } from './errors'
+import type { RequestResponse } from '@posthog/types'
 
 const logger = createLogger('[ConversationsManager]')
+
+const createConversationsRequestError = (
+    response: RequestResponse,
+    operation: string,
+    fallbackMessage: string,
+    rateLimitIsWarning: boolean = false,
+    logFailure: boolean = true
+): Error => {
+    if (response.statusCode === 0) {
+        // Fetch failures are already logged by `_send_request`. XHR reports status 0
+        // without an error, so keep one warning for that otherwise-unlogged path.
+        const error = createConversationsError(
+            'network',
+            'Unable to reach the server. Please check your connection and try again.'
+        )
+        if (response.error) {
+            const errorWithCause = error as Error & { cause?: unknown }
+            errorWithCause.cause = response.error
+        } else if (logFailure) {
+            logger.warn(`Network error ${operation}`)
+        }
+        return error
+    }
+
+    if (response.statusCode === 429) {
+        if (logFailure) {
+            if (rateLimitIsWarning) {
+                logger.warn(`Rate limited ${operation}`)
+            } else {
+                logger.error(fallbackMessage, { status: response.statusCode })
+            }
+        }
+        return createConversationsError('rate_limit', 'Too many requests. Please wait before trying again.')
+    }
+
+    const message = response.json?.error || response.json?.detail || response.json?.message || fallbackMessage
+    if (logFailure) {
+        logger.error(fallbackMessage, { status: response.statusCode })
+    }
+    return createConversationsError('http', message)
+}
+
+const createInvalidConversationsResponseError = (operation: string, logFailure: boolean = true): Error => {
+    const message = 'Invalid response from server'
+    if (logFailure) {
+        logger.error(message, { operation })
+    }
+    return createConversationsError('invalid_response', message)
+}
 
 const WIDGET_CONTAINER_ID = 'ph-conversations-widget-container'
 const POLL_INTERVAL_MS = 5000 // 5 seconds
@@ -195,20 +246,15 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     'X-Conversations-Token': token,
                 },
                 callback: (response) => {
-                    if (response.statusCode === 429) {
-                        reject(new Error('Too many requests. Please wait before trying again.'))
-                        return
-                    }
-
                     if (response.statusCode !== 200 && response.statusCode !== 201) {
-                        const errorMsg = response.json?.detail || response.json?.message || 'Failed to send message'
-                        logger.error('Failed to send message', { status: response.statusCode })
-                        reject(new Error(errorMsg))
+                        reject(
+                            createConversationsRequestError(response, 'sending message', 'Failed to send message', true)
+                        )
                         return
                     }
 
                     if (!response.json) {
-                        reject(new Error('Invalid response from server'))
+                        reject(createInvalidConversationsResponseError('sending message'))
                         return
                     }
 
@@ -292,26 +338,22 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     `/api/conversations/v1/widget/messages/${targetTicketId}?${formDataToQuery(queryParams)}`
                 ),
                 method: 'GET',
+                timestampMode: 'query',
                 headers: {
                     'X-Conversations-Token': token,
                 },
                 callback: (response) => {
                     this._trackPollingEndpointReachability(response.statusCode)
 
-                    if (response.statusCode === 429) {
-                        reject(new Error('Too many requests. Please wait before trying again.'))
-                        return
-                    }
-
                     if (response.statusCode !== 200) {
-                        const errorMsg = response.json?.detail || response.json?.message || 'Failed to fetch messages'
-                        logger.error('Failed to fetch messages', { status: response.statusCode })
-                        reject(new Error(errorMsg))
+                        reject(
+                            createConversationsRequestError(response, 'fetching messages', 'Failed to fetch messages')
+                        )
                         return
                     }
 
                     if (!response.json) {
-                        reject(new Error('Invalid response from server'))
+                        reject(createInvalidConversationsResponseError('fetching messages'))
                         return
                     }
 
@@ -356,21 +398,19 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     'X-Conversations-Token': token,
                 },
                 callback: (response) => {
-                    if (response.statusCode === 429) {
-                        reject(new Error('Too many requests. Please wait before trying again.'))
-                        return
-                    }
-
                     if (response.statusCode !== 200) {
-                        const errorMsg =
-                            response.json?.detail || response.json?.message || 'Failed to mark messages as read'
-                        logger.error('Failed to mark messages as read', { status: response.statusCode })
-                        reject(new Error(errorMsg))
+                        reject(
+                            createConversationsRequestError(
+                                response,
+                                'marking messages as read',
+                                'Failed to mark messages as read'
+                            )
+                        )
                         return
                     }
 
                     if (!response.json) {
-                        reject(new Error('Invalid response from server'))
+                        reject(createInvalidConversationsResponseError('marking messages as read'))
                         return
                     }
 
@@ -412,7 +452,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
             this._restoreFromTokenWithRetry(restoreToken)
                 .catch((error) => {
-                    logger.warn('Failed to restore conversations from URL token', error)
+                    if (!isConversationsError(error)) {
+                        logger.warn('Failed to restore conversations from URL token', error)
+                    }
                 })
                 .finally(() => {
                     clearRestoreTokenFromUrl()
@@ -456,7 +498,11 @@ export class ConversationsManager implements ConversationsManagerInterface {
         try {
             return await this._restoreFromToken(restoreToken)
         } catch (error) {
-            logger.warn('Restore token exchange failed, retrying once', error)
+            const requestLayerHandledNetworkError =
+                isConversationsError(error) && error.kind === 'network' && 'cause' in error
+            if (!requestLayerHandledNetworkError) {
+                logger.warn('Restore token exchange failed, retrying once', error)
+            }
             return await this._restoreFromToken(restoreToken)
         }
     }
@@ -481,23 +527,21 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     'X-Conversations-Token': token,
                 },
                 callback: (response) => {
-                    if (response.statusCode === 429) {
-                        reject(new Error('Too many requests. Please wait before trying again.'))
-                        return
-                    }
-
                     if (response.statusCode !== 200) {
-                        const errorMsg =
-                            response.json?.error ||
-                            response.json?.detail ||
-                            response.json?.message ||
-                            'Failed to restore conversations'
-                        reject(new Error(errorMsg))
+                        reject(
+                            createConversationsRequestError(
+                                response,
+                                'restoring conversations',
+                                'Failed to restore conversations',
+                                true,
+                                false
+                            )
+                        )
                         return
                     }
 
                     if (!response.json) {
-                        reject(new Error('Invalid response from server'))
+                        reject(createInvalidConversationsResponseError('restoring conversations', false))
                         return
                     }
 
@@ -651,16 +695,13 @@ export class ConversationsManager implements ConversationsManagerInterface {
         // Get user traits from the widget
         const userTraits = this._widgetRef?.getUserTraits() || undefined
 
-        try {
-            // Call the public API method (which handles tracking and state updates)
-            await this.sendMessage(message, userTraits)
+        // Call the public API method (which handles tracking and state updates).
+        // Any rejection is propagated to the widget, which renders the error state and logs it -
+        // logging it here as well would surface a benign network failure as a captured exception.
+        await this.sendMessage(message, userTraits)
 
-            // Poll for response immediately
-            setTimeout(() => this._pollMessages(), 1000)
-        } catch (error) {
-            logger.error('Failed to send message', error)
-            throw error
-        }
+        // Poll for response immediately
+        setTimeout(() => this._pollMessages(), 1000)
     }
 
     /**
@@ -701,7 +742,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
             this._widgetRef?.setUnreadCount(0)
             logger.info('Messages marked as read', { unreadCount: response.unread_count })
         } catch (error) {
-            logger.error('Failed to mark messages as read', error)
+            if (!isConversationsError(error)) {
+                logger.error('Failed to mark messages as read', error)
+            }
         }
     }
 
@@ -752,7 +795,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
                 this._lastMessageTimestamp = lastMessage.created_at
             }
         } catch (error) {
-            logger.error('Failed to load messages', error)
+            if (!isConversationsError(error)) {
+                logger.error('Failed to load messages', error)
+            }
         }
     }
 
@@ -824,18 +869,18 @@ export class ConversationsManager implements ConversationsManagerInterface {
 
             logger.info('Tickets loaded', { count: response.results.length, totalUnread })
         } catch (error) {
-            logger.error('Failed to load tickets', error)
+            if (!isConversationsError(error)) {
+                logger.error('Failed to load tickets', error)
+            }
         }
     }
 
     private _computeShowTicketList(tickets: Ticket[]): boolean {
-        if (tickets.length > 1) {
-            return true
-        }
-        if (tickets.length === 1 && tickets[0].status === 'resolved') {
-            return true
-        }
-        return false
+        // Surface the ticket-list hub (which holds the "New conversation" button and
+        // the back-to-tickets navigation) whenever the user has any ticket -- including
+        // a single open one. Otherwise a user with one unresolved ticket is locked into
+        // that conversation with no way to start a second one.
+        return tickets.length >= 1
     }
 
     private _isCurrentTicketResolved(): boolean {
@@ -990,7 +1035,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
             const view = this._applyTicketsToState(response.results)
             return { view, tickets: response.results }
         } catch (error) {
-            logger.error('Failed to determine initial view', error)
+            if (!isConversationsError(error)) {
+                logger.error('Failed to determine initial view', error)
+            }
             return { view: 'messages', tickets: [] }
         }
     }
@@ -1197,26 +1244,20 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     `/api/conversations/v1/widget/tickets?${formDataToQuery(queryParams)}`
                 ),
                 method: 'GET',
+                timestampMode: 'query',
                 headers: {
                     'X-Conversations-Token': token,
                 },
                 callback: (response) => {
                     this._trackPollingEndpointReachability(response.statusCode)
 
-                    if (response.statusCode === 429) {
-                        reject(new Error('Too many requests. Please wait before trying again.'))
-                        return
-                    }
-
                     if (response.statusCode !== 200) {
-                        const errorMsg = response.json?.detail || response.json?.message || 'Failed to fetch tickets'
-                        logger.error('Failed to fetch tickets', { status: response.statusCode })
-                        reject(new Error(errorMsg))
+                        reject(createConversationsRequestError(response, 'fetching tickets', 'Failed to fetch tickets'))
                         return
                     }
 
                     if (!response.json) {
-                        reject(new Error('Invalid response from server'))
+                        reject(createInvalidConversationsResponseError('fetching tickets'))
                         return
                     }
 
@@ -1253,18 +1294,14 @@ export class ConversationsManager implements ConversationsManagerInterface {
                     'X-Conversations-Token': token,
                 },
                 callback: (response) => {
-                    if (response.statusCode === 429) {
-                        reject(new Error('Too many requests. Please wait before trying again.'))
-                        return
-                    }
-
                     if (response.statusCode !== 200) {
-                        const errorMsg =
-                            response.json?.error ||
-                            response.json?.detail ||
-                            response.json?.message ||
-                            'Failed to request restore link'
-                        reject(new Error(errorMsg))
+                        reject(
+                            createConversationsRequestError(
+                                response,
+                                'requesting restore link',
+                                'Failed to request restore link'
+                            )
+                        )
                         return
                     }
 
@@ -1371,7 +1408,9 @@ export class ConversationsManager implements ConversationsManagerInterface {
                 void this._loadMessages()
             }
         } catch (error) {
-            logger.error('Failed to load tickets after identity change', error)
+            if (!isConversationsError(error)) {
+                logger.error('Failed to load tickets after identity change', error)
+            }
         }
     }
 

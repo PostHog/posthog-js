@@ -129,10 +129,10 @@ export class ErrorPropertiesBuilder {
   }
 
   private buildParsingContext(hint: EventHint): ParsingContext {
-    const context = {
+    const context: ParsingContext = {
       chunkIdMap: getFilenameToChunkIdMap(this.stackParser),
       skipFirstLines: hint.skipFirstLines ?? 1,
-    } as ParsingContext
+    }
     return context
   }
 
@@ -145,18 +145,20 @@ export class ErrorPropertiesBuilder {
         return undefined
       }
     }
-    const context = {
+    const context: CoercingContext = {
       ...hint,
       // Do not propagate synthetic exception as it doesn't make sense
       syntheticException: depth == 0 ? hint.syntheticException : undefined,
       mechanism,
+      // `coerce` only widens to `undefined` past MAX_CAUSE_RECURSION; `apply` reuses this
+      // context's depth, which was already validated when the context was built
       apply: (input: unknown) => {
-        return coerce(input, depth)
+        return coerce(input, depth) as ExceptionLike
       },
       next: (input: unknown) => {
         return coerce(input, depth + 1)
       },
-    } as CoercingContext
+    }
     return context
   }
 }

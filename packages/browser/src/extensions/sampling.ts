@@ -1,5 +1,5 @@
 import { isArray, isUndefined, clampToRange } from '@posthog/core'
-import { logger } from '../utils/logger'
+import { logger } from '@posthog/browser-common/utils/logger'
 
 export function appendArray(currentValue: string[] | undefined, sampleType: string | string[]): string[] {
     return [...(currentValue ? currentValue : []), ...(isArray(sampleType) ? sampleType : [sampleType])]

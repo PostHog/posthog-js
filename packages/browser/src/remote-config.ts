@@ -1,8 +1,10 @@
 import { PostHog } from './posthog-core'
 import { RemoteConfig } from './types'
 
-import { createLogger } from './utils/logger'
-import { assignableWindow, document } from './utils/globals'
+import { createLogger } from '@posthog/browser-common/utils/logger'
+import { document } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from './utils/globals'
+import type { RequestResponse } from '@posthog/types'
 
 const logger = createLogger('[RemoteConfig]')
 
@@ -30,13 +32,11 @@ export class RemoteConfigLoader {
         }
     }
 
-    private _loadRemoteConfigJSON(cb: (config?: RemoteConfig) => void): void {
+    private _loadRemoteConfigJSON(cb: (response: RequestResponse) => void): void {
         this._instance._send_request({
             method: 'GET',
             url: this._instance.requestRouter.endpointFor('assets', `/array/${this._instance.config.token}/config`),
-            callback: (response) => {
-                cb(response.json as RemoteConfig | undefined)
-            },
+            callback: cb,
         })
     }
 
@@ -61,8 +61,8 @@ export class RemoteConfigLoader {
                 if (!config) {
                     logger.info('No config found after loading remote JS config. Falling back to JSON.')
                     // Attempt 3 Load the config json instead of the script - we won't get site apps etc. but we will get the config
-                    this._loadRemoteConfigJSON((config) => {
-                        this._onRemoteConfig(config)
+                    this._loadRemoteConfigJSON((response) => {
+                        this._onRemoteConfig(response.json as RemoteConfig | undefined, response)
                         this._startRefreshInterval()
                     })
                     return
@@ -73,6 +73,7 @@ export class RemoteConfigLoader {
             })
         } catch (error) {
             logger.error('Error loading remote config', error)
+            this._onRemoteConfig()
         }
     }
 
@@ -114,9 +115,15 @@ export class RemoteConfigLoader {
         }, intervalMs)
     }
 
-    private _onRemoteConfig(config?: RemoteConfig): void {
-        if (!config) {
-            logger.error('Failed to fetch remote config from PostHog.')
+    private _onRemoteConfig(config?: RemoteConfig, response?: RequestResponse): void {
+        if (!config && response) {
+            if (response.statusCode === 0) {
+                if (!response.error) {
+                    logger.warn('Failed to fetch remote config from PostHog.')
+                }
+            } else {
+                logger.error('Failed to fetch remote config from PostHog.')
+            }
         }
 
         // Config and flags are loaded separately: config from /array/{token}/config,
@@ -126,13 +133,20 @@ export class RemoteConfigLoader {
         // whether to show a survey), not during config processing. By the time a linked
         // flag is evaluated, flags have already loaded.
         //
-        // Even when config fails, we pass an empty object so extensions (autocapture,
-        // session recording, etc.) still initialize with their defaults.
-        this._instance._onRemoteConfig(config ?? ({} as RemoteConfig))
+        // Even when config fails, we notify extensions so they initialize with their
+        // defaults — as an explicit failure, so settings that must not fail open
+        // (e.g. autocapture's opt-out) can keep their last known value.
+        try {
+            this._instance._onRemoteConfig(config ? { ok: true, config } : { ok: false })
+        } catch (error) {
+            logger.error('Error applying remote config', error)
+        }
 
-        if (config?.hasFeatureFlags !== false) {
-            if (!this._instance.config.advanced_disable_feature_flags_on_first_load) {
+        if (config?.hasFeatureFlags !== false && !this._instance.config.advanced_disable_feature_flags_on_first_load) {
+            try {
                 this._instance.featureFlags?.ensureFlagsLoaded()
+            } catch (error) {
+                logger.error('Error loading feature flags', error)
             }
         }
     }

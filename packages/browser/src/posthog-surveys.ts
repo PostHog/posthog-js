@@ -18,8 +18,9 @@ import {
     SurveyCallback,
     SurveyRenderReason,
 } from './posthog-surveys-types'
-import { Properties, RemoteConfig } from './types'
-import { assignableWindow, document } from './utils/globals'
+import { Properties, RemoteConfigResult } from './types'
+import { document } from '@posthog/browser-common/utils/globals'
+import { assignableWindow } from './utils/globals'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import {
     doesSurveyActivateByAction,
@@ -66,13 +67,18 @@ export class PostHogSurveys implements Extension {
         this.loadIfEnabled()
     }
 
-    onRemoteConfig(response: RemoteConfig) {
+    onRemoteConfig(result: RemoteConfigResult) {
         // only load surveys if they are enabled and there are surveys to load
         if (this._config.disable_surveys) {
             return
         }
 
-        const surveys = response['surveys']
+        if (!result.ok) {
+            // Failure behaves like a response without a surveys key: not loaded.
+            return logger.warn('Remote config unavailable. Not loading surveys.')
+        }
+
+        const surveys = result.config['surveys']
         if (isNullish(surveys)) {
             return logger.warn('Flags not loaded yet. Not loading surveys.')
         }
@@ -266,6 +272,7 @@ export class PostHogSurveys implements Extension {
         this._instance._send_request({
             url: this._instance.requestRouter.endpointFor('api', `/api/surveys/?token=${this._config.token}`),
             method: 'GET',
+            timestampMode: 'query',
             timeout: this._config.surveys_request_timeout_ms,
             callback: (response) => {
                 this._getSurveysInFlightPromise = null
@@ -273,7 +280,11 @@ export class PostHogSurveys implements Extension {
                 const statusCode = response.statusCode
                 if (statusCode !== 200 || !response.json) {
                     const error = `Surveys API could not be loaded, status: ${statusCode}`
-                    logger.error(error)
+                    if (statusCode !== 0) {
+                        logger.error(error)
+                    } else if (!response.error) {
+                        logger.warn(error)
+                    }
                     this._lastSurveyRefreshFailedAt = Date.now()
                     const context = { isLoaded: false, error }
                     callback([], context)
@@ -393,12 +404,23 @@ export class PostHogSurveys implements Extension {
         return this._surveyManager.checkSurveyEligibility(survey)
     }
 
+    private _checkSurveyRenderability(surveyId: string | Survey): { eligible: boolean; reason?: string } {
+        if (isNullish(this._surveyManager)) {
+            return { eligible: false, reason: SURVEY_NOT_LOADED }
+        }
+        const survey = typeof surveyId === 'string' ? this._getSurveyById(surveyId) : surveyId
+        if (!survey) {
+            return { eligible: false, reason: 'Survey not found' }
+        }
+        return this._surveyManager.checkSurveyRenderability(survey)
+    }
+
     canRenderSurvey(surveyId: string | Survey): SurveyRenderReason {
         if (isNullish(this._surveyManager)) {
             logger.warn('init was not called')
             return { visible: false, disabledReason: SURVEY_NOT_LOADED }
         }
-        const eligibility = this._checkSurveyEligibility(surveyId)
+        const eligibility = this._checkSurveyRenderability(surveyId)
 
         return { visible: eligibility.eligible, disabledReason: eligibility.reason }
     }
@@ -421,7 +443,7 @@ export class PostHogSurveys implements Extension {
                 if (!survey) {
                     resolve({ visible: false, disabledReason: 'Survey not found' })
                 } else {
-                    const eligibility = this._checkSurveyEligibility(survey)
+                    const eligibility = this._checkSurveyRenderability(survey)
                     resolve({ visible: eligibility.eligible, disabledReason: eligibility.reason })
                 }
             }, forceReload)
@@ -487,9 +509,11 @@ export class PostHogSurveys implements Extension {
             logger.warn('initialResponses is only supported for popover surveys. prefill will not be applied.')
         }
         if (options.ignoreConditions === false) {
-            const canRender = this.canRenderSurvey(survey)
-            if (!canRender.visible) {
-                logger.warn('Survey is not eligible to be displayed: ', canRender.disabledReason)
+            // Explicit display goes through eligibility only, not renderability: the event/action
+            // trigger state lives in memory and is irrelevant when the caller asks to show the survey.
+            const eligibility = this._checkSurveyEligibility(survey)
+            if (!eligibility.eligible) {
+                logger.warn('Survey is not eligible to be displayed: ', eligibility.reason)
                 return
             }
         }

@@ -102,6 +102,20 @@ module.exports = {
             },
         },
         {
+            // Object-literal type assertions (`{...} as T`) silently fabricate values that are
+            // missing required fields — prefer `const x: T = {...}` or `satisfies T`, which keep
+            // the compiler checking the literal. Enforced for shipped source only; tests may
+            // still build partial fixtures with casts.
+            files: ['packages/*/src/**/*.ts', 'packages/*/src/**/*.tsx'],
+            excludedFiles: ['**/__tests__/**', '**/__mocks__/**', '**/*.spec.*', '**/*.test.*'],
+            rules: {
+                '@typescript-eslint/consistent-type-assertions': [
+                    'error',
+                    { assertionStyle: 'as', objectLiteralTypeAssertions: 'never' },
+                ],
+            },
+        },
+        {
             // @posthog/core is shared by browser and React Native — Web API globals
             // like Event, ErrorEvent, etc. don't exist in Hermes/JSC and referencing
             // them as values throws a ReferenceError at runtime.
