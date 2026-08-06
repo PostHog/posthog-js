@@ -30,13 +30,18 @@ jobs:
           node-version: 24
           package-manager-cache: false
 
+      - name: Validate risk map
+        run: node .agents/skills/replay-incident-risk/check.mjs --validate
+
       - name: Run incident-pattern check
         id: check
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
-          BASE="origin/${{ github.event.pull_request.base.ref }}"
-          node .agents/skills/replay-incident-risk/check.mjs "$BASE" --json > risk.json
+          BASE="origin/$BASE_REF"
+          node .agents/skills/replay-incident-risk/check.mjs "$BASE" --json > risk.json || true
           node .agents/skills/replay-incident-risk/check.mjs "$BASE" > risk.txt || true
-          COUNT=$(node -e "console.log(JSON.parse(require('fs').readFileSync('risk.json','utf8')).findings.length)")
+          COUNT=$(node -e "try { console.log(JSON.parse(require('fs').readFileSync('risk.json','utf8')).findings.length) } catch { console.log(0) }")
           echo "findings=$COUNT" >> "$GITHUB_OUTPUT"
 
           {
@@ -56,10 +61,13 @@ jobs:
             echo '```'
           } > comment.md
 
+          # Random delimiter: the report quotes added lines from the PR diff, so a fixed
+          # delimiter would let a crafted diff line inject step outputs.
+          DELIM="RISK_$(openssl rand -hex 16)"
           {
-            echo 'comment<<RISK_EOF'
+            echo "comment<<$DELIM"
             cat comment.md
-            echo 'RISK_EOF'
+            echo "$DELIM"
           } >> "$GITHUB_OUTPUT"
           cat risk.txt
 

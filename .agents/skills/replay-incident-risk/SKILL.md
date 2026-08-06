@@ -15,10 +15,12 @@ The registry of patterns and incidents lives next to this file: [INCIDENTS.md](.
 1. Run the mechanical matcher from the repo root:
 
     ```bash
-    node .agents/skills/replay-incident-risk/check.mjs [base-ref]
+    node .agents/skills/replay-incident-risk/check.mjs [base-ref] [head-ref]
     ```
 
-    It diffs against `origin/main` by default and prints matched incident classes with the touched paths and risky added lines. It is advisory and always exits 0.
+    It diffs `HEAD` against `origin/main` by default and prints matched incident classes with the touched paths and risky added lines. It is advisory and always exits 0, even on internal errors.
+
+    When changing `risk-map.json` itself, also run `check.mjs --validate`: it fails on path patterns matching no tracked file and on anchors that don't resolve to an INCIDENTS.md heading, so dead patterns can't rot silently. CI runs it on every PR.
 
 2. For every matched class, open the class section in [INCIDENTS.md](./INCIDENTS.md) and answer its **review questions** against the diff. Answer them concretely (walk the code), not by assertion.
 

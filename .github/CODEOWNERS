@@ -1,11 +1,14 @@
 # Default owner for the repository
 * @PostHog/team-client-libraries
 
-# the recorder file can have unexpected impact on users' sites
-packages/browser/src/entrypoints/recorder.ts           @PostHog/team-client-libraries @PostHog/team-replay
-
-# Network recorder
-packages/browser/src/extensions/replay/external/network-plugin.ts @PostHog/team-client-libraries
+# Session replay: recorder changes ship fleet-wide via the unversioned CDN bundle and
+# have caused repeated incidents (see .agents/skills/replay-incident-risk/INCIDENTS.md)
+packages/browser/src/extensions/replay/                @PostHog/team-client-libraries @PostHog/team-replay
+packages/browser/src/entrypoints/lazy-recorder.ts      @PostHog/team-client-libraries @PostHog/team-replay
+packages/browser/src/entrypoints/posthog-recorder.ts   @PostHog/team-client-libraries @PostHog/team-replay
+packages/browser/src/entrypoints/recorder-v2.ts        @PostHog/team-client-libraries @PostHog/team-replay
+packages/rrweb/                                        @PostHog/team-client-libraries @PostHog/team-replay
+.agents/skills/replay-incident-risk/                   @PostHog/team-client-libraries @PostHog/team-replay
 
 # Surveys
 packages/browser/src/extensions/surveys/               @PostHog/team-client-libraries @PostHog/team-surveys
