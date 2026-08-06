@@ -1349,11 +1349,14 @@ export function SurveyPopup({
      * skipped whenever the survey already has answers in progress (resumed session or URL
      * prefill), and dismissing it only flips local state — no event, no response, no effect on
      * completion or partial-response accounting. The confirmation check above always wins so a
-     * completed survey never shows the intro.
+     * completed survey never shows the intro. Unlike the confirmation message the intro has no
+     * default header, so a survey with no intro copy at all skips straight to question 1 rather
+     * than drawing an empty box with a button.
      */
+    const hasIntroContent = !!(survey.appearance?.introScreenHeader || survey.appearance?.introScreenDescription)
     const shouldShowIntroScreen = isPreviewMode
         ? previewPageIndex === INTRO_SCREEN_PREVIEW_INDEX
-        : !!survey.appearance?.displayIntroScreen && !introScreenDismissed && !hasInProgressState
+        : !!survey.appearance?.displayIntroScreen && hasIntroContent && !introScreenDismissed && !hasInProgressState
 
     const surveyContextValue = useMemo(() => {
         const getInProgressSurvey = getInProgressSurveyState(survey)

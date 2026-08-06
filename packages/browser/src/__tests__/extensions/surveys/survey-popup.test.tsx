@@ -467,6 +467,29 @@ describe('SurveyPopup', () => {
             expect(screen.getByText('Question 1')).toBeVisible()
         })
 
+        test('skips the intro screen when it has neither a header nor a description', () => {
+            // Unlike the thank-you screen there is no default intro header, so an intro with no
+            // copy at all would render an empty box with only a button.
+            render(
+                <SurveyPopup
+                    survey={{
+                        ...mockSurvey,
+                        appearance: {
+                            ...mockSurvey.appearance,
+                            displayIntroScreen: true,
+                            introScreenButtonText: 'Get started',
+                        },
+                    }}
+                    removeSurveyFromFocus={mockRemoveSurveyFromFocus}
+                    isPopup={true}
+                    posthog={mockPosthog as any}
+                />
+            )
+
+            expect(screen.queryByText('Get started')).not.toBeInTheDocument()
+            expect(screen.getByText('Question 1')).toBeVisible()
+        })
+
         test('shows the confirmation message, not the intro, when the survey is already completed', () => {
             render(
                 <SurveyPopup

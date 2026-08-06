@@ -340,6 +340,18 @@ describe('SurveyModal intro screen', () => {
     expect(queryByTestId('questions-stub')).not.toBeNull()
   })
 
+  it('skips the intro screen when it has neither a header nor a description', () => {
+    const { queryByTestId } = renderWithAppearance({
+      ...defaultSurveyAppearance,
+      displayIntroScreen: true,
+      introScreenHeader: '',
+      introScreenDescription: '',
+    })
+
+    expect(queryByTestId('intro-stub')).toBeNull()
+    expect(queryByTestId('questions-stub')).not.toBeNull()
+  })
+
   it('still shows the confirmation after submitting when the intro was used', () => {
     const { queryByTestId, getByTestId } = renderWithAppearance(appearanceWithIntro)
 

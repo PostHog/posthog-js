@@ -92,28 +92,25 @@ function isTranslatedChoices(
   return isArray(questionTranslation.choices)
 }
 
+const TRANSLATABLE_APPEARANCE_FIELDS = [
+  'thankYouMessageHeader',
+  'thankYouMessageDescription',
+  'thankYouMessageCloseButtonText',
+  'introScreenHeader',
+  'introScreenDescription',
+  'introScreenButtonText',
+  'submitButtonText',
+  'backButtonText',
+] as const
+
+type TranslatableAppearanceField = (typeof TRANSLATABLE_APPEARANCE_FIELDS)[number]
+
 function hasAppearanceTranslation(translation: SurveyTranslation): boolean {
-  return (
-    !isUndefined(translation.thankYouMessageHeader) ||
-    !isUndefined(translation.thankYouMessageDescription) ||
-    !isUndefined(translation.thankYouMessageCloseButtonText) ||
-    !isUndefined(translation.introScreenHeader) ||
-    !isUndefined(translation.introScreenDescription) ||
-    !isUndefined(translation.introScreenButtonText) ||
-    !isUndefined(translation.submitButtonText) ||
-    !isUndefined(translation.backButtonText)
-  )
+  return TRANSLATABLE_APPEARANCE_FIELDS.some((field) => !isUndefined(translation[field]))
 }
 
 type TranslatableSurveyAppearance = {
-  thankYouMessageHeader?: string
-  thankYouMessageDescription?: string | null
-  thankYouMessageCloseButtonText?: string
-  introScreenHeader?: string
-  introScreenDescription?: string | null
-  introScreenButtonText?: string
-  submitButtonText?: string
-  backButtonText?: string
+  [K in TranslatableAppearanceField]?: string | null
 }
 
 type TranslatableSurveyQuestion = {
@@ -211,40 +208,15 @@ export function applySurveyTranslation<
       }
 
       if (translated.appearance) {
-        translated.appearance = { ...translated.appearance }
-
-        if (!isUndefined(translation.thankYouMessageHeader)) {
-          translated.appearance.thankYouMessageHeader = translation.thankYouMessageHeader
-          hasTranslation = true
+        const appearance: TranslatableSurveyAppearance = { ...translated.appearance }
+        for (const field of TRANSLATABLE_APPEARANCE_FIELDS) {
+          const value = translation[field]
+          if (!isUndefined(value)) {
+            appearance[field] = value
+            hasTranslation = true
+          }
         }
-        if (!isUndefined(translation.thankYouMessageDescription)) {
-          translated.appearance.thankYouMessageDescription = translation.thankYouMessageDescription
-          hasTranslation = true
-        }
-        if (!isUndefined(translation.thankYouMessageCloseButtonText)) {
-          translated.appearance.thankYouMessageCloseButtonText = translation.thankYouMessageCloseButtonText
-          hasTranslation = true
-        }
-        if (!isUndefined(translation.introScreenHeader)) {
-          translated.appearance.introScreenHeader = translation.introScreenHeader
-          hasTranslation = true
-        }
-        if (!isUndefined(translation.introScreenDescription)) {
-          translated.appearance.introScreenDescription = translation.introScreenDescription
-          hasTranslation = true
-        }
-        if (!isUndefined(translation.introScreenButtonText)) {
-          translated.appearance.introScreenButtonText = translation.introScreenButtonText
-          hasTranslation = true
-        }
-        if (!isUndefined(translation.submitButtonText)) {
-          translated.appearance.submitButtonText = translation.submitButtonText
-          hasTranslation = true
-        }
-        if (!isUndefined(translation.backButtonText)) {
-          translated.appearance.backButtonText = translation.backButtonText
-          hasTranslation = true
-        }
+        translated.appearance = appearance
       } else if (hasAppearanceTranslation(translation)) {
         hasTranslation = true
       }
