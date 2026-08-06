@@ -4649,9 +4649,8 @@ describe('Lazy SessionRecording', () => {
             )
         })
 
-        it('passes client-side maskAllElementAttributes and maskAttributeFn to rrweb', () => {
+        it('passes client-side maskAttributeFn to rrweb', () => {
             const maskAttributeFn = (_name: string, value: string) => value
-            posthog.config.session_recording.maskAllElementAttributes = true
             posthog.config.session_recording.maskAttributeFn = maskAttributeFn
 
             sessionRecording.onRemoteConfig(
@@ -4666,10 +4665,96 @@ describe('Lazy SessionRecording', () => {
 
             expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    maskAllElementAttributes: true,
+                    maskAllElementAttributes: false,
                     maskAttributeFn,
                 })
             )
+        })
+
+        describe('attribute masking options are mutually exclusive', () => {
+            let logSpy: jest.SpyInstance
+            let warnSpy: jest.SpyInstance
+
+            beforeEach(() => {
+                // the logger only emits to the console when debug mode is enabled
+                assignableWindow.POSTHOG_DEBUG = true
+                logSpy = jest.spyOn(window!.console, 'log').mockImplementation(() => {})
+                warnSpy = jest.spyOn(window!.console, 'warn').mockImplementation(() => {})
+            })
+
+            afterEach(() => {
+                logSpy.mockRestore()
+                warnSpy.mockRestore()
+                assignableWindow.POSTHOG_DEBUG = undefined
+            })
+
+            // the logger prepends a prefix arg, so the human-readable message is the second call arg
+            const exclusivityWarnings = () =>
+                warnSpy.mock.calls.filter(
+                    (call) => typeof call[1] === 'string' && call[1].includes('mutually exclusive')
+                )
+
+            it('drops maskAttributeFn and warns when maskAllElementAttributes is also set', () => {
+                posthog.config.session_recording.maskAllElementAttributes = true
+                posthog.config.session_recording.maskAttributeFn = (_name: string, value: string) => value
+
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                        },
+                    })
+                )
+
+                sessionRecording['_onScriptLoaded']()
+
+                expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        maskAllElementAttributes: true,
+                        maskAttributeFn: undefined,
+                    })
+                )
+                expect(exclusivityWarnings()).toHaveLength(1)
+            })
+
+            it('drops maskAttributeFn and warns when the project setting enables maskAllElementAttributes', () => {
+                posthog.config.session_recording.maskAttributeFn = (_name: string, value: string) => value
+
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            masking: { maskAllElementAttributes: true },
+                        },
+                    })
+                )
+
+                sessionRecording['_onScriptLoaded']()
+
+                expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        maskAllElementAttributes: true,
+                        maskAttributeFn: undefined,
+                    })
+                )
+                expect(exclusivityWarnings()).toHaveLength(1)
+            })
+
+            it('does not warn when only one option is set', () => {
+                posthog.config.session_recording.maskAllElementAttributes = true
+
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                        },
+                    })
+                )
+
+                sessionRecording['_onScriptLoaded']()
+
+                expect(exclusivityWarnings()).toHaveLength(0)
+            })
         })
 
         describe('warns when client-side masking shadows the project setting', () => {

@@ -367,15 +367,16 @@ export function maskAttributeValue({
   if (!value) {
     return value;
   }
-  // A custom callback takes precedence so callers can choose a stable mask.
+  // The options are mutually exclusive and the coarse one fails closed: when
+  // both are set the callback is never consulted, so it cannot silently
+  // unmask values the coarse option would have hidden.
+  if (maskAllElementAttributes) {
+    return isGenerated && RENDERING_METADATA_ATTRIBUTES.has(toLowerCase(name))
+      ? value
+      : '*'.repeat(value.length);
+  }
   if (maskAttributeFn) {
     return maskAttributeFn(name, value, element);
-  }
-  if (
-    maskAllElementAttributes &&
-    !(isGenerated && RENDERING_METADATA_ATTRIBUTES.has(toLowerCase(name)))
-  ) {
-    return '*'.repeat(value.length);
   }
   return value;
 }
