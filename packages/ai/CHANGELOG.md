@@ -1,5 +1,30 @@
 # posthog-ai
 
+## 8.6.2
+
+### Patch Changes
+
+- [#4370](https://github.com/PostHog/posthog-js/pull/4370) [`ea64094`](https://github.com/PostHog/posthog-js/commit/ea640947085a3d317666223b64fae5adbd75cc54) Thanks [@marandaneto](https://github.com/marandaneto)! - Capture Chat Completions usage from OpenAI Agents spans.
+  (2026-08-04)
+
+- [#4368](https://github.com/PostHog/posthog-js/pull/4368) [`45c0559`](https://github.com/PostHog/posthog-js/commit/45c05596566236405a60ed579d60ffe6ae9a891f) Thanks [@marandaneto](https://github.com/marandaneto)! - Remove the undeclared OpenTelemetry core runtime dependency.
+  (2026-08-04)
+
+- [#4369](https://github.com/PostHog/posthog-js/pull/4369) [`6e2f33a`](https://github.com/PostHog/posthog-js/commit/6e2f33aea42ee98e3c6bbe0d99bec80a23d788b3) Thanks [@marandaneto](https://github.com/marandaneto)! - Resolve OpenAI Agents APIs through the declared peer dependency.
+  (2026-08-04)
+
+- [#4371](https://github.com/PostHog/posthog-js/pull/4371) [`a9a78c0`](https://github.com/PostHog/posthog-js/commit/a9a78c0f2768a2083a439a067002f51f656127cd) Thanks [@marandaneto](https://github.com/marandaneto)! - Support current LangChain message usage and response metadata.
+  (2026-08-04)
+
+- [#4363](https://github.com/PostHog/posthog-js/pull/4363) [`821a2c6`](https://github.com/PostHog/posthog-js/commit/821a2c6bc46c61b988f92557f52a0b84afb342a8) Thanks [@marandaneto](https://github.com/marandaneto)! - Safely capture circular and otherwise unknown telemetry values with a shared JSON-safe value converter.
+  (2026-08-04)
+
+- [#4367](https://github.com/PostHog/posthog-js/pull/4367) [`5483f25`](https://github.com/PostHog/posthog-js/commit/5483f25f7f8f370089a05240f7fd0045fe1db504) Thanks [@marandaneto](https://github.com/marandaneto)! - Handle Vercel AI stream errors and cancellation exactly once.
+  (2026-08-04)
+- Updated dependencies [[`d4ffb83`](https://github.com/PostHog/posthog-js/commit/d4ffb83a1bebeb99edc8e9452a674c146c22f033), [`821a2c6`](https://github.com/PostHog/posthog-js/commit/821a2c6bc46c61b988f92557f52a0b84afb342a8)]:
+  - posthog-node@5.47.8
+  - @posthog/core@1.46.6
+
 ## 8.6.1
 
 ### Patch Changes
