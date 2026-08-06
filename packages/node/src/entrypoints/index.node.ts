@@ -7,10 +7,15 @@ import { createRelativePathModifier } from '../extensions/error-tracking/modifie
 import { PostHogBackendClient } from '../client'
 import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 import { PostHogContext } from '../extensions/context/context'
+import { gzipCompress } from '../gzip.node'
 
 export class PostHog extends PostHogBackendClient {
   getLibraryId(): string {
     return 'posthog-node'
+  }
+
+  protected override compressPayload(payload: string): Promise<Blob | null> {
+    return gzipCompress(payload, this.isDebug)
   }
 
   protected initializeContext(): PostHogContext {
