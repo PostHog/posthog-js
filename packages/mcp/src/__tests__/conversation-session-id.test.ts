@@ -1,10 +1,9 @@
 import { CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { instrument } from '../index'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
-import { deterministicPrefixedId } from '../extensions/ids'
 import { MCP_SESSION_HEADER, encodeSessionId } from '../extensions/session-token'
 import { getServerTrackingData } from '../extensions/internal'
-import { getSessionId } from '../extensions/session'
+import { deriveSessionIdFromConversation, getSessionId } from '../extensions/session'
 import type { HighLevelMCPServerLike, MCPServerLike } from '../types'
 import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
@@ -178,7 +177,7 @@ describe('conversation_id as the session anchor', () => {
 
       const derived = getSessionId(lowLevel, extra, CONVERSATION_HANDLE)
 
-      expect(derived).toBe(deterministicPrefixedId('ses', CONVERSATION_HANDLE))
+      expect(derived).toBe(deriveSessionIdFromConversation(CONVERSATION_HANDLE))
       expect(data.sessionInfo.clientName).toBe('acme-client')
       expect(data.sessionInfo.clientVersion).toBe('9.9.9')
       expect(data.sessionInfo.protocolVersion).toBe('2025-11-25')
@@ -230,7 +229,7 @@ describe('conversation_id as the session anchor', () => {
 
         const sessions = new Set(capture.getCaptures().map((c: any) => c.properties.$session_id))
         expect(sessions.size).toBe(2)
-        expect(sessions).not.toContain(deterministicPrefixedId('ses', invented))
+        expect(sessions).not.toContain(deriveSessionIdFromConversation(invented))
       } finally {
         await other.cleanup()
       }
@@ -246,7 +245,7 @@ describe('conversation_id as the session anchor', () => {
 
       // Assert the derived value, not just that the two agree — they would also
       // agree on the transport session id if the handle were ignored entirely.
-      const expected = deterministicPrefixedId('ses', CONVERSATION_HANDLE)
+      const expected = deriveSessionIdFromConversation(CONVERSATION_HANDLE)
       expect(toolCallSessionIds()).toEqual([expected, expected])
     })
 
@@ -262,7 +261,7 @@ describe('conversation_id as the session anchor', () => {
       await callTool('first', a)
       await callTool('second', b)
 
-      expect(toolCallSessionIds()).toEqual([deterministicPrefixedId('ses', a), deterministicPrefixedId('ses', b)])
+      expect(toolCallSessionIds()).toEqual([deriveSessionIdFromConversation(a), deriveSessionIdFromConversation(b)])
     })
 
     it('stamps both $session_id and $mcp_conversation_id on the payload', async () => {
@@ -271,7 +270,7 @@ describe('conversation_id as the session anchor', () => {
       await callTool('first', CONVERSATION_HANDLE)
 
       const [payload] = capture.findCapturesByEvent('$mcp_tool_call')
-      expect(payload.properties.$session_id).toBe(deterministicPrefixedId('ses', CONVERSATION_HANDLE))
+      expect(payload.properties.$session_id).toBe(deriveSessionIdFromConversation(CONVERSATION_HANDLE))
       expect(payload.properties.$mcp_conversation_id).toBe(CONVERSATION_HANDLE)
       // Deliberately distinct values: one is the grouping key, the other the raw handle.
       expect(payload.properties.$session_id).not.toBe(payload.properties.$mcp_conversation_id)
@@ -330,7 +329,7 @@ describe('conversation_id as the session anchor', () => {
 
       await callTool('second', minted)
 
-      const expected = deterministicPrefixedId('ses', minted!)
+      const expected = deriveSessionIdFromConversation(minted!)
       expect(toolCallSessionIds()).toEqual([expected, expected])
     })
   })

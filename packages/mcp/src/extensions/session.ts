@@ -30,6 +30,23 @@ export function deriveSessionIdFromMCPSession(mcpSessionId: string): string {
 }
 
 /**
+ * Derives the SDK session id from the agent's conversation handle. Deterministic
+ * and unsalted on purpose: two pods that never met must agree on the session, and
+ * the 2026-07-28 revision leaves them no shared state to agree through.
+ *
+ * Hashed rather than used verbatim so an MCP session can never collide with a
+ * Session Replay id — a bare uuidv7 would render a "View recording" button that
+ * resolves to nothing.
+ *
+ * Exported because this *is* the cross-SDK contract: posthog-python has to
+ * reproduce it byte for byte or the same conversation splits into two sessions
+ * depending on which SDK served the call.
+ */
+export function deriveSessionIdFromConversation(conversationId: string): string {
+  return deterministicPrefixedId('ses', conversationId)
+}
+
+/**
  * Resolves the session id for a request. Three steps, first match wins:
  *
  *   1. the agent carried a `conversation_id` tool argument   — 2026-07-28
@@ -73,7 +90,7 @@ export function getSessionId(
     // request told us about the client. Without this, tool calls and `$identify`
     // go out unattributed on exactly the deployments this branch exists for.
     applyTokenClientIdentity(data, extra)
-    return deterministicPrefixedId('ses', conversationId)
+    return deriveSessionIdFromConversation(conversationId)
   }
 
   // 2. A session id the request itself carried (undefined if it carried none).

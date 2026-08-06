@@ -195,6 +195,14 @@ describe('conversation-id', () => {
       })
     })
 
+    it('canonicalises an uppercased echo, so it hashes to the minting session', () => {
+      // The shape test is case-insensitive; the hash behind `$session_id` is not.
+      // A host that normalises uuids to uppercase must not be split off from the
+      // call that minted the handle.
+      const { conversationId } = resolve({ conversation_id: AGENT_ECHOED.toUpperCase() })
+      expect(conversationId).toBe(AGENT_ECHOED)
+    })
+
     it('rejects a uuid that is not v7', () => {
       // v4 in the version nibble. Nothing we mint looks like this, so it is a
       // value the agent brought from somewhere else.

@@ -123,7 +123,11 @@ export function resolveConversationId(enabled: boolean, args: unknown): Conversa
   }
   const supplied = extractConversationId(args)
   if (supplied && MINTED_CONVERSATION_ID.test(supplied)) {
-    return { minted: false, conversationId: supplied }
+    // Lowercased because the shape test is case-insensitive but the hash behind
+    // `$session_id` is not. Some hosts normalise uuids to uppercase, and an
+    // uppercased echo of our own handle would otherwise clear the gate and then
+    // land in a different session than the call that minted it.
+    return { minted: false, conversationId: supplied.toLowerCase() }
   }
   return { minted: true, conversationId: uuidv7() }
 }
