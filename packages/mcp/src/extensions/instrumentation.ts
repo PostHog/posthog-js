@@ -32,7 +32,7 @@ import { resolveToolCallIntent, setEventIntent, setExplicitContextIntent } from 
 import { getServerTrackingData, handleIdentify, setServerTrackingData, withIdentity } from './internal'
 import type { LoggerFn } from './logger'
 import { buildCapturedMcpParameters } from './mcp-payloads'
-import { getLiteralValue, getObjectShape } from './mcp-sdk-compat'
+import { readRequestHandlerMethod } from './mcp-sdk-compat'
 import { getSessionId, getSessionInfo, newSessionId } from './session'
 import { encodeSessionId, readMcpSessionHeader, writeSessionIdToTransport } from './session-token'
 import { getReportMissingToolDescriptor, resolveMissingCapabilityToolName } from './tools'
@@ -162,17 +162,15 @@ function getActiveAnalyticsParameterOwnership(
     // JSON Schema can answer it — an override is built from the live registry,
     // which on the high-level path holds Zod.
     //
-    // The cache is per-instance, so this is not merely "before the first
-    // `tools/list`": an instance that never serves a listing never writes the
-    // mirror at all. That is the per-request server pattern — `tools/list` lands
-    // on one instance, `tools/call` on a cold one — where the handle falls back
-    // to the `content` block and a structuredContent-only client misses it.
+    // The cache is process-scoped, so the per-request server pattern —
+    // `tools/list` on one instance, `tools/call` on a cold one — answers this
+    // too: whichever instance served the listing answers for the rest.
     //
-    // Failing closed is deliberate. Writing a key the advertised schema did not
-    // declare fails the *entire* tool result under `additionalProperties: false`,
-    // so guessing costs the caller their result, while not guessing costs us one
-    // delivery channel. The fix is a process-scoped ownership cache, so a listing
-    // served by any instance answers for the rest — not a per-call guess.
+    // It still fails closed when no instance has served one yet. Writing a key
+    // the advertised schema did not declare fails the *entire* tool result under
+    // `additionalProperties: false`, so guessing costs the caller their result,
+    // while not guessing costs us one delivery channel — the handle falls back to
+    // the `content` block, which a structuredContent-only client misses.
     outputInstructions: data.options.enableConversationId === true && listed?.outputInstructions === true,
   }
 }
@@ -430,10 +428,9 @@ export function patchRequestHandlers(server: MCPServerLike, patches: Record<stri
   // Monkey patch dynamically added handlers (registered after instrument()).
   const originalSetRequestHandler = server.setRequestHandler.bind(server)
   server.setRequestHandler = ((requestSchema: unknown, originalHandler: MCPRequestHandler) => {
-    const shape = getObjectShape(requestSchema)
-    const handlerName = shape?.method ? getLiteralValue(shape.method) : undefined
-    const patch = typeof handlerName === 'string' ? patches[handlerName] : undefined
-    if (!patch || typeof handlerName !== 'string') {
+    const handlerName = readRequestHandlerMethod(requestSchema)
+    const patch = handlerName ? patches[handlerName] : undefined
+    if (!patch || !handlerName) {
       return originalSetRequestHandler(requestSchema, originalHandler)
     }
 

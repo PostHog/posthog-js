@@ -1,6 +1,43 @@
-import type { AnalyticsParameterOwnership } from '../types'
+import type { AnalyticsParameterOwnership, ServerClientInfoLike } from '../types'
 import { getObjectShape, isZodRawShapeCompat } from './mcp-sdk-compat'
 import { canDeclareOutputInstructions } from './output-instructions'
+
+const sharedOwnershipCaches = new Map<string, Map<string, AnalyticsParameterOwnership>>()
+
+/**
+ * The tool-ownership cache for a server identity, shared by every instance of
+ * that server in this process.
+ *
+ * Which arguments we own is a property of the advertised schemas, so every
+ * instance a factory produces answers it identically. Sharing is what makes the
+ * answer available at all under the per-request server pattern, where
+ * `tools/list` lands on one instance and `tools/call` on a cold one that will
+ * never serve a listing of its own. Without it, a stateless server silently
+ * treats the `context` argument we injected as the tool's own — no `$mcp_intent`
+ * recorded, and the argument passed on to a tool that never declared it.
+ *
+ * Deliberately *not* solved by having the cold instance call its own
+ * `tools/list`: re-entering the application's list handler from inside a
+ * `tools/call` deadlocks whenever the two share a lock.
+ *
+ * Keyed by name and version so two servers sharing a process keep their own.
+ */
+export function getSharedToolOwnershipCache(
+  serverInfo: ServerClientInfoLike | undefined
+): Map<string, AnalyticsParameterOwnership> {
+  const key = `${serverInfo?.name ?? ''}@${serverInfo?.version ?? ''}`
+  let cache = sharedOwnershipCaches.get(key)
+  if (!cache) {
+    cache = new Map()
+    sharedOwnershipCaches.set(key, cache)
+  }
+  return cache
+}
+
+/** Test seam: these caches are process-scoped, so they outlive any one server. */
+export function resetSharedToolOwnershipCaches(): void {
+  sharedOwnershipCaches.clear()
+}
 
 const JSON_SCHEMA_KEYWORDS = [
   '$defs',
