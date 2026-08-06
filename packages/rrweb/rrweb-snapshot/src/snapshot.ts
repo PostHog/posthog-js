@@ -1322,6 +1322,7 @@ export function serializeNodeWithId(
       onStylesheetLoad,
       stylesheetLoadTimeout,
       keepIframeSrcFn,
+      onStylesheetTextSerialized,
       depth: depth + 1,
       maxDepth,
     };
@@ -1394,6 +1395,11 @@ export function serializeNodeWithId(
             onStylesheetLoad,
             stylesheetLoadTimeout,
             keepIframeSrcFn,
+            // without this, a same-origin iframe's <style> text serializes
+            // without reporting whether live CSSOM was inlined, and the
+            // budgeted flush treats every held CSSOM delta for that sheet as
+            // uncovered (double application on replay)
+            onStylesheetTextSerialized,
             depth: depth + 1,
             maxDepth,
           });

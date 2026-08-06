@@ -358,6 +358,45 @@ describe('snapshotWithBudget hardening', () => {
     }
   });
 
+  it('reports <style> text serialization inside same-origin iframes too', async () => {
+    const dom = new JSDOM(
+      `<!DOCTYPE html><html><head></head><body><iframe id="frame"></iframe></body></html>`,
+      { url: 'https://example.com/page' },
+    );
+    const doc = dom.window.document;
+    const iframe = doc.getElementById('frame') as HTMLIFrameElement;
+    const iframeDoc = iframe.contentDocument!;
+    const style = iframeDoc.createElement('style');
+    style.id = 'frame-style';
+    style.appendChild(iframeDoc.createTextNode('.f { color: red; }'));
+    iframeDoc.head.appendChild(style);
+
+    cleanupSnapshot();
+    const reports: Array<{ parentId: string; inlined: boolean }> = [];
+    await snapshotWithBudget(doc, {
+      ...OPTIONS,
+      mirror: new Mirror(),
+      yieldBudgetMs: 60_000,
+      yieldFn: async () => undefined,
+      iframeLoadTimeout: 100,
+      onIframeLoad: () => undefined,
+      onStylesheetTextSerialized: (textNode, inlined) => {
+        reports.push({
+          parentId: (textNode.parentNode as Element).id,
+          inlined,
+        });
+      },
+    });
+    // a loaded iframe serializes on the next tick (see onceIframeLoaded)
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const frameStyle = reports.find((r) => r.parentId === 'frame-style');
+    // without the callback in the iframe option bag this never fires, and the
+    // budgeted flush would double-apply held CSSOM deltas for iframe sheets
+    expect(frameStyle).toBeDefined();
+    expect(frameStyle?.inlined).toBe(true);
+  });
+
   it('getStats reports the slice telemetry of a completed walk', async () => {
     const doc = buildDocument(60);
 
