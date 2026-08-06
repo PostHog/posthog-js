@@ -387,6 +387,216 @@ describe('budgeted snapshot lifecycle hardening', () => {
     expect(recorded?.data.payload).toEqual({ step: 'started', items: [1, 2] });
   }, 20_000);
 
+  it('an aborted walk drains dead nodes from the mirror instead of leaking them', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    fillBody();
+    const events: eventWithTime[] = [];
+
+    stop = record({
+      emit: (event) => {
+        events.push(event as eventWithTime);
+      },
+      fullSnapshotYieldBudgetMs: 1,
+    });
+
+    expect(events.some((e) => e.type === EventType.FullSnapshot)).toBe(false);
+    // serialized in the first slice, so its removal mid-walk goes through
+    // mapRemoves rather than cancelling a pending add
+    const victim = document.body.children[0] as HTMLElement;
+    expect(record.mirror.getMeta(victim)).not.toBeNull();
+    const victimId = record.mirror.getId(victim);
+    expect(victimId).toBeGreaterThan(0);
+    victim.remove();
+
+    // overflow the held queue so the walk aborts and discards its buffers
+    for (let i = 0; i < 4200; i++) {
+      record.addCustomEvent('queue-pressure', { index: i });
+    }
+
+    await vi.waitFor(
+      () => {
+        expect(events.some((e) => e.type === EventType.FullSnapshot)).toBe(
+          true,
+        );
+      },
+      { timeout: 15_000 },
+    );
+    await settle();
+
+    // the discard drained mapRemoves through the mirror like a commit does:
+    // the dead node is no longer resolvable by id
+    expect(record.mirror.getNode(victimId)).toBeNull();
+  }, 20_000);
+
+  it('held non-mutation events survive an abort and land after the retry snapshot', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    fillBody();
+    const events: eventWithTime[] = [];
+
+    stop = record({
+      emit: (event) => {
+        events.push(event as eventWithTime);
+      },
+      fullSnapshotYieldBudgetMs: 1,
+    });
+
+    expect(events.some((e) => e.type === EventType.FullSnapshot)).toBe(false);
+    // a click observed mid-walk on a node the first slice already serialized
+    expect(record.mirror.getMeta(document.body)).not.toBeNull();
+    document.body.dispatchEvent(
+      new MouseEvent('click', { bubbles: true, cancelable: true }),
+    );
+
+    // Bank enough mutation records in the locked buffer that the next abort
+    // probe trips the backlog cap and the walk retries. Spread across many
+    // small containers: jsdom's live NodeList makes one 50k-child parent
+    // quadratic to traverse, which is a test-environment artifact.
+    const fragment = document.createDocumentFragment();
+    for (let c = 0; c < 510; c++) {
+      const container = document.createElement('div');
+      for (let i = 0; i < 100; i++) {
+        container.appendChild(document.createElement('i'));
+      }
+      fragment.appendChild(container);
+    }
+    document.body.appendChild(fragment);
+
+    await vi.waitFor(
+      () => {
+        expect(events.some((e) => e.type === EventType.FullSnapshot)).toBe(
+          true,
+        );
+      },
+      { timeout: 25_000 },
+    );
+    await settle();
+
+    const retry = diagnostics(events).find(
+      (p) => p?.status === 'budgeted-retry',
+    );
+    expect(retry).toBeDefined();
+    expect(retry?.reason).toBe('mutation-backlog');
+    expect(retry?.carriedHeldEventCount).toBe(1);
+
+    // the click was not lost to the abort: it went out after the retry's
+    // FullSnapshot, where the id it references is valid again
+    const fullIndex = events.findIndex(
+      (e) => e.type === EventType.FullSnapshot,
+    );
+    const clickIndex = events.findIndex(
+      (e) =>
+        e.type === EventType.IncrementalSnapshot &&
+        (e as { data: { source: IncrementalSource } }).data.source ===
+          IncrementalSource.MouseInteraction,
+    );
+    expect(fullIndex).toBeGreaterThan(-1);
+    expect(clickIndex).toBeGreaterThan(fullIndex);
+    expect(
+      events.filter((e) => e.type === EventType.FullSnapshot).length,
+    ).toBe(1);
+  }, 30_000);
+
+  it('a held delivery that keeps failing is retried once and counted', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    fillBody();
+    const events: eventWithTime[] = [];
+    let poisonAttempts = 0;
+
+    stop = record({
+      emit: (event) => {
+        const e = event as eventWithTime;
+        if (
+          e.type === EventType.Custom &&
+          (e as { data: { tag: string } }).data.tag === 'poison'
+        ) {
+          poisonAttempts++;
+          throw new Error('injected consumer failure');
+        }
+        events.push(e);
+      },
+      fullSnapshotYieldBudgetMs: 1,
+    });
+
+    expect(events.some((e) => e.type === EventType.FullSnapshot)).toBe(false);
+    record.addCustomEvent('poison', {});
+    record.addCustomEvent('kept', {});
+
+    await vi.waitFor(
+      () => {
+        expect(events.some((e) => e.type === EventType.FullSnapshot)).toBe(
+          true,
+        );
+      },
+      { timeout: 10_000 },
+    );
+    await settle();
+
+    // delivery was retried exactly once, and the rest of the window survived
+    expect(poisonAttempts).toBe(2);
+    expect(
+      events.some(
+        (e) =>
+          e.type === EventType.Custom &&
+          (e as { data: { tag: string } }).data.tag === 'kept',
+      ),
+    ).toBe(true);
+    // the loss is visible on the wire, not silent
+    const incomplete = diagnostics(events).find(
+      (p) => p?.status === 'mutation-commit-incomplete',
+    );
+    expect(incomplete).toBeDefined();
+    expect(incomplete?.failedHeldEventDeliveries).toBe(1);
+  }, 20_000);
+
+  it('a flaky consumer delivery is retried once and the event is not lost', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    fillBody();
+    const events: eventWithTime[] = [];
+    let flakyAttempts = 0;
+
+    stop = record({
+      emit: (event) => {
+        const e = event as eventWithTime;
+        if (
+          e.type === EventType.Custom &&
+          (e as { data: { tag: string } }).data.tag === 'flaky' &&
+          flakyAttempts++ === 0
+        ) {
+          throw new Error('injected transient consumer failure');
+        }
+        events.push(e);
+      },
+      fullSnapshotYieldBudgetMs: 1,
+    });
+
+    expect(events.some((e) => e.type === EventType.FullSnapshot)).toBe(false);
+    record.addCustomEvent('flaky', {});
+
+    await vi.waitFor(
+      () => {
+        expect(events.some((e) => e.type === EventType.FullSnapshot)).toBe(
+          true,
+        );
+      },
+      { timeout: 10_000 },
+    );
+    await settle();
+
+    expect(
+      events.filter(
+        (e) =>
+          e.type === EventType.Custom &&
+          (e as { data: { tag: string } }).data.tag === 'flaky',
+      ).length,
+    ).toBe(1);
+    // a recovered delivery is not a loss: no degradation diagnostic
+    expect(
+      diagnostics(events).find(
+        (p) => p?.status === 'mutation-commit-incomplete',
+      ),
+    ).toBeUndefined();
+  }, 20_000);
+
   it('isIgnored does not mint an id reservation for an unserialized mutation target', () => {
     const mirror = createMirror();
     let next = 1;

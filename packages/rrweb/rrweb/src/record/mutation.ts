@@ -313,6 +313,13 @@ export default class MutationBuffer {
     // shared canvas manager locked, or every frame is dropped until the
     // next successful snapshot's commit
     this.canvasManager.unlock();
+    // drain mapRemoves through the mirror exactly like emit() does: these
+    // nodes left the DOM, and skipping removeNodeFromMap here would leave
+    // them resolvable in the idNodeMap forever, a leak that grows on every
+    // aborted snapshot of exactly the huge, busy pages budgeted mode targets
+    while (this.mapRemoves.length) {
+      this.mirror.removeNodeFromMap(this.mapRemoves.shift()!);
+    }
     this.texts = [];
     this.attributes = [];
     this.attributeMap = new WeakMap<Node, attributeCursor>();

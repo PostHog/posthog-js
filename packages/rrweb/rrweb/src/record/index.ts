@@ -164,6 +164,21 @@ const bypassesHeldEventWindow = (e: eventWithTime): boolean => {
   return false;
 };
 
+// Whether a held event carries a Mutation payload (attach-iframe or forwarded
+// child-frame content; real mutations sit in locked buffers, never here).
+// These describe subtrees rooted in the aborted walk's output and cannot be
+// re-anchored, so they are the one class of held event an abort must drop.
+const isMutationHeldEvent = (event: eventWithoutTime): boolean => {
+  const e = event as {
+    type: EventType;
+    data?: { source?: IncrementalSource };
+  };
+  return (
+    e.type === EventType.IncrementalSnapshot &&
+    e.data?.source === IncrementalSource.Mutation
+  );
+};
+
 // Custom and Plugin payloads are the only held payloads the caller still owns
 // after emit; the recorder builds every other event's payload itself and never
 // touches it again. Snapshotting them at hold time keeps budgeted mode at
@@ -1203,18 +1218,55 @@ function record<T = eventWithTime>(
       // downgraded by the recovery snapshot
       const isCheckout =
         transaction.isCheckout || (budgetedSnapshotQueued?.isCheckout ?? false);
-      transaction.eventQueue.length = 0;
+      const willRetry = !transaction.isRetry && reason !== 'walk-error';
+      // Held non-mutation events stay deliverable across the one budgeted
+      // retry: the mirror is not reset, so the ids they reference are
+      // re-claimed by the retry's serialization (the checkout invariant) and
+      // the retry's flush delivers them after its FullSnapshot. Only what
+      // genuinely cannot survive is dropped (mutation payloads and
+      // references to reservations no serialization ever claimed), and every
+      // drop is counted into the diagnostics below.
+      const abandonedHeldEvents = transaction.eventQueue.splice(0);
+      const carriedHeldEvents: HeldEvent[] = [];
+      let droppedHeldOnAbort = 0;
+      if (willRetry && abandonedHeldEvents.length > 0) {
+        const unclaimed = new Set(mirror.getUnclaimedReservedIds());
+        for (const held of abandonedHeldEvents) {
+          if (isMutationHeldEvent(held.event)) {
+            droppedHeldOnAbort++;
+            continue;
+          }
+          const scrubbed = scrubUnclaimedIds(held.event, unclaimed);
+          if (!scrubbed) {
+            droppedHeldOnAbort++;
+            continue;
+          }
+          // seq 0: observed before any node of the retry walk is serialized,
+          // so the retry's CSSOM coverage check reads these as pre-read deltas
+          carriedHeldEvents.push({
+            event: scrubbed,
+            isCheckout: held.isCheckout,
+            seq: 0,
+          });
+        }
+      } else {
+        droppedHeldOnAbort = abandonedHeldEvents.length;
+      }
       budgetedSnapshotQueued = null;
       mirror.endIdReservation();
       discardMutationBuffers(transaction.bufferToken);
       budgetedSnapshotInFlight = false;
       activeBudgetedSnapshot = null;
+      let droppedHeldEventCount =
+        (transaction.overflow?.count ?? 0) +
+        transaction.droppedAfterAbort +
+        droppedHeldOnAbort;
 
       // The mirror is deliberately NOT reset on any failure path: ids the
       // aborted walk already claimed are reused by the next serialization
       // (the checkout invariant), and a reset would re-key every node and
       // orphan iframeManager's attached cross-origin trees.
-      if (!transaction.isRetry && reason !== 'walk-error') {
+      if (willRetry) {
         // Overflow and watchdog aborts are load-dependent — the page may have
         // been mid-burst (a route change, a data refresh). One fresh walk is
         // cheap; going straight to the synchronous fallback re-runs the very
@@ -1222,9 +1274,9 @@ function record<T = eventWithTime>(
         emitBudgetedSnapshotDiagnostic('budgeted-retry', {
           reason,
           walkMs: nowTimestamp() - transaction.startedAt,
-          droppedHeldEventCount:
-            (transaction.overflow?.count ?? 0) + transaction.droppedAfterAbort,
+          droppedHeldEventCount,
           droppedHeldEventBytes: transaction.overflow?.bytes ?? 0,
+          carriedHeldEventCount: carriedHeldEvents.length,
         });
         // the diagnostic went through the consumer too; a rotation from it
         // means the retry would walk the new session's mirror
@@ -1232,11 +1284,13 @@ function record<T = eventWithTime>(
           return;
         }
         try {
-          takeFullSnapshotBudgeted(isCheckout, true);
+          takeFullSnapshotBudgeted(isCheckout, true, carriedHeldEvents);
           // the retry walk (or the in-flight walk it coalesced into) owns
           // recovery from here
           return;
         } catch (retryError) {
+          // the retry never took ownership of the carried events
+          droppedHeldEventCount += carriedHeldEvents.length;
           // e.g. the consumer's emit throws at the retry's Meta. Swallowing
           // this and returning would leave a live recorder that never emits
           // a FullSnapshot, so a genuine failure falls through to the
@@ -1255,8 +1309,7 @@ function record<T = eventWithTime>(
         reason,
         isRetry: transaction.isRetry,
         walkMs: nowTimestamp() - transaction.startedAt,
-        droppedHeldEventCount:
-          (transaction.overflow?.count ?? 0) + transaction.droppedAfterAbort,
+        droppedHeldEventCount,
         droppedHeldEventBytes: transaction.overflow?.bytes ?? 0,
       });
       if (walkSuperseded(transaction)) {
@@ -1312,6 +1365,7 @@ function record<T = eventWithTime>(
     let droppedMutationRecords = 0;
     let deferredMutationRecords = 0;
     let droppedHeldEvents = 0;
+    let failedHeldEventDeliveries = 0;
     // Every delivery below re-enters the consumer, and the consumer can
     // rotate the recorder from any of them. The early returns land in the
     // finally blocks, which release this transaction's own state either way
@@ -1337,8 +1391,12 @@ function record<T = eventWithTime>(
         }
         const queuedEvents = transaction.eventQueue.splice(0);
         const deferred: HeldEvent[] = [];
-        // a consumer throw on one delivery must not drop the rest of the
-        // held window — input/scroll dedup means dropped deltas never re-send
+        // A consumer throw on one delivery must not drop the rest of the
+        // held window (input/scroll dedup means dropped deltas never
+        // re-send). For the same reason the failed event itself is retried
+        // once (the observer already advanced its dedup state past it, so a
+        // drop here is permanent), and still-failed deliveries are counted
+        // into the flush diagnostic.
         const emitHeld = (
           event: eventWithoutTime,
           isCheckout: boolean | undefined,
@@ -1348,7 +1406,17 @@ function record<T = eventWithTime>(
             sessionEmit(event, isCheckout, preserveTimestamp);
           } catch (emitError) {
             reportError(emitError);
-            console.warn('Held event delivery failed', emitError);
+            if (walkSuperseded(transaction)) {
+              failedHeldEventDeliveries++;
+              return;
+            }
+            try {
+              sessionEmit(event, isCheckout, preserveTimestamp);
+            } catch (retryError) {
+              failedHeldEventDeliveries++;
+              reportError(retryError);
+              console.warn('Held event delivery failed', retryError);
+            }
           }
         };
         for (const held of queuedEvents) {
@@ -1473,12 +1541,16 @@ function record<T = eventWithTime>(
 
     if (
       !walkSuperseded(transaction) &&
-      (droppedMutationRecords > 0 || deferredMutationRecords > 0)
+      (droppedMutationRecords > 0 ||
+        deferredMutationRecords > 0 ||
+        droppedHeldEvents > 0 ||
+        failedHeldEventDeliveries > 0)
     ) {
       emitBudgetedSnapshotDiagnostic('mutation-commit-incomplete', {
         droppedMutationRecords,
         deferredMutationRecords,
         droppedHeldEventCount: droppedHeldEvents,
+        failedHeldEventDeliveries,
       });
       // the diagnostic went through the consumer; a rotation from it owns
       // the recorder now, including the coalesced follow-up
@@ -1520,13 +1592,30 @@ function record<T = eventWithTime>(
   //    source of truth, carrying their live position and final state;
   //  - everything observed in the meantime is held and delivered after the
   //    FullSnapshot, in order (see sessionEmit and completeBudgetedWalk).
-  const takeFullSnapshotBudgeted = (isCheckout: boolean, isRetry = false) => {
+  const takeFullSnapshotBudgeted = (
+    isCheckout: boolean,
+    isRetry = false,
+    // Held events an aborted walk preserved for its retry (see the failure
+    // branch of completeBudgetedWalk). Seeded into this walk's queue so the
+    // normal flush machinery orders, scrubs and delivers them after the
+    // FullSnapshot. Only the retry passes these; the in-flight coalesce
+    // above can never swallow them because the failure branch clears the
+    // in-flight gate before calling back in.
+    carriedHeldEvents: HeldEvent[] = [],
+  ) => {
     if (budgetedSnapshotInFlight) {
       // coalesce concurrent requests into a single follow-up snapshot
       budgetedSnapshotQueued = {
         isCheckout: (budgetedSnapshotQueued?.isCheckout ?? false) || isCheckout,
       };
       return;
+    }
+    let carriedHeldEventBytes = 0;
+    for (const held of carriedHeldEvents) {
+      carriedHeldEventBytes += estimateRetainedSize(
+        held.event,
+        MAX_HELD_EVENT_BYTES,
+      );
     }
     const transaction: BudgetedSnapshotTransaction = {
       bufferToken: createMutationBufferLockToken(),
@@ -1540,8 +1629,8 @@ function record<T = eventWithTime>(
       error: null,
       abortRequested: false,
       abortReason: null,
-      heldEventBytes: 0,
-      eventQueue: [],
+      heldEventBytes: carriedHeldEventBytes,
+      eventQueue: carriedHeldEvents.slice(),
       serializedCount: 0,
       styleTargets: new Map(),
       overflow: null,
