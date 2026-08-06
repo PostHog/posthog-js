@@ -15,8 +15,19 @@ Conventions:
 
 - One decision per record, numbered sequentially (`NNNN-short-title.md`).
 - ADRs are immutable once accepted. Reversing or amending a decision gets a **new** ADR; the old one's Status becomes `Superseded by ADR-NNNN`.
-- `docs/ARCHITECTURE.md` stays the source of truth for the **current state** of the system. A PR that changes an architectural decision ships the ADR and the (small) ARCHITECTURE.md diff together.
+- `docs/ARCHITECTURE.md` stays the source of truth for the **current state** of the system. A PR that changes an architectural decision ships the ADR and the (small) ARCHITECTURE.md diff together, including the ADR's one-line entry in the index there.
 - Inline comments state the constraint and point at the ADR for the full story, instead of retelling it.
+
+### When to write one (and when not to)
+
+ADRs are for **architecturally significant** decisions only — the log loses its value if it records everything. Write one when a decision:
+
+- constrains future work or is expensive to reverse (a wire contract, an event/property name, a cross-SDK contract like the session-id derivation);
+- spans repos or SDKs, or responds to an MCP protocol revision;
+- deliberately accepts a trade-off or known gap that would otherwise resurface as "why don't we just...?" in every future review;
+- would otherwise need a multi-paragraph comment essay to justify inline.
+
+Do **not** write one for refactors, renames, bug fixes, dependency bumps, test changes, or anything the diff and its tests fully explain. Rule of thumb: if the PR description needs a "why not X instead" section, it's an ADR; if the diff speaks for itself, it isn't. When in doubt, start writing the Context section — if there's nothing non-obvious to say, stop.
 
 ## Consequences
 

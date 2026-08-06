@@ -2,7 +2,16 @@
 
 This document describes the internals of the `@posthog/mcp` SDK and the exact PostHog event/property contract it emits.
 
-It documents the **current state** only. The reasoning behind architectural decisions — what problem forced them, what was rejected, what trade-offs were accepted — lives in [`docs/adr/`](./adr/) (see [ADR-0001](./adr/0001-record-architecture-decisions.md) for the conventions). When this document says "see ADR-NNNN", that's where the why is.
+It documents the **current state** only. The reasoning behind architectural decisions — what problem forced them, what was rejected, what trade-offs were accepted — lives in [`docs/adr/`](./adr/). When this document says "see ADR-NNNN", that's where the why is.
+
+## Decision records
+
+One line per ADR; the record itself has the context and trade-offs. Not every change gets an ADR — [ADR-0001](./adr/0001-record-architecture-decisions.md) has the conventions and the bar for what counts as architecturally significant. A PR that adds an ADR also adds its line here.
+
+- [ADR-0001](./adr/0001-record-architecture-decisions.md) — Record architecture decisions: the conventions, and when (not) to write one.
+- [ADR-0002](./adr/0002-tools-list-analytics-affordances.md) — Analytics affordances (`context` param, `get_more_tools`) are injected via `tools/list`.
+- [ADR-0003](./adr/0003-self-encoded-session-tokens.md) — Self-encoded session tokens on `Mcp-Session-Id` (MCP 2025-11-25; superseded by 0004 for 2026-07-28).
+- [ADR-0004](./adr/0004-conversation-id-as-session-anchor.md) — `conversation_id` anchors `$session_id` under the stateless 2026-07-28 revision.
 
 ## TL;DR
 
