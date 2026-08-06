@@ -59,6 +59,15 @@ export type recordOptions<T> = {
   maskTextFn?: MaskTextFn;
   maskAllElementAttributes?: boolean;
   maskAttributeFn?: MaskAttributeFn;
+  /**
+   * When true, every `<audio>`/`<video>` element is serialized as muted at
+   * volume 0, and media-interaction events (play/volumechange) are recorded
+   * muted at volume 0. The replayer restores muted/volume at playback time, so
+   * without this the player re-fetches the page's own media and plays it with
+   * whatever volume the end user had - which can sound like captured audio even
+   * though nothing is recorded on our side. Visual playback state is unaffected.
+   */
+  maskMediaAudio?: boolean;
   slimDOMOptions?: SlimDOMOptions | 'all' | true;
   ignoreCSSAttributes?: Set<string>;
   /**
@@ -133,6 +142,7 @@ export type observerParam = {
   maskTextFn?: MaskTextFn;
   maskAllElementAttributes: boolean;
   maskAttributeFn?: MaskAttributeFn;
+  maskMediaAudio: boolean;
   keepIframeSrcFn: KeepIframeSrcFn;
   inlineStylesheet: boolean;
   styleSheetRuleCb: styleSheetRuleCallback;
@@ -182,6 +192,7 @@ export type MutationBufferParam = Pick<
   | 'maskInputFn'
   | 'maskAllElementAttributes'
   | 'maskAttributeFn'
+  | 'maskMediaAudio'
   | 'keepIframeSrcFn'
   | 'recordCanvas'
   | 'canvasMaskingConfigured'

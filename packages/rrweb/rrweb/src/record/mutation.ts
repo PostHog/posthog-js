@@ -208,6 +208,7 @@ export default class MutationBuffer {
   private maskInputFn: observerParam['maskInputFn'];
   private maskAllElementAttributes: observerParam['maskAllElementAttributes'];
   private maskAttributeFn: observerParam['maskAttributeFn'];
+  private maskMediaAudio: observerParam['maskMediaAudio'];
   private keepIframeSrcFn: observerParam['keepIframeSrcFn'];
   private recordCanvas: observerParam['recordCanvas'];
   private canvasMaskingConfigured: observerParam['canvasMaskingConfigured'];
@@ -238,6 +239,7 @@ export default class MutationBuffer {
         'maskInputFn',
         'maskAllElementAttributes',
         'maskAttributeFn',
+        'maskMediaAudio',
         'keepIframeSrcFn',
         'recordCanvas',
         'canvasMaskingConfigured',
@@ -384,6 +386,7 @@ export default class MutationBuffer {
         maskInputFn: this.maskInputFn,
         maskAllElementAttributes: this.maskAllElementAttributes,
         maskAttributeFn: this.maskAttributeFn,
+        maskMediaAudio: this.maskMediaAudio,
         slimDOMOptions: this.slimDOMOptions,
         dataURLOptions: this.dataURLOptions,
         recordCanvas: this.recordCanvas,

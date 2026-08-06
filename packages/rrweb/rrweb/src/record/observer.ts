@@ -1103,6 +1103,7 @@ function initMediaInteractionObserver({
   mirror,
   sampling,
   doc,
+  maskMediaAudio,
 }: observerParam): listenerHandler {
   const handler = callbackWrapper((type: MediaInteractions) =>
     throttle(
@@ -1120,8 +1121,11 @@ function initMediaInteractionObserver({
           type,
           id: mirror.getId(target as Node),
           currentTime,
-          volume,
-          muted,
+          // when `maskMediaAudio` is set, record every media interaction as muted
+          // at volume 0 so a later volumechange/play can't leak audible state into
+          // replay (mirrors the snapshot-time masking in rrweb-snapshot)
+          volume: maskMediaAudio ? 0 : volume,
+          muted: maskMediaAudio ? true : muted,
           playbackRate,
           loop,
         });

@@ -2305,6 +2305,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             maskInputFn: undefined,
             maskAllElementAttributes: false,
             maskAttributeFn: undefined,
+            // force `<audio>`/`<video>` elements to serialize (and record media
+            // interactions) muted at volume 0 so replay never re-fetches and plays
+            // the page's own media with sound. off by default; the replayer can
+            // still mute at playback time. see session_recording.maskMediaAudio
+            maskMediaAudio: false,
             slimDOMOptions: {},
             collectFonts: false,
             inlineStylesheet: true,

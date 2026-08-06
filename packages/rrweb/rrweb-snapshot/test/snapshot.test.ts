@@ -472,6 +472,55 @@ describe('attribute masking', () => {
   });
 });
 
+describe('media audio masking', () => {
+  const serializeMedia = (
+    el: Element,
+    opts: { maskMediaAudio?: boolean } = {},
+  ): elementNode =>
+    serializeNodeWithId(el, {
+      doc: document,
+      mirror: new Mirror(),
+      blockClass: 'blockblock',
+      blockSelector: null,
+      maskTextClass: 'maskmask',
+      maskTextSelector: null,
+      skipChild: false,
+      inlineStylesheet: true,
+      maskTextFn: undefined,
+      maskInputFn: undefined,
+      slimDOMOptions: {},
+      ...opts,
+    }) as elementNode;
+
+  const makeMedia = (tag: 'audio' | 'video'): HTMLMediaElement => {
+    const el = document.createElement(tag) as HTMLMediaElement;
+    // jsdom doesn't implement playback, so stub the read-only media props
+    Object.defineProperty(el, 'paused', { value: false, configurable: true });
+    Object.defineProperty(el, 'muted', { value: false, configurable: true });
+    Object.defineProperty(el, 'volume', { value: 0.9, configurable: true });
+    return el;
+  };
+
+  it('records live muted/volume when maskMediaAudio is off', () => {
+    const sn = serializeMedia(makeMedia('video'));
+    expect(sn.attributes.rr_mediaMuted).toBe(false);
+    expect(sn.attributes.rr_mediaVolume).toBe(0.9);
+    // visual playback state is still captured
+    expect(sn.attributes.rr_mediaState).toBe('played');
+  });
+
+  it.each(['audio', 'video'] as const)(
+    'forces %s to muted at volume 0 when maskMediaAudio is on',
+    (tag) => {
+      const sn = serializeMedia(makeMedia(tag), { maskMediaAudio: true });
+      expect(sn.attributes.rr_mediaMuted).toBe(true);
+      expect(sn.attributes.rr_mediaVolume).toBe(0);
+      // masking audio must not blank visual playback state
+      expect(sn.attributes.rr_mediaState).toBe('played');
+    },
+  );
+});
+
 describe('blocked elements with CSS transforms', () => {
   const renderWithStyle = (html: string, styles: string): HTMLElement => {
     const styleEl = document.createElement('style');

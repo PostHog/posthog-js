@@ -651,6 +651,23 @@ export interface SessionRecordingOptions {
     maskAttributeFn?: ((name: string, value: string, element?: Element) => string) | null
 
     /**
+     * We don't capture audio: PostHog has no `getUserMedia`/`MediaRecorder`/`AudioContext`.
+     * rrweb serializes each `<audio>`/`<video>` element's playback state (muted, volume,
+     * playing) alongside its `src`, and the replayer restores that state at playback time,
+     * re-fetching the page's own media file and playing it at the volume the end user had.
+     * To someone watching a recording this can sound like we captured audio even though
+     * nothing is stored on our side.
+     *
+     * Set `true` to force every media element to be serialized muted at volume 0, and to
+     * record media interactions (play/volumechange) muted at volume 0, so audible playback
+     * state never leaves the page. Visual playback (whether the video is playing, its
+     * position) is unaffected. Unlike `blockClass: 'ph-no-capture'`, this does not blank the
+     * element visually - you keep the video and lose only the sound.
+     * @default false
+     */
+    maskMediaAudio?: boolean
+
+    /**
      * Derived from `rrweb.record` options
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
      * @default {}
