@@ -1,4 +1,4 @@
-import AnthropicOriginal, { APIPromise } from '@anthropic-ai/sdk'
+import AnthropicOriginal, { APIPromise, ClientOptions } from '@anthropic-ai/sdk'
 import { PostHog } from 'posthog-node'
 import {
   formatResponseAnthropic,
@@ -20,6 +20,7 @@ type MessageCreateParamsBase = AnthropicOriginal.Messages.MessageCreateParams
 type RequestOptions = AnthropicOriginal.RequestOptions
 import { Stream } from '@anthropic-ai/sdk/streaming'
 import { sanitizeAnthropic } from '../sanitization'
+import { preserveProviderPromise } from '../providerPromise'
 import { monitoredStreamTee } from '../stream'
 
 interface ToolInProgress {
@@ -27,10 +28,9 @@ interface ToolInProgress {
   inputString: string
 }
 
-interface MonitoringAnthropicConfig {
+interface MonitoringAnthropicConfig extends ClientOptions {
   apiKey: string
   posthog: PostHog
-  baseURL?: string
 }
 
 export class PostHogAnthropic extends AnthropicOriginal {
@@ -71,10 +71,9 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
     const { providerParams: anthropicParams, posthogParams } = extractPosthogParams(body)
     const startTime = Date.now()
 
-    const parentPromise = super.create(anthropicParams, options)
-
     if (anthropicParams.stream) {
-      return parentPromise.then((value) => {
+      const parentPromise = super.create(anthropicParams, options)
+      const wrappedPromise = parentPromise.then((value) => {
         let accumulatedContent = ''
         const contentBlocks: FormattedContentItem[] = []
         const toolsInProgress: Map<string, ToolInProgress> = new Map()
@@ -280,8 +279,11 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
           return stream2
         }
         return value
-      }) as APIPromise<Stream<RawMessageStreamEvent>>
+      })
+
+      return preserveProviderPromise(parentPromise, wrappedPromise, { requestIdHeader: 'request-id' })
     } else {
+      const parentPromise = super.create(anthropicParams, options)
       const wrappedPromise = parentPromise.then(
         async (result) => {
           if ('content' in result) {
@@ -332,9 +334,9 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
           })
           throw error
         }
-      ) as APIPromise<Message>
+      )
 
-      return wrappedPromise
+      return preserveProviderPromise(parentPromise, wrappedPromise, { requestIdHeader: 'request-id' })
     }
   }
 }
