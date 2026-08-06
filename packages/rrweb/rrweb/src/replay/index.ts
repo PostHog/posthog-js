@@ -173,7 +173,7 @@ export class Replayer {
   private lastMouseDownEvent: [Node, Event] | null = null;
 
   // Keep the rootNode of the last hovered element. So  when hovering a new element, we can remove the last hovered element's :hover style.
-  private lastHoveredRootNode: Document | ShadowRoot;
+  private lastHoveredRootNode: Document | ShadowRoot | undefined;
 
   // In the fast-forward mode, only the last selection data needs to be applied.
   private lastSelectionData: selectionData | null = null;
@@ -2465,7 +2465,12 @@ export class Replayer {
     if (!isSync) {
       this.drawMouseTail({ x: _x, y: _y });
     }
-    this.hoverElements(target as Element);
+    // A mouse event can resolve to a non-element node (e.g. a text or comment
+    // node), which has no classList/querySelectorAll. Only element nodes can be
+    // hovered, so skip anything else instead of casting and crashing later.
+    if (target.nodeType === Node.ELEMENT_NODE) {
+      this.hoverElements(target as Element);
+    }
   }
 
   private drawMouseTail(position: { x: number; y: number }) {
@@ -2510,7 +2515,20 @@ export class Replayer {
       .forEach((hoveredEl) => {
         hoveredEl.classList.remove(':hover');
       });
-    this.lastHoveredRootNode = el.getRootNode() as Document | ShadowRoot;
+    // getRootNode() returns the node itself when it is detached from any
+    // document, so it is not guaranteed to be a Document or ShadowRoot. Only
+    // those expose querySelectorAll, so cache it only when it actually is one –
+    // otherwise the next hover tick would call querySelectorAll on a node that
+    // has no such method and throw an unhandled TypeError mid-playback.
+    const rootNode = el.getRootNode();
+    if (
+      rootNode.nodeType === Node.DOCUMENT_NODE ||
+      rootNode.nodeType === Node.DOCUMENT_FRAGMENT_NODE
+    ) {
+      this.lastHoveredRootNode = rootNode as Document | ShadowRoot;
+    } else {
+      this.lastHoveredRootNode = undefined;
+    }
     let currentEl: Element | null = el;
     while (currentEl) {
       if (currentEl.classList) {
