@@ -12,7 +12,12 @@ import {
 import { captureAiGeneration } from './capture'
 import type { APIPromise } from 'openai'
 import { Stream } from 'openai/streaming'
-import type { ParsedResponse } from 'openai/resources/responses/responses'
+import type {
+  ParsedResponse,
+  ResponseRetrieveParamsBase,
+  ResponseRetrieveParamsNonStreaming,
+  ResponseRetrieveParamsStreaming,
+} from 'openai/resources/responses/responses'
 import type { ResponseCreateParamsWithTools, ExtractParsedContentFromParams } from 'openai/lib/ResponsesParser'
 import type { FormattedMessage, FormattedContent } from '../types'
 import { sanitizeOpenAI, sanitizeOpenAIResponse } from '../sanitization'
@@ -24,6 +29,13 @@ import {
   isTerminalResponse,
   getResponseFailure,
 } from './utils'
+import type { MonitoringEventPropertiesWithDefaults } from '../utils'
+import {
+  BackgroundResponseTracker,
+  getBackgroundResponseLatency,
+  isPendingBackgroundResponse,
+  wrapBackgroundResponseStream,
+} from './background-responses'
 import { callWithOriginalCreate, preserveProviderPromise } from '../providerPromise'
 import { monitoredStreamTee } from '../stream'
 
@@ -37,6 +49,11 @@ type ResponsesCreateParamsNonStreaming = OpenAIOrignal.Responses.ResponseCreateP
 type ResponsesCreateParamsStreaming = OpenAIOrignal.Responses.ResponseCreateParamsStreaming
 type CreateEmbeddingResponse = OpenAIOrignal.CreateEmbeddingResponse
 type EmbeddingCreateParams = OpenAIOrignal.EmbeddingCreateParams
+
+interface BackgroundResponseState {
+  openAIParams: ResponsesCreateParamsBase
+  posthogParams: MonitoringEventPropertiesWithDefaults
+}
 
 interface MonitoringOpenAIConfig extends AzureClientOptions {
   apiKey: string
@@ -367,11 +384,44 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
 export class WrappedResponses extends AzureOpenAI.Responses {
   private readonly phClient: PostHog
   private readonly baseURL: string
+  private readonly backgroundResponses = new BackgroundResponseTracker<BackgroundResponseState>()
 
   constructor(client: AzureOpenAI, phClient: PostHog) {
     super(client)
     this.phClient = phClient
     this.baseURL = client.baseURL
+  }
+
+  private async captureBackgroundResponse(
+    result: OpenAIOrignal.Responses.Response,
+    context: BackgroundResponseState
+  ): Promise<void> {
+    const { openAIParams, posthogParams } = context
+    await captureAiGeneration(this.phClient, {
+      ...posthogParams,
+      model: openAIParams.model ?? result.model,
+      provider: 'azure',
+      input: formatOpenAIResponsesInput(openAIParams.input, openAIParams.instructions),
+      output: result.output,
+      latency: getBackgroundResponseLatency(result),
+      baseURL: this.baseURL,
+      modelParameters: getModelParams(openAIParams, result.service_tier),
+      httpStatus: 200,
+      usage: {
+        inputTokens: result.usage?.input_tokens ?? 0,
+        outputTokens: result.usage?.output_tokens ?? 0,
+        reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
+        cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
+        rawUsage: result.usage,
+      },
+      stopReason: result.status ?? undefined,
+      completionId: result.id,
+      providerMetadata: buildProviderMetadata({
+        requestId: extractRequestId(result),
+        incompleteDetails: result.incomplete_details,
+      }),
+      error: getResponseFailure(result),
+    })
   }
 
   // --- Overload #1: Non-streaming
@@ -446,6 +496,9 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                   if (!completionIdFromResponse && chunk.response.id) {
                     completionIdFromResponse = chunk.response.id
                   }
+                  if (openAIParams.background === true && !this.backgroundResponses.get(chunk.response.id)) {
+                    this.backgroundResponses.set(chunk.response.id, { openAIParams, posthogParams })
+                  }
                   if (chunk.response.service_tier != null) {
                     serviceTierFromResponse = chunk.response.service_tier
                   }
@@ -462,6 +515,16 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                     cacheReadInputTokens: chunk.response.usage.input_tokens_details?.cached_tokens ?? 0,
                   }
                 }
+              }
+
+              if (openAIParams.background === true) {
+                if (terminalResponse) {
+                  const context = this.backgroundResponses.take(terminalResponse.id)
+                  if (context) {
+                    await this.captureBackgroundResponse(terminalResponse, context).catch(() => undefined)
+                  }
+                }
+                return
               }
 
               const latency = (Date.now() - startTime) / 1000
@@ -489,6 +552,14 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 error: getResponseFailure(terminalResponse),
               })
             } catch (error: unknown) {
+              if (
+                openAIParams.background === true &&
+                completionIdFromResponse &&
+                this.backgroundResponses.get(completionIdFromResponse)
+              ) {
+                throw error
+              }
+
               await captureAiGeneration(this.phClient, {
                 ...posthogParams,
                 model: openAIParams.model,
@@ -524,6 +595,11 @@ export class WrappedResponses extends AzureOpenAI.Responses {
       const wrappedPromise = parentPromise.then(
         async (result) => {
           if ('output' in result) {
+            if (isPendingBackgroundResponse(openAIParams, result)) {
+              this.backgroundResponses.set(result.id, { openAIParams, posthogParams })
+              return result
+            }
+
             const latency = (Date.now() - startTime) / 1000
             await captureAiGeneration(this.phClient, {
               ...posthogParams,
@@ -540,6 +616,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 outputTokens: result.usage?.output_tokens ?? 0,
                 reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
                 cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
+                rawUsage: result.usage,
               },
               stopReason: result.status ?? undefined,
               completionId: result.id,
@@ -582,6 +659,85 @@ export class WrappedResponses extends AzureOpenAI.Responses {
     }
   }
 
+  public retrieve(
+    responseID: string,
+    query?: ResponseRetrieveParamsNonStreaming,
+    options?: RequestOptions
+  ): APIPromise<OpenAIOrignal.Responses.Response>
+
+  public retrieve(
+    responseID: string,
+    query: ResponseRetrieveParamsStreaming,
+    options?: RequestOptions
+  ): APIPromise<Stream<OpenAIOrignal.Responses.ResponseStreamEvent>>
+
+  public retrieve(
+    responseID: string,
+    query?: ResponseRetrieveParamsBase,
+    options?: RequestOptions
+  ): APIPromise<OpenAIOrignal.Responses.Response | Stream<OpenAIOrignal.Responses.ResponseStreamEvent>>
+
+  public retrieve(
+    responseID: string,
+    query: ResponseRetrieveParamsBase = {},
+    options?: RequestOptions
+  ): APIPromise<OpenAIOrignal.Responses.Response | Stream<OpenAIOrignal.Responses.ResponseStreamEvent>> {
+    const parentPromise = super.retrieve(responseID, query, options)
+
+    // Preserve the upstream promise and stream unchanged for responses that
+    // were not created through this client.
+    if (!this.backgroundResponses.get(responseID)) {
+      return parentPromise
+    }
+
+    if (query.stream) {
+      return parentPromise._thenUnwrap((result) => {
+        if ('controller' in result) {
+          return wrapBackgroundResponseStream(result, responseID, this.backgroundResponses, (response, context) =>
+            this.captureBackgroundResponse(response, context)
+          )
+        }
+        return result
+      })
+    }
+
+    return parentPromise._thenUnwrap(async (result) => {
+      if (!('output' in result) || !isTerminalResponse(result)) {
+        return result
+      }
+
+      // Removing the context before capture makes concurrent or repeated
+      // terminal polls idempotent.
+      const context = this.backgroundResponses.take(responseID)
+      if (context) {
+        await this.captureBackgroundResponse(result, context).catch(() => undefined)
+      }
+      return result
+    }) as unknown as APIPromise<OpenAIOrignal.Responses.Response>
+  }
+
+  public cancel(responseID: string, options?: RequestOptions): APIPromise<OpenAIOrignal.Responses.Response> {
+    const parentPromise = super.cancel(responseID, options)
+
+    // Avoid wrapping calls that do not belong to a background response created
+    // through this client, preserving the upstream APIPromise unchanged.
+    if (!this.backgroundResponses.get(responseID)) {
+      return parentPromise
+    }
+
+    return parentPromise._thenUnwrap(async (result) => {
+      if (!isTerminalResponse(result)) {
+        return result
+      }
+
+      const context = this.backgroundResponses.take(responseID)
+      if (context) {
+        await this.captureBackgroundResponse(result, context).catch(() => undefined)
+      }
+      return result
+    }) as unknown as APIPromise<OpenAIOrignal.Responses.Response>
+  }
+
   public parse<Params extends ResponseCreateParamsWithTools, ParsedT = ExtractParsedContentFromParams<Params>>(
     body: Params & MonitoringParams,
     options?: RequestOptions
@@ -595,6 +751,11 @@ export class WrappedResponses extends AzureOpenAI.Responses {
 
     const wrappedPromise = parentPromise.then(
       async (result) => {
+        if (isPendingBackgroundResponse(openAIParams, result)) {
+          this.backgroundResponses.set(result.id, { openAIParams, posthogParams })
+          return result
+        }
+
         const latency = (Date.now() - startTime) / 1000
         await captureAiGeneration(this.phClient, {
           ...posthogParams,
@@ -611,6 +772,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
             outputTokens: result.usage?.output_tokens ?? 0,
             reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
             cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
+            rawUsage: result.usage,
           },
           stopReason: result.status ?? undefined,
           completionId: result.id,
