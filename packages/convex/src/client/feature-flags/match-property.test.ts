@@ -68,6 +68,79 @@ describe('matchProperty — is_set', () => {
   })
 })
 
+describe('matchProperty — starts_with / ends_with', () => {
+  test('starts_with matches case-insensitively', () => {
+    expect(matchProperty(prop('starts_with', 'Val'), { k: 'value' })).toBe(true)
+    expect(matchProperty(prop('starts_with', 'Val'), { k: 'VALUE' })).toBe(true)
+    expect(matchProperty(prop('starts_with', 'Val'), { k: 'vaLue4' })).toBe(true)
+
+    expect(matchProperty(prop('starts_with', 'Val'), { k: 'prevalue' })).toBe(false)
+    expect(matchProperty(prop('starts_with', 'Val'), { k: 'Alakazam' })).toBe(false)
+    expect(matchProperty(prop('starts_with', 'Val'), { k: 123 })).toBe(false)
+  })
+
+  test('starts_with stringifies numeric property values', () => {
+    expect(matchProperty(prop('starts_with', '3'), { k: '3' })).toBe(true)
+    expect(matchProperty(prop('starts_with', '3'), { k: 323 })).toBe(true)
+
+    expect(matchProperty(prop('starts_with', '3'), { k: 123 })).toBe(false)
+    expect(matchProperty(prop('starts_with', '3'), { k: 'val3' })).toBe(false)
+  })
+
+  test('not_starts_with negates the match', () => {
+    expect(matchProperty(prop('not_starts_with', 'Val'), { k: 'value' })).toBe(false)
+    expect(matchProperty(prop('not_starts_with', 'Val'), { k: 'VALUE' })).toBe(false)
+
+    expect(matchProperty(prop('not_starts_with', 'Val'), { k: 'prevalue' })).toBe(true)
+    expect(matchProperty(prop('not_starts_with', 'Val'), { k: 'Alakazam' })).toBe(true)
+  })
+
+  test('ends_with matches case-insensitively', () => {
+    expect(matchProperty(prop('ends_with', 'lUe'), { k: 'value' })).toBe(true)
+    expect(matchProperty(prop('ends_with', 'lUe'), { k: 'VALUE' })).toBe(true)
+    expect(matchProperty(prop('ends_with', 'lUe'), { k: '343tfvalue' })).toBe(true)
+
+    expect(matchProperty(prop('ends_with', 'lUe'), { k: 'value2' })).toBe(false)
+    expect(matchProperty(prop('ends_with', 'lUe'), { k: 'Alakazam' })).toBe(false)
+    expect(matchProperty(prop('ends_with', 'lUe'), { k: 123 })).toBe(false)
+  })
+
+  test('ends_with stringifies numeric property values', () => {
+    expect(matchProperty(prop('ends_with', '3'), { k: '3' })).toBe(true)
+    expect(matchProperty(prop('ends_with', '3'), { k: 323 })).toBe(true)
+    expect(matchProperty(prop('ends_with', '3'), { k: 13 })).toBe(true)
+
+    expect(matchProperty(prop('ends_with', '3'), { k: 321 })).toBe(false)
+    expect(matchProperty(prop('ends_with', '3'), { k: '3val' })).toBe(false)
+  })
+
+  test('not_ends_with negates the match', () => {
+    expect(matchProperty(prop('not_ends_with', 'lUe'), { k: 'value' })).toBe(false)
+    expect(matchProperty(prop('not_ends_with', 'lUe'), { k: 'VALUE' })).toBe(false)
+
+    expect(matchProperty(prop('not_ends_with', 'lUe'), { k: 'value2' })).toBe(true)
+    expect(matchProperty(prop('not_ends_with', 'lUe'), { k: 'Alakazam' })).toBe(true)
+  })
+
+  test.each(['starts_with', 'not_starts_with', 'ends_with', 'not_ends_with'])(
+    '%s throws InconclusiveMatchError when the key is absent',
+    (op) => {
+      expect(() => matchProperty(prop(op, 'Val'), { other: 'value' })).toThrow(InconclusiveMatchError)
+      expect(() => matchProperty(prop(op, 'Val'), {})).toThrow(InconclusiveMatchError)
+    }
+  )
+
+  test.each(['starts_with', 'not_starts_with', 'ends_with', 'not_ends_with'])(
+    '%s returns false when the property value is null or undefined',
+    (op) => {
+      // The null guard fires before operator dispatch, so the not_ variants are not
+      // pure negations here — both directions return false, matching icontains.
+      expect(matchProperty(prop(op, 'Val'), { k: null })).toBe(false)
+      expect(matchProperty(prop(op, 'Val'), { k: undefined })).toBe(false)
+    }
+  )
+})
+
 describe('matchProperty — error cases', () => {
   test('throws InconclusiveMatchError when key is absent for non-is_not_set operators', () => {
     expect(() => matchProperty(prop('exact', 'x'), {})).toThrow(InconclusiveMatchError)

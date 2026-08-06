@@ -1,14 +1,16 @@
-import { defaultPostHog } from './helpers/posthog-instance'
-import type { PostHogConfig } from '../types'
+import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
+import { PostHog } from '../posthog-core'
+import type { PostHogConfig, SessionIdChangedCallback } from '../types'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { SurveyEventName, SurveyEventProperties } from '../posthog-surveys-types'
 import { ProductTourEventName, ProductTourEventProperties } from '../posthog-product-tours-types'
 import { SURVEY_SEEN_PREFIX } from '../utils/survey-utils'
 import { beforeEach } from '@jest/globals'
 import { RateLimiter } from '../rate-limiter'
+import { normalizeCaptureResult } from './helpers/normalize-capture-result'
 
 jest.mock('@posthog/browser-common/utils/globals', () => {
-    const orig = jest.requireActual('@posthog/browser-common/utils/globals')
+    const orig = jest.requireActual('./helpers/snapshot-test-globals').snapshotTestGlobals
     const mockURL = jest.fn().mockReturnValue('https://example.com')
     const mockReferrer = jest.fn().mockReturnValue('https://referrer.com')
     const mockHostName = jest.fn().mockReturnValue('example.com')
@@ -125,6 +127,38 @@ describe('posthog core', () => {
             expect(beforeSendMock.mock.calls[0][0]).toMatchObject({
                 $unset: ['email'],
             })
+        })
+
+        it('produces a representative custom event capture', () => {
+            const { posthog, beforeSendMock } = setup({}, 'snapshot-token')
+            posthog.register({ plan: 'growth', workspace_id: 'workspace-42' })
+
+            posthog.capture('report exported', {
+                export_format: 'csv',
+                row_count: 42,
+                filters: { date_range: 'last_30_days', teams: ['analytics', 'growth'] },
+            })
+
+            const capturedEvent = beforeSendMock.mock.calls[0][0]
+            expect(normalizeCaptureResult(capturedEvent)).toMatchSnapshot()
+        })
+
+        it('produces a representative $groupidentify capture from a real instance', () => {
+            const { posthog, beforeSendMock } = setup({}, 'group-snapshot-token')
+
+            posthog.group('organization', 'org::5', { group: 'property', foo: 5 })
+
+            expect(beforeSendMock).toHaveBeenCalledTimes(1)
+            const capturedEvent = beforeSendMock.mock.calls[0][0]
+            expect(capturedEvent).toMatchObject({
+                event: '$groupidentify',
+                properties: {
+                    $group_type: 'organization',
+                    $group_key: 'org::5',
+                    $group_set: { group: 'property', foo: 5 },
+                },
+            })
+            expect(normalizeCaptureResult(capturedEvent)).toMatchSnapshot()
         })
 
         describe('rate limiting', () => {
@@ -842,6 +876,143 @@ describe('posthog core', () => {
             expect(captureSpy).toHaveBeenCalledWith('test-event')
             captureSpy.mockRestore()
             delete (posthog as any).parseInvalidJson
+        })
+    })
+
+    describe('register_for_session()', () => {
+        const emitSessionChange = (
+            posthog: PostHog,
+            changeReason: NonNullable<Parameters<SessionIdChangedCallback>[2]>
+        ): void => {
+            const handlers = (posthog.sessionManager as any)._sessionIdChangedHandlers as SessionIdChangedCallback[]
+            handlers.forEach((handler) => handler('new-session-id', 'window-id', changeReason))
+        }
+
+        const createReloadedPosthogInstance = (token: string): Promise<PostHog> =>
+            new Promise((resolve) => {
+                const posthog = new PostHog()
+                posthog._init(
+                    token,
+                    {
+                        persistence: 'localStorage',
+                        request_batching: false,
+                        api_host: 'http://localhost',
+                        disable_surveys: true,
+                        disable_conversations: true,
+                        before_send: () => null,
+                        loaded: (instance) => resolve(instance as PostHog),
+                    },
+                    `reload-${token}`
+                )
+            })
+
+        it('clears session-registered props when PostHog session rotates due to activity timeout', async () => {
+            const posthog = await createPosthogInstance(uuidv7(), { persistence: 'localStorage' })
+
+            posthog.register_for_session({ link_id: 'abc123', flow: 'signup' })
+            expect(posthog.sessionPersistence?.props['link_id']).toBe('abc123')
+            expect(posthog.sessionPersistence?.props['flow']).toBe('signup')
+
+            emitSessionChange(posthog, {
+                noSessionId: false,
+                activityTimeout: true,
+                sessionPastMaximumLength: false,
+                crossTabAdoption: false,
+            })
+
+            expect(posthog.sessionPersistence?.props['link_id']).toBeUndefined()
+            expect(posthog.sessionPersistence?.props['flow']).toBeUndefined()
+        })
+
+        it('does not collide with user-provided session property names', async () => {
+            const posthog = await createPosthogInstance(uuidv7(), { persistence: 'localStorage' })
+
+            posthog.register_for_session({ $session_registered_properties: 'user-value' })
+
+            expect(posthog.sessionPersistence?.props['$session_registered_properties']).toBe('user-value')
+            expect(posthog.sessionPersistence?.properties()['$session_registered_properties']).toBe('user-value')
+        })
+
+        it('clears session-registered props after a page reload and later session rotation', async () => {
+            const token = uuidv7()
+            const posthog = await createPosthogInstance(token, { persistence: 'localStorage' })
+            posthog.register_for_session({ link_id: 'abc123' })
+
+            const reloadedPosthog = await createReloadedPosthogInstance(token)
+            expect(reloadedPosthog.sessionPersistence?.props['link_id']).toBe('abc123')
+
+            emitSessionChange(reloadedPosthog, {
+                noSessionId: false,
+                activityTimeout: true,
+                sessionPastMaximumLength: false,
+                crossTabAdoption: false,
+            })
+
+            expect(reloadedPosthog.sessionPersistence?.props['link_id']).toBeUndefined()
+        })
+
+        it('clears session-registered props when adopting another tab session', async () => {
+            const posthog = await createPosthogInstance(uuidv7(), { persistence: 'localStorage' })
+            posthog.register_for_session({ link_id: 'abc123' })
+
+            emitSessionChange(posthog, {
+                noSessionId: false,
+                activityTimeout: false,
+                sessionPastMaximumLength: false,
+                crossTabAdoption: true,
+            })
+
+            expect(posthog.sessionPersistence?.props['link_id']).toBeUndefined()
+        })
+
+        it('does not clear session-registered props on initial session creation', async () => {
+            const posthog = await createPosthogInstance(uuidv7(), { persistence: 'localStorage' })
+
+            posthog.register_for_session({ link_id: 'abc123' })
+            expect(posthog.sessionPersistence?.props['link_id']).toBe('abc123')
+
+            emitSessionChange(posthog, {
+                noSessionId: true,
+                activityTimeout: false,
+                sessionPastMaximumLength: false,
+                crossTabAdoption: false,
+            })
+
+            expect(posthog.sessionPersistence?.props['link_id']).toBe('abc123')
+        })
+
+        it('clears only user-registered keys, not system-managed session storage keys', async () => {
+            const posthog = await createPosthogInstance(uuidv7(), { persistence: 'localStorage' })
+
+            posthog.register_for_session({ my_prop: 'user-value' })
+            posthog.sessionPersistence?.register({ $referring_domain: 'google.com' })
+
+            emitSessionChange(posthog, {
+                noSessionId: false,
+                activityTimeout: true,
+                sessionPastMaximumLength: false,
+                crossTabAdoption: false,
+            })
+
+            expect(posthog.sessionPersistence?.props['my_prop']).toBeUndefined()
+            expect(posthog.sessionPersistence?.props['$referring_domain']).toBe('google.com')
+        })
+
+        it('removes keys from the tracked set when unregister_for_session is called', async () => {
+            const posthog = await createPosthogInstance(uuidv7(), { persistence: 'localStorage' })
+
+            posthog.register_for_session({ link_id: 'abc123', flow: 'signup' })
+            posthog.unregister_for_session('flow')
+
+            emitSessionChange(posthog, {
+                noSessionId: false,
+                activityTimeout: true,
+                sessionPastMaximumLength: false,
+                crossTabAdoption: false,
+            })
+
+            expect(posthog.sessionPersistence?.props['flow']).toBeUndefined()
+            expect(posthog.sessionPersistence?.props['link_id']).toBeUndefined()
         })
     })
 })

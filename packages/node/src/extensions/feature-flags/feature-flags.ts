@@ -1150,6 +1150,14 @@ function matchProperty(
       return String(overrideValue).toLowerCase().includes(String(value).toLowerCase())
     case 'not_icontains':
       return !String(overrideValue).toLowerCase().includes(String(value).toLowerCase())
+    case 'starts_with':
+      return String(overrideValue).toLowerCase().startsWith(String(value).toLowerCase())
+    case 'not_starts_with':
+      return !String(overrideValue).toLowerCase().startsWith(String(value).toLowerCase())
+    case 'ends_with':
+      return String(overrideValue).toLowerCase().endsWith(String(value).toLowerCase())
+    case 'not_ends_with':
+      return !String(overrideValue).toLowerCase().endsWith(String(value).toLowerCase())
     case 'regex':
       return isValidRegex(String(value)) && String(overrideValue).match(String(value)) !== null
     case 'not_regex':
