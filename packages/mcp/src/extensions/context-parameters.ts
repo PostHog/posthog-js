@@ -108,11 +108,5 @@ export function addContextParameterToTools<TTool extends ContextInjectableTool>(
   contextDescriptionOverride?: string,
   logger: LoggerFn = log
 ): TTool[] {
-  return tools.map((tool) => {
-    // Skip get_more_tools - it has its own special context parameter
-    if (tool.name === 'get_more_tools') {
-      return tool
-    }
-    return addContextParameterToTool(tool, contextDescriptionOverride, logger)
-  })
+  return tools.map((tool) => addContextParameterToTool(tool, contextDescriptionOverride, logger))
 }
