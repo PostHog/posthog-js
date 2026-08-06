@@ -41,9 +41,10 @@ import {
   PostHogAutocaptureOptions,
   PostHogCustomAppProperties,
   PostHogCustomStorage,
+  PostHogPushIdentityProvider,
   PostHogSessionReplayConfig,
 } from './types'
-import { getRemoteConfigBool, getRemoteConfigNumber, isHermes, isMacOS, isValidSampleRate } from './utils'
+import { getRemoteConfigBool, getRemoteConfigNumber, isHermes, isMacOS, isValidSampleRate, isWeb } from './utils'
 import { withReactNativeNavigation } from './frameworks/wix-navigation'
 import { OptionalReactNativePlugin } from './optional/OptionalPlugin'
 import { ErrorTracking, ErrorTrackingOptions } from './error-tracking'
@@ -66,6 +67,11 @@ function mapAppStateForLogs(state: AppStateStatus | undefined): 'foreground' | '
   }
   return 'foreground'
 }
+
+// Upper bound on a single JS->native bridge call. Only bounds the call itself — waiting for
+// native setup happens before it — so it can be tight enough that a stuck call doesn't strand
+// the queue for the process lifetime.
+const NATIVE_CALL_TIMEOUT_MS = 10_000
 
 export interface PostHogOptions extends PostHogCoreOptions {
   /**
@@ -186,6 +192,49 @@ export interface PostHogOptions extends PostHogCoreOptions {
    * and then the device locale.
    */
   overrideDisplayLanguage?: string | null
+
+  /**
+   * Whether to automatically register this device's push token so PostHog
+   * Workflows can target it. Requires `@posthog/react-native-plugin`.
+   *
+   * Your app still owns permission — PostHog only observes the token the OS hands
+   * back, and never sees later refreshes. Forward those to
+   * {@link PostHog.registerPushNotificationToken} yourself.
+   *
+   * Not supported on web or macOS.
+   *
+   * @default true
+   */
+  capturePushNotificationSubscriptions?: boolean
+
+  /**
+   * Whether to automatically capture `$push_notification_opened` on a notification
+   * tap. Requires `@posthog/react-native-plugin`.
+   *
+   * Fires for pushes from any provider, not just PostHog's — but title and body are
+   * attached only for PostHog's own, so third-party notification text never reaches
+   * analytics. Android sees cold starts only; call
+   * {@link PostHog.capturePushNotificationOpened} for the taps it misses.
+   *
+   * The native SDK builds and sends this event, so JS `before_send` never sees it.
+   *
+   * Not supported on web.
+   *
+   * @default true
+   */
+  capturePushNotificationOpened?: boolean
+
+  /**
+   * Mints a signed identity-verification token for push subscription requests.
+   * Only needed when your PostHog project requires identity verification for push.
+   * Requires `@posthog/react-native-plugin`.
+   *
+   * Called with the current `distinctId` and `appId`. Mint on your backend (HS256,
+   * `sub` = distinctId, an `app_id` claim, `aud` = `posthog:push_identity`), never
+   * in the app. Return `null` to send the request unauthenticated; a slow or
+   * throwing implementation does the same after 10 seconds.
+   */
+  pushIdentityProvider?: PostHogPushIdentityProvider
 }
 
 export class PostHog extends PostHogCore {
@@ -197,11 +246,19 @@ export class PostHog extends PostHogCore {
   private _enableSessionReplay?: boolean
   private _sessionReplayNativeInitialized: boolean = false
   private _nativeErrorTrackingInitialized: boolean = false
+  // Initialized: setup() ran carrying push config, so a live native instance exists.
+  // Unsupported: this plugin can never do push — latched so the enable check stops
+  // recomputing, without claiming an instance that isn't there.
+  private _pushNativeInitialized: boolean = false
+  private _pushNativeUnsupported: boolean = false
   private _sessionReplayMacOSWarned: boolean = false
   // Last applied recording state; the native bridge is only crossed on a change.
   private _sessionReplayRecordingActive?: boolean
   // Serializes re-arm evaluations so concurrent flags reloads don't interleave.
   private _sessionReplayEvalChain: Promise<void> = Promise.resolve()
+  // Serializes every JS->native command (identity, consent, push) so they reach native in
+  // call order. See _enqueueNative.
+  private _nativeChain: Promise<void> = Promise.resolve()
   private _sessionReplayOptions?: PostHogOptions
   // Event names that gate session replay (remote `sessionRecording.eventTriggers`). Cached in
   // memory so the capture hot path never reads storage. Empty when replay is off or unconfigured.
@@ -714,10 +771,13 @@ export class PostHog extends PostHogCore {
     // user-specific survey state (SurveysSeen, SurveyLastSeenDate) is still cleared.
     // Do NOT keep SessionReplayEventTriggerActivatedSession: it is user-session state, so the
     // base reset() must clear it to stop one user's activation leaking into the next.
+    // PushRegistered is device-level subscription state, not user data: native reset()
+    // re-binds the subscription rather than deleting it, so the device stays registered.
     super.reset([
       PostHogPersistedProperty.RemoteConfig,
       PostHogPersistedProperty.SessionReplay,
       PostHogPersistedProperty.Surveys,
+      PostHogPersistedProperty.PushRegistered,
       ...effectivePropertiesToKeep,
     ])
 
@@ -727,6 +787,24 @@ export class PostHog extends PostHogCore {
       // reloading, and allow the super.reset() call to reload the flags.
       this._setDefaultPersonPropertiesForFlags(false)
     }
+
+    // Native holds its own identity and a registered push token is bound to it, so without this
+    // Workflows keep delivering to the logged-out user. identify() only writes native
+    // preferences; reset() is what unregisters and re-registers the subscription.
+    if (OptionalReactNativePlugin?.reset) {
+      // Ids are read at dispatch, not here: a same-tick identify() shares this queue and
+      // lands after, so native must converge on whichever identity is current by then.
+      void this._enqueueNative(
+        'reset',
+        (plugin) => plugin.reset?.(String(this.getDistinctId()), String(this.getAnonymousId())),
+        // Boot native when a manual register persisted a subscription; skipping the rebind
+        // would leave Workflows targeting the pre-reset identity.
+        this.getPersistedProperty(PostHogPersistedProperty.PushRegistered) === true
+      )
+    }
+    // super.reset() cleared the persisted opt-out, but native keeps its own copy and would
+    // stay opted out for the rest of the process.
+    this._propagateNativeOptOut()
 
     // Logout must be durable so a crash in the debounce window can't resurface the previous user.
     void this._eventsStorage.waitForPersist()
@@ -918,6 +996,9 @@ export class PostHog extends PostHogCore {
     // Consent must be durable. See reset()/identify().
     const result = super.optIn()
     void this._eventsStorage.waitForPersist()
+    // Native re-arms push on opt-in (iOS reinstalls its integrations, Android resumes deferred
+    // work on the next flush), so the token unregistered by optOut() comes back without a restart.
+    this._propagateNativeOptOut()
     return result
   }
 
@@ -940,7 +1021,35 @@ export class PostHog extends PostHogCore {
     // Consent must be durable. See reset()/identify().
     const result = super.optOut()
     void this._eventsStorage.waitForPersist()
+    // A device token registered before opt-out would otherwise survive consent withdrawal: the
+    // native subscription handler keeps its own persisted record and retry loop. unregister is
+    // deliberately allowed while opted out.
+    // Native gates unregister sends on its own opt-out flag, so the unregister has to reach
+    // native first; both share _nativeChain, so enqueueing it first is the ordering. A DELETE
+    // that still loses the race natively is persisted there and replayed after opt-in.
+    if (OptionalReactNativePlugin?.unregisterPushNotificationToken) {
+      void this.unregisterPushNotificationToken()
+    }
+    this._propagateNativeOptOut()
     return result
+  }
+
+  // Native persists its own consent flag and only reads the JS one at setup(), so runtime
+  // changes must cross the bridge or native's automatic push registration keeps running on
+  // its setup-time snapshot (e.g. re-registering an OS-refreshed token after optOut()).
+  private _propagateNativeOptOut(): void {
+    if (!OptionalReactNativePlugin?.setOptOut) {
+      // A plugin that predates push cannot auto-register tokens, so there is no consent to sync.
+      return
+    }
+    // Consent is read at dispatch, so two queued writes converge on the current value however
+    // they interleave — an unawaited optOut()/optIn() pair cannot strand native opted out.
+    void this._enqueueNative('setOptOut', (plugin) => plugin.setOptOut?.(this.optedOut))
+    // Nothing runs setup() while opted out, so consent granted at runtime has no native
+    // instance to land on. The predicate is false when opted out, so optOut() self-excludes.
+    if (this._isPushNativeEnabled(this._sessionReplayOptions)) {
+      void this._ensureNativeInitialized()
+    }
   }
 
   /**
@@ -1462,7 +1571,15 @@ export class PostHog extends PostHogCore {
    * @param resumeCurrent - Whether to resume recording of current session (true) or start a new session (false). Defaults to true.
    */
   async startSessionRecording(resumeCurrent: boolean = true): Promise<void> {
-    await this._startSessionRecording(resumeCurrent)
+    // Chained here, not in _startSessionRecording (which _evaluateAndStartSessionReplayInternal
+    // also calls from inside this chain — re-chaining there deadlocks), so two callers can't
+    // both enter initializeNativePlugin() and race their pluginConfigs.
+    this._sessionReplayEvalChain = this._sessionReplayEvalChain
+      .catch(() => {})
+      .then(async () => {
+        await this._startSessionRecording(resumeCurrent)
+      })
+    await this._sessionReplayEvalChain
   }
 
   // Same as startSessionRecording, but reports success so callers can react to failures.
@@ -1679,15 +1796,20 @@ export class PostHog extends PostHogCore {
       )
     }
 
-    if ((this._isEnableSessionReplay() || this._isNativePluginInitialized()) && OptionalReactNativePlugin) {
-      try {
-        distinctId = distinctId || previousDistinctId
-        const anonymousId = this.getAnonymousId()
-        OptionalReactNativePlugin.identify(String(distinctId), String(anonymousId))
-        this._logger.info(`Native PostHog identified with distinctId ${distinctId} and anonymousId ${anonymousId}.`)
-      } catch (e) {
-        this._logger.error(`Native PostHog failed to identify: ${e}.`)
-      }
+    if (OptionalReactNativePlugin) {
+      // Queued, not inline: a same-tick reset() is already on _nativeChain and must land first,
+      // or its post-reset anonymous id gets overwritten. No init check here — gating on
+      // _isNativePluginInitialized() would lose every identify() issued while setup() is in
+      // flight, which is most startup identifies.
+      void this._enqueueNative('identify', (plugin) => {
+        const nativeDistinctId = String(this.getDistinctId() || previousDistinctId)
+        const anonymousId = String(this.getAnonymousId())
+        const identified = plugin.identify(nativeDistinctId, anonymousId)
+        this._logger.info(
+          `Native PostHog identified with distinctId ${nativeDistinctId} and anonymousId ${anonymousId}.`
+        )
+        return identified
+      })
     }
 
     // Account-switch safety — same as reset().
@@ -1966,6 +2088,218 @@ export class PostHog extends PostHogCore {
     }
   }
 
+  /**
+   * Registers this device's push token so PostHog Workflows can target it.
+   * Requires `@posthog/react-native-plugin`.
+   *
+   * Registration happens at startup on its own when
+   * {@link PostHogOptions.capturePushNotificationSubscriptions} is on, so call this for
+   * token refreshes, which that startup fetch cannot see — on Android only, since a
+   * refresh listener yields an FCM token and iOS defaults to APNs. Safe to call before
+   * the native SDK is ready; the call queues rather than being dropped.
+   *
+   * `appId` says which provider delivers: the Firebase `project_id` for an FCM token, the
+   * APNs bundle id for an APNs token. Unset, iOS uses the bundle id and Android the
+   * default `FirebaseApp`'s project id, so pass it if you don't use Firebase or use a
+   * non-default project. Registration fails server-side if your PostHog project has no
+   * matching integration for `appId`.
+   *
+   * To use FCM on iOS too, pass the Firebase `project_id` as `appId` and set
+   * {@link PostHogOptions.capturePushNotificationSubscriptions} to `false` first —
+   * otherwise the device registers twice (APNs under the bundle id, FCM under the project
+   * id), a Workflow with both integrations delivers twice, and
+   * {@link unregisterPushNotificationToken} clears only the most recent.
+   *
+   * Not supported on web or macOS.
+   */
+  async registerPushNotificationToken(deviceToken: string, options?: { appId?: string }): Promise<void> {
+    return this._callPushPlugin(
+      'registerPushNotificationToken',
+      // requireInit: a host driving registration itself may have both capture flags off, so
+      // nothing else would ever bring the native SDK up and the token would be dropped.
+      { allowMacOS: false, requireInit: true, noop: 'token not registered' },
+      (plugin) => {
+        // Native persists the subscription across launches; remember that so a later
+        // launch's cleanup knows to boot native (see unregister/reset).
+        this.setPersistedProperty(PostHogPersistedProperty.PushRegistered, true)
+        return plugin.registerPushNotificationToken?.(deviceToken, options?.appId ?? null)
+      }
+    )
+  }
+
+  /**
+   * Unregisters this device's push token so Workflows stop targeting it — for example
+   * from your logout flow. Requires `@posthog/react-native-plugin`.
+   *
+   * Durable: a failed or offline request retries on the next flush or launch. `reset()`
+   * already moves a registered token to the new identity, so this is only needed if you
+   * manage subscriptions yourself.
+   *
+   * Not supported on web or macOS.
+   */
+  async unregisterPushNotificationToken(): Promise<void> {
+    return this._callPushPlugin(
+      'unregisterPushNotificationToken',
+      // requireInit only when a manual register persisted a subscription: native keeps it
+      // across launches, so cleanup must boot native even in a process where nothing else
+      // initialized it. Without one, native never came up with anything to remove, and
+      // booting it to delete nothing would defeat the opt-out this usually follows.
+      {
+        allowMacOS: false,
+        allowWhenOptedOut: true,
+        requireInit: this.getPersistedProperty(PostHogPersistedProperty.PushRegistered) === true,
+        noop: 'nothing to unregister',
+      },
+      (plugin) => {
+        // Clear on dispatch: both native SDKs persist the delete intent before their
+        // consent/network gates and retry it on later launches, so the retry is native's
+        // from here on.
+        this.setPersistedProperty(PostHogPersistedProperty.PushRegistered, null)
+        return plugin.unregisterPushNotificationToken?.()
+      }
+    )
+  }
+
+  /**
+   * Captures `$push_notification_opened` when a user opens a push notification.
+   * Requires `@posthog/react-native-plugin`.
+   *
+   * Only for taps {@link PostHogOptions.capturePushNotificationOpened} cannot see itself —
+   * local notifications, plus warm-start and foreground taps on Android — or the tap is
+   * counted twice.
+   *
+   * Keys of `payload`'s `posthog` entry become `$notification_<key>` properties. Leave
+   * `action` unset for a plain tap; `subtitle` is iOS only. The native SDK builds and
+   * sends the event, so JS `before_send` never sees it — redact anything sensitive first.
+   *
+   * Not supported on web.
+   */
+  async capturePushNotificationOpened(options: {
+    title?: string
+    subtitle?: string
+    body?: string
+    payload?: { [key: string]: JsonType }
+    action?: string
+  }): Promise<void> {
+    const properties: { [key: string]: JsonType } = {}
+    for (const key of ['title', 'subtitle', 'body', 'payload', 'action'] as const) {
+      if (options[key] !== undefined) {
+        properties[key] = options[key]
+      }
+    }
+    return this._callPushPlugin(
+      'capturePushNotificationOpened',
+      { allowMacOS: true, requireInit: true, noop: 'event not captured' },
+      (plugin) => plugin.capturePushNotificationOpened?.(properties)
+    )
+  }
+
+  // Shared guard skeleton for the push methods: disabled → unsupported platform →
+  // plugin missing or outdated → queued behind native init → swallow-and-warn on rejection.
+  private async _callPushPlugin(
+    method: 'registerPushNotificationToken' | 'unregisterPushNotificationToken' | 'capturePushNotificationOpened',
+    behavior: { allowMacOS: boolean; allowWhenOptedOut?: boolean; requireInit: boolean; noop: string },
+    invoke: (plugin: NonNullable<typeof OptionalReactNativePlugin>) => Promise<void> | undefined
+  ): Promise<void> {
+    if (this.isDisabled) {
+      return
+    }
+    // Unregistering removes a subscription, so it stays available after opt-out; the two that
+    // send data do not.
+    if (this.optedOut && !behavior.allowWhenOptedOut) {
+      this._logger.warn(`${method} skipped: the user is opted out; ${behavior.noop}.`)
+      return
+    }
+    if (isWeb() || (!behavior.allowMacOS && isMacOS())) {
+      this._logger.warn(`${method} is not supported on ${isWeb() ? 'web' : 'macOS'}; ${behavior.noop}.`)
+      return
+    }
+    if (!OptionalReactNativePlugin?.[method]) {
+      this._logger.warn(`${method} requires @posthog/react-native-plugin; install or update it.`)
+      return
+    }
+    return this._enqueueNative(
+      method,
+      (plugin) => {
+        // Re-check consent: it may have been withdrawn while this waited its turn.
+        if (this.optedOut && !behavior.allowWhenOptedOut) {
+          this._logger.warn(`${method} skipped: the user is opted out; ${behavior.noop}.`)
+          return
+        }
+        return invoke(plugin)
+      },
+      behavior.requireInit
+    )
+  }
+
+  /**
+   * The one channel for JS->native commands (identity, consent, push):
+   *
+   * - ordered: commands reach native in call order, so a reset() can't be overtaken by an
+   *   identify() issued after it.
+   * - late-bound: `run` reads live state at dispatch, so the newest identity/consent wins.
+   * - init-gated: nothing runs before native setup(). `requireInit` brings a native SDK that
+   *   was never set up all the way up rather than dropping the command.
+   *
+   * Never rejects — failures are logged.
+   */
+  private _enqueueNative(
+    label: string,
+    run: (plugin: NonNullable<typeof OptionalReactNativePlugin>) => Promise<void> | void,
+    requireInit: boolean = false
+  ): Promise<void> {
+    const next = this._nativeChain
+      .catch(() => {})
+      .then(async () => {
+        if (this.isDisabled || isWeb() || !OptionalReactNativePlugin) {
+          return
+        }
+        // ready() doesn't cover native setup — it's kicked off fire-and-forget, and the native
+        // SDK resolves a call it dropped for not being initialized, so the caller sees a
+        // success that registered nothing. _initPromise first: it is what assigns the eval
+        // chain, so until it settles the chain is still its initial resolved value.
+        await this._initPromise.catch(() => {})
+        await this._sessionReplayEvalChain.catch(() => {})
+        if (!this._isNativePluginInitialized()) {
+          if (!requireInit) {
+            return
+          }
+          await this._ensureNativeInitialized()
+          if (!this._isNativePluginInitialized()) {
+            this._logger.warn(`${label} skipped: the native plugin is not initialized.`)
+            return
+          }
+        }
+        // A call that never settles (bridge torn down mid-call, or a native hang) would own
+        // _nativeChain for the rest of the process, silently blocking every later
+        // identify/reset/consent/push. Timing out doesn't cancel the native work, just stops
+        // it blocking the queue.
+        await raceWithTimeout(Promise.resolve(run(OptionalReactNativePlugin)), NATIVE_CALL_TIMEOUT_MS, () =>
+          this._logger.warn(`Native PostHog ${label} timed out after ${NATIVE_CALL_TIMEOUT_MS}ms; continuing.`)
+        )
+      })
+      .catch((e) => this._logger.warn(`Native PostHog ${label} failed: ${e}.`))
+    this._nativeChain = next
+    return next
+  }
+
+  // Brings native up on demand (push call, or late consent). Runs on the replay eval chain
+  // to avoid racing a flags-driven evaluation. Callers re-check _isNativePluginInitialized
+  // since the return value is also true on the nothing-to-do path.
+  private _ensureNativeInitialized(): Promise<void> {
+    this._sessionReplayEvalChain = this._sessionReplayEvalChain
+      .catch(() => {})
+      .then(async () => {
+        if (!this._isNativePluginInitialized()) {
+          // enableSessionReplay: false — only replay's own evaluation may start it; this just
+          // brings the instance up. forcePush: true — needed even with both auto-capture flags
+          // off, the one config nothing else would create an instance for.
+          await this.initializeNativePlugin(this._sessionReplayOptions, undefined, false, true)
+        }
+      })
+    return this._sessionReplayEvalChain
+  }
+
   private _isAutocaptureNativeErrors(options?: PostHogOptions): boolean {
     const autocapture = options?.errorTracking?.autocapture
     const nativeCrashes = typeof autocapture === 'object' && autocapture.nativeCrashes === true
@@ -1973,7 +2307,28 @@ export class PostHog extends PostHogCore {
   }
 
   private _isNativePluginInitialized(): boolean {
-    return this._sessionReplayNativeInitialized || this._nativeErrorTrackingInitialized
+    return this._sessionReplayNativeInitialized || this._nativeErrorTrackingInitialized || this._pushNativeInitialized
+  }
+
+  // Push is enabled unless everything push-related is switched off: both auto-capture
+  // flags default to true, matching the native SDKs.
+  //
+  // `force` covers a host that disabled both auto-capture flags to drive registration itself —
+  // the native SDK still must exist. It bypasses only the auto-capture test; consent/platform/
+  // plugin-support still gate, and the config built from `options` means forcing never
+  // re-enables auto-capture.
+  private _isPushNativeEnabled(options?: PostHogOptions, force: boolean = false): boolean {
+    // optedOut is the persisted consent state; isDisabled is the static `disabled` option.
+    // Push registers a durable device token, so it must respect consent, not just `disabled`.
+    if (this.isDisabled || this.optedOut || isWeb() || this._pushNativeUnsupported) {
+      return false
+    }
+    return (
+      force ||
+      options?.capturePushNotificationSubscriptions !== false ||
+      options?.capturePushNotificationOpened !== false ||
+      !!options?.pushIdentityProvider
+    )
   }
 
   /**
@@ -1992,9 +2347,11 @@ export class PostHog extends PostHogCore {
   private async initializeNativePlugin(
     options?: PostHogOptions,
     cachedRemoteConfig?: Omit<PostHogRemoteConfig, 'surveys'>,
-    enableSessionReplay: boolean = this._isEnableSessionReplay()
+    enableSessionReplay: boolean = this._isEnableSessionReplay(),
+    forcePush: boolean = false
   ): Promise<boolean> {
     let enableNativeErrorTracking = this._isAutocaptureNativeErrors(options)
+    let enablePush = this._isPushNativeEnabled(options, forcePush)
 
     // Session replay has no macOS backend — the native plugin no-ops its recording controls there.
     // Skip it in JS so we don't mark replay initialized or log a false "started" while nothing records.
@@ -2006,29 +2363,39 @@ export class PostHog extends PostHogCore {
       enableSessionReplay = false
     }
 
-    if (!enableSessionReplay && !enableNativeErrorTracking) {
+    if (!enableSessionReplay && !enableNativeErrorTracking && !enablePush) {
       return true
     }
 
     if (!OptionalReactNativePlugin) {
-      this._logger.warn(
-        enableSessionReplay
-          ? 'Session replay enabled but not installed.'
-          : 'Native error tracking enabled but not installed.'
-      )
+      // Only replay and error tracking warrant a warning: they are explicit opt-ins,
+      // while push is on by default and shouldn't nag every plugin-less app.
+      if (enableSessionReplay || enableNativeErrorTracking) {
+        this._logger.warn(
+          enableSessionReplay
+            ? 'Session replay enabled but not installed.'
+            : 'Native error tracking enabled but not installed.'
+        )
+      }
+      // Push is on by default, so latch it unsupported or every flags reload re-enters this
+      // method just to return here.
+      this._pushNativeUnsupported = true
       return false
     }
 
     if (
       (!enableSessionReplay || this._sessionReplayNativeInitialized) &&
-      (!enableNativeErrorTracking || this._nativeErrorTrackingInitialized)
+      (!enableNativeErrorTracking || this._nativeErrorTrackingInitialized) &&
+      (!enablePush || this._pushNativeInitialized)
     ) {
       return true
     }
 
-    // The native SDKs can't be re-initialized — a second setup() would reset the running
-    // instance. If error tracking is already running, skip setup() and start replay on the
-    // existing native instance instead (setup() is what would otherwise start it).
+    // Both native SDKs ignore a second setup() once running (PostHogSDK.swift:139,
+    // PostHog.kt:150), so whatever brought the instance up first — replay, error tracking, or
+    // push — replay must resume on it instead of calling setup() again. Reaching here with
+    // enableSessionReplay true already means sampling/event-trigger evaluation decided
+    // recording may start.
     if (this._isNativePluginInitialized() && enableSessionReplay && !this._sessionReplayNativeInitialized) {
       this._sessionReplayNativeInitialized = true
       await OptionalReactNativePlugin.startRecording?.(true)
@@ -2138,6 +2505,11 @@ export class PostHog extends PostHogCore {
       `Session replay session recording from flags cached config: ${JSON.stringify(cachedSessionReplayConfig)}`
     )
 
+    // Push alone doesn't need native's own feature-flag preload — JS already owns flags. Error
+    // tracking's autocapture kill-switch does, so only skip when push is the sole reason for
+    // setup. Remote config isn't skippable: both native SDKs deprecated that option to a no-op.
+    const pushOnlyInit = enablePush && !enableSessionReplay && !enableNativeErrorTracking
+
     const sdkOptions = {
       apiKey: this.apiKey,
       host: this.host,
@@ -2146,6 +2518,10 @@ export class PostHog extends PostHogCore {
       anonymousId: this.getAnonymousId(),
       sdkVersion: this.getLibraryVersion(),
       flushAt: this.flushAt,
+      // Consent is persisted JS-side; without this the native SDK defaults to opted-in and
+      // would keep registering a device token after optOut().
+      optOut: this.optedOut,
+      preloadFeatureFlags: !pushOnlyInit,
       // Native-sent requests (session replay, crash uploads) bypass the JS request path,
       // so the configured headers are passed through to the native plugin as well.
       requestHeaders: this._requestHeaders,
@@ -2161,6 +2537,24 @@ export class PostHog extends PostHogCore {
         : false
 
       if (OptionalReactNativePlugin.setup) {
+        // The provider can't cross the bridge, so only an enabled marker goes into the
+        // setup map; the JS listener itself must be installed here, before setup() captures it.
+        // Installed regardless of enablePush: an opted-out app's only setup() call comes from
+        // replay/error-tracking, and native ignores a second — skip here and subscriptions stay
+        // unauthenticated for the process. Inert while opted out, since native only mints on a
+        // subscription request, which its own opt-out flag blocks.
+        let pushIdentityProviderEnabled = false
+        if (options?.pushIdentityProvider) {
+          if (OptionalReactNativePlugin.setPushIdentityProvider) {
+            OptionalReactNativePlugin.setPushIdentityProvider(options.pushIdentityProvider)
+            pushIdentityProviderEnabled = true
+          } else {
+            this._logger.warn(
+              'pushIdentityProvider requires a newer @posthog/react-native-plugin; push subscriptions will be sent unauthenticated.'
+            )
+          }
+        }
+
         const pluginConfig = {
           sessionReplay: {
             enabled: enableSessionReplay,
@@ -2171,8 +2565,19 @@ export class PostHog extends PostHogCore {
             nativeAutocapture: enableNativeErrorTracking,
             exceptionSteps: this._errorTracking.getNativePluginExceptionStepsConfig(),
           },
+          // Always sent, even when push init isn't the reason we're here: the native
+          // defaults are true, so an explicit opt-out must reach the native config.
+          push: {
+            capturePushNotificationSubscriptions: options?.capturePushNotificationSubscriptions ?? true,
+            capturePushNotificationOpened: options?.capturePushNotificationOpened ?? true,
+            pushIdentityProviderEnabled,
+          },
         }
         await OptionalReactNativePlugin.setup(String(sessionId), sdkOptions, pluginConfig)
+        // Native resolves its own persisted opt-out over the config value passed above, so an
+        // earlier optIn() keeps winning and sdkOptions.optOut alone can't opt a user back out.
+        // Only an explicit optOut()/optIn() overwrites it, so re-assert JS consent every setup.
+        await OptionalReactNativePlugin.setOptOut?.(this.optedOut)
         if (wasSessionReplayEnabled) {
           // if somehow the SDK is already enabled with a different sessionId, we reset it
           this._resetSessionId(OptionalReactNativePlugin, String(sessionId))
@@ -2185,6 +2590,16 @@ export class PostHog extends PostHogCore {
           // The legacy plugin can't do native crash capture, so don't mark it initialized below.
           enableNativeErrorTracking = false
         }
+        // start() carries no push config, so the legacy plugin can never do push. Unsupported,
+        // not initialized: the latch stops enablePush recomputing true on every flags reload,
+        // while claiming initialized would assert a native instance setup() never created.
+        if (enablePush) {
+          this._logger.warn(
+            'Push notifications require @posthog/react-native-plugin; the legacy session-replay plugin does not support them.'
+          )
+        }
+        enablePush = false
+        this._pushNativeUnsupported = true
         if (!enableSessionReplay) {
           return false
         }
@@ -2209,6 +2624,10 @@ export class PostHog extends PostHogCore {
         this._nativeErrorTrackingInitialized = true
         this._errorTracking.onNativeErrorTrackingReady()
         this._logger.info('Native error tracking started.')
+      }
+      if (enablePush) {
+        this._pushNativeInitialized = true
+        this._logger.info('Push notification native support started.')
       }
       return true
     } catch (e) {
@@ -2255,6 +2674,7 @@ export class PostHog extends PostHogCore {
   ): Promise<void> {
     const options = this._sessionReplayOptions
     const enableNativeErrorTracking = this._isAutocaptureNativeErrors(options)
+    const enablePush = this._isPushNativeEnabled(options)
     // On the re-arm path (flags reloaded after identify/reset) cachedRemoteConfig
     // isn't passed in, so fall back to the persisted remote config for capture gating.
     const remoteConfig =
@@ -2265,7 +2685,7 @@ export class PostHog extends PostHogCore {
       this._logger.info('Session replay is not enabled.')
       // Replay off — disarm event triggers so the capture hook stays inert.
       this._sessionReplayEventTriggers = []
-      if (enableNativeErrorTracking) {
+      if (enableNativeErrorTracking || enablePush) {
         await this.initializeNativePlugin(options, remoteConfig, false)
       }
       return
@@ -2351,7 +2771,7 @@ export class PostHog extends PostHogCore {
         this._sessionReplayRecordingActive = false
       }
 
-      if (enableNativeErrorTracking) {
+      if (enableNativeErrorTracking || enablePush) {
         await this.initializeNativePlugin(options, remoteConfig, false)
       }
     }
