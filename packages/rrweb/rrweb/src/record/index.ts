@@ -1642,8 +1642,14 @@ function record<T = eventWithTime>(
   //  - nodes the locked buffers will re-add at commit (added or moved during
   //    the walk) are skipped by the walk itself — the buffer is their single
   //    source of truth, carrying their live position and final state;
-  //  - everything observed in the meantime is held and delivered after the
-  //    FullSnapshot, in order (see sessionEmit and completeBudgetedWalk).
+  //  - non-mutation events observed in the meantime are held and delivered
+  //    after the FullSnapshot, each keeping its observation timestamp, except
+  //    an allowlist of order-independent control events that bypass the hold
+  //    (see sessionEmit and completeBudgetedWalk). NOTE the ordering caveats:
+  //    mutations deliver at commit time after every held event, and a held
+  //    event referencing a node only the commit introduces is deferred past
+  //    the commit and re-stamped. The wire is timestamp-monotonic but not
+  //    observation-ordered across those classes.
   const takeFullSnapshotBudgeted = (
     isCheckout: boolean,
     isRetry = false,
