@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
 const source = readFileSync(new URL('../src/runtime/nitro-plugin.ts', import.meta.url), 'utf8')
-assert.doesNotMatch(source, /from ['"](?:nitro|nitropack)/)
+assert.doesNotMatch(source, /from ['"]nitro/)
 
 const executableSource = source
   .replace(/^import .*$/gm, '')
@@ -51,10 +51,10 @@ setupPostHogNitroPlugin({
       flushAt: 1,
     },
   }),
-  onError: handler => {
+  onError: (handler) => {
     handlers.error = handler
   },
-  onClose: handler => {
+  onClose: (handler) => {
     handlers.close = handler
   },
 })
@@ -87,7 +87,7 @@ function loadAdapter(filename, defineName) {
   const plugin = new Function(defineName, 'useRuntimeConfig', 'setupPostHogNitroPlugin', executableAdapter)(
     value => value,
     () => ({}),
-    value => {
+    (value) => {
       bindings = value
     },
   )

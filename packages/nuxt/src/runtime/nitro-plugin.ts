@@ -3,7 +3,7 @@ import { uuidv7 } from '@posthog/core/vendor/uuidv7'
 import type { PostHogCommon, PostHogServerConfig } from '../module'
 import type { JsonType } from '@posthog/core'
 
-type RequestContext = { path?: string; method?: string }
+type RequestContext = { path?: string, method?: string }
 type ErrorHandler = (error: unknown, request?: RequestContext) => void
 type NitroBindings = {
   useRuntimeConfig: () => unknown
