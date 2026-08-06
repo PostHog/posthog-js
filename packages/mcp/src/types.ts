@@ -123,6 +123,8 @@ export type RegisteredTool = {
   /** MCP tool `_meta` block (spec-allowed arbitrary metadata, e.g. `category`). */
   _meta?: Record<string, unknown>
   inputSchema?: unknown
+  /** Present when the tool was registered with a declared output schema. */
+  outputSchema?: unknown
   update?: (...args: unknown[]) => unknown
 } & ({ callback: ToolCallback; handler?: never } | { handler: ToolCallback; callback?: never })
 
