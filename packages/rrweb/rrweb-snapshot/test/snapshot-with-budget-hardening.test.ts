@@ -167,6 +167,68 @@ describe('snapshotWithBudget hardening', () => {
     void walkPromise;
   });
 
+  it('keeps yielding when the page becomes hidden mid-walk', async () => {
+    const doc = buildDocument(60);
+    let visibility = 'visible';
+    Object.defineProperty(doc, 'visibilityState', {
+      get: () => visibility,
+      configurable: true,
+    });
+
+    cleanupSnapshot();
+    let yields = 0;
+    const node = await snapshotWithBudget(doc, {
+      ...OPTIONS,
+      mirror: new Mirror(),
+      yieldBudgetMs: 0.0001,
+      yieldFn: async () => {
+        yields++;
+        if (yields === 1) {
+          // an ordinary tab switch 300ms into the walk
+          visibility = 'hidden';
+        }
+      },
+    });
+
+    expect(node).not.toBeNull();
+    // the tab switch must not trigger the one-task drain reserved for walks
+    // that START hidden: the walk keeps slicing under its own scheduling
+    expect(yields).toBeGreaterThan(2);
+  });
+
+  it('a throwing serializer during the synchronous drain aborts instead of resuming truncated', async () => {
+    const doc = buildDocument(60);
+
+    cleanupSnapshot();
+    let blowUp = false;
+    let controller: BudgetedSnapshotController | null = null;
+    const walkPromise = snapshotWithBudget(doc, {
+      ...OPTIONS,
+      maskTextSelector: 'td',
+      maskTextFn: (text: string) => {
+        if (blowUp) {
+          throw new Error('mask exploded');
+        }
+        return text;
+      },
+      mirror: new Mirror(),
+      yieldBudgetMs: 0.0001,
+      yieldFn: () => new Promise<void>(() => undefined),
+      onController: (c) => {
+        controller = c;
+      },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    blowUp = true;
+    // the drain dies mid-serialization with a node already popped
+    expect(controller!.flushSync()).toBeNull();
+    // the driver must not resume from the damaged stack and emit a
+    // truncated tree: the walk fails, loudly
+    await expect(walkPromise).rejects.toThrow('mask exploded');
+    expect(controller!.flushSync()).toBeNull();
+  });
+
   it('completes in a single slice while the document is hidden', async () => {
     const doc = buildDocument(60);
     Object.defineProperty(doc, 'visibilityState', {

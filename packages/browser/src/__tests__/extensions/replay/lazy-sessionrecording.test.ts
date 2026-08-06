@@ -3335,8 +3335,8 @@ describe('Lazy SessionRecording', () => {
                 })
             )
             expect(sessionRecording['_onBeforeUnload']).not.toBeNull()
-            // we register 4 event listeners
-            expect(window.addEventListener).toHaveBeenCalledTimes(4)
+            // we register 5 event listeners: beforeunload, pagehide, offline, online, visibilitychange
+            expect(window.addEventListener).toHaveBeenCalledTimes(5)
 
             // window.addEventListener('blah', someFixedListenerInstance) is safe to call multiple times,
             // so we don't need to test if the addEvenListener registrations are called multiple times

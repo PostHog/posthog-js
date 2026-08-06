@@ -1888,9 +1888,16 @@ export async function snapshotWithBudget(
   ];
   let sliceStart = performance.now();
   const walkStart = sliceStart;
+  // Captured once: only a walk that STARTS hidden may finish in one task
+  // (see the yield-skip below). A page that merely becomes hidden mid-walk
+  // is an ordinary tab switch and must keep yielding.
+  const startedHidden = n.visibilityState === 'hidden';
   let nodesSinceCheck = 0;
   let finished = false;
   let aborted = false;
+  // Set when the synchronous drain dies mid-serialization; the woken driver
+  // rethrows it so the failure surfaces on the walk's promise too.
+  let drainError: unknown = null;
   // Settles the driver's pending yield from the outside. A parked yield can
   // otherwise never settle (a dying page's MessageChannel message, a frozen
   // tab's timers), and both the watchdog below and flushSync need the driver
@@ -2061,14 +2068,25 @@ export async function snapshotWithBudget(
         wakeParkedDriver?.();
         return null;
       }
-      while (stack.length > 0) {
-        processNode();
+      try {
+        while (stack.length > 0) {
+          processNode();
+        }
+        finished = true;
+      } catch (error) {
+        // A mid-drain throw (e.g. a consumer mask fn) already lost the
+        // popped node, so letting the driver resume from this stack would
+        // emit a silently truncated tree. Abort instead; the woken driver
+        // rethrows so the failure also surfaces on the walk's promise.
+        drainError = error;
+        aborted = true;
+        return null;
+      } finally {
+        // The driver may be parked on a yield that will never fire on a
+        // dying page; wake it so it unwinds, disposes the yielder and
+        // settles the walk's promise instead of retaining them all forever.
+        wakeParkedDriver?.();
       }
-      finished = true;
-      // The driver may be parked on a yield that will never fire on a dying
-      // page; wake it so it unwinds, disposes the yielder and settles the
-      // walk's promise instead of retaining them all forever.
-      wakeParkedDriver?.();
       return root;
     },
   });
@@ -2104,12 +2122,21 @@ export async function snapshotWithBudget(
               'Budgeted full snapshot exceeded its wall-clock limit',
             );
           }
-          // A hidden page paints no frames and has no user waiting on the
-          // main thread, while background throttling can stretch every yield
-          // — and a tab freeze would park the walk (and the buffer locks and
-          // held queue behind it) indefinitely. Finish in one task instead.
-          if (n.visibilityState !== 'hidden') {
+          // A walk that STARTS on a hidden page finishes in one task: no
+          // frames are painted and no user is waiting on the main thread,
+          // so there is nothing to yield for. A page that becomes hidden
+          // MID-walk (an ordinary tab switch) keeps yielding instead:
+          // draining the rest of a large document synchronously here would
+          // be the very stall this walker exists to avoid, and the user may
+          // be back in 300ms. MessageChannel yields are not background
+          // throttled, and the wall-clock watchdog backstops a tab that
+          // stays parked anyway; a page that is truly going away gets the
+          // synchronous drain from the recorder's pagehide handler.
+          if (!(startedHidden && n.visibilityState === 'hidden')) {
             await Promise.race([doYield(), parkedDriverWoken]);
+            if (drainError) {
+              throw drainError;
+            }
             if (watchdogExpired) {
               throw new Error(
                 'Budgeted full snapshot exceeded its wall-clock limit',

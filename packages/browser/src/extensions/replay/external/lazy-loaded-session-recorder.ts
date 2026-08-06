@@ -1106,6 +1106,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         // calling addEventListener multiple times is safe and will not add duplicates
         addEventListener(window, 'beforeunload', this._onBeforeUnload)
+        // Registered after rrweb's own pagehide handler (added when the recorder
+        // started above), which synchronously finishes any in-flight time-sliced
+        // FullSnapshot. beforeunload fires BEFORE pagehide, so this second drain
+        // is what actually ships that rescued snapshot; it also covers bfcache
+        // navigations where beforeunload may not fire at all.
+        addEventListener(window, 'pagehide', this._onPageHide)
         addEventListener(window, 'offline', this._onOffline)
         addEventListener(window, 'online', this._onOnline)
         addEventListener(window, 'visibilitychange', this._onVisibilityChange)
@@ -1244,6 +1250,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _teardown() {
         window?.removeEventListener('beforeunload', this._onBeforeUnload)
+        window?.removeEventListener('pagehide', this._onPageHide)
         window?.removeEventListener('offline', this._onOffline)
         window?.removeEventListener('online', this._onOnline)
         window?.removeEventListener('visibilitychange', this._onVisibilityChange)
@@ -1926,6 +1933,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // compress any queued events so sendBeacon can include them in this flush.
         this._drainCompressionQueueSync()
         this._flushBuffer()
+    }
+
+    private _onPageHide = (): void => {
+        // same drain as beforeunload; by pagehide rrweb has rescued any
+        // in-flight FullSnapshot, and this is the last chance to ship it
+        this._onBeforeUnload()
     }
 
     private _onOffline = (): void => {

@@ -703,6 +703,118 @@ describe('budgeted snapshot lifecycle hardening', () => {
     );
   }, 20_000);
 
+  it('a tab switch mid-walk does not drain the walk synchronously', async () => {
+    fillBody();
+    const events: eventWithTime[] = [];
+
+    stop = record({
+      emit: (event) => {
+        events.push(event as eventWithTime);
+      },
+      fullSnapshotYieldBudgetMs: 1,
+    });
+
+    expect(events.some((e) => e.type === EventType.FullSnapshot)).toBe(false);
+    Object.defineProperty(document, 'visibilityState', {
+      get: () => 'hidden',
+      configurable: true,
+    });
+    try {
+      document.dispatchEvent(new Event('visibilitychange'));
+      // no synchronous drain inside the dispatch task: an ordinary tab
+      // switch must not run the rest of the document in one long task
+      expect(events.some((e) => e.type === EventType.FullSnapshot)).toBe(
+        false,
+      );
+      // the walk still completes under its own scheduling
+      await vi.waitFor(
+        () => {
+          expect(events.some((e) => e.type === EventType.FullSnapshot)).toBe(
+            true,
+          );
+        },
+        { timeout: 10_000 },
+      );
+    } finally {
+      delete (document as { visibilityState?: unknown }).visibilityState;
+    }
+  }, 20_000);
+
+  it('pagehide with an aborted walk still produces a synchronous fallback snapshot', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    fillBody();
+    const events: eventWithTime[] = [];
+
+    stop = record({
+      emit: (event) => {
+        events.push(event as eventWithTime);
+      },
+      fullSnapshotYieldBudgetMs: 1,
+    });
+
+    expect(events.some((e) => e.type === EventType.FullSnapshot)).toBe(false);
+    // overflow the held queue: the walk is now abort-requested, but its
+    // parked driver has not observed that yet
+    for (let i = 0; i < 4200; i++) {
+      record.addCustomEvent('queue-pressure', { index: i });
+    }
+    window.dispatchEvent(new Event('pagehide'));
+
+    // a short busy visit still ends with a snapshot, synchronously in the
+    // pagehide task, not with an orphan Meta
+    expect(
+      events.filter((e) => e.type === EventType.FullSnapshot).length,
+    ).toBe(1);
+    const statuses = diagnostics(events).map((p) => p?.status);
+    expect(statuses).toContain('sync-fallback');
+    // and not via a budgeted retry no dying page could finish
+    expect(statuses).not.toContain('budgeted-retry');
+  }, 20_000);
+
+  it('a throwing mask fn during the pagehide drain aborts with a diagnostic, not a truncated tree', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    fillBody();
+    const events: eventWithTime[] = [];
+    let blowUp = false;
+
+    stop = record({
+      emit: (event) => {
+        events.push(event as eventWithTime);
+      },
+      fullSnapshotYieldBudgetMs: 1,
+      maskTextSelector: 'div',
+      maskTextFn: (text: string) => {
+        if (blowUp) {
+          throw new Error('mask exploded');
+        }
+        return text;
+      },
+    });
+
+    expect(events.some((e) => e.type === EventType.FullSnapshot)).toBe(false);
+    blowUp = true;
+    // the drain dies mid-serialization; nothing may escape the handler and
+    // no truncated FullSnapshot may go out (the fallback's mask throws too)
+    expect(() => window.dispatchEvent(new Event('pagehide'))).not.toThrow();
+    expect(events.some((e) => e.type === EventType.FullSnapshot)).toBe(false);
+    const statuses = diagnostics(events).map((p) => p?.status);
+    expect(statuses).toContain('sync-fallback');
+    expect(statuses).toContain('sync-fallback-failed');
+
+    // the failure is contained: the recorder recovers on the next snapshot
+    await settle();
+    blowUp = false;
+    record.takeFullSnapshot();
+    await vi.waitFor(
+      () => {
+        expect(events.some((e) => e.type === EventType.FullSnapshot)).toBe(
+          true,
+        );
+      },
+      { timeout: 10_000 },
+    );
+  }, 20_000);
+
   it('isIgnored does not mint an id reservation for an unserialized mutation target', () => {
     const mirror = createMirror();
     let next = 1;

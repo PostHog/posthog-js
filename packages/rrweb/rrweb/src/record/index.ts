@@ -1229,7 +1229,14 @@ function record<T = eventWithTime>(
       // downgraded by the recovery snapshot
       const isCheckout =
         transaction.isCheckout || (budgetedSnapshotQueued?.isCheckout ?? false);
-      const willRetry = !transaction.isRetry && reason !== 'walk-error';
+      // No budgeted retry while the page is dying (`draining`): a retry walk
+      // started from a pagehide handler would park on yields that never
+      // fire; the synchronous fallback below is the only recovery that can
+      // still finish inside this task.
+      const willRetry =
+        !transaction.isRetry &&
+        reason !== 'walk-error' &&
+        !transaction.draining;
       // Held non-mutation events stay deliverable across the one budgeted
       // retry: the mirror is not reset, so the ids they reference are
       // re-claimed by the retry's serialization (the checkout invariant) and
@@ -2018,13 +2025,15 @@ function record<T = eventWithTime>(
       unregisterErrorHandler();
     };
 
-    // A walk in flight when the page hides or unloads must not die parked on
-    // a yield that will never fire: finish it synchronously — invisible to a
-    // hidden page — so the FullSnapshot and the held window flush in this
-    // task and the SDK's own unload flush can still send them. An aborted
-    // walk (overflow/teardown) is left for its normal completion path: a
-    // synchronous fallback snapshot inside an unload handler would be the
-    // original multi-second stall, spent on a page that is going away.
+    // A walk in flight when the page unloads must not die parked on a yield
+    // that will never fire: finish it synchronously so the FullSnapshot and
+    // the held window flush in this task and the SDK's own unload flush can
+    // still send them. If the walk already aborted (overflow, backlog,
+    // watchdog, a throw inside the drain itself), a Meta is on the wire with
+    // nothing behind it and no retry can finish on a dying page; attempt
+    // the synchronous fallback snapshot instead (completeBudgetedWalk routes
+    // there because `draining` is set); a stall no longer matters on a page
+    // that is going away.
     const completeWalkBeforePageHides = () => {
       const transaction = activeBudgetedSnapshot;
       if (!transaction || transaction.completed || !transaction.controller) {
@@ -2032,9 +2041,7 @@ function record<T = eventWithTime>(
       }
       transaction.draining = true;
       const node = transaction.controller.flushSync();
-      if (node) {
-        completeBudgetedWalk(transaction, node);
-      }
+      completeBudgetedWalk(transaction, node);
     };
 
     const init = () => {
@@ -2051,14 +2058,14 @@ function record<T = eventWithTime>(
       }
       handlers.push(observe(document));
       if (fullSnapshotYieldBudgetMs > 0) {
-        handlers.push(
-          on('visibilitychange', () => {
-            if (document.visibilityState === 'hidden') {
-              completeWalkBeforePageHides();
-            }
-          }),
-        );
-        // pagehide fires on window, not document
+        // pagehide only, deliberately NOT visibilitychange→hidden: an
+        // ordinary tab switch mid-walk must not drain the rest of a large
+        // document in one synchronous task (the very stall budgeted mode
+        // exists to avoid) when the user may be back in 300ms. A hidden
+        // walk keeps slicing (MessageChannel yields are not background
+        // throttled) with the wall-clock watchdog as backstop; only a page
+        // that is truly going away gets the synchronous drain. pagehide
+        // fires on window, not document.
         handlers.push(on('pagehide', completeWalkBeforePageHides, window));
       }
       handlers.push(on('fullscreenchange', emitFullscreenChange));
