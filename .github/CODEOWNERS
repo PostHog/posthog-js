@@ -23,6 +23,9 @@ packages/react-native/                                 @PostHog/team-client-libr
 # AI
 /packages/ai/package.json                              @PostHog/team-client-libraries @PostHog/team-llm-analytics
 
+# MCP Analytics
+packages/mcp/                                          @PostHog/team-client-libraries @PostHog/mcp-analytics
+
 # Web Analytics
 packages/browser/src/page-view.ts                      @PostHog/team-client-libraries @PostHog/team-web-analytics
 packages/browser/src/sessionid.ts                      @PostHog/team-client-libraries @PostHog/team-web-analytics
