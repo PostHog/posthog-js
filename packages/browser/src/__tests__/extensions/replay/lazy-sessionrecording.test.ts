@@ -1567,6 +1567,162 @@ describe('Lazy SessionRecording', () => {
                     expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toContain(snapshot)
                 })
 
+                describe('V2 trigger groups', () => {
+                    function applyV2Config(events: { name: string; properties?: any[] }[], urls?: any[]) {
+                        sessionRecording.onRemoteConfig(
+                            makeFlagsResponse({
+                                sessionRecording: {
+                                    endpoint: '/s/',
+                                    version: 2,
+                                    triggerGroups: [
+                                        {
+                                            id: 'group-1',
+                                            name: 'Test Group',
+                                            sampleRate: 1.0,
+                                            conditions: {
+                                                matchType: 'any',
+                                                events,
+                                                urls,
+                                            },
+                                        },
+                                    ],
+                                },
+                            })
+                        )
+                    }
+
+                    function expectHoldRetained(snapshot: eventWithTime) {
+                        expect(sessionRecording['_lazyLoadedSessionRecording']['_holdFlushUntilInteraction']).toEqual(
+                            true
+                        )
+                        expect(posthog.capture).not.toHaveBeenCalledWith(
+                            '$snapshot',
+                            expect.anything(),
+                            expect.anything()
+                        )
+                        expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toContain(snapshot)
+                    }
+
+                    it('an event trigger match releases the hold and ships under the rotated session id', () => {
+                        applyV2Config([{ name: '$exception' }])
+
+                        const rotationTimestamp = rotateExternallyWhileUnknown()
+                        const snapshot = emitInactiveEvent(rotationTimestamp + 100, 'unknown')
+
+                        jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                        expect(posthog.capture).not.toHaveBeenCalledWith(
+                            '$snapshot',
+                            expect.anything(),
+                            expect.anything()
+                        )
+
+                        simpleEventEmitter.emit('eventCaptured', { event: '$exception', properties: {} })
+
+                        expect(sessionRecording['_lazyLoadedSessionRecording']['_holdFlushUntilInteraction']).toEqual(
+                            false
+                        )
+                        expect(posthog.capture).toHaveBeenCalledWith(
+                            '$snapshot',
+                            expect.objectContaining({
+                                $session_id: rotatedSessionId,
+                                $snapshot_data: expect.arrayContaining([snapshot]),
+                            }),
+                            expect.any(Object)
+                        )
+                    })
+
+                    it('an event trigger whose property filters do not match retains the hold', () => {
+                        applyV2Config([
+                            {
+                                name: '$exception',
+                                properties: [{ key: 'level', type: 'event', operator: 'exact', value: 'fatal' }],
+                            },
+                        ])
+
+                        const rotationTimestamp = rotateExternallyWhileUnknown()
+                        const snapshot = emitInactiveEvent(rotationTimestamp + 100, 'unknown')
+
+                        simpleEventEmitter.emit('eventCaptured', {
+                            event: '$exception',
+                            properties: { level: 'warning' },
+                        })
+                        jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                        expectHoldRetained(snapshot)
+                    })
+
+                    it('a URL trigger activation does not release the hold', () => {
+                        applyV2Config([], [{ url: 'test.com', matching: 'regex' }])
+                        fakeNavigateTo('https://test.com/')
+
+                        const rotationTimestamp = rotateExternallyWhileUnknown()
+                        // the URL trigger matches on the next emitted event's trigger check
+                        const snapshot = emitInactiveEvent(rotationTimestamp + 100, 'unknown')
+
+                        // guard against a vacuous pass: 'sampled' is only reachable once a group's
+                        // trigger status is 'trigger_activated' (triggerGroupsMatchSessionRecordingStatus)
+                        expect(sessionRecording.status).toBe('sampled')
+
+                        jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                        expectHoldRetained(snapshot)
+                    })
+
+                    it('releases a hold that begins after the initial-flush unhook optimization', () => {
+                        // the eventCaptured hook unhooks itself once the initial flush completes;
+                        // a rotation after that must still be releasable because start() builds a
+                        // fresh strategy (and hook) for the rotation-born epoch
+                        applyV2Config([{ name: '$exception' }])
+                        const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+
+                        simpleEventEmitter.emit('eventCaptured', { event: '$exception', properties: {} })
+                        expect(sessionRecording.status).toBe('active')
+
+                        jest.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                        emitActiveEvent(startingTimestamp + 100)
+                        jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                        expect(posthog.capture).toHaveBeenCalledWith('$snapshot', expect.anything(), expect.anything())
+
+                        // next captured event disconnects the hook on the pre-rotation strategy
+                        simpleEventEmitter.emit('eventCaptured', { event: 'anything', properties: {} })
+                        expect(lazyRecorder['_strategy']['_removeEventTriggerCaptureHook']).toBeUndefined()
+
+                        // go confirmed-idle, then rotate externally into a held epoch
+                        const idleTimestamp = startingTimestamp + 100 + RECORDING_IDLE_THRESHOLD_MS + 1000
+                        jest.setSystemTime(new Date(idleTimestamp))
+                        emitInactiveEvent(idleTimestamp, true)
+
+                        sessionIdGeneratorMock.mockImplementation(() => 'late-rotated-session-id')
+                        const rotationTimestamp = idleTimestamp + sessionManager['_sessionTimeoutMs'] + 1000
+                        jest.setSystemTime(new Date(rotationTimestamp))
+                        sessionManager.checkAndGetSessionAndWindowId(false, rotationTimestamp)
+                        ;(posthog.capture as Mock).mockClear()
+
+                        expect(lazyRecorder['_sessionId']).toEqual('late-rotated-session-id')
+                        expect(lazyRecorder['_holdFlushUntilInteraction']).toEqual(true)
+
+                        const snapshot = emitInactiveEvent(rotationTimestamp + 100, 'unknown')
+                        jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                        expect(posthog.capture).not.toHaveBeenCalledWith(
+                            '$snapshot',
+                            expect.anything(),
+                            expect.anything()
+                        )
+
+                        simpleEventEmitter.emit('eventCaptured', { event: '$exception', properties: {} })
+
+                        expect(lazyRecorder['_holdFlushUntilInteraction']).toEqual(false)
+                        expect(posthog.capture).toHaveBeenCalledWith(
+                            '$snapshot',
+                            expect.objectContaining({
+                                $session_id: 'late-rotated-session-id',
+                                $snapshot_data: expect.arrayContaining([snapshot]),
+                            }),
+                            expect.any(Object)
+                        )
+                    })
+                })
+
                 it('does not hold a windowId-only restart (no session rotation)', () => {
                     const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
                     expect(lazyRecorder['_isIdle']).toEqual('unknown')
