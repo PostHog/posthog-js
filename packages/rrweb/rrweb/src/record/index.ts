@@ -689,11 +689,22 @@ function record<T = eventWithTime>(
         return;
       }
 
-      incrementalSnapshotCount++;
+      // Held-window replays and commit deltas delivered by the flush describe
+      // the walk window the snapshot just closed; counting them toward
+      // checkoutEveryNth would let a burst re-trip a checkout from inside the
+      // flush and fire a coalesced follow-up with zero enforced gap.
+      if (!budgetedSnapshotFlushing) {
+        incrementalSnapshotCount++;
+      }
       const exceedCount =
         checkoutEveryNth && incrementalSnapshotCount >= checkoutEveryNth;
+      // Zero means no FullSnapshot has ever reached the consumer (it is only
+      // set when one lands). Requesting a checkout for every event in that
+      // state is a Meta-plus-walk storm that just re-runs whatever failure
+      // kept the first snapshot from landing.
       const exceedTime =
         checkoutEveryNms &&
+        lastFullSnapshotWallTime !== 0 &&
         e.timestamp - lastFullSnapshotWallTime > checkoutEveryNms;
       if (exceedCount || exceedTime) {
         sessionTakeFullSnapshot(true);
@@ -1723,6 +1734,10 @@ function record<T = eventWithTime>(
 
   const sessionTakeFullSnapshot = (isCheckout = false) => {
     if (!recordDOM) {
+      // No FullSnapshot will ever land, so stamp the checkout clock here or
+      // exceedTime would either never arm or re-request this no-op snapshot
+      // on every subsequent event.
+      lastFullSnapshotWallTime = nowTimestamp();
       return true;
     }
     if (fullSnapshotYieldBudgetMs > 0) {

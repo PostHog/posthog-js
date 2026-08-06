@@ -997,11 +997,13 @@ describe('time-sliced full snapshot converges on replay', () => {
     expect(opsRules.length).toBe(3);
   });
 
-  it('coalesces checkouts triggered by held events during the flush', async () => {
-    // checkoutEveryNth counts incremental events and calls takeFullSnapshot
-    // from inside wrappedEmit — including for held events being flushed. A
-    // request landing mid-flush must coalesce into the follow-up snapshot,
-    // not start a walk whose locks the ongoing flush then destroys.
+  it('held events replayed by the flush do not re-trip checkoutEveryNth', async () => {
+    // checkoutEveryNth counts incremental events from inside wrappedEmit.
+    // Held events replayed by the post-snapshot flush describe the walk
+    // window that snapshot just closed, so they must not count toward the
+    // next checkout: a burst would otherwise fire a coalesced follow-up
+    // snapshot with zero enforced gap. Organic events after the flush still
+    // budget a checkout normally.
     const result = await expectConvergence({
       body: `<button id="clicker">c</button>`,
       recordOptions: 'checkoutEveryNth: 3,',
@@ -1009,15 +1011,40 @@ describe('time-sliced full snapshot converges on replay', () => {
       settleMs: 800,
       ops: async () => {
         const btn = document.getElementById('clicker')!;
+        const snapshots = (
+          window as unknown as { snapshots: Array<{ type: number }> }
+        ).snapshots;
+        const fullCount = () =>
+          snapshots.filter((e) => e.type === 2).length;
+        // more held clicks than the checkout budget while the walk runs
         for (let i = 0; i < 6; i++) {
           btn.dispatchEvent(
             new MouseEvent('click', { bubbles: true, clientX: 1, clientY: 1 }),
           );
           await new Promise((r) => setTimeout(r, 0));
         }
+        while (fullCount() === 0) {
+          await new Promise((r) => setTimeout(r, 20));
+        }
+        // give a checkout re-tripped from inside the flush time to fire
+        await new Promise((r) => setTimeout(r, 800));
+        const fullSnapshotsAfterFlush = fullCount();
+        // organic clicks past the flush trip the checkout normally
+        for (let i = 0; i < 3; i++) {
+          btn.dispatchEvent(
+            new MouseEvent('click', { bubbles: true, clientX: 2, clientY: 2 }),
+          );
+          await new Promise((r) => setTimeout(r, 0));
+        }
+        return { fullSnapshotsAfterFlush };
       },
     });
-    // enough clicks to trip the checkout threshold at least once
+    // the six held replays did not fire a follow-up snapshot...
+    expect(
+      (result.opsResult as { fullSnapshotsAfterFlush: number })
+        .fullSnapshotsAfterFlush,
+    ).toBe(1);
+    // ...while the three organic clicks did
     const fullSnapshots = result.eventTypes.filter((t) => t === 2).length;
     expect(fullSnapshots).toBeGreaterThanOrEqual(2);
   });

@@ -597,6 +597,112 @@ describe('budgeted snapshot lifecycle hardening', () => {
     ).toBeUndefined();
   }, 20_000);
 
+  it('a recording whose first snapshot never lands does not checkout-storm', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    fillBody();
+    const events: eventWithTime[] = [];
+
+    stop = record({
+      emit: (event) => {
+        const e = event as eventWithTime;
+        events.push(e);
+        // the consumer rejects every FullSnapshot: budgeted walk, retry and
+        // synchronous fallback all fail to land one
+        if (e.type === EventType.FullSnapshot) {
+          throw new Error('injected consumer FullSnapshot failure');
+        }
+      },
+      fullSnapshotYieldBudgetMs: 1,
+      checkoutEveryNms: 1,
+    });
+
+    await vi.waitFor(
+      () => {
+        expect(
+          diagnostics(events).some((p) => p?.status === 'sync-fallback-failed'),
+        ).toBe(true);
+      },
+      { timeout: 10_000 },
+    );
+    await settle();
+
+    const metasBefore = events.filter((e) => e.type === EventType.Meta).length;
+    // every incremental is now long past checkoutEveryNms of a clock that
+    // never started; none of them may re-trip a snapshot
+    for (let i = 0; i < 5; i++) {
+      document.body.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true }),
+      );
+      await settle();
+    }
+
+    expect(
+      events.some(
+        (e) =>
+          e.type === EventType.IncrementalSnapshot &&
+          (e as { data: { source: IncrementalSource } }).data.source ===
+            IncrementalSource.MouseInteraction,
+      ),
+    ).toBe(true);
+    expect(events.filter((e) => e.type === EventType.Meta).length).toBe(
+      metasBefore,
+    );
+  }, 20_000);
+
+  it('held-window replays do not count toward the checkoutEveryNth budget', async () => {
+    fillBody();
+    const events: eventWithTime[] = [];
+
+    stop = record({
+      emit: (event) => {
+        events.push(event as eventWithTime);
+      },
+      fullSnapshotYieldBudgetMs: 1,
+      checkoutEveryNth: 5,
+    });
+
+    expect(events.some((e) => e.type === EventType.FullSnapshot)).toBe(false);
+    // ten clicks held during the walk: replaying them through the flush must
+    // not trip exceedCount from inside the flush
+    for (let i = 0; i < 10; i++) {
+      document.body.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true }),
+      );
+    }
+
+    await vi.waitFor(
+      () => {
+        expect(events.some((e) => e.type === EventType.FullSnapshot)).toBe(
+          true,
+        );
+      },
+      { timeout: 10_000 },
+    );
+    await settle();
+    await settle();
+
+    // no coalesced follow-up fired with zero enforced gap
+    expect(
+      events.filter((e) => e.type === EventType.FullSnapshot).length,
+    ).toBe(1);
+    expect(events.filter((e) => e.type === EventType.Meta).length).toBe(1);
+
+    // organic post-flush events still budget a checkout normally
+    for (let i = 0; i < 5; i++) {
+      document.body.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true }),
+      );
+    }
+    await vi.waitFor(
+      () => {
+        expect(
+          events.filter((e) => e.type === EventType.FullSnapshot).length,
+        ).toBe(2);
+      },
+      { timeout: 10_000 },
+    );
+  }, 20_000);
+
   it('isIgnored does not mint an id reservation for an unserialized mutation target', () => {
     const mirror = createMirror();
     let next = 1;
