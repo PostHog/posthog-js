@@ -386,6 +386,37 @@ function rememberOriginalRequestHandler(
   handlers.set(handlerName, originalHandler)
 }
 
+/**
+ * Registers a synthetic fallback handler for `handlerName`, already wrapped in
+ * `patch`, by writing straight into `_requestHandlers` instead of going through
+ * `setRequestHandler`.
+ *
+ * Bypassing the SDK setter is deliberate, on three counts:
+ *
+ * - **Capability assertion.** `setRequestHandler` refuses a method the server
+ *   never declared a capability for, so instrumenting a low-level server built
+ *   without `capabilities.tools` used to throw `Server does not support tools`
+ *   and leave instrumentation half-applied. Our fallback is not a capability the
+ *   server offers — it exists only so a call for a tool nobody claims is still
+ *   captured — so the assertion has nothing to protect here.
+ * - **Schema validation.** The setter also wraps the handler in request/result
+ *   parsing, which a handler that can only ever throw `Unknown tool` never needs.
+ * - **Portability.** The setter's first argument is a Zod schema on SDK v1 and a
+ *   method string on v2; the map key is the same string on both, so this is the
+ *   one registration form that does not need to know which major it is talking
+ *   to — and it drops the last runtime `@modelcontextprotocol/sdk` import from
+ *   the shipped bundle.
+ */
+export function registerFallbackRequestHandler(
+  server: MCPServerLike,
+  handlerName: string,
+  fallbackHandler: MCPRequestHandler,
+  patch: HandlerPatch
+): void {
+  rememberOriginalRequestHandler(server, handlerName, fallbackHandler)
+  server._requestHandlers.set(handlerName, (request, extra) => patch(server, fallbackHandler, request, extra))
+}
+
 export function patchRequestHandlers(server: MCPServerLike, patches: Record<string, HandlerPatch>): void {
   // Monkey patch existing handlers.
   for (const [handlerName, patch] of Object.entries(patches)) {
