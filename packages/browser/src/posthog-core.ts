@@ -10,7 +10,7 @@ import {
     PERSON_PROFILES_IDENTIFIED_ONLY,
     USER_STATE_ANONYMOUS,
     USER_STATE_IDENTIFIED,
-    DOM_EVENT_VISIBILITYCHANGE,
+    DOM_EVENT_PRERENDERINGCHANGE,
     ENABLE_PERSON_PROCESSING,
     EVENT_GROUPIDENTIFY,
     EVENT_IDENTIFY,
@@ -443,7 +443,7 @@ export class PostHog implements PostHogInterface {
     webPerformance = new DeprecatedWebPerformanceObserver()
 
     _initialPageviewCaptured: boolean
-    _visibilityStateListener: (() => void) | null
+    _prerenderingChangeListener: (() => void) | null
     _personProcessingSetOncePropertiesSent: boolean = false
     _triggered_notifs: any
     compression?: Compression
@@ -534,7 +534,7 @@ export class PostHog implements PostHogInterface {
         this.__loaded = false
         this.analyticsDefaultEndpoint = '/e/'
         this._initialPageviewCaptured = false
-        this._visibilityStateListener = null
+        this._prerenderingChangeListener = null
         this._initialPersonProfilesConfig = null
         this._cachedPersonProperties = null
         this.scrollManager = new ScrollManager(this)
@@ -4310,15 +4310,19 @@ export class PostHog implements PostHogInterface {
             return
         }
 
-        // If page is not visible, add a listener to detect when the page becomes visible
-        // and trigger the pageview only then
-        // This is useful to avoid `prerender` calls from Chrome/Wordpress/SPAs
-        // that are not visible to the user
-
-        if (document.visibilityState !== 'visible') {
-            if (!this._visibilityStateListener) {
-                this._visibilityStateListener = this._captureInitialPageview.bind(this)
-                addEventListener(document, DOM_EVENT_VISIBILITYCHANGE, this._visibilityStateListener)
+        // Chrome (and other engines supporting the Speculation Rules API) can render this
+        // page in the background as a prerender before the user has actually navigated to it.
+        // If that's what's happening, wait for the page to be promoted to an active one via
+        // the `prerenderingchange` event before counting the pageview - otherwise we'd count
+        // pages the user never visited.
+        //
+        // Note this is deliberately narrower than "page is hidden": an ordinary background
+        // tab, a bfcache restore, or a prefetch is still a real page load and should be
+        // counted immediately, not silently dropped because the tab never became visible.
+        if (document.prerendering) {
+            if (!this._prerenderingChangeListener) {
+                this._prerenderingChangeListener = this._captureInitialPageview.bind(this)
+                addEventListener(document, DOM_EVENT_PRERENDERINGCHANGE, this._prerenderingChangeListener)
             }
 
             return
@@ -4330,9 +4334,9 @@ export class PostHog implements PostHogInterface {
             this.capture(EVENT_PAGEVIEW, { title: document.title }, { send_instantly: true })
 
             // After we've captured the initial pageview, we can remove the listener
-            if (this._visibilityStateListener) {
-                document.removeEventListener(DOM_EVENT_VISIBILITYCHANGE, this._visibilityStateListener)
-                this._visibilityStateListener = null
+            if (this._prerenderingChangeListener) {
+                document.removeEventListener(DOM_EVENT_PRERENDERINGCHANGE, this._prerenderingChangeListener)
+                this._prerenderingChangeListener = null
             }
         }
     }
