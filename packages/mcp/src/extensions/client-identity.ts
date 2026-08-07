@@ -1,5 +1,7 @@
 import type { CompatibleRequestHandlerExtra, McpEvent, MCPRequestLike, MCPServerLike } from '../types'
 import { hasClientVersionAccessor, hasNegotiatedProtocolVersionAccessor } from './detect'
+import { readHeaderValue } from './headers'
+import { getRequestHeaders } from './request-headers'
 
 /**
  * Client identity — who is calling, and which spec revision they speak.
@@ -13,7 +15,11 @@ import { hasClientVersionAccessor, hasNegotiatedProtocolVersionAccessor } from '
  *      the time a handler runs they are here and `params._meta` is empty.
  *   2. `request.params._meta` — where 2026-07-28 puts them on the wire, and
  *      where they still are on any server that does not lift them.
- *   3. the server's own accessors — `getClientVersion()` from a legacy
+ *   3. the `MCP-Protocol-Version` request header, which 2025-11-25 requires a
+ *      client to send on every request after `initialize` — the only per-request
+ *      carrier a legacy-era request has, and therefore the only one that
+ *      survives a per-request server instance.
+ *   4. the server's own accessors — `getClientVersion()` from a legacy
  *      `initialize` handshake, `getNegotiatedProtocolVersion()` on v2.
  *
  * The 2026-07-28 revision removed the `initialize` handshake and the
@@ -24,6 +30,10 @@ import { hasClientVersionAccessor, hasNegotiatedProtocolVersionAccessor } from '
  */
 export const META_CLIENT_INFO_KEY = 'io.modelcontextprotocol/clientInfo'
 export const META_PROTOCOL_VERSION_KEY = 'io.modelcontextprotocol/protocolVersion'
+/** Required on every post-`initialize` request by 2025-11-25 (and sent by modern clients too). */
+export const PROTOCOL_VERSION_HEADER = 'mcp-protocol-version'
+/** A version string is a date-like token; anything longer is junk we should not record. */
+const MAX_PROTOCOL_VERSION_LENGTH = 64
 
 export interface MetaClientInfo {
   clientName?: string
@@ -101,6 +111,28 @@ export function readEnvelopeClientInfo(extra: CompatibleRequestHandlerExtra | un
 }
 
 /**
+ * Reads the protocol version off the request headers.
+ *
+ * This is what closes the gap on **2025-11-25 traffic served by a per-request
+ * server**: that era carries identity at the handshake, and the instance
+ * handling a later `tools/call` never saw it. The header rides every request, so
+ * it survives where the handshake does not. Carries no client name — that still
+ * depends on the replayed session token.
+ */
+export function readHeaderProtocolVersion(
+  extra: CompatibleRequestHandlerExtra | undefined
+): MetaClientInfo | undefined {
+  // `getRequestHeaders` answers *where* the headers are on either SDK major;
+  // `readHeaderValue` answers how to read one value out of the bag it returns —
+  // repeated values, mixed case, blank strings. Two questions, one place each.
+  const protocolVersion = readHeaderValue(getRequestHeaders(extra), PROTOCOL_VERSION_HEADER)
+  if (!protocolVersion || protocolVersion.length > MAX_PROTOCOL_VERSION_LENGTH) {
+    return undefined
+  }
+  return { protocolVersion }
+}
+
+/**
  * Asks the server itself. `getClientVersion()` answers on any server that
  * handled an `initialize` (and v2 hosts such as `createMcpHandler` backfill it
  * from the envelope); `getNegotiatedProtocolVersion()` exists on v2 only, which
@@ -148,7 +180,12 @@ export function readServerClientIdentity(server: unknown): MetaClientInfo | unde
  * keeps it a fallback: any request that identifies itself wins outright.
  */
 export function resolveClientIdentity({ request, extra, server }: ClientIdentitySources): MetaClientInfo | undefined {
-  const chain = [readEnvelopeClientInfo(extra), readMetaClientInfo(request), readServerClientIdentity(server)]
+  const chain = [
+    readEnvelopeClientInfo(extra),
+    readMetaClientInfo(request),
+    readHeaderProtocolVersion(extra),
+    readServerClientIdentity(server),
+  ]
   const result: MetaClientInfo = {}
   for (const source of chain) {
     if (!source) {
