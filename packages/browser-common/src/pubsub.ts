@@ -1,4 +1,4 @@
-import { createDisposable, type Disposable } from './disposable'
+import type { Disposable } from './disposable'
 
 /**
  * Call it with a handler to start listening; dispose the returned
@@ -19,24 +19,38 @@ export type Listener<T> = (handler: (payload: T) => void) => Disposable
 export class Publisher<T> implements Disposable {
     /** Subscriptions currently registered with this publisher. */
     private _subscriptions: Array<{ handler: (payload: T) => void; isActive: boolean }> = []
+    private _disposed = false
+
+    constructor(private readonly _onError?: (error: unknown) => void) {}
 
     /**
      * Register a handler for future payloads. The returned disposable
      * subscription unregisters this handler.
      */
     readonly listener: Listener<T> = (handler) => {
+        if (this._disposed) {
+            return { dispose() {} }
+        }
+
         const subscription = { handler, isActive: true }
 
         this._subscriptions.push(subscription)
 
-        return createDisposable(() => {
-            subscription.isActive = false
+        let active = true
+        return {
+            dispose: () => {
+                if (!active) {
+                    return
+                }
+                active = false
+                subscription.isActive = false
 
-            const index = this._subscriptions.indexOf(subscription)
-            if (index !== -1) {
-                this._subscriptions.splice(index, 1)
-            }
-        })
+                const index = this._subscriptions.indexOf(subscription)
+                if (index !== -1) {
+                    this._subscriptions.splice(index, 1)
+                }
+            },
+        }
     }
 
     /** Notify every currently registered listener with the provided payload. */
@@ -44,14 +58,24 @@ export class Publisher<T> implements Disposable {
         const subscriptions = this._subscriptions.slice()
 
         subscriptions.forEach((subscription) => {
-            if (subscription.isActive) {
+            if (!subscription.isActive) {
+                return
+            }
+
+            try {
                 subscription.handler(payload)
+            } catch (error) {
+                if (!this._onError) {
+                    throw error
+                }
+                this._onError(error)
             }
         })
     }
 
     /** Drop all registered listeners. Safe to call more than once. */
     dispose(): void {
+        this._disposed = true
         this._subscriptions.forEach((subscription) => {
             subscription.isActive = false
         })
