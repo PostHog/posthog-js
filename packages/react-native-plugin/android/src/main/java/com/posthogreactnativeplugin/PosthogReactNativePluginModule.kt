@@ -485,7 +485,7 @@ class PosthogReactNativePluginModule(
     if (!config.capturePushNotificationOpened) {
       return
     }
-    val intent = currentActivity?.intent ?: return
+    val intent = reactApplicationContext.currentActivity?.intent ?: return
     // A relaunch from recents redelivers the original tray intent to a fresh activity;
     // capturing it would count a days-old tap as a new open.
     if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) {
