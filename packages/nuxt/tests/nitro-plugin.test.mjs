@@ -116,10 +116,11 @@ const nitro3 = loadAdapter('nitro-plugin-v3.ts', 'definePlugin')
 assert.match(nitro3.adapterSource, /from 'nitro'/)
 assert.match(nitro3.adapterSource, /from 'nitro\/runtime-config'/)
 let nitro3Request
+const waitUntil = () => {}
 nitro3.bindings.onError((_error, request) => {
   nitro3Request = request
 })
 nitro3.adapterHandlers.error(error, {
-  event: { req: { url: 'https://example.com/v3?query=ignored', method: 'POST' } },
+  event: { req: { url: 'https://example.com/v3?query=ignored', method: 'POST', waitUntil } },
 })
-assert.deepEqual(nitro3Request, { path: '/v3', method: 'POST' })
+assert.deepEqual(nitro3Request, { path: '/v3', method: 'POST', waitUntil })

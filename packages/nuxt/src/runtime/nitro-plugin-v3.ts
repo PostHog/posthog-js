@@ -7,13 +7,17 @@ export default definePlugin((nitroApp) => {
     useRuntimeConfig,
     onError: handler =>
       nitroApp.hooks.hook('error', (error, { event }) =>
-        handler(error, event ? { path: new URL(event.req.url).pathname, method: event.req.method } : undefined),
+        handler(
+          error,
+          event
+            ? {
+                path: new URL(event.req.url).pathname,
+                method: event.req.method,
+                waitUntil: event.req.waitUntil,
+              }
+            : undefined,
+        ),
       ),
-    onClose: (handler) => {
-      let shutdown
-      const close = () => (shutdown ??= handler())
-      nitroApp.hooks.hook('close', close)
-      globalThis.process?.once?.('beforeExit', close)
-    },
+    onClose: handler => nitroApp.hooks.hook('close', handler),
   })
 })

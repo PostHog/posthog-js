@@ -118,7 +118,7 @@ try {
   mkdirSync(join(fixtureDir, 'server', 'api'), { recursive: true })
   writeFileSync(
     join(fixtureDir, 'server', 'api', 'error.mjs'),
-    `export default defineEventHandler(() => { throw new Error('shutdown test') })\n`,
+    `setInterval(() => {}, 60_000)\nexport default defineEventHandler(() => { throw new Error('shutdown test') })\n`,
   )
 
   execFileSync('pnpm', ['install', '--ignore-scripts', '--no-frozen-lockfile'], { cwd: fixtureDir, stdio: 'inherit' })
@@ -139,9 +139,15 @@ try {
 
   const response = await waitForServer(`http://127.0.0.1:${nuxtPort}/api/error`)
   assert.equal(response.status, 500)
+  const exit = once(nuxtServer, 'exit')
   nuxtServer.kill('SIGTERM')
-  await once(nuxtServer, 'exit')
-  assert.match(await withTimeout(capture, 5_000, 'PostHog events were not flushed on shutdown'), /shutdown test/)
+  assert.match(
+    await withTimeout(capture, 5_000, 'PostHog events were not flushed while the server had an active handle'),
+    /shutdown test/,
+  )
+  assert.equal(nuxtServer.exitCode, null)
+  nuxtServer.kill('SIGKILL')
+  await withTimeout(exit, 5_000, 'Nuxt server did not exit')
   console.log('ok nuxt5-consumer.test.mjs')
 } finally {
   if (nuxtServer?.exitCode === null) {
