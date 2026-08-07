@@ -99,11 +99,28 @@ describe('MCP SDK import boundary', () => {
     expect(offenders).toEqual([])
   })
 
+  /**
+   * Stronger than the runtime rule above, and for a different reason: both SDK
+   * majors are *optional* peer dependencies, so a v2-only consumer has no v1 SDK
+   * on disk. A type-only import survives into the published `.d.ts`, where it is
+   * a `TS2307` for anyone type-checking without `skipLibCheck` — an install that
+   * runs fine but will not compile. So the wire shapes are declared
+   * structurally in `types.ts` instead of imported.
+   */
+  it('never references a @modelcontextprotocol package at all, not even as a type', () => {
+    const offenders = files.filter((file) => scan(readFileSync(file, 'utf8')).references.length > 0)
+    expect(offenders.map((file) => file.slice(SRC.length + 1))).toEqual([])
+  })
+
   it('recognises the type-only imports it is meant to allow', () => {
-    // Without this, a scanner that silently matches nothing would pass the test
-    // above forever while checking nothing at all.
-    const erasedCount = files.reduce((total, file) => total + scan(readFileSync(file, 'utf8')).erased.length, 0)
-    expect(erasedCount).toBeGreaterThan(0)
+    // Without this, a scanner that silently matches nothing would pass the tests
+    // above forever while checking nothing at all. Asserted against a fixture
+    // rather than against `src`, which is now deliberately free of them.
+    const { erased, references } = scan(`import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'`)
+    expect(erased).toHaveLength(1)
+    expect(references).toHaveLength(1)
+    expect(erased[0].start).toBeLessThanOrEqual(references[0])
+    expect(erased[0].end).toBeGreaterThan(references[0])
   })
 
   it.each([
