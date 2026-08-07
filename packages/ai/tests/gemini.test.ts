@@ -699,6 +699,58 @@ describe('PostHogGemini - Jest test suite', () => {
       expect(properties['$ai_cache_reporting_exclusive']).toBe(false)
     })
 
+    test('drops the cache reporting flag when the caller overrides token counts', async () => {
+      mockGeminiResponse = {
+        text: 'Cached answer',
+        candidates: [{ content: { parts: [{ text: 'Cached answer' }] }, finishReason: 'STOP' }],
+        usageMetadata: {
+          promptTokenCount: 23000,
+          candidatesTokenCount: 8,
+          cachedContentTokenCount: 25000,
+        },
+      }
+      ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue(mockGeminiResponse)
+
+      await client.models.generateContent({
+        model: 'gemini-2.0-flash-001',
+        contents: 'Test',
+        posthogDistinctId: 'test-id',
+        posthogProperties: { $ai_input_tokens: 400, $ai_cache_read_input_tokens: 25000 },
+      })
+
+      const { properties } = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
+      expect(properties['$ai_tokens_source']).toBe('passthrough')
+      expect(properties['$ai_input_tokens']).toBe(400)
+      expect(properties).not.toHaveProperty('$ai_cache_reporting_exclusive')
+    })
+
+    test('keeps an explicit cache reporting flag from the caller', async () => {
+      mockGeminiResponse = {
+        text: 'Cached answer',
+        candidates: [{ content: { parts: [{ text: 'Cached answer' }] }, finishReason: 'STOP' }],
+        usageMetadata: {
+          promptTokenCount: 23000,
+          candidatesTokenCount: 8,
+          cachedContentTokenCount: 25000,
+        },
+      }
+      ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue(mockGeminiResponse)
+
+      await client.models.generateContent({
+        model: 'gemini-2.0-flash-001',
+        contents: 'Test',
+        posthogDistinctId: 'test-id',
+        posthogProperties: {
+          $ai_input_tokens: 400,
+          $ai_cache_read_input_tokens: 25000,
+          $ai_cache_reporting_exclusive: true,
+        },
+      })
+
+      const { properties } = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
+      expect(properties['$ai_cache_reporting_exclusive']).toBe(true)
+    })
+
     test('omits the cache reporting flag when no tokens were cached', async () => {
       ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue(mockGeminiResponse)
 
