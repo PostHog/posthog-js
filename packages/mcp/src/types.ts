@@ -277,6 +277,12 @@ export interface CompatibleRequestHandlerExtra {
   requestInfo?: CompatibleRequestInfoLike
   /** Where MCP SDK v2 puts the same thing. Read both through `getRequestHeaders`. */
   http?: CompatibleHttpRequestLike
+  /**
+   * MCP SDK v2's parsed request. It lifts the reserved `io.modelcontextprotocol/*`
+   * keys out of `params._meta` into `envelope`, so client identity is here rather
+   * than on the request by the time a handler runs.
+   */
+  mcpReq?: { envelope?: Record<string, unknown>; [key: string]: unknown }
   [key: string]: unknown
 }
 
