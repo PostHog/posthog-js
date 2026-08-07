@@ -263,8 +263,26 @@ describe('ErrorPropertiesBuilder', () => {
       })
 
       expect(coerceInput(customEvent)).toMatchObject({
+        type: 'TypeError',
         value: "'TypeError' captured as exception with message: 'Extension context invalidated.'",
         stack,
+      })
+    })
+
+    it('should fall back to Error when the object has no name property', () => {
+      const exception = coerceInput({ message: 'oh no disaster' })
+
+      expect(exception).toMatchObject({
+        type: 'Error',
+        value: 'oh no disaster',
+      })
+    })
+
+    it('should fall back to Error when the name property is an empty string', () => {
+      const exception = coerceInput({ name: '', message: 'oh no disaster' })
+
+      expect(exception).toMatchObject({
+        type: 'Error',
       })
     })
   })
