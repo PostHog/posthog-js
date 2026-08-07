@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.7.0
+
+### Minor Changes
+
+- [#4319](https://github.com/PostHog/posthog-js/pull/4319) [`4d379bb`](https://github.com/PostHog/posthog-js/commit/4d379bb327ed76cca9c9c9734f72f585c15fb057) Thanks [@kdawgwilk](https://github.com/kdawgwilk)! - Support AI SDK v7 provider peers for OpenTelemetry integrations and reject v7 models passed to the legacy `withTracing` wrapper.
+  (2026-08-07)
+
 ## 8.6.8
 
 ### Patch Changes
