@@ -165,6 +165,11 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
       ...(usage.reasoningTokens ? { $ai_reasoning_tokens: usage.reasoningTokens } : {}),
       ...(usage.cacheReadInputTokens ? { $ai_cache_read_input_tokens: usage.cacheReadInputTokens } : {}),
       ...(usage.cacheCreationInputTokens ? { $ai_cache_creation_input_tokens: usage.cacheCreationInputTokens } : {}),
+      // Checked against undefined rather than truthiness, because false is the meaningful
+      // value here and a truthiness guard would drop it.
+      ...(usage.cacheReportingExclusive !== undefined
+        ? { $ai_cache_reporting_exclusive: usage.cacheReportingExclusive }
+        : {}),
       ...(usage.webSearchCount ? { $ai_web_search_count: usage.webSearchCount } : {}),
       ...(usage.rawUsage ? { $ai_usage: usage.rawUsage } : {}),
     }

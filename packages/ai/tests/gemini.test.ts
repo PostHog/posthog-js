@@ -675,6 +675,44 @@ describe('PostHogGemini - Jest test suite', () => {
     ])
   })
 
+  describe('Cache reporting', () => {
+    test('declares inclusive cache reporting when cached tokens are present', async () => {
+      mockGeminiResponse = {
+        text: 'Cached answer',
+        candidates: [{ content: { parts: [{ text: 'Cached answer' }] }, finishReason: 'STOP' }],
+        usageMetadata: {
+          promptTokenCount: 23000,
+          candidatesTokenCount: 8,
+          cachedContentTokenCount: 25000,
+        },
+      }
+      ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue(mockGeminiResponse)
+
+      await client.models.generateContent({
+        model: 'gemini-2.0-flash-001',
+        contents: 'Test',
+        posthogDistinctId: 'test-id',
+      })
+
+      const { properties } = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
+      expect(properties['$ai_cache_read_input_tokens']).toBe(25000)
+      expect(properties['$ai_cache_reporting_exclusive']).toBe(false)
+    })
+
+    test('omits the cache reporting flag when no tokens were cached', async () => {
+      ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue(mockGeminiResponse)
+
+      await client.models.generateContent({
+        model: 'gemini-2.0-flash-001',
+        contents: 'Test',
+        posthogDistinctId: 'test-id',
+      })
+
+      const { properties } = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
+      expect(properties).not.toHaveProperty('$ai_cache_reporting_exclusive')
+    })
+  })
+
   describe('Web Search Tracking', () => {
     test('should detect grounding metadata (binary detection)', async () => {
       mockGeminiResponse = {
