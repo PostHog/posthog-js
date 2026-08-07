@@ -184,6 +184,41 @@ describe('instrument() on an MCP SDK v2 high-level server', () => {
   })
 
   /**
+   * `enableConversationId` appends a `[SERVER]: Reuse conversation_id=…` block to
+   * the result so the agent echoes the handle back. On v2 a thrown error is
+   * already flattened into an `isError` result by the time we see it, so that
+   * result *is* our only description of the failure — and reading the error off
+   * the delivered copy would splice a fresh uuid into `$mcp_error_message`,
+   * turning one recurring failure into a new error group on every call.
+   *
+   * The agent must still receive the prompt-back on a failed call: a tool that
+   * fails on the first call of a conversation is exactly when the handle matters,
+   * or the retry starts a new conversation and the failure and its fix land in
+   * different sessions. So both halves are asserted here — clean message out to
+   * PostHog, handle still delivered to the caller.
+   */
+  it('keeps the conversation prompt-back out of the captured error message', async () => {
+    const server = makeV2Server()
+    instrument(server, fakePostHog(), { context: false, enableConversationId: true })
+
+    const result = await dispatch(
+      server,
+      { method: 'tools/call', params: { name: 'fail_always', arguments: {} } },
+      v2Ctx()
+    )
+    await new Promise((r) => setTimeout(r, 20))
+
+    const call = eventCapture.findCapturesByEvent('$mcp_tool_call')[0]
+    expect(call.properties.$mcp_is_error).toBe(true)
+    expect(call.properties.$mcp_error_message).toBe('intentional failure')
+    expect(call.properties.$mcp_error_message).not.toMatch(/conversation_id/)
+
+    // The caller still gets the handle, on the failed call.
+    const delivered = (result.content as { text: string }[]).map((block) => block.text).join('\n')
+    expect(delivered).toMatch(/Reuse conversation_id=/)
+  })
+
+  /**
    * The one thing the stale executor does cost us, measured: v2 flattens a throw
    * into an `isError` result before our callback wrapper would have stashed the
    * original error, and the wrapper never runs anyway because dispatch goes
