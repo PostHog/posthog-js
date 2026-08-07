@@ -138,7 +138,9 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   }
 
   const finalResult = applyConversationInstructions(preparedEvent?.event ?? null, result, conversation, ownership)
-  publishSuccessfulToolEvent(server, preparedEvent, finalResult, startTime, data.logger, takeCapturedError)
+  // `result`, not `finalResult`: the error is read from what the tool produced,
+  // before the conversation handle was written into it. See below.
+  publishSuccessfulToolEvent(server, preparedEvent, finalResult, startTime, data.logger, takeCapturedError, result)
   return finalResult
 }
 
@@ -298,13 +300,26 @@ function applyConversationInstructions(
   return updated
 }
 
+/**
+ * @param result - what the caller receives, conversation handle included.
+ * @param resultBeforeInstructions - the same result as the tool produced it.
+ *
+ * The two differ once `enableConversationId` mints a handle, and the difference
+ * matters for errors. A tool that fails returns its message in `content`, and on
+ * MCP SDK v2 that flattened `isError` result is the only description of the
+ * failure we get — the throw never reaches our callback wrapper. Reading the
+ * error off the *delivered* result would therefore append the prompt-back to it,
+ * putting a fresh uuid inside `$mcp_error_message` on every failed call and
+ * splitting one recurring failure into as many groups as there were calls.
+ */
 function publishSuccessfulToolEvent(
   server: MCPServerLike,
   preparedEvent: PreparedToolEvent | null,
   result: unknown,
   startTime: Date,
   logger: LoggerFn,
-  takeCapturedError?: () => unknown
+  takeCapturedError?: () => unknown,
+  resultBeforeInstructions?: unknown
 ): void {
   if (!preparedEvent) {
     return
@@ -314,7 +329,7 @@ function publishSuccessfulToolEvent(
     if (isToolResultError(result)) {
       event.isError = true
       const capturedError = takeCapturedError?.()
-      event.error = captureException(capturedError ?? result)
+      event.error = captureException(capturedError ?? resultBeforeInstructions ?? result)
     } else {
       event.isError = false
     }
