@@ -399,6 +399,16 @@ jobs:
       - name: Smoke test package tarballs
         run: pnpm check:package-tarballs
 
+      - name: Install AI SDK v7 example dependencies from local tarballs
+        run: pnpm install --lockfile=false
+        working-directory: examples/example-ai-vercel-ai-v7
+
+      - name: Test AI SDK v7 OpenTelemetry integration
+        working-directory: examples/example-ai-vercel-ai-v7
+        run: |
+          pnpm build
+          pnpm test
+
       # Replaces Vercel preview deploy validation for @posthog/next.
       - name: Install Next.js App Router example dependencies from local tarballs
         run: pnpm install --lockfile=false
