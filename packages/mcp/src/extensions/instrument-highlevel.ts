@@ -280,7 +280,6 @@ export function instrumentHighLevelServer(server: HighLevelMCPServerLike, logger
     const lowLevelServer = server.server
     const mcpAnalyticsData = getServerTrackingData(lowLevelServer)
 
-    // Patch already existing handlers, and patch setRequestHandler to capture dynamically created handlers.
     const handlers: Record<string, HandlerPatch> = {
       initialize: (trackedServer, originalHandler, request, extra) =>
         handleInitializeRequest(trackedServer, originalHandler, request, extra, logger),

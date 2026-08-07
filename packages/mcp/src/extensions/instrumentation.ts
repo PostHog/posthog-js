@@ -158,22 +158,13 @@ function getActiveAnalyticsParameterOwnership(
   return {
     context: !isMissingCapabilityTool && isContextEnabled(data.options.context) && ownership?.context === true,
     conversationId: data.options.enableConversationId === true && ownership?.conversationId === true,
-    // Deliberately read off `listed`, never the override. This asks whether
-    // `tools/list` actually declared `_mcp_instructions`, and only the advertised
-    // JSON Schema can answer it — an override is built from the live registry,
-    // which on the high-level path holds Zod.
-    //
-    // The cache is per-instance, so this is not merely "before the first
-    // `tools/list`": an instance that never serves a listing never writes the
-    // mirror at all. That is the per-request server pattern — `tools/list` lands
-    // on one instance, `tools/call` on a cold one — where the handle falls back
-    // to the `content` block and a structuredContent-only client misses it.
-    //
-    // Failing closed is deliberate. Writing a key the advertised schema did not
-    // declare fails the *entire* tool result under `additionalProperties: false`,
-    // so guessing costs the caller their result, while not guessing costs us one
-    // delivery channel. The fix is a process-scoped ownership cache, so a listing
-    // served by any instance answers for the rest — not a per-call guess.
+    // Deliberately read off `listed`, never the override: only the advertised
+    // JSON Schema can say whether `tools/list` declared `_mcp_instructions` (an
+    // override is built from the live registry, which holds Zod on the
+    // high-level path). An instance that never served a listing has no answer
+    // and fails closed — writing an undeclared key fails the customer's entire
+    // tool result under `additionalProperties: false`. See ADR-0004 for the
+    // per-request-instance gap this leaves and the planned fix.
     outputInstructions: data.options.enableConversationId === true && listed?.outputInstructions === true,
   }
 }
@@ -254,19 +245,14 @@ async function prepareToolCallEvent(
 }
 
 /**
- * Delivers the conversation session handle back to the agent, over both channels a tool
- * result has:
+ * Delivers the conversation session handle back to the agent over both channels
+ * a tool result has: mirrored into `structuredContent` on every response (for
+ * tools whose output schema declares the key), and as a `content` text block on
+ * the minting response only. Why two channels and why those cadences: ADR-0004.
  *
- * - `structuredContent`, on *every* response for a tool whose output schema we
- *   declared the key on. Clients that read structured results never see the text
- *   block, and re-sending it each time lets an agent that dropped the session handle read
- *   it back.
- * - `content`, as a text block, only on the response that minted the session handle.
- *   Repeating it every call would put a `[SERVER]:` line in front of the user on
- *   every single tool result.
- *
- * If neither channel could carry a session handle we minted, the agent never received it,
- * so clear it off the event rather than showing analytics an id nobody has.
+ * If neither channel could carry a session handle we minted, the agent never
+ * received it, so clear it off the event rather than showing analytics an id
+ * nobody has.
  */
 function applyConversationInstructions(
   event: McpEvent | null,
@@ -368,13 +354,7 @@ export type HandlerPatch = (
   extra: CompatibleRequestHandlerExtra | undefined
 ) => Promise<unknown>
 
-/**
- * Applies the `patches` (keyed by method, e.g. `initialize`, `tools/list`) to the
- * handlers already registered, and patches `setRequestHandler` so matching
- * handlers registered later are patched too. The latter is what makes adapters
- * that register handlers post-construction work — e.g. `@rekog/mcp-nest` hands a
- * bare server to instrument() and only then registers its handlers.
- */
+/** Pre-patch handlers, kept so `isToolAdvertised` can query the raw listing. */
 const originalRequestHandlers = new WeakMap<MCPServerLike, Map<string, MCPRequestHandler>>()
 
 function rememberOriginalRequestHandler(
@@ -421,8 +401,14 @@ export function registerFallbackRequestHandler(
   server._requestHandlers.set(handlerName, (request, extra) => patch(server, fallbackHandler, request, extra))
 }
 
+/**
+ * Applies the `patches` (keyed by method, e.g. `initialize`, `tools/list`) to the
+ * handlers already registered, and patches `setRequestHandler` so matching
+ * handlers registered later are patched too. The latter is what makes adapters
+ * that register handlers post-construction work — e.g. `@rekog/mcp-nest` hands a
+ * bare server to instrument() and only then registers its handlers.
+ */
 export function patchRequestHandlers(server: MCPServerLike, patches: Record<string, HandlerPatch>): void {
-  // Monkey patch existing handlers.
   for (const [handlerName, patch] of Object.entries(patches)) {
     const originalHandler = server._requestHandlers.get(handlerName)
     if (originalHandler) {
@@ -688,7 +674,7 @@ export function cacheToolCategories(cache: Map<string, string>, tools: ListTools
  * client name/version is lost after `initialize`. Fix: mint the
  * `Mcp-Session-Id` response header as a token carrying both. Clients replay
  * the header on every request, so any pod recovers them with no server-side
- * store (decoded in `getSessionId`).
+ * store (decoded in `getSessionId`). See ADR-0003.
  *
  * The header only reaches the wire when response headers are built after the
  * handler runs — StreamableHTTP with `enableJsonResponse: true`. SSE flushes

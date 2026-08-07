@@ -30,9 +30,10 @@ export function deriveSessionIdFromMCPSession(mcpSessionId: string): string {
 }
 
 /**
- * Derives the SDK session id from the agent's conversation handle. Deterministic
- * and unsalted on purpose: two pods that never met must agree on the session, and
- * the 2026-07-28 revision leaves them no shared state to agree through.
+ * Derives the SDK session id from the agent's conversation handle (ADR-0004).
+ * Deterministic and unsalted on purpose: two pods that never met must agree on
+ * the session, and the 2026-07-28 revision leaves them no shared state to agree
+ * through.
  *
  * Hashed rather than used verbatim so an MCP session can never collide with a
  * Session Replay id — a bare uuidv7 would render a "View recording" button that
@@ -69,26 +70,16 @@ export function getSessionId(
     throw new Error('Server tracking data not found')
   }
 
-  // 1. The agent's conversation handle. It outranks both steps below because it
-  // is the only id that survives reconnects, restarts, and the per-request
-  // server instances the 2026-07-28 revision introduces. Hashed rather than used
-  // verbatim so it can never collide with Session Replay ids.
-  //
-  // This returns instead of falling through to the shared-state writes at the
-  // end: the handle belongs to this one request, and persisting it would leak
-  // one chat's session onto a concurrent chat's `tools/list`.
-  //
-  // `lastActivity` therefore does not advance either, so a conversation that
-  // always echoes lets the in-memory fallback age past the inactivity timeout —
-  // and a later call carrying no handle rotates it. That is the honest reading:
-  // the fallback session really has been idle for that whole time.
+  // 1. The agent's conversation handle — the only id that survives reconnects,
+  // restarts, and the per-request server instances of the 2026-07-28 revision
+  // (ADR-0004). Returns before the shared-state writes at the end: the handle
+  // belongs to this one request, and persisting it (or advancing lastActivity)
+  // would leak one chat's session onto a concurrent chat's `tools/list`.
   if (conversationId) {
-    // The handle decides the *session*, but the request may still carry our token,
-    // and on a stateless instance that never processed `initialize` its payload is
-    // the only place client identity exists. Restore that before returning: the
-    // early return is about not persisting a session, not about ignoring what the
-    // request told us about the client. Without this, tool calls and `$identify`
-    // go out unattributed on exactly the deployments this branch exists for.
+    // The session comes from the handle, but on an instance that never processed
+    // `initialize` the request's token is still the only source of client
+    // identity — without this, tool calls and `$identify` go out unattributed
+    // on exactly the deployments this branch exists for.
     applyTokenClientIdentity(data, extra)
     return deriveSessionIdFromConversation(conversationId)
   }
@@ -110,14 +101,10 @@ export function getSessionId(
 /**
  * Restores the client name/version and protocol version baked into our token at
  * mint time, and hands the decoded token back so the caller can also take the
- * session id from it.
- *
- * Split out from step 2 because the two halves of the token have different
- * scopes. The session id it carries is per-chat, so a conversation-anchored
- * request must not adopt it. The client identity is per-connection — the same
- * client for every request on it — so a conversation-anchored request should,
- * and on a stateless instance that never saw `initialize` this is the only
- * source of it.
+ * session id from it. Split from step 2 because the token's two halves have
+ * different scopes: its session id is per-chat (a conversation-anchored request
+ * must not adopt it), its client identity is per-connection (every request on
+ * the connection should).
  */
 function applyTokenClientIdentity(
   data: MCPAnalyticsData,
@@ -139,9 +126,8 @@ function applyTokenClientIdentity(
  * issued. Returns undefined when the request carried neither, which is what
  * sends the caller on to 3.
  *
- * Both are 2025-11-25 mechanisms. The 2026-07-28 revision removed that header
- * outright — servers MUST NOT mint or echo it — so this entire step becomes
- * legacy-only once era detection lands.
+ * Both are 2025-11-25 mechanisms; the 2026-07-28 revision removed the header
+ * outright, so this step is legacy-only once era detection lands (ADR-0003).
  */
 function readSessionIdFromRequest(data: MCPAnalyticsData, extra?: CompatibleRequestHandlerExtra): string | undefined {
   // 2a. A token we minted at `initialize` and the client replayed. It rides the
@@ -203,8 +189,8 @@ export function getSessionInfo(
   const actorInfo = data?.identifiedSessions.get(sessionId ?? data.sessionId)
 
   const sessionInfo: SessionInfo = {
-    ipAddress: undefined, // grab from django
-    sdkLanguage: 'TypeScript', // hardcoded for now
+    ipAddress: undefined,
+    sdkLanguage: 'TypeScript',
     sdkVersion: version,
     serverName: server._serverInfo?.name,
     serverVersion: server._serverInfo?.version,
