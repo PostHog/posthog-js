@@ -949,3 +949,5 @@ export const getRecordNetworkPlugin: (options?: NetworkRecordOptions) => RecordP
 }
 
 // rrweb/networ@1 ends
+
+// temporary: exercises the replay-incident-risk check, do not merge (new Request( pattern)
