@@ -2888,6 +2888,7 @@ describe('Lazy SessionRecording', () => {
                 maskInputFn: undefined,
                 maskAllElementAttributes: false,
                 maskAttributeFn: undefined,
+                maskMediaAudio: false,
                 slimDOMOptions: {},
                 collectFonts: false,
                 plugins: [],
