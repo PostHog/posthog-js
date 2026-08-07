@@ -67,6 +67,7 @@ export const createMockPostHog = (overrides: Partial<PostHog> = {}): PostHog =>
         capture: jest.fn(),
         reloadFeatureFlags: jest.fn(),
         _send_request: jest.fn(),
+        onFeatureFlags: jest.fn().mockReturnValue(() => {}),
         ...overrides,
     }) as PostHog
 

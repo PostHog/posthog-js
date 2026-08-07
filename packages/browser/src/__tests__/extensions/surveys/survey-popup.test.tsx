@@ -234,6 +234,9 @@ describe('SurveyPopup', () => {
             posthog: mockPosthog,
             properties: undefined,
             surveyLanguage: undefined,
+            questionSnapshots: {
+                q1: 'Question 1',
+            },
         })
         expect(screen.getByText('Question 2')).toBeVisible()
     })
@@ -279,6 +282,10 @@ describe('SurveyPopup', () => {
             posthog: mockPosthog,
             properties: undefined,
             surveyLanguage: undefined,
+            questionSnapshots: {
+                q1: 'Question 1',
+                q2: 'Question 2',
+            },
         })
 
         // *** Manually dispatch the event that the real function would dispatch ***

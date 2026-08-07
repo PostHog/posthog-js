@@ -1,4 +1,5 @@
 import { act, fireEvent, render, renderHook } from '@testing-library/preact'
+import { within } from '@testing-library/dom'
 import {
     SurveyManager,
     generateSurveys,
@@ -331,6 +332,14 @@ describe('SurveyManager', () => {
         })
 
         surveyManager = new SurveyManager(mockPostHog)
+    })
+
+    afterEach(() => {
+        // SurveyManager attaches a 'languagechange' window listener on construction (see
+        // surveys.tsx). Without destroying it, listeners from earlier tests' instances stay
+        // attached and fire on later tests' window.dispatchEvent(new Event('languagechange')),
+        // hitting a stale mockPostHog whose mocks may no longer exist.
+        surveyManager.destroy()
     })
 
     test('callSurveysAndEvaluateDisplayLogic should handle a single popover survey correctly', () => {
@@ -1453,6 +1462,70 @@ describe('SurveyManager', () => {
             surveyManager.cancelSurvey('non-existent-survey')
 
             expect(clearTimeoutSpy).not.toHaveBeenCalled()
+        })
+    })
+
+    describe('re-renders the actual popup on a real language change', () => {
+        const setNavigatorLanguage = (language: string): void => {
+            Object.defineProperty(window.navigator, 'language', {
+                value: language,
+                configurable: true,
+            })
+        }
+
+        const langSurvey: Survey = {
+            id: 'lang-survey-1',
+            name: 'Lang Survey',
+            type: SurveyType.Popover,
+            linked_flag_key: null,
+            targeting_flag_key: null,
+            internal_targeting_flag_key: null,
+            questions: [
+                {
+                    type: SurveyQuestionType.Open,
+                    question: 'Hello?',
+                    id: 'q1',
+                    description: '',
+                    translations: { fr: { question: 'Bonjour?' } },
+                },
+            ],
+            appearance: {},
+            conditions: null,
+            start_date: '2024-01-01T00:00:00.000Z',
+            end_date: null,
+            current_iteration: null,
+            current_iteration_start_date: null,
+            feature_flag_keys: [],
+        } as unknown as Survey
+
+        const originalLanguage = window.navigator.language
+
+        afterEach(() => {
+            setNavigatorLanguage(originalLanguage)
+            document.getElementsByTagName('html')[0].innerHTML = ''
+        })
+
+        it('updates the rendered question text and keeps the typed answer when the language changes', () => {
+            setNavigatorLanguage('en')
+            mockPostHog.get_property = jest.fn().mockReturnValue([langSurvey])
+
+            surveyManager.handlePopoverSurvey(langSurvey)
+
+            const { shadow } = retrieveSurveyShadow(langSurvey, mockPostHog)
+            const textarea = within(shadow as unknown as HTMLElement).getByRole('textbox') as HTMLTextAreaElement
+            expect(within(shadow as unknown as HTMLElement).getByText('Hello?')).toBeInTheDocument()
+
+            fireEvent.input(textarea, { target: { value: 'my in-progress answer' } })
+            expect(textarea.value).toBe('my in-progress answer')
+
+            setNavigatorLanguage('fr')
+            act(() => {
+                window.dispatchEvent(new Event('languagechange'))
+            })
+
+            expect(within(shadow as unknown as HTMLElement).getByText('Bonjour?')).toBeInTheDocument()
+            const textareaAfter = within(shadow as unknown as HTMLElement).getByRole('textbox') as HTMLTextAreaElement
+            expect(textareaAfter.value).toBe('my in-progress answer')
         })
     })
 
