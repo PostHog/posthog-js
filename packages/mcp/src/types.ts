@@ -225,13 +225,31 @@ export interface CompatibleRequestInfoLike {
   [key: string]: unknown
 }
 
+/**
+ * The HTTP request an MCP SDK v2 server attaches to the handler context, as a
+ * WHATWG `Request` — so `headers` answers to `.get()`, not to indexing.
+ */
+export interface CompatibleHttpRequestLike {
+  req?: { headers?: unknown; [key: string]: unknown }
+  [key: string]: unknown
+}
+
 export interface CompatibleRequestHandlerExtra {
   headers?: Record<string, string | string[]>
   sessionId?: string
   /** Present on HTTP transports only — headers ride every request, unlike `clientInfo`. */
   requestInfo?: CompatibleRequestInfoLike
+  /** Where MCP SDK v2 puts the same thing. Read both through `getRequestHeaders`. */
+  http?: CompatibleHttpRequestLike
   [key: string]: unknown
 }
+
+/**
+ * HTTP headers normalised to lowercase keys, as `getRequestHeaders` returns
+ * them — a plain bag, so a host's existing `headers['authorization']` keeps
+ * working when only the source of the headers changes.
+ */
+export type RequestHeaderBag = Record<string, string | string[]>
 
 export interface ServerClientInfoLike {
   name?: string
