@@ -33,6 +33,7 @@ import { getServerTrackingData, handleIdentify, setServerTrackingData, withIdent
 import type { LoggerFn } from './logger'
 import { buildCapturedMcpParameters } from './mcp-payloads'
 import { readRequestHandlerMethod } from './mcp-sdk-compat'
+import { getRequestHeaders } from './request-headers'
 import { getSessionId, getSessionInfo, newSessionId } from './session'
 import { encodeSessionId, readMcpSessionHeader, writeSessionIdToTransport } from './session-token'
 import { getReportMissingToolDescriptor, resolveMissingCapabilityToolName } from './tools'
@@ -697,8 +698,8 @@ function mintStatelessSessionOnInitialize(
   extra: CompatibleRequestHandlerExtra | undefined
 ): string | undefined {
   try {
-    const headers = extra?.requestInfo?.headers
-    if (!headers || typeof headers !== 'object') {
+    const headers = getRequestHeaders(extra)
+    if (!headers) {
       return undefined // not an HTTP transport (stdio/in-memory) — nothing to mint into
     }
     if (readMcpSessionHeader(headers)) {
