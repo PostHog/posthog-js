@@ -517,6 +517,7 @@
         "_reloadingDisabled",
         "_remoteConfig",
         "_remoteConfigLoader",
+        "_remoteConfigSuccessful",
         "_remoteEnabled",
         "_remove",
         "_removeAllTriggerListeners",

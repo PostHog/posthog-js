@@ -35,6 +35,7 @@ export class PostHogConversations implements Extension {
     private _conversationsManager: LazyLoadedConversationsInterface | null = null
     private _isInitializing: boolean = false
     private _remoteConfig: ConversationsRemoteConfig | null = null
+    private _remoteConfigSuccessful?: boolean
     // Set when the lazy bundle fails to load or init (blocked, network, CSP, init throw); cleared on
     // successful load. Distinguishes a load failure from "still initializing" in getUnavailableReason().
     // A boolean rather than the message: only the fact of failure is read, and this class lands in the
@@ -53,8 +54,8 @@ export class PostHogConversations implements Extension {
             return
         }
 
+        this._remoteConfigSuccessful = result.ok
         if (!result.ok) {
-            // Failure behaves like a response without a conversations key.
             return
         }
 
@@ -84,6 +85,7 @@ export class PostHogConversations implements Extension {
         // Reset local state
         this._isConversationsEnabled = undefined
         this._remoteConfig = null
+        this._remoteConfigSuccessful = undefined
         this._loadFailed = false
     }
 
@@ -242,10 +244,13 @@ export class PostHogConversations implements Extension {
             return 'consent_opted_out'
         }
         // Deliberately diverges from loadIfEnabled, which checks __PosthogExtensions__ before remote
-        // config. Until remote config arrives we do not know conversations was ever meant to load, so
+        // config. Until remote config settles we do not know conversations was ever meant to load, so
         // reporting a missing extension bundle then would read as an ad blocker during normal startup.
+        if (this._remoteConfigSuccessful === false) {
+            return 'remote_config_failed'
+        }
         if (isUndefined(this._isConversationsEnabled)) {
-            return 'remote_config_pending'
+            return this._remoteConfigSuccessful ? 'disabled_in_project' : 'remote_config_pending'
         }
         if (!this._isConversationsEnabled) {
             return 'disabled_in_project'
@@ -256,11 +261,11 @@ export class PostHogConversations implements Extension {
         if (!assignableWindow?.__PosthogExtensions__) {
             return 'extensions_unavailable'
         }
-        if (this._loadFailed) {
-            return 'load_failed'
-        }
         if (this._isInitializing) {
             return 'initializing'
+        }
+        if (this._loadFailed) {
+            return 'load_failed'
         }
         return 'not_loaded'
     }

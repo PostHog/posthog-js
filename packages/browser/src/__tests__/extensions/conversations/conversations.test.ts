@@ -88,6 +88,7 @@ describe('PostHogConversations', () => {
             conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
 
             expect(conversations.isAvailable()).toBe(false)
+            expect(conversations.getUnavailableReason()).toBe('disabled_in_project')
         })
 
         it('should not load when conversations is boolean true (no token)', () => {
@@ -159,6 +160,18 @@ describe('PostHogConversations', () => {
             expect(conversations.getUnavailableReason()).toBe('remote_config_pending')
         })
 
+        it('returns remote_config_failed when remote config fails', () => {
+            conversations.onRemoteConfig({ ok: false })
+
+            expect(conversations.getUnavailableReason()).toBe('remote_config_failed')
+        })
+
+        it('returns disabled_in_project when successful remote config omits conversations', () => {
+            conversations.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
+
+            expect(conversations.getUnavailableReason()).toBe('disabled_in_project')
+        })
+
         it('returns disabled_by_config when disabled via config', () => {
             mockPostHog.config.disable_conversations = true
 
@@ -205,6 +218,27 @@ describe('PostHogConversations', () => {
             conversations.onRemoteConfig({ ok: true, config: validRemoteConfig as RemoteConfig })
 
             expect(conversations.isAvailable()).toBe(false)
+            expect(conversations.getUnavailableReason()).toBe('load_failed')
+        })
+
+        it('returns initializing while retrying after a load failure', () => {
+            let attempt = 0
+            let finishRetry: (() => void) | undefined
+            assignableWindow.__PosthogExtensions__!.loadExternalDependency = jest.fn((_instance, _path, callback) => {
+                attempt++
+                if (attempt === 1) {
+                    callback(new Error('blocked'))
+                } else {
+                    finishRetry = () => callback(new Error('blocked again'))
+                }
+            })
+            conversations.onRemoteConfig({ ok: true, config: validRemoteConfig as RemoteConfig })
+            expect(conversations.getUnavailableReason()).toBe('load_failed')
+
+            conversations.loadIfEnabled()
+
+            expect(conversations.getUnavailableReason()).toBe('initializing')
+            finishRetry!()
             expect(conversations.getUnavailableReason()).toBe('load_failed')
         })
     })

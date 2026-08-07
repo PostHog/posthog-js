@@ -2353,7 +2353,7 @@
       "name": "ConversationsUnavailableReason",
       "properties": [],
       "path": "lib/src/posthog-conversations-types.d.ts",
-      "example": "\"disabled_by_config\" | \"consent_opted_out\" | \"disabled_for_toolbar\" | \"remote_config_pending\" | \"disabled_in_project\" | \"missing_token\" | \"extensions_unavailable\" | \"load_failed\" | \"initializing\" | \"not_loaded\""
+      "example": "\"disabled_by_config\" | \"consent_opted_out\" | \"disabled_for_toolbar\" | \"remote_config_pending\" | \"remote_config_failed\" | \"disabled_in_project\" | \"missing_token\" | \"extensions_unavailable\" | \"load_failed\" | \"initializing\" | \"not_loaded\""
     },
     {
       "id": "ConversationsWidgetState",

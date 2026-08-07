@@ -407,6 +407,7 @@ export type ConversationsUnavailableReason =
     | 'consent_opted_out'
     | 'disabled_for_toolbar'
     | 'remote_config_pending'
+    | 'remote_config_failed'
     | 'disabled_in_project'
     | 'missing_token'
     | 'extensions_unavailable'
