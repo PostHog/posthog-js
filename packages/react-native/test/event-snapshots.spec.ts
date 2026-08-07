@@ -93,7 +93,7 @@ const createClient = (options: ConstructorParameters<typeof PostHog>[1] = {}): P
 
 describe('PostHog React Native event and request snapshots', () => {
   beforeEach(() => {
-    jest.useFakeTimers()
+    jest.useFakeTimers({ doNotFake: ['nextTick'] })
     jest.setSystemTime(fixedTime)
   })
 
