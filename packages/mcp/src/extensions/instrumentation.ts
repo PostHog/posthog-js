@@ -24,6 +24,7 @@ import {
   resolveConversationId,
 } from './conversation-id'
 import { stampMetaClientInfo } from './client-identity'
+import { stampTransportIdentity } from './transport-identity'
 import { addInstructionsToOutputSchemas, mirrorInstructionsIntoStructuredContent } from './output-instructions'
 import { captureEvent } from './capture'
 import { MCPAnalyticsEventType } from './event-types'
@@ -237,6 +238,9 @@ async function prepareToolCallEvent(
     // `_meta` on every request rather than at `initialize`; stamp them onto this
     // event now so concurrent requests can't cross-attribute it.
     stampMetaClientInfo(event, request)
+    // Which *surface* of the client made this call lives only in the request
+    // headers (HTTP transports); `clientInfo` can't tell a vendor's products apart.
+    stampTransportIdentity(event, extra)
 
     await applyResolvedMetadata(event, data, request, extra)
     setEventIntent(event, await resolveToolCallIntent(data, request, ownership.context, extra))
@@ -519,6 +523,7 @@ export async function handleListToolsRequest(
     timestamp: startTime,
   }
   stampMetaClientInfo(event, request)
+  stampTransportIdentity(event, extra)
 
   if (data) {
     await applyResolvedMetadata(event, data, request, extra)
@@ -830,6 +835,7 @@ export async function handleInitializeRequest(
   // negotiated protocol version below overrides any `_meta` one); picks up client
   // info if a client also sends it in `_meta`.
   stampMetaClientInfo(event, request)
+  stampTransportIdentity(event, extra)
 
   await applyResolvedMetadata(event, data, request, extra)
 

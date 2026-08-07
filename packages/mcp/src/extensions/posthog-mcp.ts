@@ -19,6 +19,7 @@ import {
 } from './context-parameters'
 import { MCPAnalyticsEventType } from './event-types'
 import { captureException } from './exceptions'
+import { normalizeHeaderString } from './headers'
 import { applyMcpLibIdentity } from './lib-identity'
 import { log } from './logger'
 import { McpEventSink } from './sink'
@@ -244,6 +245,12 @@ function baseEvent(eventType: MCPAnalyticsEventType, common: McpCaptureCommon): 
     eventType,
     sessionId: common.sessionId,
     protocolVersion: common.protocolVersion,
+    // There is no `extra` on this path, so the host reads the request headers and
+    // passes them per capture — the SDK has no transport to read them from. Normalized
+    // with the same rules `instrument()` applies, so one request yields one set of
+    // properties whichever path captured it.
+    clientUserAgent: normalizeHeaderString(common.clientUserAgent),
+    vendorClient: normalizeHeaderString(common.vendorClient),
     timestamp: common.timestamp ?? new Date(),
     properties: common.properties,
     groups: common.groups,

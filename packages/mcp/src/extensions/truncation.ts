@@ -430,6 +430,10 @@ export function truncateEvent<T extends Event | McpEvent>(event: T): T {
   result.serverVersion = truncateString(result.serverVersion, MAX_METADATA_LENGTH)
   result.clientName = truncateString(result.clientName, MAX_METADATA_LENGTH)
   result.clientVersion = truncateString(result.clientVersion, MAX_METADATA_LENGTH)
+  // Client-supplied HTTP headers, so unlike the fields above they are attacker-
+  // controlled in length. Any real User-Agent fits well inside the metadata cap.
+  result.clientUserAgent = truncateString(result.clientUserAgent, MAX_METADATA_LENGTH)
+  result.vendorClient = truncateString(result.vendorClient, MAX_METADATA_LENGTH)
   result.errorType = truncateString(result.errorType, MAX_METADATA_LENGTH)
 
   // Error field limits — operate on the core `$exception_list` shape
