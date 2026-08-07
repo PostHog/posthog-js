@@ -69,7 +69,6 @@ describe('SessionRecording', () => {
     let config: PostHogConfig
     let sessionIdGeneratorMock: Mock
     let windowIdGeneratorMock: Mock
-    let removePageviewCaptureHookMock: Mock
     let simpleEventEmitter: SimpleEventEmitter
 
     const addRRwebToWindow = () => {
@@ -92,7 +91,6 @@ describe('SessionRecording', () => {
     }
 
     beforeEach(() => {
-        removePageviewCaptureHookMock = jest.fn()
         sessionId = 'sessionId' + uuidv7()
 
         config = createMockConfig({
@@ -151,7 +149,7 @@ describe('SessionRecording', () => {
             _internalEventEmitter: simpleEventEmitter,
             on: jest.fn().mockImplementation((event, cb) => {
                 const unsubscribe = simpleEventEmitter.on(event, cb)
-                return removePageviewCaptureHookMock.mockImplementation(unsubscribe)
+                return jest.fn().mockImplementation(unsubscribe)
             }),
         } as Partial<PostHog> as PostHog
 

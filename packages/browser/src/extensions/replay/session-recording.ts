@@ -12,6 +12,7 @@ import {
 import { PostHog } from '../../posthog-core'
 import { RemoteConfigLoader } from '../../remote-config'
 import {
+    CaptureResult,
     Properties,
     RemoteConfig,
     RemoteConfigResult,
@@ -39,6 +40,9 @@ import type { Extension } from '../types'
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
 
+// only the first events of a pageload need buffering, so this can stay small
+const PRE_START_EVENT_BUFFER_LIMIT = 100
+
 const hasDocumentEverBeenVisible = (): boolean => {
     if (!document?.visibilityState || document.visibilityState === 'visible') {
         return true
@@ -65,6 +69,13 @@ export class SessionRecording implements Extension {
     private _lazyLoadedSessionRecording: LazyLoadedSessionRecordingInterface | undefined
     private _sessionRecordingDisposed = false
     private _documentWasEverVisible = hasDocumentEverBeenVisible()
+
+    // event triggers are matched by the lazy-loaded recorder, which only registers its
+    // listener once the recorder script has loaded. Events captured before then (most
+    // importantly the initial $pageview) are buffered here so the recorder can replay
+    // them through trigger matching when it starts.
+    private _eventsCapturedBeforeRecorderStarted: CaptureResult[] = []
+    private _removePreStartEventBufferHook: (() => void) | undefined
 
     private _onVisibilityChange = (): void => {
         if (document?.visibilityState === 'visible') {
@@ -99,6 +110,12 @@ export class SessionRecording implements Extension {
         if (document?.addEventListener) {
             addEventListener(document, 'visibilitychange', this._onVisibilityChange)
         }
+
+        this._removePreStartEventBufferHook = this._instance.on?.('eventCaptured', (event) => {
+            if (this._eventsCapturedBeforeRecorderStarted.length < PRE_START_EVENT_BUFFER_LIMIT) {
+                this._eventsCapturedBeforeRecorderStarted.push(event)
+            }
+        })
     }
 
     initialize() {
@@ -108,7 +125,24 @@ export class SessionRecording implements Extension {
     dispose(): void {
         this._sessionRecordingDisposed = true
         document?.removeEventListener?.('visibilitychange', this._onVisibilityChange)
+        this._stopBufferingPreStartEvents()
         this.stopRecording()
+    }
+
+    /**
+     * called by the lazy-loaded recorder once it has registered its event trigger listeners,
+     * so events captured before then can be replayed through trigger matching
+     */
+    public consumeEventsCapturedBeforeRecorderStarted(): CaptureResult[] {
+        const events = this._eventsCapturedBeforeRecorderStarted
+        this._stopBufferingPreStartEvents()
+        return events
+    }
+
+    private _stopBufferingPreStartEvents(): void {
+        this._removePreStartEventBufferHook?.()
+        this._removePreStartEventBufferHook = undefined
+        this._eventsCapturedBeforeRecorderStarted = []
     }
 
     private get _isRecordingEnabled() {
@@ -288,6 +322,7 @@ export class SessionRecording implements Extension {
         if (response.sessionRecording === false) {
             this._persistRemoteConfig(response)
             this._discardRecording()
+            this._stopBufferingPreStartEvents()
             return
         }
 
@@ -367,6 +402,8 @@ export class SessionRecording implements Extension {
         this._recordingStatus = LAZY_LOADING
         this._lazyLoadedSessionRecording.setDocumentWasEverVisible?.(this._documentWasEverVisible)
         this._lazyLoadedSessionRecording.start(startReason)
+        // an older recorder chunk may never consume the buffer; recording has started, so it is no longer needed
+        this._stopBufferingPreStartEvents()
     }
 
     /**

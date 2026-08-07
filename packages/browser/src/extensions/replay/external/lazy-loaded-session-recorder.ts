@@ -69,6 +69,7 @@ import {
 } from '../../../constants'
 import { PostHog } from '../../../posthog-core'
 import {
+    CaptureResult,
     NetworkRecordOptions,
     PerformanceCaptureConfig,
     Properties,
@@ -1150,10 +1151,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // Let the strategy configure itself
         this._strategy.onRemoteConfig(config)
 
-        // Setup event trigger listeners via strategy
+        // Setup event trigger listeners via strategy. The strategy's callback is stashed so
+        // that events captured before this point can be replayed through it at the end of start().
+        let eventTriggerCallback: ((event: CaptureResult) => void) | undefined
         this._removeEventTriggerCaptureHook?.()
         this._removeEventTriggerCaptureHook = this._strategy.setupEventTriggerListeners(
-            this._instance.on.bind(this._instance, 'eventCaptured'),
+            (callback) => {
+                eventTriggerCallback = callback
+                return this._instance.on('eventCaptured', callback)
+            },
             this.sessionId,
             (triggerType, matchDetail) => this._activateTrigger(triggerType, matchDetail)
         )
@@ -1257,6 +1263,17 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         if (this.status === ACTIVE) {
             this._reportStarted(startReason || 'recording_initialized')
+        }
+
+        // events captured while this recorder chunk was loading never reached the trigger
+        // listener registered above, so an event trigger on e.g. the initial $pageview could
+        // otherwise never match on the first page of a pageload. Replay them through the
+        // matchers. Optional call: this chunk can run against an older bundled core.
+        const preStartEvents = this._instance.sessionRecording?.consumeEventsCapturedBeforeRecorderStarted?.() ?? []
+        if (eventTriggerCallback) {
+            for (const event of preStartEvents) {
+                eventTriggerCallback(event)
+            }
         }
     }
 
