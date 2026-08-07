@@ -1958,10 +1958,22 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         return lastTimestamp - firstTimestamp
     }
 
+    // A buffer holding only lifecycle custom events (e.g. a lone $session_starting pushed in on
+    // rotation) has no Meta/FullSnapshot to play back. Neither duration check below looks at
+    // event content, so without this a buffer like that can still cross a configured minimum
+    // duration on wall-clock/event-timestamp age alone and ship as an empty, unplayable recording.
+    private _hasOnlyLifecycleEvents = (): boolean => {
+        return this._buffer.data.length > 0 && this._buffer.data.every((event) => event?.type === EventType.Custom)
+    }
+
     private _isBelowMinimumDuration = (): boolean => {
         const minimumDuration = this._minimumDuration
         if (!isNumber(minimumDuration)) {
             return false
+        }
+
+        if (this._hasOnlyLifecycleEvents()) {
+            return true
         }
 
         const strictMode = this._instance.config.session_recording?.strictMinimumDuration ?? false
