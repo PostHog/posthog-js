@@ -16,11 +16,11 @@ import type { Extension } from './types'
 export class HistoryAutocapture implements Extension {
     private _instance: PostHog
     private _popstateListener: (() => void) | undefined
-    private _lastPathname: string
+    private _lastLocation: string
 
     constructor(instance: PostHog) {
         this._instance = instance
-        this._lastPathname = window?.location?.pathname || ''
+        this._lastLocation = this._getComparableLocation()
     }
 
     initialize() {
@@ -82,20 +82,32 @@ export class HistoryAutocapture implements Extension {
         })
     }
 
+    private _getComparableLocation(): string {
+        const location = window?.location
+
+        if (!location?.pathname) {
+            return ''
+        }
+
+        const hash = this._instance.config.disable_capture_url_hashes ? '' : location.hash
+
+        return location.pathname + location.search + hash
+    }
+
     private _capturePageview(navigationType: 'pushState' | 'replaceState' | 'popstate'): void {
         try {
-            const currentPathname = window?.location?.pathname
+            const currentLocation = this._getComparableLocation()
 
-            if (!currentPathname) {
+            if (!currentLocation) {
                 return
             }
 
-            // Only capture pageview if the pathname has changed and the feature is enabled
-            if (currentPathname !== this._lastPathname && this.isEnabled) {
+            // Only capture pageview if the URL (path, query, and hash) has changed and the feature is enabled
+            if (currentLocation !== this._lastLocation && this.isEnabled) {
                 this._instance.capture(EVENT_PAGEVIEW, { navigation_type: navigationType })
             }
 
-            this._lastPathname = currentPathname
+            this._lastLocation = currentLocation
         } catch (error) {
             logger.error(`Error capturing ${navigationType} pageview`, error)
         }

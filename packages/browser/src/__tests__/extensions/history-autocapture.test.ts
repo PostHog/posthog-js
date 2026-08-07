@@ -117,14 +117,15 @@ describe('HistoryAutocapture', () => {
             expect(capture).toHaveBeenCalledWith('$pageview', { navigation_type: 'pushState' })
         })
 
-        it('should not capture pageview when pathname does not change with pushState', () => {
+        it('should capture pageview when only the query string changes with pushState', () => {
             capture.mockClear()
 
             mockLocation.pathname = '/initial'
             mockLocation.search = '?param=value'
             window.history.pushState({ page: 1 }, 'Test Page', '/initial?param=value')
 
-            expect(capture).not.toHaveBeenCalled()
+            expect(capture).toHaveBeenCalledTimes(1)
+            expect(capture).toHaveBeenCalledWith('$pageview', { navigation_type: 'pushState' })
         })
 
         it('should not capture pageview when capture_pageview is disabled', () => {
@@ -153,7 +154,7 @@ describe('HistoryAutocapture', () => {
             expect(capture).toHaveBeenCalledWith('$pageview', { navigation_type: 'replaceState' })
         })
 
-        it('should not capture pageview when pathname does not change with replaceState', () => {
+        it('should capture pageview when only the hash changes with replaceState', () => {
             capture.mockClear()
 
             // Same pathname, only hash change
@@ -161,7 +162,8 @@ describe('HistoryAutocapture', () => {
             mockLocation.hash = '#section'
             window.history.replaceState({ page: 2 }, 'Test Page 2', '/initial#section')
 
-            expect(capture).not.toHaveBeenCalled()
+            expect(capture).toHaveBeenCalledTimes(1)
+            expect(capture).toHaveBeenCalledWith('$pageview', { navigation_type: 'replaceState' })
         })
     })
 
@@ -186,42 +188,69 @@ describe('HistoryAutocapture', () => {
     })
 
     describe('URL changes without pathname change', () => {
-        it('should not capture pageview when only query parameters change', () => {
+        it('should capture pageview when only query parameters change', () => {
             capture.mockClear()
 
             mockLocation.pathname = '/initial'
             mockLocation.search = '?param=value'
             window.history.pushState({ page: 1 }, 'Test Page', '/initial?param=value')
 
-            expect(capture).not.toHaveBeenCalled()
+            expect(capture).toHaveBeenCalledTimes(1)
+            expect(capture).toHaveBeenCalledWith('$pageview', { navigation_type: 'pushState' })
         })
 
-        it('should not capture pageview when only hash changes', () => {
+        it('should capture pageview when only hash changes', () => {
             capture.mockClear()
 
             mockLocation.pathname = '/initial'
             mockLocation.hash = '#section'
             window.history.pushState({ page: 1 }, 'Test Page', '/initial#section')
 
-            expect(capture).not.toHaveBeenCalled()
+            expect(capture).toHaveBeenCalledTimes(1)
+            expect(capture).toHaveBeenCalledWith('$pageview', { navigation_type: 'pushState' })
         })
 
-        it('should not capture pageview when query parameters change with replaceState', () => {
+        it('should capture pageview when query parameters change with replaceState', () => {
             capture.mockClear()
 
             mockLocation.pathname = '/initial'
             mockLocation.search = '?sort=asc'
             window.history.replaceState({ page: 1 }, 'Test Page', '/initial?sort=asc')
 
-            expect(capture).not.toHaveBeenCalled()
+            expect(capture).toHaveBeenCalledTimes(1)
+            expect(capture).toHaveBeenCalledWith('$pageview', { navigation_type: 'replaceState' })
         })
 
-        it('should not capture pageview when hash changes with popstate', () => {
+        it('should capture pageview when hash changes with popstate', () => {
             capture.mockClear()
 
             mockLocation.pathname = '/initial'
             mockLocation.hash = '#details'
             window.dispatchEvent(new PopStateEvent('popstate', { state: { page: 3 } }))
+
+            expect(capture).toHaveBeenCalledTimes(1)
+            expect(capture).toHaveBeenCalledWith('$pageview', { navigation_type: 'popstate' })
+        })
+
+        it('should not capture pageview when history method is called with an identical URL', () => {
+            capture.mockClear()
+
+            mockLocation.pathname = '/initial'
+            window.history.pushState({ page: 1 }, 'Test Page', '/initial')
+
+            expect(capture).not.toHaveBeenCalled()
+        })
+
+        it('should not capture a hash-only change when disable_capture_url_hashes is set', () => {
+            posthog.config.disable_capture_url_hashes = true
+            historyAutocapture.stop()
+            historyAutocapture = new HistoryAutocapture(posthog)
+            historyAutocapture.startIfEnabled()
+            capture.mockClear()
+
+            mockLocation.pathname = '/initial'
+            mockLocation.hash = '#section'
+            window.history.pushState({ page: 1 }, 'Test Page', '/initial#section')
 
             expect(capture).not.toHaveBeenCalled()
         })
@@ -262,7 +291,7 @@ describe('HistoryAutocapture', () => {
             expect(capture).toHaveBeenCalledWith('$pageview', { navigation_type: 'pushState' })
         })
 
-        it('should not capture pageview when only query and hash change together', () => {
+        it('should capture pageview when only query and hash change together', () => {
             capture.mockClear()
 
             mockLocation.pathname = '/initial'
@@ -270,7 +299,8 @@ describe('HistoryAutocapture', () => {
             mockLocation.hash = '#results'
             window.history.pushState({ page: 1 }, 'Filter Results', '/initial?filter=new#results')
 
-            expect(capture).not.toHaveBeenCalled()
+            expect(capture).toHaveBeenCalledTimes(1)
+            expect(capture).toHaveBeenCalledWith('$pageview', { navigation_type: 'pushState' })
         })
     })
 
