@@ -755,7 +755,7 @@ export interface IPostHog {
    *
    * @param shutdownTimeoutMs The shutdown timeout, in milliseconds. Defaults to 30000 (30s).
    */
-  shutdown(shutdownTimeoutMs?: number): void
+  shutdown(shutdownTimeoutMs?: number): Promise<void>
 
   /**
    * @description Waits for local evaluation to be ready, with an optional timeout.
