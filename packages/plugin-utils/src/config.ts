@@ -32,6 +32,12 @@ export interface PluginConfig {
         build?: string | number
         deleteAfterUpload?: boolean
         batchSize?: number
+        /**
+         * EXPERIMENTAL: don't bind uploaded symbol sets to a release; chunk ids become stable
+         * across rebuilds. Requires a posthog-cli that supports `--no-release-bind`.
+         * Defaults to the POSTHOG_NO_RELEASE_BIND env var.
+         */
+        noReleaseBind?: boolean
     }
 }
 
@@ -47,7 +53,16 @@ export interface ResolvedPluginConfig extends Omit<PluginConfig, 'envId' | 'proj
         build?: string
         deleteAfterUpload: boolean
         batchSize?: number
+        noReleaseBind: boolean
     }
+}
+
+/** Mirrors the CLI's boolish env parsing. */
+function boolishEnv(value: string | undefined): boolean {
+    if (value === undefined) {
+        return false
+    }
+    return !['false', 'f', 'no', 'n', 'off', '0', ''].includes(value.trim().toLowerCase())
 }
 
 export interface ResolveConfigOptions {
@@ -96,6 +111,7 @@ export function resolveConfig(options: PluginConfig, resolveOptions?: ResolveCon
             build: userSourcemaps.build !== undefined ? String(userSourcemaps.build) : undefined,
             deleteAfterUpload: userSourcemaps.deleteAfterUpload ?? true,
             batchSize: userSourcemaps.batchSize,
+            noReleaseBind: userSourcemaps.noReleaseBind ?? boolishEnv(process.env.POSTHOG_NO_RELEASE_BIND),
         },
     }
 }

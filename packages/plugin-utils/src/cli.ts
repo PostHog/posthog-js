@@ -36,6 +36,10 @@ export function buildSourcemapCliArgs(
         args.push('--batch-size', config.sourcemaps.batchSize.toString())
     }
 
+    if (config.sourcemaps.noReleaseBind) {
+        args.push('--no-release-bind')
+    }
+
     return args
 }
 

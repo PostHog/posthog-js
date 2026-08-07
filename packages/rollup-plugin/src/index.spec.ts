@@ -34,6 +34,24 @@ describe('posthogRollupPlugin', () => {
         expect(plugin.outputOptions.handler({} as OutputOptions)).toEqual({ sourcemap: true })
     })
 
+    it('emits debug ids only when noReleaseBind is on', () => {
+        const withFlag = testPlugin({ ...options, sourcemaps: { noReleaseBind: true } })
+        const withoutFlag = testPlugin(options)
+
+        expect(withFlag.outputOptions.handler({} as OutputOptions)).toEqual({
+            sourcemap: 'hidden',
+            sourcemapDebugIds: true,
+        })
+        expect(withoutFlag.outputOptions.handler({} as OutputOptions)).toEqual({ sourcemap: 'hidden' })
+    })
+
+    it('skips debug ids on rollup versions older than 4.28', () => {
+        const plugin = testPlugin({ ...options, sourcemaps: { noReleaseBind: true } })
+        const handler = plugin.outputOptions.handler.bind({ meta: { rollupVersion: '4.27.3' } })
+
+        expect(handler({} as OutputOptions)).toEqual({ sourcemap: 'hidden' })
+    })
+
     it('leaves sourcemap settings alone when disabled', () => {
         const plugin = testPlugin({
             personalApiKey: '',
