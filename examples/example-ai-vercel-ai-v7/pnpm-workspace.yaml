@@ -1,5 +1,9 @@
 pnpmfile: ../.pnpmfile.cjs
 minimumReleaseAge: 10080
+
 allowBuilds:
-  esbuild: set this to true or false
-  protobufjs: set this to true or false
+  esbuild: true
+  protobufjs: true
+
+blockExoticSubdeps: true
+trustPolicy: no-downgrade
