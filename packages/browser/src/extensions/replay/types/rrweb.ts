@@ -94,6 +94,7 @@ export type recordOptions = {
     maskTextFn?: MaskTextFn
     maskAllElementAttributes?: boolean
     maskAttributeFn?: MaskAttributeFn
+    maskMediaAudio?: boolean
     slimDOMOptions?: SlimDOMOptions | 'all' | true
     ignoreCSSAttributes?: Set<string>
     attributeFilter?: string[]

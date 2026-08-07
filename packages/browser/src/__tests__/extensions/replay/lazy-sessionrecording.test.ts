@@ -349,6 +349,33 @@ describe('Lazy SessionRecording', () => {
         window!.location = originalLocation
     })
 
+    describe('maskMediaAudio config passthrough', () => {
+        const startAndGetRecordOptions = () => {
+            sessionRecording = new SessionRecording(posthog)
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            const recordMock = assignableWindow.__PosthogExtensions__.rrweb.record as Mock
+            expect(recordMock).toHaveBeenCalledTimes(1)
+            return recordMock.mock.calls[0][0]
+        }
+
+        it('defaults maskMediaAudio to false', () => {
+            try {
+                expect(startAndGetRecordOptions().maskMediaAudio).toBe(false)
+            } finally {
+                sessionRecording.stopRecording()
+            }
+        })
+
+        it('passes maskMediaAudio: true through to rrweb.record when set in config', () => {
+            ;(posthog.config.session_recording as any).maskMediaAudio = true
+            try {
+                expect(startAndGetRecordOptions().maskMediaAudio).toBe(true)
+            } finally {
+                sessionRecording.stopRecording()
+            }
+        })
+    })
+
     describe('before remote config', () => {
         it('is disabled without persisted config', () => {
             expect(sessionRecording.status).toBe('disabled')
@@ -3005,6 +3032,7 @@ describe('Lazy SessionRecording', () => {
                 maskInputFn: undefined,
                 maskAllElementAttributes: false,
                 maskAttributeFn: undefined,
+                maskMediaAudio: false,
                 slimDOMOptions: {},
                 collectFonts: false,
                 plugins: [],

@@ -524,6 +524,7 @@ function serializeNode(
     maskInputFn: MaskInputFn | undefined;
     maskAllElementAttributes: boolean;
     maskAttributeFn: MaskAttributeFn | undefined;
+    maskMediaAudio: boolean;
     dataURLOptions?: DataURLOptions;
     inlineImages: boolean;
     recordCanvas: boolean;
@@ -547,6 +548,7 @@ function serializeNode(
     maskInputFn,
     maskAllElementAttributes = false,
     maskAttributeFn,
+    maskMediaAudio = false,
     dataURLOptions = {},
     inlineImages,
     recordCanvas,
@@ -588,6 +590,7 @@ function serializeNode(
         maskInputFn,
         maskAllElementAttributes,
         maskAttributeFn,
+        maskMediaAudio,
         dataURLOptions,
         inlineImages,
         recordCanvas,
@@ -720,6 +723,7 @@ function serializeElementNode(
     maskInputFn: MaskInputFn | undefined;
     maskAllElementAttributes: boolean;
     maskAttributeFn: MaskAttributeFn | undefined;
+    maskMediaAudio: boolean;
     dataURLOptions?: DataURLOptions;
     inlineImages: boolean;
     recordCanvas: boolean;
@@ -741,6 +745,7 @@ function serializeElementNode(
     maskInputFn,
     maskAllElementAttributes = false,
     maskAttributeFn,
+    maskMediaAudio = false,
     dataURLOptions = {},
     inlineImages,
     recordCanvas,
@@ -974,9 +979,18 @@ function serializeElementNode(
     generatedAttributeNames.add('rr_mediaState');
     mediaAttributes.rr_mediaCurrentTime = (n as HTMLMediaElement).currentTime;
     mediaAttributes.rr_mediaPlaybackRate = (n as HTMLMediaElement).playbackRate;
-    mediaAttributes.rr_mediaMuted = (n as HTMLMediaElement).muted;
+    // when `maskMediaAudio` is set, force the serialized element to be muted at
+    // volume 0 so the recorded state never carries audio - the replayer restores
+    // `rr_mediaMuted`/`rr_mediaVolume` at playback time, which would otherwise
+    // re-fetch and play the page's own media with sound. Visual playback state
+    // (`rr_mediaState`, currentTime, playbackRate) is left untouched.
+    mediaAttributes.rr_mediaMuted = maskMediaAudio
+      ? true
+      : (n as HTMLMediaElement).muted;
     mediaAttributes.rr_mediaLoop = (n as HTMLMediaElement).loop;
-    mediaAttributes.rr_mediaVolume = (n as HTMLMediaElement).volume;
+    mediaAttributes.rr_mediaVolume = maskMediaAudio
+      ? 0
+      : (n as HTMLMediaElement).volume;
   }
   // Scroll
   if (!newlyAddedElement) {
@@ -1205,6 +1219,7 @@ export function serializeNodeWithId(
     maskInputFn: MaskInputFn | undefined;
     maskAllElementAttributes?: boolean;
     maskAttributeFn?: MaskAttributeFn;
+    maskMediaAudio?: boolean;
     slimDOMOptions: SlimDOMOptions;
     dataURLOptions?: DataURLOptions;
     keepIframeSrcFn?: KeepIframeSrcFn;
@@ -1246,6 +1261,7 @@ export function serializeNodeWithId(
     maskInputFn,
     maskAllElementAttributes = false,
     maskAttributeFn,
+    maskMediaAudio = false,
     slimDOMOptions,
     dataURLOptions = {},
     inlineImages = false,
@@ -1303,6 +1319,7 @@ export function serializeNodeWithId(
     maskInputFn,
     maskAllElementAttributes,
     maskAttributeFn,
+    maskMediaAudio,
     dataURLOptions,
     inlineImages,
     recordCanvas,
@@ -1381,6 +1398,7 @@ export function serializeNodeWithId(
       maskInputFn,
       maskAllElementAttributes,
       maskAttributeFn,
+      maskMediaAudio,
       slimDOMOptions,
       dataURLOptions,
       inlineImages,
@@ -1455,6 +1473,7 @@ export function serializeNodeWithId(
             maskInputFn,
             maskAllElementAttributes,
             maskAttributeFn,
+            maskMediaAudio,
             slimDOMOptions,
             dataURLOptions,
             inlineImages,
@@ -1510,6 +1529,7 @@ export function serializeNodeWithId(
             maskInputFn,
             maskAllElementAttributes,
             maskAttributeFn,
+            maskMediaAudio,
             slimDOMOptions,
             dataURLOptions,
             inlineImages,
@@ -1579,6 +1599,7 @@ function snapshot(
     maskInputFn?: MaskInputFn;
     maskAllElementAttributes?: boolean;
     maskAttributeFn?: MaskAttributeFn;
+    maskMediaAudio?: boolean;
     slimDOM?: 'all' | boolean | SlimDOMOptions;
     dataURLOptions?: DataURLOptions;
     inlineImages?: boolean;
@@ -1626,6 +1647,7 @@ function snapshot(
     maskInputFn,
     maskAllElementAttributes = false,
     maskAttributeFn,
+    maskMediaAudio = false,
     slimDOM = false,
     dataURLOptions,
     preserveWhiteSpace,
@@ -1681,6 +1703,7 @@ function snapshot(
       maskInputFn,
       maskAllElementAttributes,
       maskAttributeFn,
+      maskMediaAudio,
       slimDOMOptions,
       dataURLOptions,
       inlineImages,

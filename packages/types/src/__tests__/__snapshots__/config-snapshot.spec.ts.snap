@@ -467,6 +467,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "null",
       "(name: string, value: string, element?: Element | undefined) => string"
     ],
+    "maskMediaAudio": [
+      "undefined",
+      "false",
+      "true"
+    ],
     "slimDOMOptions": [
       "undefined",
       "true",
