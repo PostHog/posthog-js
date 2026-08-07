@@ -487,6 +487,30 @@ export class PostHog implements PostHogInterface {
         )
     }
 
+    /**
+     * Replace a stale cookieless sentinel distinct_id with a fresh anonymous device id.
+     *
+     * Consent lives in shared cookie/localStorage, but the in-memory distinct_id does not. A tab
+     * that started in cookieless mode holds the `$posthog_cookieless` sentinel as its distinct_id;
+     * when consent is flipped to opted-in in another tab, this tab stops being cookieless
+     * (`_inCookielessMode()` becomes false) while the sentinel is still persisted. If that sentinel
+     * then escapes into a real event — or into `identify()` as `$anon_distinct_id` — the plugin
+     * server never hashes it and every affected browser collapses onto a single
+     * `$posthog_cookieless` person. Healing to a real device id keeps those users distinct.
+     */
+    private _healCookielessSentinelDistinctId(): void {
+        if (!this.persistence) {
+            return
+        }
+        const uuid = this.config.get_device_id(uuidv7())
+        this.register({
+            distinct_id: uuid,
+            $device_id: uuid,
+        })
+        // distinct id == $device_id is a proxy for an anonymous user
+        this.persistence.set_property(USER_STATE, USER_STATE_ANONYMOUS)
+    }
+
     // Legacy property to support existing usage - this isn't technically correct but it's what it has always been - a proxy for flags being loaded
     /** @deprecated Use `flagsEndpointWasHit` instead.  We migrated to using a new feature flag endpoint and the new method is more semantically accurate */
     public get decideEndpointWasHit(): boolean {
@@ -1382,6 +1406,14 @@ export class PostHog implements PostHogInterface {
         if (isUndefined(event_name) || !isString(event_name)) {
             logger.error('No event name provided to posthog.capture')
             return
+        }
+
+        // A tab that missed a cross-tab consent flip can still hold the cookieless sentinel as its
+        // distinct_id even though it is no longer in cookieless mode. Never let that sentinel leave
+        // as a real distinct_id (it would merge every affected browser onto one person) — heal it
+        // to a fresh anonymous device id first.
+        if (!this._inCookielessMode() && this.get_distinct_id() === COOKIELESS_SENTINEL_VALUE) {
+            this._healCookielessSentinelDistinctId()
         }
 
         const isBot = !this.config.opt_out_useragent_filter && this._is_bot()
@@ -2696,6 +2728,14 @@ export class PostHog implements PostHogInterface {
 
         if (!this._requirePersonProcessing('posthog.identify')) {
             return
+        }
+
+        // If this tab is still holding the cookieless sentinel as its distinct_id (e.g. it missed a
+        // cross-tab consent flip), don't let it leak into $identify as $anon_distinct_id — that would
+        // merge every such user into a single '$posthog_cookieless' person. Self-heal to a fresh
+        // device id so the identify links a real anonymous id to the new identity instead.
+        if (this.get_distinct_id() === COOKIELESS_SENTINEL_VALUE) {
+            this._healCookielessSentinelDistinctId()
         }
 
         const previous_distinct_id = this.get_distinct_id()
