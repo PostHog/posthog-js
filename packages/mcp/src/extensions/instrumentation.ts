@@ -34,7 +34,7 @@ import type { LoggerFn } from './logger'
 import { buildCapturedMcpParameters } from './mcp-payloads'
 import { readRequestHandlerMethod } from './mcp-sdk-compat'
 import { getRequestHeaders } from './request-headers'
-import { getSessionId, getSessionInfo, newSessionId } from './session'
+import { getSessionId, getSessionInfo, isModernEraRequest, newSessionId } from './session'
 import { encodeSessionId, readMcpSessionHeader, writeSessionIdToTransport } from './session-token'
 import { getReportMissingToolDescriptor, resolveMissingCapabilityToolName } from './tools'
 import { applyResolvedMetadata, isToolResultError } from './tracing-helpers'
@@ -707,6 +707,14 @@ function mintStatelessSessionOnInitialize(
     const headers = getRequestHeaders(extra)
     if (!headers) {
       return undefined // not an HTTP transport (stdio/in-memory) — nothing to mint into
+    }
+    // 2026-07-28 removed sessions from the protocol: a server MUST NOT mint or
+    // echo `Mcp-Session-Id` under it. Today that era never reaches here anyway,
+    // because it has no `initialize` — but relying on that is relying on an SDK
+    // routing detail to keep us spec-compliant, so the era is asked directly.
+    // Per request, never per server: the same v2 server serves both.
+    if (isModernEraRequest(request, extra, server)) {
+      return undefined
     }
     if (readMcpSessionHeader(headers)) {
       return undefined // client already replays a session id (ours or the transport's)
