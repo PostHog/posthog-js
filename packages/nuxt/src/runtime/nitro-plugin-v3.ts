@@ -9,6 +9,11 @@ export default definePlugin((nitroApp) => {
       nitroApp.hooks.hook('error', (error, { event }) =>
         handler(error, event ? { path: new URL(event.req.url).pathname, method: event.req.method } : undefined),
       ),
-    onClose: handler => nitroApp.hooks.hook('close', handler),
+    onClose: (handler) => {
+      let shutdown
+      const close = () => (shutdown ??= handler())
+      nitroApp.hooks.hook('close', close)
+      globalThis.process?.once?.('beforeExit', close)
+    },
   })
 })
