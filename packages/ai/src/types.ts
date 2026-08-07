@@ -95,6 +95,10 @@ export interface TokenUsage {
   reasoningTokens?: unknown // Use unknown since various providers return different types
   cacheReadInputTokens?: unknown // Use unknown for provider flexibility
   cacheCreationInputTokens?: unknown // Use unknown for provider flexibility
+  // Whether cache tokens are counted separately from inputTokens. Providers that report
+  // them as a subset of inputTokens set this false. Left undefined when the provider's
+  // accounting model is not known, in which case ingestion infers it from the counts.
+  cacheReportingExclusive?: boolean
   webSearchCount?: number // Count of web search queries/calls used
   rawUsage?: unknown // Raw provider usage metadata for backend processing
 }
