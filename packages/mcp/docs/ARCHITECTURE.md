@@ -347,12 +347,15 @@ The SDK does **not**: call an LLM, inspect tool arguments, build heuristics, or 
 
    The same applies to any callback that reads request headers, `identify` most
    of all. An implementation written against v1's `extra.requestInfo.headers`
-   returns `null` on a v2 server and every event goes out anonymous, with
-   nothing logged — v2 puts the HTTP request at `extra.http.req` instead, and a
-   `Headers` object does not answer to property access:
+   resolves to `null` on a v2 server and every event goes out anonymous — v2 puts
+   the HTTP request at `extra.http.req` instead, and a `Headers` object does not
+   answer to property access:
 
    ```ts
-   const authHeader = extra?.requestInfo?.headers?.authorization ?? extra?.http?.req?.headers?.get('authorization')
+   identify: async (request, extra) => {
+     const authHeader = extra?.requestInfo?.headers?.authorization ?? extra?.http?.req?.headers?.get('authorization')
+     return authHeader ? { distinctId: parseSubject(authHeader) } : null
+   }
    ```
 
 3. **LLM-derived** (async, expensive — push back unless the value is high). Sits on the hot path of every uncontextualized tool call.

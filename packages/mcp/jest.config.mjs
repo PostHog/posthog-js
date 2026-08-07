@@ -3,7 +3,6 @@ export default {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
   modulePathIgnorePatterns: ['<rootDir>/src/__tests__/test-utils/*'],
-  setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   collectCoverage: true,
   clearMocks: true,
   fakeTimers: { enableGlobally: false },

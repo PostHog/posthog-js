@@ -162,15 +162,23 @@ function getActiveAnalyticsParameterOwnership(
     // JSON Schema can answer it — an override is built from the live registry,
     // which on the high-level path holds Zod.
     //
-    // The cache is process-scoped, so the per-request server pattern —
-    // `tools/list` on one instance, `tools/call` on a cold one — answers this
-    // too: whichever instance served the listing answers for the rest.
+    // The cache is per-instance, so this is not merely "before the first
+    // `tools/list`": an instance that never serves a listing never writes the
+    // mirror at all. That is the per-request server pattern — `tools/list` lands
+    // on one instance, `tools/call` on a cold one — where the handle falls back
+    // to the `content` block and a structuredContent-only client misses it.
     //
-    // It still fails closed when no instance has served one yet. Writing a key
-    // the advertised schema did not declare fails the *entire* tool result under
-    // `additionalProperties: false`, so guessing costs the caller their result,
-    // while not guessing costs us one delivery channel — the handle falls back to
-    // the `content` block, which a structuredContent-only client misses.
+    // Failing closed is deliberate. Writing a key the advertised schema did not
+    // declare fails the *entire* tool result under `additionalProperties: false`,
+    // so guessing costs the caller their result, while not guessing costs us one
+    // delivery channel.
+    //
+    // Sharing the cache across instances keyed on server name+version was tried
+    // and reverted: two servers sharing a name and version but advertising
+    // different schemas for one tool name then answer each other, and the wrong
+    // answer *deletes* a real argument the tool requires and reports its value as
+    // `$mcp_intent`. Ownership has to come from something that actually knows this
+    // instance's schema — see the follow-up issue.
     outputInstructions: data.options.enableConversationId === true && listed?.outputInstructions === true,
   }
 }
@@ -427,16 +435,21 @@ export function patchRequestHandlers(server: MCPServerLike, patches: Record<stri
 
   // Monkey patch dynamically added handlers (registered after instrument()).
   const originalSetRequestHandler = server.setRequestHandler.bind(server)
-  server.setRequestHandler = ((requestSchema: unknown, originalHandler: MCPRequestHandler) => {
+  // Variadic, and forwards every argument untouched. SDK v2 has a three-argument
+  // form for custom methods — `setRequestHandler(method, {params, result}, handler)`
+  // — and a two-parameter wrapper silently drops the handler, so the SDK sees the
+  // schemas object in its place and throws `handler is required`. Only the
+  // registration is our business; the shape of it is the SDK's.
+  server.setRequestHandler = ((requestSchema: unknown, ...rest: unknown[]) => {
     const handlerName = readRequestHandlerMethod(requestSchema)
     const patch = handlerName ? patches[handlerName] : undefined
     if (!patch || !handlerName) {
-      return originalSetRequestHandler(requestSchema, originalHandler)
+      return originalSetRequestHandler(requestSchema, ...(rest as [MCPRequestHandler]))
     }
 
     // Register first so the MCP SDK's request/result validation stays inside
     // our analytics wrapper, matching handlers that existed before instrument().
-    const result = originalSetRequestHandler(requestSchema, originalHandler)
+    const result = originalSetRequestHandler(requestSchema, ...(rest as [MCPRequestHandler]))
     const registeredHandler = server._requestHandlers.get(handlerName)
     if (registeredHandler) {
       rememberOriginalRequestHandler(server, handlerName, registeredHandler)

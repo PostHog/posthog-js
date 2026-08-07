@@ -4,7 +4,6 @@
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
 import type { PostHog } from 'posthog-node'
-import { getSharedToolOwnershipCache } from './extensions/analytics-parameters'
 import { isCompatibleServerType, isHighLevelServer } from './extensions/compatibility'
 import { McpEventSink } from './extensions/sink'
 import { MCPAnalyticsEventType } from './extensions/event-types'
@@ -145,7 +144,7 @@ function buildTrackingData(
     sessionId: newSessionId(),
     lastActivity: new Date(),
     identifiedSessions: new IdentityCache(),
-    toolAnalyticsParameterOwnership: getSharedToolOwnershipCache(lowLevelServer._serverInfo),
+    toolAnalyticsParameterOwnership: new Map(),
     toolCategories: new Map<string, string>(),
     toolDescriptions: new Map<string, string>(),
     sessionInfo: getSessionInfo(lowLevelServer, undefined),

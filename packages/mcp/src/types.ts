@@ -211,12 +211,22 @@ export interface CompatibleRequestInfoLike {
 }
 
 /**
+ * The part of a web-standard `Headers` a callback actually needs. Declared
+ * structurally rather than as lib.dom's `Headers` so the package keeps building
+ * without DOM types.
+ */
+export interface CompatibleHeadersLike {
+  get(name: string): string | null
+  entries?(): Iterable<[string, string]>
+}
+
+/**
  * How MCP SDK v2 surfaces the HTTP request: the whole web-standard `Request`,
  * in place of v1's `requestInfo`. Typed structurally so the SDK stays a
  * type-only dependency and neither major has to be installed to build.
  */
 export interface CompatibleHttpContextLike {
-  req?: { headers?: unknown }
+  req?: { headers?: CompatibleHeadersLike }
   [key: string]: unknown
 }
 
