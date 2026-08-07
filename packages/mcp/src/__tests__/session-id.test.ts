@@ -1,8 +1,8 @@
 import { instrument } from '../index'
 import { getServerTrackingData } from '../extensions/internal'
-import { deriveSessionIdFromMCPSession, getSessionId } from '../extensions/session'
+import { deriveSessionIdFromMCPSession, getSessionId, isModernEraRequest } from '../extensions/session'
 import { MCP_SESSION_HEADER, encodeSessionId } from '../extensions/session-token'
-import type { HighLevelMCPServerLike } from '../types'
+import type { CompatibleRequestHandlerExtra, HighLevelMCPServerLike, MCPRequestLike } from '../types'
 import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
 
@@ -348,5 +348,43 @@ describe('Session ID Management', () => {
 
       await eventCapture.stop()
     })
+  })
+})
+
+/**
+ * Which protocol revision *this request* is governed by. It decides whether a
+ * session header may be minted at all, so it has to be per request: one MCP SDK
+ * v2 server serves both eras, and v2's exported `LATEST_PROTOCOL_VERSION` still
+ * reads `2025-11-25`, so no module constant describes the traffic.
+ */
+describe('isModernEraRequest', () => {
+  const call = (request: MCPRequestLike, extra?: CompatibleRequestHandlerExtra) => isModernEraRequest(request, extra)
+
+  it('reads the version an initialize request declares', () => {
+    expect(call({ method: 'initialize', params: { protocolVersion: '2026-07-28' } })).toBe(true)
+    expect(call({ method: 'initialize', params: { protocolVersion: '2025-11-25' } })).toBe(false)
+  })
+
+  it('treats any later revision as modern — sessions were removed, not re-added', () => {
+    expect(call({ method: 'initialize', params: { protocolVersion: '2027-03-01' } })).toBe(true)
+  })
+
+  it('falls back to the identity chain when the request body declares nothing', () => {
+    const viaHeader = { requestInfo: { headers: { 'mcp-protocol-version': '2026-07-28' } } }
+    expect(call({ method: 'tools/call', params: { name: 'echo' } }, viaHeader as CompatibleRequestHandlerExtra)).toBe(
+      true
+    )
+
+    const viaEnvelope = {
+      mcpReq: { envelope: { 'io.modelcontextprotocol/protocolVersion': '2026-07-28' } },
+    } as unknown as CompatibleRequestHandlerExtra
+    expect(call({ method: 'tools/call', params: { name: 'echo' } }, viaEnvelope)).toBe(true)
+  })
+
+  it('treats an unknown version as legacy', () => {
+    // A v1 client on a transport that has always carried a session header.
+    // Guessing "modern" here would take that away from them.
+    expect(call({ method: 'tools/call', params: { name: 'echo' } })).toBe(false)
+    expect(call({ method: 'tools/call', params: { name: 'echo' } }, { requestInfo: { headers: {} } })).toBe(false)
   })
 })
