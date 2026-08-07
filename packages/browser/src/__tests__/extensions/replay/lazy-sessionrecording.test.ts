@@ -4058,6 +4058,28 @@ describe('Lazy SessionRecording', () => {
             }
         })
 
+        it('does not inject the mutation throttle warning into the recording', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            const recorder = sessionRecording['_lazyLoadedSessionRecording']
+            const mutationThrottler = recorder['_mutationThrottler']
+            expect(mutationThrottler).toBeDefined()
+
+            const logSpy = jest.spyOn(recorder, 'log')
+
+            // Simulate the throttler blocking a busy node. The warning belongs in the page
+            // console only, never as an rrweb console event that lands in the replay inspector.
+            mutationThrottler!['_options'].onBlockedNode?.(123, null)
+
+            expect(logSpy).not.toHaveBeenCalled()
+        })
+
         it('clears queued rrweb events on stop', () => {
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
