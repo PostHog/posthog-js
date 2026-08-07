@@ -46,14 +46,17 @@
   "devDependencies": {
     "@babel/preset-env": "catalog:",
     "@babel/preset-typescript": "catalog:",
+    "@modelcontextprotocol/core": "2.0.0",
     "@modelcontextprotocol/sdk": "~1.29.0",
+    "@modelcontextprotocol/server": "2.0.0",
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@rslib/core": "catalog:",
     "@types/jest": "catalog:",
     "@types/node": "^20.0.0",
     "jest": "catalog:",
     "posthog-node": "workspace:^",
-    "zod": "^3.25.0"
+    "zod": "^3.25.0",
+    "zod4": "npm:zod@^4.4.3"
   },
   "peerDependencies": {
     "@modelcontextprotocol/sdk": ">=1.26.0",

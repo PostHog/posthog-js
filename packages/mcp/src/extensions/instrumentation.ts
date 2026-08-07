@@ -32,9 +32,9 @@ import { resolveToolCallIntent, setEventIntent, setExplicitContextIntent } from 
 import { getServerTrackingData, handleIdentify, setServerTrackingData, withIdentity } from './internal'
 import type { LoggerFn } from './logger'
 import { buildCapturedMcpParameters } from './mcp-payloads'
-import { getLiteralValue, getObjectShape } from './mcp-sdk-compat'
+import { readRequestHandlerMethod } from './mcp-sdk-compat'
 import { getSessionId, getSessionInfo, newSessionId } from './session'
-import { encodeSessionId, readMcpSessionHeader, writeSessionIdToTransport } from './session-token'
+import { encodeSessionId, readMcpSessionHeader, readRequestHeaders, writeSessionIdToTransport } from './session-token'
 import { getReportMissingToolDescriptor, resolveMissingCapabilityToolName } from './tools'
 import { applyResolvedMetadata, isToolResultError } from './tracing-helpers'
 
@@ -171,8 +171,14 @@ function getActiveAnalyticsParameterOwnership(
     // Failing closed is deliberate. Writing a key the advertised schema did not
     // declare fails the *entire* tool result under `additionalProperties: false`,
     // so guessing costs the caller their result, while not guessing costs us one
-    // delivery channel. The fix is a process-scoped ownership cache, so a listing
-    // served by any instance answers for the rest — not a per-call guess.
+    // delivery channel.
+    //
+    // Sharing the cache across instances keyed on server name+version was tried
+    // and reverted: two servers sharing a name and version but advertising
+    // different schemas for one tool name then answer each other, and the wrong
+    // answer *deletes* a real argument the tool requires and reports its value as
+    // `$mcp_intent`. Ownership has to come from something that actually knows this
+    // instance's schema — see the follow-up issue.
     outputInstructions: data.options.enableConversationId === true && listed?.outputInstructions === true,
   }
 }
@@ -429,17 +435,21 @@ export function patchRequestHandlers(server: MCPServerLike, patches: Record<stri
 
   // Monkey patch dynamically added handlers (registered after instrument()).
   const originalSetRequestHandler = server.setRequestHandler.bind(server)
-  server.setRequestHandler = ((requestSchema: unknown, originalHandler: MCPRequestHandler) => {
-    const shape = getObjectShape(requestSchema)
-    const handlerName = shape?.method ? getLiteralValue(shape.method) : undefined
-    const patch = typeof handlerName === 'string' ? patches[handlerName] : undefined
-    if (!patch || typeof handlerName !== 'string') {
-      return originalSetRequestHandler(requestSchema, originalHandler)
+  // Variadic, and forwards every argument untouched. SDK v2 has a three-argument
+  // form for custom methods — `setRequestHandler(method, {params, result}, handler)`
+  // — and a two-parameter wrapper silently drops the handler, so the SDK sees the
+  // schemas object in its place and throws `handler is required`. Only the
+  // registration is our business; the shape of it is the SDK's.
+  server.setRequestHandler = ((requestSchema: unknown, ...rest: unknown[]) => {
+    const handlerName = readRequestHandlerMethod(requestSchema)
+    const patch = handlerName ? patches[handlerName] : undefined
+    if (!patch || !handlerName) {
+      return originalSetRequestHandler(requestSchema, ...(rest as [MCPRequestHandler]))
     }
 
     // Register first so the MCP SDK's request/result validation stays inside
     // our analytics wrapper, matching handlers that existed before instrument().
-    const result = originalSetRequestHandler(requestSchema, originalHandler)
+    const result = originalSetRequestHandler(requestSchema, ...(rest as [MCPRequestHandler]))
     const registeredHandler = server._requestHandlers.get(handlerName)
     if (registeredHandler) {
       rememberOriginalRequestHandler(server, handlerName, registeredHandler)
@@ -684,8 +694,8 @@ function mintStatelessSessionOnInitialize(
   extra: CompatibleRequestHandlerExtra | undefined
 ): string | undefined {
   try {
-    const headers = extra?.requestInfo?.headers
-    if (!headers || typeof headers !== 'object') {
+    const headers = readRequestHeaders(extra)
+    if (!headers) {
       return undefined // not an HTTP transport (stdio/in-memory) — nothing to mint into
     }
     if (readMcpSessionHeader(headers)) {

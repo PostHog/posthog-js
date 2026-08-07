@@ -57,10 +57,13 @@ export function isCompatibleServerType(server: unknown, logger: LoggerFn): MCPSe
         'PostHog MCP analytics SDK compatibility error: High-level server must have _registeredTools object. This requires MCP SDK v1.11 or higher.'
       )
     }
-    if (typeof server.tool !== 'function') {
+    // `tool()` on SDK v1, `registerTool()` on v2, which dropped the former. We
+    // call neither — this only asks "is this an MCP server wrapper, or some
+    // unrelated object that happens to have a `.server`?" — so either answers it.
+    if (typeof server.tool !== 'function' && typeof server.registerTool !== 'function') {
       logCompatibilityWarning(logger)
       throw new Error(
-        'PostHog MCP analytics SDK compatibility error: High-level server must have tool() method. This requires MCP SDK v1.11 or higher.'
+        'PostHog MCP analytics SDK compatibility error: High-level server must have a tool() or registerTool() method. This requires MCP SDK v1.11 or higher.'
       )
     }
 

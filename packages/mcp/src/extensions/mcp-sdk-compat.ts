@@ -143,6 +143,23 @@ export function getObjectShape(schema: unknown): Record<string, unknown> | undef
   return rawShape
 }
 
+/**
+ * Reads the method a `setRequestHandler` registration is for.
+ *
+ * The two SDK majors disagree on what the first argument is: v1 takes the Zod
+ * schema for the request and carries the method as a literal on its shape, v2
+ * takes the method string itself. A registration we can't name is one we can't
+ * match against a patch, which is how a v2 handler ends up unwrapped.
+ */
+export function readRequestHandlerMethod(requestSchema: unknown): string | undefined {
+  if (typeof requestSchema === 'string') {
+    return requestSchema
+  }
+  const shape = getObjectShape(requestSchema)
+  const method = shape?.method ? getLiteralValue(shape.method) : undefined
+  return typeof method === 'string' ? method : undefined
+}
+
 export function getLiteralValue(schema: unknown): unknown {
   if (!schema || typeof schema !== 'object') {
     return

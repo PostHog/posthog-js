@@ -8,7 +8,18 @@
  * client identity — any pod can read them back from the header alone.
  *
  * The token is unsigned: it holds only what the client already self-reports.
+ *
+ * Legacy-era only, and permanently so. The 2026-07-28 revision removes
+ * protocol-level sessions: there is no `initialize` to mint at, and a server on
+ * that revision must "ignore [an `Mcp-Session-Id` header], and do not mint or
+ * echo session IDs". Modern-era identity rides `_meta` on every request instead
+ * (see `client-identity.ts`), and cross-call state is the agent-carried
+ * `conversation_id` handle. Everything here exists to serve 2025-era traffic,
+ * which the SDK v2 `legacy` era still accepts — the mint stays gated behind
+ * `initialize`, so it cannot fire on a modern request.
  */
+
+import type { CompatibleRequestHandlerExtra } from '../types'
 
 export const MCP_SESSION_HEADER = 'mcp-session-id'
 
@@ -100,9 +111,41 @@ export function decodeSessionId(value: unknown): SessionTokenPayload | null {
   return payload
 }
 
+interface WebHeadersLike {
+  entries(): Iterable<[string, string]>
+}
+
+function isWebHeaders(value: unknown): value is WebHeadersLike {
+  return !!value && typeof value === 'object' && typeof (value as WebHeadersLike).entries === 'function'
+}
+
 /**
- * Reads the `mcp-session-id` header off `extra.requestInfo.headers`. The SDK
- * transports lowercase header keys; the fallback scan covers hand-built extras.
+ * The HTTP request headers behind this call, whichever SDK major built the
+ * `extra`, or undefined on a transport that carries no HTTP request at all
+ * (stdio, in-memory).
+ *
+ * v1 attaches them as a plain object on `requestInfo`. v2 hands over the whole
+ * request as `http.req`, a web-standard `Request`, so its headers are a
+ * `Headers` — an object whose keys are invisible to `Object.keys`. Reading v1's
+ * shape against a v2 extra therefore finds nothing and reports "not HTTP",
+ * which silently costs every stateless server its session token.
+ */
+export function readRequestHeaders(
+  extra: CompatibleRequestHandlerExtra | undefined
+): Record<string, unknown> | undefined {
+  // Normalize by shape rather than by source: a framework is free to hand us a
+  // plain object where the SDK would hand us `Headers`, and reading the wrong
+  // one of those fails silently rather than loudly.
+  const headers = extra?.http?.req?.headers ?? extra?.requestInfo?.headers
+  if (isWebHeaders(headers)) {
+    return Object.fromEntries(headers.entries())
+  }
+  return headers && typeof headers === 'object' ? (headers as Record<string, unknown>) : undefined
+}
+
+/**
+ * Reads the `mcp-session-id` header out of a header bag. The SDK transports
+ * lowercase header keys; the fallback scan covers hand-built extras.
  */
 export function readMcpSessionHeader(headers: unknown): string | undefined {
   if (!headers || typeof headers !== 'object') {
