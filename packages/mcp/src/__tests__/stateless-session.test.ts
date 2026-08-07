@@ -171,30 +171,18 @@ describe('Stateless session minting', () => {
      * a host that routes an initialize-shaped request on a modern connection is
      * still answered correctly.
      */
-    it('does not mint for a request that declares 2026-07-28', async () => {
-      const { server, lowLevel } = createPod('pod-modern')
+    it.each([
+      ['2026-07-28', 'the revision that removed sessions'],
+      ['2027-03-01', 'any later revision — they were removed, not re-added'],
+    ])('does not mint for a request declaring %s (%s)', async (protocolVersion) => {
+      const { server, lowLevel } = createPod(`pod-${protocolVersion}`)
       const transport: { sessionId?: string } = {}
       setFakeTransport(server, transport)
 
       await invokeHandler(
         lowLevel,
         'initialize',
-        { ...INITIALIZE_REQUEST, params: { ...INITIALIZE_REQUEST.params, protocolVersion: '2026-07-28' } },
-        { requestInfo: { headers: {} } }
-      )
-
-      expect(transport.sessionId).toBeUndefined()
-    })
-
-    it('does not mint for a revision newer than 2026-07-28 either', async () => {
-      const { server, lowLevel } = createPod('pod-future')
-      const transport: { sessionId?: string } = {}
-      setFakeTransport(server, transport)
-
-      await invokeHandler(
-        lowLevel,
-        'initialize',
-        { ...INITIALIZE_REQUEST, params: { ...INITIALIZE_REQUEST.params, protocolVersion: '2027-03-01' } },
+        { ...INITIALIZE_REQUEST, params: { ...INITIALIZE_REQUEST.params, protocolVersion } },
         { requestInfo: { headers: {} } }
       )
 
