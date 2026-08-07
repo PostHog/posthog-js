@@ -7,16 +7,54 @@ import { version } from '../version'
 import type {
   CompatibleRequestHandlerExtra,
   MCPAnalyticsData,
+  MCPRequestLike,
   MCPServerLike,
   ServerClientInfoLike,
   SessionInfo,
 } from '../types'
 import { INACTIVITY_TIMEOUT_IN_MINUTES } from './constants'
 import { deterministicPrefixedId, newPrefixedId } from './ids'
+import { resolveClientIdentity } from './client-identity'
 import { getServerTrackingData, setServerTrackingData } from './internal'
 import { getRequestHeaders } from './request-headers'
 import { decodeSessionId, readMcpSessionHeader } from './session-token'
 import type { SessionTokenPayload } from './session-token'
+
+/**
+ * The revision that removed protocol-level sessions. A request declaring this or
+ * anything later must not be answered with an `Mcp-Session-Id`.
+ *
+ * Compared as a string, which is safe and stable because MCP revisions are
+ * ISO dates: any future revision sorts above this one and is treated as modern,
+ * which is the right default — sessions were removed, not re-added.
+ */
+export const MODERN_PROTOCOL_REVISION = '2026-07-28'
+
+/**
+ * Whether *this request* is governed by 2026-07-28 or later.
+ *
+ * Era is a property of the request, never of the installed SDK: one v2 server
+ * serves both, request by request, and v2's exported `LATEST_PROTOCOL_VERSION`
+ * still reads `2025-11-25`. So the version is resolved from the request itself —
+ * an `initialize` body declares the version it is asking for, and every other
+ * request carries it in the envelope, `_meta`, or the `MCP-Protocol-Version`
+ * header — and only then compared.
+ *
+ * Unknown means legacy. A request that declares nothing is a v1 client on a
+ * transport that has always had a session header, and taking it away from them
+ * would be the regression.
+ */
+export function isModernEraRequest(
+  request: MCPRequestLike,
+  extra?: CompatibleRequestHandlerExtra,
+  server?: MCPServerLike
+): boolean {
+  const requested = request.params?.protocolVersion
+  const version =
+    (typeof requested === 'string' && requested.length > 0 ? requested : undefined) ??
+    resolveClientIdentity({ request, extra, server })?.protocolVersion
+  return !!version && version >= MODERN_PROTOCOL_REVISION
+}
 
 export function newSessionId(): string {
   return newPrefixedId('ses')

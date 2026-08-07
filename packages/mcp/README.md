@@ -73,6 +73,27 @@ Details: [docs/ARCHITECTURE.md §4](./docs/ARCHITECTURE.md).
 `@modelcontextprotocol/{core,server,client}` v2 — and on both the high-level `McpServer` and the
 low-level `Server`. Shapes are detected at runtime, so neither major is a dependency here.
 
+### Sessions and client identity on a v2 server
+
+Protocol revision is a property of each **request**, not of the server: a v2 server serves both
+`2025-11-25` and `2026-07-28` traffic, and the SDK is instrumented once for both.
+
+- **On `2026-07-28`** there is no `initialize` and no session header — the revision removed
+  protocol-level sessions, and this SDK will not mint one. Session correlation therefore comes from
+  `enableConversationId`, which is **opt-in**. Without it every request is its own `$session_id`.
+- **On `2025-11-25`**, the session id and the client's name and version are exchanged once at
+  `initialize`. If your server builds a fresh `McpServer` per HTTP request — which
+  `createMcpHandler` does by default — the instance serving a later `tools/call` never saw that
+  handshake. The SDK bridges it by minting the `Mcp-Session-Id` token described above, which the
+  client replays on every request.
+
+  **That token only reaches the client if the transport builds response headers _after_ the handler
+  runs.** `@rekog/mcp-nest` with `enableJsonResponse: true` does; `createMcpHandler`'s legacy leg
+  does not, and there is no setting we can reach from inside the server. On that leg, expect
+  `$mcp_client_name` and `$mcp_client_version` to be absent for `2025-11-25` traffic — the protocol
+  version still arrives, because clients send it on the `MCP-Protocol-Version` header of every
+  request.
+
 ### Reading request headers in a callback
 
 If your `identify`, `intentFallback`, `eventProperties` or `beforeSend` reads HTTP headers, it has
