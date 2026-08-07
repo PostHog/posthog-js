@@ -1,5 +1,16 @@
 # @posthog/mcp
 
+## 0.10.9
+
+### Patch Changes
+
+- [#4461](https://github.com/PostHog/posthog-js/pull/4461) [`f457521`](https://github.com/PostHog/posthog-js/commit/f4575212113fb48f73a23695fa883aa6e06e8447) Thanks [@gesh](https://github.com/gesh)! - Wrap request handlers registered with a method string, and stop breaking three-argument registrations. MCP TypeScript SDK v2 calls `setRequestHandler('tools/call', handler)` where v1 passed a Zod schema, so `instrument()` could not name those registrations and left them unwrapped — a handler bound after `instrument()` silently replaced the analytics wrapper, and no `$mcp_tool_call` or `$mcp_tools_list` was captured. Frameworks that attach handlers post-construction, such as `@rekog/mcp-nest`, do exactly this on every request.
+
+  The patched `setRequestHandler` now also forwards every argument it is given. v2's three-argument form for custom methods — `setRequestHandler(method, { params, result }, handler)` — previously lost its handler and threw `setRequestHandler: handler is required`, taking down the host server rather than just instrumentation. (2026-08-07)
+
+- [#4450](https://github.com/PostHog/posthog-js/pull/4450) [`69e47bd`](https://github.com/PostHog/posthog-js/commit/69e47bd1b1f276258a25958f2608d0e8a2f88f5c) Thanks [@gesh](https://github.com/gesh)! - Register the synthetic `tools/call` fallback by writing into the server's handler map instead of calling `setRequestHandler`. Instrumenting a low-level `Server` that never declared a `tools` capability no longer fails with `Server does not support tools` and leaves instrumentation half-applied — it now instruments cleanly, and answers a call for a tool no dispatcher claims with `Unknown tool: <name>`. This also removes the last runtime `@modelcontextprotocol/sdk` import from the published bundle; the SDK is now referenced only as a type.
+  (2026-08-07)
+
 ## 0.10.8
 
 ### Patch Changes
