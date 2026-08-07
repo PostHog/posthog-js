@@ -3,7 +3,6 @@
 // Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
-import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import type { CompatibleRequestHandlerExtra, MCPRequestLike, MCPServerLike } from '../types'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
@@ -13,6 +12,7 @@ import {
   handleInitializeRequest,
   handleListToolsRequest,
   patchRequestHandlers,
+  registerFallbackRequestHandler,
   captureToolCall,
   isToolAdvertised,
   type HandlerPatch,
@@ -34,28 +34,33 @@ export function instrumentLowLevelServer(server: MCPServerLike, logger: LoggerFn
   try {
     // Patch already existing handlers, and patch setRequestHandler to capture dynamically created handlers.
     const hadCallToolHandler = server._requestHandlers.has('tools/call')
+    const traceToolCall: HandlerPatch = (server, originalHandler, request, extra) =>
+      handleToolCallRequest(server, originalHandler, request, extra, logger)
     const handlers: Record<string, HandlerPatch> = {
       initialize: (server, originalHandler, request, extra) =>
         handleInitializeRequest(server, originalHandler, request, extra, logger),
       'tools/list': (server, originalHandler, request, extra) =>
         handleListToolsRequest(server, originalHandler, request, extra, logger),
-      'tools/call': (server, originalHandler, request, extra) =>
-        handleToolCallRequest(server, originalHandler, request, extra, logger),
+      'tools/call': traceToolCall,
     }
     patchRequestHandlers(server, handlers)
 
     if (!hadCallToolHandler) {
-      // Register a raw fallback through the patched setter so reportMissing works
-      // even before an application dispatcher is attached. A later registration
-      // replaces it and is wrapped by patchRequestHandlers.
-      server.setRequestHandler(CallToolRequestSchema, async (request) => {
-        throw new Error(`Unknown tool: ${request.params?.name || 'unknown'}`)
-      })
+      // Register a raw fallback so reportMissing works even before an application
+      // dispatcher is attached. A later registration replaces it and is wrapped by
+      // the patched setRequestHandler. Written into the handler map directly — see
+      // registerFallbackRequestHandler for why the SDK setter is the wrong door.
+      registerFallbackRequestHandler(server, 'tools/call', unknownToolHandler, traceToolCall)
     }
   } catch (error) {
     logger(`Warning: Failed to setup tool call instrumentation - ${error}`)
     throw error
   }
+}
+
+/** Stands in for an application dispatcher that has not been attached yet. */
+async function unknownToolHandler(request: MCPRequestLike): Promise<never> {
+  throw new Error(`Unknown tool: ${request.params?.name || 'unknown'}`)
 }
 
 async function handleToolCallRequest(
