@@ -14,7 +14,7 @@ import type {
 } from '../types'
 import { MCPAnalyticsEventType } from './event-types'
 import { captureEvent } from './capture'
-import { stampMetaClientInfo } from './client-identity'
+import { stampClientIdentity } from './client-identity'
 import { stampTransportIdentity } from './transport-identity'
 
 /**
@@ -153,7 +153,7 @@ export async function handleIdentify(
     parameters: { request, extra },
     timestamp: new Date(),
   }
-  stampMetaClientInfo(identifyEvent, request)
+  stampClientIdentity(identifyEvent, request, extra, server)
   stampTransportIdentity(identifyEvent, extra)
 
   try {

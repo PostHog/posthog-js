@@ -71,6 +71,15 @@ export function hasClientVersionAccessor(server: unknown): boolean {
   return hasMethod(server, 'getClientVersion')
 }
 
+/**
+ * `getNegotiatedProtocolVersion()` — v2 only, and the last link in the protocol
+ * version chain. A v1 server does not have it, which is why the chain probes for
+ * it instead of branching on which SDK is installed.
+ */
+export function hasNegotiatedProtocolVersionAccessor(server: unknown): boolean {
+  return hasMethod(server, 'getNegotiatedProtocolVersion')
+}
+
 /** `_serverInfo`, which names the server on every event. */
 export function hasServerInfo(server: unknown): boolean {
   const info = asRecord(asRecord(server)?._serverInfo)
