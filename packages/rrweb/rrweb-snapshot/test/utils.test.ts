@@ -13,6 +13,7 @@ import {
 } from 'vitest';
 import {
   createMirror,
+  createStylesheetTextCursor,
   escapeImportStatement,
   extractFileExtension,
   fixSafariColons,
@@ -366,6 +367,134 @@ describe('utils', () => {
       ).toEqual(
         "@font-face { font-family: 'MockFont'; src: url('https://example.com/fonts/mockfont.woff2') format('woff2'); font-weight: normal; font-style: normal; }",
       );
+    });
+  });
+
+  describe('createStylesheetTextCursor', () => {
+    const makeRules = (count: number, prefix = 'r') =>
+      Array.from({ length: count }, (_, i) => ({
+        cssText: `.${prefix}${i} { background: url("img/${prefix}${i}.png"); }`,
+      })) as unknown as CSSRule[];
+
+    const makeSheet = (
+      rules: unknown[],
+      href: string | null = 'https://example.com/main.css',
+    ) => ({ cssRules: rules, href }) as unknown as CSSStyleSheet;
+
+    it('stringifies a large sheet in bounded slices, byte-identical to the single pass', () => {
+      const sheet = makeSheet(makeRules(1000));
+      const singlePass = stringifyStylesheet(sheet);
+      expect(singlePass).toBeTruthy();
+
+      const cursor = createStylesheetTextCursor(sheet);
+      let boundedSlices = 0;
+      while (!cursor.advance(100)) {
+        boundedSlices += 1;
+        expect(cursor.text()).toBeNull();
+      }
+      // exactly 100 rules per slice: 10 bounded slices, then the final call
+      // that assembles the text
+      expect(boundedSlices).toBe(10);
+      expect(cursor.text()).toBe(singlePass);
+    });
+
+    it('slices across an @import chain and matches the single pass', () => {
+      const inner = makeSheet(makeRules(20, 'inner'), 'https://example.com/inner.css');
+      const innerImport = {
+        styleSheet: inner,
+        cssText: '@import url("inner.css");',
+        href: 'inner.css',
+        media: { length: 0 },
+        layerName: null,
+        supportsText: null,
+      } as unknown as CSSRule;
+      const imported = makeSheet(
+        [...makeRules(20, 'mid'), innerImport, ...makeRules(20, 'mid2')],
+        'https://example.com/imported.css',
+      );
+      const importRule = {
+        styleSheet: imported,
+        cssText: '@import url("imported.css");',
+        href: 'imported.css',
+        media: { length: 0 },
+        layerName: null,
+        supportsText: null,
+      } as unknown as CSSRule;
+      const sheet = makeSheet([
+        ...makeRules(5, 'top'),
+        importRule,
+        ...makeRules(5, 'tail'),
+      ]);
+
+      const singlePass = stringifyStylesheet(sheet);
+      expect(singlePass).toContain('inner0');
+
+      const cursor = createStylesheetTextCursor(sheet);
+      let boundedSlices = 0;
+      while (!cursor.advance(10)) {
+        boundedSlices += 1;
+        expect(cursor.text()).toBeNull();
+      }
+      // 72 rules in total (import rules included), so slice boundaries fall
+      // inside the imported sheets and the chain is resumed mid-descent
+      expect(boundedSlices).toBeGreaterThanOrEqual(7);
+      expect(cursor.text()).toBe(singlePass);
+    });
+
+    it('terminates on cyclic @import graphs, falling back to the import statement', () => {
+      const parentRules: unknown[] = [...makeRules(3, 'parent')];
+      const parent = makeSheet(parentRules, 'https://example.com/parent.css');
+      const child = makeSheet(
+        [
+          ...makeRules(3, 'child'),
+          {
+            styleSheet: parent,
+            cssText: '@import url(parent.css);',
+            href: 'parent.css',
+            media: { length: 0 },
+            layerName: null,
+            supportsText: null,
+          },
+        ],
+        'https://example.com/child.css',
+      );
+      parentRules.push({
+        styleSheet: child,
+        cssText: '@import url(child.css);',
+        href: 'child.css',
+        media: { length: 0 },
+        layerName: null,
+        supportsText: null,
+      });
+
+      const cursor = createStylesheetTextCursor(parent);
+      let calls = 0;
+      while (!cursor.advance(2) && calls < 100) {
+        calls += 1;
+      }
+      const text = cursor.text();
+      expect(text).toContain('child2');
+      // the cycle-closing import is emitted as a statement, not descended
+      expect(text).toContain('@import url(https://example.com/parent.css)');
+    });
+
+    it('always advances at least one rule, even with a zero budget', () => {
+      const cursor = createStylesheetTextCursor(makeSheet(makeRules(3)));
+      let calls = 0;
+      while (!cursor.advance(0) && calls < 10) {
+        calls += 1;
+      }
+      expect(calls).toBeLessThanOrEqual(4);
+      expect(cursor.text()).toBeTruthy();
+    });
+
+    it('is done immediately with null text for unreadable sheets', () => {
+      const cursor = createStylesheetTextCursor({
+        rules: null,
+        cssRules: null,
+      } as unknown as CSSStyleSheet);
+      expect(cursor.advance(100)).toBe(true);
+      expect(cursor.text()).toBeNull();
     });
   });
 

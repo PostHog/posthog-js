@@ -510,6 +510,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
      * than only via customer-supplied Chrome traces.
      */
     private _slowestFullSnapshot: SnapshotCost | undefined
+    // the cost object most recently read from rrweb; each snapshot produces a fresh
+    // object, so identity comparison dedupes the sync and microtask reads
+    private _lastSeenSnapshotCost: SnapshotCost | undefined
     // only warn once per recorder instance that client-side masking is shadowing the project setting
     private _hasWarnedClientMaskingOverride = false
     // only warn once per recorder instance that maskAttributeFn is ignored
@@ -1197,6 +1200,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         // calling addEventListener multiple times is safe and will not add duplicates
         addEventListener(window, 'beforeunload', this._onBeforeUnload)
+        // registered after _startRecorder so rrweb's own pagehide listener runs first:
+        // it synchronously flushes deferred stylesheet mutations, and this later
+        // listener then ships them (beforeunload has already fired, so nothing else will)
+        addEventListener(window, 'pagehide', this._onPageHide)
         addEventListener(window, 'offline', this._onOffline)
         addEventListener(window, 'online', this._onOnline)
         addEventListener(document, 'visibilitychange', this._onVisibilityChange)
@@ -1298,6 +1305,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         // cost metrics are per-session, so the next session isn't tarred with this one's
         this._slowestFullSnapshot = undefined
+        this._lastSeenSnapshotCost = undefined
         getRRWeb()?.resetSnapshotCostState?.()
 
         this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
@@ -1343,6 +1351,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _teardown() {
         window?.removeEventListener('beforeunload', this._onBeforeUnload)
+        window?.removeEventListener('pagehide', this._onPageHide)
         window?.removeEventListener('offline', this._onOffline)
         window?.removeEventListener('online', this._onOnline)
         document?.removeEventListener('visibilitychange', this._onVisibilityChange)
@@ -1500,9 +1509,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _trackFullSnapshotCost() {
         const cost = getRRWeb()?.getLastSnapshotCost?.()
-        if (!cost) {
+        if (!cost || cost === this._lastSeenSnapshotCost) {
             return
         }
+        this._lastSeenSnapshotCost = cost
         if (!this._slowestFullSnapshot || cost.durationMs > this._slowestFullSnapshot.durationMs) {
             this._slowestFullSnapshot = cost
         }
@@ -1512,6 +1522,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 stylesheetMs: Math.round(cost.stylesheetMs),
                 nodeCount: cost.nodeCount,
                 cssRuleCount: cost.cssRuleCount,
+                nonDeferrableCssRuleCount: cost.nonDeferrableCssRuleCount,
                 deferredStylesheetCount: cost.deferredStylesheetCount,
             })
         }
@@ -1682,13 +1693,19 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         // we're processing a full snapshot, so we should reset the timer
         if (rawEvent.type === EventType.FullSnapshot) {
-            // read the cost globals now, synchronously with the snapshot that produced
-            // them; by the time the event drains from the async compression queue a
-            // newer snapshot (or a session reset) may have replaced them
             if (getRRWeb()?.wasMaxDepthReached?.()) {
                 this._maxDepthExceeded = true
             }
+            // the FullSnapshot event is emitted partway through rrweb's takeFullSnapshot,
+            // whose cost window only closes after the post-snapshot buffer drain and
+            // adoptedStyleSheets work; the sync read below picks up any snapshot we have
+            // not seen yet, and the microtask (which runs as soon as the synchronous
+            // snapshot task finishes, before any newer snapshot can replace the globals)
+            // picks up the one in progress right now
             this._trackFullSnapshotCost()
+            Promise.resolve()
+                .then(() => this._trackFullSnapshotCost())
+                .catch(() => {})
 
             this._scheduleFullSnapshot()
             // Full snapshots reset rrweb's node IDs, so clear any logged node tracking
@@ -2121,6 +2138,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._flushBuffer()
     }
 
+    // pagehide fires after beforeunload, i.e. after the flush above has emptied the
+    // buffer - but also after rrweb's own pagehide listener has synchronously emitted
+    // any remaining deferred stylesheet mutations. Repeat the drain+flush so those
+    // events ship instead of dying in a buffer nothing will ever flush again.
+    private _onPageHide = (): void => {
+        this._onBeforeUnload()
+    }
+
     private _onOffline = (): void => {
         this._tryAddCustomEvent('browser offline', {})
     }
@@ -2256,6 +2281,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     get sdkDebugProperties(): Properties {
         const { sessionStartTimestamp } = this._sessionManager.checkAndGetSessionAndWindowId(true)
+        // deferred sheets that never made it back into the recording (see rrweb-snapshot),
+        // undefined on recorder chunks that predate the counters
+        const deferredStylesheetStats = getRRWeb()?.getDeferredStylesheetStats?.()
 
         return {
             $recording_status: this.status,
@@ -2274,7 +2302,19 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             ),
             $sdk_debug_replay_slowest_full_snapshot_nodes: this._slowestFullSnapshot?.nodeCount,
             $sdk_debug_replay_slowest_full_snapshot_css_rules: this._slowestFullSnapshot?.cssRuleCount,
-            $sdk_debug_replay_deferred_stylesheets: this._slowestFullSnapshot?.deferredStylesheetCount,
+            // never-deferrable sources (CSSOM-only <style>, adoptedStyleSheets) split out,
+            // so a customer can tell which bucket dominates their page
+            $sdk_debug_replay_slowest_full_snapshot_css_rules_non_deferrable:
+                this._slowestFullSnapshot?.nonDeferrableCssRuleCount,
+            // cumulative across the session, unlike the slowest-snapshot properties: a fast
+            // first snapshot's deferrals must not vanish because a slower one deferred none
+            $sdk_debug_replay_deferred_stylesheets: deferredStylesheetStats?.deferredCount,
+            $sdk_debug_replay_deferred_stylesheets_failed: deferredStylesheetStats?.failedCount,
+            $sdk_debug_replay_deferred_stylesheets_abandoned: deferredStylesheetStats?.abandonedCount,
+            $sdk_debug_replay_deferred_stylesheet_ms: roundOrUndefined(deferredStylesheetStats?.totalMs),
+            $sdk_debug_replay_deferred_stylesheet_slowest_slice_ms: roundOrUndefined(
+                deferredStylesheetStats?.slowestSliceMs
+            ),
             $sdk_debug_replay_slowest_mutation_batch_ms: roundOrUndefined(
                 getRRWeb()?.getMutationCost?.()?.slowestBatchMs
             ),
@@ -2310,9 +2350,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             inlineStylesheet: true,
             // inlining every CSSRule of every sheet is the dominant cost of a full
             // snapshot on CSS-heavy pages, and it runs as one uninterruptible task.
-            // rrweb caps it by default and inlines the overflow across idle callbacks;
-            // listed here so users can raise the cap, or set 0 to do it all up front.
-            inlineStylesheetBudgetRules: undefined,
+            // We cap it here (rrweb itself stays unbounded) so the budget only turns
+            // on when this config surface ships alongside the recorder; the overflow
+            // is inlined across idle callbacks. The cap is in rules, not elapsed
+            // time, so a single enormous sheet can't slip through, and ~10k rules
+            // (a couple hundred ms in Chrome, well above Bootstrap's 2-3k) keeps it
+            // inert for ordinary sites. Users can raise it, or set 0 to disable.
+            inlineStylesheetBudgetRules: 10_000,
             recordCrossOriginIframes: false,
             sampling: undefined,
             attributeFilter: undefined,

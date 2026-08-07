@@ -83,12 +83,16 @@ export type recordOptions<T> = {
    * freeze the UI for seconds.
    *
    * Once the cap is hit, remaining `<link rel=stylesheet>` elements are serialized
-   * without `_cssText` - they keep `rel`/`href`, so replay loads them remotely -
-   * and are then inlined one-per-idle-callback afterwards, arriving as attribute
-   * mutations. Fidelity is preserved; the work just stops being one long blocking
-   * task.
+   * without `_cssText` - they keep `rel`/`href` - and are then inlined across idle
+   * callbacks, arriving as attribute mutations. The queue is flushed synchronously
+   * (bounded) when recording stops and on `pagehide`, so in the common case every
+   * deferred sheet still reaches the recording. The residual risk: replay falls
+   * back to loading a sheet from its original href - which may be purged,
+   * auth-gated, or renamed by then - only if the tab dies without `pagehide`
+   * firing, the teardown flush hits its safety cap, or stringifying the sheet
+   * fails; those last two are counted in `getDeferredStylesheetStats()`.
    *
-   * Set to 0 to disable the cap and restore the previous unbounded behaviour.
+   * Unset or 0 means no cap (the default): every sheet is inlined synchronously.
    */
   inlineStylesheetBudgetRules?: number;
   hooks?: hooksParam;
