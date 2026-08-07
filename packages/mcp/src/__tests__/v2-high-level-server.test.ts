@@ -183,6 +183,86 @@ describe('instrument() on an MCP SDK v2 high-level server', () => {
     expect(eventCapture.findCapturesByEvent('$exception')).toHaveLength(1)
   })
 
+  /**
+   * The one thing the stale executor does cost us, measured: v2 flattens a throw
+   * into an `isError` result before our callback wrapper would have stashed the
+   * original error, and the wrapper never runs anyway because dispatch goes
+   * through the executor. So the error's **class** is lost — everything else
+   * survives, because the `tools/call` request-handler patch sees the result.
+   *
+   * This is a documented limitation, not an aspiration: if wrapping the executor
+   * ever lands, this test should start failing and be updated to expect the real
+   * class name.
+   */
+  it('captures message and error flag but degrades the error class to Error', async () => {
+    const server = makeV2Server()
+    class RateLimitError extends Error {}
+    ;(server as unknown as V2McpServerDouble).registerTool(
+      'rate_limited',
+      { description: 'Throws a subclass.' },
+      async () => {
+        throw new RateLimitError('rate limited')
+      }
+    )
+    instrument(server, fakePostHog(), { context: false })
+
+    await dispatch(server, { method: 'tools/call', params: { name: 'rate_limited', arguments: {} } }, v2Ctx())
+    await new Promise((r) => setTimeout(r, 20))
+
+    const call = eventCapture.findCapturesByEvent('$mcp_tool_call')[0]
+    expect(call.properties.$mcp_is_error).toBe(true)
+    expect(call.properties.$mcp_error_message).toBe('rate limited')
+    // Not 'RateLimitError' — the class does not survive v2's flattening.
+    expect(call.properties.$mcp_error_type).toBe('Error')
+
+    const exceptionList = eventCapture.findCapturesByEvent('$exception')[0].properties.$exception_list as {
+      type: string
+      value: string
+    }[]
+    expect(exceptionList[0]).toEqual(expect.objectContaining({ type: 'Error', value: 'rate limited' }))
+  })
+
+  /**
+   * v2 builds a tool's `executor` from its `handler` **once at registration**,
+   * and dispatch calls the executor — so our callback wrapper, installed after
+   * registration, never runs on v2. The stripping of SDK-injected arguments does
+   * not depend on it: the `tools/call` request-handler patch strips them before
+   * the SDK ever dispatches, and the callback wrapper is a defensive second pass
+   * for hosts that invoke a tool callback directly. This asserts the primary
+   * path, which is what a real v2 server takes.
+   */
+  it('strips the injected context argument before the tool runs, despite the stale executor', async () => {
+    const server = makeV2Server()
+    const seen: unknown[] = []
+    ;(server as unknown as V2McpServerDouble).registerTool(
+      'watch_args',
+      {
+        description: 'Records the arguments it was called with.',
+        inputSchema: { type: 'object', properties: { event: { type: 'string' } } },
+      },
+      async (args: unknown) => {
+        seen.push(args)
+        return { content: [{ type: 'text', text: 'ok' }] }
+      }
+    )
+
+    instrument(server, fakePostHog(), { context: true })
+
+    await dispatch(
+      server,
+      {
+        method: 'tools/call',
+        params: { name: 'watch_args', arguments: { event: 'pageview', context: 'user asked for trends' } },
+      },
+      v2Ctx()
+    )
+    await new Promise((r) => setTimeout(r, 20))
+
+    expect(seen).toHaveLength(1)
+    expect(seen[0]).toEqual({ event: 'pageview' })
+    expect(eventCapture.findCapturesByEvent('$mcp_tool_call')[0].properties.$mcp_intent).toBe('user asked for trends')
+  })
+
   it('captures a tools/list and injects the analytics parameter into the advertised schema', async () => {
     const server = makeV2Server()
     instrument(server, fakePostHog(), { context: true })
