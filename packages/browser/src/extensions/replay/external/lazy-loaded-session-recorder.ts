@@ -2420,12 +2420,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 refillRate: this._instance.config.session_recording.__mutationThrottlerRefillRate,
                 bucketSize: this._instance.config.session_recording.__mutationThrottlerBucketSize,
                 onBlockedNode: (id, node) => {
+                    // Keep this as a page-console breadcrumb only. Emitting it as an rrweb console
+                    // event injects it into the recording, where it buries the customer's own logs
+                    // in the replay inspector's console tab.
                     const message = `Too many mutations on node '${id}'. Rate limiting. This could be due to SVG animations or something similar`
                     logger.info(message, {
                         node: node,
                     })
-
-                    this.log(LOGGER_PREFIX + ' ' + message, 'warn')
                 },
             })
 
