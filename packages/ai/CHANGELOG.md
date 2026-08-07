@@ -1,5 +1,12 @@
 # posthog-ai
 
+## 8.7.1
+
+### Patch Changes
+
+- [#4473](https://github.com/PostHog/posthog-js/pull/4473) [`9b5922f`](https://github.com/PostHog/posthog-js/commit/9b5922ffcf9f01ae6a0b834ff1cafc2f0ac521a4) Thanks [@fivestarspicy](https://github.com/fivestarspicy)! - fix(gemini): declare Gemini's cache accounting model on generations with cache reads, so ingestion prices cached tokens from `$ai_cache_reporting_exclusive` instead of inferring it from the token counts
+  (2026-08-07)
+
 ## 8.7.0
 
 ### Minor Changes
