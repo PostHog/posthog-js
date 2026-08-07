@@ -35,7 +35,13 @@ export interface MetaClientInfo {
 export interface ClientIdentitySources {
   request: MCPRequestLike
   extra?: CompatibleRequestHandlerExtra
-  server?: MCPServerLike
+  /**
+   * Typed `unknown` on purpose: every accessor on it is reached through a
+   * structural probe, never a declared type, because the two SDK majors expose
+   * different ones. Call sites pass a real `MCPServerLike`; the shape checks
+   * here are what decide whether it can answer.
+   */
+  server?: unknown
 }
 
 type UnknownRecord = Record<string, unknown>
@@ -101,14 +107,14 @@ export function readEnvelopeClientInfo(extra: CompatibleRequestHandlerExtra | un
  * is why it is a link in the chain rather than a branch. Never throws — a
  * server that dislikes being asked must not fail the tool call.
  */
-export function readServerClientIdentity(server: MCPServerLike | undefined): MetaClientInfo | undefined {
+export function readServerClientIdentity(server: unknown): MetaClientInfo | undefined {
   if (!server) {
     return undefined
   }
   const result: MetaClientInfo = {}
   try {
     if (hasClientVersionAccessor(server)) {
-      Object.assign(result, readClientInfoValue(server.getClientVersion()))
+      Object.assign(result, readClientInfoValue((server as MCPServerLike).getClientVersion()))
     }
     if (hasNegotiatedProtocolVersionAccessor(server)) {
       const negotiated = (
@@ -131,6 +137,15 @@ export function readServerClientIdentity(server: MCPServerLike | undefined): Met
  * does not participate. Field-by-field rather than source-by-source because a
  * request may carry its protocol version in the envelope while the client's
  * name is only known to the server from a handshake.
+ *
+ * The first three links are **per request**, so they cannot describe anyone but
+ * the caller. Only the last — the server's own accessors — is connection-scoped,
+ * and on a server that multiplexes several clients through one connection it
+ * answers for whichever client completed the handshake. That is the best answer
+ * available on that connection, and it is the same scope `capture.ts` has always
+ * fallen back to (`eventInput.clientName ?? sessionInfo.clientName`), so the
+ * chain neither introduces that sharing nor widens it. Ordering it last is what
+ * keeps it a fallback: any request that identifies itself wins outright.
  */
 export function resolveClientIdentity({ request, extra, server }: ClientIdentitySources): MetaClientInfo | undefined {
   const chain = [readEnvelopeClientInfo(extra), readMetaClientInfo(request), readServerClientIdentity(server)]

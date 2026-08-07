@@ -5,7 +5,7 @@ import {
   resolveClientIdentity,
   stampClientIdentity,
 } from '../extensions/client-identity'
-import type { CompatibleRequestHandlerExtra, McpEvent, MCPRequestLike, MCPServerLike } from '../types'
+import type { CompatibleRequestHandlerExtra, McpEvent, MCPRequestLike } from '../types'
 
 function requestWithMeta(meta: Record<string, unknown> | undefined): MCPRequestLike {
   return { method: 'tools/call', params: { name: 'echo', arguments: {}, _meta: meta } }
@@ -20,8 +20,15 @@ function ctxWithEnvelope(envelope: Record<string, unknown>): CompatibleRequestHa
   return { mcpReq: { envelope } } as unknown as CompatibleRequestHandlerExtra
 }
 
+/**
+ * No cast: `resolveClientIdentity` types its server as `unknown` because every
+ * accessor is reached through a structural probe. A double that declares only
+ * what it answers is therefore the honest fixture — and if a probe starts
+ * requiring something else, these tests fail on behaviour rather than being
+ * waved through by a cast.
+ */
 function serverWith(accessors: Partial<Record<'getClientVersion' | 'getNegotiatedProtocolVersion', () => unknown>>) {
-  return accessors as unknown as MCPServerLike
+  return accessors
 }
 
 describe('client-identity', () => {
