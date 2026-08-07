@@ -200,6 +200,36 @@ describe('client-identity', () => {
       expect(identity).toBeUndefined()
     })
 
+    it('reads the MCP-Protocol-Version header, the only per-request carrier a legacy request has', () => {
+      const identity = resolveClientIdentity({
+        request: requestWithMeta(undefined),
+        extra: { requestInfo: { headers: { 'mcp-protocol-version': '2025-11-25' } } } as CompatibleRequestHandlerExtra,
+      })
+      expect(identity).toEqual({ protocolVersion: '2025-11-25' })
+    })
+
+    it('reads the same header off a v2 context, where it is a WHATWG Headers', () => {
+      const extra = {
+        http: { req: new Request('https://example.com/mcp', { headers: { 'MCP-Protocol-Version': '2026-07-28' } }) },
+      } as unknown as CompatibleRequestHandlerExtra
+      expect(resolveClientIdentity({ request: requestWithMeta(undefined), extra })?.protocolVersion).toBe('2026-07-28')
+    })
+
+    it('prefers the protocol-level envelope over the header when both are present', () => {
+      const extra = {
+        mcpReq: { envelope: { [META_PROTOCOL_VERSION_KEY]: '2026-07-28' } },
+        requestInfo: { headers: { 'mcp-protocol-version': '2025-11-25' } },
+      } as unknown as CompatibleRequestHandlerExtra
+      expect(resolveClientIdentity({ request: requestWithMeta(undefined), extra })?.protocolVersion).toBe('2026-07-28')
+    })
+
+    it('ignores a junk header rather than recording it', () => {
+      const extra = {
+        requestInfo: { headers: { 'mcp-protocol-version': 'x'.repeat(200) } },
+      } as CompatibleRequestHandlerExtra
+      expect(resolveClientIdentity({ request: requestWithMeta(undefined), extra })).toBeUndefined()
+    })
+
     it('returns undefined when no source answers', () => {
       expect(resolveClientIdentity({ request: requestWithMeta(undefined) })).toBeUndefined()
     })
