@@ -3,8 +3,8 @@
 // Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { ErrorTracking } from '@posthog/core'
+import type { AnalyticsInjectableJsonSchema } from './extensions/analytics-parameters'
 import type { MCPAnalyticsEventType } from './extensions/event-types'
 import type { IdentityCache } from './extensions/internal'
 import type { PostHogCaptureEvent } from './extensions/posthog-events'
@@ -17,6 +17,54 @@ export type JsonRecord = Record<string, unknown>
 export type ErrorProperties = ErrorTracking.ErrorProperties
 /** A single parsed stack frame. Re-exported from `@posthog/core`. */
 export type StackFrame = ErrorTracking.StackFrame
+
+/**
+ * The MCP wire shapes we touch, declared structurally rather than imported from
+ * `@modelcontextprotocol/sdk`.
+ *
+ * Both SDK majors are **optional** peers — a v2-only consumer has no v1 SDK
+ * installed — so a type import of it in shipped `.d.ts` output is a `TS2307`
+ * for anyone type-checking without `skipLibCheck`. These are deliberately loose
+ * (open-ended, everything optional): they describe what we *read* off an SDK
+ * result, and an SDK-typed value assigns to them cleanly. What we hand back to
+ * the SDK is typed precisely instead — see {@link CompatibleTextToolResult}.
+ */
+export interface CompatibleToolResultLike {
+  content?: unknown[]
+  structuredContent?: JsonRecord
+  isError?: boolean
+  _meta?: JsonRecord
+  [key: string]: unknown
+}
+
+/** One entry of a `tools/list` response, as we read it. */
+export interface CompatibleToolDescriptorLike {
+  name: string
+  title?: string
+  description?: string
+  /** The advertised JSON Schema, as the analytics parameters are injected into it. */
+  inputSchema?: AnalyticsInjectableJsonSchema
+  outputSchema?: unknown
+  _meta?: JsonRecord
+  [key: string]: unknown
+}
+
+/** A `tools/list` response, as we read it. */
+export interface CompatibleToolsListLike {
+  tools: CompatibleToolDescriptorLike[]
+  nextCursor?: string
+  [key: string]: unknown
+}
+
+/**
+ * A text-only tool result *we* construct and a host may hand straight back to
+ * the SDK. Typed precisely, not loosely, so it stays assignable to the SDK's own
+ * `CallToolResult` — the direction that would silently break callers.
+ */
+export interface CompatibleTextToolResult {
+  content: { type: 'text'; text: string }[]
+  isError?: boolean
+}
 
 export interface MCPRequestParamsLike {
   arguments?: JsonRecord
@@ -128,8 +176,11 @@ export type MaybePromise<T> = T | Promise<T>
 export type MCPAnalyticsIntentSource = 'context_parameter' | 'inferred'
 
 export type ToolCallback =
-  | ((args: unknown, extra: CompatibleRequestHandlerExtra) => CallToolResult | Promise<CallToolResult>)
-  | ((extra: CompatibleRequestHandlerExtra) => CallToolResult | Promise<CallToolResult>)
+  | ((
+      args: unknown,
+      extra: CompatibleRequestHandlerExtra
+    ) => CompatibleToolResultLike | Promise<CompatibleToolResultLike>)
+  | ((extra: CompatibleRequestHandlerExtra) => CompatibleToolResultLike | Promise<CompatibleToolResultLike>)
 
 // RegisteredTool type that supports both MCP SDK 1.23- (callback) and 1.24+ (handler)
 export type RegisteredTool = {

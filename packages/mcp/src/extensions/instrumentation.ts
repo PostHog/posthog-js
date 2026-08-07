@@ -3,10 +3,10 @@
 // Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
-import type { ListToolsResult } from '@modelcontextprotocol/sdk/types.js'
 import type {
   AnalyticsParameterOwnership,
   CompatibleRequestHandlerExtra,
+  CompatibleToolsListLike,
   MCPAnalyticsData,
   MCPRequestLike,
   MCPServerLike,
@@ -481,7 +481,7 @@ export async function isToolAdvertised(
   }
 
   try {
-    const response = (await listHandler({ method: 'tools/list', params: {} }, extra)) as ListToolsResult
+    const response = (await listHandler({ method: 'tools/list', params: {} }, extra)) as CompatibleToolsListLike
     if (!response || !Array.isArray(response.tools)) {
       return undefined
     }
@@ -506,7 +506,7 @@ export async function handleListToolsRequest(
   request: MCPRequestLike,
   extra: CompatibleRequestHandlerExtra | undefined,
   logger: LoggerFn
-): Promise<{ tools: ListToolsResult['tools'] }> {
+): Promise<{ tools: CompatibleToolsListLike['tools'] }> {
   const data = getServerTrackingData(server)
   const startTime = new Date()
   const sessionId = getSessionId(server, extra)
@@ -563,7 +563,7 @@ export async function handleListToolsRequest(
 
 function cacheToolAnalyticsParameterOwnership(
   cache: Map<string, AnalyticsParameterOwnership>,
-  tools: ListToolsResult['tools']
+  tools: CompatibleToolsListLike['tools']
 ): void {
   // Merge pages and concurrent enumerations; repeated tool names overwrite stale schemas.
   for (const tool of tools) {
@@ -573,7 +573,7 @@ function cacheToolAnalyticsParameterOwnership(
   }
 }
 
-function collectListedToolNames(tools: ListToolsResult['tools'] | undefined): string[] | undefined {
+function collectListedToolNames(tools: CompatibleToolsListLike['tools'] | undefined): string[] | undefined {
   if (!tools || tools.length === 0) {
     return
   }
@@ -589,10 +589,10 @@ async function getTracedToolsList(
   event: McpEvent,
   logger: LoggerFn,
   requestAttribution: SessionInfo
-): Promise<ListToolsResult['tools']> {
+): Promise<CompatibleToolsListLike['tools']> {
   try {
     const data = getServerTrackingData(server)
-    const originalResponse = (await originalListToolsHandler(request, extra)) as ListToolsResult
+    const originalResponse = (await originalListToolsHandler(request, extra)) as CompatibleToolsListLike
     // Injection must not mutate arrays reused or frozen by the server.
     let tools = [...(originalResponse.tools || [])]
 
@@ -644,7 +644,10 @@ async function getTracedToolsList(
   }
 }
 
-export function cacheToolDescriptions(cache: Map<string, string>, tools: ListToolsResult['tools'] | undefined): void {
+export function cacheToolDescriptions(
+  cache: Map<string, string>,
+  tools: CompatibleToolsListLike['tools'] | undefined
+): void {
   if (!tools) {
     return
   }
@@ -665,7 +668,10 @@ export function readToolMetaCategory(meta: unknown): string | undefined {
   return typeof category === 'string' && category.length > 0 ? category : undefined
 }
 
-export function cacheToolCategories(cache: Map<string, string>, tools: ListToolsResult['tools'] | undefined): void {
+export function cacheToolCategories(
+  cache: Map<string, string>,
+  tools: CompatibleToolsListLike['tools'] | undefined
+): void {
   if (!tools) {
     return
   }
