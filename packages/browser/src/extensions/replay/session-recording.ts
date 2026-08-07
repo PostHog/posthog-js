@@ -324,9 +324,10 @@ export class SessionRecording implements Extension {
             logger.warn('persisted remote config for session recording is invalid and will be ignored', e)
             return false
         }
-        // default to now so that configs persisted by older SDK versions
-        // (which never set cache_timestamp) are treated as fresh
-        const cacheTimestamp = config.cache_timestamp ?? Date.now()
+        // a config with no cache_timestamp can never be aged out, so treat it as stale and request
+        // fresh config before starting rather than trusting a blob that may predate the current
+        // trigger setup (e.g. persisted by an older SDK version that never set cache_timestamp).
+        const cacheTimestamp = config.cache_timestamp ?? 0
         return Date.now() - cacheTimestamp <= RECORDING_REMOTE_CONFIG_TTL_MS
     }
 

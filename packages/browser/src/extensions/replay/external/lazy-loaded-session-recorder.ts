@@ -18,6 +18,7 @@ import {
     LinkedFlagMatching,
     PAUSED,
     SessionRecordingStatus,
+    TRIGGER_PENDING,
     TriggerType,
     URLTriggerMatching,
 } from './triggerMatching'
@@ -1046,9 +1047,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // Only check TTL if recording hasn't started yet
         // Once started, trust the config until a hard page load
         if (!this.isStarted) {
-            // default to now so that configs persisted by older SDK versions
-            // (which never set cache_timestamp) are treated as fresh
-            const cacheTimestamp = parsedConfig.cache_timestamp ?? Date.now()
+            // a config with no cache_timestamp can never be aged out, so a returning visitor could
+            // keep recording under a trigger config that no longer exists server-side. Treat a
+            // missing timestamp as stale and re-fetch fresh config rather than trusting the blob.
+            const cacheTimestamp = parsedConfig.cache_timestamp ?? 0
             if (Date.now() - cacheTimestamp > RECORDING_REMOTE_CONFIG_TTL_MS) {
                 logger.info('persisted remote config for session recording is stale and will be ignored', {
                     cacheTimestamp,
@@ -1895,6 +1897,43 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
     }
 
+    /**
+     * Names the trigger conditions that are keeping the session in BUFFERING, so a customer looking
+     * at the console can tell which leg failed instead of only seeing an unexplained "buffering".
+     * A URL trigger that never matches (e.g. an over-anchored regex) under the default AND matching
+     * otherwise reads, from the outside, exactly like a session that is about to record.
+     */
+    private _describePendingTriggerConditions(): string[] {
+        const legs: { label: string; matcher: { triggerStatus(sessionId: string): string } }[] = [
+            { label: 'URL condition not matched', matcher: this._urlTriggerMatching },
+            { label: 'event condition not matched', matcher: this._eventTriggerMatching },
+            { label: 'linked flag condition not matched', matcher: this._linkedFlagMatching },
+        ]
+        return legs
+            .filter(({ matcher }) => matcher.triggerStatus(this.sessionId) === TRIGGER_PENDING)
+            .map(({ label }) => label)
+    }
+
+    private _lastLoggedBufferingReason: string | undefined
+
+    private _maybeLogBufferingReason(): void {
+        if (this.status !== BUFFERING) {
+            this._lastLoggedBufferingReason = undefined
+            return
+        }
+        const pending = this._describePendingTriggerConditions()
+        if (pending.length === 0) {
+            return
+        }
+        const reason = pending.join(', ')
+        // only log on change so the flush cadence doesn't spam the console while buffering
+        if (reason === this._lastLoggedBufferingReason) {
+            return
+        }
+        this._lastLoggedBufferingReason = reason
+        logger.info(`buffering: ${reason}`)
+    }
+
     private _flushBuffer(): SnapshotBuffer {
         this._clearFlushBufferTimer()
 
@@ -1910,6 +1949,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         const isBelowMinimumDuration = this._isBelowMinimumDuration()
 
         if (this.status === BUFFERING || this.status === PAUSED || this.status === DISABLED || isBelowMinimumDuration) {
+            this._maybeLogBufferingReason()
             this._scheduleFlushBuffer()
             return this._buffer
         }

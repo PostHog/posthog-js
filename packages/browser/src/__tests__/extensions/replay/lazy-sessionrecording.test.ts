@@ -596,7 +596,7 @@ describe('Lazy SessionRecording', () => {
                 }
             })
 
-            it('treats legacy config without cache_timestamp as fresh', () => {
+            it('treats config without cache_timestamp as stale so it is revalidated, not trusted', () => {
                 sessionRecording.stopRecording()
 
                 posthog.persistence?.register({
@@ -604,7 +604,8 @@ describe('Lazy SessionRecording', () => {
                 })
 
                 const result = sessionRecording['_lazyLoadedSessionRecording']['_remoteConfig']
-                expect(result?.enabled).toBe(true)
+                expect(result).toBeUndefined()
+                expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)).toBeUndefined()
             })
 
             it('ignores invalid persisted JSON config when checking freshness', () => {
@@ -4016,6 +4017,11 @@ describe('Lazy SessionRecording', () => {
 
             // because still waiting for URL to trigger
             expect(sessionRecording.status).toBe('buffering')
+
+            // and we can name which leg is still pending so a customer can debug the buffering
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_describePendingTriggerConditions']()).toEqual([
+                'URL condition not matched',
+            ])
         })
 
         it('never sends data when sampling is false regardless of event triggers', async () => {
