@@ -32,7 +32,7 @@ import { resolveToolCallIntent, setEventIntent, setExplicitContextIntent } from 
 import { getServerTrackingData, handleIdentify, setServerTrackingData, withIdentity } from './internal'
 import type { LoggerFn } from './logger'
 import { buildCapturedMcpParameters } from './mcp-payloads'
-import { getLiteralValue, getObjectShape } from './mcp-sdk-compat'
+import { readRequestHandlerMethod } from './mcp-sdk-compat'
 import { getSessionId, getSessionInfo, newSessionId } from './session'
 import { encodeSessionId, readMcpSessionHeader, writeSessionIdToTransport } from './session-token'
 import { getReportMissingToolDescriptor, resolveMissingCapabilityToolName } from './tools'
@@ -428,18 +428,31 @@ export function patchRequestHandlers(server: MCPServerLike, patches: Record<stri
   }
 
   // Monkey patch dynamically added handlers (registered after instrument()).
-  const originalSetRequestHandler = server.setRequestHandler.bind(server)
-  server.setRequestHandler = ((requestSchema: unknown, originalHandler: MCPRequestHandler) => {
-    const shape = getObjectShape(requestSchema)
-    const handlerName = shape?.method ? getLiteralValue(shape.method) : undefined
-    const patch = typeof handlerName === 'string' ? patches[handlerName] : undefined
-    if (!patch || typeof handlerName !== 'string') {
-      return originalSetRequestHandler(requestSchema, originalHandler)
+  //
+  // Variadic, and every argument is forwarded verbatim. The registration form is
+  // the SDK's business, not ours — only *that* a registration happened is ours.
+  // SDK v2 has a three-argument form for custom methods,
+  // `setRequestHandler(method, { params, result }, handler)`, and a two-parameter
+  // wrapper drops the handler: the SDK then sees the schemas object where the
+  // handler should be and throws `setRequestHandler: handler is required`, which
+  // takes down the host server rather than just our instrumentation.
+  const originalSetRequestHandler = server.setRequestHandler.bind(server) as (...args: unknown[]) => unknown
+  server.setRequestHandler = ((...args: unknown[]) => {
+    const handlerName = readRequestHandlerMethod(args[0])
+    // `hasOwnProperty`, not a bare index: `handlerName` is now an arbitrary
+    // caller-supplied string, and a custom method named `toString` would
+    // otherwise resolve to an inherited function and be treated as a patch.
+    const patch =
+      handlerName !== undefined && Object.prototype.hasOwnProperty.call(patches, handlerName)
+        ? patches[handlerName]
+        : undefined
+    if (handlerName === undefined || !patch) {
+      return originalSetRequestHandler(...args)
     }
 
     // Register first so the MCP SDK's request/result validation stays inside
     // our analytics wrapper, matching handlers that existed before instrument().
-    const result = originalSetRequestHandler(requestSchema, originalHandler)
+    const result = originalSetRequestHandler(...args)
     const registeredHandler = server._requestHandlers.get(handlerName)
     if (registeredHandler) {
       rememberOriginalRequestHandler(server, handlerName, registeredHandler)
