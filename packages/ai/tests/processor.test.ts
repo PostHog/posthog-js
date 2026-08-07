@@ -75,9 +75,25 @@ describe('PostHogSpanProcessor', () => {
   })
 
   it.each([
+    ['US default', undefined, 'https://ai-gateway.us.posthog.com/i/v0/ai/otel'],
+    ['EU', 'https://ai-gateway.eu.posthog.com', 'https://ai-gateway.eu.posthog.com/i/v0/ai/otel'],
+    ['self-hosted', 'https://gateway.example.com/', 'https://gateway.example.com/i/v0/ai/otel'],
+    ['blank host', '  \n\t ', 'https://ai-gateway.us.posthog.com/i/v0/ai/otel'],
+  ])('routes project secrets through the %s AI gateway', (_name, host, expectedUrl) => {
+    new PostHogSpanProcessor({ aiGateway: { projectSecret: '  phs_test123  ', host } })
+
+    expect(OTLPTraceExporter).toHaveBeenCalledWith({
+      url: expectedUrl,
+      headers: { Authorization: 'Bearer phs_test123' },
+    })
+    expect(BatchSpanProcessor).toHaveBeenCalledWith(expect.any(Object))
+  })
+
+  it.each([
     ['missing', {}],
     ['empty', { projectToken: '' }],
     ['blank', { projectToken: '  \n\t ' }],
+    ['empty AI Gateway secret', { aiGateway: { projectSecret: '' } }],
   ])('disables and no-ops when projectToken is %s', async (_case, options) => {
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
     const processor = new PostHogSpanProcessor(options as any)
@@ -90,9 +106,22 @@ describe('PostHogSpanProcessor', () => {
     expect(OTLPTraceExporter).not.toHaveBeenCalled()
     expect(BatchSpanProcessor).not.toHaveBeenCalled()
     expect(warnSpy).toHaveBeenCalledWith(
-      '[PostHogSpanProcessor] projectToken is missing or blank; the processor will be disabled.'
+      '[PostHogSpanProcessor] projectToken or aiGateway.projectSecret is missing or blank; the processor will be disabled.'
     )
     warnSpy.mockRestore()
+  })
+
+  it('rejects conflicting direct and AI gateway credentials', () => {
+    expect(
+      () =>
+        new PostHogSpanProcessor({
+          projectToken: 'phc_test',
+          aiGateway: { projectSecret: 'phs_test' },
+        } as any)
+    ).toThrow('[PostHogSpanProcessor] provide either projectToken or aiGateway, not both.')
+
+    expect(OTLPTraceExporter).not.toHaveBeenCalled()
+    expect(BatchSpanProcessor).not.toHaveBeenCalled()
   })
 
   it('delegates onStart to the inner processor', () => {

@@ -3,34 +3,30 @@
 import '../polyfills.js'
 
 import { trace } from '@opentelemetry/api'
-import { BasicTracerProvider, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base'
+import { BasicTracerProvider } from '@opentelemetry/sdk-trace-base'
 import { resourceFromAttributes } from '@opentelemetry/resources'
 import { Agent } from '@convex-dev/agent'
 import { openai } from '@ai-sdk/openai'
-import { PostHogTraceExporter } from '@posthog/ai/otel'
+import { PostHogSpanProcessor } from '@posthog/ai/otel'
 import { components } from '../_generated/api'
 import { action } from '../_generated/server'
 import { v } from 'convex/values'
 
-// PostHogTraceExporter is a standard OTEL SpanExporter — add it as a span
-// processor alongside any other exporters in your OTEL setup.
 const provider = new BasicTracerProvider({
     resource: resourceFromAttributes({
         'service.name': 'example-convex',
     }),
     spanProcessors: [
-        new SimpleSpanProcessor(
-            new PostHogTraceExporter({
-                projectToken: process.env.POSTHOG_PROJECT_TOKEN!,
-                host: process.env.POSTHOG_HOST,
-            })
-        ),
+        new PostHogSpanProcessor({
+            projectToken: process.env.POSTHOG_PROJECT_TOKEN!,
+            host: process.env.POSTHOG_HOST,
+        }),
     ],
 })
 trace.setGlobalTracerProvider(provider)
 
 // Demonstrates using @convex-dev/agent with the Vercel AI SDK's
-// experimental_telemetry and PostHog's PostHogTraceExporter to
+// experimental_telemetry and PostHog's PostHogSpanProcessor to
 // automatically capture $ai_generation events.
 export const generate = action({
     args: {
@@ -58,6 +54,12 @@ export const generate = action({
                 },
             },
         })
+
+        try {
+            await provider.forceFlush()
+        } catch (error) {
+            console.error('Failed to flush PostHog telemetry', error)
+        }
 
         return {
             text: result.text,
