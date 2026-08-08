@@ -2,8 +2,10 @@ import { PostHog } from './posthog-core'
 import { RemoteConfig } from './types'
 
 import { createLogger } from '@posthog/browser-common/utils/logger'
+import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { document } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from './utils/globals'
+import { DOM_EVENT_VISIBILITYCHANGE } from './constants'
 import type { RequestResponse } from '@posthog/types'
 
 const logger = createLogger('[RemoteConfig]')
@@ -15,6 +17,8 @@ const DEFAULT_REFRESH_INTERVAL = 5 * 60 * 1000
 
 export class RemoteConfigLoader {
     private _refreshInterval: ReturnType<typeof setInterval> | undefined
+    private _visibilityChangeListener: EventListener | undefined
+    private _lastRefreshAt: number | undefined
 
     constructor(private readonly _instance: PostHog) {}
 
@@ -74,6 +78,9 @@ export class RemoteConfigLoader {
         } catch (error) {
             logger.error('Error loading remote config', error)
             this._onRemoteConfig()
+            // Start polling even when the config load fails, so a tab that lost this
+            // request still picks up later flag changes instead of holding a stale value.
+            this._startRefreshInterval()
         }
     }
 
@@ -81,6 +88,10 @@ export class RemoteConfigLoader {
         if (this._refreshInterval) {
             clearInterval(this._refreshInterval)
             this._refreshInterval = undefined
+        }
+        if (this._visibilityChangeListener) {
+            document?.removeEventListener(DOM_EVENT_VISIBILITYCHANGE, this._visibilityChangeListener)
+            this._visibilityChangeListener = undefined
         }
     }
 
@@ -95,7 +106,12 @@ export class RemoteConfigLoader {
             return
         }
 
+        this._lastRefreshAt = Date.now()
         this._instance.reloadFeatureFlags()
+    }
+
+    private get _refreshIntervalMs(): number {
+        return this._instance.config.remote_config_refresh_interval_ms ?? DEFAULT_REFRESH_INTERVAL
     }
 
     private _startRefreshInterval(): void {
@@ -103,7 +119,7 @@ export class RemoteConfigLoader {
             return
         }
 
-        const intervalMs = this._instance.config.remote_config_refresh_interval_ms ?? DEFAULT_REFRESH_INTERVAL
+        const intervalMs = this._refreshIntervalMs
 
         // Allow users to disable periodic refresh by setting interval to 0
         if (intervalMs === 0) {
@@ -113,6 +129,33 @@ export class RemoteConfigLoader {
         this._refreshInterval = setInterval(() => {
             this.refresh()
         }, intervalMs)
+
+        this._startVisibilityRefresh()
+    }
+
+    /**
+     * Refresh flags when a background tab becomes visible again.
+     * Browsers throttle background timers hard, so a hidden tab skips every interval tick
+     * and then serves the cached flag value until the next tick fires late. This listener
+     * closes that gap. The minimum-interval guard (plus the debounce in reloadFeatureFlags)
+     * stops a wall of restored tabs from stampeding the /flags endpoint.
+     */
+    private _startVisibilityRefresh(): void {
+        if (this._visibilityChangeListener || !document) {
+            return
+        }
+
+        this._visibilityChangeListener = () => {
+            if (document?.visibilityState !== 'visible') {
+                return
+            }
+            if (Date.now() - (this._lastRefreshAt ?? 0) < this._refreshIntervalMs) {
+                return
+            }
+            this.refresh()
+        }
+
+        addEventListener(document, DOM_EVENT_VISIBILITYCHANGE, this._visibilityChangeListener)
     }
 
     private _onRemoteConfig(config?: RemoteConfig, response?: RequestResponse): void {

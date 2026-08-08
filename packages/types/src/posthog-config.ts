@@ -1901,6 +1901,8 @@ export interface PostHogConfig {
      *   Use this if you control flag updates manually or have infrequent flag changes.
      *
      * Note: Refreshes are automatically skipped when the browser tab is hidden or no document is available.
+     * A refresh also runs when a hidden tab becomes visible again, so a long-lived background tab
+     * does not keep a stale flag value after a rollout change.
      *
      * @default 300000 (5 minutes)
      */
