@@ -509,12 +509,19 @@ export type canvasMutationParam =
       commands: canvasMutationCommand[];
       displayWidth?: number;
       displayHeight?: number;
+      // the canvas coordinate space (width/height attributes) at capture time. Replay sets
+      // the canvas to this size before applying the frame, so a seek renders the frame at the
+      // same scale as straight playback instead of the final size the DOM diff last wrote.
+      canvasWidth?: number;
+      canvasHeight?: number;
     }
   | ({
       id: number;
       type: CanvasContext;
       displayWidth?: number;
       displayHeight?: number;
+      canvasWidth?: number;
+      canvasHeight?: number;
     } & canvasMutationCommand);
 
 export type canvasMutationWithType = {
@@ -560,6 +567,10 @@ export type ImageBitmapDataURLWorkerParams = {
   // through the worker so the reply knows it without the main thread holding per-id state.
   displayWidth: number;
   displayHeight: number;
+  // the canvas coordinate space (width/height attributes) at capture time; carried through the
+  // worker so replay can restore the scale of the frame before drawing it back.
+  canvasWidth: number;
+  canvasHeight: number;
   dataURLOptions: DataURLOptions;
   // capture-resolution pixels, painted over before the frame is encoded
   maskRegions?: CanvasMaskRegion[];
@@ -588,6 +599,9 @@ export type ImageBitmapDataURLWorkerResponse =
       // the display size to draw the (possibly downscaled) frame back to on replay
       displayWidth: number;
       displayHeight: number;
+      // the canvas coordinate space to restore before drawing the frame back on replay
+      canvasWidth: number;
+      canvasHeight: number;
     };
 
 export type fontParam = {

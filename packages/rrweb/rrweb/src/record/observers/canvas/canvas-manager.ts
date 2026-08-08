@@ -228,7 +228,8 @@ export class CanvasManager {
 
       if (!('base64' in e.data)) return;
 
-      const { base64, type, displayWidth, displayHeight } = e.data;
+      const { base64, type, displayWidth, displayHeight, canvasWidth, canvasHeight } =
+        e.data;
       // the encoded image may be downscaled; draw it stretched back to the canvas's display
       // size — carried through the worker with the frame, so playback keeps the original
       // dimensions and aspect ratio, just softer.
@@ -264,6 +265,8 @@ export class CanvasManager {
         ],
         displayWidth: dw,
         displayHeight: dh,
+        canvasWidth,
+        canvasHeight,
       });
     };
 
@@ -348,6 +351,10 @@ export class CanvasManager {
             // Fallback to intrinsic size if canvas has not yet rendered
             const displayWidth = canvas.clientWidth || canvas.width;
             const displayHeight = canvas.clientHeight || canvas.height;
+            // the coordinate space the frame was drawn against; replay restores it before
+            // drawing, so a seek scales the frame the same way straight playback does
+            const canvasWidth = canvas.width;
+            const canvasHeight = canvas.height;
             // capture at a (optionally downscaled) resolution; replay upscales it back to the
             // display size, so playback dimensions/aspect are unchanged, just softer.
             const captureWidth = Math.max(1, Math.round(displayWidth * scale));
@@ -388,6 +395,8 @@ export class CanvasManager {
                 height: captureHeight,
                 displayWidth,
                 displayHeight,
+                canvasWidth,
+                canvasHeight,
                 dataURLOptions: options.dataURLOptions,
                 maskRegions,
               },

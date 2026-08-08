@@ -97,6 +97,8 @@ worker.onmessage = async function (e) {
       height,
       displayWidth,
       displayHeight,
+      canvasWidth,
+      canvasHeight,
       dataURLOptions,
       maskRegions,
     } = e.data;
@@ -160,6 +162,8 @@ worker.onmessage = async function (e) {
         base64: encode(arrayBuffer), // cpu intensive
         displayWidth,
         displayHeight,
+        canvasWidth,
+        canvasHeight,
       });
       // only record the fingerprint once the frame was actually sent — a
       // transient encode failure must retry on the next frame, not be
