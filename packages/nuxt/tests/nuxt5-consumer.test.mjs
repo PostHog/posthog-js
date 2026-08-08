@@ -115,10 +115,10 @@ try {
     join(fixtureDir, 'nuxt.config.mjs'),
     `export default defineNuxtConfig({ modules: ['@posthog/nuxt'], posthogConfig: { publicKey: 'phc_test', host: '${posthogHost}', serverConfig: { enableExceptionAutocapture: true, flushAt: 100, flushInterval: 0, disableCompression: true, disableRemoteConfig: true } } })\n`,
   )
-  mkdirSync(join(fixtureDir, 'server', 'api'), { recursive: true })
+  mkdirSync(join(fixtureDir, 'server', 'plugins'), { recursive: true })
   writeFileSync(
-    join(fixtureDir, 'server', 'api', 'error.mjs'),
-    `setInterval(() => {}, 60_000)\nexport default defineEventHandler(() => { throw new Error('shutdown test') })\n`,
+    join(fixtureDir, 'server', 'plugins', 'background-error.mjs'),
+    `setInterval(() => {}, 60_000)\nexport default () => { process.once('SIGUSR2', () => { Promise.reject(new Error('background shutdown test')) }) }\n`,
   )
 
   execFileSync('pnpm', ['install', '--ignore-scripts', '--no-frozen-lockfile'], { cwd: fixtureDir, stdio: 'inherit' })
@@ -137,13 +137,15 @@ try {
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 
-  const response = await waitForServer(`http://127.0.0.1:${nuxtPort}/api/error`)
-  assert.equal(response.status, 500)
+  const nuxtHost = `http://127.0.0.1:${nuxtPort}`
+  await waitForServer(nuxtHost)
+  nuxtServer.kill('SIGUSR2')
+  await new Promise(resolve => setTimeout(resolve, 100))
   const exit = once(nuxtServer, 'exit')
   nuxtServer.kill('SIGTERM')
   assert.match(
     await withTimeout(capture, 5_000, 'PostHog events were not flushed while the server had an active handle'),
-    /shutdown test/,
+    /background shutdown test/,
   )
   assert.equal(nuxtServer.exitCode, null)
   nuxtServer.kill('SIGKILL')

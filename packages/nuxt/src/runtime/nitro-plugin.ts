@@ -3,8 +3,8 @@ import { uuidv7 } from '@posthog/core/vendor/uuidv7'
 import type { PostHogCommon, PostHogServerConfig } from '../module'
 import type { JsonType } from '@posthog/core'
 
-type RequestContext = { path?: string, method?: string, waitUntil?: (promise: Promise<unknown>) => void }
-type ErrorHandler = (error: unknown, request?: RequestContext) => void
+type RequestContext = { path?: string, method?: string }
+type ErrorHandler = (error: unknown, request?: RequestContext) => Promise<void>
 type NitroBindings = {
   useRuntimeConfig: () => unknown
   onError: (handler: ErrorHandler) => void
@@ -43,7 +43,7 @@ export function setupPostHogNitroPlugin({ useRuntimeConfig, onError, onClose }: 
       }
 
       client.captureException(error, uuidv7(), props)
-      request?.waitUntil?.(client.flush().catch(() => {}))
+      return client.flush().catch(() => {})
     })
   }
 

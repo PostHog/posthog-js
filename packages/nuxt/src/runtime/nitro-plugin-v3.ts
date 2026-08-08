@@ -13,7 +13,6 @@ export default definePlugin((nitroApp) => {
             ? {
                 path: new URL(event.req.url).pathname,
                 method: event.req.method,
-                waitUntil: event.req.waitUntil,
               }
             : undefined,
         ),

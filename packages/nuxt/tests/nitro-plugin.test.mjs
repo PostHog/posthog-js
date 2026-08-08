@@ -30,6 +30,10 @@ class PostHog {
     calls.push(['captureException', ...args])
   }
 
+  async flush() {
+    calls.push(['flush'])
+  }
+
   async shutdown() {
     calls.push(['shutdown'])
   }
@@ -67,16 +71,27 @@ assert.equal(typeof handlers.error, 'function')
 assert.equal(typeof handlers.close, 'function')
 
 const error = new Error('server failure')
-handlers.error(error, { path: '/api/test', method: 'POST' })
+await handlers.error(error, { path: '/api/test', method: 'POST' })
 assert.deepEqual(calls[2], [
   'captureException',
   error,
   'event-id',
   { $process_person_profile: false, path: '/api/test', method: 'POST' },
 ])
+assert.deepEqual(calls[3], ['flush'])
+
+const backgroundError = new Error('background failure')
+await handlers.error(backgroundError)
+assert.deepEqual(calls[4], [
+  'captureException',
+  backgroundError,
+  'event-id',
+  { $process_person_profile: false },
+])
+assert.deepEqual(calls[5], ['flush'])
 
 await handlers.close()
-assert.deepEqual(calls[3], ['shutdown'])
+assert.deepEqual(calls[6], ['shutdown'])
 
 function loadAdapter(filename, defineName) {
   const adapterSource = readFileSync(new URL(`../src/runtime/${filename}`, import.meta.url), 'utf8')
@@ -106,21 +121,28 @@ const nitro2 = loadAdapter('nitro-plugin-v2.ts', 'defineNitroPlugin')
 assert.match(nitro2.adapterSource, /from 'nitropack\/runtime'/)
 assert.doesNotMatch(nitro2.adapterSource, /from '#imports'/)
 let nitro2Request
+const nitro2Promise = Promise.resolve()
 nitro2.bindings.onError((_error, request) => {
   nitro2Request = request
+  return nitro2Promise
 })
-nitro2.adapterHandlers.error(error, { event: { path: '/v2', method: 'GET' } })
+assert.equal(nitro2.adapterHandlers.error(error, { event: { path: '/v2', method: 'GET' } }), nitro2Promise)
 assert.deepEqual(nitro2Request, { path: '/v2', method: 'GET' })
 
 const nitro3 = loadAdapter('nitro-plugin-v3.ts', 'definePlugin')
 assert.match(nitro3.adapterSource, /from 'nitro'/)
 assert.match(nitro3.adapterSource, /from 'nitro\/runtime-config'/)
 let nitro3Request
+const nitro3Promise = Promise.resolve()
 const waitUntil = () => {}
 nitro3.bindings.onError((_error, request) => {
   nitro3Request = request
+  return nitro3Promise
 })
-nitro3.adapterHandlers.error(error, {
-  event: { req: { url: 'https://example.com/v3?query=ignored', method: 'POST', waitUntil } },
-})
-assert.deepEqual(nitro3Request, { path: '/v3', method: 'POST', waitUntil })
+assert.equal(
+  nitro3.adapterHandlers.error(error, {
+    event: { req: { url: 'https://example.com/v3?query=ignored', method: 'POST', waitUntil } },
+  }),
+  nitro3Promise,
+)
+assert.deepEqual(nitro3Request, { path: '/v3', method: 'POST' })
