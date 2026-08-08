@@ -2352,6 +2352,52 @@ describe('preview renders', () => {
         expect(surveyDiv.getElementsByClassName('survey-question').length).toBe(1)
     })
 
+    test('renderSurveysPreview renders the intro screen for the intro sentinel page index (-1)', () => {
+        const mockSurvey = {
+            id: 'testSurveyIntro',
+            name: 'Test survey with intro',
+            type: SurveyType.Popover,
+            appearance: {
+                displayIntroScreen: true,
+                introScreenHeader: 'Welcome!',
+                introScreenDescription: 'Two quick questions.',
+                introScreenButtonText: 'Get started',
+            },
+            start_date: '2021-01-01T00:00:00.000Z',
+            description: 'This is a survey description',
+            linked_flag_key: null,
+            questions: [
+                {
+                    question: 'How satisfied are you with our newest product?',
+                    description: 'This is a question description',
+                    descriptionContentType: 'text',
+                    type: SurveyQuestionType.Rating,
+                    display: 'number',
+                    scale: 10,
+                    lowerBoundLabel: 'Not Satisfied',
+                    upperBoundLabel: 'Very Satisfied',
+                },
+            ],
+            conditions: {},
+            end_date: null,
+            targeting_flag_key: null,
+        }
+        const surveyDiv = document.createElement('div')
+        renderSurveysPreview({ survey: mockSurvey as Survey, parentElement: surveyDiv, previewPageIndex: -1 })
+        expect(surveyDiv.getElementsByClassName('intro-screen').length).toBe(1)
+        expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(0)
+        expect(surveyDiv.querySelector('.intro-screen-header')!.textContent).toBe('Welcome!')
+        expect(surveyDiv.querySelector('.intro-screen-body')!.textContent).toBe('Two quick questions.')
+        expect(surveyDiv.querySelector('.form-submit')!.textContent).toBe('Get started')
+
+        // Page index 0 renders the first question, not the intro
+        const questionDiv = document.createElement('div')
+        renderSurveysPreview({ survey: mockSurvey as Survey, parentElement: questionDiv, previewPageIndex: 0 })
+        expect(questionDiv.getElementsByClassName('intro-screen').length).toBe(0)
+        expect(questionDiv.getElementsByClassName('survey-form').length).toBe(1)
+        expect(questionDiv.getElementsByClassName('survey-question').length).toBe(1)
+    })
+
     test('renderSurveysPreview marks up question with html when no content type is selected by default', () => {
         const mockSurvey = {
             id: 'testSurvey1',
