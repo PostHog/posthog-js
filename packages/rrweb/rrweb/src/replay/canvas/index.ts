@@ -46,6 +46,21 @@ export default async function canvasMutation({
       return;
     }
     // default is '2d' for backwards compatibility (rrweb below 1.1.x)
+    // Restore the coordinate space the frame was captured against before drawing it. The
+    // drawImage command draws at the display size, which the browser reads in the canvas
+    // coordinate space, so the scale depends on the width/height attributes at apply time. A
+    // seek applies the final size first and then replays the queued frames, so without this it
+    // renders a canvas whose coordinate space differs from its display size at the wrong scale.
+    const { canvasWidth, canvasHeight } = precomputedMutation;
+    if (
+      typeof canvasWidth === 'number' &&
+      typeof canvasHeight === 'number' &&
+      (target.width !== canvasWidth || target.height !== canvasHeight)
+    ) {
+      // this also clears the canvas, which is fine because the frame repaints it in full
+      target.width = canvasWidth;
+      target.height = canvasHeight;
+    }
     await canvas2DMutation({
       event,
       mutations: commands,
