@@ -347,6 +347,63 @@ describe('RemoteConfigLoader', () => {
             loader.stop()
         })
 
+        it('refreshes when a hidden tab becomes visible again', () => {
+            const loader = new RemoteConfigLoader(posthog)
+            loader.load()
+
+            // Tab goes to the background — the interval tick is a no-op while hidden
+            Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+            jest.advanceTimersByTime(5 * 60 * 1000)
+            expect(posthog.reloadFeatureFlags).not.toHaveBeenCalled()
+
+            // Tab comes back — the visibilitychange listener refreshes right away
+            Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+            document.dispatchEvent(new Event('visibilitychange'))
+            expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(1)
+
+            loader.stop()
+        })
+
+        it('skips the visibility refresh within the minimum interval', () => {
+            const loader = new RemoteConfigLoader(posthog)
+            loader.load()
+
+            // Interval fires while visible and records the refresh time
+            jest.advanceTimersByTime(5 * 60 * 1000)
+            expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(1)
+
+            // A visibility change right after must not refresh again — the guard blocks it
+            document.dispatchEvent(new Event('visibilitychange'))
+            expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(1)
+
+            loader.stop()
+        })
+
+        it('removes the visibility listener on stop', () => {
+            const loader = new RemoteConfigLoader(posthog)
+            loader.load()
+            loader.stop()
+
+            document.dispatchEvent(new Event('visibilitychange'))
+            expect(posthog.reloadFeatureFlags).not.toHaveBeenCalled()
+        })
+
+        it('starts polling even when the config load throws', () => {
+            // Force the loader down the failure path instead of the preloaded config
+            assignableWindow._POSTHOG_REMOTE_CONFIG = undefined
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(() => {
+                throw new Error('loader failed')
+            })
+
+            const loader = new RemoteConfigLoader(posthog)
+            loader.load()
+
+            jest.advanceTimersByTime(5 * 60 * 1000)
+            expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(1)
+
+            loader.stop()
+        })
+
         it('skips refresh when no document is available', async () => {
             try {
                 await jest.isolateModulesAsync(async () => {
