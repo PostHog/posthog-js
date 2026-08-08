@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
 const source = readFileSync(new URL('../src/runtime/vue-plugin.ts', import.meta.url), 'utf8')
+assert.doesNotMatch(source, /\bwindow\b/)
 
 const executableSource = source
   .replace(/^import .*$/gm, '')
@@ -10,11 +11,10 @@ const executableSource = source
   .replace('function autocaptureEnabled(config: PostHogClientConfig): boolean', 'function autocaptureEnabled(config)')
 
 function loadPlugin({ posthog, useRuntimeConfig }) {
-  return new Function('defineNuxtPlugin', 'useRuntimeConfig', 'posthog', 'window', executableSource)(
+  return new Function('defineNuxtPlugin', 'useRuntimeConfig', 'posthog', executableSource)(
     plugin => plugin,
     useRuntimeConfig,
     posthog,
-    {},
   )
 }
 
