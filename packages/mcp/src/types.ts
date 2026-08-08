@@ -151,6 +151,15 @@ export type BeforeSendFn = (event: PostHogCaptureEvent) => MaybePromise<PostHogC
 export interface Event {
   actorId?: string
   clientName?: string
+  /**
+   * Raw `user-agent` request header → `$mcp_client_user_agent`. HTTP transports
+   * only. The only place a client's *surface* is distinguishable: one vendor
+   * ships many products under a single `clientName` (Anthropic's CLI, Agent SDK
+   * and VS Code extension all report `claude-code`), and only the User-Agent
+   * parenthetical tells them apart. Captured verbatim — surfaces are resolved to
+   * friendly labels at query time, never in this SDK.
+   */
+  clientUserAgent?: string
   clientVersion?: string
   conversationId?: string
   duration?: number
@@ -199,6 +208,12 @@ export interface Event {
   toolDescription?: string
   userIntent?: string
   userIntentSource?: MCPAnalyticsIntentSource
+  /**
+   * Raw vendor client header (`x-anthropic-client`) → `$mcp_vendor_client`. HTTP
+   * transports only. A second, independent surface signal alongside
+   * {@link Event.clientUserAgent}; captured verbatim, never classified.
+   */
+  vendorClient?: string
 }
 
 /** A partially-built MCP event as it flows through the SDK before capture. */
@@ -344,6 +359,24 @@ export interface McpCaptureCommon {
    * not just the initialize event — the `PostHogMCP` client holds no per-session state.
    */
   protocolVersion?: string
+  /**
+   * Raw `user-agent` request header → `$mcp_client_user_agent`. The
+   * `instrument()` path reads this off the transport automatically; a custom
+   * dispatcher has no `extra`, so pass `req.headers['user-agent']` yourself.
+   *
+   * Worth wiring up: it is the only signal that separates a vendor's surfaces
+   * (Anthropic's CLI, Agent SDK and VS Code extension all report
+   * `clientName: "claude-code"`, and only the User-Agent parenthetical —
+   * `(cli)` / `(sdk-ts)` / `(claude-vscode)` — tells them apart). Send it raw;
+   * PostHog resolves friendly product labels at query time.
+   */
+  clientUserAgent?: string
+  /**
+   * Raw vendor client header → `$mcp_vendor_client`. Anthropic's clients send
+   * `x-anthropic-client`; pass it as a second, independent surface signal
+   * alongside {@link McpCaptureCommon.clientUserAgent}. Sent verbatim.
+   */
+  vendorClient?: string
   /** Person properties → `$set` (e.g. `{ name, email, plan }`). */
   setProperties?: JsonRecord
   /** Group memberships → `$groups`. */

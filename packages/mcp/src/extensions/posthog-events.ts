@@ -151,6 +151,14 @@ function addCommonEventProperties(event: Event, properties: Record<string, unkno
   if (event.clientVersion) {
     properties[PostHogMCPAnalyticsProperty.ClientVersion] = event.clientVersion
   }
+  // HTTP transports only, and only for the request that carried the header —
+  // stdio and in-memory servers simply never set these.
+  if (event.clientUserAgent) {
+    properties[PostHogMCPAnalyticsProperty.ClientUserAgent] = event.clientUserAgent
+  }
+  if (event.vendorClient) {
+    properties[PostHogMCPAnalyticsProperty.VendorClient] = event.vendorClient
+  }
   // Present on every event once negotiated at `initialize` (carried via
   // sessionInfo / the session token). Absent only before the handshake.
   if (event.protocolVersion) {
@@ -241,6 +249,12 @@ function buildExceptionEvent(event: Event): PostHogCaptureEvent {
   }
   if (event.clientVersion) {
     properties[PostHogMCPAnalyticsProperty.ClientVersion] = event.clientVersion
+  }
+  if (event.clientUserAgent) {
+    properties[PostHogMCPAnalyticsProperty.ClientUserAgent] = event.clientUserAgent
+  }
+  if (event.vendorClient) {
+    properties[PostHogMCPAnalyticsProperty.VendorClient] = event.vendorClient
   }
   if (event.protocolVersion) {
     properties[PostHogMCPAnalyticsProperty.ProtocolVersion] = event.protocolVersion

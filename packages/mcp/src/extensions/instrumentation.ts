@@ -24,6 +24,7 @@ import {
   resolveConversationId,
 } from './conversation-id'
 import { stampMetaClientInfo } from './client-identity'
+import { stampTransportIdentity } from './transport-identity'
 import { addInstructionsToOutputSchemas, mirrorInstructionsIntoStructuredContent } from './output-instructions'
 import { captureEvent } from './capture'
 import { MCPAnalyticsEventType } from './event-types'
@@ -32,7 +33,7 @@ import { resolveToolCallIntent, setEventIntent, setExplicitContextIntent } from 
 import { getServerTrackingData, handleIdentify, setServerTrackingData, withIdentity } from './internal'
 import type { LoggerFn } from './logger'
 import { buildCapturedMcpParameters } from './mcp-payloads'
-import { getLiteralValue, getObjectShape } from './mcp-sdk-compat'
+import { readRequestHandlerMethod } from './mcp-sdk-compat'
 import { getSessionId, getSessionInfo, newSessionId } from './session'
 import { encodeSessionId, readMcpSessionHeader, writeSessionIdToTransport } from './session-token'
 import { getReportMissingToolDescriptor, resolveMissingCapabilityToolName } from './tools'
@@ -157,22 +158,13 @@ function getActiveAnalyticsParameterOwnership(
   return {
     context: !isMissingCapabilityTool && isContextEnabled(data.options.context) && ownership?.context === true,
     conversationId: data.options.enableConversationId === true && ownership?.conversationId === true,
-    // Deliberately read off `listed`, never the override. This asks whether
-    // `tools/list` actually declared `_mcp_instructions`, and only the advertised
-    // JSON Schema can answer it — an override is built from the live registry,
-    // which on the high-level path holds Zod.
-    //
-    // The cache is per-instance, so this is not merely "before the first
-    // `tools/list`": an instance that never serves a listing never writes the
-    // mirror at all. That is the per-request server pattern — `tools/list` lands
-    // on one instance, `tools/call` on a cold one — where the handle falls back
-    // to the `content` block and a structuredContent-only client misses it.
-    //
-    // Failing closed is deliberate. Writing a key the advertised schema did not
-    // declare fails the *entire* tool result under `additionalProperties: false`,
-    // so guessing costs the caller their result, while not guessing costs us one
-    // delivery channel. The fix is a process-scoped ownership cache, so a listing
-    // served by any instance answers for the rest — not a per-call guess.
+    // Deliberately read off `listed`, never the override: only the advertised
+    // JSON Schema can say whether `tools/list` declared `_mcp_instructions` (an
+    // override is built from the live registry, which holds Zod on the
+    // high-level path). An instance that never served a listing has no answer
+    // and fails closed — writing an undeclared key fails the customer's entire
+    // tool result under `additionalProperties: false`. See ADR-0004 for the
+    // per-request-instance gap this leaves and the planned fix.
     outputInstructions: data.options.enableConversationId === true && listed?.outputInstructions === true,
   }
 }
@@ -237,6 +229,9 @@ async function prepareToolCallEvent(
     // `_meta` on every request rather than at `initialize`; stamp them onto this
     // event now so concurrent requests can't cross-attribute it.
     stampMetaClientInfo(event, request)
+    // Which *surface* of the client made this call lives only in the request
+    // headers (HTTP transports); `clientInfo` can't tell a vendor's products apart.
+    stampTransportIdentity(event, extra)
 
     await applyResolvedMetadata(event, data, request, extra)
     setEventIntent(event, await resolveToolCallIntent(data, request, ownership.context, extra))
@@ -250,19 +245,14 @@ async function prepareToolCallEvent(
 }
 
 /**
- * Delivers the conversation session handle back to the agent, over both channels a tool
- * result has:
+ * Delivers the conversation session handle back to the agent over both channels
+ * a tool result has: mirrored into `structuredContent` on every response (for
+ * tools whose output schema declares the key), and as a `content` text block on
+ * the minting response only. Why two channels and why those cadences: ADR-0004.
  *
- * - `structuredContent`, on *every* response for a tool whose output schema we
- *   declared the key on. Clients that read structured results never see the text
- *   block, and re-sending it each time lets an agent that dropped the session handle read
- *   it back.
- * - `content`, as a text block, only on the response that minted the session handle.
- *   Repeating it every call would put a `[SERVER]:` line in front of the user on
- *   every single tool result.
- *
- * If neither channel could carry a session handle we minted, the agent never received it,
- * so clear it off the event rather than showing analytics an id nobody has.
+ * If neither channel could carry a session handle we minted, the agent never
+ * received it, so clear it off the event rather than showing analytics an id
+ * nobody has.
  */
 function applyConversationInstructions(
   event: McpEvent | null,
@@ -364,13 +354,7 @@ export type HandlerPatch = (
   extra: CompatibleRequestHandlerExtra | undefined
 ) => Promise<unknown>
 
-/**
- * Applies the `patches` (keyed by method, e.g. `initialize`, `tools/list`) to the
- * handlers already registered, and patches `setRequestHandler` so matching
- * handlers registered later are patched too. The latter is what makes adapters
- * that register handlers post-construction work — e.g. `@rekog/mcp-nest` hands a
- * bare server to instrument() and only then registers its handlers.
- */
+/** Pre-patch handlers, kept so `isToolAdvertised` can query the raw listing. */
 const originalRequestHandlers = new WeakMap<MCPServerLike, Map<string, MCPRequestHandler>>()
 
 function rememberOriginalRequestHandler(
@@ -386,8 +370,45 @@ function rememberOriginalRequestHandler(
   handlers.set(handlerName, originalHandler)
 }
 
+/**
+ * Registers a synthetic fallback handler for `handlerName`, already wrapped in
+ * `patch`, by writing straight into `_requestHandlers` instead of going through
+ * `setRequestHandler`.
+ *
+ * Bypassing the SDK setter is deliberate, on three counts:
+ *
+ * - **Capability assertion.** `setRequestHandler` refuses a method the server
+ *   never declared a capability for, so instrumenting a low-level server built
+ *   without `capabilities.tools` used to throw `Server does not support tools`
+ *   and leave instrumentation half-applied. Our fallback is not a capability the
+ *   server offers — it exists only so a call for a tool nobody claims is still
+ *   captured — so the assertion has nothing to protect here.
+ * - **Schema validation.** The setter also wraps the handler in request/result
+ *   parsing, which a handler that can only ever throw `Unknown tool` never needs.
+ * - **Portability.** The setter's first argument is a Zod schema on SDK v1 and a
+ *   method string on v2; the map key is the same string on both, so this is the
+ *   one registration form that does not need to know which major it is talking
+ *   to — and it drops the last runtime `@modelcontextprotocol/sdk` import from
+ *   the shipped bundle.
+ */
+export function registerFallbackRequestHandler(
+  server: MCPServerLike,
+  handlerName: string,
+  fallbackHandler: MCPRequestHandler,
+  patch: HandlerPatch
+): void {
+  rememberOriginalRequestHandler(server, handlerName, fallbackHandler)
+  server._requestHandlers.set(handlerName, (request, extra) => patch(server, fallbackHandler, request, extra))
+}
+
+/**
+ * Applies the `patches` (keyed by method, e.g. `initialize`, `tools/list`) to the
+ * handlers already registered, and patches `setRequestHandler` so matching
+ * handlers registered later are patched too. The latter is what makes adapters
+ * that register handlers post-construction work — e.g. `@rekog/mcp-nest` hands a
+ * bare server to instrument() and only then registers its handlers.
+ */
 export function patchRequestHandlers(server: MCPServerLike, patches: Record<string, HandlerPatch>): void {
-  // Monkey patch existing handlers.
   for (const [handlerName, patch] of Object.entries(patches)) {
     const originalHandler = server._requestHandlers.get(handlerName)
     if (originalHandler) {
@@ -397,18 +418,31 @@ export function patchRequestHandlers(server: MCPServerLike, patches: Record<stri
   }
 
   // Monkey patch dynamically added handlers (registered after instrument()).
-  const originalSetRequestHandler = server.setRequestHandler.bind(server)
-  server.setRequestHandler = ((requestSchema: unknown, originalHandler: MCPRequestHandler) => {
-    const shape = getObjectShape(requestSchema)
-    const handlerName = shape?.method ? getLiteralValue(shape.method) : undefined
-    const patch = typeof handlerName === 'string' ? patches[handlerName] : undefined
-    if (!patch || typeof handlerName !== 'string') {
-      return originalSetRequestHandler(requestSchema, originalHandler)
+  //
+  // Variadic, and every argument is forwarded verbatim. The registration form is
+  // the SDK's business, not ours — only *that* a registration happened is ours.
+  // SDK v2 has a three-argument form for custom methods,
+  // `setRequestHandler(method, { params, result }, handler)`, and a two-parameter
+  // wrapper drops the handler: the SDK then sees the schemas object where the
+  // handler should be and throws `setRequestHandler: handler is required`, which
+  // takes down the host server rather than just our instrumentation.
+  const originalSetRequestHandler = server.setRequestHandler.bind(server) as (...args: unknown[]) => unknown
+  server.setRequestHandler = ((...args: unknown[]) => {
+    const handlerName = readRequestHandlerMethod(args[0])
+    // `hasOwnProperty`, not a bare index: `handlerName` is now an arbitrary
+    // caller-supplied string, and a custom method named `toString` would
+    // otherwise resolve to an inherited function and be treated as a patch.
+    const patch =
+      handlerName !== undefined && Object.prototype.hasOwnProperty.call(patches, handlerName)
+        ? patches[handlerName]
+        : undefined
+    if (handlerName === undefined || !patch) {
+      return originalSetRequestHandler(...args)
     }
 
     // Register first so the MCP SDK's request/result validation stays inside
     // our analytics wrapper, matching handlers that existed before instrument().
-    const result = originalSetRequestHandler(requestSchema, originalHandler)
+    const result = originalSetRequestHandler(...args)
     const registeredHandler = server._requestHandlers.get(handlerName)
     if (registeredHandler) {
       rememberOriginalRequestHandler(server, handlerName, registeredHandler)
@@ -475,6 +509,7 @@ export async function handleListToolsRequest(
     timestamp: startTime,
   }
   stampMetaClientInfo(event, request)
+  stampTransportIdentity(event, extra)
 
   if (data) {
     await applyResolvedMetadata(event, data, request, extra)
@@ -639,7 +674,7 @@ export function cacheToolCategories(cache: Map<string, string>, tools: ListTools
  * client name/version is lost after `initialize`. Fix: mint the
  * `Mcp-Session-Id` response header as a token carrying both. Clients replay
  * the header on every request, so any pod recovers them with no server-side
- * store (decoded in `getSessionId`).
+ * store (decoded in `getSessionId`). See ADR-0003.
  *
  * The header only reaches the wire when response headers are built after the
  * handler runs — StreamableHTTP with `enableJsonResponse: true`. SSE flushes
@@ -786,6 +821,7 @@ export async function handleInitializeRequest(
   // negotiated protocol version below overrides any `_meta` one); picks up client
   // info if a client also sends it in `_meta`.
   stampMetaClientInfo(event, request)
+  stampTransportIdentity(event, extra)
 
   await applyResolvedMetadata(event, data, request, extra)
 

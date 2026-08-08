@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.414.0
+
+### Minor Changes
+
+- [#4330](https://github.com/PostHog/posthog-js/pull/4330) [`5bd8b83`](https://github.com/PostHog/posthog-js/commit/5bd8b83fcffcdeccd3f029afd03a7fa5854591d7) Thanks [@darkopia](https://github.com/darkopia)! - Add `posthog.conversations.getUnavailableReason()` to expose why the conversations API is unavailable (bundle blocked/failed to load, disabled in project, remote config pending/failed, still initializing, …) instead of collapsing every case into `isAvailable() === false`. Lets callers that fall back to another channel record the specific cause. `ConversationsUnavailableReason` is exported from the package entry points, so consumers can name the type.
+  (2026-08-07)
+
 ## 1.413.3
 
 ### Patch Changes

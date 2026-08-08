@@ -42,6 +42,13 @@ function isV2Model(model: LanguageModel): model is LanguageModelV2 {
   return model.specificationVersion === 'v2'
 }
 
+function getSpecificationVersion(model: unknown): unknown {
+  if (typeof model === 'object' && model !== null && 'specificationVersion' in model) {
+    return model.specificationVersion
+  }
+  return undefined
+}
+
 interface ClientOptions {
   posthogDistinctId?: string
   posthogTraceId?: string
@@ -452,6 +459,14 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
   phClient: PostHog,
   options: ClientOptions
 ): T => {
+  const specificationVersion = getSpecificationVersion(model)
+  if (specificationVersion !== 'v2' && specificationVersion !== 'v3') {
+    throw new Error(
+      `[PostHog AI] withTracing supports Vercel AI SDK v5 and v6 models only. ` +
+        `Use @ai-sdk/otel with @posthog/ai/otel for AI SDK v7 models.`
+    )
+  }
+
   const traceId = options.posthogTraceId ?? uuidv4()
   const mergedOptions = {
     ...options,

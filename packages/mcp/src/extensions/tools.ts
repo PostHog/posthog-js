@@ -36,15 +36,12 @@ export function getReportMissingToolDescriptor(name: string = GET_MORE_TOOLS_NAM
     },
     annotations: {
       title: 'Get More Tools',
-      // Doesn't mutate state on the MCP server
       readOnlyHint: true,
-      // Interacts with external entities because we store this in analytics
+      // Interacts with an external entity: the report lands in analytics.
       openWorldHint: true,
-      // A tool like `get_more_tools` would usually NOT be idempontent, but since we are
-      // only using this to keep track of missing tools/feedback/analytics, it is actually idempontent.
-      // It's also preferable to track it as idempontent to make agents more prone to call it proactively.
+      // Only records the gap, so repeat calls are harmless — and advertising it
+      // as idempotent makes agents more willing to call it proactively.
       idempotentHint: true,
-      // Never deletes any data from the MCP server
       destructiveHint: false,
     },
   }

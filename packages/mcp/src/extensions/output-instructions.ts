@@ -3,17 +3,15 @@ import { log } from './logger'
 import type { AnalyticsInjectableJsonSchema } from './analytics-parameters'
 
 /**
- * The `conversation_id` session handle reaches the agent as a text block appended to the
- * tool result. That block is invisible to any client that reads
- * `structuredContent` instead of `content` — which is what clients do whenever a
- * tool declares an `outputSchema`. Measured against Claude Code, correlation for
- * such tools drops to zero.
- *
- * The fix is to mirror the session handle into `structuredContent` as well, which this
- * module does in two halves that must stay in that order:
+ * Mirrors the `conversation_id` session handle into `structuredContent`, in two
+ * halves that must stay in that order:
  *
  *   1. declare `_mcp_instructions` on the tool's advertised `outputSchema`
  *   2. write it into the result's `structuredContent`
+ *
+ * Needed because clients that read `structuredContent` — which they do whenever
+ * a tool declares an `outputSchema` — never see the `content` text block that
+ * carries the handle (ADR-0004).
  *
  * The declaration is what makes the write safe. The MCP client ajv-validates
  * `structuredContent` against the schema from `tools/list`, and

@@ -10,6 +10,8 @@
  * The token is unsigned: it holds only what the client already self-reports.
  */
 
+import { readHeaderValue } from './headers'
+
 export const MCP_SESSION_HEADER = 'mcp-session-id'
 
 /** What a session token carries. */
@@ -105,21 +107,7 @@ export function decodeSessionId(value: unknown): SessionTokenPayload | null {
  * transports lowercase header keys; the fallback scan covers hand-built extras.
  */
 export function readMcpSessionHeader(headers: unknown): string | undefined {
-  if (!headers || typeof headers !== 'object') {
-    return undefined
-  }
-  const record = headers as Record<string, unknown>
-  let value = record[MCP_SESSION_HEADER]
-  if (value === undefined) {
-    const key = Object.keys(record).find((k) => k.toLowerCase() === MCP_SESSION_HEADER)
-    value = key === undefined ? undefined : record[key]
-  }
-  const first = Array.isArray(value) ? value[0] : value
-  if (typeof first !== 'string') {
-    return undefined
-  }
-  const trimmed = first.trim()
-  return trimmed.length > 0 ? trimmed : undefined
+  return readHeaderValue(headers, MCP_SESSION_HEADER)
 }
 
 /**
