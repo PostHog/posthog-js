@@ -132,7 +132,9 @@ exports[`record webgl > recordCanvas FPS > should record snapshots 1`] = `
         }
       ],
       \\"displayWidth\\": 300,
-      \\"displayHeight\\": 150
+      \\"displayHeight\\": 150,
+      \\"canvasWidth\\": 300,
+      \\"canvasHeight\\": 150
     }
   },
   {
@@ -177,7 +179,9 @@ exports[`record webgl > recordCanvas FPS > should record snapshots 1`] = `
         }
       ],
       \\"displayWidth\\": 300,
-      \\"displayHeight\\": 150
+      \\"displayHeight\\": 150,
+      \\"canvasWidth\\": 300,
+      \\"canvasHeight\\": 150
     }
   }
 ]"
