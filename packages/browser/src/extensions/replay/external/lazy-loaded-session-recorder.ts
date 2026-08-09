@@ -1895,12 +1895,35 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
     }
 
+    // Custom events are lifecycle markers (sessionIdle, $session_id_change, ...). A buffer holding
+    // nothing else has no content to render, so shipping it as a session's first block opens a
+    // recording that bills the customer and plays back as nothing. Once the session has a
+    // FullSnapshot, later marker-only blocks append to real content and are fine.
+    // $session_starting and $session_ending are exempt: they only exist in this stream, and
+    // dropping them would break the linking chain through a session that recorded nothing.
+    private _wouldOpenRecordingWithMarkersOnly(): boolean {
+        if (this._lastFullSnapshotSessionId === this._buffer.sessionId || this._buffer.data.length === 0) {
+            return false
+        }
+        return this._buffer.data.every(
+            (event) =>
+                event?.type === EventType.Custom && !isSessionEndingEvent(event) && !isSessionStartingEvent(event)
+        )
+    }
+
     private _flushBuffer(): SnapshotBuffer {
         this._clearFlushBufferTimer()
 
         // hold the buffer rather than ship a billable recording for an epoch nobody touched
         if (this._holdFlushUntilInteraction) {
             return this._buffer
+        }
+
+        // keep the markers rather than open a recording with them: the next capture schedules another
+        // flush, so they ship alongside the content that follows, and go with the page if none does
+        if (this._wouldOpenRecordingWithMarkersOnly()) {
+            // markers alone are unplayable, so past the cap they aren't worth the memory either
+            return this._buffer.size > RECORDING_MAX_EVENT_SIZE ? this._clearBuffer() : this._buffer
         }
 
         // never flush while a sampling decision is missing (e.g. wiped by posthog.reset()) — an

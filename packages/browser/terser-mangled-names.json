@@ -752,6 +752,7 @@
         "_windowId",
         "_windowIdGenerator",
         "_window_id_storage_key",
+        "_wouldOpenRecordingWithMarkersOnly",
         "_write",
         "_writeActivationTimestamps",
         "_writeEntry",
