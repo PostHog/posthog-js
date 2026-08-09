@@ -4661,6 +4661,26 @@
           "name": "thankYouMessageCloseButtonText"
         },
         {
+          "type": "boolean",
+          "name": "displayIntroScreen"
+        },
+        {
+          "type": "string",
+          "name": "introScreenHeader"
+        },
+        {
+          "type": "string",
+          "name": "introScreenDescription"
+        },
+        {
+          "type": "SurveyQuestionDescriptionContentType",
+          "name": "introScreenDescriptionContentType"
+        },
+        {
+          "type": "string",
+          "name": "introScreenButtonText"
+        },
+        {
           "type": "string",
           "name": "borderColor"
         },
@@ -4762,6 +4782,26 @@
         {
           "type": "string",
           "name": "thankYouMessageCloseButtonText"
+        },
+        {
+          "type": "boolean",
+          "name": "displayIntroScreen"
+        },
+        {
+          "type": "string",
+          "name": "introScreenHeader"
+        },
+        {
+          "type": "string",
+          "name": "introScreenDescription"
+        },
+        {
+          "type": "SurveyQuestionDescriptionContentType",
+          "name": "introScreenDescriptionContentType"
+        },
+        {
+          "type": "string",
+          "name": "introScreenButtonText"
         },
         {
           "type": "string",
@@ -4999,6 +5039,18 @@
         {
           "type": "string",
           "name": "backButtonText"
+        },
+        {
+          "type": "string",
+          "name": "introScreenButtonText"
+        },
+        {
+          "type": "string",
+          "name": "introScreenDescription"
+        },
+        {
+          "type": "string",
+          "name": "introScreenHeader"
         },
         {
           "type": "string",
