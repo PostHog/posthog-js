@@ -525,7 +525,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _strategy: RecordingStrategy | undefined
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
     private _fullSnapshotTimestamps: Array<[string, number]> = []
-    // ship-time FullSnapshot tracking for _ensureFullSnapshotForSession (unlike _fullSnapshotTimestamps, which records emit-time debug telemetry)
+    // the session a FullSnapshot was last captured for, read by _ensureFullSnapshotForSession and by
+    // the marker-only flush guard (unlike _fullSnapshotTimestamps, which records emit-time debug
+    // telemetry). Capture-time, not ship-time: a buffer cleared before it flushed leaves this set.
     private _lastFullSnapshotSessionId: string | undefined = undefined
     private _fullSnapshotHealAttemptedFor: string | undefined = undefined
 
@@ -1922,7 +1924,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // keep the markers rather than open a recording with them: the next capture schedules another
         // flush, so they ship alongside the content that follows, and go with the page if none does
         if (this._wouldOpenRecordingWithMarkersOnly()) {
-            // markers alone are unplayable, so past the cap they aren't worth the memory either
+            // unplayable either way, so a flush that finds them past the cap drops them rather than
+            // holding them. Only a flush checks this, so it bounds the common case, not every case
             return this._buffer.size > RECORDING_MAX_EVENT_SIZE ? this._clearBuffer() : this._buffer
         }
 

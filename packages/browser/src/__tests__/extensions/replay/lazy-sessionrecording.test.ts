@@ -2174,6 +2174,18 @@ describe('Lazy SessionRecording', () => {
                     expect(shippedSessionIds().size).toEqual(expectedRecordings)
                 })
 
+                it('drops held markers once they pass the buffer size cap', () => {
+                    rotateToASessionWithNoContent()
+                    const lazy = sessionRecording['_lazyLoadedSessionRecording']
+
+                    _emit(createCustomSnapshot({ timestamp: Date.now() }, {}, 'sessionIdle'))
+                    lazy['_buffer'].size = RECORDING_MAX_EVENT_SIZE + 1
+                    lazy['_flushBuffer']()
+
+                    expect(shippedSessionIds().size).toEqual(0)
+                    expect(lazy['_buffer'].data).toEqual([])
+                })
+
                 it('holds idle markers until content arrives, then ships them with it', () => {
                     rotateToASessionWithNoContent()
 
