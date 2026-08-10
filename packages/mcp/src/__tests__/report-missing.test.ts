@@ -1,4 +1,5 @@
 import { type CallToolResult, CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
+import type { CallToolResult as V2CallToolResult } from '@modelcontextprotocol/server'
 import { z } from 'zod'
 import { instrument } from '../index'
 import { DEFAULT_CONTEXT_PARAMETER_DESCRIPTION } from '../extensions/constants'
@@ -313,8 +314,16 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
  * the exported surface; internal descriptors are read by us, never handed on.
  */
 describe('results we hand back stay assignable to the SDK types', () => {
-  it('getMoreToolsResult() satisfies CallToolResult', () => {
+  it('getMoreToolsResult() satisfies v1 CallToolResult', () => {
     const result: CallToolResult = getMoreToolsResult()
+    expect(result.content).toHaveLength(1)
+  })
+
+  // Both majors, because either can drift away from our structural type — and v2
+  // is the likelier of the two, being the newer schema. Available only because
+  // this package now carries v2 as a devDependency.
+  it('getMoreToolsResult() satisfies v2 CallToolResult', () => {
+    const result: V2CallToolResult = getMoreToolsResult()
     expect(result.content).toHaveLength(1)
   })
 })
