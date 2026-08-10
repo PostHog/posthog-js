@@ -312,7 +312,8 @@ exports[`config snapshot for PostHogConfig 1`] = `
   ],
   "strict_script_versioning": [
     "false",
-    "true"
+    "true",
+    "\\"fallback\\""
   ],
   "asset_host": [
     "null",

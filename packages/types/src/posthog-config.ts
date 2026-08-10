@@ -1450,11 +1450,13 @@ export interface PostHogConfig {
     /**
      * Determines whether PostHog should load external dependency scripts from
      * semver-qualified asset paths such as /static/1.370.0/recorder.js instead
-     * of the legacy /static/recorder.js?v=1.370.0 form.
+     * of the legacy /static/recorder.js?v=1.370.0 form. Set to `true` to use only
+     * versioned paths, `false` to use only legacy paths, or `'fallback'` to try
+     * the versioned path first and retry with the legacy path if it fails.
      *
-     * @default false
+     * @default 'fallback'
      */
-    strict_script_versioning: boolean
+    strict_script_versioning: boolean | 'fallback'
 
     /**
      * Optional host override for static assets loaded by PostHog, such as

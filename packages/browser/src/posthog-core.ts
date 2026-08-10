@@ -271,7 +271,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     disable_product_tours: false,
     disableDeviceModel: false,
     disable_external_dependency_loading: false,
-    strict_script_versioning: false,
+    strict_script_versioning: 'fallback',
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
     secure_cookie: window?.location?.protocol === 'https:',
     ip: false,
