@@ -1,4 +1,17 @@
 {
+  "PostHog/posthog-js/issue/4483": {
+    "key": "PostHog/posthog-js/issue/4483",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4483",
+    "url": "https://github.com/PostHog/posthog-js/issues/4483",
+    "conclusion": "Confirmed MCP compatibility and security-UX bug: the opt-in conversation correlation feature intentionally places imperative instructions in tool results, which Claude can reasonably reject as prompt injection.",
+    "labels": [
+      "feature/mcp-analytics",
+      "team/ai-observability"
+    ],
+    "closed": false,
+    "updatedAt": "2026-08-10T14:41:37.482Z"
+  },
   "PostHog/posthog-js/issue/4422": {
     "key": "PostHog/posthog-js/issue/4422",
     "repo": "PostHog/posthog-js",
