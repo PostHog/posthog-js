@@ -371,6 +371,7 @@ The SDK does **not**: call an LLM, inspect tool arguments, build heuristics, or 
 | Identity cache + identify dispatch                                    | `src/extensions/internal.ts`                                          |
 | Session id derivation & timeout                                       | `src/extensions/session.ts`, `src/extensions/ids.ts`                  |
 | Self-encoded session tokens (`Mcp-Session-Id`)                        | `src/extensions/session-token.ts`                                     |
+| Per-request protocol revision + mint gating (ADR-0008/0009)           | `src/extensions/session.ts`, `src/extensions/client-identity.ts`      |
 | `conversation_id` injection + minting                                 | `src/extensions/conversation-id.ts`                                   |
 | `_mcp_instructions` output-schema mirror                              | `src/extensions/output-instructions.ts`                               |
 | Client identity from request `_meta` (2026-07-28)                     | `src/extensions/client-identity.ts`                                   |
