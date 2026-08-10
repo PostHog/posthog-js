@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.415.1
+
+### Patch Changes
+
+- [#4477](https://github.com/PostHog/posthog-js/pull/4477) [`6f9adf8`](https://github.com/PostHog/posthog-js/commit/6f9adf80fc6ce83ec88d1285707a078710355d2a) Thanks [@TueHaulund](https://github.com/TueHaulund)! - fix(replay): don't open a recording that holds only idle lifecycle markers
+  (2026-08-10)
+
 ## 1.415.0
 
 ### Minor Changes
