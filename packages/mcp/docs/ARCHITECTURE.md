@@ -383,4 +383,5 @@ The SDK does **not**: call an LLM, inspect tool arguments, build heuristics, or 
 | Exception capture & stack-trace parsing                               | `src/extensions/exceptions.ts`                                        |
 | MCP SDK version compat shims                                          | `src/extensions/compatibility.ts`, `src/extensions/mcp-sdk-compat.ts` |
 | Structural capability probes (both SDK majors)                        | `src/extensions/detect.ts`                                            |
+| MCP wire shapes, declared not imported (ADR-0007)                     | `src/types.ts`                                                        |
 | Request headers on either SDK major (`getRequestHeaders`)             | `src/extensions/request-headers.ts`                                   |
