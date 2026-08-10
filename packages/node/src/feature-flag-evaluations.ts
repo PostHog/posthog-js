@@ -119,13 +119,14 @@ export class FeatureFlagEvaluations {
    * on the first access per (distinctId, flag, value) tuple, deduped via the SDK's
    * existing cache.
    *
-   * Flags that were not returned from the underlying evaluation are treated as
-   * disabled (returns `false`).
+   * Flags that were not returned from the underlying evaluation resolve to
+   * `defaultValue` (`false` unless overridden). A flag that has a value —
+   * including `false` and variant strings — always wins over `defaultValue`.
    */
-  isEnabled(key: string): boolean {
+  isEnabled(key: string, defaultValue: boolean = false): boolean {
     const flag = this._flags[key]
     this._recordAccess(key)
-    return flag?.enabled ?? false
+    return flag?.enabled ?? defaultValue
   }
 
   /**
