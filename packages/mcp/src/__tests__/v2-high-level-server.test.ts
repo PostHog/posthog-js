@@ -277,6 +277,29 @@ describe('instrument() on an MCP SDK v2 high-level server', () => {
     expect(listings[0].properties.$mcp_listed_tool_names).toEqual(expect.arrayContaining(['get_trends']))
   })
 
+  /**
+   * The transport-identity headers (`user-agent`, `x-anthropic-client`) are read
+   * through the same helper, so the feature that captures which *product* is
+   * calling works on v2 as well. Read the v1 way it finds nothing here, because
+   * v2 has no `extra.requestInfo` at all — the failure this whole PR is about,
+   * in a feature that landed after it was written.
+   */
+  it('captures the transport identity headers on a v2 context', async () => {
+    const server = makeV2Server()
+    instrument(server, fakePostHog(), { context: false })
+
+    await dispatch(
+      server,
+      { method: 'tools/call', params: { name: 'get_trends', arguments: { event: 'pageview' } } },
+      v2Ctx({ 'user-agent': 'claude-code/2.1.0 (cli)', 'x-anthropic-client': 'claude-code' })
+    )
+    await new Promise((r) => setTimeout(r, 20))
+
+    const call = eventCapture.findCapturesByEvent('$mcp_tool_call')[0]
+    expect(call.properties.$mcp_client_user_agent).toBe('claude-code/2.1.0 (cli)')
+    expect(call.properties.$mcp_vendor_client).toBe('claude-code')
+  })
+
   it('lets a host resolve identity from v2 headers through the exported getRequestHeaders', async () => {
     const server = makeV2Server()
     const seen: unknown[] = []
