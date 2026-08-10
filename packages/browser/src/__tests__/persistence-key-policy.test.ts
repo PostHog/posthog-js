@@ -592,7 +592,11 @@ const collectPersistenceKeyIdentifiers = (sources: SourceInput[] = productionSou
                     KEY_VALUE_STORE_SINGLE_KEY_METHODS.has(methodName) &&
                     isKeyValueStoreReceiver(receiver, checker)
                 ) {
-                    recordResolution(node.arguments[0], node, `${methodName}() on KeyValueStore`, true)
+                    if (methodName === 'set' && node.arguments.length === 1) {
+                        recordObjectLike(node.arguments[0], node, `${methodName}() on KeyValueStore`)
+                    } else {
+                        recordResolution(node.arguments[0], node, `${methodName}() on KeyValueStore`, true)
+                    }
                 }
 
                 if (methodName && SESSION_OBJECT_METHODS.has(methodName) && isRegisterForSessionReceiver(receiver)) {
@@ -845,6 +849,16 @@ describe('persistence key policy', () => {
 
         expect(knownKey.issues).toEqual([])
         expect([...knownKey.resolvedKeys]).toEqual([constants.AUTOCAPTURE_DISABLED_SERVER_SIDE])
+
+        const batchedKeys = analyze(`
+            const FIRST_KEY = '${constants.AUTOCAPTURE_DISABLED_SERVER_SIDE}'
+            const SECOND_KEY = '${constants.HEATMAPS_ENABLED_SERVER_SIDE}'
+            client.kv.set({ [FIRST_KEY]: true, [SECOND_KEY]: false })
+        `)
+        expect(batchedKeys.issues).toEqual([])
+        expect([...batchedKeys.resolvedKeys]).toEqual(
+            expect.arrayContaining([constants.AUTOCAPTURE_DISABLED_SERVER_SIDE, constants.HEATMAPS_ENABLED_SERVER_SIDE])
+        )
 
         const unknownKey = analyze(`
             const EXTENSION_KEY = '$unclassified_extension_key'
