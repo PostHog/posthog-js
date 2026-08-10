@@ -1,5 +1,21 @@
 # @posthog/mcp
 
+## 0.11.4
+
+### Patch Changes
+
+- [#4482](https://github.com/PostHog/posthog-js/pull/4482) [`9dd5e6c`](https://github.com/PostHog/posthog-js/commit/9dd5e6c7acb07a7282904e9eeabd7a612b9021f5) Thanks [@gesh](https://github.com/gesh)! - Keep the conversation-id prompt-back out of `$mcp_error_message`.
+
+  With `enableConversationId` on, a `[SERVER]: Reuse conversation_id=…` block is appended to a tool result so the agent echoes the handle back on later calls. The captured error was read from that already-appended result, so a failed call reported `"intentional failure [SERVER]: Reuse conversation_id=019f…"` — a fresh uuid inside the error message on every call, which splits one recurring failure into a new error group each time it happens.
+
+  The error is now read from the result as the tool produced it, before the handle is written in. It bites hardest on MCP SDK v2, where a thrown error is flattened into an `isError` result before the SDK hands it to us, so that result is the only description of the failure available. The agent still receives the prompt-back on failed calls — that is when it matters most, since otherwise the retry starts a new conversation and the failure and its fix land in different sessions. (2026-08-10)
+
+- [#4466](https://github.com/PostHog/posthog-js/pull/4466) [`fe3ea18`](https://github.com/PostHog/posthog-js/commit/fe3ea183c3871a297a1701f6a69bb4d246efbe4a) Thanks [@gesh](https://github.com/gesh)! - Gate `Mcp-Session-Id` minting on the protocol revision the request declares.
+
+  The 2026-07-28 revision removed protocol-level sessions: a server must not mint or echo `Mcp-Session-Id` under it. Until now that held only by accident — the mint hangs off the `initialize` handler and 2026-07-28 has no handshake — so compliance depended on an SDK routing detail rather than on anything the SDK checks.
+
+  The era is now resolved per request, from the version an `initialize` body declares or, failing that, from the same fallback chain that resolves client identity. Nothing branches on which SDK major is installed: one v2 server serves both revisions, request by request. An unknown version counts as legacy, so a v1 client that declares nothing keeps the session header it has always had. (2026-08-10)
+
 ## 0.11.3
 
 ### Patch Changes
