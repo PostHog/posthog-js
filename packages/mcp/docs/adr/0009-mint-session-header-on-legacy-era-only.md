@@ -15,8 +15,9 @@ Dropping the mechanism entirely was considered. It was rejected because it is th
 
 Minting is gated on the revision **the request declares**, resolved through the same per-request chain as identity (ADR-0008): the version an `initialize` body asks for, else envelope → `_meta` → `MCP-Protocol-Version` header.
 
-- Any revision **at or after** `2026-07-28` is treated as sessionless. Revisions sort as ISO dates, so a future one is modern by default — sessions were removed, not re-added.
-- An **unknown** version counts as legacy. A client that declares nothing is on a transport that has always carried a session header, and taking it away would be the regression this guard exists to prevent.
+- Any revision **at or after** `2026-07-28` is treated as sessionless. Revisions sort as ISO dates, so a future one is modern by default — sessions were removed, not re-added. The spec's rolling `draft` counts as modern for the same reason.
+- Only **date-shaped** tokens are compared as dates. The comparison is lexicographic, so without that guard any junk string starting above `'2'` would sort as modern and lose the header — the opposite of the rule below.
+- An **unknown** version counts as legacy, including unknown because it was malformed. A client that declares nothing, or declares nonsense, is one we should assume still wants the header it has always had; taking it away is the regression this guard exists to prevent.
 - The gate lives in the session layer, not in the handler, so the policy is stated once.
 
 ## Consequences

@@ -31,6 +31,18 @@ import type { SessionTokenPayload } from './session-token'
 export const MODERN_PROTOCOL_REVISION = '2026-07-28'
 
 /**
+ * Revisions are ISO dates, and only a date-shaped token may be compared as one.
+ * Without this the comparison is lexicographic over arbitrary input, so any
+ * string starting above `'2'` — every junk value beginning with a letter —
+ * sorts as modern and silently loses the session header. Unknown must mean
+ * legacy, so anything that is not a date is not compared at all.
+ */
+const REVISION_SHAPE = /^\d{4}-\d{2}-\d{2}$/
+
+/** The spec's rolling draft sits ahead of every dated revision, sessions included. */
+const DRAFT_REVISION = 'draft'
+
+/**
  * Whether *this request* is governed by 2026-07-28 or later.
  *
  * Era is a property of the request, never of the installed SDK: one v2 server
@@ -53,7 +65,13 @@ export function isModernEraRequest(
   const version =
     (typeof requested === 'string' && requested.length > 0 ? requested : undefined) ??
     resolveClientIdentity({ request, extra, server })?.protocolVersion
-  return !!version && version >= MODERN_PROTOCOL_REVISION
+  if (!version) {
+    return false
+  }
+  if (version === DRAFT_REVISION) {
+    return true
+  }
+  return REVISION_SHAPE.test(version) && version >= MODERN_PROTOCOL_REVISION
 }
 
 export function newSessionId(): string {

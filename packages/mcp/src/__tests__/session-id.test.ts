@@ -381,6 +381,22 @@ describe('isModernEraRequest', () => {
     expect(call({ method: 'tools/call', params: { name: 'echo' } }, viaEnvelope)).toBe(true)
   })
 
+  it.each([
+    ['junk that sorts above the revision', 'garbage'],
+    ['a truncated token', '2026'],
+    ['an empty-ish token', '   '],
+  ])('treats %s as legacy rather than comparing it as a date', (_label, protocolVersion) => {
+    // Lexicographically 'garbage' > '2026-07-28', so an unguarded comparison
+    // would call it modern and withhold the session header from a client that
+    // simply sent something malformed. Unknown means legacy — including unknown
+    // because it was junk.
+    expect(call({ method: 'initialize', params: { protocolVersion } })).toBe(false)
+  })
+
+  it("treats the spec's rolling draft as modern", () => {
+    expect(call({ method: 'initialize', params: { protocolVersion: 'draft' } })).toBe(true)
+  })
+
   it('treats an unknown version as legacy', () => {
     // A v1 client on a transport that has always carried a session header.
     // Guessing "modern" here would take that away from them.
