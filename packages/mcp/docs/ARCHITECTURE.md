@@ -25,7 +25,7 @@ The host application supplies its own `posthog-node` client as the positional `p
 
 `instrument()` does five things (`src/index.ts`):
 
-1. Validate `server` is either a low-level `Server` or a high-level `McpServer`, and unwrap the latter to get the underlying `Server`.
+1. Validate `server` is either a low-level `Server` or a high-level `McpServer`, and unwrap the latter to get the underlying `Server`. Both MCP TypeScript SDK majors are supported, and which one you have is never read — capabilities are detected by object shape in `src/extensions/detect.ts` (ADR-0005).
 2. Wrap the user-provided `posthog` client in an `McpEventSink`.
 3. Build per-server tracking state (session id, identity cache, callbacks, the sink) stored in a module-level `WeakMap`.
 4. Replace the `tools/call` and `initialize` handlers on the underlying `Server` instance with wrappers, and (for `McpServer`) install a `Proxy` on `_registeredTools` so any tool registered _after_ `instrument()` is also wrapped.
@@ -382,3 +382,5 @@ The SDK does **not**: call an LLM, inspect tool arguments, build heuristics, or 
 | STDIO-safe logger sink                                                | `src/extensions/logger.ts`                                            |
 | Exception capture & stack-trace parsing                               | `src/extensions/exceptions.ts`                                        |
 | MCP SDK version compat shims                                          | `src/extensions/compatibility.ts`, `src/extensions/mcp-sdk-compat.ts` |
+| Structural capability probes (both SDK majors)                        | `src/extensions/detect.ts`                                            |
+| Request headers on either SDK major (`getRequestHeaders`)             | `src/extensions/request-headers.ts`                                   |

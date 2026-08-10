@@ -67,6 +67,45 @@ if (body?.method === 'initialize' && !req.headers[MCP_SESSION_HEADER]) {
 
 Details: [docs/ARCHITECTURE.md §4](./docs/ARCHITECTURE.md).
 
+## MCP TypeScript SDK v2
+
+`instrument()` works on both SDK majors — `@modelcontextprotocol/sdk` v1 and
+`@modelcontextprotocol/{core,server,client}` v2 — and on both the high-level `McpServer` and the
+low-level `Server`. Shapes are detected at runtime, so neither major is a dependency here.
+
+### Reading request headers in a callback
+
+If your `identify`, `intentFallback`, `eventProperties` or `beforeSend` reads HTTP headers, it has
+to change. The two majors put the request in different places and in different shapes: v1 attaches
+a plain object at `extra.requestInfo.headers`, v2 attaches the WHATWG `Request` at `extra.http.req`,
+whose `headers` only answers to `.get()`. A v1-shaped read returns `undefined` on v2 — an
+`identify()` written that way returns `null` and every event goes anonymous.
+
+The SDK hands your callback whatever the MCP SDK handed it, unchanged; it does **not** fake a v1
+shape on v2, because a partially synthesised `requestInfo` is a more convincing lie than an absent
+one. Read headers through the exported helper instead, which handles both majors, lowercases keys,
+and duck-types `Headers` so it also works on edge runtimes:
+
+```ts
+import { getRequestHeaders } from '@posthog/mcp'
+
+identify: async (request, extra) => {
+  const auth = getRequestHeaders(extra)?.['authorization'] // v1 and v2
+  // ...
+}
+```
+
+### If you switched to `instrument(server.server)`
+
+Before v2 support landed, the compatibility gate rejected high-level v2 servers, and the usual
+workaround was to instrument the underlying low-level server. `instrument(server)` now works, so
+you can go back to the documented call.
+
+Whether the workaround costs you anything depends on your stack: instrumenting the low-level server
+skips the high-level tool registry, so tool descriptions and callback-level wrapping come only from
+what is advertised over `tools/list`. If your framework never calls `registerTool()` — `@rekog/mcp-nest`
+does not — the registry is empty and the two calls behave the same.
+
 ## Developing locally
 
 To test local changes in a consumer app (e.g. a dummy MCP server), symlink **both**
