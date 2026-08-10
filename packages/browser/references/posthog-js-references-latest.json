@@ -3166,8 +3166,8 @@
           "name": "disable_external_dependency_loading"
         },
         {
-          "description": "Determines whether PostHog should load external dependency scripts from\nsemver-qualified asset paths such as /static/1.370.0/recorder.js instead\nof the legacy /static/recorder.js?v=1.370.0 form.",
-          "type": "boolean",
+          "description": "Determines whether PostHog should load external dependency scripts from\nsemver-qualified asset paths such as /static/1.370.0/recorder.js instead\nof the legacy /static/recorder.js?v=1.370.0 form. Set to `true` to use only\nversioned paths, `false` to use only legacy paths, or `'fallback'` to try\nthe versioned path first and retry with the legacy path if it fails.",
+          "type": "boolean | \"fallback\"",
           "name": "strict_script_versioning"
         },
         {
