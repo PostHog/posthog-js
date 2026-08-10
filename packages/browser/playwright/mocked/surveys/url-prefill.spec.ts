@@ -33,7 +33,7 @@ test.describe('surveys - URL prefill with auto-submit', () => {
         page,
         context,
     }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
+        await page.route('**/surveys/**', async (route) => {
             await route.fulfill({ json: { surveys: [prefillSurvey] } })
         })
 
@@ -49,7 +49,6 @@ test.describe('surveys - URL prefill with auto-submit', () => {
             page,
             context
         )
-        await surveysAPICall
 
         await page.evaluate(
             () =>
