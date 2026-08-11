@@ -2,18 +2,7 @@
 
 ...<older entries truncated>
 
-e`, but do not change the mocked URL between captures.
-- Fix assessment: The defect is isolated to a single cache guard and the requested semantics match the existing persistence behavior. A narrowly scoped replacement of the boolean with the last processed URL, plus focused regressions, avoids changing campaign parsing or attribution rules.
-- PR: https://github.com/PostHog/posthog-js/pull/4327
-
-## 2026-07-31T11:25:32.142Z
-- Item: issue #4353 — Prompt management: support fetching multiple prompts in a single call (batch fetch)
-- Conclusion: Valid enhancement request, but true batch fetching requires a supporting PostHog API endpoint before SDK work can deliver the requested single network call.
-- Labels: enhancement, team/ai-observability
-- URL: https://github.com/PostHog/posthog-js/issues/4353
-- Relevant files: `packages/ai/src/prompts.ts`, `packages/ai/src/types.ts`, `packages/ai/tests/prompts.test.ts`, `packages/ai/CHANGELOG.md`
-- Findings: `Prompts.get(name, options)` is the only retrieval method exposed by `packages/ai/src/prompts.ts`; it obtains one `PromptResult` at a time.; The only implemented API request is `GET /api/environments/@current/llm_prompts/name/:name/`, which encodes a single prompt name and validates a single prompt-object response.; Caching is already keyed per prompt name and version, label, or latest selection, so it can be reused by a future batch method but does not itself coalesce network requests.; The existing tests cover single-prompt cache hits, stale-cache recovery, code fallbacks, version/label selection, and response validation; there is no batch endpoint, batch response type, or batch behavior coverage.; Adding `getMany()` as `Promise.all(names.map(name => get(name)))` would preserve client behavior but still issue N requests, contrary to the issue's primary requirement.
-- Fix assessment: The JavaScript SDK change is localized only after a backend batch endpoint exists. The required server request/response contract and partial-failure semantics are not present in this repository, and the request also calls for corresponding Python support. Implementing an SDK-only approximation would not provide a single request.
+sponse contract and partial-failure semantics are not present in this repository, and the request also calls for corresponding Python support. Implementing an SDK-only approximation would not provide a single request.
 
 ## 2026-08-02T05:05:54.043Z
 - Item: issue #4385 — rrweb canvas worker emits console error due to sourceMappingURL in blob worker
@@ -89,3 +78,12 @@ e`, but do not change the mocked URL between captures.
 - Relevant files: `packages/core/src/posthog-core-stateless.ts`, `packages/core/src/posthog-core.ts`, `packages/core/src/types.ts`, `packages/web/src/posthog-web.ts`, `packages/react-native/src/posthog-rn.ts`, `packages/react-native/src/storage.ts`, `packages/core/package.json`, `pnpm-workspace.yaml`
 - Findings: `PostHogCoreStateless` explicitly requires platform implementations to provide `fetch`, library metadata, and synchronous persisted-property access through abstract methods, while retaining shared queueing, batching, retries, capture, identity, and session behavior.; `PostHogFetchOptions` and `PostHogFetchResponse` define a fetch-like promise interface, so a WeChat implementation would need a small `wx.request` adapter that translates its callback response into `status`, `text()`, and `json()`.; `posthog-js-lite` is browser-specific: `packages/web/src/posthog-web.ts` uses browser storage, `window`, history APIs, and the Fetch API, so it is not a suitable Mini Program runtime target.; `posthog-react-native` demonstrates the existing supported pattern of extending `PostHogCore`, supplying storage and transport implementations, delaying initialization until asynchronous storage preload completes, and flushing/persisting on application lifecycle transitions.; `packages/react-native/src/storage.ts` provides React-Native-specific storage wrappers and cannot be reused directly for WeChat storage APIs.; No WeChat/Mini Program package or runnable example was found under the workspace packages or examples.
 - Fix assessment: Although @posthog/core supplies the core analytics behavior, this request requires a new supported and published runtime package plus native transport, persistence durability, lifecycle semantics, test infrastructure, documentation, and a Mini Program example. Incorrect lifecycle or storage handling could lose or duplicate queued events.
+
+## 2026-08-11T12:51:53.818Z
+- Item: issue #4492 — Add official Uni-App integration
+- Conclusion: Valid cross-platform integration feature request, but it is not a small SDK change and is blocked in part by the separate official WeChat Mini Program SDK work in #4491.
+- Labels: enhancement, web, team/client-libraries
+- URL: https://github.com/PostHog/posthog-js/issues/4492
+- Relevant files: `packages/browser/package.json`, `packages/browser/src/posthog-core.ts`, `packages/browser/README.md`, `packages/web/package.json`, `packages/web/README.md`, `examples/`
+- Findings: `packages/browser/package.json` identifies `posthog-js` as the primary browser SDK distribution, matching the requested H5 runtime choice.; `packages/browser/src/posthog-core.ts` imports browser globals and browser storage (`localStore` and `sessionStore`), so it should not be assumed to run unchanged in Mini Program or native Uni-App targets.; There is no Uni-App- or WeChat-specific package in `packages/`, and a repository-wide search found no existing Uni-App integration or documentation.; The existing examples include browser, Next.js, Nuxt, React Native, and other SDK examples, but no Uni-App example.; `posthog-js-lite` is documented as a reduced web package and does not provide a cross-runtime Uni-App adapter.; The issue explicitly identifies #4491 as the dependency for the WeChat Mini Program runtime; without that SDK and its transport, persistence, and lifecycle contract, the requested multi-target integration cannot be completed safely.
+- Fix assessment: Completing the acceptance criteria requires a new integration surface, target-specific runtime contracts, runnable projects, and behavior tests across runtimes with different storage, networking, and lifecycle APIs. The WeChat path also depends on the still-open #4491 SDK work. A browser-only wrapper or runtime-detection shim would imply unsupported compatibility and would not satisfy the requested target matrix.
