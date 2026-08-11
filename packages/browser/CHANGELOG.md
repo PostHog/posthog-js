@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.415.2
+
+### Patch Changes
+
+- [#4316](https://github.com/PostHog/posthog-js/pull/4316) [`f999394`](https://github.com/PostHog/posthog-js/commit/f9993947c7436672f5daf2a2a284fa1c9771f602) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Support removing multiple persisted properties in one operation.
+  (2026-08-11)
+- Updated dependencies [[`f999394`](https://github.com/PostHog/posthog-js/commit/f9993947c7436672f5daf2a2a284fa1c9771f602)]:
+    - @posthog/browser-common@0.5.0
+
 ## 1.415.1
 
 ### Patch Changes
