@@ -267,8 +267,8 @@ export class PostHogFeatureFlags implements Extension {
     private _initializingClient?: Client
     private _logger: Client['logger'] = logger
     private _dynamicProperties?: Disposable
-    private _freshEventProperties: Record<string, unknown> = {}
-    private _staleEventProperties: Record<string, unknown> = {}
+    private _baseEventProperties: Record<string, unknown> = {}
+    private _eventPropertiesWithFlagValues: Record<string, unknown> = {}
     private _reloadingHandlers: Array<() => void> = []
     private _hasLoadedFlags: boolean = false
     private _requestInFlight: boolean = false
@@ -321,7 +321,7 @@ export class PostHogFeatureFlags implements Extension {
             addEventListener(window, 'online', this._onOnline)
         }
         this._dynamicProperties = client.registerDynamicEventProperties(() =>
-            this._isCacheStale() ? this._staleEventProperties : this._freshEventProperties
+            this._isCacheStale() ? this._baseEventProperties : this._eventPropertiesWithFlagValues
         )
         this._rebuildEventProperties()
         return this.initialize()
@@ -391,15 +391,15 @@ export class PostHogFeatureFlags implements Extension {
                 common[key] = value
             }
         }
-        this._staleEventProperties = common
-        const fresh = { ...common }
+        this._baseEventProperties = common
+        const withFlagValues = { ...common }
         const flags = this._prop(ENABLED_FEATURE_FLAGS)
         if (flags) {
             for (const [key, value] of Object.entries(flags)) {
-                fresh[`$feature/${key}`] = value
+                withFlagValues[`$feature/${key}`] = value
             }
         }
-        this._freshEventProperties = fresh
+        this._eventPropertiesWithFlagValues = withFlagValues
     }
 
     /**
@@ -1562,10 +1562,6 @@ export class PostHogFeatureFlags implements Extension {
      * are unset so flags re-evaluate without the removed values.
      */
     unsetPersonPropertiesForFlags(propertyNames: string[], reloadFeatureFlags = true): void {
-        this._unsetPersonPropertiesForFlags(propertyNames, reloadFeatureFlags)
-    }
-
-    private _unsetPersonPropertiesForFlags(propertyNames: string[], reloadFeatureFlags = true): void {
         const existingProperties = this._prop(STORED_PERSON_PROPERTIES_KEY) || {}
 
         const nextProperties: Properties = { ...existingProperties }
@@ -1595,10 +1591,6 @@ export class PostHogFeatureFlags implements Extension {
      *     setGroupPropertiesForFlags({'organization': { name: 'CYZ', employees: '11' } })
      */
     setGroupPropertiesForFlags(properties: { [type: string]: Properties }, reloadFeatureFlags = true): void {
-        this._setGroupPropertiesForFlags(properties, reloadFeatureFlags)
-    }
-
-    private _setGroupPropertiesForFlags(properties: { [type: string]: Properties }, reloadFeatureFlags = true): void {
         const existingProperties = (this._prop(STORED_GROUP_PROPERTIES_KEY) || {}) as Record<string, Properties>
         const nextProperties: Record<string, Properties> = { ...existingProperties }
         for (const groupType of Object.keys(properties)) {
