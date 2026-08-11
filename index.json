@@ -1,4 +1,18 @@
 {
+  "PostHog/posthog-js/issue/4492": {
+    "key": "PostHog/posthog-js/issue/4492",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4492",
+    "url": "https://github.com/PostHog/posthog-js/issues/4492",
+    "conclusion": "Valid cross-platform integration feature request, but it is not a small SDK change and is blocked in part by the separate official WeChat Mini Program SDK work in #4491.",
+    "labels": [
+      "enhancement",
+      "web",
+      "team/client-libraries"
+    ],
+    "closed": false,
+    "updatedAt": "2026-08-11T12:51:49.580Z"
+  },
   "PostHog/posthog-js/issue/4491": {
     "key": "PostHog/posthog-js/issue/4491",
     "repo": "PostHog/posthog-js",
