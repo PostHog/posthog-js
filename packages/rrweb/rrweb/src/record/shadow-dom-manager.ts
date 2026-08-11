@@ -22,6 +22,20 @@ type BypassOptions = Omit<
   sampling: SamplingStrategy;
 };
 
+// Registry of every root ever observed, surviving reset() AND manager
+// instances: a time-sliced walk re-arms these up front instead of waiting for
+// the walker to reach each host, which left scrolls and mutations inside a
+// shadow root unobserved for the whole walk window. Module-level (like
+// `mutationBuffers`) because posthog-js session rotation is stop()+record(),
+// which builds a NEW manager on the same fully-built page — a per-instance
+// registry would reopen the blind window for the new session's entire first
+// walk. The value counts consecutive re-arm sweeps with a detached host: a
+// momentarily detached root (portal move, KeepAlive toggle) survives one
+// sweep instead of being pruned at the exact wrong instant, while anything
+// gone for two sweeps is dropped so removed subtrees are not pinned forever.
+// Connected roots cost nothing extra to retain — the DOM already holds them.
+const knownShadowRoots = new Map<ShadowRoot, number>();
+
 export class ShadowDomManager {
   private shadowDoms = new WeakSet<ShadowRoot>();
   private mutationCb: mutationCallBack;
@@ -31,13 +45,6 @@ export class ShadowDomManager {
   // Handlers are tagged with the document that owns their shadow root so a
   // single iframe can be torn down without disconnecting the rest of the page.
   private restoreHandlers: { doc: Document; handler: () => void }[] = [];
-  // Registry of every root ever observed, surviving reset(): a time-sliced
-  // checkout re-arms these up front instead of waiting for the walker to
-  // reach each host, which left scrolls and mutations inside a shadow root
-  // unobserved for the whole walk window. Strong refs are no new retention:
-  // the mirror already pins every serialized node between checkouts. Pruned
-  // of detached hosts on every re-arm.
-  private knownShadowRoots = new Set<ShadowRoot>();
 
   constructor(options: {
     mutationCb: mutationCallBack;
@@ -63,7 +70,7 @@ export class ShadowDomManager {
     if (!isNativeShadowDom(shadowRoot)) return;
     if (this.shadowDoms.has(shadowRoot)) return;
     this.shadowDoms.add(shadowRoot);
-    this.knownShadowRoots.add(shadowRoot);
+    knownShadowRoots.set(shadowRoot, 0);
     // Derive the owning document from the host so a shadow root nested in an
     // iframe is keyed to that iframe's document, not whatever the caller passed
     // (takeFullSnapshot's onSerialize hands us the top-level document).
@@ -200,9 +207,17 @@ export class ShadowDomManager {
       }
     }
     this.restoreHandlers = remaining;
-    for (const root of this.knownShadowRoots) {
-      if ((dom.host(root)?.ownerDocument ?? null) === doc) {
-        this.knownShadowRoots.delete(root);
+    // Forget an IFRAME's roots for good — they die with its document, and
+    // their hosts stay `isConnected` within it, so the two-strike sweep
+    // would never collect them. The top document's teardown (recording
+    // stop) keeps the registry: session rotation is stop()+record() on the
+    // same live page, and the next session's first sliced walk re-arms
+    // from it.
+    if (doc !== document) {
+      for (const root of knownShadowRoots.keys()) {
+        if ((dom.host(root)?.ownerDocument ?? null) === doc) {
+          knownShadowRoots.delete(root);
+        }
       }
     }
   }
@@ -217,12 +232,17 @@ export class ShadowDomManager {
    * they join the held window like any others.
    */
   public reobserveKnownRoots(doc: Document) {
-    for (const root of [...this.knownShadowRoots]) {
+    for (const [root, missedSweeps] of [...knownShadowRoots]) {
       const host = dom.host(root);
       if (!host || !inDom(host)) {
-        this.knownShadowRoots.delete(root);
+        if (missedSweeps >= 1) {
+          knownShadowRoots.delete(root);
+        } else {
+          knownShadowRoots.set(root, missedSweeps + 1);
+        }
         continue;
       }
+      knownShadowRoots.set(root, 0);
       this.addShadowRoot(root, doc);
     }
   }
