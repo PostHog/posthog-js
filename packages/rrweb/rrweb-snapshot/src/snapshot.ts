@@ -2015,6 +2015,10 @@ export async function snapshotWithBudget(
   };
 
   let root: serializedNodeWithId | null = null;
+  // Deliberately uncapped: the stack is O(serialized nodes), the same order
+  // the produced tree and the recorder's mirror already retain, so a cap here
+  // would only be a page-size cap in disguise. Its LIFETIME is what is
+  // bounded — the wall-clock watchdog and the caller's shouldAbort probes.
   const stack: WalkItem[] = [
     {
       node: n,

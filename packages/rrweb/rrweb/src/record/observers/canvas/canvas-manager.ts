@@ -103,6 +103,14 @@ export class CanvasManager {
     this.locked = false;
   }
 
+  // A time-sliced walk that bakes a canvas's pixels into rr_dataURL calls
+  // this at serialization time: commands recorded before the bake are inside
+  // those pixels, and flushing them after the unlock would apply them twice.
+  // Commands recorded after the bake enqueue after this call and survive.
+  public discardPendingFor(canvas: HTMLCanvasElement): void {
+    this.pendingCanvasMutations.delete(canvas);
+  }
+
   // The walk's backlog cap reads this: pending canvas commands accumulate
   // behind the lock exactly like mutation records but lived in no cap.
   public pendingMutationCount(): number {
