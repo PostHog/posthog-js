@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.415.4
+
+### Patch Changes
+
+- [#4494](https://github.com/PostHog/posthog-js/pull/4494) [`deb6bb0`](https://github.com/PostHog/posthog-js/commit/deb6bb0cb7c8984262707addbb4bdc8cb4ee5825) Thanks [@marandaneto](https://github.com/marandaneto)! - fix(types): accept current and legacy Segment Analytics SDK types in the Segment integration config
+  (2026-08-11)
+- Updated dependencies [[`deb6bb0`](https://github.com/PostHog/posthog-js/commit/deb6bb0cb7c8984262707addbb4bdc8cb4ee5825)]:
+    - @posthog/types@1.402.3
+
 ## 1.415.3
 
 ### Patch Changes
