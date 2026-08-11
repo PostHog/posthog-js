@@ -525,6 +525,8 @@ describe('utils', () => {
       mirror.endIdReservation();
       expect(mirror.getId(node)).toBe(-1);
       document.body.removeChild(node);
+    });
+  });
 
   describe('recompressBase64Image()', () => {
     const makeImg = (

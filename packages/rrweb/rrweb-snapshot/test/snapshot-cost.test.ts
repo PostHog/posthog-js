@@ -3,7 +3,7 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import snapshot from '../src/snapshot';
+import snapshot, { snapshotWithBudget } from '../src/snapshot';
 import {
   getLastSnapshotCost,
   getMutationCost,
@@ -105,6 +105,29 @@ describe('snapshot cost accounting', () => {
       expect(link.attributes.href).toBeUndefined();
     }
     expect(takeDeferredStylesheetLinks()).toHaveLength(0);
+  });
+
+  it('arms the budget on the time-sliced walk too, not only in snapshot()', async () => {
+    appendLink('/a.css', makeSheet('http://localhost/a.css', 8));
+    const second = appendLink('/b.css', makeSheet('http://localhost/b.css', 8));
+
+    const sn = await snapshotWithBudget(document, {
+      mirror: new Mirror(),
+      inlineStylesheetBudgetRules: 10,
+      yieldBudgetMs: 0.0001,
+      yieldFn: async () => undefined,
+    });
+
+    // the budget lives in module state only snapshot() used to arm; the
+    // sliced walk serializes through serializeNodeWithId directly and was
+    // exactly the CSS-heavy-page path the budget was built for
+    const links = findByTag(sn!, 'link');
+    expect(links).toHaveLength(2);
+    expect(links[0].attributes._cssText).toBeDefined();
+    expect(links[1].attributes._cssText).toBeUndefined();
+    expect(links[1].attributes.href).toBeDefined();
+    expect(takeDeferredStylesheetLinks()).toEqual([second]);
+    expect(getLastSnapshotCost()!.deferredStylesheetCount).toBe(1);
   });
 
   it('defers stylesheets past the budget, keeping href so replay can still load them', () => {
