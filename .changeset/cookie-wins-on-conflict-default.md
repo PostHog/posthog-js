@@ -1,6 +1,6 @@
 ---
-'posthog-js': minor
-'@posthog/types': minor
+'posthog-js': patch
+'@posthog/types': patch
 ---
 
 Make the shared cross-subdomain cookie win over per-origin localStorage by default when `config.defaults` is `'2026-08-29'` or later.
