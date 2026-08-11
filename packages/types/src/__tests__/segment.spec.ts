@@ -53,8 +53,8 @@ describe('SegmentAnalytics', () => {
             id: () => undefined,
         }
         const legacyUserId: string | undefined = legacyUser.id()
-        const getLegacyRegisterResult = (analytics: SegmentAnalytics): Promise<void> =>
-            analytics.register({} as SegmentPlugin)
+        const getLegacyRegisterResult = (analytics: SegmentAnalytics, integration: SegmentPlugin): Promise<void> =>
+            analytics.register(integration)
 
         expect(legacyUserId).toBeUndefined()
         expect(getLegacyRegisterResult).toEqual(expect.any(Function))
