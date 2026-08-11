@@ -208,21 +208,82 @@ describe('reset()', () => {
         it('applies bootstrapped feature flags and payloads', () => {
             instance.reset({
                 bootstrap: {
-                    featureFlags: { 'active-flag': true, 'variant-flag': 'control', 'inactive-flag': false },
+                    featureFlags: {
+                        'active-flag': true,
+                        'variant-flag': 'control',
+                        'false-payload-flag': true,
+                        'zero-payload-flag': true,
+                        'empty-payload-flag': true,
+                        'inactive-flag': false,
+                    },
                     featureFlagPayloads: {
                         'active-flag': { key: 'value' },
+                        'false-payload-flag': false,
+                        'zero-payload-flag': 0,
+                        'empty-payload-flag': '',
                         'inactive-flag': { should: 'not appear' },
                     },
                 },
             })
 
-            expect(instance.featureFlags.getFlags()).toEqual(['active-flag', 'variant-flag'])
+            expect(instance.featureFlags.getFlags()).toEqual([
+                'active-flag',
+                'variant-flag',
+                'false-payload-flag',
+                'zero-payload-flag',
+                'empty-payload-flag',
+            ])
             expect(instance.featureFlags.getFlagVariants()).toEqual({
                 'active-flag': true,
                 'variant-flag': 'control',
+                'false-payload-flag': true,
+                'zero-payload-flag': true,
+                'empty-payload-flag': true,
             })
             expect(instance.featureFlags.getFeatureFlagPayload('active-flag')).toEqual({ key: 'value' })
+            expect(instance.featureFlags.getFeatureFlagPayload('false-payload-flag')).toBe(false)
+            expect(instance.featureFlags.getFeatureFlagPayload('zero-payload-flag')).toBe(0)
+            expect(instance.featureFlags.getFeatureFlagPayload('empty-payload-flag')).toBe('')
             expect(instance.featureFlags.getFeatureFlagPayload('inactive-flag')).toEqual(undefined)
+        })
+
+        it('clears earlier bootstrap values on a later plain reset', () => {
+            instance.reset({
+                bootstrap: {
+                    distinctID: 'custom-anon-id',
+                    featureFlags: { 'active-flag': true },
+                    sessionID: uuidv7(),
+                },
+            })
+
+            instance.reset()
+
+            expect(instance.config.bootstrap).toEqual({})
+            expect(instance.featureFlags.getFlags()).toEqual([])
+        })
+
+        it('rejects an invalid bootstrap session ID before clearing state', () => {
+            const initialDistinctId = instance.get_distinct_id()
+            const initialSessionId = instance.sessionManager!.checkAndGetSessionAndWindowId().sessionId
+
+            expect(() => instance.reset({ bootstrap: { sessionID: 'invalid-session-id' } })).toThrow('Not a valid UUID')
+
+            expect(instance.get_distinct_id()).toEqual(initialDistinctId)
+            expect(instance.sessionManager!.checkAndGetSessionAndWindowId().sessionId).toEqual(initialSessionId)
+        })
+
+        it('rejects a future bootstrap session ID before clearing state', () => {
+            const initialDistinctId = instance.get_distinct_id()
+            const futureTimestampHex = (Date.now() + 23 * 60 * 60 * 1000).toString(16).padStart(12, '0')
+            const futureSessionID = `${futureTimestampHex.slice(0, 8)}-${futureTimestampHex.slice(
+                8
+            )}-7000-8000-000000000000`
+
+            expect(() => instance.reset({ bootstrap: { sessionID: futureSessionID } })).toThrow(
+                'Bootstrap sessionID cannot be in the future'
+            )
+
+            expect(instance.get_distinct_id()).toEqual(initialDistinctId)
         })
 
         it('applies a bootstrapped session ID and rotates the window', () => {

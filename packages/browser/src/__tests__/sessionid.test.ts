@@ -155,6 +155,25 @@ describe('Session ID manager', () => {
             })
         })
 
+        it('does not defer a bootstrapped session whose timestamp is in the future', () => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager.resetSessionId()
+            ;(uuid7ToTimestampMs as jest.Mock).mockReturnValue(now + 23 * 60 * 60 * 1000)
+            sessionIdManager.setBootstrapSessionId('future-bootstrap-session-id', true)
+            ;(uuidv7 as jest.Mock).mockReturnValueOnce('fresh-session-id').mockReturnValueOnce('fresh-window-id')
+
+            expect(sessionIdManager.checkAndGetSessionAndWindowId(false, now)).toMatchObject({
+                sessionId: 'fresh-session-id',
+                windowId: 'fresh-window-id',
+                sessionStartTimestamp: now,
+                changeReason: {
+                    noSessionId: true,
+                    activityTimeout: false,
+                    sessionPastMaximumLength: true,
+                },
+            })
+        })
+
         it('registers the session timeout as an event property', () => {
             config.session_idle_timeout_seconds = 8 * 60 * 60
             const sessionIdManager = sessionIdMgr(persistence)

@@ -47,7 +47,7 @@ import { DEFAULT_FLUSH_INTERVAL_MS, RequestQueue } from './request-queue'
 import { RetryQueue } from './retry-queue'
 import { ScrollManager } from './scroll-manager'
 import { SessionPropsManager } from './session-props'
-import { SessionIdManager } from './sessionid'
+import { SessionIdManager, validateBootstrapSessionId } from './sessionid'
 import { localStore, sessionStore } from './storage'
 import {
     CaptureLogOptions,
@@ -3166,6 +3166,13 @@ export class PostHog implements PostHogInterface {
         if (!this.__loaded) {
             return logger.uninitializedWarning('posthog.reset')
         }
+        // Validate before clearing any state so an invalid session ID leaves the current user untouched.
+        const bootstrapSessionID = bootstrap?.sessionID
+        if (!isUndefined(bootstrapSessionID)) {
+            validateBootstrapSessionId(bootstrapSessionID)
+        }
+        this.config.bootstrap = bootstrap || {}
+
         const device_id = this.get_property(DEVICE_ID)
         // $device_model describes the physical device, not the user, so preserve it across reset()
         // the same way $device_id is — it is only ever re-resolved at init.
@@ -3240,8 +3247,6 @@ export class PostHog implements PostHogInterface {
         )
 
         if (bootstrap) {
-            this.config.bootstrap = bootstrap
-
             // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
             // eslint-disable-next-line posthog-js/no-direct-undefined-check
             if (bootstrap.distinctID !== undefined && this.config.cookieless_mode !== COOKIELESS_ALWAYS) {
@@ -3254,8 +3259,8 @@ export class PostHog implements PostHogInterface {
 
             this.featureFlags?.initialize()
 
-            if (bootstrap.sessionID) {
-                this.sessionManager?.setBootstrapSessionId(bootstrap.sessionID, true)
+            if (!isUndefined(bootstrapSessionID)) {
+                this.sessionManager?.setBootstrapSessionId(bootstrapSessionID, true)
             }
         }
 

@@ -19,6 +19,13 @@ export const MAX_SESSION_IDLE_TIMEOUT_SECONDS = 10 * 60 * 60 // 10 hours
 export const MIN_SESSION_IDLE_TIMEOUT_SECONDS = 60 // 1 minute
 const SESSION_LENGTH_LIMIT_MILLISECONDS = 24 * 3600 * 1000 // 24 hours
 
+export const validateBootstrapSessionId = (sessionID: string, timestamp = new Date().getTime()): void => {
+    const sessionStartTimestamp = uuid7ToTimestampMs(sessionID)
+    if (sessionStartTimestamp > timestamp) {
+        throw new Error('Bootstrap sessionID cannot be in the future')
+    }
+}
+
 // Must stay well under MIN_SESSION_IDLE_TIMEOUT_SECONDS so idle detection on
 // other tabs cannot fire on stale persisted data (pinned by a unit test).
 // Tradeoff: sibling tabs only observe activity once it has been persisted —
@@ -394,7 +401,8 @@ export class SessionIdManager {
         const pendingBootstrapSession = this._pendingBootstrapSession
         const pendingBootstrapSessionPastMaximumLength =
             !!pendingBootstrapSession &&
-            Math.abs(timestamp - pendingBootstrapSession.sessionStartTimestamp) > SESSION_LENGTH_LIMIT_MILLISECONDS
+            (pendingBootstrapSession.sessionStartTimestamp > timestamp ||
+                timestamp - pendingBootstrapSession.sessionStartTimestamp > SESSION_LENGTH_LIMIT_MILLISECONDS)
         const sessionPastMaximumLength = pendingBootstrapSession
             ? pendingBootstrapSessionPastMaximumLength
             : isPositiveNumber(startTimestamp) &&
