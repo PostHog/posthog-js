@@ -1,5 +1,12 @@
 import type { ApiResponse } from '@posthog/browser-common'
-import { ENABLED_FEATURE_FLAGS, PERSISTENCE_ACTIVE_FEATURE_FLAGS, STORED_PERSON_PROPERTIES_KEY } from '../constants'
+import {
+    ENABLED_FEATURE_FLAGS,
+    PERSISTENCE_ACTIVE_FEATURE_FLAGS,
+    PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
+    PERSISTENCE_FEATURE_FLAG_PAYLOADS,
+    PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+    STORED_PERSON_PROPERTIES_KEY,
+} from '../constants'
 import { MutableFeatureFlagsConfigSource } from '../feature-flags-config'
 import { defaultConfig } from '../posthog-core'
 import { PostHogFeatureFlags } from '../posthog-featureflags'
@@ -142,6 +149,40 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
         featureFlags.getFeatureFlag('changed')
         expect(producer()).toBe(updated)
+        featureFlags.dispose()
+    })
+
+    it.each([
+        ['fresh', () => Date.now() - 30 * 60 * 1000, true],
+        ['expired', () => Date.now() - 2 * 60 * 60 * 1000, false],
+        ['non-numeric', () => '2025-01-01T00:00:00Z', false],
+    ])('uses %s persisted cache state for dynamic event properties', async (_, evaluatedAt, includesFlag) => {
+        const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
+        posthog.persistence?.register({
+            [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: ['cached-flag'],
+            [ENABLED_FEATURE_FLAGS]: { 'cached-flag': 'control' },
+            [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: { 'cached-flag': { source: 'cache' } },
+            [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: 'cached-request-id',
+            [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: evaluatedAt(),
+        })
+        const registerProperties = jest.spyOn(posthog, '_registerExtensionEventProperties')
+        const config = defaultConfig()
+        config.advanced_disable_feature_flags = true
+        config.feature_flag_cache_ttl_ms = 60 * 60 * 1000
+        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(config))
+        featureFlags.setup(posthog._getBrowserClientAdapter())
+
+        const properties = registerProperties.mock.calls[0][0]()
+        expect(properties).toMatchObject({
+            [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: ['cached-flag'],
+            [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: { 'cached-flag': { source: 'cache' } },
+            [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: 'cached-request-id',
+        })
+        if (includesFlag) {
+            expect(properties).toHaveProperty('$feature/cached-flag', 'control')
+        } else {
+            expect(properties).not.toHaveProperty('$feature/cached-flag')
+        }
         featureFlags.dispose()
     })
 
