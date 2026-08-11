@@ -166,7 +166,14 @@ export function commitMutationBuffers(
       }
     }
   }
-  activeMutationBufferLockToken = null;
+  // Guarded: a commit delivery re-enters the consumer, and a rotation from
+  // there (stop() discards this token, record() arms its own) makes the slot
+  // the NEW session's. Clearing it unconditionally would disarm the gate for
+  // buffers born during the new walk and turn the new session's own commit
+  // into a token-mismatch no-op — its buffers would stay locked forever.
+  if (activeMutationBufferLockToken === token) {
+    activeMutationBufferLockToken = null;
+  }
   for (const buffer of [...mutationBuffers]) {
     if (buffer.hasLockToken(token)) {
       result.committed = false;

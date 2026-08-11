@@ -300,6 +300,114 @@ describe('budgeted snapshot lifecycle hardening', () => {
     expect(adds.some((a) => a.node.id === reservedId)).toBe(true);
   }, 20_000);
 
+  it('a rotation from a mutation delivered during the commit leaves the new session gate intact', async () => {
+    fillBody();
+    const eventsA: eventWithTime[] = [];
+    const eventsB: eventWithTime[] = [];
+    let marker: HTMLElement | null = null;
+    let rotated = false;
+    let stopB: (() => void) | undefined;
+
+    const carriesMarkerAdd = (e: eventWithTime) => {
+      if (
+        e.type !== EventType.IncrementalSnapshot ||
+        (e as { data: { source: IncrementalSource } }).data.source !==
+          IncrementalSource.Mutation
+      ) {
+        return false;
+      }
+      const adds =
+        (e as unknown as { data: { adds?: Array<{ node: { id: number } }> } })
+          .data.adds ?? [];
+      return (
+        marker !== null &&
+        adds.some((a) => a.node.id === record.mirror.getId(marker as Node))
+      );
+    };
+
+    stop = record({
+      emit: (event) => {
+        const e = event as eventWithTime;
+        eventsA.push(e);
+        if (!rotated && carriesMarkerAdd(e)) {
+          rotated = true;
+          // the exact reentry of F1's residual: the commit's own delivery
+          // rotates the recorder. The old commit must not clear the lock
+          // owner the new session arms right here.
+          stop?.();
+          stop = undefined;
+          stopB = record({
+            emit: (event2) => {
+              eventsB.push(event2 as eventWithTime);
+            },
+            fullSnapshotYieldBudgetMs: 1,
+          });
+          // observed while B's walk is in flight: with the gate disarmed
+          // this would emit against B's half-built mirror before B's
+          // FullSnapshot; with it intact it is held for B's commit
+          const midWalk = document.createElement('div');
+          midWalk.id = 'mid-walk-after-rotation';
+          document.body.appendChild(midWalk);
+        }
+      },
+      fullSnapshotYieldBudgetMs: 1,
+    });
+
+    // created mid-walk so its add is delivered from inside A's commit
+    marker = document.createElement('div');
+    marker.id = 'rotation-trigger';
+    document.body.appendChild(marker);
+
+    try {
+      await vi.waitFor(
+        () => {
+          expect(rotated).toBe(true);
+          expect(eventsB.some((e) => e.type === EventType.FullSnapshot)).toBe(
+            true,
+          );
+        },
+        { timeout: 10_000 },
+      );
+      await settle();
+
+      const isMutation = (e: eventWithTime) =>
+        e.type === EventType.IncrementalSnapshot &&
+        (e as { data: { source: IncrementalSource } }).data.source ===
+          IncrementalSource.Mutation;
+
+      // nothing observed during B's walk may get ahead of B's FullSnapshot
+      const bFullIdx = eventsB.findIndex(
+        (e) => e.type === EventType.FullSnapshot,
+      );
+      expect(eventsB.slice(0, bFullIdx).filter(isMutation)).toHaveLength(0);
+
+      // B's commit released its buffers: steady-state mutations still flow
+      const late = document.createElement('div');
+      late.id = 'post-rotation-steady-state';
+      document.body.appendChild(late);
+      await vi.waitFor(
+        () => {
+          const adds = eventsB
+            .filter(isMutation)
+            .flatMap(
+              (e) =>
+                (
+                  e as unknown as {
+                    data: { adds?: Array<{ node: { id: number } }> };
+                  }
+                ).data.adds ?? [],
+            );
+          expect(
+            adds.some((a) => a.node.id === record.mirror.getId(late)),
+          ).toBe(true);
+        },
+        { timeout: 10_000 },
+      );
+    } finally {
+      stopB?.();
+    }
+  }, 30_000);
+
   it('order-independent SDK control events bypass the held window', async () => {
     fillBody();
     const events: eventWithTime[] = [];
