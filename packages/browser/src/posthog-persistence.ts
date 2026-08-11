@@ -204,11 +204,15 @@ export class PostHogPersistence {
      * non-empty cookie snapshot was observed.
      */
     syncCookieProperties(): boolean {
+        return this._syncCookieProperties(this._config)
+    }
+
+    private _syncCookieProperties(config: PostHogConfig): boolean {
         if (
             this._disabled ||
             this._cookieSyncSuppressed ||
-            !this._config.cookieWinsOnConflict ||
-            this._config.persistence.toLowerCase() !== 'localstorage+cookie'
+            !config.cookieWinsOnConflict ||
+            config.persistence.toLowerCase() !== 'localstorage+cookie'
         ) {
             return false
         }
@@ -243,7 +247,7 @@ export class PostHogPersistence {
         const nextProps = extend({}, this.props)
         const cookiePersistedProperties = [
             ...COOKIE_PERSISTED_PROPERTIES,
-            ...(this._config.cookie_persisted_properties || []),
+            ...(config.cookie_persisted_properties || []),
         ]
         cookiePersistedProperties.forEach((key) => {
             if (!(key in cookieProperties) && !invalidCookieProperties[key]) {
@@ -254,14 +258,17 @@ export class PostHogPersistence {
         return true
     }
 
-    _beginCookieSyncSuppression(): void {
+    _beginCookieSyncSuppression(): boolean {
         if (
+            !this._cookieSyncSuppressed &&
             !this._disabled &&
             this._config.cookieWinsOnConflict &&
             this._config.persistence.toLowerCase() === 'localstorage+cookie'
         ) {
             this._cookieSyncSuppressed = true
+            return true
         }
+        return false
     }
 
     _endCookieSyncSuppression(): void {
@@ -917,25 +924,29 @@ export class PostHogPersistence {
     }
 
     update_config(config: PostHogConfig, oldConfig: PostHogConfig, isDisabled?: boolean): void {
-        const persistenceChanged =
-            config.persistence !== oldConfig.persistence ||
-            !isArrayContentsEqual(config.cookie_persisted_properties || [], oldConfig.cookie_persisted_properties || [])
+        const persistenceModeChanged = config.persistence !== oldConfig.persistence
+        const cookiePersistedPropertiesChanged = !isArrayContentsEqual(
+            config.cookie_persisted_properties || [],
+            oldConfig.cookie_persisted_properties || []
+        )
+        const persistenceChanged = persistenceModeChanged || cookiePersistedPropertiesChanged
         const cookiePrecedenceChanged = config.cookieWinsOnConflict !== oldConfig.cookieWinsOnConflict
 
         const disabled = config['disable_persistence'] || !!isDisabled
-        this._config = config
-        // Adopt the shared cookie before any config setter or storage migration
-        // can clear it. This also covers enabling precedence in the same
-        // set_config call that changes cookie or split-storage routing. Never
-        // read persistent identity when the new configuration disables persistence.
+        // Reconcile through the old routing before replacing it. PostHog mutates
+        // its config object before calling this method, so use the old snapshot
+        // explicitly rather than relying on this._config.
         if (!disabled) {
-            this.syncCookieProperties()
+            this._syncCookieProperties(oldConfig)
         }
 
-        this._default_expiry = this._expire_days = config['cookie_expiration']
-        this.set_disabled(disabled)
-        this.set_cross_subdomain(config['cross_subdomain_cookie'])
-        this.set_secure(config['secure_cookie'])
+        this._config = config
+        // A newly enabled precedence policy or cookie-backed key set must apply
+        // to the current cookie even if the old-policy sync just fingerprinted it.
+        if (!disabled && (persistenceModeChanged || cookiePersistedPropertiesChanged || cookiePrecedenceChanged)) {
+            this._lastSeenCookiePropertiesFingerprint = undefined
+            this.syncCookieProperties()
+        }
 
         // `_buildStorage` re-resolves both the backend and `_splitStorageEligible`,
         // so on a persistence change build the new store first, then derive the
@@ -943,27 +954,38 @@ export class PostHogPersistence {
         // split-eligible (e.g. localStorage -> memory).
         const newStore = persistenceChanged || cookiePrecedenceChanged ? this._buildStorage(config) : this._storage
         const wantSplit = this._resolveSplitStorage(config)
+        const storageMigration = persistenceChanged || wantSplit !== this._splitStorage
+        const cookieOptionsChanged =
+            config['cross_subdomain_cookie'] !== this._cross_subdomain || config['secure_cookie'] !== this._secure
 
-        // Migrate when the backend changed or the split routing flipped at
-        // runtime, e.g. set_config({ split_storage: true })
-        // without touching persistence. Either way we clear the old layout and
-        // re-save so subsequent reads/writes land in the right entries.
-        if (persistenceChanged || wantSplit !== this._splitStorage) {
-            this._beginCookieSyncSuppression()
-            try {
+        const cookieSyncSuppressionStarted =
+            !disabled && (storageMigration || cookieOptionsChanged) && this._beginCookieSyncSuppression()
+        try {
+            this._default_expiry = this._expire_days = config['cookie_expiration']
+            this.set_disabled(disabled)
+            this.set_cross_subdomain(config['cross_subdomain_cookie'])
+            this.set_secure(config['secure_cookie'])
+
+            // Migrate when the backend changed or the split routing flipped at
+            // runtime, e.g. set_config({ split_storage: true }). Either way we
+            // clear the old layout and re-save in the new routing.
+            if (storageMigration) {
                 const props = this.props
                 this.clear()
                 this._storage = newStore
                 this._splitStorage = wantSplit
                 this.props = props
                 this.save()
-            } finally {
-                // Storage migration clears the shared cookie. Restore the
-                // authoritative snapshot before another subdomain can initialize.
+            } else if (cookiePrecedenceChanged) {
+                this._storage = newStore
+            }
+        } finally {
+            if (cookieSyncSuppressionStarted) {
+                // Cookie option and storage migrations clear the shared cookie.
+                // Restore one complete authoritative snapshot before another
+                // subdomain can initialize.
                 this._endCookieSyncSuppression()
             }
-        } else if (cookiePrecedenceChanged) {
-            this._storage = newStore
         }
     }
 

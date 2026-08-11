@@ -290,6 +290,16 @@ export const createLocalPlusCookieStore = (
                             safeCookieProperties[key] = v
                         }
                     }
+                    // A non-empty cookie is the complete shared snapshot. Remove
+                    // cookie-backed keys it omits so a subdomain reopened after
+                    // reset cannot resurrect prior-user values from localStorage.
+                    if (Object.keys(safeCookieProperties).length > 0) {
+                        cookiePropertiesToPersist.forEach((key) => {
+                            if (!(key in cookieProperties)) {
+                                delete localStorageData[key]
+                            }
+                        })
+                    }
                     value = extend(localStorageData, safeCookieProperties)
                 } else {
                     value = extend(cookieProperties, localStorageData)
