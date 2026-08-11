@@ -124,6 +124,9 @@ export type rrwebRecord = {
     (options: recordOptions): (() => void) | undefined
     addCustomEvent: (tag: string, payload: any) => void
     takeFullSnapshot: () => void
+    // optional: present on recorder builds with time-sliced snapshots; lets the
+    // SDK force an in-flight sliced snapshot to finish before an unload flush
+    drainPendingSnapshotForUnload?: () => void
     mirror: {
         getId(n: Node | undefined | null): number
         getNode(id: number): Node | null

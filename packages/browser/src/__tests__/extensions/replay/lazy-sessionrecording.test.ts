@@ -249,6 +249,7 @@ describe('Lazy SessionRecording', () => {
             _emit(createFullSnapshot())
         })
         assignableWindow.__PosthogExtensions__.rrweb.record.addCustomEvent = _addCustomEvent
+        assignableWindow.__PosthogExtensions__.rrweb.record.drainPendingSnapshotForUnload = jest.fn()
 
         assignableWindow.__PosthogExtensions__.rrwebPlugins = {
             getRecordConsolePlugin: jest.fn(),
@@ -4501,6 +4502,27 @@ describe('Lazy SessionRecording', () => {
 
             expect(mockListener).toHaveBeenCalled()
             expect(sessionRecording['_persistFlagsOnSessionListener']).toBeUndefined()
+        })
+
+        it('pagehide forces the rrweb snapshot drain before flushing', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            const drain = assignableWindow.__PosthogExtensions__.rrweb!.record
+                .drainPendingSnapshotForUnload as jest.Mock
+            drain.mockClear()
+
+            window.dispatchEvent(new Event('pagehide'))
+
+            // the drain must run inside our own handler (listener registration
+            // order against rrweb's own pagehide handler is not guaranteed).
+            // Not an exact count: prior tests in this shared jsdom window
+            // leave their own pagehide handlers registered.
+            expect(drain).toHaveBeenCalled()
         })
 
         it('sets and clears the window and document event listeners', () => {

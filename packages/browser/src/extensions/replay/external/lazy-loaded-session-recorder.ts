@@ -2198,8 +2198,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private _onPageHide = (): void => {
-        // same drain as beforeunload; by pagehide rrweb has rescued any
-        // in-flight FullSnapshot, and this is the last chance to ship it
+        // Force rrweb to finish any in-flight sliced snapshot BEFORE draining:
+        // relying on listener registration order breaks when the recorder
+        // started before DOMContentLoaded (rrweb then registers its pagehide
+        // handler at window load, after ours). The call is a no-op when
+        // nothing is in flight or the handler ran first anyway.
+        getRRWebRecord()?.drainPendingSnapshotForUnload?.()
+        // same drain as beforeunload; this is the last chance to ship it
         this._onBeforeUnload()
     }
 
