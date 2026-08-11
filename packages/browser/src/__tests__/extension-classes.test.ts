@@ -84,6 +84,37 @@ describe('__extensionClasses enrollment', () => {
         expect(posthog.autocapture).toBeInstanceOf(MockAutocapture)
     })
 
+    it('preserves the PostHog lifecycle contract for custom feature flags classes', async () => {
+        PostHog.__defaultExtensionClasses = {}
+        const posthog = new PostHog()
+        const initialize = jest.fn()
+        const destroy = jest.fn()
+        let constructorArgument: PostHog | undefined
+
+        class LegacyFeatureFlags {
+            constructor(instance: PostHog) {
+                constructorArgument = instance
+            }
+
+            initialize(): void {
+                initialize()
+            }
+
+            destroy(): void {
+                destroy()
+            }
+        }
+
+        posthog.config.__extensionClasses = { featureFlags: LegacyFeatureFlags as any }
+        posthog['_enrollFeatureFlags']()
+        posthog.__loaded = true
+        await posthog.shutdown()
+
+        expect(constructorArgument).toBe(posthog)
+        expect(initialize).toHaveBeenCalledTimes(1)
+        expect(destroy).toHaveBeenCalledTimes(1)
+    })
+
     it('eagerly constructs extensions from defaults before init()', () => {
         PostHog.__defaultExtensionClasses = AllExtensions
 

@@ -122,7 +122,6 @@ import {
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { ExternalIntegrations } from './extensions/external-integration'
 import { BrowserClientAdapter } from './extensions/browser-client'
-import { MutableFeatureFlagsConfigSource } from './feature-flags-config'
 import type { PostHogSurveys } from './posthog-surveys'
 import type { Autocapture } from './autocapture'
 import type { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
@@ -468,7 +467,6 @@ export class PostHog implements PostHogInterface {
     private readonly _extensions: Extension[] = []
     private readonly _extensionEventPropertyProducers: Array<() => Record<string, unknown>> = []
     private _browserClientAdapter: BrowserClientAdapter | undefined
-    private _featureFlagsConfigSource: MutableFeatureFlagsConfigSource | undefined
     private _featureFlagsReloadingUnsubscribe: (() => void) | undefined
 
     private _replaceExtension<T extends Extension>(oldExt: T | undefined, newExt: T): T {
@@ -550,11 +548,7 @@ export class PostHog implements PostHogInterface {
         // Eagerly construct extensions from default classes so they're available before init().
         // For the slim bundle, these remain undefined until _initExtensions sets them from config.
         const ext = PostHog.__defaultExtensionClasses ?? {}
-        this._featureFlagsConfigSource = ext.featureFlags ? new MutableFeatureFlagsConfigSource(this.config) : undefined
-        this.featureFlags =
-            ext.featureFlags && this._featureFlagsConfigSource
-                ? new ext.featureFlags(this._featureFlagsConfigSource)
-                : undefined
+        this.featureFlags = ext.featureFlags && new ext.featureFlags(this)
         this.toolbar = ext.toolbar && new ext.toolbar(this)
         this.surveys = ext.surveys && new ext.surveys(this)
         this.conversations = ext.conversations && new ext.conversations(this)
@@ -928,17 +922,20 @@ export class PostHog implements PostHogInterface {
         if (!FeatureFlagsClass) {
             return
         }
-        this._featureFlagsConfigSource ??= new MutableFeatureFlagsConfigSource(this.config, this._shouldDisableFlags())
         if (!this.featureFlags || !(this.featureFlags instanceof FeatureFlagsClass)) {
             this._featureFlagsReloadingUnsubscribe?.()
             this._featureFlagsReloadingUnsubscribe = undefined
-            this.featureFlags = new FeatureFlagsClass(this._featureFlagsConfigSource)
+            this.featureFlags = new FeatureFlagsClass(this)
         }
-        if (!this._featureFlagsReloadingUnsubscribe) {
-            this._featureFlagsReloadingUnsubscribe = this.featureFlags.onReloading(() => {
-                this._internalEventEmitter.emit('featureFlagsReloading', true)
-            })
-            void this._getBrowserClientAdapter().add(this.featureFlags)
+        if (isFunction(this.featureFlags.onReloading) && isFunction(this.featureFlags.setup)) {
+            if (!this._featureFlagsReloadingUnsubscribe) {
+                this._featureFlagsReloadingUnsubscribe = this.featureFlags.onReloading(() => {
+                    this._internalEventEmitter.emit('featureFlagsReloading', true)
+                })
+                void this._getBrowserClientAdapter().add(this.featureFlags)
+            }
+        } else {
+            this.featureFlags.initialize?.()
         }
     }
 
@@ -3304,6 +3301,11 @@ export class PostHog implements PostHogInterface {
         void this.metrics?.flush('sendBeacon')
         this._requestQueue?.unload()
         this._retryQueue?.unload()
+        try {
+            this.featureFlags?.destroy()
+        } catch (error) {
+            logger.error('Error while destroying feature flags', error)
+        }
     }
 
     /**
@@ -3564,7 +3566,7 @@ export class PostHog implements PostHogInterface {
                 }
             }
 
-            this._featureFlagsConfigSource?.update(this.config, this._shouldDisableFlags())
+            this.featureFlags?.updateConfig?.(this.config, this._shouldDisableFlags())
 
             this.exceptionObserver?.onConfigChange()
             this.exceptions?.onConfigChange()

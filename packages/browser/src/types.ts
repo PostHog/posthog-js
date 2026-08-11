@@ -15,7 +15,6 @@ import {
 
 // Extension class types for __extensionClasses (type-only, no bundle impact)
 import type { ExtensionConstructor } from './extensions/types'
-import type { FeatureFlagsConfigSource } from './feature-flags-config'
 import type { Autocapture } from './autocapture'
 import type { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
 import type { ExceptionObserver } from './extensions/exception-autocapture'
@@ -223,7 +222,7 @@ export type PostHogConfig = Omit<BasePostHogConfig, 'loaded'> & {
         toolbar?: ExtensionConstructor<Toolbar>
         experiments?: ExtensionConstructor<WebExperiments>
         conversations?: ExtensionConstructor<PostHogConversations>
-        featureFlags?: new (config: FeatureFlagsConfigSource) => PostHogFeatureFlags
+        featureFlags?: ExtensionConstructor<PostHogFeatureFlags>
         logs?: ExtensionConstructor<PostHogLogs>
         metrics?: ExtensionConstructor<PostHogMetrics>
     }

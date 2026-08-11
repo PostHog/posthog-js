@@ -17,8 +17,10 @@ import {
     IsFeatureEnabledOptions,
     OverrideFeatureFlagsOptions,
     FeatureFlagOverrideOptions,
+    PostHogConfig,
 } from './types'
-import type { FeatureFlagsConfigSource } from './feature-flags-config'
+import type { PostHog } from './posthog-core'
+import { MutableFeatureFlagsConfigSource, type FeatureFlagsConfigSource } from './feature-flags-config'
 
 import {
     PERSISTENCE_EARLY_ACCESS_FEATURES,
@@ -269,15 +271,34 @@ export class PostHogFeatureFlags implements Extension {
     private _staleEventProperties: Record<string, unknown> = {}
     private _reloadingHandlers: Array<() => void> = []
     private _hasLoadedFlags: boolean = false
-    // Latest request wins logically. Superseded transports are not aborted because Client does not expose cancellation yet.
-    private _requestInFlight?: Promise<ApiResponse>
+    private _requestInFlight: boolean = false
+    private _requestGeneration: number = 0
     private _reloadingDisabled: boolean = false
+    private _additionalReloadRequested: boolean = false
     private _reloadDebouncer?: ReturnType<typeof setTimeout>
     private _flagsLoadedFromRemote: boolean = false
     private _staleCacheRefreshTriggered: boolean = false
     private _consecutiveStatusZeroFailures: number = 0
+    private readonly _configSource: FeatureFlagsConfigSource
+    private readonly _mutableConfigSource?: MutableFeatureFlagsConfigSource
 
-    constructor(private readonly _configSource: FeatureFlagsConfigSource) {}
+    constructor(instance: PostHog)
+    constructor(configSource: FeatureFlagsConfigSource)
+    constructor(instanceOrConfigSource: PostHog | FeatureFlagsConfigSource) {
+        if ('get' in instanceOrConfigSource) {
+            this._configSource = instanceOrConfigSource
+        } else {
+            this._mutableConfigSource = new MutableFeatureFlagsConfigSource(
+                instanceOrConfigSource.config,
+                instanceOrConfigSource._shouldDisableFlags()
+            )
+            this._configSource = this._mutableConfigSource
+        }
+    }
+
+    updateConfig(config: PostHogConfig, remoteRequestsDisabled: boolean): void {
+        this._mutableConfigSource?.update(config, remoteRequestsDisabled)
+    }
 
     setup(client: Client): void | Promise<void> {
         this._initializingClient = client
@@ -303,7 +324,7 @@ export class PostHogFeatureFlags implements Extension {
             this._isCacheStale() ? this._staleEventProperties : this._freshEventProperties
         )
         this._rebuildEventProperties()
-        return this._initialize()
+        return this.initialize()
     }
 
     private _onOnline = (): void => {
@@ -314,13 +335,18 @@ export class PostHogFeatureFlags implements Extension {
         }
     }
 
+    destroy(): void {
+        window?.removeEventListener('online', this._onOnline)
+    }
+
     dispose(): void {
+        this._requestGeneration++
+        this._additionalReloadRequested = false
         this._initializingClient = undefined
         if (!this._client) {
             return
         }
         this._clearDebouncer()
-        this._requestInFlight = undefined
         this._dynamicProperties?.dispose()
         this._dynamicProperties = undefined
         this._reloadingHandlers = []
@@ -437,7 +463,7 @@ export class PostHogFeatureFlags implements Extension {
         })
     }
 
-    private _initialize(): void {
+    initialize(): void {
         const config = this._config
         const bootstrapFlags = config.bootstrap?.featureFlags ?? {}
         const hasBootstrappedFlags = Object.keys(bootstrapFlags).length
@@ -642,7 +668,7 @@ export class PostHogFeatureFlags implements Extension {
      *
      * Constraints:
      *
-     * 1. Supersede any active request so only the latest response can update state
+     * 1. Avoid parallel requests
      * 2. Delay a few milliseconds after each reloadFeatureFlags call to batch subsequent changes together
      */
     reloadFeatureFlags(): void {
@@ -661,8 +687,6 @@ export class PostHogFeatureFlags implements Extension {
             return
         }
 
-        this._requestInFlight = undefined
-
         // Notify browser-v1 facade listeners before the debounced request starts.
         this._reloadingHandlers.slice().forEach((handler) => {
             try {
@@ -674,7 +698,7 @@ export class PostHogFeatureFlags implements Extension {
 
         // Debounce multiple calls on the same tick
         this._reloadDebouncer = setTimeout(() => {
-            void this._callFlagsEndpoint()
+            this._callFlagsEndpoint()
         }, 5)
     }
 
@@ -711,10 +735,14 @@ export class PostHogFeatureFlags implements Extension {
         this._remove(FLAG_CALL_REPORTED)
     }
 
-    async _callFlagsEndpoint(options?: { disableFlags?: boolean }): Promise<void> {
+    _callFlagsEndpoint(options?: { disableFlags?: boolean }): void {
         this._clearDebouncer()
         const client = this._client
         if (!client || this._config.remoteRequestsDisabled || this._hasStatusZeroCircuitBreakerTripped()) {
+            return
+        }
+        if (this._requestInFlight) {
+            this._additionalReloadRequested = true
             return
         }
 
@@ -749,31 +777,28 @@ export class PostHogFeatureFlags implements Extension {
 
         const isPartialFlagsResponse = this._config.onlyEvaluateSurveyFeatureFlags
         const path = `/flags/?v=2${isPartialFlagsResponse ? '&only_evaluate_survey_feature_flags=true' : ''}`
-        this._requestInFlight = undefined
-        let request: Promise<ApiResponse> | undefined
+        const requestGeneration = this._requestGeneration
+        this._requestInFlight = true
 
-        try {
-            request = client.sendRequest(path, {
-                target: 'flags',
-                method: 'POST',
-                body: data,
-                compression: this._config.compression === 'base64' ? Compression.Base64 : undefined,
-                sentAt: 'body',
-                timeoutMs: this._config.requestTimeoutMs,
-            })
-            this._requestInFlight = request
-            const response = await request
-            if (this._requestInFlight !== request) {
-                return
+        const requestAdditionalReload = (): void => {
+            if (this._additionalReloadRequested) {
+                this._additionalReloadRequested = false
+                this._callFlagsEndpoint()
             }
-
+        }
+        const handleResponse = (response: ApiResponse): void => {
             const json = (response.json ?? {}) as Partial<FlagsResponse> & { quotaLimited?: string[] }
             const errorsLoading = response.statusCode !== 200
+            this._requestInFlight = false
+            if (requestGeneration !== this._requestGeneration) {
+                requestAdditionalReload()
+                return
+            }
             this._trackStatusZeroReachability(response.statusCode)
-            if (!errorsLoading) {
+            if (!errorsLoading && !this._additionalReloadRequested) {
                 this.$anon_distinct_id = undefined
             }
-            if (data.disable_flags) {
+            if (data.disable_flags && !this._additionalReloadRequested) {
                 return
             }
             this._flagsLoadedFromRemote = !errorsLoading
@@ -803,21 +828,36 @@ export class PostHogFeatureFlags implements Extension {
                 this._logger.warn(
                     'You have hit your feature flags quota limit, and will not be able to load feature flags until the quota is reset.  Please visit https://posthog.com/docs/billing/limits-alerts to learn more.'
                 )
-                return
+            } else if (!data.disable_flags) {
+                this._receivedFeatureFlags(json, errorsLoading, { partialResponse: isPartialFlagsResponse })
             }
-            this._receivedFeatureFlags(json, errorsLoading, { partialResponse: isPartialFlagsResponse })
-        } catch (error) {
-            if (request && this._requestInFlight !== request) {
+            requestAdditionalReload()
+        }
+        const handleError = (error: unknown): void => {
+            this._requestInFlight = false
+            if (requestGeneration !== this._requestGeneration) {
+                requestAdditionalReload()
                 return
             }
             this._set({ [PERSISTENCE_FEATURE_FLAG_ERRORS]: [FeatureFlagError.CONNECTION_ERROR] })
-            if (!request || this._requestInFlight === request) {
-                this._logger.error('Feature flag request failed', error)
-            }
-        } finally {
-            if (request && this._requestInFlight === request) {
-                this._requestInFlight = undefined
-            }
+            this._logger.error('Feature flag request failed', error)
+            requestAdditionalReload()
+        }
+
+        try {
+            void client
+                .sendRequest(path, {
+                    target: 'flags',
+                    method: 'POST',
+                    body: data,
+                    compression: this._config.compression === 'base64' ? Compression.Base64 : undefined,
+                    sentAt: 'body',
+                    timeoutMs: this._config.requestTimeoutMs,
+                })
+                .then(handleResponse)
+                .catch(handleError)
+        } catch (error) {
+            handleError(error)
         }
     }
 
@@ -1583,9 +1623,10 @@ export class PostHogFeatureFlags implements Extension {
     }
 
     reset(): void {
+        this._requestGeneration++
+        this._additionalReloadRequested = false
         this._rebuildEventProperties()
         this._hasLoadedFlags = false
-        this._requestInFlight = undefined
         this._reloadingDisabled = false
         this._flagsLoadedFromRemote = false
         this.$anon_distinct_id = undefined

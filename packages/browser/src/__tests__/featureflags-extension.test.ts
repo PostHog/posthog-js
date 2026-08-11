@@ -31,6 +31,19 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         expect(removeListener).toHaveBeenCalledWith('online', expect.any(Function))
     })
 
+    it('preserves the legacy initialize and destroy methods', async () => {
+        const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
+        const removeListener = jest.spyOn(window, 'removeEventListener')
+        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+        featureFlags.setup(posthog._getBrowserClientAdapter())
+
+        expect(() => featureFlags.initialize()).not.toThrow()
+        expect(() => featureFlags.destroy()).not.toThrow()
+        expect(removeListener).toHaveBeenCalledWith('online', expect.any(Function))
+
+        featureFlags.dispose()
+    })
+
     it('does not send a debounced request after reset', async () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
         const client = posthog._getBrowserClientAdapter()
@@ -103,7 +116,9 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         const requestError = new Error('request failed')
         jest.spyOn(client, 'sendRequest').mockRejectedValue(requestError)
 
-        await featureFlags._callFlagsEndpoint()
+        featureFlags._callFlagsEndpoint()
+        await Promise.resolve()
+        await Promise.resolve()
 
         expect(scopedError).toHaveBeenCalledWith('Feature flag request failed', requestError)
         expect(clientError).not.toHaveBeenCalled()
@@ -215,7 +230,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(config))
         featureFlags.setup(client)
 
-        featureFlags._callFlagsEndpoint()
+        expect(featureFlags._callFlagsEndpoint()).toBeUndefined()
 
         expect(sendRequest).toHaveBeenCalledWith(
             '/flags/?v=2&only_evaluate_survey_feature_flags=true',
@@ -234,7 +249,7 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         featureFlags.dispose()
     })
 
-    it('lets the latest request supersede an older response', async () => {
+    it('coalesces reloads behind an in-flight request after a quota-limited response', async () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
         const client = posthog._getBrowserClientAdapter()
         let distinctId = 'anonymous-id'
@@ -254,6 +269,13 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         featureFlags.setAnonymousDistinctId('anonymous-id')
         featureFlags.reloadFeatureFlags()
         jest.advanceTimersByTime(5)
+        featureFlags.reloadFeatureFlags()
+        jest.advanceTimersByTime(5)
+
+        expect(sendRequest).toHaveBeenCalledTimes(1)
+
+        resolveRequests[0]({ statusCode: 200, json: { quotaLimited: ['feature_flags'] } })
+        await Promise.resolve()
 
         expect(sendRequest).toHaveBeenCalledTimes(2)
         expect(sendRequest.mock.calls[1][1]?.body).toMatchObject({
@@ -262,20 +284,56 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         })
 
         resolveRequests[1]({ statusCode: 200, json: { featureFlags: { current: true } } })
-        await Promise.resolve()
-        expect(featureFlags.getFlagVariants()).toEqual({ current: true })
-
-        resolveRequests[0]({ statusCode: 200, json: { featureFlags: { stale: true } } })
         await firstRequest
         expect(featureFlags.getFlagVariants()).toEqual({ current: true })
         featureFlags.dispose()
     })
 
-    it('ignores an in-flight response after reset', async () => {
+    it('keeps an in-flight request single-flight through reset without applying its response', async () => {
+        const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
+        const client = posthog._getBrowserClientAdapter()
+        let distinctId = 'identified-id'
+        jest.spyOn(posthog, 'get_distinct_id').mockImplementation(() => distinctId)
+        const resolveRequests: Array<(response: ApiResponse) => void> = []
+        const sendRequest = jest.spyOn(client, 'sendRequest').mockImplementation(
+            () =>
+                new Promise<ApiResponse>((resolve) => {
+                    resolveRequests.push(resolve)
+                })
+        )
+        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+        featureFlags.setup(client)
+        const callback = jest.fn()
+        featureFlags.addFeatureFlagsHandler(callback)
+
+        const firstRequest = featureFlags._callFlagsEndpoint()
+        distinctId = 'reset-id'
+        featureFlags.reset()
+        featureFlags.reloadFeatureFlags()
+        jest.advanceTimersByTime(5)
+
+        expect(sendRequest).toHaveBeenCalledTimes(1)
+
+        resolveRequests[0]({ statusCode: 200, json: { featureFlags: { stale: true } } })
+        await Promise.resolve()
+
+        expect(callback).not.toHaveBeenCalled()
+        expect(featureFlags.getFlagVariants()).toEqual({})
+        expect(sendRequest).toHaveBeenCalledTimes(2)
+        expect(sendRequest.mock.calls[1][1]?.body).toMatchObject({ distinct_id: 'reset-id' })
+
+        resolveRequests[1]({ statusCode: 200, json: { featureFlags: { current: true } } })
+        await firstRequest
+        expect(callback).toHaveBeenCalledTimes(1)
+        expect(featureFlags.getFlagVariants()).toEqual({ current: true })
+        featureFlags.dispose()
+    })
+
+    it('drops queued work and status tracking from the generation before reset', async () => {
         const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
         const client = posthog._getBrowserClientAdapter()
         let resolveRequest: ((response: ApiResponse) => void) | undefined
-        jest.spyOn(client, 'sendRequest').mockImplementation(
+        const sendRequest = jest.spyOn(client, 'sendRequest').mockImplementation(
             () =>
                 new Promise<ApiResponse>((resolve) => {
                     resolveRequest = resolve
@@ -283,14 +341,52 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
         )
         const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
         featureFlags.setup(client)
+        const callback = jest.fn()
+        featureFlags.addFeatureFlagsHandler(callback)
 
-        const request = featureFlags._callFlagsEndpoint()
+        featureFlags._callFlagsEndpoint()
+        featureFlags.reloadFeatureFlags()
+        jest.advanceTimersByTime(5)
         featureFlags.reset()
-        resolveRequest?.({ statusCode: 200, json: { featureFlags: { stale: true } } })
-        await request
+        resolveRequest?.({ statusCode: 0 })
+        await Promise.resolve()
 
-        expect(featureFlags.getFlagVariants()).toEqual({})
+        expect(sendRequest).toHaveBeenCalledTimes(1)
+        expect(callback).not.toHaveBeenCalled()
+        expect(featureFlags['_consecutiveStatusZeroFailures']).toBe(0)
         featureFlags.dispose()
+    })
+
+    it('ignores an in-flight response and queued reload after disposal', async () => {
+        const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
+        const client = posthog._getBrowserClientAdapter()
+        let resolveRequest: ((response: ApiResponse) => void) | undefined
+        const sendRequest = jest.spyOn(client, 'sendRequest').mockImplementation(
+            () =>
+                new Promise<ApiResponse>((resolve) => {
+                    resolveRequest = resolve
+                })
+        )
+        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+        featureFlags.setup(client)
+        const callback = jest.fn()
+        featureFlags.addFeatureFlagsHandler(callback)
+
+        featureFlags._callFlagsEndpoint()
+        featureFlags.reloadFeatureFlags()
+        jest.advanceTimersByTime(5)
+        featureFlags.dispose()
+        resolveRequest?.({
+            statusCode: 0,
+            json: { flags: { stale: { key: 'stale', enabled: true } } },
+        })
+        await Promise.resolve()
+        await Promise.resolve()
+
+        expect(sendRequest).toHaveBeenCalledTimes(1)
+        expect(callback).not.toHaveBeenCalled()
+        expect(featureFlags.getFeatureFlag('stale', { send_event: false })).toBeUndefined()
+        expect(featureFlags['_consecutiveStatusZeroFailures']).toBe(0)
     })
 
     it('hydrates browser-v1 persistence synchronously', async () => {
