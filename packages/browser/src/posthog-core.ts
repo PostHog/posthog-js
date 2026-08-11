@@ -3245,16 +3245,11 @@ export class PostHog implements PostHogInterface {
             // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
             // eslint-disable-next-line posthog-js/no-direct-undefined-check
             if (bootstrap.distinctID !== undefined && this.config.cookieless_mode !== COOKIELESS_ALWAYS) {
-                const uuid = this.config.get_device_id(uuidv7())
-                const deviceID = bootstrap.isIdentifiedID ? uuid : bootstrap.distinctID
                 this.persistence?.set_property(
                     USER_STATE,
                     bootstrap.isIdentifiedID ? USER_STATE_IDENTIFIED : USER_STATE_ANONYMOUS
                 )
-                this.register({
-                    distinct_id: bootstrap.distinctID,
-                    $device_id: deviceID,
-                })
+                this.register({ distinct_id: bootstrap.distinctID })
             }
 
             this.featureFlags?.initialize()

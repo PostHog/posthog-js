@@ -172,20 +172,37 @@ describe('reset()', () => {
             expect(instance.get_property('$device_id')).toEqual(initialDeviceId)
         })
 
-        it('applies a custom anonymous distinct ID', () => {
+        it('applies a custom anonymous distinct ID and preserves the device ID', () => {
+            const initialDeviceId = instance.get_property('$device_id')
+
             instance.reset({ bootstrap: { distinctID: 'custom-anon-id', isIdentifiedID: false } })
 
             expect(instance.get_distinct_id()).toEqual('custom-anon-id')
-            expect(instance.get_property('$device_id')).toEqual('custom-anon-id')
+            expect(instance.get_property('$device_id')).toEqual(initialDeviceId)
             expect(instance.persistence!.get_property(USER_STATE)).toEqual('anonymous')
         })
 
-        it('applies a custom identified distinct ID', () => {
+        it('applies a custom identified distinct ID and preserves the device ID', () => {
+            const initialDeviceId = instance.get_property('$device_id')
+
             instance.reset({ bootstrap: { distinctID: 'user@example.com', isIdentifiedID: true } })
 
             expect(instance.get_distinct_id()).toEqual('user@example.com')
-            expect(instance.get_property('$device_id')).not.toEqual('user@example.com')
+            expect(instance.get_property('$device_id')).toEqual(initialDeviceId)
             expect(instance.persistence!.get_property(USER_STATE)).toEqual('identified')
+        })
+
+        it('resets the device ID when combined with bootstrap options', () => {
+            const initialDeviceId = instance.get_property('$device_id')
+
+            instance.reset({
+                resetDeviceID: true,
+                bootstrap: { distinctID: 'custom-anon-id', isIdentifiedID: false },
+            })
+
+            expect(instance.get_distinct_id()).toEqual('custom-anon-id')
+            expect(instance.get_property('$device_id')).not.toEqual(initialDeviceId)
+            expect(instance.get_property('$device_id')).not.toEqual('custom-anon-id')
         })
 
         it('applies bootstrapped feature flags and payloads', () => {
