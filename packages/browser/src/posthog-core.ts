@@ -71,6 +71,7 @@ import {
     QueuedRequestWithOptions,
     RemoteConfigResult,
     RequestCallback,
+    ResetOptions,
     SessionIdChangedCallback,
     SnippetArrayItem,
     ToolbarParams,
@@ -3129,6 +3130,18 @@ export class PostHog implements PostHogInterface {
      *
      * @example
      * ```js
+     * // reset with a custom anonymous ID and bootstrapped feature flags
+     * posthog.reset({
+     *     bootstrap: {
+     *         distinctID: myAnonymousID,
+     *         isIdentifiedID: false,
+     *         featureFlags: { 'my-flag': true },
+     *     }
+     * })
+     * ```
+     *
+     * @example
+     * ```js
      * // with opt_out_capturing_by_default, reset() before opting in, never after
      * posthog.reset()
      * posthog.opt_in_capturing()
@@ -3136,13 +3149,19 @@ export class PostHog implements PostHogInterface {
      *
      * @public
      *
-     * @param {boolean} [reset_device_id] Whether to generate a new device ID as well as a new distinct ID.
+     * @param options Boolean to reset the device ID (legacy), or reset options including bootstrap values.
      */
-    reset(reset_device_id?: boolean): void {
-        this._reset(reset_device_id)
+    reset(options?: boolean | ResetOptions): void {
+        const reset_device_id = isBoolean(options) ? options : options?.resetDeviceID
+        const bootstrap = isBoolean(options) ? undefined : options?.bootstrap
+        this._reset(reset_device_id, false, bootstrap)
     }
 
-    private _reset(reset_device_id?: boolean, isConsentTransition = false): void {
+    private _reset(
+        reset_device_id?: boolean,
+        isConsentTransition = false,
+        bootstrap?: ResetOptions['bootstrap']
+    ): void {
         logger.info('reset')
         if (!this.__loaded) {
             return logger.uninitializedWarning('posthog.reset')
@@ -3220,11 +3239,36 @@ export class PostHog implements PostHogInterface {
             1
         )
 
+        if (bootstrap) {
+            this.config.bootstrap = bootstrap
+
+            // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
+            // eslint-disable-next-line posthog-js/no-direct-undefined-check
+            if (bootstrap.distinctID !== undefined && this.config.cookieless_mode !== COOKIELESS_ALWAYS) {
+                const uuid = this.config.get_device_id(uuidv7())
+                const deviceID = bootstrap.isIdentifiedID ? uuid : bootstrap.distinctID
+                this.persistence?.set_property(
+                    USER_STATE,
+                    bootstrap.isIdentifiedID ? USER_STATE_IDENTIFIED : USER_STATE_ANONYMOUS
+                )
+                this.register({
+                    distinct_id: bootstrap.distinctID,
+                    $device_id: deviceID,
+                })
+            }
+
+            this.featureFlags?.initialize()
+
+            if (bootstrap.sessionID) {
+                this.sessionManager?.setBootstrapSessionId(bootstrap.sessionID, true)
+            }
+        }
+
         // Clear HMAC identity verification fields
         delete this.config.identity_distinct_id
         delete this.config.identity_hash
 
-        // Reload feature flags for the new anonymous user, just like identify()
+        // Reload feature flags for the reset user, just like identify()
         // does when the distinct_id changes.
         this.reloadFeatureFlags()
     }

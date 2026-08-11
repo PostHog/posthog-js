@@ -35,6 +35,7 @@ export class SessionIdManager {
     private readonly _window_id_storage_key: string
     private readonly _primary_window_exists_storage_key: string
     private _sessionStartTimestamp: number | null
+    private _pendingBootstrapSession: { sessionId: string; sessionStartTimestamp: number } | undefined
 
     private _sessionActivityTimestamp: number | null
     private _lastPersistedActivityTimestamp: number | null = null
@@ -67,6 +68,7 @@ export class SessionIdManager {
         this._windowId = undefined
         this._sessionId = undefined
         this._sessionStartTimestamp = null
+        this._pendingBootstrapSession = undefined
         this._sessionActivityTimestamp = null
         this._sessionIdGenerator = sessionIdGenerator || uuidv7
         this._windowIdGenerator = windowIdGenerator || uuidv7
@@ -107,12 +109,7 @@ export class SessionIdManager {
         }
 
         if (this._config.bootstrap?.sessionID) {
-            try {
-                const sessionStartTimestamp = uuid7ToTimestampMs(this._config.bootstrap.sessionID)
-                this._setSessionId(this._config.bootstrap.sessionID, new Date().getTime(), sessionStartTimestamp)
-            } catch (e) {
-                logger.error('Invalid sessionID in bootstrap', e)
-            }
+            this.setBootstrapSessionId(this._config.bootstrap.sessionID)
         }
 
         this._listenToReloadWindow()
@@ -302,9 +299,25 @@ export class SessionIdManager {
     // cannot rotate the freshly-cleared session.
     resetSessionId(): void {
         this._lastPersistedActivityTimestamp = null
+        this._pendingBootstrapSession = undefined
         clearTimeout(this._enforceIdleTimeout)
         this._enforceIdleTimeout = undefined
         this._setSessionId(null, null, null)
+    }
+
+    // Reset defers bootstrap assignment until the next session check so rotation listeners
+    // observe the same event-driven lifecycle as a normal reset, rather than starting a replay immediately.
+    setBootstrapSessionId(sessionID: string, deferUntilNextSession = false): void {
+        try {
+            const sessionStartTimestamp = uuid7ToTimestampMs(sessionID)
+            if (deferUntilNextSession) {
+                this._pendingBootstrapSession = { sessionId: sessionID, sessionStartTimestamp }
+            } else {
+                this._setSessionId(sessionID, new Date().getTime(), sessionStartTimestamp)
+            }
+        } catch (e) {
+            logger.error('Invalid sessionID in bootstrap', e)
+        }
     }
 
     /**
@@ -378,12 +391,18 @@ export class SessionIdManager {
         const lastActivityTimestamp = this._freshestActivityTimestamp()
         let windowId = this._getWindowId()
 
-        const sessionPastMaximumLength =
-            isPositiveNumber(startTimestamp) && Math.abs(timestamp - startTimestamp) > SESSION_LENGTH_LIMIT_MILLISECONDS
+        const pendingBootstrapSession = this._pendingBootstrapSession
+        const pendingBootstrapSessionPastMaximumLength =
+            !!pendingBootstrapSession &&
+            Math.abs(timestamp - pendingBootstrapSession.sessionStartTimestamp) > SESSION_LENGTH_LIMIT_MILLISECONDS
+        const sessionPastMaximumLength = pendingBootstrapSession
+            ? pendingBootstrapSessionPastMaximumLength
+            : isPositiveNumber(startTimestamp) &&
+              Math.abs(timestamp - startTimestamp) > SESSION_LENGTH_LIMIT_MILLISECONDS
 
         let valuesChanged = false
         let crossTabAdoption = false
-        const noSessionId = !sessionId
+        const noSessionId = !sessionId || !!pendingBootstrapSession
         const preRefreshSessionId = sessionId
         let activityTimeout =
             !noSessionId && !readOnly && this._sessionHasBeenIdleTooLong(timestamp, lastActivityTimestamp)
@@ -406,14 +425,17 @@ export class SessionIdManager {
             ;[, sessionId, startTimestamp] = this._getSessionId()
         }
         if (noSessionId || activityTimeout || sessionPastMaximumLength) {
-            sessionId = this._sessionIdGenerator()
+            const usePendingBootstrapSession = pendingBootstrapSession && !pendingBootstrapSessionPastMaximumLength
+            sessionId = usePendingBootstrapSession ? pendingBootstrapSession.sessionId : this._sessionIdGenerator()
             windowId = this._windowIdGenerator()
-            logger.info('new session ID generated', {
+            logger.info('new session ID assigned', {
                 sessionId,
                 windowId,
+                bootstrapped: !!usePendingBootstrapSession,
                 changeReason: { noSessionId, activityTimeout, sessionPastMaximumLength },
             })
-            startTimestamp = timestamp
+            startTimestamp = usePendingBootstrapSession ? pendingBootstrapSession.sessionStartTimestamp : timestamp
+            this._pendingBootstrapSession = undefined
             valuesChanged = true
         } else {
             if (!windowId) {

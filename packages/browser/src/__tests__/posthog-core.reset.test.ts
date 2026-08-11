@@ -1,7 +1,7 @@
 import { PostHog } from '../posthog-core'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
-import { USER_STATE } from '../constants'
+import { COOKIELESS_SENTINEL_VALUE, USER_STATE } from '../constants'
 
 describe('reset()', () => {
     let instance: PostHog
@@ -152,6 +152,92 @@ describe('reset()', () => {
 
             const nextDeviceId = instance.get_property('$device_id')
             expect(initialDeviceId).not.toEqual(nextDeviceId)
+        })
+    })
+
+    describe('when calling reset with options', () => {
+        it('resets the device id when resetDeviceID is true', () => {
+            const initialDeviceId = instance.get_property('$device_id')
+
+            instance.reset({ resetDeviceID: true })
+
+            expect(instance.get_property('$device_id')).not.toEqual(initialDeviceId)
+        })
+
+        it('preserves the device id when resetDeviceID is false', () => {
+            const initialDeviceId = instance.get_property('$device_id')
+
+            instance.reset({ resetDeviceID: false })
+
+            expect(instance.get_property('$device_id')).toEqual(initialDeviceId)
+        })
+
+        it('applies a custom anonymous distinct ID', () => {
+            instance.reset({ bootstrap: { distinctID: 'custom-anon-id', isIdentifiedID: false } })
+
+            expect(instance.get_distinct_id()).toEqual('custom-anon-id')
+            expect(instance.get_property('$device_id')).toEqual('custom-anon-id')
+            expect(instance.persistence!.get_property(USER_STATE)).toEqual('anonymous')
+        })
+
+        it('applies a custom identified distinct ID', () => {
+            instance.reset({ bootstrap: { distinctID: 'user@example.com', isIdentifiedID: true } })
+
+            expect(instance.get_distinct_id()).toEqual('user@example.com')
+            expect(instance.get_property('$device_id')).not.toEqual('user@example.com')
+            expect(instance.persistence!.get_property(USER_STATE)).toEqual('identified')
+        })
+
+        it('applies bootstrapped feature flags and payloads', () => {
+            instance.reset({
+                bootstrap: {
+                    featureFlags: { 'active-flag': true, 'variant-flag': 'control', 'inactive-flag': false },
+                    featureFlagPayloads: {
+                        'active-flag': { key: 'value' },
+                        'inactive-flag': { should: 'not appear' },
+                    },
+                },
+            })
+
+            expect(instance.featureFlags.getFlags()).toEqual(['active-flag', 'variant-flag'])
+            expect(instance.featureFlags.getFlagVariants()).toEqual({
+                'active-flag': true,
+                'variant-flag': 'control',
+            })
+            expect(instance.featureFlags.getFeatureFlagPayload('active-flag')).toEqual({ key: 'value' })
+            expect(instance.featureFlags.getFeatureFlagPayload('inactive-flag')).toEqual(undefined)
+        })
+
+        it('applies a bootstrapped session ID and rotates the window', () => {
+            const initialIds = instance.sessionManager!.checkAndGetSessionAndWindowId()
+            const onSessionId = jest.fn()
+            instance.onSessionId(onSessionId)
+            onSessionId.mockClear()
+            const sessionID = uuidv7()
+
+            instance.reset({ bootstrap: { sessionID } })
+
+            const nextIds = instance.sessionManager!.checkAndGetSessionAndWindowId()
+            expect(nextIds.sessionId).toEqual(sessionID)
+            expect(nextIds.windowId).not.toEqual(initialIds.windowId)
+            expect(onSessionId).toHaveBeenCalledWith(sessionID, nextIds.windowId, {
+                noSessionId: true,
+                activityTimeout: false,
+                sessionPastMaximumLength: false,
+                crossTabAdoption: false,
+            })
+        })
+
+        it('does not replace the cookieless sentinel with a bootstrapped distinct ID', async () => {
+            instance = await createPosthogInstance(uuidv7(), {
+                api_host: 'https://test.com',
+                token: 'testtoken',
+                cookieless_mode: 'always',
+            })
+
+            instance.reset({ bootstrap: { distinctID: 'custom-anon-id' } })
+
+            expect(instance.get_distinct_id()).toEqual(COOKIELESS_SENTINEL_VALUE)
         })
     })
 })
