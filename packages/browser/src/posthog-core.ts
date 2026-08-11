@@ -211,6 +211,7 @@ const defaultsThatVaryByConfig = (
     | 'split_storage'
     | 'detect_google_search_app'
     | 'disable_capture_url_hashes'
+    | '__preview_cookie_wins_on_conflict'
 > => ({
     rageclick:
         defaults && defaults >= '2026-05-30'
@@ -233,6 +234,7 @@ const defaultsThatVaryByConfig = (
     split_storage: !!(defaults && defaults >= '2026-05-30'),
     detect_google_search_app: !!(defaults && defaults >= '2026-05-30'),
     disable_capture_url_hashes: !!(defaults && defaults >= '2026-06-25'),
+    __preview_cookie_wins_on_conflict: !!(defaults && defaults >= '2026-08-29'),
 })
 
 // NOTE: Remember to update `types.ts` when changing a default value
@@ -258,7 +260,6 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     defaults: defaults ?? 'unset',
     __preview_deferred_init_extensions: false, // Opt-in only for now
     __preview_external_dependency_versioned_paths: false,
-    __preview_cookie_wins_on_conflict: false, // Opt-in: fixes cross-subdomain stale-localStorage bug
     debug: (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
     cookie_expiration: 365,
     upgrade: false,

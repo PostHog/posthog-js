@@ -290,6 +290,17 @@ export const createLocalPlusCookieStore = (
                             safeCookieProperties[key] = v
                         }
                     }
+                    const cookieDistinctId = safeCookieProperties[DISTINCT_ID]
+                    const localDistinctId = localStorageData[DISTINCT_ID]
+                    if (
+                        !isUndefined(cookieDistinctId) &&
+                        !isUndefined(localDistinctId) &&
+                        cookieDistinctId !== localDistinctId
+                    ) {
+                        logger.warn(
+                            'Shared cookie distinct_id differs from localStorage; the cross-subdomain cookie wins and the localStorage distinct_id is discarded.'
+                        )
+                    }
                     value = extend(localStorageData, safeCookieProperties)
                 } else {
                     value = extend(cookieProperties, localStorageData)

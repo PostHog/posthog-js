@@ -1,4 +1,5 @@
 import { window } from '@posthog/browser-common/utils/globals'
+import { logger } from '@posthog/browser-common/utils/logger'
 import {
     resetSessionStorageSupported,
     seekFirstNonPublicSubDomain,
@@ -113,5 +114,37 @@ describe('createLocalPlusCookieStore._set', () => {
         expect(result).toBe(true)
         expect(JSON.parse(window?.localStorage.getItem('ph_x_posthog') as string)).toEqual({ distinct_id: 'abc' })
         cookieSpy.mockRestore()
+    })
+})
+
+describe('createLocalPlusCookieStore._parse cookie-wins warning', () => {
+    const name = 'ph_x_posthog'
+
+    beforeEach(() => {
+        resetLocalStorageSupported()
+        window?.localStorage.clear()
+    })
+
+    it('warns when the cookie distinct_id differs from localStorage and wins', () => {
+        const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {})
+        jest.spyOn(cookieStore, '_parse').mockReturnValue({ distinct_id: 'from_cookie' })
+        window?.localStorage.setItem(name, JSON.stringify({ distinct_id: 'from_localstorage' }))
+
+        const store = createLocalPlusCookieStore([], true)
+        expect(store._parse(name)?.distinct_id).toBe('from_cookie')
+        expect(warnSpy).toHaveBeenCalledTimes(1)
+
+        jest.restoreAllMocks()
+    })
+
+    it('does not warn when the two distinct_ids match', () => {
+        const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {})
+        jest.spyOn(cookieStore, '_parse').mockReturnValue({ distinct_id: 'same' })
+        window?.localStorage.setItem(name, JSON.stringify({ distinct_id: 'same' }))
+
+        createLocalPlusCookieStore([], true)._parse(name)
+        expect(warnSpy).not.toHaveBeenCalled()
+
+        jest.restoreAllMocks()
     })
 })

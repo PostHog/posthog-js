@@ -444,7 +444,14 @@ export interface HeatmapConfig {
  * Configuration defaults snapshot used by `PostHogConfig.defaults`.
  * Later dates include all earlier default changes.
  */
-export type ConfigDefaults = '2026-06-25' | '2026-05-30' | '2026-01-30' | '2025-11-30' | '2025-05-24' | 'unset'
+export type ConfigDefaults =
+    | '2026-08-29'
+    | '2026-06-25'
+    | '2026-05-30'
+    | '2026-01-30'
+    | '2025-11-30'
+    | '2025-05-24'
+    | 'unset'
 
 export type ExternalIntegrationKind = 'intercom' | 'crispChat'
 
@@ -1629,6 +1636,7 @@ export interface PostHogConfig {
      * - `'2026-01-30'`: Defaults from '2025-11-30' plus external_scripts_inject_target defaults to 'head' (avoids SSR hydration errors)
      * - `'2026-05-30'`: Defaults from '2026-01-30' plus `persistence_save_debounce_ms` defaults to `250`, `split_storage` and `detect_google_search_app` default to `true`, and rageclick defaults also exclude stepper controls and text-selection surfaces
      * - `'2026-06-25'`: Defaults from '2026-05-30' plus `session_recording.streamNetworkBody` defaults to `true` (streams network bodies to enforce the payload size limit)
+     * - `'2026-08-29'`: Defaults from '2026-06-25' plus `__preview_cookie_wins_on_conflict` defaults to `true` (the shared cross-subdomain cookie wins over stale per-origin localStorage, fixing cross-subdomain identity and session continuity)
      *
      * @default 'unset'
      */
@@ -1654,6 +1662,8 @@ export interface PostHogConfig {
      * when both stores carry the same key. Fixes cross-subdomain identify and session
      * disconnects caused by stale per-subdomain localStorage clobbering a fresh shared cookie.
      * Read at SDK init; has no effect when toggled via `set_config` or for other persistence modes.
+     *
+     * When `defaults` is `'2026-08-29'` or later, this defaults to `true`.
      *
      * @default false
      * @experimental
