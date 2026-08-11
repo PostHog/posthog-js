@@ -2401,7 +2401,8 @@ export class Replayer {
         (!adopted || stylesToAdopt.length !== styleIds.length) &&
         count < MAX_RETRY_TIME
       ) {
-        setTimeout(
+        // tracked so destroy() cancels retries still pending on teardown
+        this.addTimeout(
           () => adoptStyleSheets(targetHost, styleIds),
           0 + 100 * count,
         );
