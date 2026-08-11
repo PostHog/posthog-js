@@ -1668,8 +1668,15 @@ function record<T = eventWithTime>(
             }
             const scrubbed = scrubUnclaimedIds(held.event, stillPending);
             if (scrubbed) {
-              // re-stamped at flush time: to the replayer these targets came
-              // into existence with the commit, just now
+              // Re-stamped at flush time, deliberately: this event's target
+              // came into existence ON THE WIRE with the commit's add, which
+              // carries commit time. Keeping the observation timestamp would
+              // put the event before its target on the timeline and make the
+              // wire non-monotonic. The alternative (stamping mutations at
+              // observation time) has no correct answer either — a locked
+              // buffer coalesces a whole window into one batch, which has no
+              // single observation time. See the changeset's ordering
+              // caveats; this is the documented trade of hold-and-deliver.
               emitHeld(scrubbed, held.isCheckout, false);
               if (walkSuperseded(transaction)) {
                 return;
