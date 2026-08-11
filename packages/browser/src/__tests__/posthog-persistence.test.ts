@@ -1128,6 +1128,25 @@ describe('persistence', () => {
                 expect(cookieStore._parse(persistenceName).distinct_id).toBe('identified-user')
             })
 
+            it('migrates a newly configured cookie-backed property without deleting its local value', () => {
+                document.cookie = encodeCookie({ distinct_id: 'identified-user' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({ distinct_id: 'identified-user', custom_property: 'preserved' })
+                )
+                const oldConfig = makeConfig('localStorage+cookie', true)
+                const lib = new PostHogPersistence(oldConfig)
+
+                const newConfig = {
+                    ...oldConfig,
+                    cookie_persisted_properties: ['custom_property'],
+                }
+                lib.update_config(newConfig, oldConfig)
+
+                expect(lib.props.custom_property).toBe('preserved')
+                expect(cookieStore._parse(persistenceName).custom_property).toBe('preserved')
+            })
+
             it('reconciles the shared cookie before migrating away from localStorage+cookie', () => {
                 document.cookie = encodeCookie({ distinct_id: 'anonymous' })
                 localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'anonymous' }))

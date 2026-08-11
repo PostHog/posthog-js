@@ -945,7 +945,13 @@ export class PostHogPersistence {
         // to the current cookie even if the old-policy sync just fingerprinted it.
         if (!disabled && (persistenceModeChanged || cookiePersistedPropertiesChanged || cookiePrecedenceChanged)) {
             this._lastSeenCookiePropertiesFingerprint = undefined
-            this.syncCookieProperties()
+            // Newly added cookie-backed keys are still local-only in the current
+            // cookie. Keep the old key set authoritative until migration writes
+            // the first snapshot under the new configuration.
+            this._syncCookieProperties({
+                ...config,
+                cookie_persisted_properties: oldConfig.cookie_persisted_properties,
+            })
         }
 
         // `_buildStorage` re-resolves both the backend and `_splitStorageEligible`,
