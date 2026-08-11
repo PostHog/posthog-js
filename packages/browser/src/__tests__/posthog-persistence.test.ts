@@ -991,6 +991,31 @@ describe('persistence', () => {
                 expect(lib.props.$user_state).toBe('anonymous')
             })
 
+            it('flag on: a sibling reset removes stale cookie-persisted properties without removing local-only data', () => {
+                document.cookie = encodeCookie({ distinct_id: 'identified-user', custom_property: 'old-user' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({
+                        distinct_id: 'identified-user',
+                        custom_property: 'old-user',
+                        local_only_property: 'preserved',
+                    })
+                )
+                const config = {
+                    ...makeConfig('localStorage+cookie', true),
+                    cookie_persisted_properties: ['custom_property'],
+                }
+                const lib = new PostHogPersistence(config)
+
+                document.cookie = encodeCookie({ distinct_id: 'new-anonymous', $user_state: 'anonymous' })
+                lib.register({ another_local_property: 'also-preserved' })
+
+                expect(lib.props.custom_property).toBeUndefined()
+                expect(lib.props.local_only_property).toBe('preserved')
+                expect(lib.props.another_local_property).toBe('also-preserved')
+                expect(cookieStore._parse(persistenceName).custom_property).toBeUndefined()
+            })
+
             it('flag on: a local identity update is not rolled back before its cookie write', () => {
                 document.cookie = encodeCookie({ distinct_id: 'anonymous' })
                 localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'anonymous' }))

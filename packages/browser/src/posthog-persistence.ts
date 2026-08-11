@@ -1,7 +1,14 @@
 /* eslint camelcase: "off" */
 
 import { each, extend, stripEmptyProperties, addEventListener } from '@posthog/browser-common/utils/general-utils'
-import { cookieStore, createLocalPlusCookieStore, localStore, memoryStore, sessionStore } from './storage'
+import {
+    COOKIE_PERSISTED_PROPERTIES,
+    cookieStore,
+    createLocalPlusCookieStore,
+    localStore,
+    memoryStore,
+    sessionStore,
+} from './storage'
 import { PersistentStore, PostHogConfig, Properties } from './types'
 import { document, window } from '@posthog/browser-common/utils/globals'
 import {
@@ -217,9 +224,11 @@ export class PostHogPersistence {
         } catch {
             return false
         }
+        const invalidCookieProperties: Record<string, true> = {}
         Object.keys(cookieProperties).forEach((key) => {
             const value = cookieProperties[key]
             if (isUndefined(value) || isNull(value) || value === '') {
+                invalidCookieProperties[key] = true
                 delete cookieProperties[key]
             }
         })
@@ -227,7 +236,17 @@ export class PostHogPersistence {
             return false
         }
 
-        this.props = extend({}, this.props, cookieProperties)
+        const nextProps = extend({}, this.props)
+        const cookiePersistedProperties = [
+            ...COOKIE_PERSISTED_PROPERTIES,
+            ...(this._config.cookie_persisted_properties || []),
+        ]
+        cookiePersistedProperties.forEach((key) => {
+            if (!(key in cookieProperties) && !invalidCookieProperties[key]) {
+                delete nextProps[key]
+            }
+        })
+        this.props = extend(nextProps, cookieProperties)
         return true
     }
 

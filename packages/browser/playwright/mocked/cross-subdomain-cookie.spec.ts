@@ -9,6 +9,7 @@ const options = {
         capture_pageview: false,
         capture_pageleave: false,
         cross_subdomain_cookie: true,
+        cookie_persisted_properties: ['cross_domain_property'],
         persistence_save_debounce_ms: 250,
     },
     flagsResponseOverrides: {
@@ -64,14 +65,31 @@ test('already-open sibling subdomains adopt identify and reset cookie changes', 
     await startOnSubdomain(sibling, context, 'b')
     expect(await distinctId(sibling)).toBe(firstAnonymousId)
 
-    await sibling.evaluate(() => (window as WindowWithPostHog).posthog?.identify('identified-user'))
+    await sibling.evaluate(() => {
+        const posthog = (window as WindowWithPostHog).posthog
+        posthog?.register({ cross_domain_property: 'old-user' })
+        posthog?.identify('identified-user')
+    })
     expect(await captureDistinctId(page, 'after-sibling-identify')).toBe('identified-user')
+    expect(
+        await page.evaluate(() => (window as WindowWithPostHog).posthog?.get_property('cross_domain_property'))
+    ).toBe('old-user')
 
     await sibling.evaluate(() => (window as WindowWithPostHog).posthog?.reset())
     const resetAnonymousId = await distinctId(sibling)
     expect(resetAnonymousId).toBeTruthy()
     expect(resetAnonymousId).not.toBe('identified-user')
     expect(await captureDistinctId(page, 'after-sibling-reset')).toBe(resetAnonymousId)
+    expect(
+        await page.evaluate(() => (window as WindowWithPostHog).posthog?.get_property('cross_domain_property'))
+    ).toBeUndefined()
+
+    // Capturing from the reset tab proves the stale tab did not republish the
+    // old cookie-backed property after it observed the reset.
+    await captureDistinctId(sibling, 'after-stale-tab-reset-sync')
+    expect(
+        await sibling.evaluate(() => (window as WindowWithPostHog).posthog?.get_property('cross_domain_property'))
+    ).toBeUndefined()
 })
 
 test('a persistence-disabled subdomain does not adopt a sibling identity', async ({ page, context }) => {
