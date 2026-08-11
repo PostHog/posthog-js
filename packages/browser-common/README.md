@@ -54,17 +54,35 @@ synchronous callback into idempotent teardown.
 
 What an extension is given in `setup` — the adapter shared by extensions on that host SDK instance:
 
-- **identity and session**: `distinctId`, `anonymousId`, `groups`, `session`
+- **identity and session**: `distinctId`, `anonymousId`, `deviceId`, `groups`, `session`, `initialPersonProperties`
+- **SDK metadata**: `library`
 - **events**: `capture(...)`, `registerDynamicEventProperties(...)`, `onEvent(...)`
 - **server config**: `onRemoteConfig(...)`
-- **transport**: `projectToken`, `sendRequest(path, init?)`
+- **transport**: `projectToken`, `sendRequest(path, init?)`, including `compression` and `sentAt` options
 - **storage and logging**: `kv`, `logger`
 
-Identity, session, and the public project token are always-ready synchronous
-reads. Operations that may perform I/O, including `capture`, `sendRequest`,
-and `kv`, are awaitable. `onRemoteConfig` immediately replays the latest known
-success or failure and then reports subsequent outcomes. Extensions that want a
-named log prefix can create a child with `client.logger.createLogger('[myExtension]')`.
+Identity, session, SDK metadata, and the public project token are always-ready synchronous reads. `capture` and
+`sendRequest` are awaitable. For `sendRequest`, `sentAt` controls `sent_at` placement on POST requests; GET query mode
+uses the cache-busting `_` parameter instead, and GET body mode has no effect. `onRemoteConfig` immediately replays the
+latest known success or failure and then reports subsequent outcomes. Extensions that want a named log prefix can
+create a child with `client.logger.createLogger('[myExtension]')`.
+
+Initialize KV during asynchronous setup before using its synchronous buffer:
+
+```ts
+await client.kv.initialize()
+const state = client.kv.get<{ first: boolean; second: string }>(['first', 'second'])
+client.kv.set({ ...state, first: true })
+client.kv.remove(['first', 'second'])
+```
+
+Initialization is idempotent and may be asynchronous while a host hydrates its buffer. After it completes, reads,
+writes, and removals are synchronous; batch reads, object writes, and multi-key removals operate on related values
+coherently. The host owns ordered durable flushing.
+
+KV keys map directly to shared host persistence: reset clears them, collisions can overwrite host state, and unknown
+keys may be captured as event properties. Use stable extension-owned keys with an explicit exposure policy, and do not
+store sensitive values unless their transmission is approved.
 
 ### Host runtime
 

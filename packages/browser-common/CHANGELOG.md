@@ -1,5 +1,12 @@
 # @posthog/browser-common
 
+## 0.5.0
+
+### Minor Changes
+
+- [#4316](https://github.com/PostHog/posthog-js/pull/4316) [`f999394`](https://github.com/PostHog/posthog-js/commit/f9993947c7436672f5daf2a2a284fa1c9771f602) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add richer client request and identity context alongside initialized, synchronously buffered batch key-value persistence operations.
+  (2026-08-11)
+
 ## 0.4.0
 
 ### Minor Changes

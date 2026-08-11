@@ -56,9 +56,10 @@ describe('PostHog RN session replay request headers', () => {
     if (posthog) {
       await posthog.shutdown()
     }
+    delete replay.setup
   })
 
-  it('forwards requestHeaders to the native plugin sdkOptions via the legacy start() path', async () => {
+  it('snapshots the complete legacy native start envelope', async () => {
     posthog = new PostHog('test-token', {
       customStorage: mockStorage,
       enableSessionReplay: true,
@@ -69,28 +70,72 @@ describe('PostHog RN session replay request headers', () => {
 
     await waitForExpect(2000, () => expect(replay.start).toHaveBeenCalledTimes(1))
 
-    const sdkOptions = replay.start.mock.calls[0][1]
-    expect(sdkOptions).toEqual(expect.objectContaining({ requestHeaders: { Authorization: 'Bearer test-jwt' } }))
+    const [sessionId, sdkOptions, pluginConfig, cachedConfig] = replay.start.mock.calls[0]
+    expect(typeof sessionId).toBe('string')
+    expect(sessionId).not.toBe('')
+    expect(sessionId).toBe(posthog.getSessionId())
+    expect(typeof sdkOptions.sdkVersion).toBe('string')
+    expect(sdkOptions.sdkVersion).not.toBe('')
+    expect(typeof sdkOptions.distinctId).toBe('string')
+    expect(sdkOptions.distinctId).not.toBe('')
+    expect(typeof sdkOptions.anonymousId).toBe('string')
+    expect(sdkOptions.anonymousId).not.toBe('')
+    expect(sdkOptions.distinctId).toBe(sdkOptions.anonymousId)
+    expect(sdkOptions.requestHeaders).toEqual({ Authorization: 'Bearer test-jwt' })
+
+    expect({
+      sessionId: '<session-id>',
+      sdkOptions: {
+        ...sdkOptions,
+        anonymousId: '<anonymous-id>',
+        distinctId: '<anonymous-id>',
+        sdkVersion: '<sdk-version>',
+      },
+      pluginConfig,
+      cachedConfig,
+    }).toMatchSnapshot()
   })
 
-  it('forwards requestHeaders to the native plugin sdkOptions via the setup() path', async () => {
+  it('snapshots the complete native setup envelope used by session replay', async () => {
     // Adding a `setup` mock switches the SDK to the modern setup() dispatch path.
     replay.setup = jest.fn(async () => {})
 
     posthog = new PostHog('test-token', {
-      customStorage: mockStorage,
+      persistence: 'memory',
+      bootstrap: { distinctId: 'replay-snapshot-id' },
+      captureAppLifecycleEvents: false,
+      capturePushNotificationSubscriptions: false,
+      capturePushNotificationOpened: false,
+      disableRemoteConfig: true,
       enableSessionReplay: true,
       flushInterval: 0,
       requestHeaders: { Authorization: 'Bearer test-jwt' },
+      sessionReplayConfig: {
+        captureLog: true,
+        captureNetworkTelemetry: false,
+        maskAllImages: false,
+        maskAllTextInputs: true,
+        screenshotModeBackgroundCapture: true,
+        throttleDelayMs: 250,
+      },
     })
     await posthog.ready()
 
     await waitForExpect(2000, () => expect(replay.setup).toHaveBeenCalledTimes(1))
     expect(replay.start).not.toHaveBeenCalled()
 
-    const sdkOptions = replay.setup.mock.calls[0][1]
-    expect(sdkOptions).toEqual(expect.objectContaining({ requestHeaders: { Authorization: 'Bearer test-jwt' } }))
+    const [sessionId, sdkOptions, pluginConfig] = replay.setup.mock.calls[0]
+    expect(typeof sessionId).toBe('string')
+    expect(sessionId).not.toBe('')
+    expect(sessionId).toBe(posthog.getSessionId())
+    expect(typeof sdkOptions.sdkVersion).toBe('string')
+    expect(sdkOptions.sdkVersion).not.toBe('')
+    expect(sdkOptions.requestHeaders).toEqual({ Authorization: 'Bearer test-jwt' })
 
-    delete replay.setup
+    expect({
+      sessionId: '<session-id>',
+      sdkOptions: { ...sdkOptions, sdkVersion: '<sdk-version>' },
+      pluginConfig,
+    }).toMatchSnapshot()
   })
 })

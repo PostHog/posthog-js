@@ -376,4 +376,199 @@ describe('SurveyPopup', () => {
             expect(mockPosthog.capture).not.toHaveBeenCalledWith('survey shown', expect.anything())
         })
     })
+
+    describe('intro screen', () => {
+        const introSurvey: Survey = {
+            ...mockSurvey,
+            appearance: {
+                ...mockSurvey.appearance,
+                displayIntroScreen: true,
+                introScreenHeader: 'Welcome!',
+                introScreenDescription: 'Two quick questions.',
+                introScreenButtonText: 'Get started',
+            },
+        }
+
+        test('renders the intro screen before the first question and advances without survey events', async () => {
+            render(
+                <SurveyPopup
+                    survey={introSurvey}
+                    removeSurveyFromFocus={mockRemoveSurveyFromFocus}
+                    isPopup={true}
+                    posthog={mockPosthog as any}
+                />
+            )
+
+            expect(screen.getByText('Welcome!')).toBeVisible()
+            expect(screen.getByText('Two quick questions.')).toBeVisible()
+            expect(screen.queryByText('Question 1')).not.toBeInTheDocument()
+
+            // "survey shown" fires once for the popup, intro included
+            await waitFor(() => expect(mockPosthog.capture).toHaveBeenCalledWith('survey shown', expect.anything()))
+
+            const startButton = screen.getByText('Get started')
+            fireEvent.click(startButton)
+
+            expect(screen.getByText('Question 1')).toBeVisible()
+            // Advancing past the intro records nothing: no response event, no dismissal, and no
+            // second "survey shown"
+            expect(mockedSendSurveyEvent).not.toHaveBeenCalled()
+            expect(mockedDismissedSurveyEvent).not.toHaveBeenCalled()
+            expect(mockPosthog.capture).toHaveBeenCalledTimes(1)
+        })
+
+        test('does not advance the intro screen on a window-level Enter press', () => {
+            render(
+                <SurveyPopup
+                    survey={introSurvey}
+                    removeSurveyFromFocus={mockRemoveSurveyFromFocus}
+                    isPopup={true}
+                    posthog={mockPosthog as any}
+                />
+            )
+
+            expect(screen.getByText('Welcome!')).toBeVisible()
+            // An Enter aimed at the host page (e.g. an unrelated form input) must not skip the intro
+            fireEvent.keyDown(window, { key: 'Enter' })
+            expect(screen.getByText('Welcome!')).toBeVisible()
+            expect(screen.queryByText('Question 1')).not.toBeInTheDocument()
+        })
+
+        test('does not show the intro screen when the survey has in-progress state', () => {
+            mockedGetInProgressSurveyState.mockReturnValue({
+                surveySubmissionId: 'existing-uuid-intro',
+                lastQuestionIndex: 1,
+                responses: { $survey_response_q1: 'Previous answer' },
+            })
+            render(
+                <SurveyPopup
+                    survey={introSurvey}
+                    removeSurveyFromFocus={mockRemoveSurveyFromFocus}
+                    isPopup={true}
+                    posthog={mockPosthog as any}
+                />
+            )
+
+            expect(screen.queryByText('Welcome!')).not.toBeInTheDocument()
+            expect(screen.getByText('Question 2')).toBeVisible()
+        })
+
+        test('does not show the intro screen when displayIntroScreen is not set', () => {
+            render(
+                <SurveyPopup
+                    survey={mockSurvey}
+                    removeSurveyFromFocus={mockRemoveSurveyFromFocus}
+                    isPopup={true}
+                    posthog={mockPosthog as any}
+                />
+            )
+
+            expect(screen.queryByText('Welcome!')).not.toBeInTheDocument()
+            expect(screen.getByText('Question 1')).toBeVisible()
+        })
+
+        test('skips the intro screen when it has neither a header nor a description', () => {
+            // Unlike the thank-you screen there is no default intro header, so an intro with no
+            // copy at all would render an empty box with only a button.
+            render(
+                <SurveyPopup
+                    survey={{
+                        ...mockSurvey,
+                        appearance: {
+                            ...mockSurvey.appearance,
+                            displayIntroScreen: true,
+                            introScreenButtonText: 'Get started',
+                        },
+                    }}
+                    removeSurveyFromFocus={mockRemoveSurveyFromFocus}
+                    isPopup={true}
+                    posthog={mockPosthog as any}
+                />
+            )
+
+            expect(screen.queryByText('Get started')).not.toBeInTheDocument()
+            expect(screen.getByText('Question 1')).toBeVisible()
+        })
+
+        test('shows the confirmation message, not the intro, when the survey is already completed', () => {
+            render(
+                <SurveyPopup
+                    survey={introSurvey}
+                    removeSurveyFromFocus={mockRemoveSurveyFromFocus}
+                    isPopup={true}
+                    posthog={mockPosthog as any}
+                    isSurveyCompleted={true}
+                />
+            )
+
+            expect(screen.getByText('Thank you!')).toBeVisible()
+            expect(screen.queryByText('Welcome!')).not.toBeInTheDocument()
+        })
+
+        test('dismissing the survey from the intro screen fires the dismissed event', async () => {
+            mockedDismissedSurveyEvent.mockImplementation(() => {
+                window.dispatchEvent(new CustomEvent('PHSurveyClosed', { detail: { surveyId: introSurvey.id } }))
+            })
+            render(
+                <SurveyPopup
+                    survey={introSurvey}
+                    removeSurveyFromFocus={mockRemoveSurveyFromFocus}
+                    isPopup={true}
+                    posthog={mockPosthog as any}
+                />
+            )
+
+            const dismissButton = screen.getByRole('button', { name: /close survey/i })
+            fireEvent.click(dismissButton)
+
+            expect(mockedDismissedSurveyEvent).toHaveBeenCalledWith(introSurvey, mockPosthog, false)
+            expect(mockedSendSurveyEvent).not.toHaveBeenCalled()
+        })
+
+        test('renders the intro screen in preview mode only for the intro sentinel page', () => {
+            const { unmount } = render(
+                <SurveyPopup
+                    survey={introSurvey}
+                    removeSurveyFromFocus={mockRemoveSurveyFromFocus}
+                    isPopup={true}
+                    posthog={mockPosthog as any}
+                    previewPageIndex={-1}
+                />
+            )
+            expect(screen.getByText('Welcome!')).toBeVisible()
+            expect(screen.queryByText('Question 1')).not.toBeInTheDocument()
+            unmount()
+
+            render(
+                <SurveyPopup
+                    survey={introSurvey}
+                    removeSurveyFromFocus={mockRemoveSurveyFromFocus}
+                    isPopup={true}
+                    posthog={mockPosthog as any}
+                    previewPageIndex={0}
+                />
+            )
+            expect(screen.queryByText('Welcome!')).not.toBeInTheDocument()
+            expect(screen.getByText('Question 1')).toBeVisible()
+        })
+
+        test('in preview mode the intro advance button delegates to onPreviewSubmit', () => {
+            const onPreviewSubmit = jest.fn()
+            render(
+                <SurveyPopup
+                    survey={introSurvey}
+                    removeSurveyFromFocus={mockRemoveSurveyFromFocus}
+                    isPopup={true}
+                    posthog={mockPosthog as any}
+                    previewPageIndex={-1}
+                    onPreviewSubmit={onPreviewSubmit}
+                />
+            )
+
+            fireEvent.click(screen.getByText('Get started'))
+            expect(onPreviewSubmit).toHaveBeenCalledWith(null)
+            // Parent owns preview navigation: local state must not advance
+            expect(screen.getByText('Welcome!')).toBeVisible()
+        })
+    })
 })

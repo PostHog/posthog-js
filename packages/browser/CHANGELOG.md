@@ -1,5 +1,42 @@
 # posthog-js
 
+## 1.415.2
+
+### Patch Changes
+
+- [#4316](https://github.com/PostHog/posthog-js/pull/4316) [`f999394`](https://github.com/PostHog/posthog-js/commit/f9993947c7436672f5daf2a2a284fa1c9771f602) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Support removing multiple persisted properties in one operation.
+  (2026-08-11)
+- Updated dependencies [[`f999394`](https://github.com/PostHog/posthog-js/commit/f9993947c7436672f5daf2a2a284fa1c9771f602)]:
+    - @posthog/browser-common@0.5.0
+
+## 1.415.1
+
+### Patch Changes
+
+- [#4477](https://github.com/PostHog/posthog-js/pull/4477) [`6f9adf8`](https://github.com/PostHog/posthog-js/commit/6f9adf80fc6ce83ec88d1285707a078710355d2a) Thanks [@TueHaulund](https://github.com/TueHaulund)! - fix(replay): don't open a recording that holds only idle lifecycle markers
+  (2026-08-10)
+
+## 1.415.0
+
+### Minor Changes
+
+- [#4436](https://github.com/PostHog/posthog-js/pull/4436) [`80f15a3`](https://github.com/PostHog/posthog-js/commit/80f15a386621514c43f19e99ee4e3f702e4d369d) Thanks [@jakesciotto](https://github.com/jakesciotto)! - feat(surveys): optional intro screen shown before the first question
+
+    Surveys can now display an intro screen before question 1, configured via the new
+    `displayIntroScreen`, `introScreenHeader`, `introScreenDescription`,
+    `introScreenDescriptionContentType`, and `introScreenButtonText` appearance fields.
+    The intro is dismissed with a button and records no response, does not affect
+    completion or partial-response metrics, does not re-fire "survey shown", and is
+    skipped when a survey is resumed with answers in progress. Intro copy is
+    translatable like the thank-you message. `renderSurveysPreview` accepts
+    `previewPageIndex: -1` (exported as `INTRO_SCREEN_PREVIEW_INDEX`) to preview the
+    intro screen. (2026-08-10)
+
+### Patch Changes
+
+- Updated dependencies [[`80f15a3`](https://github.com/PostHog/posthog-js/commit/80f15a386621514c43f19e99ee4e3f702e4d369d)]:
+    - @posthog/core@1.47.0
+
 ## 1.414.0
 
 ### Minor Changes

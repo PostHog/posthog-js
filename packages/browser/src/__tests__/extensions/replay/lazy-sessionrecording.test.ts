@@ -366,6 +366,7 @@ describe('Lazy SessionRecording', () => {
                         },
                     })
                 )
+                sessionRecording.onRRwebEmit(createFullSnapshot({ timestamp: Date.now() }))
                 const snapshot = createCustomSnapshot({ timestamp: Date.now() })
                 sessionRecording.onRRwebEmit(snapshot)
                 ;(posthog.capture as Mock).mockClear()
@@ -392,6 +393,7 @@ describe('Lazy SessionRecording', () => {
                         },
                     })
                 )
+                sessionRecording.onRRwebEmit(createFullSnapshot({ timestamp: Date.now() }))
                 const snapshot = createCustomSnapshot({ timestamp: Date.now() })
                 sessionRecording.onRRwebEmit(snapshot)
                 ;(posthog.capture as Mock).mockClear()
@@ -427,6 +429,7 @@ describe('Lazy SessionRecording', () => {
                         },
                     })
                 )
+                sessionRecording.onRRwebEmit(createFullSnapshot({ timestamp: Date.now() }))
                 const snapshot = createCustomSnapshot({ timestamp: Date.now() })
                 sessionRecording.onRRwebEmit(snapshot)
                 ;(posthog.capture as Mock).mockClear()
@@ -461,6 +464,7 @@ describe('Lazy SessionRecording', () => {
                         },
                     })
                 )
+                sessionRecording.onRRwebEmit(createFullSnapshot({ timestamp: Date.now() }))
                 const snapshot = createCustomSnapshot({ timestamp: Date.now() })
                 sessionRecording.onRRwebEmit(snapshot)
                 ;(posthog.capture as Mock).mockClear()
@@ -491,6 +495,7 @@ describe('Lazy SessionRecording', () => {
                         },
                     })
                 )
+                sessionRecording.onRRwebEmit(createFullSnapshot({ timestamp: Date.now() }))
                 const snapshot = createCustomSnapshot({ timestamp: Date.now() })
                 sessionRecording.onRRwebEmit(snapshot)
                 ;(posthog.capture as Mock).mockClear()
@@ -2053,6 +2058,204 @@ describe('Lazy SessionRecording', () => {
                 })
             })
 
+            describe('recording volume invariants', () => {
+                // Billing-level invariants over long simulated timelines. The mechanics of
+                // holding rotation-born sessions are covered above; these assert the outcome
+                // that matters regardless of mechanism: how many recordings a tab ships.
+
+                function shippedSessionIds(): Set<string> {
+                    return new Set(
+                        (posthog.capture as Mock).mock.calls
+                            .filter(([eventName]) => eventName === '$snapshot')
+                            .map(([, properties]) => properties.$session_id)
+                    )
+                }
+
+                function emitInactiveWithoutAssertion(activityTimestamp: number): void {
+                    _emit({
+                        event: 123,
+                        type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                        data: { source: 0, adds: [], attributes: [], removes: [], texts: [] },
+                        timestamp: activityTimestamp,
+                    })
+                }
+
+                // An idle tab rotates through two distinct paths, and both must stay silent:
+                // - organic: the recorder's own per-emit readOnly session check enforces the
+                //   24 hour cap (one rotation per day of pure idleness)
+                // - external: another caller rotates the session on the activity timeout
+                //   (a sibling tab, or any non-readonly check every ~30 idle minutes); the
+                //   recorder hears it via the session manager listener. This is the Jul 2026
+                //   incident path: one billed recording per external rotation, unbounded.
+                function runOrganicIdleEmits(fromTimestamp: number, days: number): void {
+                    let timestamp = fromTimestamp
+                    const endTimestamp = fromTimestamp + days * 24 * 60 * 60 * 1000
+                    sessionIdGeneratorMock.mockClear()
+                    sessionIdGeneratorMock.mockImplementation(() => `volume-organic-${uuidv7()}`)
+                    while (timestamp < endTimestamp) {
+                        timestamp += sessionManager['_sessionTimeoutMs'] + 1000
+                        jest.setSystemTime(new Date(timestamp))
+                        emitInactiveWithoutAssertion(timestamp)
+                        jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                    }
+                    // the readOnly per-emit check must rotate at each 24 hour cap; if this
+                    // stops happening, idle tabs accrete multi-day recordings again
+                    expect(sessionIdGeneratorMock.mock.calls.length).toBeGreaterThanOrEqual(days)
+                }
+
+                function runExternalRotations(fromTimestamp: number, days: number): number {
+                    let timestamp = fromTimestamp
+                    const endTimestamp = fromTimestamp + days * 24 * 60 * 60 * 1000
+                    let rotationCount = 0
+                    sessionIdGeneratorMock.mockClear()
+                    sessionIdGeneratorMock.mockImplementation(() => `volume-external-${uuidv7()}`)
+                    while (timestamp < endTimestamp) {
+                        timestamp += sessionManager['_sessionTimeoutMs'] + 1000
+                        rotationCount++
+                        jest.setSystemTime(new Date(timestamp))
+                        sessionManager.checkAndGetSessionAndWindowId(false, timestamp)
+                        emitInactiveWithoutAssertion(timestamp + 10)
+                        jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                    }
+                    // guard against a silent no-op loop: every step must have rotated the session
+                    expect(sessionIdGeneratorMock).toHaveBeenCalledTimes(rotationCount)
+                    return rotationCount
+                }
+
+                beforeEach(() => {
+                    jest.useFakeTimers().setSystemTime(new Date(startingTimestamp))
+                })
+
+                it('a purely idle tab ships zero recordings across three days of cap rotations', () => {
+                    runOrganicIdleEmits(startingTimestamp, 3)
+
+                    expect(shippedSessionIds()).toEqual(new Set())
+                })
+
+                it('a tab whose session is rotated externally every idle timeout ships zero recordings across three days', () => {
+                    const rotations = runExternalRotations(startingTimestamp, 3)
+
+                    expect(rotations).toBeGreaterThan(100)
+                    expect(shippedSessionIds()).toEqual(new Set())
+                })
+
+                it('a single interaction ships exactly one session and later idle rotations add none', () => {
+                    emitActiveEvent(startingTimestamp + 100)
+                    jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                    expect(shippedSessionIds()).toEqual(new Set([sessionId]))
+
+                    const rotations = runExternalRotations(startingTimestamp + 100, 2)
+
+                    expect(rotations).toBeGreaterThan(50)
+                    expect(shippedSessionIds()).toEqual(new Set([sessionId]))
+                })
+
+                // The Jul 2026 idle-rotation family: an idle tab rotates, the markers for the
+                // rotation land in the new session's empty buffer, and shipping them opens a
+                // recording that bills the customer and plays back as nothing.
+                function rotateToASessionWithNoContent(): void {
+                    const rotateAt = startingTimestamp + sessionManager['_sessionTimeoutMs'] + 1000
+                    jest.setSystemTime(new Date(rotateAt))
+                    sessionIdGeneratorMock.mockImplementation(() => 'rotated-empty-session')
+                    sessionManager.checkAndGetSessionAndWindowId(false, rotateAt)
+                    releaseInteractionHold()
+                    ;(posthog.capture as Mock).mockClear()
+                }
+
+                it.each([
+                    ['idle markers alone never open a recording', 'sessionIdle', 0],
+                    ['session-linking markers still open one, the chain needs them', '$session_ending', 1],
+                ])('%s', (_name, tag, expectedRecordings) => {
+                    rotateToASessionWithNoContent()
+
+                    _emit(createCustomSnapshot({ timestamp: Date.now() }, {}, tag as string))
+                    sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+                    expect(shippedSessionIds().size).toEqual(expectedRecordings)
+                })
+
+                it('drops held markers once they pass the buffer size cap', () => {
+                    rotateToASessionWithNoContent()
+                    const lazy = sessionRecording['_lazyLoadedSessionRecording']
+
+                    _emit(createCustomSnapshot({ timestamp: Date.now() }, {}, 'sessionIdle'))
+                    lazy['_buffer'].size = RECORDING_MAX_EVENT_SIZE + 1
+                    lazy['_flushBuffer']()
+
+                    expect(shippedSessionIds().size).toEqual(0)
+                    expect(lazy['_buffer'].data).toEqual([])
+                })
+
+                it('holds idle markers until content arrives, then ships them with it', () => {
+                    rotateToASessionWithNoContent()
+
+                    _emit(createCustomSnapshot({ timestamp: Date.now() }, {}, 'sessionIdle'))
+                    sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+                    expect(shippedSessionIds().size).toEqual(0)
+
+                    _emit(createFullSnapshot({ timestamp: Date.now() }))
+                    sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+                    const shipped = (posthog.capture as Mock).mock.calls.filter(([name]) => name === '$snapshot')
+                    expect(shipped).toHaveLength(1)
+                    expect((shipped[0][1].$snapshot_data as any[]).map((e) => e.type)).toEqual([
+                        EventType.Custom,
+                        EventType.FullSnapshot,
+                    ])
+                })
+
+                it('an interaction after many idle rotations ships one session, not the held backlog', () => {
+                    runExternalRotations(startingTimestamp, 1)
+
+                    const interactionTimestamp = jest.now() + 1000
+                    jest.setSystemTime(new Date(interactionTimestamp))
+                    emitActiveEvent(interactionTimestamp)
+                    jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+
+                    const shipped = shippedSessionIds()
+                    expect(shipped.size).toEqual(1)
+                    expect(shipped).toEqual(new Set([sessionRecording['_lazyLoadedSessionRecording']['_sessionId']]))
+                })
+
+                it('a continuously active tab rotates at the 24 hour cap and no shipped session spans longer', () => {
+                    const hourInMillis = 60 * 60 * 1000
+                    const dayInMillis = 24 * hourInMillis
+                    sessionIdGeneratorMock.mockImplementation(() => `volume-active-${uuidv7()}`)
+
+                    // activity every 10 minutes keeps the session inside the 30 minute
+                    // activity timeout, so the only legitimate rotation is the 24 hour cap
+                    const stepMillis = 10 * 60 * 1000
+                    let timestamp = startingTimestamp
+                    const endTimestamp = startingTimestamp + 50 * hourInMillis
+                    while (timestamp < endTimestamp) {
+                        timestamp += stepMillis
+                        jest.setSystemTime(new Date(timestamp))
+                        emitActiveEvent(timestamp, false)
+                        jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                    }
+
+                    const spanBySession = new Map<string, { min: number; max: number }>()
+                    for (const [eventName, properties] of (posthog.capture as Mock).mock.calls) {
+                        if (eventName !== '$snapshot') continue
+                        for (const event of properties.$snapshot_data as eventWithTime[]) {
+                            const span = spanBySession.get(properties.$session_id) ?? {
+                                min: event.timestamp,
+                                max: event.timestamp,
+                            }
+                            span.min = Math.min(span.min, event.timestamp)
+                            span.max = Math.max(span.max, event.timestamp)
+                            spanBySession.set(properties.$session_id, span)
+                        }
+                    }
+
+                    // 50 active hours must rotate at the cap into at least two sessions
+                    expect(spanBySession.size).toBeGreaterThanOrEqual(2)
+                    for (const [, span] of spanBySession) {
+                        expect(span.max - span.min).toBeLessThanOrEqual(dayInMillis)
+                    }
+                })
+            })
+
             it('takes a full snapshot for the new session on a second idle rotation without user interaction', () => {
                 // Regression test for #4202, reported production sequence: interaction, idle,
                 // rotation (restart leaves _isIdle 'unknown'), no further interaction, second
@@ -2782,6 +2985,9 @@ describe('Lazy SessionRecording', () => {
             })
 
             it('does not compress custom events', () => {
+                _emit(createFullSnapshot())
+                sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+                ;(posthog.capture as Mock).mockClear()
                 _emit(createCustomSnapshot(undefined, { tag: 'wat' }))
                 sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
 
@@ -4164,6 +4370,7 @@ describe('Lazy SessionRecording', () => {
                 document.dispatchEvent(new Event('visibilitychange'))
 
                 sessionRecording.startIfEnabledOrStop()
+                sessionRecording.onRRwebEmit(createFullSnapshot({ timestamp: Date.now() }))
                 const snapshot = createCustomSnapshot({ timestamp: Date.now() })
                 sessionRecording.onRRwebEmit(snapshot)
                 ;(posthog.capture as Mock).mockClear()
