@@ -1016,6 +1016,28 @@ describe('persistence', () => {
                 expect(cookieStore._parse(persistenceName).custom_property).toBeUndefined()
             })
 
+            it('flag on: a local reset is not rolled back when a stale sibling writes during the clear window', () => {
+                document.cookie = encodeCookie({ distinct_id: 'identified-user', $user_state: 'identified' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({ distinct_id: 'identified-user', $user_state: 'identified' })
+                )
+                const config = {
+                    ...makeConfig('localStorage+cookie', true),
+                    persistence_save_debounce_ms: 250,
+                }
+                const lib = new PostHogPersistence(config)
+
+                lib._beginCookieSyncSuppression()
+                lib.clear()
+                lib.register({ distinct_id: 'new-anonymous', $user_state: 'anonymous' })
+                document.cookie = encodeCookie({ distinct_id: 'identified-user', $user_state: 'identified' })
+                lib._endCookieSyncSuppression()
+
+                expect(lib.props.distinct_id).toBe('new-anonymous')
+                expect(cookieStore._parse(persistenceName).distinct_id).toBe('new-anonymous')
+            })
+
             it('flag on: a local identity update is not rolled back before its cookie write', () => {
                 document.cookie = encodeCookie({ distinct_id: 'anonymous' })
                 localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'anonymous' }))

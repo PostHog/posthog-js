@@ -3198,6 +3198,7 @@ export class PostHog implements PostHogInterface {
             console.warn('[PostHog.js]', RESET_CONSENT_WARN)
         }
 
+        this.persistence?._beginCookieSyncSuppression?.()
         this.persistence?.clear()
         this.sessionPersistence?.clear()
         this._sessionRegisteredPropKeys.clear()
@@ -3250,11 +3251,9 @@ export class PostHog implements PostHogInterface {
         delete this.config.identity_distinct_id
         delete this.config.identity_hash
 
-        if (this.config.cookieWinsOnConflict) {
-            // Publish the new anonymous identity as one complete cookie before
-            // another sibling tab can resurrect the pre-reset state.
-            this.persistence?.flush()
-        }
+        // Publish the new anonymous identity as one complete cookie before
+        // another sibling tab can resurrect the pre-reset state.
+        this.persistence?._endCookieSyncSuppression?.()
 
         // Reload feature flags for the new anonymous user, just like identify()
         // does when the distinct_id changes.

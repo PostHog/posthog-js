@@ -147,6 +147,9 @@ export class PostHogPersistence {
     // Cookies do not emit cross-origin storage events, so captures and writes use
     // this fingerprint to cheaply detect identity changes made on sibling subdomains.
     private _lastSeenCookiePropertiesFingerprint: string | undefined
+    // A local reset or storage migration owns the next cookie snapshot. Ignore
+    // sibling writes until the complete replacement has been published.
+    private _cookieSyncSuppressed = false
 
     /**
      * @param {PostHogConfig} config initial PostHog configuration
@@ -203,6 +206,7 @@ export class PostHogPersistence {
     syncCookieProperties(): boolean {
         if (
             this._disabled ||
+            this._cookieSyncSuppressed ||
             !this._config.cookieWinsOnConflict ||
             this._config.persistence.toLowerCase() !== 'localstorage+cookie'
         ) {
@@ -248,6 +252,34 @@ export class PostHogPersistence {
         })
         this.props = extend(nextProps, cookieProperties)
         return true
+    }
+
+    _beginCookieSyncSuppression(): void {
+        if (
+            !this._disabled &&
+            this._config.cookieWinsOnConflict &&
+            this._config.persistence.toLowerCase() === 'localstorage+cookie'
+        ) {
+            this._cookieSyncSuppressed = true
+        }
+    }
+
+    _endCookieSyncSuppression(): void {
+        if (!this._cookieSyncSuppressed) {
+            return
+        }
+        try {
+            if (!isUndefined(this._pendingSaveTimer)) {
+                clearTimeout(this._pendingSaveTimer)
+                this._pendingSaveTimer = undefined
+            }
+            // Force the complete local snapshot through even if an earlier
+            // write in this transaction seeded the no-op fingerprint.
+            delete this._slotState[MAIN_STORAGE_SLOT]
+            this._writeNow()
+        } finally {
+            this._cookieSyncSuppressed = false
+        }
     }
 
     /**
@@ -917,16 +949,18 @@ export class PostHogPersistence {
         // without touching persistence. Either way we clear the old layout and
         // re-save so subsequent reads/writes land in the right entries.
         if (persistenceChanged || wantSplit !== this._splitStorage) {
-            const props = this.props
-            this.clear()
-            this._storage = newStore
-            this._splitStorage = wantSplit
-            this.props = props
-            this.save()
-            if (config.cookieWinsOnConflict && config.persistence.toLowerCase() === 'localstorage+cookie') {
-                // Storage migration clears the shared cookie. Restore it before
-                // another subdomain can initialize during the debounce window.
-                this.flush()
+            this._beginCookieSyncSuppression()
+            try {
+                const props = this.props
+                this.clear()
+                this._storage = newStore
+                this._splitStorage = wantSplit
+                this.props = props
+                this.save()
+            } finally {
+                // Storage migration clears the shared cookie. Restore the
+                // authoritative snapshot before another subdomain can initialize.
+                this._endCookieSyncSuppression()
             }
         } else if (cookiePrecedenceChanged) {
             this._storage = newStore
