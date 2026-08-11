@@ -253,11 +253,25 @@ const MAX_LOCKED_BUFFER_RECORDS = 50_000;
 const MAX_WALK_WALL_CLOCK_MS = 30_000;
 const WATCHDOG_MESSAGE = 'exceeded its wall-clock limit';
 
-function estimateRetainedSize(value: unknown, ceiling: number): number {
+// Bounds the estimator's own main-thread cost: every visit accrues at least
+// 8 bytes, so the byte ceiling bounds visits too, but only when the caller's
+// remaining budget is small. A structure that is still uncounted after this
+// many visits is treated as over any ceiling rather than walked to the end.
+const MAX_ESTIMATOR_VISITS = 131_072;
+
+// Exported for unit tests only. Runs synchronously inside wrappedEmit, so it
+// must never throw (payloads can carry proxies and throwing getters) and
+// never under-count a container type to ~0 (Map/Set/Blob and cross-realm
+// buffers don't answer instanceof/Object.keys).
+export function estimateRetainedSize(value: unknown, ceiling: number): number {
   const seen = new WeakSet<object>();
   const stack: unknown[] = [value];
   let bytes = 0;
+  let visits = 0;
   while (stack.length && bytes <= ceiling) {
+    if (++visits > MAX_ESTIMATOR_VISITS) {
+      return ceiling + 1;
+    }
     const current = stack.pop();
     if (
       current === null ||
@@ -272,23 +286,50 @@ function estimateRetainedSize(value: unknown, ceiling: number): number {
     } else if (typeof current === 'object') {
       if (seen.has(current)) continue;
       seen.add(current);
-      if (ArrayBuffer.isView(current)) {
-        bytes += current.byteLength;
-      } else if (current instanceof ArrayBuffer) {
-        bytes += current.byteLength;
-      } else if (Array.isArray(current)) {
-        bytes += current.length * 8;
-        for (const item of current) {
-          stack.push(item);
+      try {
+        const tag = Object.prototype.toString.call(current);
+        if (ArrayBuffer.isView(current)) {
+          bytes += current.byteLength;
+        } else if (tag === '[object ArrayBuffer]') {
+          // by tag, not instanceof: a buffer from an iframe realm is
+          // otherwise counted as an empty object
+          bytes += (current as ArrayBuffer).byteLength;
+        } else if (tag === '[object Blob]' || tag === '[object File]') {
+          bytes += (current as Blob).size;
+        } else if (tag === '[object Map]') {
+          bytes += (current as Map<unknown, unknown>).size * 16;
+          for (const [k, v] of current as Map<unknown, unknown>) {
+            stack.push(k, v);
+          }
+        } else if (tag === '[object Set]') {
+          bytes += (current as Set<unknown>).size * 8;
+          for (const item of current as Set<unknown>) {
+            stack.push(item);
+          }
+        } else if (Array.isArray(current)) {
+          bytes += current.length * 8;
+          for (const item of current) {
+            stack.push(item);
+          }
+        } else {
+          const record = current as Record<string, unknown>;
+          const keys = Object.keys(record);
+          bytes += keys.length * 16;
+          for (const key of keys) {
+            bytes += key.length * 2;
+            try {
+              // enumerable getters are consumer code; one throwing property
+              // must not take down the emit that is measuring it
+              stack.push(record[key]);
+            } catch {
+              bytes += 8;
+            }
+          }
         }
-      } else {
-        const record = current as Record<string, unknown>;
-        const keys = Object.keys(record);
-        bytes += keys.length * 16;
-        for (const key of keys) {
-          bytes += key.length * 2;
-          stack.push(record[key]);
-        }
+      } catch {
+        // a hostile proxy (throwing ownKeys/getPrototypeOf): charge a token
+        // amount and move on rather than surfacing through wrappedEmit
+        bytes += 64;
       }
     } else {
       bytes += 8;
@@ -1924,6 +1965,9 @@ function record<T = eventWithTime>(
         for (const buffer of mutationBuffers) {
           backlog += buffer.pendingRecordCount();
         }
+        // canvas commands accumulate behind the same lock as mutation
+        // records and are just as unsplittable at commit time
+        backlog += canvasManager.pendingMutationCount();
         if (backlog > MAX_LOCKED_BUFFER_RECORDS) {
           transaction.abortRequested = true;
           transaction.abortReason = 'mutation-backlog';

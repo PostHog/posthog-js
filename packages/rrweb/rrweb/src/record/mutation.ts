@@ -315,7 +315,11 @@ export default class MutationBuffer {
       this.attributes.length +
       this.removes.length +
       this.addedSet.size +
-      this.movedSet.size
+      this.movedSet.size +
+      // mirror bookkeeping the commit drains; a locked buffer on a churning
+      // page can hold more of these than actual records, and the backlog
+      // cap must see what commit-time work is actually accumulating
+      this.mapRemoves.length
     );
   }
 

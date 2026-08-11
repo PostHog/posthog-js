@@ -2223,9 +2223,17 @@ export async function snapshotWithBudget(
       // sliceStart is stale); count it so a pagehide drain shows up in the
       // completed walk's slice telemetry
       const drainStart = performance.now();
+      let drained = 0;
       try {
         while (stack.length > 0) {
           processNode();
+          // the drain is one unbounded loop the between-slice probe never
+          // reaches; a rotation or teardown mid-drain must still end the
+          // walk. Strided: the probe is consumer code with real cost.
+          if ((++drained & 511) === 0 && shouldAbort?.()) {
+            aborted = true;
+            return null;
+          }
         }
         finished = true;
         endSlice(drainStart);
@@ -2296,6 +2304,13 @@ export async function snapshotWithBudget(
           // throttled, and the wall-clock watchdog backstops a tab that
           // stays parked anyway; a page that is truly going away gets the
           // synchronous drain from the recorder's pagehide handler.
+          // Probed at the stride, not just after a yield: a walk that
+          // started hidden never yields, and a rotation or teardown mid-walk
+          // must still be able to end it.
+          if (shouldAbort?.()) {
+            aborted = true;
+            break;
+          }
           if (!(startedHidden && n.visibilityState === 'hidden')) {
             endSlice(sliceStart);
             await Promise.race([doYield(), parkedDriverWoken]);

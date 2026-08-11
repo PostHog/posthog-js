@@ -40,7 +40,10 @@ vi.mock('../../src/record/observer', async (importOriginal) => {
   };
 });
 
-import record, { scrubUnclaimedIds } from '../../src/record';
+import record, {
+  estimateRetainedSize,
+  scrubUnclaimedIds,
+} from '../../src/record';
 import { mutationBuffers } from '../../src/record/observer';
 import { IframeManager } from '../../src/record/iframe-manager';
 import { isIgnored } from '../../src/utils';
@@ -1097,6 +1100,53 @@ describe('budgeted snapshot lifecycle hardening', () => {
 
     mirror.endIdReservation();
     document.body.removeChild(target);
+  });
+
+  describe('estimateRetainedSize hardening', () => {
+    it('survives throwing enumerable getters and hostile proxies', () => {
+      const withGetter = {};
+      Object.defineProperty(withGetter, 'boom', {
+        enumerable: true,
+        get() {
+          throw new Error('consumer getter');
+        },
+      });
+      expect(() => estimateRetainedSize(withGetter, 1e9)).not.toThrow();
+
+      const hostile = new Proxy(
+        {},
+        {
+          ownKeys() {
+            throw new Error('hostile proxy');
+          },
+        },
+      );
+      expect(() =>
+        estimateRetainedSize({ payload: hostile }, 1e9),
+      ).not.toThrow();
+    });
+
+    it('counts Map, Set, Blob and ArrayBuffer contents instead of ~0', () => {
+      const big = 'x'.repeat(10_000);
+      expect(
+        estimateRetainedSize(new Map([['key', big]]), 1e9),
+      ).toBeGreaterThan(big.length);
+      expect(estimateRetainedSize(new Set([big]), 1e9)).toBeGreaterThan(
+        big.length,
+      );
+      expect(
+        estimateRetainedSize(new ArrayBuffer(50_000), 1e9),
+      ).toBeGreaterThanOrEqual(50_000);
+      expect(
+        estimateRetainedSize(new Blob([big]), 1e9),
+      ).toBeGreaterThanOrEqual(big.length);
+    });
+
+    it('bounds its own traversal and reports over-ceiling instead of walking forever', () => {
+      const wide = Array.from({ length: 200_000 }, () => ({}));
+      const ceiling = Number.MAX_SAFE_INTEGER;
+      expect(estimateRetainedSize(wide, ceiling)).toBeGreaterThan(ceiling);
+    });
   });
 
   describe('scrubUnclaimedIds custom events', () => {

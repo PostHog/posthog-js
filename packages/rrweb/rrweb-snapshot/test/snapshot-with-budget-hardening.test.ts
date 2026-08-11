@@ -167,6 +167,55 @@ describe('snapshotWithBudget hardening', () => {
     void walkPromise;
   });
 
+  it('a shouldAbort that flips mid-drain ends flushSync instead of being consulted only at entry', async () => {
+    const doc = buildDocument(200);
+
+    cleanupSnapshot();
+    let controller: BudgetedSnapshotController | null = null;
+    let probes = 0;
+    const walkPromise = snapshotWithBudget(doc, {
+      ...OPTIONS,
+      mirror: new Mirror(),
+      yieldBudgetMs: 0.0001,
+      yieldFn: () => new Promise<void>(() => undefined),
+      // false at the entry probe, true from the first mid-drain probe on:
+      // a rotation or teardown can land while the drain loop is running
+      shouldAbort: () => ++probes > 1,
+      onController: (c) => {
+        controller = c;
+      },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(controller!.flushSync()).toBeNull();
+    await expect(walkPromise).resolves.toBeNull();
+    // the mid-drain stride probe fired; entry alone would leave probes at 1
+    expect(probes).toBeGreaterThan(1);
+  });
+
+  it('a walk that starts hidden still consults shouldAbort at the stride', async () => {
+    const doc = buildDocument(200);
+    Object.defineProperty(doc, 'visibilityState', {
+      get: () => 'hidden',
+      configurable: true,
+    });
+
+    cleanupSnapshot();
+    let probes = 0;
+    const node = await snapshotWithBudget(doc, {
+      ...OPTIONS,
+      mirror: new Mirror(),
+      yieldBudgetMs: 0.0001,
+      // the hidden fast path never yields, so without a stride probe this
+      // walk could not be ended by rotation or teardown at all
+      shouldAbort: () => ++probes > 1,
+      yieldFn: async () => undefined,
+    });
+
+    expect(node).toBeNull();
+    expect(probes).toBeGreaterThan(1);
+  });
+
   it('keeps yielding when the page becomes hidden mid-walk', async () => {
     const doc = buildDocument(60);
     let visibility = 'visible';

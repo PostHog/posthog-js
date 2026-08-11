@@ -103,6 +103,16 @@ export class CanvasManager {
     this.locked = false;
   }
 
+  // The walk's backlog cap reads this: pending canvas commands accumulate
+  // behind the lock exactly like mutation records but lived in no cap.
+  public pendingMutationCount(): number {
+    let count = 0;
+    for (const commands of this.pendingCanvasMutations.values()) {
+      count += commands.length;
+    }
+    return count;
+  }
+
   public discardPending() {
     this.pendingCanvasMutations.clear();
     this.locked = false;
