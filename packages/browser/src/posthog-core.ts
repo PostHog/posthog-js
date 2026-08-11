@@ -7,6 +7,7 @@ import {
     COOKIELESS_ON_REJECT,
     DEVICE_ID,
     DEVICE_MODEL,
+    DISTINCT_ID,
     PERSON_PROFILES_IDENTIFIED_ONLY,
     USER_STATE_ANONYMOUS,
     USER_STATE_IDENTIFIED,
@@ -211,6 +212,7 @@ const defaultsThatVaryByConfig = (
     | 'split_storage'
     | 'detect_google_search_app'
     | 'disable_capture_url_hashes'
+    | 'cookieWinsOnConflict'
 > => ({
     rageclick:
         defaults && defaults >= '2026-05-30'
@@ -233,6 +235,7 @@ const defaultsThatVaryByConfig = (
     split_storage: !!(defaults && defaults >= '2026-05-30'),
     detect_google_search_app: !!(defaults && defaults >= '2026-05-30'),
     disable_capture_url_hashes: !!(defaults && defaults >= '2026-06-25'),
+    cookieWinsOnConflict: !!(defaults && defaults >= '2026-08-29'),
 })
 
 // NOTE: Remember to update `types.ts` when changing a default value
@@ -332,6 +335,7 @@ const CONFIG_RENAMES: [keyof PostHogConfig, keyof PostHogConfig][] = [
     ['__preview_disable_beacon', 'disable_beacon'],
     ['store_google', 'save_campaign_params'],
     ['verbose', 'debug'],
+    ['__preview_cookie_wins_on_conflict', 'cookieWinsOnConflict'],
 ]
 
 export const configRenames = (origConfig: Partial<PostHogConfig>): Partial<PostHogConfig> => {
@@ -1634,6 +1638,19 @@ export class PostHog implements PostHogInterface {
             return eventProperties
         }
 
+        // Cookies do not emit cross-origin storage events. Reconcile before
+        // reading any event properties so already-open sibling subdomains pick
+        // up identify/reset changes, including for replay snapshot events.
+        const previousDistinctId = this.persistence.get_property(DISTINCT_ID)
+        if (
+            this.persistence.syncCookieProperties() &&
+            this.persistence.get_property(DISTINCT_ID) !== previousDistinctId
+        ) {
+            this._cachedPersonProperties = null
+            this.reloadFeatureFlags()
+            this.unregister(FLAG_CALL_REPORTED)
+        }
+
         // set defaults
         const startTimestamp = readOnly ? undefined : this.persistence.remove_event_timer(eventName)
         let properties = { ...eventProperties }
@@ -2737,6 +2754,12 @@ export class PostHog implements PostHogInterface {
                 false
             )
 
+            if (this.config.cookieWinsOnConflict) {
+                // Publish the identity transition before capture so sibling
+                // subdomains never observe the old cookie during the debounce window.
+                this.persistence.flush()
+            }
+
             this.capture(
                 EVENT_IDENTIFY,
                 {
@@ -2761,6 +2784,9 @@ export class PostHog implements PostHogInterface {
             const setProperties = userPropertiesToSet || {}
             const setOnceProperties = userPropertiesToSetOnce || {}
             this.setPersonPropertiesForFlags({ $set: setProperties, $set_once: setOnceProperties }, false)
+            if (this.config.cookieWinsOnConflict) {
+                this.persistence.flush()
+            }
             this.capture('$set', { $set: setProperties, $set_once: setOnceProperties })
 
             // This transition must create/update the person even when an identical property call was cached earlier.
@@ -3223,6 +3249,12 @@ export class PostHog implements PostHogInterface {
         // Clear HMAC identity verification fields
         delete this.config.identity_distinct_id
         delete this.config.identity_hash
+
+        if (this.config.cookieWinsOnConflict) {
+            // Publish the new anonymous identity as one complete cookie before
+            // another sibling tab can resurrect the pre-reset state.
+            this.persistence?.flush()
+        }
 
         // Reload feature flags for the new anonymous user, just like identify()
         // does when the distinct_id changes.

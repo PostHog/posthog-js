@@ -374,7 +374,13 @@ export class SessionIdManager {
         }
         const timestamp = _timestamp || new Date().getTime()
 
+        const managedSessionIdBeforeCookieSync = this._sessionId
+        this._persistence.syncCookieProperties?.()
         let [, sessionId, startTimestamp] = this._getSessionId()
+        const cookieSessionAdoption =
+            !isNull(managedSessionIdBeforeCookieSync) &&
+            !isUndefined(managedSessionIdBeforeCookieSync) &&
+            sessionId !== managedSessionIdBeforeCookieSync
         const lastActivityTimestamp = this._freshestActivityTimestamp()
         let windowId = this._getWindowId()
 
@@ -382,7 +388,7 @@ export class SessionIdManager {
             isPositiveNumber(startTimestamp) && Math.abs(timestamp - startTimestamp) > SESSION_LENGTH_LIMIT_MILLISECONDS
 
         let valuesChanged = false
-        let crossTabAdoption = false
+        let crossTabAdoption = cookieSessionAdoption
         const noSessionId = !sessionId
         const preRefreshSessionId = sessionId
         let activityTimeout =
@@ -425,7 +431,7 @@ export class SessionIdManager {
             // change that handlers don't hear about leaves consumers (page-view
             // state, a stopped recorder, session-scoped props) on the old
             // session. If we adopted, we must notify.
-            crossTabAdoption = sessionId !== preRefreshSessionId
+            crossTabAdoption = crossTabAdoption || sessionId !== preRefreshSessionId
             if (crossTabAdoption) {
                 // We took a sibling tab's session id (keeping our own window
                 // id). Fire handlers so downstream consumers (session

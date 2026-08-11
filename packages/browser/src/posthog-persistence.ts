@@ -31,7 +31,7 @@ const GROUP_FRESHNESS_KEY: Partial<Record<PersistenceStorageGroup, string>> = {
     surveys: SURVEYS_LOADED_AT,
 }
 
-import { isArray, isNumber, isUndefined } from '@posthog/core'
+import { isArray, isNull, isNumber, isUndefined } from '@posthog/core'
 import {
     getCampaignParams,
     getInitialPersonPropsFromInfo,
@@ -136,6 +136,10 @@ export class PostHogPersistence {
     // flushed on `beforeunload` and `pagehide` so no state is lost on
     // tab close.
     private _pendingSaveTimer: ReturnType<typeof setTimeout> | undefined
+    // Snapshot of the last shared-cookie state this instance observed or wrote.
+    // Cookies do not emit cross-origin storage events, so captures and writes use
+    // this fingerprint to cheaply detect identity changes made on sibling subdomains.
+    private _lastSeenCookiePropertiesFingerprint: string | undefined
 
     /**
      * @param {PostHogConfig} config initial PostHog configuration
@@ -175,6 +179,54 @@ export class PostHogPersistence {
         return isNumber(value) && value > 0 ? value : 0
     }
 
+    private _rememberCurrentCookieProperties(): void {
+        if (!this._config.cookieWinsOnConflict || this._config.persistence.toLowerCase() !== 'localstorage+cookie') {
+            return
+        }
+        try {
+            this._lastSeenCookiePropertiesFingerprint = cookieStore._get(this._name) || undefined
+        } catch {}
+    }
+
+    /**
+     * Adopt shared-cookie changes made by a sibling subdomain without replacing
+     * localStorage-only or pending in-memory properties. Returns true when a new
+     * non-empty cookie snapshot was observed.
+     */
+    syncCookieProperties(): boolean {
+        if (!this._config.cookieWinsOnConflict || this._config.persistence.toLowerCase() !== 'localstorage+cookie') {
+            return false
+        }
+
+        let cookieValue: string | undefined
+        try {
+            cookieValue = cookieStore._get(this._name) || undefined
+        } catch {}
+        if (!cookieValue || cookieValue === this._lastSeenCookiePropertiesFingerprint) {
+            return false
+        }
+        this._lastSeenCookiePropertiesFingerprint = cookieValue
+
+        let cookieProperties: Properties
+        try {
+            cookieProperties = JSON.parse(cookieValue) || {}
+        } catch {
+            return false
+        }
+        Object.keys(cookieProperties).forEach((key) => {
+            const value = cookieProperties[key]
+            if (isUndefined(value) || isNull(value) || value === '') {
+                delete cookieProperties[key]
+            }
+        })
+        if (isEmptyObject(cookieProperties)) {
+            return false
+        }
+
+        this.props = extend({}, this.props, cookieProperties)
+        return true
+    }
+
     /**
      * Returns whether persistence is disabled. Only available in SDKs > 1.257.1. Do not use on extensions, otherwise
      * it'll break backwards compatibility for any version before 1.257.1.
@@ -200,7 +252,7 @@ export class PostHogPersistence {
         // so create it once for this specific config and use it if necessary
         const localPlusCookieStore = createLocalPlusCookieStore(
             config['cookie_persisted_properties'] || [],
-            config['__preview_cookie_wins_on_conflict'] || false
+            config.cookieWinsOnConflict
         )
 
         let store: PersistentStore
@@ -309,6 +361,8 @@ export class PostHogPersistence {
         if (this._splitStorage) {
             this._loadGroupEntries()
         }
+
+        this._rememberCurrentCookieProperties()
     }
 
     // Merge each group entry over `props`, which already holds the main blob.
@@ -456,12 +510,18 @@ export class PostHogPersistence {
             return
         }
 
+        // Reconcile immediately before writing as well as before capture. This
+        // closes the debounce window where a sibling identify/reset could
+        // otherwise be overwritten by this tab's pending stale whole-blob save.
+        this.syncCookieProperties()
+
         if (this._splitStorage) {
             this._writeNowSplit()
             return
         }
 
         this._writeEntry(this._storage, this._name, this.props, MAIN_STORAGE_SLOT)
+        this._rememberCurrentCookieProperties()
     }
 
     // Partition `props` by storage group and write each entry independently:
@@ -478,6 +538,7 @@ export class PostHogPersistence {
     private _writeNowSplit(): void {
         const { main, groups } = this._partitionProps()
         this._writeEntry(this._storage, this._name, main, MAIN_STORAGE_SLOT)
+        this._rememberCurrentCookieProperties()
         for (const group of PERSISTENCE_STORAGE_GROUPS) {
             const groupProps = groups[group]
             // Don't materialize an entry just to hold `{}`: skip a group that is
@@ -637,6 +698,7 @@ export class PostHogPersistence {
         } else {
             this._slotState = {}
         }
+        this._lastSeenCookiePropertiesFingerprint = undefined
     }
 
     // removes the storage entry and deletes all loaded data
@@ -800,6 +862,7 @@ export class PostHogPersistence {
     }
 
     update_config(config: PostHogConfig, oldConfig: PostHogConfig, isDisabled?: boolean): void {
+        this._config = config
         this._default_expiry = this._expire_days = config['cookie_expiration']
         this.set_disabled(config['disable_persistence'] || !!isDisabled)
         this.set_cross_subdomain(config['cross_subdomain_cookie'])
@@ -808,12 +871,13 @@ export class PostHogPersistence {
         const persistenceChanged =
             config.persistence !== oldConfig.persistence ||
             !isArrayContentsEqual(config.cookie_persisted_properties || [], oldConfig.cookie_persisted_properties || [])
+        const cookiePrecedenceChanged = config.cookieWinsOnConflict !== oldConfig.cookieWinsOnConflict
 
         // `_buildStorage` re-resolves both the backend and `_splitStorageEligible`,
         // so on a persistence change build the new store first, then derive the
         // split flag from the fresh eligibility. The new backend may no longer be
         // split-eligible (e.g. localStorage -> memory).
-        const newStore = persistenceChanged ? this._buildStorage(config) : this._storage
+        const newStore = persistenceChanged || cookiePrecedenceChanged ? this._buildStorage(config) : this._storage
         const wantSplit = this._resolveSplitStorage(config)
 
         // Migrate when the backend changed or the split routing flipped at
@@ -827,6 +891,13 @@ export class PostHogPersistence {
             this._splitStorage = wantSplit
             this.props = props
             this.save()
+        } else if (cookiePrecedenceChanged) {
+            // Do not clear first: when cookie precedence is enabled, clearing
+            // would delete the shared state before it can win. Preserve pending
+            // local-only props and reconcile just the cookie-backed values.
+            this._storage = newStore
+            this._lastSeenCookiePropertiesFingerprint = undefined
+            this.syncCookieProperties()
         }
     }
 

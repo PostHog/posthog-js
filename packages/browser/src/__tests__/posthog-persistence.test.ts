@@ -868,7 +868,7 @@ describe('persistence', () => {
         describe('merge precedence', () => {
             // The default merge in createLocalPlusCookieStore._parse is
             // extend(cookieProperties, localStorageData) — localStorage wins.
-            // With __preview_cookie_wins_on_conflict: true, that order flips so the
+            // With cookieWinsOnConflict: true, that order flips so the
             // cross-subdomain cookie is authoritative for the keys it stores.
             const persistenceName = 'ph__posthog'
             const encodeCookie = (props: Record<string, any>) =>
@@ -883,7 +883,7 @@ describe('persistence', () => {
                         | 'localStorage+cookie'
                         | 'memory'
                         | 'sessionStorage',
-                    __preview_cookie_wins_on_conflict: cookieWins,
+                    cookieWinsOnConflict: cookieWins,
                 }
             }
 
@@ -956,6 +956,75 @@ describe('persistence', () => {
                 // The _parse self-heal writes the merged value back to localStorage
                 const localStorageAfter = JSON.parse(localStorage.getItem(persistenceName) || '{}')
                 expect(localStorageAfter.distinct_id).toBe('from_cookie')
+            })
+
+            it('flag on: a live tab adopts a sibling identify before its next persistence write', () => {
+                document.cookie = encodeCookie({ distinct_id: 'anonymous', $user_state: 'anonymous' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({ distinct_id: 'anonymous', $user_state: 'anonymous' })
+                )
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+
+                // Another subdomain identifies the user while this instance remains open.
+                document.cookie = encodeCookie({ distinct_id: 'identified-user', $user_state: 'identified' })
+                lib.register({ local_only_property: 'preserved' })
+
+                expect(lib.props.distinct_id).toBe('identified-user')
+                expect(lib.props.$user_state).toBe('identified')
+                expect(lib.props.local_only_property).toBe('preserved')
+                expect(cookieStore._parse(persistenceName).distinct_id).toBe('identified-user')
+            })
+
+            it('flag on: a live tab adopts a sibling reset before its next capture', () => {
+                document.cookie = encodeCookie({ distinct_id: 'identified-user', $user_state: 'identified' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({ distinct_id: 'identified-user', $user_state: 'identified' })
+                )
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+
+                document.cookie = encodeCookie({ distinct_id: 'new-anonymous', $user_state: 'anonymous' })
+
+                expect(lib.syncCookieProperties()).toBe(true)
+                expect(lib.props.distinct_id).toBe('new-anonymous')
+                expect(lib.props.$user_state).toBe('anonymous')
+            })
+
+            it('flag on: a local identity update is not rolled back before its cookie write', () => {
+                document.cookie = encodeCookie({ distinct_id: 'anonymous' })
+                localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'anonymous' }))
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+
+                lib.register({ distinct_id: 'locally-identified' })
+
+                expect(lib.props.distinct_id).toBe('locally-identified')
+                expect(cookieStore._parse(persistenceName).distinct_id).toBe('locally-identified')
+            })
+
+            it('flag off: a live tab keeps legacy in-memory precedence', () => {
+                document.cookie = encodeCookie({ distinct_id: 'anonymous' })
+                localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'anonymous' }))
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', false))
+
+                document.cookie = encodeCookie({ distinct_id: 'identified-user' })
+
+                expect(lib.syncCookieProperties()).toBe(false)
+                expect(lib.props.distinct_id).toBe('anonymous')
+            })
+
+            it('enabling cookie precedence through update_config adopts the shared cookie without clearing it', () => {
+                document.cookie = encodeCookie({ distinct_id: 'anonymous' })
+                localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'anonymous' }))
+                const oldConfig = makeConfig('localStorage+cookie', false)
+                const lib = new PostHogPersistence(oldConfig)
+
+                document.cookie = encodeCookie({ distinct_id: 'identified-user' })
+                const newConfig = makeConfig('localStorage+cookie', true)
+                lib.update_config(newConfig, oldConfig)
+
+                expect(lib.props.distinct_id).toBe('identified-user')
+                expect(cookieStore._parse(persistenceName).distinct_id).toBe('identified-user')
             })
 
             it('flag on: localStorage-only keys are preserved (cookie does not carry them)', () => {

@@ -8,6 +8,7 @@ import { isUndefined } from '@posthog/core'
 import {
     AUTOCAPTURE_DISABLED_SERVER_SIDE,
     ENABLE_PERSON_PROCESSING,
+    FLAG_CALL_REPORTED,
     HEATMAPS_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_REMOTE_CONFIG,
     USER_STATE,
@@ -540,6 +541,7 @@ describe('posthog core', () => {
                 get_property: () => 'anonymous',
                 props: {},
                 register: jest.fn(),
+                syncCookieProperties: jest.fn(),
             } as unknown as PostHogPersistence,
             sessionPersistence: {
                 properties: () => ({ distinct_id: 'abc', persistent: 'prop' }),
@@ -589,6 +591,36 @@ describe('posthog core', () => {
                 $sdk_debug_retry_queue_size: 0,
                 $config_defaults: 'unset',
             })
+        })
+
+        it('uses a sibling subdomain identity change for the next event and reloads flags', () => {
+            const props = { distinct_id: 'anonymous', $user_state: 'anonymous' }
+            const persistence = {
+                props,
+                properties: () => ({ ...props }),
+                remove_event_timer: jest.fn(),
+                get_property: (key: string) => props[key as keyof typeof props],
+                register: jest.fn(),
+                unregister: jest.fn(),
+                syncCookieProperties: jest.fn().mockImplementation(() => {
+                    props.distinct_id = 'identified-user'
+                    props.$user_state = 'identified'
+                    return true
+                }),
+            } as unknown as PostHogPersistence
+            const sessionPersistence = {
+                properties: () => ({}),
+                get_property: () => undefined,
+            } as unknown as PostHogPersistence
+            posthog = posthogWith({}, { ...overrides, persistence, sessionPersistence })
+            const reloadFeatureFlags = jest.spyOn(posthog, 'reloadFeatureFlags').mockImplementation(() => {})
+
+            const properties = posthog.calculateEventProperties('custom_event', {}, new Date(), uuid)
+
+            expect(properties.distinct_id).toBe('identified-user')
+            expect(properties.$is_identified).toBe(true)
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+            expect(persistence.unregister).toHaveBeenCalledWith(FLAG_CALL_REPORTED)
         })
 
         it('sets $lib_custom_api_host if api_host is not the default', () => {
@@ -648,6 +680,7 @@ describe('posthog core', () => {
                 distinct_id: 'abc',
                 $config_defaults: 'unset',
             })
+            expect(posthog.persistence.syncCookieProperties).toHaveBeenCalled()
             expect(posthog.sessionManager.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
         })
 

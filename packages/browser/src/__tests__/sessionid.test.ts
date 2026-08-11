@@ -54,6 +54,7 @@ describe('Session ID manager', () => {
             load: jest.fn(),
             flush: jest.fn(),
             refreshKey: jest.fn(),
+            syncCookieProperties: jest.fn().mockReturnValue(false),
             _disabled: false,
         }
         ;(sessionStore._is_supported as jest.Mock).mockReturnValue(true)
@@ -1002,6 +1003,49 @@ describe('Session ID manager', () => {
 
             const secondResult = sessionIdManager.checkAndGetSessionAndWindowId(false, testTimestamp)
             expect(secondResult.changeReason?.activityTimeout).toBeUndefined()
+        })
+    })
+
+    describe('shared-cookie session adoption', () => {
+        it('adopts a sibling subdomain session and notifies session listeners on the next event', () => {
+            ;(sessionStore._parse as jest.Mock).mockReturnValue('stable-window-id')
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('sessionA', 1_000_000, 1_000_000)
+            const onSessionId = jest.fn()
+            sessionIdManager.onSessionId(onSessionId)
+            onSessionId.mockClear()
+            ;(persistence.syncCookieProperties as jest.Mock).mockImplementation(() => {
+                persistence.props[SESSION_ID] = [1_001_000, 'sessionB', 1_001_000]
+                return true
+            })
+
+            const result = sessionIdManager.checkAndGetSessionAndWindowId(false, 1_001_000)
+
+            expect(result.sessionId).toBe('sessionB')
+            expect(result.changeReason?.crossTabAdoption).toBe(true)
+            expect(onSessionId).toHaveBeenCalledWith(
+                'sessionB',
+                'stable-window-id',
+                expect.objectContaining({ crossTabAdoption: true })
+            )
+        })
+
+        it('does not notify session listeners for an activity-only cookie update', () => {
+            ;(sessionStore._parse as jest.Mock).mockReturnValue('stable-window-id')
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager['_setSessionId']('sessionA', 1_000_000, 1_000_000)
+            const onSessionId = jest.fn()
+            sessionIdManager.onSessionId(onSessionId)
+            onSessionId.mockClear()
+            ;(persistence.syncCookieProperties as jest.Mock).mockImplementation(() => {
+                persistence.props[SESSION_ID] = [1_001_000, 'sessionA', 1_000_000]
+                return true
+            })
+
+            const result = sessionIdManager.checkAndGetSessionAndWindowId(false, 1_001_000)
+
+            expect(result.changeReason).toBeUndefined()
+            expect(onSessionId).not.toHaveBeenCalled()
         })
     })
 
