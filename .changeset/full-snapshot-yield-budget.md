@@ -1,6 +1,8 @@
 ---
 'posthog-js': minor
 '@posthog/types': patch
+'@posthog/rrweb': patch
+'@posthog/rrweb-snapshot': patch
 ---
 
 Adds the opt-in `session_recording.fullSnapshotYieldBudgetMs` config. On pages with very large DOMs the recorder's full snapshot otherwise serializes the whole tree in one synchronous main-thread pass, freezing the page for seconds. With a budget set, serialization is time-sliced: the recorder yields to the event loop whenever it has spent the configured milliseconds of continuous main-thread work, while producing a node-identical snapshot through the same serialization path the synchronous snapshot uses. The default (0) keeps the previous fully-synchronous behavior.
