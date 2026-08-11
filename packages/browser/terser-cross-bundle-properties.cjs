@@ -3,8 +3,6 @@ const globallyReservedPrivateProperties = ['_addCaptureHook', '_send_request']
 
 const crossBundlePrivateProperties = [
     ...globallyReservedPrivateProperties,
-    '_internalEventEmitter',
-    '_isFeatureFlagCacheStale',
     '_onIdentityChanged',
     '_onIdentityCleared',
     '_originatedFromCaptureException',
@@ -17,6 +15,7 @@ const knownNonAbiOverlaps = [
     '_POSTHOG_REMOTE_CONFIG',
     '_batchKey',
     '_buffer',
+    '_client',
     '_config',
     '_enqueue',
     '_events',
@@ -34,7 +33,9 @@ const knownNonAbiOverlaps = [
     '_persistence',
     '_queue',
     '_refreshInterval',
+    '_remove',
     '_runBeforeSend',
+    '_set',
     '_startRefreshInterval',
 ]
 

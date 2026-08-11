@@ -1,0 +1,73 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`PostHogFeatureFlags extension lifecycle snapshots feature flag persistence after loading a v2 response 1`] = `
+{
+  "$active_feature_flags": [
+    "boolean-flag",
+    "variant-flag",
+  ],
+  "$enabled_feature_flags": {
+    "boolean-flag": true,
+    "disabled-flag": false,
+    "variant-flag": "control",
+  },
+  "$feature_flag_details": {
+    "boolean-flag": {
+      "enabled": true,
+      "key": "boolean-flag",
+      "metadata": {
+        "description": "Boolean flag",
+        "has_experiment": false,
+        "id": 1,
+        "payload": undefined,
+        "version": 2,
+      },
+      "reason": {
+        "code": "condition_match",
+        "condition_index": 0,
+        "description": "matched boolean condition",
+      },
+      "variant": undefined,
+    },
+    "disabled-flag": {
+      "enabled": false,
+      "key": "disabled-flag",
+      "metadata": {
+        "description": "Disabled flag",
+        "id": 3,
+        "payload": undefined,
+        "version": 4,
+      },
+      "reason": {
+        "code": "no_condition_match",
+        "condition_index": undefined,
+        "description": "no match",
+      },
+      "variant": undefined,
+    },
+    "variant-flag": {
+      "enabled": true,
+      "key": "variant-flag",
+      "metadata": {
+        "description": "Variant flag",
+        "has_experiment": true,
+        "id": 2,
+        "payload": "{"layout":"compact"}",
+        "version": 3,
+      },
+      "reason": {
+        "code": "condition_match",
+        "condition_index": 1,
+        "description": "matched variant condition",
+      },
+      "variant": "control",
+    },
+  },
+  "$feature_flag_evaluated_at": 1700000000000,
+  "$feature_flag_payloads": {
+    "variant-flag": "{"layout":"compact"}",
+  },
+  "$feature_flag_request_id": "flags-request-id",
+  "$minimal_flag_called_events": true,
+}
+`;
