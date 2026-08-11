@@ -2176,6 +2176,18 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         if (document?.visibilityState) {
             if (document.visibilityState === 'visible') {
                 this._documentWasEverVisible = true
+                // A hidden tab keeps running MutationObserver, so streamed DOM nodes (for
+                // example an AI chat response) are still captured while the tab is in the
+                // background. But the app skips its auto-scroll-to-bottom on a hidden tab, and
+                // scroll is only captured as a discrete incremental event, so no scroll event
+                // is emitted. On return the recording shows content below the fold. Schedule a
+                // full snapshot so the recording re-syncs DOM and scroll state when the viewer
+                // comes back, the same path used on return from idle.
+                //
+                // Mouse behaviour differs by state: a hidden tab receives no mousemove, so
+                // nothing is captured, but a visible-but-unfocused window still records mouse
+                // movement.
+                this._scheduleFullSnapshot()
             }
             const label = 'window ' + document.visibilityState
             this._tryAddCustomEvent(label, {})

@@ -2716,6 +2716,33 @@ describe('Lazy SessionRecording', () => {
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotTimer']).not.toBe(undefined)
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotTimer']).not.toBe(startTimer)
             })
+
+            it('schedules a snapshot when the tab becomes visible again', () => {
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                        },
+                    })
+                )
+                _emit(createFullSnapshot())
+
+                const scheduleFullSnapshot = jest.spyOn(
+                    sessionRecording['_lazyLoadedSessionRecording'] as any,
+                    '_scheduleFullSnapshot'
+                )
+                const visibilityState = jest.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
+                try {
+                    document.dispatchEvent(new Event('visibilitychange'))
+                    expect(scheduleFullSnapshot).not.toHaveBeenCalled()
+
+                    visibilityState.mockReturnValue('visible')
+                    document.dispatchEvent(new Event('visibilitychange'))
+                    expect(scheduleFullSnapshot).toHaveBeenCalledTimes(1)
+                } finally {
+                    visibilityState.mockRestore()
+                }
+            })
         })
 
         describe('full snapshot timestamp tracking', () => {
