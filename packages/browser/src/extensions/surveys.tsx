@@ -1144,6 +1144,12 @@ export function usePopupVisibility(
     )
     const [isSurveySent, setIsSurveySent] = useState(false)
 
+    // Tracks whether a view transition is already in flight so a second close
+    // (e.g. Enter + button click, or a dismiss fired while the thank-you screen
+    // is animating out) doesn't start an overlapping transition. Overlapping
+    // transitions on the same document are a known source of renderer crashes.
+    const isTransitionInFlightRef = useRef(false)
+
     const hidePopupWithViewTransition = () => {
         const removeDOMAndHidePopup = () => {
             if (isPopup) {
@@ -1152,20 +1158,51 @@ export function usePopupVisibility(
             setIsPopupVisible(false)
         }
 
-        if (!document.startViewTransition) {
+        // No View Transitions API (jsdom, older browsers): tear down synchronously.
+        if (typeof document === 'undefined' || !document.startViewTransition) {
             removeDOMAndHidePopup()
             return
         }
 
-        const transition = document.startViewTransition(() => {
-            surveyContainerRef?.current?.remove()
-        })
+        // A transition is already animating the close. Don't start a second one —
+        // overlapping transitions on the same document are themselves a renderer
+        // crash risk. The in-flight transition's `finish` will hide the popup.
+        if (isTransitionInFlightRef.current) {
+            return
+        }
 
-        transition.finished.then(() => {
-            setTimeout(() => {
-                removeDOMAndHidePopup()
-            }, 100)
-        })
+        isTransitionInFlightRef.current = true
+
+        const finish = () => {
+            isTransitionInFlightRef.current = false
+            removeDOMAndHidePopup()
+        }
+
+        try {
+            // The transition callback only animates the fade-out of the survey
+            // container. It must NOT own the DOM teardown — removing the element
+            // inside the callback (the previous behaviour) is what triggered a
+            // Chromium renderer crash (grey "Aw, Snap" tab) on heavy SPAs, because
+            // the transition's captured snapshot ended up pointing at a removed
+            // node. React unmounts the container via setIsPopupVisible(false) +
+            // removeSurveyFromFocus once the transition settles.
+            const transition = document.startViewTransition(() => {
+                if (surveyContainerRef?.current) {
+                    surveyContainerRef.current.style.opacity = '0'
+                }
+            })
+
+            // `transition.finished` rejects if the transition is skipped or
+            // interrupted (e.g. tab backgrounded, reduced motion, another transition
+            // supersedes it). Always settle the state so the popup is never left
+            // visible with a stale ref.
+            transition.finished.then(finish, finish)
+        } catch (error) {
+            // startViewTransition can throw if the document is not in a state that
+            // allows a transition (e.g. during unload). Fall back to a plain remove.
+            logger.warn('View transition failed, removing survey without animation:', error)
+            finish()
+        }
     }
 
     const handleSurveyClosed = (event: CustomEvent) => {
