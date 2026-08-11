@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.415.5
+
+### Patch Changes
+
+- [#4497](https://github.com/PostHog/posthog-js/pull/4497) [`d62e42e`](https://github.com/PostHog/posthog-js/commit/d62e42e64330788191558511adc7dae97a038813) Thanks [@hpouillot](https://github.com/hpouillot)! - Fix a Chrome renderer crash (grey "Aw, Snap" tab) that could occur when closing an in-app survey.
+
+    The survey close path wrapped the survey container's DOM removal in `document.startViewTransition`. Removing the element inside the transition callback left the captured snapshot pointing at a removed node, which on heavy SPAs triggered a Chromium renderer crash and took down the whole tab.
+
+    The close path now only animates a fade-out inside the transition and lets React tear the container down once the transition settles. It also guards against overlapping transitions (a second close while one is animating) and always settles the popup state if the transition is skipped or interrupted, so the survey can never be left visible with a stale reference. (2026-08-11)
+
 ## 1.415.4
 
 ### Patch Changes
