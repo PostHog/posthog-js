@@ -1,5 +1,17 @@
 # posthog-js
 
+## 1.415.3
+
+### Patch Changes
+
+- [#4488](https://github.com/PostHog/posthog-js/pull/4488) [`23db844`](https://github.com/PostHog/posthog-js/commit/23db8444c94d3424739b6ff5439c6068c2e68088) Thanks [@TueHaulund](https://github.com/TueHaulund)! - fix(replay): never ship a buffer swapped in by a re-entrant session rotation mid-flush
+  (2026-08-11)
+
+- [#4474](https://github.com/PostHog/posthog-js/pull/4474) [`e06bf52`](https://github.com/PostHog/posthog-js/commit/e06bf52590664882b27dc2d7bbad613f4ccd6422) Thanks [@dependabot](https://github.com/apps/dependabot)! - dependencies updates: - Updated dependency [`dompurify@^3.4.13` ↗︎](https://www.npmjs.com/package/dompurify/v/3.4.13) (from `^3.4.12`, in `dependencies`) (2026-08-11)
+
+- [#4435](https://github.com/PostHog/posthog-js/pull/4435) [`1cbbe6a`](https://github.com/PostHog/posthog-js/commit/1cbbe6aabe13e4dca32aea6eb567a00f05ca7d7b) Thanks [@arnohillen](https://github.com/arnohillen)! - fix(replay): stop dropping adopted stylesheets that arrive before the host's shadow root is attached. When the recorder's full snapshot races a web component's hydration, the AdoptedStyleSheet event can be recorded before the mutation that attaches the host's shadow root. The replayer silently dropped those styles for the rest of the page view, so components styled via `shadowRoot.adoptedStyleSheets` (Stencil, Lit) rendered completely unstyled. The replayer now constructs the stylesheet even when the shadow root does not exist yet and keeps retrying adoption until it is attached.
+  (2026-08-11)
+
 ## 1.415.2
 
 ### Patch Changes
