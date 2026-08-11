@@ -676,6 +676,16 @@ describe('budgeted snapshot lifecycle hardening', () => {
     expect(
       events.filter((e) => e.type === EventType.FullSnapshot).length,
     ).toBe(1);
+
+    // the carried click was observed before the retry walk started, so its
+    // held timestamp predates the retry FullSnapshot's — without the clamp
+    // the replayer's timestamp sort would put it BEFORE the snapshot that
+    // introduces its target id and drop it
+    for (let i = 1; i < events.length; i++) {
+      expect(events[i].timestamp).toBeGreaterThanOrEqual(
+        events[i - 1].timestamp,
+      );
+    }
   }, 30_000);
 
   it('a held delivery that keeps failing is retried once and counted', async () => {
@@ -1102,6 +1112,155 @@ describe('budgeted snapshot lifecycle hardening', () => {
     document.body.removeChild(target);
   });
 
+  it('a held interaction on a node removed mid-walk before its visit is dropped and counted', async () => {
+    fillBody();
+    // the victim sits AFTER the filler so the checkout walker reaches it late
+    const victim = document.createElement('button');
+    victim.id = 'dangling-victim';
+    document.body.appendChild(victim);
+
+    const events: eventWithTime[] = [];
+    stop = record({
+      emit: (event) => {
+        events.push(event as eventWithTime);
+      },
+      fullSnapshotYieldBudgetMs: 1,
+    });
+
+    await vi.waitFor(
+      () => {
+        expect(
+          events.filter((e) => e.type === EventType.FullSnapshot),
+        ).toHaveLength(1);
+      },
+      { timeout: 10_000 },
+    );
+    await settle();
+    const victimId = record.mirror.getId(victim);
+    expect(victimId).toBeGreaterThan(0);
+
+    // checkout: click the victim while the walk is in flight, then remove it
+    // before the walker can reach it — the new snapshot will not contain it
+    record.takeFullSnapshot(true);
+    victim.dispatchEvent(
+      new MouseEvent('click', { bubbles: true, cancelable: true }),
+    );
+    victim.remove();
+
+    await vi.waitFor(
+      () => {
+        expect(
+          events.filter((e) => e.type === EventType.FullSnapshot),
+        ).toHaveLength(2);
+      },
+      { timeout: 10_000 },
+    );
+    await settle();
+
+    const full2 = events.filter((e) => e.type === EventType.FullSnapshot)[1];
+    const full2Index = events.indexOf(full2);
+    const danglingClicks = events
+      .slice(full2Index)
+      .filter(
+        (e) =>
+          e.type === EventType.IncrementalSnapshot &&
+          (e as { data: { source: IncrementalSource } }).data.source ===
+            IncrementalSource.MouseInteraction &&
+          (e as unknown as { data: { id: number } }).data.id === victimId,
+      );
+    // not delivered dangling (the replayer would drop it silently)...
+    expect(danglingClicks).toHaveLength(0);
+    // ...and the loss is accounted, not invisible
+    const reported = diagnostics(events).filter(
+      (p) => (p?.droppedHeldEventCount as number) > 0,
+    );
+    expect(reported.length).toBeGreaterThan(0);
+  }, 30_000);
+
+  it('a session rotation does not reopen the shadow scroll blind window', async () => {
+    fillBody();
+    const host = document.createElement('div');
+    const shadow = host.attachShadow({ mode: 'open' });
+    const inner = document.createElement('div');
+    inner.textContent = 'shadow content';
+    shadow.appendChild(inner);
+    document.body.appendChild(host);
+
+    const eventsA: eventWithTime[] = [];
+    stop = record({
+      emit: (event) => {
+        eventsA.push(event as eventWithTime);
+      },
+      fullSnapshotYieldBudgetMs: 1,
+    });
+    await vi.waitFor(
+      () => {
+        expect(eventsA.some((e) => e.type === EventType.FullSnapshot)).toBe(
+          true,
+        );
+      },
+      { timeout: 10_000 },
+    );
+    await settle();
+
+    // the posthog-js rotation shape: stop() then record() on the same page.
+    // The new session's first walk used to start with an empty registry and
+    // no listener on the existing shadow root until the walker reached it.
+    stop?.();
+    const eventsB: eventWithTime[] = [];
+    stop = record({
+      emit: (event) => {
+        eventsB.push(event as eventWithTime);
+      },
+      fullSnapshotYieldBudgetMs: 1,
+    });
+    // dispatched while session B's first walk is in flight
+    expect(eventsB.some((e) => e.type === EventType.FullSnapshot)).toBe(false);
+    inner.dispatchEvent(new Event('scroll', { bubbles: true }));
+
+    await vi.waitFor(
+      () => {
+        expect(eventsB.some((e) => e.type === EventType.FullSnapshot)).toBe(
+          true,
+        );
+      },
+      { timeout: 10_000 },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    const innerId = record.mirror.getId(inner);
+    const scrolls = eventsB.filter(
+      (e) =>
+        e.type === EventType.IncrementalSnapshot &&
+        (e as { data: { source: IncrementalSource } }).data.source ===
+          IncrementalSource.Scroll &&
+        (e as unknown as { data: { id: number } }).data.id === innerId,
+    );
+    expect(scrolls.length).toBeGreaterThan(0);
+  }, 30_000);
+
+  it('drainPendingSnapshotForUnload finishes an in-flight walk synchronously', async () => {
+    fillBody();
+    const events: eventWithTime[] = [];
+    stop = record({
+      emit: (event) => {
+        events.push(event as eventWithTime);
+      },
+      fullSnapshotYieldBudgetMs: 1,
+    });
+
+    expect(events.some((e) => e.type === EventType.FullSnapshot)).toBe(false);
+    // what the SDK's pagehide handler calls before flushing its buffer —
+    // the snapshot must exist by the time this returns, no awaiting
+    record.drainPendingSnapshotForUnload();
+    expect(events.some((e) => e.type === EventType.FullSnapshot)).toBe(true);
+
+    // and it is a no-op once nothing is in flight
+    const count = events.length;
+    record.drainPendingSnapshotForUnload();
+    expect(events.length).toBe(count);
+  }, 20_000);
+
   describe('estimateRetainedSize hardening', () => {
     it('survives throwing enumerable getters and hostile proxies', () => {
       const withGetter = {};
@@ -1140,6 +1299,14 @@ describe('budgeted snapshot lifecycle hardening', () => {
       expect(
         estimateRetainedSize(new Blob([big]), 1e9),
       ).toBeGreaterThanOrEqual(big.length);
+    });
+
+    it('a spoofed toStringTag without a numeric size cannot poison the byte total', () => {
+      const fakeMap = { [Symbol.toStringTag]: 'Map', payload: 'x'.repeat(100) };
+      const bytes = estimateRetainedSize(fakeMap, 1e9);
+      expect(Number.isFinite(bytes)).toBe(true);
+      const fakeBlob = { [Symbol.toStringTag]: 'Blob' };
+      expect(Number.isFinite(estimateRetainedSize(fakeBlob, 1e9))).toBe(true);
     });
 
     it('bounds its own traversal and reports over-ceiling instead of walking forever', () => {

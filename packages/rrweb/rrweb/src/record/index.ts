@@ -99,6 +99,11 @@ try {
 }
 
 const mirror = createMirror();
+// The active recording's synchronous unload drain (budgeted mode only); the
+// SDK invokes it from its own pagehide handler via
+// record.drainPendingSnapshotForUnload so listener registration order between
+// the two never matters.
+let activeUnloadDrain: (() => void) | null = null;
 
 const BUDGETED_SNAPSHOT_DIAGNOSTIC_TAG = 'budgeted-full-snapshot';
 
@@ -228,6 +233,11 @@ interface BudgetedSnapshotTransaction {
   // How many held events a failed predecessor carried into this walk.
   carriedHeldEventCount: number;
   serializedCount: number;
+  // ids the walk actually emitted into this FullSnapshot. The flush uses it
+  // to tell a deliverable held event from a dangling one: an old claimed id
+  // whose node was removed mid-walk before the walker reached it is absent
+  // from the new snapshot, and the replayer would silently drop the event.
+  serializedIds: Set<number>;
   // Per stylesheet carrier (<style>/<link>): when its CSS was read (walk
   // sequence) and whether the output carries live CSSOM or raw author text.
   styleTargets: Map<number, { seq: number; inlined: boolean }>;
@@ -289,20 +299,22 @@ export function estimateRetainedSize(value: unknown, ceiling: number): number {
       try {
         const tag = Object.prototype.toString.call(current);
         if (ArrayBuffer.isView(current)) {
-          bytes += current.byteLength;
+          bytes += Number(current.byteLength) || 0;
         } else if (tag === '[object ArrayBuffer]') {
           // by tag, not instanceof: a buffer from an iframe realm is
           // otherwise counted as an empty object
-          bytes += (current as ArrayBuffer).byteLength;
+          bytes += Number((current as ArrayBuffer).byteLength) || 0;
         } else if (tag === '[object Blob]' || tag === '[object File]') {
-          bytes += (current as Blob).size;
+          // coerced: a payload spoofing Symbol.toStringTag has no real size,
+          // and one NaN here would disable the byte cap for the whole walk
+          bytes += Number((current as Blob).size) || 0;
         } else if (tag === '[object Map]') {
-          bytes += (current as Map<unknown, unknown>).size * 16;
+          bytes += (Number((current as Map<unknown, unknown>).size) || 0) * 16;
           for (const [k, v] of current as Map<unknown, unknown>) {
             stack.push(k, v);
           }
         } else if (tag === '[object Set]') {
-          bytes += (current as Set<unknown>).size * 8;
+          bytes += (Number((current as Set<unknown>).size) || 0) * 8;
           for (const item of current as Set<unknown>) {
             stack.push(item);
           }
@@ -335,7 +347,9 @@ export function estimateRetainedSize(value: unknown, ceiling: number): number {
       bytes += 8;
     }
   }
-  return bytes;
+  // belt-and-braces: a non-finite total would silently disable the caller's
+  // byte cap for the rest of the walk
+  return Number.isFinite(bytes) ? bytes : ceiling + 1;
 }
 
 /**
@@ -1057,6 +1071,12 @@ function record<T = eventWithTime>(
       const transaction = activeBudgetedSnapshot;
       if (transaction && !budgetedSnapshotFlushing) {
         transaction.serializedCount++;
+        {
+          const serializedMeta = mirror.getMeta(n);
+          if (serializedMeta) {
+            transaction.serializedIds.add(serializedMeta.id);
+          }
+        }
         // Track what the snapshot captured for each stylesheet carrier, so
         // the flush can tell which held CSSOM deltas the FullSnapshot already
         // contains. `_cssText` presence covers <link> and empty <style>; a
@@ -1066,6 +1086,16 @@ function record<T = eventWithTime>(
         const meta = mirror.getMeta(n);
         if (meta && meta.type === NodeType.Element) {
           const tagName = (meta as { tagName?: string }).tagName;
+          if (
+            tagName === 'canvas' &&
+            (meta as { attributes?: Record<string, unknown> }).attributes
+              ?.rr_dataURL !== undefined
+          ) {
+            // this snapshot baked the canvas's pixels; command-mode records
+            // accumulated behind the lock describe transitions those pixels
+            // already contain, and replaying them on top would double-apply
+            canvasManager.discardPendingFor(n as HTMLCanvasElement);
+          }
           if (tagName === 'link' || tagName === 'style') {
             transaction.styleTargets.set(meta.id, {
               seq: transaction.serializedCount,
@@ -1433,7 +1463,15 @@ function record<T = eventWithTime>(
       if (willRetry && abandonedHeldEvents.length > 0) {
         const unclaimed = new Set(mirror.getUnclaimedReservedIds());
         for (const held of abandonedHeldEvents) {
-          if (isMutationHeldEvent(held.event)) {
+          if (isMutationHeldEvent(held.event) && !recordCrossOriginIframes) {
+            // same-origin attach payloads: the retry walk re-serializes the
+            // iframe's content inline, so dropping these loses nothing.
+            // Under recordCrossOriginIframes they are forwarded child-frame
+            // content the retry CANNOT re-produce (nothing re-snapshots the
+            // child), so they carry like every other held event: their ids
+            // live in the remap space (never colliding with reservations),
+            // and the retry's reattach-then-flush replays them exactly as a
+            // successful walk would have.
             droppedHeldOnAbort++;
             continue;
           }
@@ -1620,6 +1658,56 @@ function record<T = eventWithTime>(
             }
           }
         };
+        // A forwarded child-frame event held after its frame's DEFERRED
+        // attach must not overtake it on the wire (the replayer drops
+        // unknown remap-space ids). Child events are recognizable by
+        // exclusion: their ids resolve in the remap space, never in the
+        // document mirror or the reservation set.
+        let attachDeferred = false;
+        const isChildFrameHeldEvent = (event: eventWithoutTime): boolean => {
+          if (!recordCrossOriginIframes) return false;
+          const e = event as {
+            type: EventType;
+            data?: { id?: unknown; isAttachIframe?: boolean };
+          };
+          if (e.type !== EventType.IncrementalSnapshot || !e.data) {
+            return false;
+          }
+          if (e.data.isAttachIframe) return false;
+          if (isMutationHeldEvent(event)) return true;
+          return (
+            typeof e.data.id === 'number' &&
+            e.data.id > 0 &&
+            mirror.getNode(e.data.id) === null &&
+            !pendingBeforeCommit.has(e.data.id)
+          );
+        };
+        // A held event can reference an id claimed by a PREVIOUS snapshot
+        // whose node was removed mid-walk before the walker reached it: it
+        // is in the recorder mirror but absent from the new FullSnapshot,
+        // so delivering it would only make the replayer drop it silently.
+        // Drop it here instead, counted. Guarded on getNode returning a
+        // node: remap-space (cross-origin) ids resolve to null and must
+        // pass through untouched.
+        const referencesDanglingId = (event: eventWithoutTime): boolean => {
+          const e = event as {
+            type: EventType;
+            data?: { id?: unknown };
+          };
+          if (e.type !== EventType.IncrementalSnapshot || !e.data) {
+            return false;
+          }
+          if (typeof e.data.id !== 'number' || e.data.id <= 0) return false;
+          const id = e.data.id;
+          if (
+            transaction.serializedIds.has(id) ||
+            pendingBeforeCommit.has(id)
+          ) {
+            return false;
+          }
+          const node = mirror.getNode(id);
+          return node !== null && !node.isConnected;
+        };
         for (const held of queuedEvents) {
           if (heldCssomDeltaCoveredBySnapshot(transaction, held)) {
             continue;
@@ -1637,7 +1725,22 @@ function record<T = eventWithTime>(
           }
           if (scrubUnclaimedIds(held.event, pendingBeforeCommit) !== held.event) {
             // references a node only the commit's add will introduce
+            if (
+              (held.event as { data?: { isAttachIframe?: boolean } }).data
+                ?.isAttachIframe
+            ) {
+              attachDeferred = true;
+            }
             deferred.push(held);
+            continue;
+          }
+          if (attachDeferred && isChildFrameHeldEvent(held.event)) {
+            // transitively deferred behind its (possibly its) frame's attach
+            deferred.push(held);
+            continue;
+          }
+          if (referencesDanglingId(held.event)) {
+            droppedHeldEvents++;
             continue;
           }
           emitHeld(held.event, held.isCheckout, true);
@@ -1897,11 +2000,24 @@ function record<T = eventWithTime>(
       heldEventHighWater: carriedHeldEvents.length,
       carriedHeldEventCount: carriedHeldEvents.length,
       serializedCount: 0,
+      serializedIds: new Set(),
       styleTargets: new Map(),
       overflow: null,
       droppedAfterAbort: 0,
       draining: false,
     };
+    // Carried events keep their observation timestamps, but the retry's
+    // FullSnapshot is stamped at ITS walk start — later than every carried
+    // event. The replayer sorts by timestamp, so an earlier-stamped event
+    // would sort ahead of the snapshot that introduces its target ids and be
+    // dropped as unknown. Clamp to the snapshot's timestamp: deliverability
+    // over exact observation timing, and the wire stays monotonic.
+    for (const held of carriedHeldEvents) {
+      const e = held.event as { timestamp?: number };
+      if (typeof e.timestamp === 'number' && e.timestamp < transaction.startedAt) {
+        e.timestamp = transaction.startedAt;
+      }
+    }
     // Meta is emitted before any transaction state is committed: the
     // consumer's emit is outside our control, and a throw from it must leave
     // the recorder able to snapshot again — not latched in-flight with no
@@ -2260,6 +2376,9 @@ function record<T = eventWithTime>(
         return;
       }
       didStopRecording = true;
+      if (activeUnloadDrain === completeWalkBeforePageHides) {
+        activeUnloadDrain = null;
+      }
       // Invalidate any time-sliced full snapshot still in flight before we tear
       // the managers down, so its continuation can't emit a FullSnapshot for a
       // recording that no longer exists, unlock buffers, or schedule a
@@ -2310,6 +2429,12 @@ function record<T = eventWithTime>(
       const node = transaction.controller.flushSync();
       completeBudgetedWalk(transaction, node);
     };
+    // Exposed so the SDK's own pagehide handler can force the drain before
+    // flushing its send buffer, instead of assuming its listener registered
+    // after this recorder's (false when record() starts before
+    // DOMContentLoaded: init() — and its pagehide registration — then runs
+    // from the load listener, after the SDK's registration).
+    activeUnloadDrain = completeWalkBeforePageHides;
 
     const init = () => {
       const generation = recordingGeneration;
@@ -2406,5 +2531,13 @@ record.takeFullSnapshot = (isCheckout?: boolean) => {
 };
 
 record.mirror = mirror;
+
+// For the embedding SDK's unload path: synchronously finish (or fall back
+// for) any in-flight time-sliced full snapshot so the events exist before
+// the SDK flushes its buffer. No-op when nothing is in flight or the
+// recording is synchronous.
+record.drainPendingSnapshotForUnload = () => {
+  activeUnloadDrain?.();
+};
 
 export default record;
