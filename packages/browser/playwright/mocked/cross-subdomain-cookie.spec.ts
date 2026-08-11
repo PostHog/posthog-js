@@ -49,11 +49,13 @@ async function captureDistinctId(page: Page, event: string): Promise<string | un
         | undefined
 }
 
-test('already-open sibling subdomains adopt identify and reset cookie changes', async ({ page, context }) => {
+test.beforeEach(async ({ context }) => {
     await context.route('**/playground/cypress/index.html', (route) =>
         route.fulfill({ path: './playground/cypress/index.html' })
     )
+})
 
+test('already-open sibling subdomains adopt identify and reset cookie changes', async ({ page, context }) => {
     await startOnSubdomain(page, context, 'a')
     const firstAnonymousId = await distinctId(page)
     expect(firstAnonymousId).toBeTruthy()
@@ -70,4 +72,20 @@ test('already-open sibling subdomains adopt identify and reset cookie changes', 
     expect(resetAnonymousId).toBeTruthy()
     expect(resetAnonymousId).not.toBe('identified-user')
     expect(await captureDistinctId(page, 'after-sibling-reset')).toBe(resetAnonymousId)
+})
+
+test('a persistence-disabled subdomain does not adopt a sibling identity', async ({ page, context }) => {
+    await startOnSubdomain(page, context, 'a')
+    const firstAnonymousId = await distinctId(page)
+    expect(firstAnonymousId).toBeTruthy()
+
+    const sibling = await context.newPage()
+    await startOnSubdomain(sibling, context, 'b')
+    expect(await distinctId(sibling)).toBe(firstAnonymousId)
+
+    await page.evaluate(() => (window as WindowWithPostHog).posthog?.set_config({ disable_persistence: true }))
+    await sibling.evaluate(() => (window as WindowWithPostHog).posthog?.identify('identified-user'))
+
+    expect(await captureDistinctId(page, 'after-disabled-sibling-identify')).toBe(firstAnonymousId)
+    expect(await distinctId(page)).toBe(firstAnonymousId)
 })

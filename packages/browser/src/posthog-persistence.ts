@@ -194,7 +194,11 @@ export class PostHogPersistence {
      * non-empty cookie snapshot was observed.
      */
     syncCookieProperties(): boolean {
-        if (!this._config.cookieWinsOnConflict || this._config.persistence.toLowerCase() !== 'localstorage+cookie') {
+        if (
+            this._disabled ||
+            !this._config.cookieWinsOnConflict ||
+            this._config.persistence.toLowerCase() !== 'localstorage+cookie'
+        ) {
             return false
         }
 
@@ -867,14 +871,18 @@ export class PostHogPersistence {
             !isArrayContentsEqual(config.cookie_persisted_properties || [], oldConfig.cookie_persisted_properties || [])
         const cookiePrecedenceChanged = config.cookieWinsOnConflict !== oldConfig.cookieWinsOnConflict
 
+        const disabled = config['disable_persistence'] || !!isDisabled
         this._config = config
         // Adopt the shared cookie before any config setter or storage migration
         // can clear it. This also covers enabling precedence in the same
-        // set_config call that changes cookie or split-storage routing.
-        this.syncCookieProperties()
+        // set_config call that changes cookie or split-storage routing. Never
+        // read persistent identity when the new configuration disables persistence.
+        if (!disabled) {
+            this.syncCookieProperties()
+        }
 
         this._default_expiry = this._expire_days = config['cookie_expiration']
-        this.set_disabled(config['disable_persistence'] || !!isDisabled)
+        this.set_disabled(disabled)
         this.set_cross_subdomain(config['cross_subdomain_cookie'])
         this.set_secure(config['secure_cookie'])
 

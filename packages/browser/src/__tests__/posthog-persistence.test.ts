@@ -1013,6 +1013,18 @@ describe('persistence', () => {
                 expect(lib.props.distinct_id).toBe('anonymous')
             })
 
+            it('flag on: a disabled live tab does not adopt a sibling cookie', () => {
+                document.cookie = encodeCookie({ distinct_id: 'anonymous' })
+                localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'anonymous' }))
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+                lib.set_disabled(true)
+
+                document.cookie = encodeCookie({ distinct_id: 'identified-user' })
+
+                expect(lib.syncCookieProperties()).toBe(false)
+                expect(lib.props.distinct_id).toBe('anonymous')
+            })
+
             it('enabling cookie precedence through update_config adopts the shared cookie without clearing it', () => {
                 document.cookie = encodeCookie({ distinct_id: 'anonymous' })
                 localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'anonymous' }))
