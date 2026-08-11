@@ -473,6 +473,10 @@ export function buildNodeWithSN(
     const meta = mirror.getMeta(nodeInMirror)!;
     // For safety concern, check if the node in mirror is the same as the node we are trying to build
     if (isNodeMetaEqual(meta, n)) return mirror.getNode(n.id);
+    // The meta differs, so we build a replacement below and re-point the id at
+    // it. Detach the old node first, otherwise it stays in the document with no
+    // mirror id, which no later remove can reach, and renders as a duplicate.
+    nodeInMirror.parentNode?.removeChild(nodeInMirror);
   }
   let node = buildNode(n, { doc, hackCss, cache });
   if (!node) {

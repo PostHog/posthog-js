@@ -106,6 +106,77 @@ describe('rebuild', function () {
     });
   });
 
+  describe('re-add of an existing node id', function () {
+    it('detaches the old node when the meta changed, so it does not duplicate', function () {
+      const parent = buildNodeWithSN(
+        {
+          id: 1,
+          tagName: 'div',
+          type: NodeType.Element,
+          attributes: {},
+          childNodes: [
+            {
+              id: 2,
+              tagName: 'span',
+              type: NodeType.Element,
+              attributes: { class: 'a' },
+              childNodes: [],
+            },
+          ],
+        },
+        { doc: document, mirror, hackCss: false, cache },
+      ) as HTMLDivElement;
+
+      const oldChild = mirror.getNode(2);
+      expect(parent.childNodes.length).toBe(1);
+
+      // re-add id 2 with changed attributes (the meta differs)
+      const newChild = buildNodeWithSN(
+        {
+          id: 2,
+          tagName: 'span',
+          type: NodeType.Element,
+          attributes: { class: 'b' },
+          childNodes: [],
+        },
+        { doc: document, mirror, hackCss: false, cache },
+      );
+
+      // the mirror now points id 2 at the replacement
+      expect(mirror.getNode(2)).toBe(newChild);
+      expect(newChild).not.toBe(oldChild);
+      // the stale node no longer sits in the parent as a duplicate
+      expect(parent.childNodes.length).toBe(0);
+      expect(oldChild?.parentNode).toBe(null);
+    });
+
+    it('reuses the existing node when the meta is unchanged', function () {
+      buildNodeWithSN(
+        {
+          id: 3,
+          tagName: 'p',
+          type: NodeType.Element,
+          attributes: { class: 'a' },
+          childNodes: [],
+        },
+        { doc: document, mirror, hackCss: false, cache },
+      );
+      const first = mirror.getNode(3);
+
+      const second = buildNodeWithSN(
+        {
+          id: 3,
+          tagName: 'p',
+          type: NodeType.Element,
+          attributes: { class: 'a' },
+          childNodes: [],
+        },
+        { doc: document, mirror, hackCss: false, cache },
+      );
+      expect(second).toBe(first);
+    });
+  });
+
   describe('rr_left/rr_top (CSS transform fix)', function () {
     it('rebuild blocked element with position for CSS transforms', function () {
       const node = buildNodeWithSN(

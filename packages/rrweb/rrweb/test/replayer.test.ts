@@ -35,6 +35,7 @@ import documentReplacementEvents from './events/document-replacement';
 import hoverInIframeShadowDom from './events/iframe-shadowdom-hover';
 import customElementDefineClass from './events/custom-element-define-class';
 import svgXlinkHrefEvents from './events/svg-xlink-href';
+import readdNodeSubtreeSwapEvents from './events/readd-node-subtree-swap';
 import {
   EventType,
   IncrementalSource,
@@ -215,6 +216,29 @@ describe('replayer', function () {
       snapshotFrameSize: { width: '1000', height: '800' },
     });
   });
+
+  for (const useVirtualDom of [true, false]) {
+    it(`replaces a re-added node instead of duplicating it (virtual dom: ${useVirtualDom})`, async () => {
+      await page.evaluate(
+        `events = ${JSON.stringify(readdNodeSubtreeSwapEvents)}`,
+      );
+      const result = await page.evaluate(`
+        const { Replayer } = rrweb;
+        const replayer = new Replayer(events, { useVirtualDom: ${useVirtualDom} });
+        replayer.pause(600);
+        const container = replayer.iframe.contentDocument.getElementById('container');
+        ({
+          childElementCount: container.childElementCount,
+          childClasses: [...container.children].map((c) => c.className),
+        });
+      `);
+
+      expect(result).toEqual({
+        childElementCount: 1,
+        childClasses: ['b'],
+      });
+    });
+  }
 
   it('can fast forward past StyleSheetRule changes on virtual elements', async () => {
     await page.evaluate(`events = ${JSON.stringify(styleSheetRuleEvents)}`);
