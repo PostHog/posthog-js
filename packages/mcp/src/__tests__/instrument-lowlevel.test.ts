@@ -519,6 +519,58 @@ describe('Low-level Server tracing (e2e)', () => {
     }
   )
 
+  /**
+   * A composed schema (`oneOf`/`allOf`/`anyOf`/`$ref`) has no single `properties` bag
+   * to add to, so `conversation_id` is never injected into one — and because minting
+   * is gated on that same ownership answer, no handle is minted, stated, or reported
+   * for such a tool either. This is what keeps the content block's claim ("tools that
+   * declare an optional conversation_id parameter accept this value") true: we never
+   * hand the agent a handle for a tool that would reject it. See ADR-0010.
+   */
+  it('mints and states no handle for a tool whose schema cannot accept one', async () => {
+    const server = new Server({ name: 'composed only', version: '1.0.0' }, { capabilities: { tools: {} } })
+    server.setRequestHandler(ListToolsRequestSchema, async () => ({
+      tools: [
+        {
+          name: 'composed',
+          description: 'Every schema here is composed, so nothing is injectable',
+          inputSchema: {
+            type: 'object' as const,
+            oneOf: [{ properties: { a: { type: 'string' } } }, { properties: { b: { type: 'string' } } }],
+          },
+        },
+      ],
+    }))
+    server.setRequestHandler(CallToolRequestSchema, async () => ({
+      content: [{ type: 'text' as const, text: 'ok' }],
+    }))
+
+    const client = new Client({ name: 'test client', version: '1.0' }, { capabilities: {} })
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    try {
+      instrument(server, fakePostHog(), { context: false, enableConversationId: true })
+      await Promise.all([client.connect(clientTransport), server.connect(serverTransport)])
+
+      const { tools } = await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+      expect((tools[0].inputSchema as { properties?: unknown }).properties).toBeUndefined()
+
+      const result = await client.request(
+        { method: 'tools/call', params: { name: 'composed', arguments: {} } },
+        CallToolResultSchema
+      )
+
+      expect((result.content as { text?: string }[]).some((c) => c.text?.includes('conversation_id='))).toBe(false)
+
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const events = eventCapture.getEvents().filter((event) => event.resourceName === 'composed')
+      expect(events).toHaveLength(1)
+      expect(events[0].conversationId).toBeUndefined()
+    } finally {
+      await clientTransport.close?.()
+      await serverTransport.close?.()
+    }
+  })
+
   it('strips and captures analytics-owned reserved arguments on the low-level path', async () => {
     const { server, client, receivedCalls, connect, cleanup } = await setupLowLevelServer()
     try {

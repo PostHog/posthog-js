@@ -2,13 +2,14 @@ import { DEFAULT_CONVERSATION_ID_DESCRIPTION } from '../extensions/constants'
 import {
   addConversationIdToTool,
   addConversationIdToTools,
-  buildConversationIdPromptBack,
+  buildConversationIdContentBlock,
   CONVERSATION_ID_PARAM_NAME,
   extractConversationId,
-  injectConversationIdPromptBack,
+  appendConversationIdToContent,
   resolveConversationId,
   stripConversationId,
 } from '../extensions/conversation-id'
+import { addConversationStateToOutputSchema } from '../extensions/conversation-state'
 
 /**
  * Handles shaped like ones we would have minted — `resolveConversationId` only
@@ -167,7 +168,7 @@ describe('conversation-id', () => {
   })
 
   describe('resolveConversationId', () => {
-    const resolve = (args: unknown) => resolveConversationId(true, args, 'a_tool')
+    const resolve = (args: unknown) => resolveConversationId(true, args)
 
     it('echoes a handle shaped like one we minted', () => {
       expect(resolve({ conversation_id: AGENT_ECHOED })).toEqual({
@@ -211,7 +212,7 @@ describe('conversation-id', () => {
     })
 
     it('returns nothing when the feature is off', () => {
-      expect(resolveConversationId(false, { conversation_id: AGENT_ECHOED }, 'a_tool')).toEqual({
+      expect(resolveConversationId(false, { conversation_id: AGENT_ECHOED })).toEqual({
         minted: false,
         conversationId: undefined,
       })
@@ -233,9 +234,9 @@ describe('conversation-id', () => {
     })
   })
 
-  describe('injectConversationIdPromptBack', () => {
-    it('appends the prompt-back content block on a successful result', () => {
-      const result = injectConversationIdPromptBack({ content: [{ type: 'text', text: 'hello' }] }, 'conv-123')
+  describe('appendConversationIdToContent', () => {
+    it('appends the handle content block on a successful result', () => {
+      const result = appendConversationIdToContent({ content: [{ type: 'text', text: 'hello' }] }, 'conv-123')
       const { content } = result as {
         content: Array<{ type: string; text: string }>
       }
@@ -249,32 +250,95 @@ describe('conversation-id', () => {
         isError: true,
         content: [{ type: 'text', text: 'oops' }],
       }
-      const result = injectConversationIdPromptBack(original, 'conv-123') as { content: { text: string }[] }
+      const result = appendConversationIdToContent(original, 'conv-123') as { content: { text: string }[] }
       expect(result.content).toHaveLength(2)
       expect(result.content[1].text).toContain('conv-123')
     })
 
     it('does not inject when content is missing or not an array', () => {
-      expect(injectConversationIdPromptBack({}, 'conv-123')).toEqual({})
-      expect(injectConversationIdPromptBack({ content: 'not-an-array' }, 'conv-123')).toEqual({
+      expect(appendConversationIdToContent({}, 'conv-123')).toEqual({})
+      expect(appendConversationIdToContent({ content: 'not-an-array' }, 'conv-123')).toEqual({
         content: 'not-an-array',
       })
     })
 
     it('does not inject on non-object results', () => {
-      expect(injectConversationIdPromptBack(null, 'conv-123')).toBeNull()
-      expect(injectConversationIdPromptBack('string', 'conv-123')).toBe('string')
+      expect(appendConversationIdToContent(null, 'conv-123')).toBeNull()
+      expect(appendConversationIdToContent('string', 'conv-123')).toBe('string')
     })
   })
 
-  describe('buildConversationIdPromptBack', () => {
+  describe('buildConversationIdContentBlock', () => {
     it('references the conversation_id argument name', () => {
-      const block = buildConversationIdPromptBack('xyz')
+      const block = buildConversationIdContentBlock('xyz')
       expect(block.text).toContain(CONVERSATION_ID_PARAM_NAME)
       expect(block.text).toContain('xyz')
     })
   })
+
+  /**
+   * Two ways to lose, pulling opposite directions. Both have happened, so both get a
+   * guard. See ADR-0010.
+   *
+   * Overreach: a tool result is untrusted input, and a client that refuses
+   * instructions found in one is behaving correctly. Every phrase banned below
+   * shipped at some point — `[SERVER]:` impersonating a privileged speaker, `Reuse`
+   * and `Read and follow` commanding the agent, `Required` claiming a necessity that
+   * was untrue, `every subsequent` promising something composed schemas cannot
+   * honour, `do not issue parallel tool calls` dictating execution strategy, and
+   * `never invent one` prohibiting rather than stating the consequence.
+   *
+   * Note this bans *those* phrasings, not the imperative mood as such: a schema
+   * description saying "pass that same value here" is ordinary API documentation,
+   * because the client fetched it at `tools/list` as part of the tool contract.
+   *
+   * Underreach: "analytics"/"telemetry"/a vendor name are true of what PostHog does
+   * with the handle and useless to the agent, which would reasonably conclude the
+   * value is safe to drop — trading a visible refusal for silent non-compliance,
+   * which is worse because it looks like it works.
+   */
+  describe('agent-facing strings', () => {
+    const OVERREACH =
+      /\byou must\b|\bReuse\b|\bRequired\b|Read and follow|every subsequent|\[SERVER\]|do not issue|never invent/i
+    const DISCOUNTABLE = /analytics|telemetry|tracking|metadata|posthog/i
+
+    const AGENT_FACING: Array<[string, string]> = [
+      ['content block', buildConversationIdContentBlock('019fd2b0-3333-7333-8333-333333333333').text],
+      ['conversation_id parameter description', DEFAULT_CONVERSATION_ID_DESCRIPTION],
+      ...collectDescriptions(
+        'output schema',
+        addConversationStateToOutputSchema({
+          name: 'tool',
+          outputSchema: { type: 'object', properties: {} },
+        }).outputSchema
+      ),
+    ]
+
+    it.each(AGENT_FACING)('%s issues no instruction', (_label, text) => {
+      expect(text).not.toMatch(OVERREACH)
+    })
+
+    it.each(AGENT_FACING)('%s does not invite the agent to discount it', (_label, text) => {
+      expect(text).not.toMatch(DISCOUNTABLE)
+    })
+  })
 })
+
+/** Every `description` anywhere in a JSON Schema, flattened for assertion. */
+function collectDescriptions(label: string, schema: unknown): Array<[string, string]> {
+  if (!schema || typeof schema !== 'object') {
+    return []
+  }
+  const found: Array<[string, string]> = []
+  for (const [key, value] of Object.entries(schema as Record<string, unknown>)) {
+    if (key === 'description' && typeof value === 'string') {
+      found.push([label, value])
+    } else if (value && typeof value === 'object') {
+      found.push(...collectDescriptions(`${label}.${key}`, value))
+    }
+  }
+  return found
+}
 import { CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { instrument } from '../index'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
@@ -328,6 +392,33 @@ describe('conversation_id tool parameter', () => {
         expect(schema.properties.conversation_id).toBeUndefined()
       }
     })
+
+    // The object form means enabled, matching `context`. But `context` defaults *on*
+    // and this defaults *off*, so the predicate cannot be `context`'s `!== false` —
+    // that would silently turn the feature on for every server that never named it.
+    it('treats the object form as enabled and honours a description override', async () => {
+      instrument(server, fakePostHog(), { enableConversationId: { description: 'Custom handle docs.' } })
+
+      const result = await client.request({ method: 'tools/list' }, ListToolsResultSchema)
+
+      for (const tool of result.tools) {
+        const schema = tool.inputSchema as {
+          properties: Record<string, { description: string }>
+        }
+        expect(schema.properties.conversation_id.description).toBe('Custom handle docs.')
+      }
+    })
+
+    it('leaves the parameter injected when only the text block is turned off', async () => {
+      instrument(server, fakePostHog(), { enableConversationId: { resultText: false } })
+
+      const result = await client.request({ method: 'tools/list' }, ListToolsResultSchema)
+
+      for (const tool of result.tools) {
+        const schema = tool.inputSchema as { properties: Record<string, unknown> }
+        expect(schema.properties.conversation_id).toBeDefined()
+      }
+    })
   })
 
   describe('tools/call conversation_id propagation', () => {
@@ -354,7 +445,7 @@ describe('conversation_id tool parameter', () => {
       await capture.stop()
     })
 
-    it('mints a conversation_id and appends a prompt-back text block when the agent omits it', async () => {
+    it('mints a conversation_id and appends a handle text block when the agent omits it', async () => {
       instrument(server, fakePostHog(), { enableConversationId: true })
 
       const result = await client.request(
@@ -368,10 +459,33 @@ describe('conversation_id tool parameter', () => {
         CallToolResultSchema
       )
 
-      const promptBack = result.content.find(
+      const handleBlock = result.content.find(
         (c) => c.type === 'text' && typeof c.text === 'string' && c.text.includes('conversation_id=')
       )
-      expect(promptBack).toBeDefined()
+      expect(handleBlock).toBeDefined()
+    })
+
+    it('appends nothing to content when resultText is off', async () => {
+      const capture = new EventCapture()
+      await capture.start()
+      instrument(server, fakePostHog(), { enableConversationId: { resultText: false } })
+
+      const result = await client.request(
+        {
+          method: 'tools/call',
+          params: { name: 'add_todo', arguments: { text: 'first' } },
+        },
+        CallToolResultSchema
+      )
+
+      expect(result.content.some((c) => c.type === 'text' && String(c.text).includes('conversation_id='))).toBe(false)
+
+      // The handle was minted but no channel carried it, so it must not be reported
+      // as a session the agent holds.
+      await new Promise((r) => setTimeout(r, 50))
+      const toolCall = capture.getEvents().find((e) => e.resourceName === 'add_todo')
+      expect(toolCall?.conversationId).toBeUndefined()
+      await capture.stop()
     })
 
     it('sets event.conversationId on the captured event when minted', async () => {

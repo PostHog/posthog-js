@@ -17,6 +17,7 @@ import {
   stripOwnedAnalyticsArguments,
 } from './analytics-parameters'
 import { isContextEnabled } from './context-parameters'
+import { isConversationIdEnabled } from './conversation-id'
 import { MCPAnalyticsEventType } from './event-types'
 import { getServerTrackingData } from './internal'
 import type { LoggerFn } from './logger'
@@ -188,7 +189,9 @@ function addTracingToToolCallbackInternal(
     const inputSchema = getCurrentInputSchema()
     const cleanedArgs = stripOwnedAnalyticsArguments(args, {
       context: isContextEnabled(options?.context) && analyticsOwnsParameter(inputSchema, 'context'),
-      conversationId: options?.enableConversationId === true && analyticsOwnsParameter(inputSchema, 'conversation_id'),
+      conversationId:
+        isConversationIdEnabled(options?.enableConversationId) &&
+        analyticsOwnsParameter(inputSchema, 'conversation_id'),
     })
     try {
       if (cleanedArgs === undefined) {

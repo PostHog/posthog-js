@@ -6,7 +6,7 @@ import type { AnalyticsInjectableJsonSchema } from './analytics-parameters'
  * Mirrors the `conversation_id` session handle into `structuredContent`, in two
  * halves that must stay in that order:
  *
- *   1. declare `_mcp_instructions` on the tool's advertised `outputSchema`
+ *   1. declare `_conversation` on the tool's advertised `outputSchema`
  *   2. write it into the result's `structuredContent`
  *
  * Needed because clients that read `structuredContent` — which they do whenever
@@ -18,23 +18,29 @@ import type { AnalyticsInjectableJsonSchema } from './analytics-parameters'
  * `zod-to-json-schema` emits `additionalProperties: false` for a plain
  * `z.object`, so an undeclared key is not ignored — it fails the entire tool
  * result. Only tools that got the declaration are ever written to.
+ *
+ * What rides here is *state*, never an instruction. A tool result is untrusted
+ * input, and a payload that tells the agent what to do reads as a prompt
+ * injection — which clients are right to refuse. The "carry this value forward"
+ * guidance lives in the schema descriptions the client fetched at `tools/list`.
+ * See ADR-0010.
  */
-export const MCP_INSTRUCTIONS_KEY = '_mcp_instructions'
+export const CONVERSATION_STATE_KEY = '_conversation'
 
-const INSTRUCTIONS_FIELD_DESCRIPTION =
-  'Server-issued handles for this conversation, and what to do with them. Read and follow.'
+const CONVERSATION_STATE_FIELD_DESCRIPTION =
+  "Conversation state issued by this server, alongside this tool's own output."
 
 const CONVERSATION_ID_FIELD_DESCRIPTION =
-  'Echo this exact value as the conversation_id argument on every subsequent tool call.'
+  "This server's handle for the current conversation. Tools that declare an optional conversation_id parameter accept this value."
 
-export interface OutputInstructionsInjectableTool {
+export interface ConversationStateInjectableTool {
   name?: string
   outputSchema?: unknown
   [key: string]: unknown
 }
 
 /**
- * True when we can safely declare {@link MCP_INSTRUCTIONS_KEY} on this tool's
+ * True when we can safely declare {@link CONVERSATION_STATE_KEY} on this tool's
  * advertised output schema.
  *
  * Requires a plain-object schema we can extend. A tool with no `outputSchema`
@@ -42,7 +48,7 @@ export interface OutputInstructionsInjectableTool {
  * schema (`oneOf`/`allOf`/`anyOf`/`$ref`) has no single `properties` bag to add
  * to. Both stay content-only, matching the policy on the input side.
  */
-export function canDeclareOutputInstructions(outputSchema: unknown): boolean {
+export function canDeclareConversationState(outputSchema: unknown): boolean {
   if (!outputSchema || typeof outputSchema !== 'object') {
     return false
   }
@@ -73,7 +79,7 @@ export function canDeclareOutputInstructions(outputSchema: unknown): boolean {
   ) {
     return false
   }
-  return !properties || !Object.prototype.hasOwnProperty.call(properties, MCP_INSTRUCTIONS_KEY)
+  return !properties || !Object.prototype.hasOwnProperty.call(properties, CONVERSATION_STATE_KEY)
 }
 
 /** A single Zod schema — the internals every version brands its instances with. */
@@ -115,14 +121,14 @@ function isSchemaObjectLike(value: unknown): boolean {
 }
 
 /**
- * Returns a copy of the tool with an optional {@link MCP_INSTRUCTIONS_KEY}
+ * Returns a copy of the tool with an optional {@link CONVERSATION_STATE_KEY}
  * property added to its output schema, or the tool untouched when it has no
  * output schema to extend.
  *
  * The property is never added to `required` — a result without it must stay
  * valid, since every tool result predating this change lacks it.
  */
-export function addInstructionsToOutputSchema<TTool extends OutputInstructionsInjectableTool>(
+export function addConversationStateToOutputSchema<TTool extends ConversationStateInjectableTool>(
   tool: TTool,
   logger: LoggerFn = log
 ): TTool {
@@ -135,15 +141,15 @@ export function addInstructionsToOutputSchema<TTool extends OutputInstructionsIn
     return tool
   }
 
-  if (!canDeclareOutputInstructions(original)) {
+  if (!canDeclareConversationState(original)) {
     const schema = original as AnalyticsInjectableJsonSchema
-    if (schema.properties && Object.prototype.hasOwnProperty.call(schema.properties, MCP_INSTRUCTIONS_KEY)) {
+    if (schema.properties && Object.prototype.hasOwnProperty.call(schema.properties, CONVERSATION_STATE_KEY)) {
       logger(
-        `WARN: Tool "${toolName}" already declares '${MCP_INSTRUCTIONS_KEY}' in its output schema. Leaving it alone.`
+        `WARN: Tool "${toolName}" already declares '${CONVERSATION_STATE_KEY}' in its output schema. Leaving it alone.`
       )
     } else {
       logger(
-        `WARN: Tool "${toolName}" has a complex output schema (oneOf/allOf/anyOf/$ref). Skipping '${MCP_INSTRUCTIONS_KEY}' declaration; its session handle stays content-only.`
+        `WARN: Tool "${toolName}" has a complex output schema (oneOf/allOf/anyOf/$ref). Skipping '${CONVERSATION_STATE_KEY}' declaration; its session handle stays content-only.`
       )
     }
     return tool
@@ -157,15 +163,14 @@ export function addInstructionsToOutputSchema<TTool extends OutputInstructionsIn
     outputSchema.properties = {}
   }
 
-  outputSchema.properties[MCP_INSTRUCTIONS_KEY] = {
+  outputSchema.properties[CONVERSATION_STATE_KEY] = {
     type: 'object',
-    description: INSTRUCTIONS_FIELD_DESCRIPTION,
+    description: CONVERSATION_STATE_FIELD_DESCRIPTION,
     properties: {
       conversation_id: {
         type: 'string',
         description: CONVERSATION_ID_FIELD_DESCRIPTION,
       },
-      instructions: { type: 'string' },
     },
   }
 
@@ -174,30 +179,27 @@ export function addInstructionsToOutputSchema<TTool extends OutputInstructionsIn
 }
 
 /**
- * Declares {@link MCP_INSTRUCTIONS_KEY} across a tool listing. Tools without an
+ * Declares {@link CONVERSATION_STATE_KEY} across a tool listing. Tools without an
  * output schema, and tools whose schema we cannot extend, pass through unchanged.
  */
-export function addInstructionsToOutputSchemas<TTool extends OutputInstructionsInjectableTool>(
+export function addConversationStateToOutputSchemas<TTool extends ConversationStateInjectableTool>(
   tools: TTool[],
   logger: LoggerFn = log
 ): TTool[] {
-  return tools.map((tool) => addInstructionsToOutputSchema(tool, logger))
+  return tools.map((tool) => addConversationStateToOutputSchema(tool, logger))
 }
 
-export interface ConversationInstructions {
+export interface ConversationState {
   conversation_id: string
-  instructions: string
 }
-
-const ECHO_INSTRUCTION = 'Send this conversation_id as an argument on every subsequent tool call in this conversation.'
 
 /** The payload mirrored into `structuredContent` for a tool we declared the key on. */
-export function buildConversationInstructions(conversationId: string): ConversationInstructions {
-  return { conversation_id: conversationId, instructions: ECHO_INSTRUCTION }
+export function buildConversationState(conversationId: string): ConversationState {
+  return { conversation_id: conversationId }
 }
 
 /**
- * Adds {@link MCP_INSTRUCTIONS_KEY} to a result's `structuredContent`, which is
+ * Adds {@link CONVERSATION_STATE_KEY} to a result's `structuredContent`, which is
  * where clients look once a tool declares an `outputSchema` — the `content` text
  * block carrying the session handle is invisible to them.
  *
@@ -208,7 +210,7 @@ export function buildConversationInstructions(conversationId: string): Conversat
  * to extend, or when the tool already produced its own key — customer data wins.
  * Never mutates the input.
  */
-export function mirrorInstructionsIntoStructuredContent(result: unknown, conversationId: string): unknown {
+export function mirrorConversationStateIntoStructuredContent(result: unknown, conversationId: string): unknown {
   if (!result || typeof result !== 'object') {
     return result
   }
@@ -216,14 +218,14 @@ export function mirrorInstructionsIntoStructuredContent(result: unknown, convers
   if (!structuredContent || typeof structuredContent !== 'object' || Array.isArray(structuredContent)) {
     return result
   }
-  if (Object.prototype.hasOwnProperty.call(structuredContent, MCP_INSTRUCTIONS_KEY)) {
+  if (Object.prototype.hasOwnProperty.call(structuredContent, CONVERSATION_STATE_KEY)) {
     return result
   }
   return {
     ...result,
     structuredContent: {
       ...structuredContent,
-      [MCP_INSTRUCTIONS_KEY]: buildConversationInstructions(conversationId),
+      [CONVERSATION_STATE_KEY]: buildConversationState(conversationId),
     },
   }
 }

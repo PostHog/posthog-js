@@ -19,13 +19,16 @@ import { addContextParameterToTools, getContextDescription, isContextEnabled } f
 import {
   addConversationIdToTools,
   type ConversationIdResolution,
-  canInjectConversationIdPromptBack,
-  injectConversationIdPromptBack,
+  appendConversationIdToContent,
+  canAppendConversationIdToContent,
+  getConversationIdDescription,
+  isConversationIdEnabled,
+  isConversationIdResultTextEnabled,
   resolveConversationId,
 } from './conversation-id'
 import { stampClientIdentity } from './client-identity'
 import { stampTransportIdentity } from './transport-identity'
-import { addInstructionsToOutputSchemas, mirrorInstructionsIntoStructuredContent } from './output-instructions'
+import { addConversationStateToOutputSchemas, mirrorConversationStateIntoStructuredContent } from './conversation-state'
 import { captureEvent } from './capture'
 import { MCPAnalyticsEventType } from './event-types'
 import { captureException } from './exceptions'
@@ -138,7 +141,7 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     throw error
   }
 
-  const finalResult = applyConversationInstructions(preparedEvent?.event ?? null, result, conversation, ownership)
+  const finalResult = applyConversationState(preparedEvent?.event ?? null, result, conversation, ownership, data)
   // `result`, not `finalResult`: the error is read from what the tool produced,
   // before the conversation handle was written into it. See below.
   publishSuccessfulToolEvent(server, preparedEvent, finalResult, startTime, data.logger, takeCapturedError, result)
@@ -160,15 +163,15 @@ function getActiveAnalyticsParameterOwnership(
   const ownership = override ?? listed
   return {
     context: !isMissingCapabilityTool && isContextEnabled(data.options.context) && ownership?.context === true,
-    conversationId: data.options.enableConversationId === true && ownership?.conversationId === true,
+    conversationId: isConversationIdEnabled(data.options.enableConversationId) && ownership?.conversationId === true,
     // Deliberately read off `listed`, never the override: only the advertised
-    // JSON Schema can say whether `tools/list` declared `_mcp_instructions` (an
+    // JSON Schema can say whether `tools/list` declared `_conversation` (an
     // override is built from the live registry, which holds Zod on the
     // high-level path). An instance that never served a listing has no answer
     // and fails closed — writing an undeclared key fails the customer's entire
     // tool result under `additionalProperties: false`. See ADR-0004 for the
     // per-request-instance gap this leaves and the planned fix.
-    outputInstructions: data.options.enableConversationId === true && listed?.outputInstructions === true,
+    conversationState: isConversationIdEnabled(data.options.enableConversationId) && listed?.conversationState === true,
   }
 }
 
@@ -253,15 +256,19 @@ async function prepareToolCallEvent(
  * tools whose output schema declares the key), and as a `content` text block on
  * the minting response only. Why two channels and why those cadences: ADR-0004.
  *
+ * Both carry the handle as data. Neither tells the agent what to do with it —
+ * that guidance lives in the schema descriptions served at `tools/list`, which is
+ * the channel a client can trust. See ADR-0010.
+ *
  * If neither channel could carry a session handle we minted, the agent never
- * received it, so clear it off the event rather than showing analytics an id
- * nobody has.
+ * received it, so clear it off the event rather than reporting an id nobody has.
  */
-function applyConversationInstructions(
+function applyConversationState(
   event: McpEvent | null,
   result: unknown,
   conversation: ConversationIdResolution,
-  ownership: AnalyticsParameterOwnership
+  ownership: AnalyticsParameterOwnership,
+  data: MCPAnalyticsData
 ): unknown {
   const conversationId = conversation.conversationId
   if (!conversationId) {
@@ -271,14 +278,18 @@ function applyConversationInstructions(
   let updated = result
   let delivered = false
 
-  if (ownership.outputInstructions) {
-    const mirrored = mirrorInstructionsIntoStructuredContent(updated, conversationId)
+  if (ownership.conversationState) {
+    const mirrored = mirrorConversationStateIntoStructuredContent(updated, conversationId)
     delivered = mirrored !== updated
     updated = mirrored
   }
 
-  if (conversation.minted && canInjectConversationIdPromptBack(updated)) {
-    updated = injectConversationIdPromptBack(updated, conversationId)
+  if (
+    conversation.minted &&
+    isConversationIdResultTextEnabled(data.options.enableConversationId) &&
+    canAppendConversationIdToContent(updated)
+  ) {
+    updated = appendConversationIdToContent(updated, conversationId)
     delivered = true
   }
 
@@ -626,9 +637,13 @@ async function getTracedToolsList(
         }
       }
 
-      if (data.options.enableConversationId) {
-        tools = addConversationIdToTools(tools, data.logger)
-        tools = addInstructionsToOutputSchemas(tools, data.logger)
+      if (isConversationIdEnabled(data.options.enableConversationId)) {
+        tools = addConversationIdToTools(
+          tools,
+          getConversationIdDescription(data.options.enableConversationId),
+          data.logger
+        )
+        tools = addConversationStateToOutputSchemas(tools, data.logger)
       }
     }
 

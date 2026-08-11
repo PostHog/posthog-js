@@ -94,6 +94,52 @@ Protocol revision is a property of each **request**, not of the server: a v2 ser
   version still arrives, because clients send it on the `MCP-Protocol-Version` header of every
   request.
 
+### What `enableConversationId` adds to your schemas and results
+
+The feature works by handing the agent a conversation handle and letting it carry that value
+forward, which is the pattern the MCP spec recommends now that the protocol has no session. That
+means it is visible — to the model, and to anyone reading a transcript. Everything it adds:
+
+**In `tools/list`**, an optional `conversation_id` string parameter on every eligible tool (never
+added to `required`, and skipped for tools that already declare one or whose schema is composed
+with `oneOf`/`allOf`/`anyOf`/`$ref`). Tools that declare an `outputSchema` also get an optional
+`_conversation` property declared on it — the declaration is what makes the write below valid under
+`additionalProperties: false`.
+
+**In `tools/call` results**, one text block, appended only to the response that mints the handle:
+
+```
+conversation_id=019a3f2c-7b41-7c8e-9d02-3f5a1b6c8e40 — this server's handle for the current conversation. Tools that declare an optional conversation_id parameter accept this value.
+```
+
+and, for tools that got the `outputSchema` declaration, the handle mirrored into
+`structuredContent` on every response:
+
+```json
+{ "_conversation": { "conversation_id": "019a3f2c-7b41-7c8e-9d02-3f5a1b6c8e40" } }
+```
+
+Both channels carry the handle as data. Neither instructs the agent — the "pass this value forward"
+guidance lives in the `conversation_id` parameter's schema description, which clients fetch at
+`tools/list` as part of the tool contract. Results are untrusted input, and clients that refuse
+instructions found in one are behaving correctly. See ADR-0010.
+
+PostHog derives `$session_id` from the handle (hashed, so it doesn't collide with the Session Replay
+namespace) and records the raw value as `$mcp_conversation_id`. The handle itself is not branded —
+nothing on the wire names PostHog — so if your users should know their MCP traffic is instrumented,
+that disclosure belongs in your own privacy policy.
+
+To keep tool results' `content` byte-identical, pass `{ resultText: false }`. The handle then travels
+only via `structuredContent`, so tools with no `outputSchema` lose session correlation:
+
+```ts
+instrument(server, posthog, {
+  enableConversationId: { resultText: false },
+})
+```
+
+`{ description: '…' }` overrides the text on the injected parameter if you'd rather word it yourself.
+
 ### Reading request headers in a callback
 
 If your `identify`, `intentFallback`, `eventProperties` or `beforeSend` reads HTTP headers, it has

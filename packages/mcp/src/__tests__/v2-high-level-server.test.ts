@@ -184,20 +184,20 @@ describe('instrument() on an MCP SDK v2 high-level server', () => {
   })
 
   /**
-   * `enableConversationId` appends a `[SERVER]: Reuse conversation_id=…` block to
-   * the result so the agent echoes the handle back. On v2 a thrown error is
-   * already flattened into an `isError` result by the time we see it, so that
-   * result *is* our only description of the failure — and reading the error off
-   * the delivered copy would splice a fresh uuid into `$mcp_error_message`,
-   * turning one recurring failure into a new error group on every call.
+   * `enableConversationId` appends a `conversation_id=…` block to the result so the
+   * agent can carry the handle forward. On v2 a thrown error is already flattened
+   * into an `isError` result by the time we see it, so that result *is* our only
+   * description of the failure — and reading the error off the delivered copy would
+   * splice a fresh uuid into `$mcp_error_message`, turning one recurring failure
+   * into a new error group on every call.
    *
-   * The agent must still receive the prompt-back on a failed call: a tool that
-   * fails on the first call of a conversation is exactly when the handle matters,
-   * or the retry starts a new conversation and the failure and its fix land in
-   * different sessions. So both halves are asserted here — clean message out to
-   * PostHog, handle still delivered to the caller.
+   * The agent must still receive the handle on a failed call: a tool that fails on
+   * the first call of a conversation is exactly when it matters, or the retry starts
+   * a new conversation and the failure and its fix land in different sessions. So
+   * both halves are asserted here — clean message out to PostHog, handle still
+   * delivered to the caller.
    */
-  it('keeps the conversation prompt-back out of the captured error message', async () => {
+  it('keeps the conversation handle out of the captured error message', async () => {
     const server = makeV2Server()
     instrument(server, fakePostHog(), { context: false, enableConversationId: true })
 
@@ -215,7 +215,7 @@ describe('instrument() on an MCP SDK v2 high-level server', () => {
 
     // The caller still gets the handle, on the failed call.
     const delivered = (result.content as { text: string }[]).map((block) => block.text).join('\n')
-    expect(delivered).toMatch(/Reuse conversation_id=/)
+    expect(delivered).toMatch(/conversation_id=[0-9a-f-]{36}/)
   })
 
   /**

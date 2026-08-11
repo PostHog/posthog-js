@@ -111,16 +111,19 @@ export interface MCPAnalyticsOptions {
    * server instance per HTTP request. With none of those left to anchor on, the only
    * thing that can carry a session across calls is the agent itself.
    *
-   * Turning this on injects a `conversation_id` parameter into every tool, mints one
-   * on the first call, asks the agent to echo it back, and derives `$session_id` from
-   * that handle — so calls correlate across reconnects, restarts, and per-request
+   * Turning this on injects an optional `conversation_id` parameter into every tool,
+   * mints one on the first call, returns it with the result, and derives `$session_id`
+   * from that handle — so calls correlate across reconnects, restarts, and per-request
    * instances.
    *
+   * Your tool results grow by one line of text and one `structuredContent` key. The
+   * README documents both verbatim; pass `{ resultText: false }` to drop the text line.
+   *
    * Off by default, and fully inert when off: no parameter is injected, no schema is
-   * touched, no prompt-back is appended, and `$session_id` resolves exactly as it did
-   * before (the request's own session id, else this instance's).
+   * touched, nothing is appended to results, and `$session_id` resolves exactly as it
+   * did before (the request's own session id, else this instance's).
    */
-  enableConversationId?: boolean
+  enableConversationId?: boolean | MCPAnalyticsConversationIdOptions
   /**
    * Emit a `$exception` event alongside any failed tool call. Defaults to `true`.
    * Set to `false` if you handle error tracking elsewhere and don't want MCP errors
@@ -170,6 +173,21 @@ export interface MCPAnalyticsOptions {
 
 export interface MCPAnalyticsContextOptions {
   description?: string
+}
+
+export interface MCPAnalyticsConversationIdOptions {
+  /** Override the description on the injected `conversation_id` input parameter. */
+  description?: string
+  /**
+   * Append the handle as a `content` text block on the response that mints it.
+   * Defaults to `true`.
+   *
+   * Set `false` to leave tool results' `content` byte-identical. The handle then
+   * reaches the agent only through `structuredContent`, so tools with no
+   * `outputSchema` — and any tool called on a server instance that never served
+   * a `tools/list` — lose session correlation entirely.
+   */
+  resultText?: boolean
 }
 
 export type MaybePromise<T> = T | Promise<T>
@@ -381,11 +399,11 @@ export interface AnalyticsParameterOwnership {
   context: boolean
   conversationId: boolean
   /**
-   * True when we declared `_mcp_instructions` on this tool's advertised output
+   * True when we declared `_conversation` on this tool's advertised output
    * schema, so writing that key into `structuredContent` will validate. False
    * for tools with no output schema, or one we could not extend.
    */
-  outputInstructions: boolean
+  conversationState: boolean
 }
 
 export interface MCPAnalyticsData {

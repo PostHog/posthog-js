@@ -227,6 +227,7 @@ export type {
   McpAnalytics,
   McpCaptureCommon,
   MCPAnalyticsContextOptions,
+  MCPAnalyticsConversationIdOptions,
   MCPAnalyticsIntentSource,
   MCPAnalyticsOptions,
   MissingCapabilityCaptureData,

@@ -6,23 +6,23 @@ import { z } from 'zod'
 import { instrument } from '../index'
 import { getAnalyticsParameterOwnership } from '../extensions/analytics-parameters'
 import {
-  MCP_INSTRUCTIONS_KEY,
-  addInstructionsToOutputSchema,
-  addInstructionsToOutputSchemas,
-  canDeclareOutputInstructions,
-  mirrorInstructionsIntoStructuredContent,
-} from '../extensions/output-instructions'
+  CONVERSATION_STATE_KEY,
+  addConversationStateToOutputSchema,
+  addConversationStateToOutputSchemas,
+  canDeclareConversationState,
+  mirrorConversationStateIntoStructuredContent,
+} from '../extensions/conversation-state'
 import { fakePostHog } from './test-utils'
 
 /**
- * Declaring `_mcp_instructions` on a tool's advertised output schema is what
+ * Declaring `_conversation` on a tool's advertised output schema is what
  * makes writing it into `structuredContent` safe: the MCP client ajv-validates
  * that object against the schema under `additionalProperties: false`, so an
  * undeclared key fails the whole tool result.
  *
  * This change only declares. Nothing writes the field yet.
  */
-describe('_mcp_instructions output schema declaration', () => {
+describe('_conversation output schema declaration', () => {
   const objectSchema = () => ({
     type: 'object' as const,
     properties: { ok: { type: 'boolean' } },
@@ -30,9 +30,9 @@ describe('_mcp_instructions output schema declaration', () => {
     required: ['ok'],
   })
 
-  describe('canDeclareOutputInstructions', () => {
+  describe('canDeclareConversationState', () => {
     it('accepts a plain object schema', () => {
-      expect(canDeclareOutputInstructions(objectSchema())).toBe(true)
+      expect(canDeclareConversationState(objectSchema())).toBe(true)
     })
 
     it('rejects a malformed `properties` rather than crashing the listing', () => {
@@ -40,65 +40,65 @@ describe('_mcp_instructions output schema declaration', () => {
       // inside the tools/list wrapper — failing the whole listing over a schema
       // we only meant to annotate.
       for (const properties of [true, 'nope', 42, null, []]) {
-        expect(canDeclareOutputInstructions({ type: 'object', properties })).toBe(false)
+        expect(canDeclareConversationState({ type: 'object', properties })).toBe(false)
       }
       expect(() =>
-        addInstructionsToOutputSchema({ name: 'malformed', outputSchema: { properties: true } })
+        addConversationStateToOutputSchema({ name: 'malformed', outputSchema: { properties: true } })
       ).not.toThrow()
     })
 
     it('accepts a schema whose own property is named `_def`', () => {
       // `_def` is a Zod internal, so a naive scan of the property values reads
       // this legitimate schema as a Zod value and silently skips the tool.
-      expect(canDeclareOutputInstructions({ type: 'object', properties: { _def: { type: 'string' } } })).toBe(true)
+      expect(canDeclareConversationState({ type: 'object', properties: { _def: { type: 'string' } } })).toBe(true)
     })
 
     it('still refuses a raw shape whose keys happen to be `type` and `properties`', () => {
       // The JSON Schema check above must key off the *values*: a raw Zod shape is
       // free to name its fields `type` or `properties`.
-      expect(canDeclareOutputInstructions({ type: z.string(), properties: z.object({}) })).toBe(false)
+      expect(canDeclareConversationState({ type: z.string(), properties: z.object({}) })).toBe(false)
     })
 
     it('rejects a missing schema — there is nothing to mirror into', () => {
-      expect(canDeclareOutputInstructions(undefined)).toBe(false)
-      expect(canDeclareOutputInstructions(null)).toBe(false)
+      expect(canDeclareConversationState(undefined)).toBe(false)
+      expect(canDeclareConversationState(null)).toBe(false)
     })
 
     it('rejects composed schemas, which have no single properties bag', () => {
-      expect(canDeclareOutputInstructions({ oneOf: [] })).toBe(false)
-      expect(canDeclareOutputInstructions({ allOf: [] })).toBe(false)
-      expect(canDeclareOutputInstructions({ anyOf: [] })).toBe(false)
-      expect(canDeclareOutputInstructions({ $ref: '#/$defs/x' })).toBe(false)
+      expect(canDeclareConversationState({ oneOf: [] })).toBe(false)
+      expect(canDeclareConversationState({ allOf: [] })).toBe(false)
+      expect(canDeclareConversationState({ anyOf: [] })).toBe(false)
+      expect(canDeclareConversationState({ $ref: '#/$defs/x' })).toBe(false)
     })
 
     it('refuses a Zod schema or raw shape — only advertised JSON Schema can answer', () => {
       // The high-level registry stores Zod, which has no `properties` bag, so
       // every structural check would pass vacuously and wrongly report `true`.
-      expect(canDeclareOutputInstructions(z.object({ ok: z.boolean() }))).toBe(false)
-      expect(canDeclareOutputInstructions({ ok: z.boolean() })).toBe(false)
-      expect(canDeclareOutputInstructions({ [MCP_INSTRUCTIONS_KEY]: z.string() })).toBe(false)
+      expect(canDeclareConversationState(z.object({ ok: z.boolean() }))).toBe(false)
+      expect(canDeclareConversationState({ ok: z.boolean() })).toBe(false)
+      expect(canDeclareConversationState({ [CONVERSATION_STATE_KEY]: z.string() })).toBe(false)
     })
 
     it('rejects a schema that already declares the key', () => {
       expect(
-        canDeclareOutputInstructions({ type: 'object', properties: { [MCP_INSTRUCTIONS_KEY]: { type: 'object' } } })
+        canDeclareConversationState({ type: 'object', properties: { [CONVERSATION_STATE_KEY]: { type: 'object' } } })
       ).toBe(false)
     })
   })
 
-  describe('addInstructionsToOutputSchema', () => {
+  describe('addConversationStateToOutputSchema', () => {
     it('declares the key as an optional object property', () => {
-      const result = addInstructionsToOutputSchema({ name: 'get_issue', outputSchema: objectSchema() })
+      const result = addConversationStateToOutputSchema({ name: 'get_issue', outputSchema: objectSchema() })
       const schema = result.outputSchema as any
 
-      expect(schema.properties[MCP_INSTRUCTIONS_KEY].type).toBe('object')
-      expect(schema.properties[MCP_INSTRUCTIONS_KEY].properties.conversation_id.type).toBe('string')
+      expect(schema.properties[CONVERSATION_STATE_KEY].type).toBe('object')
+      expect(schema.properties[CONVERSATION_STATE_KEY].properties.conversation_id.type).toBe('string')
       // A result without the field must stay valid — every existing result lacks it.
       expect(schema.required).toEqual(['ok'])
     })
 
     it('preserves the schema the tool advertised, including additionalProperties: false', () => {
-      const result = addInstructionsToOutputSchema({ name: 'get_issue', outputSchema: objectSchema() })
+      const result = addConversationStateToOutputSchema({ name: 'get_issue', outputSchema: objectSchema() })
       const schema = result.outputSchema as any
 
       // Declaring inside `properties` is what makes the key legal; the closed
@@ -111,7 +111,7 @@ describe('_mcp_instructions output schema declaration', () => {
       const outputSchema = objectSchema()
       const tool = { name: 'get_issue', outputSchema }
 
-      addInstructionsToOutputSchema(tool)
+      addConversationStateToOutputSchema(tool)
 
       expect(Object.keys(outputSchema.properties)).toEqual(['ok'])
       expect(tool.outputSchema).toBe(outputSchema)
@@ -119,14 +119,14 @@ describe('_mcp_instructions output schema declaration', () => {
 
     it('leaves a tool without an output schema alone', () => {
       const tool = { name: 'list_issues' }
-      expect(addInstructionsToOutputSchema(tool)).toBe(tool)
+      expect(addConversationStateToOutputSchema(tool)).toBe(tool)
     })
 
     it('leaves a composed schema alone and says why', () => {
       const logged: string[] = []
       const tool = { name: 'get_issue', outputSchema: { oneOf: [{ type: 'object' }] } }
 
-      expect(addInstructionsToOutputSchema(tool, (m) => logged.push(m))).toBe(tool)
+      expect(addConversationStateToOutputSchema(tool, (m) => logged.push(m))).toBe(tool)
       expect(logged.join(' ')).toContain('complex output schema')
     })
 
@@ -135,33 +135,33 @@ describe('_mcp_instructions output schema declaration', () => {
       const own = { type: 'string' as const }
       const tool = {
         name: 'get_issue',
-        outputSchema: { type: 'object', properties: { [MCP_INSTRUCTIONS_KEY]: own } },
+        outputSchema: { type: 'object', properties: { [CONVERSATION_STATE_KEY]: own } },
       }
 
-      const result = addInstructionsToOutputSchema(tool, (m) => logged.push(m))
+      const result = addConversationStateToOutputSchema(tool, (m) => logged.push(m))
 
-      expect((result.outputSchema as any).properties[MCP_INSTRUCTIONS_KEY]).toBe(own)
+      expect((result.outputSchema as any).properties[CONVERSATION_STATE_KEY]).toBe(own)
       expect(logged.join(' ')).toContain('already declares')
     })
   })
 
-  describe('addInstructionsToOutputSchemas', () => {
+  describe('addConversationStateToOutputSchemas', () => {
     it('declares on schema-bearing tools and passes the rest through', () => {
       const withSchema = { name: 'get_issue', outputSchema: objectSchema() }
       const withoutSchema = { name: 'list_issues' }
 
-      const [a, b] = addInstructionsToOutputSchemas([withSchema, withoutSchema])
+      const [a, b] = addConversationStateToOutputSchemas([withSchema, withoutSchema])
 
-      expect((a.outputSchema as any).properties[MCP_INSTRUCTIONS_KEY]).toBeDefined()
+      expect((a.outputSchema as any).properties[CONVERSATION_STATE_KEY]).toBeDefined()
       expect(b).toBe(withoutSchema)
     })
   })
 
   describe('ownership registry', () => {
     it('records where the key was declared, so only those tools are safe to write', () => {
-      expect(getAnalyticsParameterOwnership({}, objectSchema()).outputInstructions).toBe(true)
-      expect(getAnalyticsParameterOwnership({}, undefined).outputInstructions).toBe(false)
-      expect(getAnalyticsParameterOwnership({}, { oneOf: [] }).outputInstructions).toBe(false)
+      expect(getAnalyticsParameterOwnership({}, objectSchema()).conversationState).toBe(true)
+      expect(getAnalyticsParameterOwnership({}, undefined).conversationState).toBe(false)
+      expect(getAnalyticsParameterOwnership({}, { oneOf: [] }).conversationState).toBe(false)
     })
   })
 })
@@ -171,7 +171,7 @@ describe('_mcp_instructions output schema declaration', () => {
  * for is enforced client-side: the SDK ajv-validates `structuredContent`
  * against the schema it received from `tools/list`.
  */
-describe('_mcp_instructions declaration over a real client', () => {
+describe('_conversation declaration over a real client', () => {
   async function connect(options: Record<string, unknown>) {
     const server = new McpServer({ name: 'schema-test', version: '1.0.0' })
 
@@ -202,8 +202,8 @@ describe('_mcp_instructions declaration over a real client', () => {
       const { tools } = await client.request({ method: 'tools/list' }, ListToolsResultSchema)
       const schema = tools.find((t) => t.name === 'get_issue')!.outputSchema as any
 
-      expect(schema.properties[MCP_INSTRUCTIONS_KEY]).toBeDefined()
-      expect(schema.required).not.toContain(MCP_INSTRUCTIONS_KEY)
+      expect(schema.properties[CONVERSATION_STATE_KEY]).toBeDefined()
+      expect(schema.required).not.toContain(CONVERSATION_STATE_KEY)
     } finally {
       await cleanup()
     }
@@ -215,7 +215,7 @@ describe('_mcp_instructions declaration over a real client', () => {
       const { tools } = await client.request({ method: 'tools/list' }, ListToolsResultSchema)
       const schema = tools.find((t) => t.name === 'get_issue')!.outputSchema as any
 
-      expect(schema.properties[MCP_INSTRUCTIONS_KEY]).toBeUndefined()
+      expect(schema.properties[CONVERSATION_STATE_KEY]).toBeUndefined()
     } finally {
       await cleanup()
     }
@@ -232,7 +232,7 @@ describe('_mcp_instructions declaration over a real client', () => {
 
       const result = await client.callTool({ name: 'get_issue', arguments: { issue_id: 'iss_7' } })
 
-      const mirrored = (result.structuredContent as Record<string, any>)[MCP_INSTRUCTIONS_KEY]
+      const mirrored = (result.structuredContent as Record<string, any>)[CONVERSATION_STATE_KEY]
       expect(mirrored?.conversation_id).toEqual(expect.any(String))
       expect((result.structuredContent as any).ok).toBe(true)
     } finally {
@@ -280,40 +280,48 @@ describe('mirroring the session handle into structuredContent', () => {
   })
 
   it('adds the key alongside the tool’s own fields', () => {
-    const result = mirrorInstructionsIntoStructuredContent(withStructured(), 'conv-1') as any
+    const result = mirrorConversationStateIntoStructuredContent(withStructured(), 'conv-1') as any
 
-    expect(result.structuredContent[MCP_INSTRUCTIONS_KEY].conversation_id).toBe('conv-1')
-    expect(result.structuredContent[MCP_INSTRUCTIONS_KEY].instructions).toEqual(expect.any(String))
+    expect(result.structuredContent[CONVERSATION_STATE_KEY].conversation_id).toBe('conv-1')
     expect(result.structuredContent.ok).toBe(true)
+  })
+
+  // The payload carries state, never an instruction. A tool result is untrusted
+  // input, and an `instructions` field inside one is exactly what a client is right
+  // to refuse — this used to ship one. See ADR-0010.
+  it('carries the handle and nothing else', () => {
+    const result = mirrorConversationStateIntoStructuredContent(withStructured(), 'conv-1') as any
+
+    expect(Object.keys(result.structuredContent[CONVERSATION_STATE_KEY])).toEqual(['conversation_id'])
   })
 
   it('does not mutate the result it was given', () => {
     const original = withStructured()
-    mirrorInstructionsIntoStructuredContent(original, 'conv-1')
+    mirrorConversationStateIntoStructuredContent(original, 'conv-1')
     expect(Object.keys(original.structuredContent)).toEqual(['ok'])
   })
 
   it('leaves a result with no structuredContent alone', () => {
     const original = { content: [{ type: 'text', text: 'plain' }] }
-    expect(mirrorInstructionsIntoStructuredContent(original, 'conv-1')).toBe(original)
+    expect(mirrorConversationStateIntoStructuredContent(original, 'conv-1')).toBe(original)
   })
 
   it('leaves a non-object structuredContent alone', () => {
     for (const structuredContent of [[1, 2], 'text', 42, null]) {
       const original = { structuredContent }
-      expect(mirrorInstructionsIntoStructuredContent(original, 'conv-1')).toBe(original)
+      expect(mirrorConversationStateIntoStructuredContent(original, 'conv-1')).toBe(original)
     }
   })
 
   it('never overwrites a key the tool produced itself', () => {
     const own = { mine: true }
-    const original = withStructured({ [MCP_INSTRUCTIONS_KEY]: own })
-    expect(mirrorInstructionsIntoStructuredContent(original, 'conv-1')).toBe(original)
+    const original = withStructured({ [CONVERSATION_STATE_KEY]: own })
+    expect(mirrorConversationStateIntoStructuredContent(original, 'conv-1')).toBe(original)
   })
 
   it('leaves non-object results alone', () => {
-    expect(mirrorInstructionsIntoStructuredContent(null, 'conv-1')).toBeNull()
-    expect(mirrorInstructionsIntoStructuredContent('text', 'conv-1')).toBe('text')
+    expect(mirrorConversationStateIntoStructuredContent(null, 'conv-1')).toBeNull()
+    expect(mirrorConversationStateIntoStructuredContent('text', 'conv-1')).toBe('text')
   })
 })
 
@@ -335,7 +343,7 @@ describe('mirroring over a real client', () => {
       const result = await call(client)
 
       // The whole point: this survives a client that ignores `content`.
-      expect((result.structuredContent as any)[MCP_INSTRUCTIONS_KEY].conversation_id).toEqual(expect.any(String))
+      expect((result.structuredContent as any)[CONVERSATION_STATE_KEY].conversation_id).toEqual(expect.any(String))
     } finally {
       await cleanup()
     }
@@ -354,7 +362,7 @@ describe('mirroring over a real client', () => {
       // The text block is mint-only; the structured copy rides every response.
       const hasText = (second.content ?? []).some((c: any) => String(c.text).includes('conversation_id='))
       expect(hasText).toBe(false)
-      expect((second.structuredContent as any)[MCP_INSTRUCTIONS_KEY].conversation_id).toBe(echoed)
+      expect((second.structuredContent as any)[CONVERSATION_STATE_KEY].conversation_id).toBe(echoed)
     } finally {
       await cleanup()
     }
@@ -365,7 +373,7 @@ describe('mirroring over a real client', () => {
     try {
       await client.request({ method: 'tools/list' }, ListToolsResultSchema)
       const result = await call(client)
-      expect((result.structuredContent as any)[MCP_INSTRUCTIONS_KEY]).toBeUndefined()
+      expect((result.structuredContent as any)[CONVERSATION_STATE_KEY]).toBeUndefined()
     } finally {
       await cleanup()
     }
@@ -373,7 +381,7 @@ describe('mirroring over a real client', () => {
 })
 
 describe('the write is gated on what tools/list actually declared', () => {
-  /** A tool that declares `_mcp_instructions` itself, so we must not write it. */
+  /** A tool that declares `_conversation` itself, so we must not write it. */
   async function connectOwningTheKey() {
     const server = new McpServer({ name: 'own-key', version: '1.0.0' })
     server.registerTool(
@@ -381,11 +389,11 @@ describe('the write is gated on what tools/list actually declared', () => {
       {
         description: 'Owns the key.',
         inputSchema: {},
-        outputSchema: { ok: z.boolean(), [MCP_INSTRUCTIONS_KEY]: z.string() },
+        outputSchema: { ok: z.boolean(), [CONVERSATION_STATE_KEY]: z.string() },
       },
       async () => ({
         content: [{ type: 'text', text: '{"ok":true}' }],
-        structuredContent: { ok: true, [MCP_INSTRUCTIONS_KEY]: 'mine' },
+        structuredContent: { ok: true, [CONVERSATION_STATE_KEY]: 'mine' },
       })
     )
     instrument(server, fakePostHog(), { enableConversationId: true })
@@ -403,7 +411,7 @@ describe('the write is gated on what tools/list actually declared', () => {
       const result = await client.callTool({ name: 'own_key', arguments: {} })
 
       // tools/list skips the declaration for this tool, so the write must skip too.
-      expect((result.structuredContent as any)[MCP_INSTRUCTIONS_KEY]).toBe('mine')
+      expect((result.structuredContent as any)[CONVERSATION_STATE_KEY]).toBe('mine')
     } finally {
       await cleanup()
     }
@@ -415,7 +423,7 @@ describe('the write is gated on what tools/list actually declared', () => {
       // No tools/list first: we cannot know what the client's cached schema
       // declares, so writing would risk failing its validation.
       const result = await client.callTool({ name: 'with_schema', arguments: {} })
-      expect((result.structuredContent as any)[MCP_INSTRUCTIONS_KEY]).toBeUndefined()
+      expect((result.structuredContent as any)[CONVERSATION_STATE_KEY]).toBeUndefined()
     } finally {
       await cleanup()
     }

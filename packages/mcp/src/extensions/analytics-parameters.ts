@@ -1,6 +1,6 @@
 import type { AnalyticsParameterOwnership } from '../types'
 import { getObjectShape, isZodRawShapeCompat } from './mcp-sdk-compat'
-import { canDeclareOutputInstructions } from './output-instructions'
+import { canDeclareConversationState } from './conversation-state'
 
 const JSON_SCHEMA_KEYWORDS = [
   '$defs',
@@ -76,7 +76,7 @@ export function getAnalyticsParameterOwnership(
   return {
     context: analyticsOwnsParameter(inputSchema, 'context'),
     conversationId: analyticsOwnsParameter(inputSchema, 'conversation_id'),
-    outputInstructions: canDeclareOutputInstructions(outputSchema),
+    conversationState: canDeclareConversationState(outputSchema),
   }
 }
 
