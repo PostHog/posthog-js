@@ -284,6 +284,10 @@ export enum PostHogPersistedProperty {
   InstalledAppBuild = 'installed_app_build', // only used by posthog-react-native
   InstalledAppVersion = 'installed_app_version', // only used by posthog-react-native
   SessionReplay = 'session_replay', // only used by posthog-react-native
+  // Set by a manual registerPushNotificationToken(): the native SDK persists the
+  // subscription across launches, so cleanup (unregister/reset) must boot native even in a
+  // process where nothing else initialized it. Only used by posthog-react-native.
+  PushRegistered = 'push_registered',
   // Session id for which an event trigger has activated session replay. only used by posthog-react-native
   SessionReplayEventTriggerActivatedSession = 'session_replay_event_trigger_activated_session',
   SurveyLastSeenDate = 'survey_last_seen_date', // only used by posthog-react-native
@@ -629,6 +633,14 @@ export type SurveyAppearance = {
   thankYouMessageDescription?: string
   thankYouMessageDescriptionContentType?: SurveyQuestionDescriptionContentType
   thankYouMessageCloseButtonText?: string
+  // Optional intro screen shown before the first question — the leading mirror of the
+  // confirmation message. Dismissed with a button; records no response and does not count
+  // toward completion or partial-response metrics.
+  displayIntroScreen?: boolean
+  introScreenHeader?: string
+  introScreenDescription?: string
+  introScreenDescriptionContentType?: SurveyQuestionDescriptionContentType
+  introScreenButtonText?: string
   borderColor?: string
   position?: SurveyPosition
   placeholder?: string
@@ -700,6 +712,9 @@ export interface SurveyTranslation {
   thankYouMessageHeader?: string
   thankYouMessageDescription?: string
   thankYouMessageCloseButtonText?: string
+  introScreenHeader?: string
+  introScreenDescription?: string
+  introScreenButtonText?: string
   submitButtonText?: string
   backButtonText?: string
 }

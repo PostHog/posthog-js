@@ -31,7 +31,7 @@ const GROUP_FRESHNESS_KEY: Partial<Record<PersistenceStorageGroup, string>> = {
     surveys: SURVEYS_LOADED_AT,
 }
 
-import { isNumber, isUndefined } from '@posthog/core'
+import { isArray, isNumber, isUndefined } from '@posthog/core'
 import {
     getCampaignParams,
     getInitialPersonPropsFromInfo,
@@ -689,7 +689,7 @@ export class PostHogPersistence {
             let hasChanges = false
 
             each(props, (val, prop) => {
-                if (props.hasOwnProperty(prop) && this.props[prop] !== val) {
+                if (props.hasOwnProperty(prop) && (this.props[prop] !== val || isObject(val) || isArray(val))) {
                     this._setProp(prop, val)
                     hasChanges = true
                 }
@@ -703,9 +703,16 @@ export class PostHogPersistence {
         return false
     }
 
-    unregister(prop: string): void {
-        if (prop in this.props) {
-            this._deleteProp(prop)
+    unregister(propOrProps: string | readonly string[]): void {
+        const props = typeof propOrProps === 'string' ? [propOrProps] : propOrProps
+        let hasChanges = false
+        for (const prop of props) {
+            if (prop in this.props) {
+                this._deleteProp(prop)
+                hasChanges = true
+            }
+        }
+        if (hasChanges) {
             this.save()
         }
     }

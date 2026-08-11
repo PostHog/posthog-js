@@ -1,0 +1,94 @@
+name: Replay incident risk
+
+# Advisory check: flags PR diffs that resemble the code patterns behind past
+# replay/SDK incidents (see .agents/skills/replay-incident-risk/INCIDENTS.md).
+# It never fails the build; it maintains a single PR comment.
+
+on: [pull_request]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Validate risk map
+        run: node .agents/skills/replay-incident-risk/check.mjs --validate
+
+      - name: Run incident-pattern check
+        id: check
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          BASE="origin/$BASE_REF"
+          node .agents/skills/replay-incident-risk/check.mjs "$BASE" --json > risk.json || true
+          node .agents/skills/replay-incident-risk/check.mjs "$BASE" > risk.txt || true
+          COUNT=$(node -e "try { console.log(JSON.parse(require('fs').readFileSync('risk.json','utf8')).findings.length) } catch { console.log(0) }")
+          echo "findings=$COUNT" >> "$GITHUB_OUTPUT"
+
+          {
+            echo '<!-- replay-incident-risk -->'
+            echo '## Replay incident risk check'
+            echo ''
+            if [ "$COUNT" != "0" ]; then
+              echo 'This diff touches code involved in past incidents. This is a heads-up, not a verdict: read the matched sections of [INCIDENTS.md](https://github.com/PostHog/posthog-js/blob/main/.agents/skills/replay-incident-risk/INCIDENTS.md) and answer their review questions before merging.'
+              echo ''
+              echo 'For a judgment on whether this diff has the same failure mode, run the `replay-incident-risk` skill locally: open a Claude session in the repo root and ask it to review your diff with that skill. Or run `node .agents/skills/replay-incident-risk/check.mjs` and answer the review questions for each matched class yourself.'
+            else
+              echo 'The current diff no longer matches any past incident pattern.'
+            fi
+            echo ''
+            echo '```'
+            cat risk.txt
+            echo '```'
+          } > comment.md
+
+          # Random delimiter: the report quotes added lines from the PR diff, so a fixed
+          # delimiter would let a crafted diff line inject step outputs.
+          DELIM="RISK_$(openssl rand -hex 16)"
+          {
+            echo "comment<<$DELIM"
+            cat comment.md
+            echo "$DELIM"
+          } >> "$GITHUB_OUTPUT"
+          cat risk.txt
+
+      - name: Skip PR comments for fork PR
+        if: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+        run: echo "Skipping incident-risk PR comments for fork PRs because GitHub tokens are read-only."
+
+      - name: Find existing comment
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # pin v4.0.0
+        id: fc
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: "github-actions[bot]"
+          body-includes: "<!-- replay-incident-risk -->"
+
+      - name: Create or update comment
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && (steps.check.outputs.findings != '0' || steps.fc.outputs.comment-id != '') }}
+        uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # pin v5.0.0
+        with:
+          comment-id: ${{ steps.fc.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          edit-mode: replace
+          body: ${{ steps.check.outputs.comment }}

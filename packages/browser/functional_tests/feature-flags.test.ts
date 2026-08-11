@@ -2,7 +2,7 @@ import '../src/__tests__/helpers/mock-logger'
 
 import { createPosthogInstance } from '../src/__tests__/helpers/posthog-instance'
 import { waitFor } from '@testing-library/dom'
-import { getRequests, resetRequests } from './mock-server'
+import { getFlagsWireRequests, getRequests, resetRequests } from './mock-server'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 
 async function shortWait() {
@@ -16,6 +16,44 @@ describe('FunctionalTests / Feature Flags', () => {
 
     beforeEach(() => {
         token = uuidv7()
+    })
+
+    test('snapshots the decoded /flags wire envelope from the real transport', async () => {
+        token = 'flags-wire-snapshot-token'
+        resetRequests(token)
+
+        await createPosthogInstance(token, { advanced_disable_flags: false, before_send: (cr) => cr })
+
+        await waitFor(() => expect(getFlagsWireRequests(token)).toHaveLength(1))
+
+        const wireRequest = getFlagsWireRequests(token)[0]
+        expect(wireRequest).toMatchObject({
+            bodyWrapper: 'data=<base64>',
+            compression: 'base64',
+            contentType: 'application/x-www-form-urlencoded',
+            path: '/flags/?v=2&compression=base64',
+        })
+        expect(wireRequest.decodedBody.$device_id).toEqual(expect.any(String))
+        expect(wireRequest.decodedBody.distinct_id).toEqual(expect.any(String))
+        expect(wireRequest.decodedBody.sent_at).toEqual(expect.any(String))
+        expect(Number.isNaN(Date.parse(wireRequest.decodedBody.sent_at))).toBe(false)
+        expect(wireRequest.decodedBody.timezone).toEqual(expect.any(String))
+        expect(wireRequest.decodedBody.person_properties.$lib_version).toEqual(expect.any(String))
+
+        expect({
+            ...wireRequest,
+            decodedBody: {
+                ...wireRequest.decodedBody,
+                $device_id: '<generated-device-id>',
+                distinct_id: '<generated-distinct-id>',
+                person_properties: {
+                    ...wireRequest.decodedBody.person_properties,
+                    $lib_version: '<sdk-version>',
+                },
+                sent_at: '<sent-at>',
+                timezone: '<runtime-timezone>',
+            },
+        }).toMatchSnapshot()
     })
 
     test('person properties set in identify() with new distinct_id are sent to /flags', async () => {

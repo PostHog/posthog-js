@@ -4,42 +4,40 @@
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
 import { uuidv7 } from '@posthog/core'
+import {
+  canInjectAnalyticsParameter,
+  hasAnalyticsParameter,
+  type AnalyticsInjectableJsonSchema,
+} from './analytics-parameters'
 import { DEFAULT_CONVERSATION_ID_DESCRIPTION } from './constants'
-import { log } from './logger'
-import { GET_MORE_TOOLS_NAME } from './tools'
+import { log, type LoggerFn } from './logger'
 
 export const CONVERSATION_ID_PARAM_NAME = 'conversation_id'
 
-interface JsonSchema {
-  additionalProperties?: boolean
-  allOf?: unknown
-  anyOf?: unknown
-  oneOf?: unknown
-  properties?: Record<string, unknown>
-  required?: string[]
-  type?: string
-}
-
 export interface ConversationIdInjectableTool {
-  inputSchema?: JsonSchema
+  inputSchema?: AnalyticsInjectableJsonSchema
   name?: string
   [key: string]: unknown
 }
 
-export function addConversationIdToTool<TTool extends ConversationIdInjectableTool>(tool: TTool): TTool {
+export function addConversationIdToTool<TTool extends ConversationIdInjectableTool>(
+  tool: TTool,
+  logger: LoggerFn = log
+): TTool {
   const modifiedTool = { ...tool }
   const toolName = tool.name || 'unknown'
-  const schema = modifiedTool.inputSchema as JsonSchema | undefined
+  const schema = modifiedTool.inputSchema as AnalyticsInjectableJsonSchema | undefined
 
-  if (schema?.properties?.[CONVERSATION_ID_PARAM_NAME]) {
-    log(
-      `WARN: Tool "${toolName}" already has '${CONVERSATION_ID_PARAM_NAME}' parameter. Skipping conversation_id injection.`
-    )
-    return modifiedTool
-  }
-
-  if (schema?.oneOf || schema?.allOf || schema?.anyOf) {
-    log(`WARN: Tool "${toolName}" has complex schema (oneOf/allOf/anyOf). Skipping conversation_id injection.`)
+  if (!canInjectAnalyticsParameter(schema, CONVERSATION_ID_PARAM_NAME)) {
+    if (hasAnalyticsParameter(schema, CONVERSATION_ID_PARAM_NAME)) {
+      logger(
+        `WARN: Tool "${toolName}" already has '${CONVERSATION_ID_PARAM_NAME}' parameter. Skipping conversation_id injection.`
+      )
+    } else {
+      logger(
+        `WARN: Tool "${toolName}" has complex schema (oneOf/allOf/anyOf/$ref). Skipping conversation_id injection.`
+      )
+    }
     return modifiedTool
   }
 
@@ -51,9 +49,9 @@ export function addConversationIdToTool<TTool extends ConversationIdInjectableTo
     }
   }
 
-  modifiedTool.inputSchema = JSON.parse(JSON.stringify(modifiedTool.inputSchema)) as JsonSchema
+  modifiedTool.inputSchema = JSON.parse(JSON.stringify(modifiedTool.inputSchema)) as AnalyticsInjectableJsonSchema
 
-  const inputSchema = modifiedTool.inputSchema as JsonSchema
+  const inputSchema = modifiedTool.inputSchema as AnalyticsInjectableJsonSchema
 
   if (!inputSchema.properties) {
     inputSchema.properties = {}
@@ -71,17 +69,24 @@ export function addConversationIdToTool<TTool extends ConversationIdInjectableTo
   return modifiedTool
 }
 
+/**
+ * Injects `conversation_id` across a tool listing, including the virtual
+ * `get_more_tools` tool. Its calls publish `$mcp_missing_capability`, and a
+ * capability gap is only meaningful next to the work that hit it — so it belongs
+ * in the same session as the surrounding tool calls.
+ */
 export function addConversationIdToTools<TTool extends ConversationIdInjectableTool>(
   tools: TTool[],
-  missingCapabilityToolName: string = GET_MORE_TOOLS_NAME
+  logger: LoggerFn = log
 ): TTool[] {
-  return tools.map((tool) => {
-    if (tool.name === missingCapabilityToolName) {
-      return tool
-    }
-    return addConversationIdToTool(tool)
-  })
+  return tools.map((tool) => addConversationIdToTool(tool, logger))
 }
+
+/**
+ * The shape of every id we mint: a uuidv7. Used to tell an echo of our own handle
+ * from a value the agent made up.
+ */
+const MINTED_CONVERSATION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export type ConversationIdResolution =
   | { minted: false; conversationId: string | undefined }
@@ -89,40 +94,46 @@ export type ConversationIdResolution =
 
 /**
  * Decides which conversation_id to use for a tool call:
- *   - disabled or get_more_tools → none
- *   - agent supplied a value → use it
- *   - agent omitted → mint a UUID
+ *   - disabled → none
+ *   - agent echoed a handle we could have minted → use it
+ *   - anything else → mint a fresh one
+ *
+ * The shape check matters because this value becomes `$session_id`, and the
+ * derivation is deterministic so that two pods agree — which also means two
+ * *callers* sending the same string land in the same session. The strings agents
+ * invent are not random (`conv-1`, `1`, `session`), so trusting them verbatim
+ * would silently merge unrelated conversations, potentially across users. Shape
+ * rather than a registry of issued ids, because a per-request server has no
+ * memory of what it minted. Residual risk and why it's accepted: ADR-0004.
  */
-export function resolveConversationId(
-  enabled: boolean,
-  args: unknown,
-  toolName: string | undefined,
-  missingCapabilityToolName: string = GET_MORE_TOOLS_NAME
-): ConversationIdResolution {
-  if (!enabled || toolName === missingCapabilityToolName) {
+export function resolveConversationId(enabled: boolean, args: unknown): ConversationIdResolution {
+  if (!enabled) {
     return { minted: false, conversationId: undefined }
   }
   const supplied = extractConversationId(args)
-  if (supplied) {
-    return { minted: false, conversationId: supplied }
+  if (supplied && MINTED_CONVERSATION_ID.test(supplied)) {
+    // Lowercased: the shape test is case-insensitive but the hash behind
+    // `$session_id` is not, so an uppercased echo (some hosts normalise uuids)
+    // would land in a different session than the call that minted it.
+    return { minted: false, conversationId: supplied.toLowerCase() }
   }
   return { minted: true, conversationId: uuidv7() }
 }
 
 /**
- * Predicate matching the same eligibility checks injectConversationIdPromptBack uses,
- * exposed so callers can pre-decide whether the prompt-back will actually land
- * (and clear event.conversationId if not, to avoid orphan ids in analytics).
+ * Whether the prompt-back can ride this result's `content`. The only requirement
+ * is an array to append to.
+ *
+ * Errored results included on purpose. A tool that fails on the first call of a
+ * conversation is exactly when the agent needs the session handle: without it the
+ * retry starts a fresh conversation, so the failure and its fix land in different
+ * sessions.
  */
 export function canInjectConversationIdPromptBack(result: unknown): boolean {
   if (!(result && typeof result === 'object')) {
     return false
   }
-  const resultObj = result as { content?: unknown; isError?: unknown }
-  if (resultObj.isError === true) {
-    return false
-  }
-  return Array.isArray(resultObj.content)
+  return Array.isArray((result as { content?: unknown }).content)
 }
 
 export function extractConversationId(args: unknown): string | undefined {
@@ -135,25 +146,6 @@ export function extractConversationId(args: unknown): string | undefined {
   }
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : undefined
-}
-
-export function cloneRequestWithoutConversationId<
-  TRequest extends { params?: { arguments?: unknown; [k: string]: unknown } },
->(request: TRequest): TRequest {
-  if (!request.params || typeof request.params !== 'object') {
-    return request
-  }
-  const args = request.params.arguments
-  if (!(args && typeof args === 'object')) {
-    return request
-  }
-  return {
-    ...request,
-    params: {
-      ...request.params,
-      arguments: stripConversationId(args) as typeof request.params.arguments,
-    },
-  }
 }
 
 export function stripConversationId(args: unknown): unknown {

@@ -7,6 +7,8 @@ import {
   listenerHandler,
   eventWithTime,
   EventType,
+  IncrementalSource,
+  mutationData,
 } from '@posthog/rrweb-types';
 import { launchPuppeteer } from '../utils';
 import {
@@ -95,6 +97,38 @@ describe('error-handler', function (this: ISuite) {
   );
 
   describe('CSSStyleSheet.prototype', () => {
+    it('preserves native insertRule exceptions when only recorder errors are contained', async () => {
+      const result = await ctx.page.evaluate(() => {
+        const { record } = (window as unknown as IWindow).rrweb;
+        const contexts: string[] = [];
+        record({
+          errorHandler: (_error, context) => {
+            contexts.push(context ?? 'missing');
+            return context === 'rrweb';
+          },
+          emit: (window as unknown as IWindow).emit,
+        });
+
+        try {
+          document.styleSheets[0].insertRule(
+            'body { background: blue; }',
+            document.styleSheets[0].cssRules.length + 1,
+          );
+          return { exceptionName: null, contexts };
+        } catch (error) {
+          return {
+            exceptionName: (error as { name?: string }).name,
+            contexts,
+          };
+        }
+      });
+
+      expect(result).toEqual({
+        exceptionName: 'IndexSizeError',
+        contexts: ['host'],
+      });
+    });
+
     it('triggers for errors from insertRule', async () => {
       await ctx.page.evaluate(() => {
         // @ts-ignore rewrite this to something buggy
@@ -390,12 +424,13 @@ describe('error-handler', function (this: ISuite) {
     });
   });
 
-  it('triggers for errors from mutation observer', async () => {
+  it('contains errors from the recorder-owned mutation observer callback', async () => {
     await ctx.page.evaluate(() => {
       const { record } = (window as unknown as IWindow).rrweb;
       record({
-        errorHandler: (error) => {
-          document.getElementById('out')!.innerText = `${error}`;
+        errorHandler: (error, context) => {
+          document.getElementById('out')!.innerText = `${context}:${error}`;
+          return context === 'rrweb';
         },
         emit: (window as unknown as IWindow).emit,
       });
@@ -416,7 +451,48 @@ describe('error-handler', function (this: ISuite) {
     const element = await ctx.page.$('#out');
     const text = await element!.evaluate((el) => el.textContent);
 
-    expect(text).toEqual('TypeError: m.target.getAttribute is not a function');
+    expect(text).toEqual(
+      'rrweb:TypeError: m.target.getAttribute is not a function',
+    );
+  });
+
+  it('records attribute mutations on nodes adopted from another realm', async () => {
+    await ctx.page.evaluate(() => {
+      const iframe = document.createElement('iframe');
+      document.body.appendChild(iframe);
+      const adopted = iframe.contentDocument!.createElement('div');
+      adopted.id = 'adopted-node';
+      document.adoptNode(adopted);
+
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+
+      document.body.appendChild(adopted);
+    });
+
+    await ctx.page.waitForTimeout(20);
+    await ctx.page.evaluate(() => {
+      document
+        .getElementById('adopted-node')!
+        .setAttribute('data-adopted', 'retained');
+    });
+    await ctx.page.waitForTimeout(50);
+
+    const attributes = ctx.events
+      .filter(
+        (event) =>
+          event.type === EventType.IncrementalSnapshot &&
+          event.data.source === IncrementalSource.Mutation,
+      )
+      .flatMap((event) => (event.data as mutationData).attributes);
+
+    expect(attributes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          attributes: { 'data-adopted': 'retained' },
+        }),
+      ]),
+    );
   });
 });
 

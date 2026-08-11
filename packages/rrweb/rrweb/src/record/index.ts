@@ -7,6 +7,7 @@ import {
   type serializedElementNodeWithId,
   slimDOMDefaults,
   createMirror,
+  takeDeferredStylesheetLinks,
 } from '@posthog/rrweb-snapshot';
 import type { serializedNodeWithId } from '@posthog/rrweb-types';
 import {
@@ -383,9 +384,102 @@ export function scrubUnclaimedIds(
   return event;
 }
 
+/**
+ * Stylesheet stringification is the dominant, and least bounded, cost of a full
+ * snapshot on CSS-heavy pages: `stringifyStylesheet` reads `cssText` for every
+ * CSSRule of every sheet, all inside one uninterruptible task.
+ *
+ * The cap is in rules rather than elapsed time on purpose. A time cap can only stop
+ * the *next* sheet, so a single enormous sheet slips straight through it, and it
+ * makes the split depend on how contended the machine happens to be - the same page
+ * would defer different sheets from load to load. ~10k rules costs a couple of
+ * hundred ms in Chrome and sits well above what an ordinary page carries (Bootstrap
+ * is around 2-3k rules), so this is inert for most sites.
+ */
+export const DEFAULT_INLINE_STYLESHEET_BUDGET_RULES = 10_000;
+
+type IdleTask = { cancel: () => void };
+type IdleDeadline = { didTimeout: boolean; timeRemaining: () => number };
+
+function whenIdle(cb: (deadline?: IdleDeadline) => void): IdleTask {
+  const win = window as Window &
+    typeof globalThis & {
+      requestIdleCallback?: (
+        cb: (deadline: IdleDeadline) => void,
+        opts?: { timeout: number },
+      ) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+  if (typeof win.requestIdleCallback === 'function') {
+    // the timeout keeps a permanently busy main thread from starving the CSS
+    const handle = win.requestIdleCallback(cb, { timeout: 2000 });
+    return { cancel: () => win.cancelIdleCallback?.(handle) };
+  }
+  // no idle scheduling (e.g. Safari <= 17): space the chunks out instead, so
+  // they don't run back-to-back inside the page-load busy window
+  const handle = setTimeout(cb, 250);
+  return { cancel: () => clearTimeout(handle) };
+}
+
+/**
+ * Inline the `<link rel=stylesheet>` elements the snapshot skipped once it ran out
+ * of stylesheet budget, emitting each as an attribute mutation. At least one sheet
+ * per idle callback so a busy main thread still makes progress, more while the
+ * deadline says we're genuinely idle. Splitting the work this way keeps every task
+ * short - the total CPU is unchanged, but the page stays responsive between chunks.
+ */
+function inlineDeferredStylesheets(
+  links: Array<HTMLLinkElement | null>,
+  stylesheetManager: StylesheetManager,
+  onDone: () => void,
+): () => void {
+  let cancelled = false;
+  let pending: IdleTask | null = null;
+  let index = 0;
+
+  const step = (deadline?: IdleDeadline) => {
+    pending = null;
+    if (cancelled) {
+      return;
+    }
+    do {
+      const link = links[index];
+      // release the element so completed entries aren't pinned by this closure
+      links[index] = null;
+      index += 1;
+      if (link) {
+        callSafely(() =>
+          stylesheetManager.inlineDeferredLinkElement(link, mirror.getId(link)),
+        );
+      }
+    } while (
+      index < links.length &&
+      deadline &&
+      !deadline.didTimeout &&
+      deadline.timeRemaining() > 5
+    );
+    if (index < links.length) {
+      pending = whenIdle(step);
+    } else {
+      onDone();
+    }
+  };
+
+  pending = whenIdle(step);
+
+  return () => {
+    cancelled = true;
+    pending?.cancel();
+    pending = null;
+  };
+}
+
 function record<T = eventWithTime>(
   options: recordOptions<T> = {},
 ): listenerHandler | undefined {
+  // per-recorder, unlike its module-level siblings, so a stale recorder's stop
+  // handler can't cancel a newer recorder's pending deferred inlining
+  let cancelDeferredStylesheetInlining: (() => void) | undefined;
   const {
     emit,
     checkoutEveryNms,
@@ -398,11 +492,14 @@ function record<T = eventWithTime>(
     maskTextClass = 'rr-mask',
     maskTextSelector = null,
     inlineStylesheet = true,
+    inlineStylesheetBudgetRules = DEFAULT_INLINE_STYLESHEET_BUDGET_RULES,
     maskAllInputs,
     maskInputOptions: _maskInputOptions,
     slimDOMOptions: _slimDOMOptions,
     maskInputFn,
     maskTextFn,
+    maskAllElementAttributes = false,
+    maskAttributeFn,
     hooks,
     packFn,
     sampling = {},
@@ -824,6 +921,8 @@ function record<T = eventWithTime>(
   const stylesheetManager = new StylesheetManager({
     mutationCb: wrappedMutationEmit,
     adoptedStyleSheetCb: wrappedAdoptedStyleSheetEmit,
+    maskAllElementAttributes,
+    maskAttributeFn,
   });
 
   const iframeManager = new IframeManager({
@@ -877,6 +976,8 @@ function record<T = eventWithTime>(
       dataURLOptions,
       maskTextFn,
       maskInputFn,
+      maskAllElementAttributes,
+      maskAttributeFn,
       recordCanvas,
       canvasMaskingConfigured,
       inlineImages,
@@ -901,8 +1002,11 @@ function record<T = eventWithTime>(
     maskTextSelector,
     inlineStylesheet,
     maskAllInputs: maskInputOptions,
+    inlineStylesheetBudgetRules,
     maskTextFn,
     maskInputFn,
+    maskAllElementAttributes,
+    maskAttributeFn,
     slimDOM: slimDOMOptions,
     dataURLOptions,
     recordCanvas,
@@ -1048,10 +1152,24 @@ function record<T = eventWithTime>(
         return false;
       }
 
+      // Any deferred inlining from the previous snapshot targets mirror ids
+      // this snapshot is about to replace, so drop it rather than emitting
+      // stale mutations.
+      cancelDeferredStylesheetInlining?.();
+      cancelDeferredStylesheetInlining = undefined;
+
       stylesheetManager.reset();
       shadowDomManager.init();
 
-      const node = snapshot(document, buildFullSnapshotOptions());
+      let node: ReturnType<typeof snapshot> = null;
+      let deferredStylesheetLinks: HTMLLinkElement[] = [];
+      try {
+        node = snapshot(document, buildFullSnapshotOptions());
+      } finally {
+        // drain even when the snapshot throws, so a failed snapshot doesn't
+        // leave links queued for the next one
+        deferredStylesheetLinks = takeDeferredStylesheetLinks();
+      }
       if (!node) {
         discardMutationBuffers(bufferToken);
         console.warn('Failed to snapshot the document');
@@ -1093,6 +1211,17 @@ function record<T = eventWithTime>(
       }
       canvasManager.onFullSnapshot();
       finishFullSnapshot();
+      if (deferredStylesheetLinks.length) {
+        cancelDeferredStylesheetInlining = inlineDeferredStylesheets(
+          deferredStylesheetLinks,
+          stylesheetManager,
+          () => {
+            // queue drained: drop the handle so the closure and its links can
+            // be collected
+            cancelDeferredStylesheetInlining = undefined;
+          },
+        );
+      }
       return true;
     } catch (error) {
       // Release the locks, then let the error propagate exactly as the
@@ -1232,6 +1361,11 @@ function record<T = eventWithTime>(
     }
 
     if (!transaction.didEmitFullSnapshot) {
+      // Sheets this walk's stylesheet budget skipped die with it — the
+      // retry/fallback below re-serializes them and re-defers what its own
+      // budget skips. No rotation can have happened since the entry check
+      // on this branch, so the queue is exclusively this walk's.
+      takeDeferredStylesheetLinks();
       const reason = transaction.abortReason ?? 'walk-error';
       // a checkout that coalesced while this walk ran must not be silently
       // downgraded by the recovery snapshot
@@ -1565,6 +1699,28 @@ function record<T = eventWithTime>(
       }
     }
 
+    // Sheets the walk's stylesheet budget skipped: inline them one idle
+    // callback at a time now that the FullSnapshot and its held window are
+    // on the wire. A superseded walk must not drain — a rotated-in budgeted
+    // walk may already have queued its own links, and they belong to its
+    // completion, not this one.
+    let deferredStylesheetCount = 0;
+    if (!walkSuperseded(transaction)) {
+      const deferredStylesheetLinks = takeDeferredStylesheetLinks();
+      deferredStylesheetCount = deferredStylesheetLinks.length;
+      if (deferredStylesheetLinks.length) {
+        cancelDeferredStylesheetInlining = inlineDeferredStylesheets(
+          deferredStylesheetLinks,
+          stylesheetManager,
+          () => {
+            // queue drained: drop the handle so the closure and its links
+            // can be collected
+            cancelDeferredStylesheetInlining = undefined;
+          },
+        );
+      }
+    }
+
     // The success counterpart of the failure diagnostics: without it the
     // longest recorder-caused task a completed walk produced in production
     // is not computable, only inferable from the absence of failures.
@@ -1583,6 +1739,7 @@ function record<T = eventWithTime>(
         deferredMutationRecords,
         droppedHeldEventCount: droppedHeldEvents,
         failedHeldEventDeliveries,
+        deferredStylesheets: deferredStylesheetCount,
       });
       // the diagnostic went through the consumer; a rotation from it owns
       // the recorder now, including the coalesced follow-up
@@ -1709,6 +1866,12 @@ function record<T = eventWithTime>(
     if (walkSuperseded(transaction)) {
       return;
     }
+
+    // Any deferred inlining from the previous snapshot targets mirror ids
+    // this walk is about to replace, so drop it rather than emitting stale
+    // mutations.
+    cancelDeferredStylesheetInlining?.();
+    cancelDeferredStylesheetInlining = undefined;
 
     // When we take a full snapshot, old tracked StyleSheets need to be removed.
     stylesheetManager.reset();
@@ -1934,6 +2097,8 @@ function record<T = eventWithTime>(
           doc,
           maskInputFn,
           maskTextFn,
+          maskAllElementAttributes,
+          maskAttributeFn,
           keepIframeSrcFn,
           blockSelector,
           slimDOMOptions,
@@ -2055,6 +2220,8 @@ function record<T = eventWithTime>(
       // would swallow whatever it delivers, silently.
       budgetedSnapshotInFlight = false;
       budgetedSnapshotFlushing = false;
+      cancelDeferredStylesheetInlining?.();
+      cancelDeferredStylesheetInlining = undefined;
       handlers.forEach((h) => callSafely(h));
       processedNodeManager.destroy();
       iframeManager.removeLoadListener();

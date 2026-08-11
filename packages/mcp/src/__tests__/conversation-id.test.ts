@@ -6,8 +6,16 @@ import {
   CONVERSATION_ID_PARAM_NAME,
   extractConversationId,
   injectConversationIdPromptBack,
+  resolveConversationId,
   stripConversationId,
 } from '../extensions/conversation-id'
+
+/**
+ * Handles shaped like ones we would have minted — `resolveConversationId` only
+ * echoes a value that could have come from us, and mints over anything else.
+ */
+const AGENT_ECHOED = '019fd2b0-1111-7111-8111-111111111111'
+const AGENT_ECHOED_ON_ERROR = '019fd2b0-2222-7222-8222-222222222222'
 
 describe('conversation-id', () => {
   describe('addConversationIdToTool', () => {
@@ -77,6 +85,24 @@ describe('conversation-id', () => {
       expect(schema.properties.conversation_id.description).toBe('preexisting')
     })
 
+    it('preserves a conversation_id property declared with a false schema', () => {
+      const result = addConversationIdToTool({
+        name: 'tool',
+        inputSchema: { type: 'object', properties: { conversation_id: false } },
+      })
+
+      expect(result.inputSchema?.properties?.conversation_id).toBe(false)
+    })
+
+    it('skips a schema with a root $ref', () => {
+      const result = addConversationIdToTool({
+        name: 'referenced-tool',
+        inputSchema: { $ref: '#/$defs/Input' },
+      })
+
+      expect(result.inputSchema).toEqual({ $ref: '#/$defs/Input' })
+    })
+
     it('skips complex schemas (oneOf/allOf/anyOf)', () => {
       for (const key of ['oneOf', 'allOf', 'anyOf']) {
         const result = addConversationIdToTool({
@@ -106,13 +132,15 @@ describe('conversation-id', () => {
   })
 
   describe('addConversationIdToTools', () => {
-    it('skips the get_more_tools tool', () => {
+    it('injects into get_more_tools too, so capability gaps join their session', () => {
       const tools = [
         { name: 'get_more_tools', description: 'report missing' },
         { name: 'other_tool', description: 'fine' },
       ]
       const result = addConversationIdToTools(tools)
-      expect(result[0]).toBe(tools[0])
+      expect(
+        (result[0].inputSchema as { properties?: Record<string, unknown> }).properties?.conversation_id
+      ).toBeDefined()
       expect(
         (
           result[1].inputSchema as {
@@ -135,6 +163,58 @@ describe('conversation-id', () => {
       expect(extractConversationId({ conversation_id: '' })).toBeUndefined()
       expect(extractConversationId({ conversation_id: '   ' })).toBeUndefined()
       expect(extractConversationId({ conversation_id: 42 })).toBeUndefined()
+    })
+  })
+
+  describe('resolveConversationId', () => {
+    const resolve = (args: unknown) => resolveConversationId(true, args, 'a_tool')
+
+    it('echoes a handle shaped like one we minted', () => {
+      expect(resolve({ conversation_id: AGENT_ECHOED })).toEqual({
+        minted: false,
+        conversationId: AGENT_ECHOED,
+      })
+    })
+
+    it('mints instead of trusting a value the agent invented', () => {
+      // The reason this branch exists: the value becomes $session_id via a
+      // deterministic hash, so two unrelated callers both sending `conv-1` would
+      // otherwise be merged into a single session — across users and pods.
+      for (const invented of ['conv-1', '1', 'session', 'chat_abc', 'not-a-uuid']) {
+        const result = resolve({ conversation_id: invented })
+        expect(result.minted).toBe(true)
+        expect(result.conversationId).not.toBe(invented)
+      }
+    })
+
+    it('mints a value that would itself be echoed back', () => {
+      const { conversationId } = resolve({})
+      expect(resolve({ conversation_id: conversationId })).toEqual({
+        minted: false,
+        conversationId,
+      })
+    })
+
+    it('canonicalises an uppercased echo, so it hashes to the minting session', () => {
+      // The shape test is case-insensitive; the hash behind `$session_id` is not.
+      // A host that normalises uuids to uppercase must not be split off from the
+      // call that minted the handle.
+      const { conversationId } = resolve({ conversation_id: AGENT_ECHOED.toUpperCase() })
+      expect(conversationId).toBe(AGENT_ECHOED)
+    })
+
+    it('rejects a uuid that is not v7', () => {
+      // v4 in the version nibble. Nothing we mint looks like this, so it is a
+      // value the agent brought from somewhere else.
+      const v4 = '019fd2b0-1111-4111-8111-111111111111'
+      expect(resolve({ conversation_id: v4 }).minted).toBe(true)
+    })
+
+    it('returns nothing when the feature is off', () => {
+      expect(resolveConversationId(false, { conversation_id: AGENT_ECHOED }, 'a_tool')).toEqual({
+        minted: false,
+        conversationId: undefined,
+      })
     })
   })
 
@@ -164,12 +244,14 @@ describe('conversation-id', () => {
       expect(content[1].text).toContain('conversation_id=conv-123')
     })
 
-    it('does not inject when result.isError is true', () => {
+    it('injects into an errored result — the retry must land in the same conversation', () => {
       const original = {
         isError: true,
         content: [{ type: 'text', text: 'oops' }],
       }
-      expect(injectConversationIdPromptBack(original, 'conv-123')).toBe(original)
+      const result = injectConversationIdPromptBack(original, 'conv-123') as { content: { text: string }[] }
+      expect(result.content).toHaveLength(2)
+      expect(result.content[1].text).toContain('conv-123')
     })
 
     it('does not inject when content is missing or not an array', () => {
@@ -195,7 +277,8 @@ describe('conversation-id', () => {
 })
 import { CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { instrument } from '../index'
-import type { HighLevelMCPServerLike } from '../types'
+import { MCPAnalyticsEventType } from '../extensions/event-types'
+import type { HighLevelMCPServerLike, MCPServerLike } from '../types'
 import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
 
@@ -253,7 +336,7 @@ describe('conversation_id tool parameter', () => {
       await capture.start()
       instrument(server, fakePostHog(), { enableConversationId: true })
 
-      const agentConversationId = 'conversation-abc-1'
+      const agentConversationId = '019fd2b0-5555-7555-8555-555555555555'
       await client.request(
         {
           method: 'tools/call',
@@ -324,7 +407,7 @@ describe('conversation_id tool parameter', () => {
           method: 'tools/call',
           params: {
             name: 'add_todo',
-            arguments: { text: 'x', conversation_id: 'agent-supplied-1' },
+            arguments: { text: 'x', conversation_id: AGENT_ECHOED },
           },
         },
         CallToolResultSchema
@@ -332,11 +415,11 @@ describe('conversation_id tool parameter', () => {
 
       await new Promise((r) => setTimeout(r, 50))
       const toolCall = capture.getEvents().find((e) => e.resourceName === 'add_todo')
-      expect(toolCall?.conversationId).toBe('agent-supplied-1')
+      expect(toolCall?.conversationId).toBe(AGENT_ECHOED)
       await capture.stop()
     })
 
-    it('does not inject the prompt-back into error results', async () => {
+    it('injects the prompt-back into error results too', async () => {
       instrument(server, fakePostHog(), { enableConversationId: true })
 
       const result = await client.request(
@@ -350,13 +433,46 @@ describe('conversation_id tool parameter', () => {
         CallToolResultSchema
       )
 
+      // A tool that fails on the first call is exactly when the agent needs the
+      // session handle, or its retry starts a different conversation.
       const hasPromptBack = (result.content ?? []).some(
         (c) => c.type === 'text' && typeof c.text === 'string' && c.text.includes('conversation_id=')
       )
-      expect(hasPromptBack).toBe(false)
+      expect(hasPromptBack).toBe(true)
     })
 
-    it('clears event.conversationId on error when we minted it (agent never received it)', async () => {
+    it('clears event.conversationId when a minted handle reaches no channel at all', async () => {
+      // The `minted && !delivered` cell. Both delivery channels have to miss:
+      // no declared output schema means no mirror, and a result carrying no
+      // `content` array means no prompt-back. The handle then exists only in our
+      // event, describing a conversation the agent was never told about — so it
+      // is cleared rather than reported as one.
+      const capture = new EventCapture()
+      await capture.start()
+
+      // Replace the underlying handler *before* instrumenting, so our wrapper
+      // still runs and simply sees a result with no content array — bypassing the
+      // SDK's result normalisation, which would add one.
+      const lowLevel = server.server as unknown as MCPServerLike
+      lowLevel._requestHandlers.set('tools/call', async () => ({ structuredContent: { ok: true } }))
+      instrument(server, fakePostHog(), { enableConversationId: true })
+
+      const handler = lowLevel._requestHandlers.get('tools/call')!
+      const result = (await handler(
+        { method: 'tools/call', params: { name: 'add_todo', arguments: { text: 'x' } } },
+        {} as never
+      )) as { content?: unknown }
+
+      await new Promise((r) => setTimeout(r, 50))
+      const toolCall = capture.getEvents().find((e) => e.eventType === MCPAnalyticsEventType.mcpToolsCall)
+      // The event must exist, or this asserts nothing.
+      expect(toolCall).toBeDefined()
+      expect(result.content).toBeUndefined()
+      expect(toolCall?.conversationId).toBeUndefined()
+      await capture.stop()
+    })
+
+    it('keeps event.conversationId on error, since the prompt-back now reaches the agent', async () => {
       const capture = new EventCapture()
       await capture.start()
       instrument(server, fakePostHog(), { enableConversationId: true })
@@ -375,7 +491,7 @@ describe('conversation_id tool parameter', () => {
       await new Promise((r) => setTimeout(r, 50))
       const toolCall = capture.getEvents().find((e) => e.resourceName === 'complete_todo')
       expect(toolCall).toBeDefined()
-      expect(toolCall?.conversationId).toBeUndefined()
+      expect(toolCall?.conversationId).toBeDefined()
       await capture.stop()
     })
 
@@ -391,7 +507,7 @@ describe('conversation_id tool parameter', () => {
             name: 'complete_todo',
             arguments: {
               id: 'does-not-exist',
-              conversation_id: 'agent-supplied-on-error',
+              conversation_id: AGENT_ECHOED_ON_ERROR,
             },
           },
         },
@@ -400,8 +516,225 @@ describe('conversation_id tool parameter', () => {
 
       await new Promise((r) => setTimeout(r, 50))
       const toolCall = capture.getEvents().find((e) => e.resourceName === 'complete_todo')
-      expect(toolCall?.conversationId).toBe('agent-supplied-on-error')
+      expect(toolCall?.conversationId).toBe(AGENT_ECHOED_ON_ERROR)
       await capture.stop()
     })
   })
+})
+
+describe('conversation_id edge cases', () => {
+  let server: HighLevelMCPServerLike
+  let client: any
+  let cleanup: () => Promise<void>
+
+  beforeEach(async () => {
+    resetTodos()
+    const setup = await setupTestServerAndClient()
+    server = setup.server
+    client = setup.client
+    cleanup = setup.cleanup
+  })
+
+  afterEach(async () => {
+    await cleanup()
+  })
+
+  it('puts a capability gap in the same session as the calls around it', async () => {
+    const capture = new EventCapture()
+    await capture.start()
+    instrument(server, fakePostHog(), { enableConversationId: true, reportMissing: true })
+
+    await client.request({ method: 'tools/list' }, ListToolsResultSchema)
+
+    // A real call mints the handle, then the agent echoes it while reporting the gap.
+    const first = await client.request(
+      { method: 'tools/call', params: { name: 'add_todo', arguments: { text: 'first' } } },
+      CallToolResultSchema
+    )
+    const handle = (first.content ?? [])
+      .map((c: any) => String(c.text ?? '').match(/conversation_id=([\w-]+)/)?.[1])
+      .find(Boolean)
+    expect(handle).toBeDefined()
+
+    await client.request(
+      {
+        method: 'tools/call',
+        params: {
+          name: 'get_more_tools',
+          arguments: {
+            context: 'Needed a tool to delete todos, which this server does not expose.',
+            conversation_id: handle,
+          },
+        },
+      },
+      CallToolResultSchema
+    )
+
+    await new Promise((r) => setTimeout(r, 50))
+    const events = capture.getEvents()
+    const toolCall = events.find((e) => e.resourceName === 'add_todo')
+    const missing = events.find((e) => e.eventType === MCPAnalyticsEventType.mcpMissingCapability)
+
+    // This is what this PR controls: the gap report carries the same handle.
+    expect(missing?.conversationId).toBe(handle)
+    // Forward guard only. On one server instance over InMemoryTransport both
+    // events fall back to the same in-memory session id anyway, so this cannot
+    // tell "grouped by the handle" from "nothing rotated" until the handle
+    // drives $session_id. The distinguishing assertion is the next test.
+    expect(missing?.sessionId).toBe(toolCall?.sessionId)
+    await capture.stop()
+  })
+
+  it('gives two different handles two different conversations', async () => {
+    const capture = new EventCapture()
+    await capture.start()
+    instrument(server, fakePostHog(), { enableConversationId: true, reportMissing: true })
+    await client.request({ method: 'tools/list' }, ListToolsResultSchema)
+
+    // Same connection, so anything falling back to the transport or in-memory
+    // session would report one id for both. Only the handle can separate them.
+    // Both are shaped like handles the SDK would have minted, which is what a
+    // real agent echoes. On this branch any non-empty string would do; #4428
+    // adds the shape check that makes the distinction matter.
+    const one = '019fd2b0-aaaa-7aaa-8aaa-aaaaaaaaaaaa'
+    const two = '019fd2b0-bbbb-7bbb-8bbb-bbbbbbbbbbbb'
+    for (const [handle, text] of [
+      [one, 'Needed a delete tool.'],
+      [two, 'Needed an export tool.'],
+    ]) {
+      await client.request(
+        {
+          method: 'tools/call',
+          params: { name: 'get_more_tools', arguments: { context: text, conversation_id: handle } },
+        },
+        CallToolResultSchema
+      )
+    }
+
+    await new Promise((r) => setTimeout(r, 50))
+    const gaps = capture.getEvents().filter((e) => e.eventType === MCPAnalyticsEventType.mcpMissingCapability)
+    expect(gaps.map((g) => g.conversationId)).toEqual([one, two])
+    await capture.stop()
+  })
+
+  it('advertises conversation_id on the virtual get_more_tools tool', async () => {
+    instrument(server, fakePostHog(), { enableConversationId: true, reportMissing: true })
+
+    const { tools } = await client.request({ method: 'tools/list' }, ListToolsResultSchema)
+    const virtual = tools.find((t: any) => t.name === 'get_more_tools')
+
+    expect((virtual.inputSchema as any).properties.conversation_id).toBeDefined()
+    // Its own bespoke `context` parameter is untouched.
+    expect((virtual.inputSchema as any).properties.context).toBeDefined()
+  })
+
+  describe('with enableConversationId off', () => {
+    it('leaves errored results alone', async () => {
+      instrument(server, fakePostHog(), { enableConversationId: false })
+
+      const result = await client.request(
+        { method: 'tools/call', params: { name: 'complete_todo', arguments: { id: 'does-not-exist' } } },
+        CallToolResultSchema
+      )
+
+      const hasPromptBack = (result.content ?? []).some((c: any) => String(c.text ?? '').includes('conversation_id='))
+      expect(hasPromptBack).toBe(false)
+    })
+
+    it('leaves get_more_tools alone', async () => {
+      instrument(server, fakePostHog(), { enableConversationId: false, reportMissing: true })
+
+      const { tools } = await client.request({ method: 'tools/list' }, ListToolsResultSchema)
+      const virtual = tools.find((t: any) => t.name === 'get_more_tools')
+
+      expect((virtual.inputSchema as any).properties.conversation_id).toBeUndefined()
+      // Its own parameter still there — we removed nothing.
+      expect((virtual.inputSchema as any).properties.context).toBeDefined()
+    })
+
+    it('publishes a capability gap with no conversation id', async () => {
+      const capture = new EventCapture()
+      await capture.start()
+      instrument(server, fakePostHog(), { enableConversationId: false, reportMissing: true })
+
+      await client.request({ method: 'tools/list' }, ListToolsResultSchema)
+      await client.request(
+        { method: 'tools/call', params: { name: 'get_more_tools', arguments: { context: 'Needed a delete tool.' } } },
+        CallToolResultSchema
+      )
+
+      await new Promise((r) => setTimeout(r, 50))
+      const missing = capture.getEvents().find((e) => e.eventType === MCPAnalyticsEventType.mcpMissingCapability)
+      expect(missing).toBeDefined()
+      expect(missing?.conversationId).toBeUndefined()
+      await capture.stop()
+    })
+
+    it('ignores a conversation_id an agent sends anyway', async () => {
+      const capture = new EventCapture()
+      await capture.start()
+      instrument(server, fakePostHog(), { enableConversationId: false })
+
+      // With injection off the argument is the host's, not ours — never read.
+      await client.request(
+        {
+          method: 'tools/call',
+          params: { name: 'add_todo', arguments: { text: 'x', conversation_id: 'agent-made-up' } },
+        },
+        CallToolResultSchema
+      )
+
+      await new Promise((r) => setTimeout(r, 50))
+      const toolCall = capture.getEvents().find((e) => e.resourceName === 'add_todo')
+      expect(toolCall?.conversationId).toBeUndefined()
+      await capture.stop()
+    })
+  })
+})
+
+describe('enableConversationId and reportMissing are independent', () => {
+  let server: HighLevelMCPServerLike
+  let client: any
+  let cleanup: () => Promise<void>
+
+  beforeEach(async () => {
+    resetTodos()
+    const setup = await setupTestServerAndClient()
+    server = setup.server
+    client = setup.client
+    cleanup = setup.cleanup
+  })
+
+  afterEach(async () => {
+    await cleanup()
+  })
+
+  /** [enableConversationId, reportMissing] → [handle on a real tool, virtual tool exists] */
+  const matrix: [boolean, boolean, boolean, boolean][] = [
+    [false, false, false, false],
+    [false, true, false, true],
+    [true, false, true, false],
+    [true, true, true, true],
+  ]
+
+  it.each(matrix)(
+    'enableConversationId=%s reportMissing=%s → handle=%s virtualTool=%s',
+    async (enableConversationId, reportMissing, expectHandle, expectVirtual) => {
+      instrument(server, fakePostHog(), { enableConversationId, reportMissing })
+
+      const { tools } = await client.request({ method: 'tools/list' }, ListToolsResultSchema)
+      const realTool = tools.find((t: any) => t.name === 'add_todo')
+      const virtual = tools.find((t: any) => t.name === 'get_more_tools')
+
+      // One option decides stitching, the other decides whether the tool exists.
+      expect(!!(realTool.inputSchema as any).properties.conversation_id).toBe(expectHandle)
+      expect(!!virtual).toBe(expectVirtual)
+
+      // When both are on they compose: the virtual tool stitches like any other.
+      if (expectVirtual) {
+        expect(!!(virtual.inputSchema as any).properties.conversation_id).toBe(expectHandle)
+        expect((virtual.inputSchema as any).properties.context).toBeDefined()
+      }
+    }
+  )
 })

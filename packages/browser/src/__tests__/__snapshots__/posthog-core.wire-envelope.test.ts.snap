@@ -1,0 +1,99 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`PostHog final decoded request envelopes serializes complete enriched /e/ and configured /s/ JSON bodies 1`] = `
+{
+  "api_key": "wire-snapshot-token",
+  "batch": [
+    {
+      "event": "report exported",
+      "properties": {
+        "$autocapture_disabled_server_side": false,
+        "$browser": "Chrome",
+        "$browser_language": "en-US",
+        "$browser_language_prefix": "en",
+        "$browser_version": 120,
+        "$config_defaults": "unset",
+        "$configured_session_timeout_ms": 1800000,
+        "$current_url": "http://localhost/",
+        "$device_id": "wire-device-id",
+        "$device_type": "Desktop",
+        "$host": "localhost",
+        "$initialization_time": "<initialization-time>",
+        "$insert_id": "<insert-id>",
+        "$is_identified": false,
+        "$lib": "web",
+        "$lib_custom_api_host": "http://localhost",
+        "$lib_rate_limit_remaining_tokens": 99,
+        "$lib_version": "<sdk-version>",
+        "$os": "Windows",
+        "$os_version": "10",
+        "$pathname": "/",
+        "$process_person_profile": false,
+        "$raw_user_agent": "<user-agent>",
+        "$recording_status": "disabled",
+        "$referrer": "$direct",
+        "$referring_domain": "$direct",
+        "$screen_height": 0,
+        "$screen_width": 0,
+        "$sdk_debug_extensions_init_method": "synchronous",
+        "$sdk_debug_extensions_init_time_ms": "<extension-init-time>",
+        "$sdk_debug_retry_queue_size": 0,
+        "$sdk_dist_channel": "npm",
+        "$session_entry_host": "localhost",
+        "$session_entry_pathname": "/",
+        "$session_entry_referrer": "$direct",
+        "$session_entry_referring_domain": "$direct",
+        "$session_entry_url": "http://localhost/",
+        "$session_id": "<generated-session-id>",
+        "$time": "<event-time>",
+        "$timezone": "<runtime-timezone>",
+        "$timezone_offset": "<runtime-timezone-offset>",
+        "$viewport_height": 768,
+        "$viewport_width": 1024,
+        "$window_id": "<generated-window-id>",
+        "distinct_id": "wire-distinct-id",
+        "export_format": "csv",
+        "row_count": 42,
+        "token": "wire-snapshot-token",
+      },
+      "timestamp": "2023-11-14T22:13:20.000Z",
+      "uuid": "018bcfe5-6800-7000-8000-000000000001",
+    },
+  ],
+  "sent_at": "2023-11-14T22:13:20.000Z",
+}
+`;
+
+exports[`PostHog final decoded request envelopes serializes complete enriched /e/ and configured /s/ JSON bodies 2`] = `
+{
+  "event": "$snapshot",
+  "properties": {
+    "$config_defaults": "unset",
+    "$lib": "web",
+    "$lib_version": "recorder-version",
+    "$session_id": "recording-session-id",
+    "$snapshot_bytes": 60,
+    "$snapshot_data": [
+      {
+        "data": {
+          "source": 1,
+        },
+        "type": 3,
+      },
+      {
+        "data": {
+          "source": 2,
+        },
+        "type": 3,
+      },
+    ],
+    "$snapshot_host": "example.com",
+    "$window_id": "recording-window-id",
+    "distinct_id": "wire-distinct-id",
+    "token": "wire-snapshot-token",
+  },
+  "sent_at": "2023-11-14T22:13:20.000Z",
+  "timestamp": "2023-11-14T22:13:20.000Z",
+  "uuid": "018bcfe5-6800-7000-8000-000000000002",
+}
+`;

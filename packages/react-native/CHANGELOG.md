@@ -1,5 +1,68 @@
 # posthog-react-native
 
+## 4.63.0
+
+### Minor Changes
+
+- [#4436](https://github.com/PostHog/posthog-js/pull/4436) [`80f15a3`](https://github.com/PostHog/posthog-js/commit/80f15a386621514c43f19e99ee4e3f702e4d369d) Thanks [@jakesciotto](https://github.com/jakesciotto)! - feat(surveys): optional intro screen shown before the first question
+
+  Surveys can now display an intro screen before question 1, configured via the new
+  `displayIntroScreen`, `introScreenHeader`, `introScreenDescription`,
+  `introScreenDescriptionContentType`, and `introScreenButtonText` appearance fields.
+  The intro is dismissed with a button and records no response, does not affect
+  completion or partial-response metrics, does not re-fire "survey shown", and is
+  skipped when a survey is resumed with answers in progress. Intro copy is
+  translatable like the thank-you message. `renderSurveysPreview` accepts
+  `previewPageIndex: -1` (exported as `INTRO_SCREEN_PREVIEW_INDEX`) to preview the
+  intro screen. (2026-08-10)
+
+### Patch Changes
+
+- Updated dependencies [[`80f15a3`](https://github.com/PostHog/posthog-js/commit/80f15a386621514c43f19e99ee4e3f702e4d369d)]:
+  - @posthog/core@1.47.0
+
+## 4.62.0
+
+### Minor Changes
+
+- [#4415](https://github.com/PostHog/posthog-js/pull/4415) [`32434e4`](https://github.com/PostHog/posthog-js/commit/32434e403611bab48c91813cd12f542576711521) Thanks [@ioannisj](https://github.com/ioannisj)! - Add push notification support, so PostHog Workflows can target React Native apps.
+
+  With `@posthog/react-native-plugin` installed, device tokens register automatically on iOS and Android, and notification opens are captured as `$push_notification_opened`. Both are on by default; opt out with `capturePushNotificationSubscriptions: false` or `capturePushNotificationOpened: false`.
+  - `registerPushNotificationToken` and `unregisterPushNotificationToken` handle token refreshes and manual control.
+  - `capturePushNotificationOpened` covers the warm-start opens that auto-detection cannot see.
+  - `pushIdentityProvider` mints a signed token for projects that require identity-verified subscriptions.
+  - An opted-out user registers no token, and consent changes propagate to the native SDK at runtime: `optOut()` stops native auto-registration (e.g. on an OS token refresh) and requests removal of an already-registered subscription. Known limitation: the native SDKs gate that removal on their own consent state, so deleting an existing subscription may not complete until the next opted-in launch, and `optIn()` does not refetch a token on its own yet — tracked in PostHog/posthog-android#675 and PostHog/posthog-ios#746.
+  - `reset()` now propagates to the native SDK: it unregisters the logged-out user's subscription and re-registers under the new identity. The re-registration can briefly race the identity handoff on both platforms; the native SDKs converge it on the next flush. (2026-08-05)
+
+## 4.61.5
+
+### Patch Changes
+
+- [#4380](https://github.com/PostHog/posthog-js/pull/4380) [`3c40b6c`](https://github.com/PostHog/posthog-js/commit/3c40b6cecd66633d16f3f94ec6614af656445f2e) Thanks [@marandaneto](https://github.com/marandaneto)! - Keep request timeouts active through response body consumption and clarify eventual event UUID deduplication semantics.
+  (2026-08-05)
+- Updated dependencies [[`3c40b6c`](https://github.com/PostHog/posthog-js/commit/3c40b6cecd66633d16f3f94ec6614af656445f2e)]:
+  - @posthog/core@1.46.8
+  - @posthog/types@1.401.1
+
+## 4.61.4
+
+### Patch Changes
+
+- [#4381](https://github.com/PostHog/posthog-js/pull/4381) [`f3a71a1`](https://github.com/PostHog/posthog-js/commit/f3a71a1f462384543de5f39762c3c1ed7b532be8) Thanks [@marandaneto](https://github.com/marandaneto)! - Clear completed lifecycle timeout handles so successful shutdowns do not leave timers running.
+  (2026-08-03)
+- Updated dependencies [[`f3a71a1`](https://github.com/PostHog/posthog-js/commit/f3a71a1f462384543de5f39762c3c1ed7b532be8)]:
+  - @posthog/core@1.46.4
+
+## 4.61.3
+
+### Patch Changes
+
+- [#4347](https://github.com/PostHog/posthog-js/pull/4347) [`7c3a9af`](https://github.com/PostHog/posthog-js/commit/7c3a9af42be80051705f7fe820623dd7e1b879d5) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve events added to a full queue while an earlier batch is being flushed.
+  (2026-08-03)
+- Updated dependencies [[`7c3a9af`](https://github.com/PostHog/posthog-js/commit/7c3a9af42be80051705f7fe820623dd7e1b879d5), [`3d48c4b`](https://github.com/PostHog/posthog-js/commit/3d48c4bce2f44a5e9ec776b0f3ea2da19254cd27)]:
+  - @posthog/core@1.46.2
+  - @posthog/react-native-plugin@2.2.4
+
 ## 4.61.2
 
 ### Patch Changes

@@ -21,14 +21,29 @@ beforeEach(() => {
 describe('isCompatibleServerType', () => {
   it('accepts a valid low-level server', () => {
     const server = validLowLevelServer()
-    expect(isCompatibleServerType(server)).toBe(server)
+    expect(isCompatibleServerType(server, log)).toBe(server)
     expect(log).not.toHaveBeenCalled()
   })
 
   it('accepts a McpServer-shaped wrapper and returns the wrapper itself', () => {
     const wrapper = { server: validLowLevelServer(), _registeredTools: {}, tool: () => {} }
-    expect(isCompatibleServerType(wrapper)).toBe(wrapper)
+    expect(isCompatibleServerType(wrapper, log)).toBe(wrapper)
     expect(log).not.toHaveBeenCalled()
+  })
+
+  // MCP SDK v2's McpServer dropped the deprecated tool() and kept registerTool().
+  // Demanding tool() rejected every v2 high-level server, and instrument()
+  // swallows the rejection — so the integration captured nothing, silently.
+  it('accepts a high-level server that has registerTool() but no tool()', () => {
+    const wrapper = { server: validLowLevelServer(), _registeredTools: {}, registerTool: () => {} }
+    expect(isCompatibleServerType(wrapper, log)).toBe(wrapper)
+    expect(log).not.toHaveBeenCalled()
+  })
+
+  it('rejects a high-level server with neither registration method', () => {
+    const wrapper = { server: validLowLevelServer(), _registeredTools: {} }
+    expect(() => isCompatibleServerType(wrapper, log)).toThrow(/registerTool\(\) or tool\(\)/)
+    expect(log).toHaveBeenCalled()
   })
 
   it.each([
@@ -37,7 +52,7 @@ describe('isCompatibleServerType', () => {
     ['string', 'not an object', /Server must be an object/],
     ['number', 42, /Server must be an object/],
   ])('rejects non-object input (%s)', (_, input, pattern) => {
-    expect(() => isCompatibleServerType(input)).toThrow(pattern)
+    expect(() => isCompatibleServerType(input, log)).toThrow(pattern)
     expect(log).toHaveBeenCalled()
   })
 
@@ -90,7 +105,7 @@ describe('isCompatibleServerType', () => {
     ],
     ['_serverInfo.name missing', () => ({ ...validLowLevelServer(), _serverInfo: {} as never }), /_serverInfo/],
   ])('rejects a server with %s and logs a warning', (_, makeServer, pattern) => {
-    expect(() => isCompatibleServerType(makeServer())).toThrow(pattern)
+    expect(() => isCompatibleServerType(makeServer(), log)).toThrow(pattern)
     expect(log).toHaveBeenCalled()
   })
 
@@ -98,7 +113,7 @@ describe('isCompatibleServerType', () => {
     const invalidUnderlying = validLowLevelServer() as any
     delete invalidUnderlying.setRequestHandler
     const wrapper = { server: invalidUnderlying, _registeredTools: {}, tool: () => {} }
-    expect(() => isCompatibleServerType(wrapper)).toThrow(/setRequestHandler/)
+    expect(() => isCompatibleServerType(wrapper, log)).toThrow(/setRequestHandler/)
   })
 })
 
@@ -132,7 +147,7 @@ describe('getMCPCompatibleErrorMessage', () => {
 
 describe('logCompatibilityWarning', () => {
   it('logs a message that references MCP compatibility', () => {
-    logCompatibilityWarning()
+    logCompatibilityWarning(log)
     expect(log).toHaveBeenCalledTimes(1)
     const [[message]] = (log as jest.Mock).mock.calls
     expect(message).toMatch(/compatibility/i)
@@ -144,6 +159,6 @@ describe('McpServer integration', () => {
   it('accepts a real McpServer instance', async () => {
     const { McpServer } = await import('@modelcontextprotocol/sdk/server/mcp.js')
     const mcpServer = new McpServer({ name: 'test-mcp', version: '1.0.0' })
-    expect(isCompatibleServerType(mcpServer)).toBe(mcpServer)
+    expect(isCompatibleServerType(mcpServer, log)).toBe(mcpServer)
   })
 })

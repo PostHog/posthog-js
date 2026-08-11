@@ -1,5 +1,110 @@
 # posthog-ai
 
+## 8.7.1
+
+### Patch Changes
+
+- [#4473](https://github.com/PostHog/posthog-js/pull/4473) [`9b5922f`](https://github.com/PostHog/posthog-js/commit/9b5922ffcf9f01ae6a0b834ff1cafc2f0ac521a4) Thanks [@fivestarspicy](https://github.com/fivestarspicy)! - fix(gemini): declare Gemini's cache accounting model on generations with cache reads, so ingestion prices cached tokens from `$ai_cache_reporting_exclusive` instead of inferring it from the token counts
+  (2026-08-07)
+
+## 8.7.0
+
+### Minor Changes
+
+- [#4319](https://github.com/PostHog/posthog-js/pull/4319) [`4d379bb`](https://github.com/PostHog/posthog-js/commit/4d379bb327ed76cca9c9c9734f72f585c15fb057) Thanks [@kdawgwilk](https://github.com/kdawgwilk)! - Support AI SDK v7 provider peers for OpenTelemetry integrations and reject v7 models passed to the legacy `withTracing` wrapper.
+  (2026-08-07)
+
+## 8.6.8
+
+### Patch Changes
+
+- [#4189](https://github.com/PostHog/posthog-js/pull/4189) [`2831de1`](https://github.com/PostHog/posthog-js/commit/2831de1450da3126b6d8f1b6e7b72a7018a9e3bb) Thanks [@Fortiz2305](https://github.com/Fortiz2305)! - Report cache-write tokens for the OpenAI wrapper. OpenAI-compatible providers that follow Anthropic's cache-write convention (e.g. Claude via OpenRouter) return cache-write tokens in the response usage (`prompt_tokens_details.cache_write_tokens` for Chat Completions, `input_tokens_details.cache_write_tokens` for Responses), but the wrapper only surfaced cache reads. It now populates `$ai_cache_creation_input_tokens` across Chat Completions and Responses (streaming, non-streaming, and `parse()`), so ingestion can price the cache-write premium for Claude/Anthropic models instead of under-reporting cost on cache-heavy calls. Completes the cache-aware cost fix started in #4071 (#3615).
+  (2026-08-06)
+
+- [#4236](https://github.com/PostHog/posthog-js/pull/4236) [`d36a421`](https://github.com/PostHog/posthog-js/commit/d36a42186ade2c6eae957ae13020fd1af6a4bdcb) Thanks [@gouveags](https://github.com/gouveags)! - Preserve Anthropic cache creation TTL breakdowns in streaming and LangChain generation events.
+  (2026-08-06)
+- Updated dependencies [[`4751b33`](https://github.com/PostHog/posthog-js/commit/4751b33a0498fa36a9d2e11a98d4ef94ca60c5dc), [`64ba193`](https://github.com/PostHog/posthog-js/commit/64ba19370e4a974596712296c8a7f80ddbcc13b1)]:
+  - posthog-node@5.48.1
+  - @posthog/core@1.46.9
+
+## 8.6.7
+
+### Patch Changes
+
+- [#4416](https://github.com/PostHog/posthog-js/pull/4416) [`5a585b2`](https://github.com/PostHog/posthog-js/commit/5a585b22541cdec231a1875b3f956221cfc843e7) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Capture the reasoning text of assistant turns replayed in a Vercel AI SDK prompt. The input mapper read a non-existent `reasoning` field instead of the spec's `text`, so `$ai_input` reasoning parts arrived empty for multi-step agentic loops.
+  (2026-08-05)
+
+## 8.6.6
+
+### Patch Changes
+
+- [#4365](https://github.com/PostHog/posthog-js/pull/4365) [`63d87d8`](https://github.com/PostHog/posthog-js/commit/63d87d8d970c69d0974f5034590a244c22dfb4bb) Thanks [@marandaneto](https://github.com/marandaneto)! - Track OpenAI and Azure background Responses through their terminal state.
+  (2026-08-04)
+
+## 8.6.5
+
+### Patch Changes
+
+- [#4366](https://github.com/PostHog/posthog-js/pull/4366) [`1aa1690`](https://github.com/PostHog/posthog-js/commit/1aa1690974e649170c075cc0d16523cee61ad522) Thanks [@marandaneto](https://github.com/marandaneto)! - Capture failed and incomplete Responses API results correctly.
+  (2026-08-04)
+
+- [#4364](https://github.com/PostHog/posthog-js/pull/4364) [`2c6c614`](https://github.com/PostHog/posthog-js/commit/2c6c6145ded013765b418aaa306b70835acdfe2f) Thanks [@marandaneto](https://github.com/marandaneto)! - Redact binary content consistently across AI integrations.
+  (2026-08-04)
+- Updated dependencies [[`facb4c1`](https://github.com/PostHog/posthog-js/commit/facb4c1e173c0afc6b4c14154a0e65ed239d43f4)]:
+  - posthog-node@5.47.9
+
+## 8.6.4
+
+### Patch Changes
+
+- [#4406](https://github.com/PostHog/posthog-js/pull/4406) [`e2e88f6`](https://github.com/PostHog/posthog-js/commit/e2e88f662d38385359d5021bf30d61b119644951) Thanks [@github-actions](https://github.com/apps/github-actions)! - Capture Vercel AI SDK provider error status codes in `$ai_http_status`.
+  (2026-08-04)
+
+- [#4360](https://github.com/PostHog/posthog-js/pull/4360) [`98bd34b`](https://github.com/PostHog/posthog-js/commit/98bd34b0589083a2afe6f0dd8b95dcdafffa999d) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve provider SDK promise helpers when instrumenting requests, and accept the full Anthropic and Azure OpenAI client options, including custom fetch, timeout, and retry settings.
+  (2026-08-04)
+
+## 8.6.3
+
+### Patch Changes
+
+- [#4361](https://github.com/PostHog/posthog-js/pull/4361) [`0d79b00`](https://github.com/PostHog/posthog-js/commit/0d79b00404f1884ce8c9b17f496dd99d4a81bf40) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve stream cancellation and backpressure while monitoring AI responses.
+  (2026-08-04)
+
+- [#4362](https://github.com/PostHog/posthog-js/pull/4362) [`cd4da1b`](https://github.com/PostHog/posthog-js/commit/cd4da1b373967541d1f3be0a73d45eba74f1e69b) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent telemetry failures from affecting provider calls and errors.
+  (2026-08-04)
+
+## 8.6.2
+
+### Patch Changes
+
+- [#4370](https://github.com/PostHog/posthog-js/pull/4370) [`ea64094`](https://github.com/PostHog/posthog-js/commit/ea640947085a3d317666223b64fae5adbd75cc54) Thanks [@marandaneto](https://github.com/marandaneto)! - Capture Chat Completions usage from OpenAI Agents spans.
+  (2026-08-04)
+
+- [#4368](https://github.com/PostHog/posthog-js/pull/4368) [`45c0559`](https://github.com/PostHog/posthog-js/commit/45c05596566236405a60ed579d60ffe6ae9a891f) Thanks [@marandaneto](https://github.com/marandaneto)! - Remove the undeclared OpenTelemetry core runtime dependency.
+  (2026-08-04)
+
+- [#4369](https://github.com/PostHog/posthog-js/pull/4369) [`6e2f33a`](https://github.com/PostHog/posthog-js/commit/6e2f33aea42ee98e3c6bbe0d99bec80a23d788b3) Thanks [@marandaneto](https://github.com/marandaneto)! - Resolve OpenAI Agents APIs through the declared peer dependency.
+  (2026-08-04)
+
+- [#4371](https://github.com/PostHog/posthog-js/pull/4371) [`a9a78c0`](https://github.com/PostHog/posthog-js/commit/a9a78c0f2768a2083a439a067002f51f656127cd) Thanks [@marandaneto](https://github.com/marandaneto)! - Support current LangChain message usage and response metadata.
+  (2026-08-04)
+
+- [#4363](https://github.com/PostHog/posthog-js/pull/4363) [`821a2c6`](https://github.com/PostHog/posthog-js/commit/821a2c6bc46c61b988f92557f52a0b84afb342a8) Thanks [@marandaneto](https://github.com/marandaneto)! - Safely capture circular and otherwise unknown telemetry values with a shared JSON-safe value converter.
+  (2026-08-04)
+
+- [#4367](https://github.com/PostHog/posthog-js/pull/4367) [`5483f25`](https://github.com/PostHog/posthog-js/commit/5483f25f7f8f370089a05240f7fd0045fe1db504) Thanks [@marandaneto](https://github.com/marandaneto)! - Handle Vercel AI stream errors and cancellation exactly once.
+  (2026-08-04)
+- Updated dependencies [[`d4ffb83`](https://github.com/PostHog/posthog-js/commit/d4ffb83a1bebeb99edc8e9452a674c146c22f033), [`821a2c6`](https://github.com/PostHog/posthog-js/commit/821a2c6bc46c61b988f92557f52a0b84afb342a8)]:
+  - posthog-node@5.47.8
+  - @posthog/core@1.46.6
+
+## 8.6.1
+
+### Patch Changes
+
+- [#4345](https://github.com/PostHog/posthog-js/pull/4345) [`484c482`](https://github.com/PostHog/posthog-js/commit/484c482975d3d14ae37d6b5e0ef87622683be26c) Thanks [@willwearing](https://github.com/willwearing)! - Treat LangGraph control-flow exceptions (`GraphInterrupt`, `NodeInterrupt`, `ParentCommand`, and other `is_bubble_up` errors) as non-error trace and span completions in the LangChain callback, surfacing pending interrupts as `$ai_output_state` under the `__interrupt__` key.
+  (2026-08-03)
+
 ## 8.6.0
 
 ### Minor Changes

@@ -3,6 +3,12 @@ import { PostHog } from '../posthog-core'
 import { assignableWindow } from '../utils/globals'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { defaultPostHog } from './helpers/posthog-instance'
+import { normalizeCaptureResult, standardVolatileCaptureProperties } from './helpers/normalize-capture-result'
+
+jest.mock(
+    '@posthog/browser-common/utils/globals',
+    () => jest.requireActual('./helpers/snapshot-test-globals').snapshotTestGlobals
+)
 
 describe('identify()', () => {
     let instance: PostHog
@@ -178,6 +184,17 @@ describe('identify()', () => {
             })
         )
         expect(instance.featureFlags.setAnonymousDistinctId).toHaveBeenCalledWith('oldIdentity')
+
+        const capturedEvent = beforeSendMock.mock.calls[0][0]
+        expect(capturedEvent.properties.$device_id).toBe('oldIdentity')
+        expect(
+            normalizeCaptureResult(capturedEvent, [
+                ...standardVolatileCaptureProperties.filter(
+                    (field) => field !== 'distinct_id' && field !== '$device_id'
+                ),
+                'token',
+            ])
+        ).toMatchSnapshot()
     })
 
     describe('identity did not change', () => {

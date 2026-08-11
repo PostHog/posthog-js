@@ -457,6 +457,16 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "null",
       "(text: string, element?: HTMLElement | undefined) => string"
     ],
+    "maskAllElementAttributes": [
+      "undefined",
+      "false",
+      "true"
+    ],
+    "maskAttributeFn": [
+      "undefined",
+      "null",
+      "(name: string, value: string, element?: Element | undefined) => string"
+    ],
     "slimDOMOptions": [
       "undefined",
       "true",
@@ -476,6 +486,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "undefined",
       "false",
       "true"
+    ],
+    "inlineStylesheetBudgetRules": [
+      "undefined",
+      "number"
     ],
     "recordCrossOriginIframes": [
       "undefined",
@@ -548,6 +562,22 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "undefined",
       "false",
       "true"
+    ],
+    "sampling": [
+      "undefined",
+      {
+        "mousemove": [
+          "undefined",
+          "number",
+          "false",
+          "true"
+        ],
+        "mouseInteraction": [
+          "undefined",
+          "false",
+          "true"
+        ]
+      }
     ],
     "sampleRate": [
       "undefined",
@@ -699,6 +729,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
         "number"
       ],
       "web_vitals_attribution": [
+        "undefined",
+        "false",
+        "true"
+      ],
+      "__preview_web_vitals_soft_navs": [
         "undefined",
         "false",
         "true"

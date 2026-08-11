@@ -121,6 +121,8 @@ async function setupLazyLoadedSessionRecording({ gzipSupported, gzipCompress }: 
 
         const lazyLoadedSessionRecording = new LazyLoadedSessionRecording(posthog)
         lazyLoadedSessionRecording.start()
+        // these tests exercise compression, not hold semantics — drop the fresh-start interaction hold
+        lazyLoadedSessionRecording['_holdFlushUntilInteraction'] = false
 
         context.emit = emit
         context.posthog = posthog

@@ -1,6 +1,7 @@
 import { PostHog } from 'posthog-node'
 import PostHogAnthropic, { WrappedMessages } from '../src/anthropic'
 import AnthropicOriginal from '@anthropic-ai/sdk'
+import { Stream as AnthropicStream } from '@anthropic-ai/sdk/streaming'
 import { version } from '../package.json'
 import { collectUnhandledRejections } from './test-utils'
 
@@ -17,6 +18,10 @@ interface MockAnthropicResponseOptions {
     output_tokens: number
     cache_creation_input_tokens?: number
     cache_read_input_tokens?: number
+    cache_creation?: {
+      ephemeral_5m_input_tokens: number
+      ephemeral_1h_input_tokens: number
+    }
     server_tool_use?: {
       web_search_requests?: number
     }
@@ -159,6 +164,7 @@ const createMockStreamChunks = (options: MockAnthropicResponseOptions = {}): Moc
         input_tokens: options.usage?.input_tokens || 20,
         cache_creation_input_tokens: options.usage?.cache_creation_input_tokens || 0,
         cache_read_input_tokens: options.usage?.cache_read_input_tokens || 0,
+        ...(options.usage?.cache_creation ? { cache_creation: options.usage.cache_creation } : {}),
         output_tokens: 0,
         ...(options.usage?.server_tool_use?.web_search_requests
           ? {
@@ -346,12 +352,7 @@ describe('PostHogAnthropic', () => {
     const MessagesMock = AnthropicOriginal.Messages as jest.MockedClass<typeof AnthropicOriginal.Messages>
     ;(MessagesMock.prototype.create as jest.Mock) = jest.fn().mockImplementation((params: any) => {
       if (params.stream) {
-        // Return a mock stream
-        const mockStream = {
-          tee: jest
-            .fn()
-            .mockReturnValue([createMockAsyncIterator(mockStreamChunks), createMockAsyncIterator(mockStreamChunks)]),
-        }
+        const mockStream = createMockAsyncIterator(mockStreamChunks)
         return Promise.resolve(mockStream)
       }
       return Promise.resolve(mockResponse)
@@ -808,6 +809,86 @@ describe('PostHogAnthropic', () => {
         cacheReadInputTokens: 5,
       })
     })
+
+    it('should retain cache creation TTL usage after the final streaming delta', async () => {
+      mockStreamChunks = createMockStreamChunks({
+        content: 'Streaming response',
+        usage: {
+          input_tokens: 75,
+          output_tokens: 40,
+          cache_creation_input_tokens: 30,
+          cache_read_input_tokens: 5,
+          cache_creation: {
+            ephemeral_5m_input_tokens: 10,
+            ephemeral_1h_input_tokens: 20,
+          },
+        },
+      })
+
+      const stream = await client.messages.create({
+        model: 'claude-3-opus-20240229',
+        messages: [{ role: 'user', content: 'Hello' }],
+        max_tokens: 100,
+        stream: true,
+        posthogDistinctId: 'test-user-123',
+      })
+
+      for await (const _chunk of stream) {
+        // Consume the stream so the monitoring branch reaches message_delta.
+      }
+      await waitForAsyncCapture()
+
+      const captureMock = mockPostHogClient.capture as jest.Mock
+      const [captureArgs] = captureMock.mock.calls
+
+      expect(captureArgs[0].properties['$ai_usage']).toEqual({
+        input_tokens: 75,
+        output_tokens: 40,
+        cache_creation_input_tokens: 30,
+        cache_read_input_tokens: 5,
+        cache_creation: {
+          ephemeral_5m_input_tokens: 10,
+          ephemeral_1h_input_tokens: 20,
+        },
+      })
+      expect(captureArgs[0].properties['$ai_cache_creation_input_tokens']).toBe(30)
+      expect(captureArgs[0].properties['$ai_output_tokens']).toBe(40)
+    })
+  })
+
+  describe('Telemetry failure isolation', () => {
+    test('preserves the provider result when captureImmediate rejects', async () => {
+      ;(mockPostHogClient.captureImmediate as jest.Mock).mockRejectedValue(new Error('telemetry failed'))
+
+      const response = await client.messages.create({
+        model: 'claude-3-opus-20240229',
+        messages: [{ role: 'user', content: 'Hello' }],
+        max_tokens: 100,
+        posthogCaptureImmediate: true,
+      })
+
+      expect(response).toBe(mockResponse)
+      expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
+    })
+
+    test('preserves the provider error when captureImmediate rejects', async () => {
+      const providerError = new Error('provider failed')
+      const MessagesMock = AnthropicOriginal.Messages as jest.MockedClass<typeof AnthropicOriginal.Messages>
+      ;(MessagesMock.prototype.create as jest.Mock) = jest.fn().mockRejectedValue(providerError)
+      ;(mockPostHogClient.captureImmediate as jest.Mock).mockRejectedValue(new Error('telemetry failed'))
+
+      const rejection = await client.messages
+        .create({
+          model: 'claude-3-opus-20240229',
+          messages: [{ role: 'user', content: 'Hello' }],
+          max_tokens: 100,
+          posthogCaptureImmediate: true,
+        })
+        .catch((error: unknown) => error)
+
+      expect(rejection).toBe(providerError)
+      expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('Error Handling', () => {
@@ -846,20 +927,10 @@ describe('PostHogAnthropic', () => {
 
       // Create a mock stream that throws an error
       const errorStream = {
-        tee: jest.fn().mockReturnValue([
-          {
-            async *[Symbol.asyncIterator]() {
-              throw streamError
-              yield
-            },
-          },
-          {
-            async *[Symbol.asyncIterator]() {
-              throw streamError
-              yield
-            },
-          },
-        ]),
+        async *[Symbol.asyncIterator]() {
+          throw streamError
+          yield
+        },
       }
 
       const MessagesMock = AnthropicOriginal.Messages as jest.MockedClass<typeof AnthropicOriginal.Messages>
@@ -1179,6 +1250,58 @@ describe('PostHogAnthropic - streaming error safety', () => {
     })
   })
 
+  test('break after first chunk cancels the real Anthropic stream and captures only partial output', async () => {
+    const sourceController = new AbortController()
+    let pulls = 0
+    let sourceReturned = false
+    const firstChunk = {
+      type: 'content_block_delta',
+      index: 0,
+      delta: { type: 'text_delta', text: 'partial' },
+    } as AnthropicOriginal.Messages.RawMessageStreamEvent
+    const source = new AnthropicStream<AnthropicOriginal.Messages.RawMessageStreamEvent>(() => {
+      const iterator = (async function* () {
+        try {
+          pulls += 1
+          yield firstChunk
+          pulls += 1
+          yield {
+            ...firstChunk,
+            delta: { type: 'text_delta', text: 'unobserved' },
+          } as AnthropicOriginal.Messages.RawMessageStreamEvent
+        } finally {
+          sourceReturned = true
+          sourceController.abort()
+        }
+      })()
+      return iterator
+    }, sourceController)
+
+    const MessagesMock = AnthropicOriginal.Messages as jest.MockedClass<typeof AnthropicOriginal.Messages>
+    ;(MessagesMock.prototype.create as jest.Mock) = jest.fn().mockResolvedValue(source)
+    const stream = await safetyClient.messages.create({
+      model: 'claude-3-5-sonnet-20240620',
+      max_tokens: 100,
+      messages: [{ role: 'user', content: 'Stop early' }],
+      stream: true,
+      posthogDistinctId: 'anthropic-break-user',
+    } as any)
+
+    expect(stream).toBeInstanceOf(AnthropicStream)
+    expect(pulls).toBe(0)
+    for await (const _chunk of stream as unknown as AsyncIterable<AnthropicOriginal.Messages.RawMessageStreamEvent>) {
+      break
+    }
+    await new Promise(process.nextTick)
+
+    expect(pulls).toBe(1)
+    expect(sourceReturned).toBe(true)
+    expect(sourceController.signal.aborted).toBe(true)
+    expect(safetyMockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const properties = (safetyMockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+    expect(properties['$ai_output_choices'][0].content[0].text).toBe('partial')
+  })
+
   test('messages stream error is not rethrown unhandled', async () => {
     const streamError = new Error('provider error injected into SSE stream')
     const createErroringIterator = (): { [Symbol.asyncIterator](): AsyncIterator<unknown> } => ({
@@ -1189,11 +1312,9 @@ describe('PostHogAnthropic - streaming error safety', () => {
     })
 
     const MessagesMock = AnthropicOriginal.Messages as jest.MockedClass<typeof AnthropicOriginal.Messages>
-    ;(MessagesMock.prototype.create as jest.Mock) = jest.fn().mockImplementation(() =>
-      Promise.resolve({
-        tee: jest.fn().mockReturnValue([createErroringIterator(), createErroringIterator()]),
-      })
-    )
+    ;(MessagesMock.prototype.create as jest.Mock) = jest
+      .fn()
+      .mockImplementation(() => Promise.resolve(createErroringIterator()))
 
     const unhandledRejections = await collectUnhandledRejections(async () => {
       const stream = await safetyClient.messages.create({

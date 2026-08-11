@@ -1,6 +1,6 @@
 {
   "name": "@posthog/rrweb-snapshot",
-  "version": "0.0.67",
+  "version": "0.0.68",
   "description": "rrweb's component to take a snapshot of DOM, aka DOM serializer",
   "scripts": {
     "retest": "vitest run",
@@ -79,7 +79,7 @@
   },
   "dependencies": {
     "@types/postcss-safe-parser": "^5.0.4",
-    "postcss": "^8.5.1",
+    "postcss": "^8.5.23",
     "postcss-safe-parser": "^7.0.1"
   }
 }

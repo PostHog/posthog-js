@@ -97,6 +97,21 @@ export function isZ4Schema(schema: unknown): boolean {
   return !!(schema as ZodV4Internal)._zod
 }
 
+function isZodTypeLike(value: unknown): boolean {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    'parse' in value &&
+    typeof value.parse === 'function' &&
+    'safeParse' in value &&
+    typeof value.safeParse === 'function'
+  )
+}
+
+export function isZodRawShapeCompat(schema: unknown): schema is Record<string, unknown> {
+  return !!schema && typeof schema === 'object' && Object.values(schema).some(isZodTypeLike)
+}
+
 export function getObjectShape(schema: unknown): Record<string, unknown> | undefined {
   if (!schema || typeof schema !== 'object') {
     return
@@ -126,6 +141,24 @@ export function getObjectShape(schema: unknown): Record<string, unknown> | undef
   }
 
   return rawShape
+}
+
+/**
+ * Reads the method name a `setRequestHandler` registration is for.
+ *
+ * The two SDK majors disagree on what the first argument is: v1 passes the Zod
+ * schema for the request and carries the method as a literal on its shape, v2
+ * passes the method string itself. A registration we cannot name is one we
+ * cannot match against a patch — which is how a handler registered after
+ * `instrument()` on v2 ends up replacing our wrapper instead of being wrapped.
+ */
+export function readRequestHandlerMethod(requestSchema: unknown): string | undefined {
+  if (typeof requestSchema === 'string') {
+    return requestSchema
+  }
+  const shape = getObjectShape(requestSchema)
+  const method = shape?.method ? getLiteralValue(shape.method) : undefined
+  return typeof method === 'string' ? method : undefined
 }
 
 export function getLiteralValue(schema: unknown): unknown {

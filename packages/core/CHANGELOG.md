@@ -1,5 +1,83 @@
 # @posthog/core
 
+## 1.47.0
+
+### Minor Changes
+
+- [#4436](https://github.com/PostHog/posthog-js/pull/4436) [`80f15a3`](https://github.com/PostHog/posthog-js/commit/80f15a386621514c43f19e99ee4e3f702e4d369d) Thanks [@jakesciotto](https://github.com/jakesciotto)! - feat(surveys): optional intro screen shown before the first question
+
+  Surveys can now display an intro screen before question 1, configured via the new
+  `displayIntroScreen`, `introScreenHeader`, `introScreenDescription`,
+  `introScreenDescriptionContentType`, and `introScreenButtonText` appearance fields.
+  The intro is dismissed with a button and records no response, does not affect
+  completion or partial-response metrics, does not re-fire "survey shown", and is
+  skipped when a survey is resumed with answers in progress. Intro copy is
+  translatable like the thank-you message. `renderSurveysPreview` accepts
+  `previewPageIndex: -1` (exported as `INTRO_SCREEN_PREVIEW_INDEX`) to preview the
+  intro screen. (2026-08-10)
+
+## 1.46.9
+
+### Patch Changes
+
+- [#4423](https://github.com/PostHog/posthog-js/pull/4423) [`64ba193`](https://github.com/PostHog/posthog-js/commit/64ba19370e4a974596712296c8a7f80ddbcc13b1) Thanks [@marandaneto](https://github.com/marandaneto)! - Use Node's zlib gzip implementation for Node SDK payloads to avoid sustained memory growth from frequent Web Streams compression.
+  (2026-08-06)
+- Updated dependencies [[`75fb719`](https://github.com/PostHog/posthog-js/commit/75fb719bafd4eeb22ed41e10958d32a388c9883e)]:
+  - @posthog/types@1.402.2
+
+## 1.46.8
+
+### Patch Changes
+
+- [#4380](https://github.com/PostHog/posthog-js/pull/4380) [`3c40b6c`](https://github.com/PostHog/posthog-js/commit/3c40b6cecd66633d16f3f94ec6614af656445f2e) Thanks [@marandaneto](https://github.com/marandaneto)! - Keep request timeouts active through response body consumption and clarify eventual event UUID deduplication semantics.
+  (2026-08-05)
+- Updated dependencies [[`3c40b6c`](https://github.com/PostHog/posthog-js/commit/3c40b6cecd66633d16f3f94ec6614af656445f2e)]:
+  - @posthog/types@1.401.1
+
+## 1.46.7
+
+### Patch Changes
+
+- [#4287](https://github.com/PostHog/posthog-js/pull/4287) [`d3c4538`](https://github.com/PostHog/posthog-js/commit/d3c4538b7c22aa468aa0ab9e0edb63d2966618e7) Thanks [@posthog](https://github.com/apps/posthog)! - Keep `$referring_domain` and canonical `utm_*`/campaign parameters on minimal `$feature_flag_called` events. Previously the minimal allowlist stripped every campaign parameter, so a flag-called event landing first in a session could set the session's UTM attribution and channel type to NULL in web analytics.
+  (2026-08-04)
+- Updated dependencies [[`43d1850`](https://github.com/PostHog/posthog-js/commit/43d18506565b491c4a1013f9237aa732ae3d6f4e)]:
+  - @posthog/types@1.401.0
+
+## 1.46.6
+
+### Patch Changes
+
+- [#4363](https://github.com/PostHog/posthog-js/pull/4363) [`821a2c6`](https://github.com/PostHog/posthog-js/commit/821a2c6bc46c61b988f92557f52a0b84afb342a8) Thanks [@marandaneto](https://github.com/marandaneto)! - Safely capture circular and otherwise unknown telemetry values with a shared JSON-safe value converter.
+  (2026-08-04)
+
+## 1.46.5
+
+### Patch Changes
+
+- [#4235](https://github.com/PostHog/posthog-js/pull/4235) [`7db0e8c`](https://github.com/PostHog/posthog-js/commit/7db0e8c2a46edfc180b1d13d3b23fbcac867e552) Thanks [@hpouillot](https://github.com/hpouillot)! - Preserve messages, source locations, and existing stacks from browser errors that do not provide a same-realm `Error` object.
+  (2026-08-03)
+
+## 1.46.4
+
+### Patch Changes
+
+- [#4381](https://github.com/PostHog/posthog-js/pull/4381) [`f3a71a1`](https://github.com/PostHog/posthog-js/commit/f3a71a1f462384543de5f39762c3c1ed7b532be8) Thanks [@marandaneto](https://github.com/marandaneto)! - Clear completed lifecycle timeout handles so successful shutdowns do not leave timers running.
+  (2026-08-03)
+
+## 1.46.3
+
+### Patch Changes
+
+- [#4155](https://github.com/PostHog/posthog-js/pull/4155) [`eb0a793`](https://github.com/PostHog/posthog-js/commit/eb0a7930eebf2474dc03846b36891dc33df112f7) Thanks [@ATKasem](https://github.com/ATKasem)! - fix: `personProperties` and `groupProperties` on the feature flag methods are no longer typed as `Record<string, string>`, so numeric and boolean values type-check without a cast. Local evaluation already handled them — `matchProperty` takes `Record<string, any>` and compares numerically for `gt`/`gte`/`lt`/`lte` — only the public types disagreed. These now use the shared `Properties` type (`personProperties?: Properties`, `groupProperties?: Record<string, Properties>`), matching `setPersonPropertiesForFlags`/`setGroupPropertiesForFlags` so the `any` can be narrowed later. Types only, no runtime change.
+  (2026-08-03)
+
+## 1.46.2
+
+### Patch Changes
+
+- [#4347](https://github.com/PostHog/posthog-js/pull/4347) [`7c3a9af`](https://github.com/PostHog/posthog-js/commit/7c3a9af42be80051705f7fe820623dd7e1b879d5) Thanks [@marandaneto](https://github.com/marandaneto)! - Preserve events added to a full queue while an earlier batch is being flushed.
+  (2026-08-03)
+
 ## 1.46.1
 
 ### Patch Changes

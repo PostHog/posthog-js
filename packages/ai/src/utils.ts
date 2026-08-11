@@ -28,11 +28,16 @@ const TOKEN_PROPERTY_KEYS = new Set([
   '$ai_reasoning_tokens',
 ])
 
+/**
+ * Whether the caller supplied their own token counts, which override the ones the SDK
+ * derived from the provider response.
+ */
+export function hasTokenOverrides(posthogProperties?: Record<string, unknown>): boolean {
+  return !!posthogProperties && Object.keys(posthogProperties).some((key) => TOKEN_PROPERTY_KEYS.has(key))
+}
+
 export function getTokensSource(posthogProperties?: Record<string, unknown>): string {
-  if (posthogProperties && Object.keys(posthogProperties).some((key) => TOKEN_PROPERTY_KEYS.has(key))) {
-    return 'passthrough'
-  }
-  return 'sdk'
+  return hasTokenOverrides(posthogProperties) ? 'passthrough' : 'sdk'
 }
 
 // limit large outputs by truncating to 200kb (approx 200k bytes)
@@ -334,7 +339,7 @@ export const formatResponseGemini = (response: any): FormattedMessage[] => {
             }
 
             // Sanitize base64 data for images and other large inline data
-            data = redactBase64DataUrl(data)
+            data = redactBase64DataUrl(data, mimeType)
 
             content.push(buildInlineDataBlock(mimeType, data))
           }

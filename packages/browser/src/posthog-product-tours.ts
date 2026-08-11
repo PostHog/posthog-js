@@ -140,7 +140,13 @@ export class PostHogProductTours implements Extension {
                 const statusCode = response.statusCode
                 if (statusCode !== 200 || !response.json) {
                     const error = `Product Tours API could not be loaded, status: ${statusCode}`
-                    logger.error(error)
+                    if (statusCode === 0) {
+                        if (!response.error) {
+                            logger.warn(error)
+                        }
+                    } else {
+                        logger.error(error)
+                    }
                     callback([], { isLoaded: false, error })
                     return
                 }

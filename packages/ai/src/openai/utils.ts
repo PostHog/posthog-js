@@ -28,22 +28,64 @@ export function extractRequestId(result: unknown): string | undefined {
 }
 
 /**
+ * Reads `cache_write_tokens` from a usage details object — Chat Completions'
+ * `prompt_tokens_details` or the Responses API's `input_tokens_details`, both of
+ * which carry the field — and returns 0 when it is absent. A defensive reader
+ * (mirroring `extractRequestId`) that tolerates the loosely-typed usage shapes
+ * OpenAI-compatible providers return, used to populate
+ * `$ai_cache_creation_input_tokens`.
+ */
+export function extractCacheWriteTokens(details: unknown): number {
+  return (details as { cache_write_tokens?: number } | null | undefined)?.cache_write_tokens ?? 0
+}
+
+/**
  * Assembles the `$ai_provider_metadata` blob for OpenAI / Azure OpenAI events.
  * Provider-specific fields (system fingerprint, request id) live here rather
  * than in the shared, provider-agnostic `$ai_*` namespace. Only keys with a
- * truthy value are included, and `undefined` is returned when there is nothing
+ * meaningful value are included, and `undefined` is returned when there is nothing
  * to report so the property can be omitted from the event entirely.
  */
 export function buildProviderMetadata(fields: {
   systemFingerprint?: string | null
   requestId?: string | null
-}): Record<string, string> | undefined {
-  const metadata: Record<string, string> = {}
+  incompleteDetails?: OpenAI.Responses.Response['incomplete_details']
+}): Record<string, unknown> | undefined {
+  const metadata: Record<string, unknown> = {}
   if (fields.systemFingerprint) {
     metadata.system_fingerprint = fields.systemFingerprint
   }
   if (fields.requestId) {
     metadata.request_id = fields.requestId
   }
+  if (fields.incompleteDetails != null) {
+    metadata.incomplete_details = fields.incompleteDetails
+  }
   return Object.keys(metadata).length > 0 ? metadata : undefined
+}
+
+const TERMINAL_RESPONSE_STATUSES = new Set(['completed', 'failed', 'cancelled', 'incomplete'])
+
+/**
+ * Checks whether a Responses API response has reached a status that should
+ * produce a final `$ai_generation` event.
+ */
+export function isTerminalResponse(response: { status?: string | null } | null | undefined): boolean {
+  return !!response?.status && TERMINAL_RESPONSE_STATUSES.has(response.status)
+}
+
+/**
+ * Returns an isolated copy of a failed Responses API error for `$ai_error`, or
+ * creates a fallback error when the provider omitted failure details.
+ */
+export function getResponseFailure(
+  response: Pick<OpenAI.Responses.Response, 'id' | 'status' | 'error'> | null | undefined
+): unknown {
+  if (response?.status !== 'failed') {
+    return undefined
+  }
+
+  return response.error
+    ? { ...response.error }
+    : new Error(`OpenAI response ${response.id} failed without error details`)
 }

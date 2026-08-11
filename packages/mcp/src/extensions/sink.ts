@@ -7,7 +7,7 @@ import type { PostHog } from 'posthog-node'
 import { uuidv7 } from '@posthog/core'
 
 import type { BeforeSendFn, Event, McpEvent } from '../types'
-import { log } from './logger'
+import { log, type LoggerFn } from './logger'
 import { type PostHogCaptureEvent, buildPostHogCaptureEvents } from './posthog-events'
 import { newPrefixedId } from './ids'
 import { sanitizeEvent } from './sanitization'
@@ -33,21 +33,22 @@ export interface McpCaptureOptions {
  */
 export async function processMcpEvent(
   event: McpEvent,
-  options: McpCaptureOptions
+  options: McpCaptureOptions,
+  logger: LoggerFn = log
 ): Promise<{ event: Event; captures: PostHogCaptureEvent[] } | null> {
   let processed: McpEvent = event
 
   try {
     processed = sanitizeEvent(processed)
   } catch (err) {
-    log(`Failed to sanitize event: ${err}`)
+    logger(`Failed to sanitize event: ${err}`)
     return null
   }
 
   try {
     processed = truncateEvent(processed)
   } catch (err) {
-    log(`Failed to truncate event: ${err}`)
+    logger(`Failed to truncate event: ${err}`)
     return null
   }
 
@@ -58,7 +59,7 @@ export async function processMcpEvent(
     enableExceptionAutocapture: options.enableExceptionAutocapture,
   })
 
-  const captures = await applyBeforeSend(built, options.beforeSend)
+  const captures = await applyBeforeSend(built, options.beforeSend, logger)
 
   return { event: fullEvent, captures }
 }
@@ -69,7 +70,8 @@ export async function processMcpEvent(
  */
 async function applyBeforeSend(
   captures: PostHogCaptureEvent[],
-  beforeSend: BeforeSendFn | undefined
+  beforeSend: BeforeSendFn | undefined,
+  logger: LoggerFn
 ): Promise<PostHogCaptureEvent[]> {
   if (!beforeSend) {
     return captures
@@ -83,31 +85,32 @@ async function applyBeforeSend(
         kept.push(result)
       }
     } catch (err) {
-      log(`beforeSend threw for event ${capture.event}; dropping it: ${err}`)
+      logger(`beforeSend threw for event ${capture.event}; dropping it: ${err}`)
     }
   }
   return kept
 }
 
 /**
- * Wraps a user-supplied `posthog-node` client. Runs every MCP event through the
- * sanitize → truncate pipeline, fans it out into the `$mcp_*` / `$exception`
- * events, applies `beforeSend`, and hands each to `posthog.capture()`.
+ * Wraps a user-supplied `posthog-node` client: runs every MCP event through
+ * {@link processMcpEvent} and hands each surviving payload to `posthog.capture()`.
  *
  * The SDK does not own the client lifecycle — the host application constructs
  * the `PostHog` instance and is responsible for `shutdown()` (matching
  * `@posthog/ai`).
  */
 export class McpEventSink {
-  constructor(private readonly posthog: PostHog) {}
+  constructor(
+    private readonly posthog: PostHog,
+    private readonly logger: LoggerFn = log
+  ) {}
 
   /**
-   * Push an MCP event through the pipeline (sanitize → truncate → fan out →
-   * beforeSend → capture). Errors at any stage are logged and the event is
-   * dropped, never re-thrown into tool code.
+   * Errors at any stage are logged and the event is dropped, never re-thrown
+   * into tool code.
    */
   async capture(event: McpEvent, options: McpCaptureOptions): Promise<void> {
-    const result = await processMcpEvent(event, options)
+    const result = await processMcpEvent(event, options, this.logger)
     if (!result) {
       return
     }
@@ -132,13 +135,13 @@ export class McpEventSink {
           uuid: uuidv7(),
         })
       }
-      log(
+      this.logger(
         `Captured PostHog event ${fullEvent.id} | ${fullEvent.eventType} | ${fullEvent.duration} ms | ${
-          fullEvent.identifyActorGivenId || 'anonymous'
+          fullEvent.identifyActorGivenId ? 'identified' : 'anonymous'
         }`
       )
     } catch (err) {
-      log(`Failed to capture PostHog event ${fullEvent.id}: ${err}`)
+      this.logger(`Failed to capture PostHog event ${fullEvent.id}: ${err}`)
     }
   }
 }

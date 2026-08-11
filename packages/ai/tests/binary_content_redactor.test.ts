@@ -9,7 +9,7 @@ const REDACTED_GENERIC = '[base64 redacted]'
 
 const PURE_B64 = 'A'.repeat(2000)
 const URL_SAFE_B64 = '-_'.repeat(1000)
-const SHORT_B64 = 'A'.repeat(40) // below STRONG_CONTEXT_MIN_LENGTH (64)
+const SHORT_B64 = 'U0hPUlQgQklOQVJZ' // below STRONG_CONTEXT_MIN_LENGTH (64)
 const MEDIUM_B64 = 'A'.repeat(80) // above strong threshold, below weak
 
 const containsLargeBase64 = (value: unknown): boolean => JSON.stringify(value).includes('A'.repeat(500))
@@ -62,8 +62,34 @@ describe('redactBinaryContent', () => {
       expect((out as any).data).toBe(placeholder('audio/wav'))
     })
 
-    it('does not redact below strong threshold even with strong context', () => {
-      expect((redactBinaryContent({ data: SHORT_B64, mediaType: 'image/png' }) as any).data).toBe(SHORT_B64)
+    it.each(['mediaType', 'media_type', 'mimeType', 'mime_type'])(
+      'redacts short base64 when sibling %s provides an explicit MIME',
+      (key) => {
+        expect((redactBinaryContent({ data: SHORT_B64, [key]: 'image/png' }) as any).data).toBe(
+          placeholder('image/png')
+        )
+      }
+    )
+
+    it('redacts line-wrapped base64 when an explicit binary MIME is present', () => {
+      const lineWrappedBase64 = `${SHORT_B64.slice(0, 8)}\r\n${SHORT_B64.slice(8)}`
+      expect((redactBinaryContent({ data: lineWrappedBase64, mediaType: 'image/png' }) as any).data).toBe(
+        placeholder('image/png')
+      )
+    })
+
+    it('does not redact non-base64 content that starts with a base64 character', () => {
+      const value = 'Uhello world'
+      expect((redactBinaryContent({ data: value, mediaType: 'image/png' }) as any).data).toBe(value)
+    })
+
+    it('uses the first sibling MIME consistently for recognition and the placeholder', () => {
+      const out = redactBinaryContent({ data: SHORT_B64, mediaType: 'text/plain', mimeType: 'image/png' })
+      expect((out as any).data).toBe(SHORT_B64)
+    })
+
+    it('keeps the strong threshold when context has no explicit MIME', () => {
+      expect((redactBinaryContent({ type: 'image', data: SHORT_B64 }) as any).data).toBe(SHORT_B64)
     })
   })
 
@@ -122,6 +148,16 @@ describe('redactBinaryContent', () => {
       expect(redactBinaryContent('hello world')).toBe('hello world')
       expect(redactBinaryContent({ token: 'abc.def.ghi' })).toEqual({ token: 'abc.def.ghi' })
     })
+
+    it.each(['mediaType', 'media_type', 'mimeType', 'mime_type'])(
+      'preserves non-base64 data when sibling %s provides an explicit MIME',
+      (key) => {
+        expect(redactBinaryContent({ data: 'hello', [key]: 'text/plain' })).toEqual({
+          data: 'hello',
+          [key]: 'text/plain',
+        })
+      }
+    )
   })
 
   describe('walking nested structures', () => {

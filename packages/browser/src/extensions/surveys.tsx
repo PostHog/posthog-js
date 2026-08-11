@@ -28,11 +28,12 @@ import {
     isSurveyRunning,
     SURVEY_LOGGER as logger,
 } from '../utils/survey-utils'
-import { isArray, isNull, isUndefined } from '@posthog/core'
+import { isArray, isNull, isNumber, isUndefined } from '@posthog/core'
 import { Properties } from '../types'
 import { SURVEYS } from '../constants'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
+import { IntroScreen } from './surveys/components/IntroScreen'
 import { Cancel } from './surveys/components/QuestionHeader'
 import {
     CommonQuestionProps,
@@ -46,6 +47,7 @@ import {
     retrieveSurveyShadow,
     defaultSurveyAppearance,
     dismissedSurveyEvent,
+    clearInProgressSurveyState,
     doesSurveyDeviceTypesMatch,
     doesSurveyMatchSelector,
     doesSurveyUrlMatch,
@@ -74,6 +76,13 @@ import { applySurveyTranslationForUser } from '../utils/survey-translations'
 
 // Re-export for surveys-preview entrypoint
 export { getNextSurveyStep }
+
+/**
+ * `previewPageIndex` sentinel for the intro screen — the leading mirror of the confirmation
+ * page's `survey.questions.length` sentinel. Also serves as a capability marker for the main
+ * app: bundles without this export cannot render the intro screen preview.
+ */
+export const INTRO_SCREEN_PREVIEW_INDEX = -1
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
@@ -128,7 +137,7 @@ const SURVEY_TARGETING_FLAG_PREFIX = 'survey-targeting-'
 export class SurveyManager {
     private _posthog: PostHog
     private _surveyInFocus: string | null
-    private _surveyTimeouts: Map<string, NodeJS.Timeout> = new Map()
+    private _surveyTimeouts: Map<string, ReturnType<Window['setTimeout']>> = new Map()
     private _widgetSelectorListeners: Map<string, { element: Element; listener: EventListener; survey: Survey }> =
         new Map()
     private _prefillHandledSurveys: Set<string> = new Set()
@@ -181,7 +190,17 @@ export class SurveyManager {
         }
     }
 
-    public handlePopoverSurvey = (surveyParam: Survey, options?: DisplaySurveyPopoverOptions): void => {
+    /**
+     * `resumeDelayFromActivation` is internal to the display loop: a survey armed by an
+     * event/action trigger resumes its popup delay from when the trigger fired, so navigating
+     * mid-delay does not restart the countdown. An explicit `displaySurvey()` call carries its own
+     * `ignoreDelay` option instead, so it must always honor the full configured delay.
+     */
+    public handlePopoverSurvey = (
+        surveyParam: Survey,
+        options?: DisplaySurveyPopoverOptions,
+        { resumeDelayFromActivation = false }: { resumeDelayFromActivation?: boolean } = {}
+    ): void => {
         const { survey: translatedSurvey, language: surveyLanguage } = this._translateSurveyForRendering(surveyParam)
 
         // apply overrides for position / selector (needed for thumb surveys)
@@ -242,19 +261,9 @@ export class SurveyManager {
         if (delaySeconds <= 0) {
             return render(<SurveyPopup {...surveyPopupProps} />, shadow)
         }
-        const timeoutId = setTimeout(() => {
-            // remove survey to keep `_surveyTimeouts` as a true list of "pending" surveys
-            this._surveyTimeouts.delete(survey.id)
 
-            // Re-check the full display predicate, not just the URL: eligibility can change
-            // during the delay (e.g. identify() reloads flags and the internal targeting flag
-            // flips to false), and we must not show a survey that is no longer eligible by the
-            // time the delay elapses.
-            if (!this._shouldDisplaySurvey(survey)) {
-                logger.info(`Survey ${survey.id} no longer eligible when its display delay elapsed; not displaying`)
-                return this._removeSurveyFromFocus(survey)
-            }
-            // rendering with surveyPopupDelaySeconds = 0 because we're already handling the timeout here
+        // rendering with surveyPopupDelaySeconds = 0 because the delay is handled here, not in the popup
+        const renderAfterDelay = () =>
             render(
                 <SurveyPopup
                     {...surveyPopupProps}
@@ -268,7 +277,44 @@ export class SurveyManager {
                 />,
                 shadow
             )
-        }, delaySeconds * 1000)
+
+        // Re-check the full display predicate, not just the URL: eligibility can change
+        // while the delay runs down (e.g. identify() reloads flags and the internal targeting flag
+        // flips to false), and we must not show a survey that is no longer eligible by the
+        // time the delay elapses.
+        const renderIfStillEligible = () => {
+            if (!this._shouldDisplaySurvey(survey)) {
+                logger.info(`Survey ${survey.id} no longer eligible when its display delay elapsed; not displaying`)
+                return this._removeSurveyFromFocus(survey)
+            }
+            renderAfterDelay()
+        }
+
+        // Resume the delay across navigations. An event/action trigger records when it fired
+        // (persisted, session-scoped), so the remaining wait is measured from that instead of
+        // restarting a fresh countdown on every page load — otherwise a user who keeps navigating
+        // never lets the delay elapse and never sees the survey. Without a recorded activation
+        // (e.g. a survey shown on an `always`/wait-period basis rather than a trigger) we fall
+        // back to the full delay, matching the previous behaviour.
+        const activatedAt = resumeDelayFromActivation
+            ? this._posthog.surveys?._surveyEventReceiver?.getActivationTimestamp?.(survey.id)
+            : undefined
+        // Clamp the elapsed time at 0 so a clock that moved backwards after the activation was
+        // stamped (NTP correction, VM suspend/resume) cannot stretch the wait past the delay.
+        const elapsedMs = isNumber(activatedAt) ? Math.max(0, Date.now() - activatedAt) : 0
+        const remainingMs = Math.max(0, delaySeconds * 1000 - elapsedMs)
+
+        if (remainingMs <= 0) {
+            // The delay already elapsed on an earlier page load; show now, if still eligible.
+            return renderIfStillEligible()
+        }
+
+        const timeoutId = window.setTimeout(() => {
+            // remove survey to keep `_surveyTimeouts` as a true list of "pending" surveys
+            this._surveyTimeouts.delete(survey.id)
+
+            renderIfStillEligible()
+        }, remainingMs)
         this._surveyTimeouts.set(survey.id, timeoutId)
     }
 
@@ -293,14 +339,39 @@ export class SurveyManager {
         )
     }
 
-    private _removeWidgetSelectorListener = (survey: Pick<Survey, 'id' | 'type' | 'appearance'>): void => {
-        this._removeSurveyFromDom(survey)
-        const existing = this._widgetSelectorListeners.get(survey.id)
+    // Detach the tracked click listener (and its marker attribute) from the trigger element for a
+    // survey, without touching the rendered survey DOM. Safe to call while a survey is open — it
+    // only cleans up the trigger wiring, which is what an element swap needs.
+    private _detachWidgetSelectorListener = (surveyId: string): void => {
+        const existing = this._widgetSelectorListeners.get(surveyId)
         if (existing) {
             existing.element.removeEventListener('click', existing.listener)
             existing.element.removeAttribute(WIDGET_LISTENER_ATTRIBUTE)
-            this._widgetSelectorListeners.delete(survey.id)
-            logger.info(`Removed click listener for survey ${survey.id}`)
+            this._widgetSelectorListeners.delete(surveyId)
+            logger.info(`Removed click listener for survey ${surveyId}`)
+        }
+    }
+
+    private _removeWidgetSelectorListener = (survey: Pick<Survey, 'id' | 'type' | 'appearance'>): void => {
+        // Defer teardown while the survey is open (issue #2036). The trigger element may have
+        // been unmounted mid-survey — e.g. a dropdown/menu that hosts it was closed — and tearing
+        // the survey down here would make the open survey abruptly vanish. Keep it in place; the
+        // next display poll retries this cleanup once the user has closed the survey.
+        if (this._isWidgetSurveyOpen(survey)) {
+            return
+        }
+        this._removeSurveyFromDom(survey)
+        this._detachWidgetSelectorListener(survey.id)
+    }
+
+    private _isWidgetSurveyOpen = (survey: Pick<Survey, 'id' | 'type' | 'appearance'>): boolean => {
+        try {
+            // The survey popup (`.ph-survey`) is only present in the shadow root while the survey
+            // is actually open; when only the widget/trigger is mounted it is absent.
+            const shadowContainer = document.querySelector(getSurveyContainerClass(survey, true))
+            return !!shadowContainer?.shadowRoot?.querySelector('.ph-survey')
+        } catch {
+            return false
         }
     }
 
@@ -321,7 +392,12 @@ export class SurveyManager {
             // Listener exists, check if element changed
             if (currentElement !== existingListenerData.element) {
                 logger.info(`Selector element changed for survey ${survey.id}. Re-attaching listener.`)
-                this._removeWidgetSelectorListener(survey)
+                // Detach the *old* element's listener directly. Routing this through
+                // _removeWidgetSelectorListener would defer while the survey is open (to avoid
+                // tearing down the open survey's DOM), leaking the old element's listener — and the
+                // map entry that tracks it is overwritten just below, losing the only reference
+                // needed to ever clean it up.
+                this._detachWidgetSelectorListener(survey.id)
                 // Continue to attach listener to the new element below
             } else {
                 // Element is the same, listener already attached, do nothing
@@ -795,7 +871,7 @@ export class SurveyManager {
 
                 // Popover Type Logic (only one shown at a time)
                 if (isNull(this._surveyInFocus) && survey.type === SurveyType.Popover) {
-                    this.handlePopoverSurvey(survey)
+                    this.handlePopoverSurvey(survey, undefined, { resumeDelayFromActivation: true })
                 }
             })
 
@@ -1266,6 +1342,22 @@ export function SurveyPopup({
     const shouldShowConfirmation =
         isSurveySent || previewPageIndex === survey.questions.length || isSurveyCompleted === true
 
+    const [introScreenDismissed, setIntroScreenDismissed] = useState(false)
+    const hasInProgressState = useMemo(() => !!getInProgressSurveyState(survey), [survey])
+    /**
+     * The intro screen is a leading page, the mirror of the trailing confirmation message. It is
+     * skipped whenever the survey already has answers in progress (resumed session or URL
+     * prefill), and dismissing it only flips local state — no event, no response, no effect on
+     * completion or partial-response accounting. The confirmation check above always wins so a
+     * completed survey never shows the intro. Unlike the confirmation message the intro has no
+     * default header, so a survey with no intro copy at all skips straight to question 1 rather
+     * than drawing an empty box with a button.
+     */
+    const hasIntroContent = !!(survey.appearance?.introScreenHeader || survey.appearance?.introScreenDescription)
+    const shouldShowIntroScreen = isPreviewMode
+        ? previewPageIndex === INTRO_SCREEN_PREVIEW_INDEX
+        : !!survey.appearance?.displayIntroScreen && hasIntroContent && !introScreenDismissed && !hasInProgressState
+
     const surveyContextValue = useMemo(() => {
         const getInProgressSurvey = getInProgressSurveyState(survey)
         const surveySubmissionId = getInProgressSurvey?.surveySubmissionId || uuidv7()
@@ -1315,9 +1407,7 @@ export function SurveyPopup({
                 }}
                 ref={surveyContainerRef}
             >
-                {!shouldShowConfirmation ? (
-                    <Questions survey={survey} forceDisableHtml={!!forceDisableHtml} posthog={posthog} />
-                ) : (
+                {shouldShowConfirmation ? (
                     <ConfirmationMessage
                         header={survey.appearance?.thankYouMessageHeader || 'Thank you!'}
                         description={survey.appearance?.thankYouMessageDescription || ''}
@@ -1329,6 +1419,17 @@ export function SurveyPopup({
                             onCloseConfirmationMessage()
                         }}
                     />
+                ) : shouldShowIntroScreen ? (
+                    <IntroScreen
+                        header={survey.appearance?.introScreenHeader || ''}
+                        description={survey.appearance?.introScreenDescription || ''}
+                        forceDisableHtml={!!forceDisableHtml}
+                        contentType={survey.appearance?.introScreenDescriptionContentType}
+                        appearance={survey.appearance || defaultSurveyAppearance}
+                        onStart={() => setIntroScreenDismissed(true)}
+                    />
+                ) : (
+                    <Questions survey={survey} forceDisableHtml={!!forceDisableHtml} posthog={posthog} />
                 )}
             </div>
         </SurveyContext.Provider>
@@ -1344,13 +1445,37 @@ export function Questions({
     forceDisableHtml: boolean
     posthog?: PostHog
 }) {
+    // Read the persisted in-progress state once and sanitize it. A stale persisted index (e.g.
+    // left over from a prior completion) can point past the end of the questions array, which
+    // makes the question renderer bail and leaves the survey container empty. When that happens
+    // the whole record is stale, so we discard it and start fresh rather than clamping the index
+    // while keeping the equally-stale responses and visited indices around.
+    const initialInProgressState = useMemo(() => {
+        const state = getInProgressSurveyState(survey)
+        if (!state) {
+            return null
+        }
+        // Only an index that is actually present and out of range signals a stale record (e.g.
+        // left over from a prior completion) whose responses should be dropped. A missing, NaN or
+        // otherwise non-numeric index just predates the persisted-index feature — keep the
+        // responses and start from question 0 (the reader below defaults to it).
+        const hasIndex = isNumber(state.lastQuestionIndex)
+        const isIndexInRange =
+            hasIndex && state.lastQuestionIndex >= 0 && state.lastQuestionIndex < survey.questions.length
+        if (hasIndex && !isIndexInRange) {
+            clearInProgressSurveyState(survey)
+            return null
+        }
+        return state
+        // Only recompute when the survey identity changes; we intentionally read localStorage once.
+    }, [survey])
+
     // Initialize responses from localStorage or empty object
     const [questionsResponses, setQuestionsResponses] = useState(() => {
-        const inProgressSurveyData = getInProgressSurveyState(survey)
-        if (inProgressSurveyData?.responses) {
+        if (initialInProgressState?.responses) {
             logger.info('Survey is already in progress, filling in initial responses')
         }
-        return inProgressSurveyData?.responses || {}
+        return initialInProgressState?.responses || {}
     })
     const {
         previewPageIndex,
@@ -1364,18 +1489,28 @@ export function Questions({
         surveyLanguage,
     } = useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(() => {
-        const inProgressSurveyData = getInProgressSurveyState(survey)
-        return previewPageIndex || inProgressSurveyData?.lastQuestionIndex || 0
+        // Fall back to the first question for a missing, NaN or out-of-range persisted index so a
+        // resumed survey always renders a real question rather than an empty container.
+        const savedIndex = initialInProgressState?.lastQuestionIndex
+        const validSavedIndex =
+            isNumber(savedIndex) && savedIndex >= 0 && savedIndex < survey.questions.length ? savedIndex : 0
+        // The intro screen preview sentinel (INTRO_SCREEN_PREVIEW_INDEX) is handled at the
+        // SurveyPopup level and must never become a question index.
+        return isNumber(previewPageIndex) && previewPageIndex >= 0 ? previewPageIndex : validSavedIndex
     })
     const [visitedIndices, setVisitedIndices] = useState<number[]>(() => {
-        const inProgressSurveyData = getInProgressSurveyState(survey)
-        return inProgressSurveyData?.visitedIndices ?? []
+        // Drop any out-of-range visited indices so the Back button can never navigate to a
+        // non-existent question (which would re-empty the container).
+        return (initialInProgressState?.visitedIndices ?? []).filter(
+            (index) => index >= 0 && index < survey.questions.length
+        )
     })
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
 
-    // Sync preview state
+    // Sync preview state. Negative sentinels (the intro screen page) are rendered by SurveyPopup
+    // instead of Questions, so they must never reach currentQuestionIndex.
     useEffect(() => {
-        if (isPreviewMode && !isUndefined(previewPageIndex)) {
+        if (isPreviewMode && !isUndefined(previewPageIndex) && previewPageIndex >= 0) {
             setCurrentQuestionIndex(previewPageIndex)
         }
     }, [previewPageIndex, isPreviewMode])

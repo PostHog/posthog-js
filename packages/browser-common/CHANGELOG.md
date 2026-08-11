@@ -1,5 +1,24 @@
 # @posthog/browser-common
 
+## 0.5.0
+
+### Minor Changes
+
+- [#4316](https://github.com/PostHog/posthog-js/pull/4316) [`f999394`](https://github.com/PostHog/posthog-js/commit/f9993947c7436672f5daf2a2a284fa1c9771f602) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add richer client request and identity context alongside initialized, synchronously buffered batch key-value persistence operations.
+  (2026-08-11)
+
+## 0.4.0
+
+### Minor Changes
+
+- [#4376](https://github.com/PostHog/posthog-js/pull/4376) [`2da12b8`](https://github.com/PostHog/posthog-js/commit/2da12b8cbe7c3fa2354bfc157a4db927ef5a3ac1) Thanks [@posthog](https://github.com/apps/posthog)! - Add attribute-level masking to session replay: `maskAttributeFn` provides per-attribute control over the final serialized value, while `maskAllElementAttributes` masks all source DOM string attributes (including rendering attributes and synthesized form values) at the cost of replay fidelity.
+  (2026-08-05)
+
+### Patch Changes
+
+- Updated dependencies [[`2da12b8`](https://github.com/PostHog/posthog-js/commit/2da12b8cbe7c3fa2354bfc157a4db927ef5a3ac1)]:
+    - @posthog/types@1.402.0
+
 ## 0.3.1
 
 ### Patch Changes

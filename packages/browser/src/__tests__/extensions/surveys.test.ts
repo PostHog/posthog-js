@@ -7,7 +7,11 @@ import {
     useHideSurveyOnURLChange,
     usePopupVisibility,
 } from '../../extensions/surveys'
-import { retrieveSurveyShadow } from '../../extensions/surveys/surveys-extension-utils'
+import {
+    getSurveyContainerClass,
+    retrieveSurveyShadow,
+    setInProgressSurveyState,
+} from '../../extensions/surveys/surveys-extension-utils'
 import {
     Survey,
     SurveyQuestionBranchingType,
@@ -338,7 +342,9 @@ describe('SurveyManager', () => {
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
         expect(mockPostHog.surveys.getSurveys).toHaveBeenCalled()
-        expect(handlePopoverSurveyMock).toHaveBeenCalledWith(mockSurveys[0])
+        expect(handlePopoverSurveyMock).toHaveBeenCalledWith(mockSurveys[0], undefined, {
+            resumeDelayFromActivation: true,
+        })
     })
 
     test('should initialize surveyInFocus correctly', () => {
@@ -373,7 +379,9 @@ describe('SurveyManager', () => {
         expect(mockPostHog.surveys.getSurveys).toHaveBeenCalled()
 
         // First popover should be handled
-        expect(handlePopoverSurveySpy).toHaveBeenCalledWith(mockSurveys[0])
+        expect(handlePopoverSurveySpy).toHaveBeenCalledWith(mockSurveys[0], undefined, {
+            resumeDelayFromActivation: true,
+        })
         expect(addSurveyToFocusSpy).toHaveBeenCalledWith(mockSurveys[0])
         expect(surveyManager.getTestAPI().surveyInFocus).toBe(mockSurveys[0].id)
 
@@ -381,7 +389,9 @@ describe('SurveyManager', () => {
         surveyManager.callSurveysAndEvaluateDisplayLogic(true)
 
         // Second popover should NOT be handled as one is already in focus
-        expect(handlePopoverSurveySpy).not.toHaveBeenCalledWith(anotherPopover)
+        expect(handlePopoverSurveySpy).not.toHaveBeenCalledWith(anotherPopover, undefined, {
+            resumeDelayFromActivation: true,
+        })
 
         // Ensure only called once for the first popover
         expect(handlePopoverSurveySpy).toHaveBeenCalledTimes(1)
@@ -462,6 +472,114 @@ describe('SurveyManager', () => {
 
             expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(null)
+        })
+    })
+
+    describe('resumes the popup delay across navigations', () => {
+        const makeDelayedSurvey = (id: string, delaySeconds: number): Survey => ({
+            ...mockSurveys[0],
+            id,
+            conditions: { events: { values: [{ name: 'trigger_event' }] } },
+            appearance: { surveyPopupDelaySeconds: delaySeconds },
+        })
+
+        // The trigger records when it fired; handlePopoverSurvey reads that through the event
+        // receiver to compute the remaining wait instead of restarting a fresh countdown.
+        const stubEventReceiver = (surveyId: string, activatedAt: number | undefined): void => {
+            ;(mockPostHog.surveys as any)._surveyEventReceiver = {
+                getSurveys: () => [surveyId],
+                getActivationTimestamp: () => activatedAt,
+            }
+        }
+
+        afterEach(() => {
+            jest.useRealTimers()
+        })
+
+        it('waits only the remaining delay when the survey was triggered on an earlier page', () => {
+            jest.useFakeTimers()
+            const survey = makeDelayedSurvey('resume-survey', 60)
+            mockPostHog.surveys.getSurveys = jest.fn((cb) => cb([survey]))
+            // triggered 40s ago, so only 20s of the 60s delay should remain
+            stubEventReceiver(survey.id, Date.now() - 40_000)
+
+            surveyManager.callSurveysAndEvaluateDisplayLogic(true)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(true)
+
+            // the full 60s has not elapsed, but the remaining 20s has → shown
+            jest.advanceTimersByTime(19_000)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(true)
+            jest.advanceTimersByTime(1_000)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
+        })
+
+        it('shows immediately when the delay already elapsed on an earlier page', () => {
+            jest.useFakeTimers()
+            const survey = makeDelayedSurvey('elapsed-survey', 60)
+            mockPostHog.surveys.getSurveys = jest.fn((cb) => cb([survey]))
+            stubEventReceiver(survey.id, Date.now() - 90_000) // 90s ago > 60s delay
+
+            surveyManager.callSurveysAndEvaluateDisplayLogic(true)
+            // no pending timer: rendered right away
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
+        })
+
+        it('waits the full delay when no activation time is recorded', () => {
+            jest.useFakeTimers()
+            const survey = makeDelayedSurvey('no-timestamp-survey', 60)
+            mockPostHog.surveys.getSurveys = jest.fn((cb) => cb([survey]))
+            stubEventReceiver(survey.id, undefined)
+
+            surveyManager.callSurveysAndEvaluateDisplayLogic(true)
+            jest.advanceTimersByTime(59_000)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(true)
+            jest.advanceTimersByTime(1_000)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
+        })
+
+        it('waits the full delay when an older core bundle has no activation timestamp method', () => {
+            jest.useFakeTimers()
+            const survey = makeDelayedSurvey('older-core-survey', 60)
+            mockPostHog.surveys.getSurveys = jest.fn((cb) => cb([survey]))
+            ;(mockPostHog.surveys as any)._surveyEventReceiver = { getSurveys: () => [survey.id] }
+
+            expect(() => surveyManager.callSurveysAndEvaluateDisplayLogic(true)).not.toThrow()
+            jest.advanceTimersByTime(60_000)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
+        })
+
+        // An explicit displaySurvey() call honors its own `ignoreDelay` option, so it must never
+        // shortcut the wait using an activation the display loop recorded.
+        it('waits the full delay for an explicit display call even when the trigger fired long ago', () => {
+            jest.useFakeTimers()
+            const survey = makeDelayedSurvey('explicit-display-survey', 60)
+            mockPostHog.surveys.getSurveys = jest.fn((cb) => cb([survey]))
+            stubEventReceiver(survey.id, Date.now() - 90_000)
+
+            surveyManager.handlePopoverSurvey(survey)
+
+            jest.advanceTimersByTime(59_000)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(true)
+            jest.advanceTimersByTime(1_000)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
+        })
+
+        it('never waits longer than the configured delay when the clock moved backwards', () => {
+            jest.useFakeTimers()
+            const survey = makeDelayedSurvey('clock-skew-survey', 60)
+            mockPostHog.surveys.getSurveys = jest.fn((cb) => cb([survey]))
+            // stamped in the future, so the naive elapsed time is negative
+            stubEventReceiver(survey.id, Date.now() + 600_000)
+
+            surveyManager.callSurveysAndEvaluateDisplayLogic(true)
+            jest.advanceTimersByTime(60_000)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(survey.id)).toBe(false)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(survey.id)
         })
     })
 
@@ -554,7 +672,9 @@ describe('SurveyManager', () => {
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
         expect(mockPostHog.surveys.getSurveys).toHaveBeenCalled()
-        expect(handlePopoverSurveyMock).toHaveBeenCalledWith(mockSurveys[0])
+        expect(handlePopoverSurveyMock).toHaveBeenCalledWith(mockSurveys[0], undefined, {
+            resumeDelayFromActivation: true,
+        })
         expect(handleWidgetMock).not.toHaveBeenCalled()
         expect(manageWidgetSelectorListener).not.toHaveBeenCalled()
     })
@@ -615,6 +735,175 @@ describe('SurveyManager', () => {
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
         expect(manageWidgetSelectorListenerSpy).toHaveBeenCalledWith(mockSurvey, '.my-selector')
+    })
+
+    it('does not tear down an open selector-widget survey when its trigger element unmounts (issue #2036)', async () => {
+        const survey = {
+            id: 'openSelectorWidgetSurvey',
+            name: 'Open Selector Widget Survey',
+            description: 'A selector widget survey',
+            type: SurveyType.Widget,
+            questions: [{ id: 'q1', question: 'How are we doing?', type: SurveyQuestionType.Open }],
+            appearance: { widgetType: SurveyWidgetType.Selector, widgetSelector: '.my-selector' },
+            conditions: null,
+            start_date: '2021-01-01T00:00:00.000Z',
+            end_date: null,
+            current_iteration: null,
+            current_iteration_start_date: null,
+            feature_flag_keys: [],
+            linked_flag_key: null,
+            targeting_flag_key: null,
+            internal_targeting_flag_key: null,
+        } as unknown as Survey
+
+        mockPostHog.surveys.getSurveys = jest.fn().mockImplementation((callback) => callback([survey]))
+        document.body.innerHTML = '<div class="my-selector">Click Me</div>'
+
+        const surveyPopup = () =>
+            document.querySelector(getSurveyContainerClass(survey, true))?.shadowRoot?.querySelector('.ph-survey') ??
+            null
+
+        // attaches the click listener and renders the feedback widget into the shadow container
+        await act(async () => {
+            surveyManager.callSurveysAndEvaluateDisplayLogic()
+        })
+
+        // open the survey, as if the trigger element was clicked
+        await act(async () => {
+            window.dispatchEvent(new CustomEvent('ph:show_survey_widget', { detail: { surveyId: survey.id } }))
+        })
+        expect(surveyPopup()).not.toBeNull()
+
+        // the trigger element is unmounted (e.g. a dropdown that hosts it closes) while the survey is open
+        document.querySelector('.my-selector')!.remove()
+
+        // the display poll runs again and finds the trigger gone
+        await act(async () => {
+            surveyManager.callSurveysAndEvaluateDisplayLogic()
+        })
+
+        // the open survey must still be in the DOM, not abruptly removed
+        expect(surveyPopup()).not.toBeNull()
+    })
+
+    it('completes the deferred trigger teardown once the open survey is closed (issue #2036)', async () => {
+        const survey = {
+            id: 'openSelectorWidgetSurvey',
+            name: 'Open Selector Widget Survey',
+            description: 'A selector widget survey',
+            type: SurveyType.Widget,
+            questions: [{ id: 'q1', question: 'How are we doing?', type: SurveyQuestionType.Open }],
+            appearance: { widgetType: SurveyWidgetType.Selector, widgetSelector: '.my-selector' },
+            conditions: null,
+            start_date: '2021-01-01T00:00:00.000Z',
+            end_date: null,
+            current_iteration: null,
+            current_iteration_start_date: null,
+            feature_flag_keys: [],
+            linked_flag_key: null,
+            targeting_flag_key: null,
+            internal_targeting_flag_key: null,
+        } as unknown as Survey
+
+        mockPostHog.surveys.getSurveys = jest.fn().mockImplementation((callback) => callback([survey]))
+        document.body.innerHTML = '<div class="my-selector">Click Me</div>'
+
+        const surveyPopup = () =>
+            document.querySelector(getSurveyContainerClass(survey, true))?.shadowRoot?.querySelector('.ph-survey') ??
+            null
+        const widgetListeners = (surveyManager as any)._widgetSelectorListeners as Map<string, any>
+
+        // attaches the click listener (marker attribute) and renders the feedback widget
+        await act(async () => {
+            surveyManager.callSurveysAndEvaluateDisplayLogic()
+        })
+        const triggerElement = document.querySelector('.my-selector')!
+        expect(triggerElement.hasAttribute('PHWidgetSurveyClickListener')).toBe(true)
+        expect(widgetListeners.has(survey.id)).toBe(true)
+
+        // open the survey, then unmount its trigger element while it is open
+        await act(async () => {
+            window.dispatchEvent(new CustomEvent('ph:show_survey_widget', { detail: { surveyId: survey.id } }))
+        })
+        expect(surveyPopup()).not.toBeNull()
+        triggerElement.remove()
+
+        // while the survey is open the teardown is deferred: nothing is cleaned up yet
+        await act(async () => {
+            surveyManager.callSurveysAndEvaluateDisplayLogic()
+        })
+        expect(surveyPopup()).not.toBeNull()
+        expect(widgetListeners.has(survey.id)).toBe(true)
+        expect(triggerElement.hasAttribute('PHWidgetSurveyClickListener')).toBe(true)
+
+        // close the survey (the popup unmounts), then let the display poll run again
+        surveyPopup()!.remove()
+        await act(async () => {
+            surveyManager.callSurveysAndEvaluateDisplayLogic()
+        })
+
+        // now that _isWidgetSurveyOpen is false, the deferred teardown must actually complete:
+        // the tracked listener is dropped and its marker attribute removed from the old element.
+        expect(widgetListeners.has(survey.id)).toBe(false)
+        expect(triggerElement.hasAttribute('PHWidgetSurveyClickListener')).toBe(false)
+    })
+
+    it('detaches the old trigger listener when the selector resolves to a new element mid-survey (issue #2036)', async () => {
+        const survey = {
+            id: 'swapSelectorWidgetSurvey',
+            name: 'Swap Selector Widget Survey',
+            description: 'A selector widget survey',
+            type: SurveyType.Widget,
+            questions: [{ id: 'q1', question: 'How are we doing?', type: SurveyQuestionType.Open }],
+            appearance: { widgetType: SurveyWidgetType.Selector, widgetSelector: '.my-selector' },
+            conditions: null,
+            start_date: '2021-01-01T00:00:00.000Z',
+            end_date: null,
+            current_iteration: null,
+            current_iteration_start_date: null,
+            feature_flag_keys: [],
+            linked_flag_key: null,
+            targeting_flag_key: null,
+            internal_targeting_flag_key: null,
+        } as unknown as Survey
+
+        mockPostHog.surveys.getSurveys = jest.fn().mockImplementation((callback) => callback([survey]))
+        document.body.innerHTML = '<div class="my-selector" id="first">Click Me</div>'
+
+        const surveyPopup = () =>
+            document.querySelector(getSurveyContainerClass(survey, true))?.shadowRoot?.querySelector('.ph-survey') ??
+            null
+        const widgetListeners = (surveyManager as any)._widgetSelectorListeners as Map<string, any>
+
+        await act(async () => {
+            surveyManager.callSurveysAndEvaluateDisplayLogic()
+        })
+        const firstElement = document.getElementById('first')!
+        expect(firstElement.hasAttribute('PHWidgetSurveyClickListener')).toBe(true)
+        expect(widgetListeners.get(survey.id)?.element).toBe(firstElement)
+
+        // open the survey, then swap the trigger: the selector now resolves to a different live
+        // element while the survey is still open.
+        await act(async () => {
+            window.dispatchEvent(new CustomEvent('ph:show_survey_widget', { detail: { surveyId: survey.id } }))
+        })
+        expect(surveyPopup()).not.toBeNull()
+        firstElement.remove()
+        const secondElement = document.createElement('div')
+        secondElement.className = 'my-selector'
+        secondElement.id = 'second'
+        document.body.appendChild(secondElement)
+
+        await act(async () => {
+            surveyManager.callSurveysAndEvaluateDisplayLogic()
+        })
+
+        // the open survey must stay put, and the listener must have moved to the new element with
+        // no orphaned marker left on the old one (which would keep firing show_survey_widget).
+        expect(surveyPopup()).not.toBeNull()
+        expect(firstElement.hasAttribute('PHWidgetSurveyClickListener')).toBe(false)
+        expect(secondElement.hasAttribute('PHWidgetSurveyClickListener')).toBe(true)
+        expect(widgetListeners.get(survey.id)?.element).toBe(secondElement)
     })
 
     test('callSurveysAndEvaluateDisplayLogic should not call surveys in focus', () => {
@@ -751,6 +1040,76 @@ describe('SurveyManager', () => {
             expect(surveyDiv.getElementsByClassName('survey-question').length).toBe(1)
             const descriptionElement = surveyDiv.querySelector('.survey-question-description')
             expect(descriptionElement).not.toBeNull()
+        })
+
+        it('still renders the form when a stale persisted index points past the last question (issue #3575)', () => {
+            // A prior completion/interaction can leave an in-progress index beyond the questions
+            // array. Without clamping, the question renderer bails and the survey container is
+            // injected but empty — the exact symptom reported in #3575.
+            const staleSurvey = { ...mockSurvey, id: 'stale-index-survey' } as unknown as Survey
+            setInProgressSurveyState(staleSurvey, {
+                surveySubmissionId: 'stale',
+                responses: {},
+                lastQuestionIndex: staleSurvey.questions.length, // out of range (only 0..length-1 are valid)
+                visitedIndices: [0],
+            } as any)
+
+            const surveyDiv = document.createElement('div')
+            surveyManager.renderSurvey(staleSurvey, surveyDiv)
+
+            expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
+            expect(surveyDiv.querySelector('.survey-box')?.getAttribute('data-question-index')).toBe('0')
+
+            localStorage.clear()
+        })
+
+        it('does not navigate Back to a stale out-of-range visited index (issue #3575)', async () => {
+            // A corrupt/stale persisted blob can carry a valid current index but a visitedIndices
+            // array that points past the end of the questions array. Popping such an entry on Back
+            // would send the renderer to a non-existent question and re-empty the container. The
+            // restored visited indices must be filtered so Back always lands on a real question.
+            //
+            // Open questions schedule a 100ms autofocus setTimeout on mount. Unlike the
+            // @testing-library render() tests (which auto-unmount in afterEach and clear it),
+            // renderSurvey mounts Preact directly with no teardown, so that timer would outlive
+            // the test as an orphan and trip CI's "worker failed to exit gracefully" guard. Fake
+            // timers keep it from ever becoming a real pending handle.
+            jest.useFakeTimers()
+            const backSurvey = {
+                ...mockSurvey,
+                id: 'stale-visited-indices-survey',
+                appearance: { ...(mockSurvey.appearance ?? {}), allowGoBack: true },
+                questions: [
+                    { id: 'q1', question: 'Question 1', type: SurveyQuestionType.Open, optional: true },
+                    { id: 'q2', question: 'Question 2', type: SurveyQuestionType.Open, optional: true },
+                ],
+            } as unknown as Survey
+            setInProgressSurveyState(backSurvey, {
+                surveySubmissionId: 'stale',
+                responses: {},
+                lastQuestionIndex: 1, // in range, so the whole blob is kept
+                visitedIndices: [0, backSurvey.questions.length], // trailing entry is out of range
+            } as any)
+
+            const surveyDiv = document.createElement('div')
+            document.body.appendChild(surveyDiv)
+            surveyManager.renderSurvey(backSurvey, surveyDiv)
+
+            expect(surveyDiv.querySelector('.survey-box')?.getAttribute('data-question-index')).toBe('1')
+
+            const backButton = surveyDiv.querySelector<HTMLButtonElement>('.form-back')
+            expect(backButton).not.toBeNull()
+            await act(async () => {
+                fireEvent.click(backButton!)
+            })
+
+            // Back must land on the real first question, not the stale out-of-range index.
+            expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
+            expect(surveyDiv.querySelector('.survey-box')?.getAttribute('data-question-index')).toBe('0')
+
+            document.body.removeChild(surveyDiv)
+            localStorage.clear()
+            jest.useRealTimers()
         })
 
         it('exposes the current question index on .survey-box for embedders', () => {
@@ -1991,6 +2350,52 @@ describe('preview renders', () => {
         expect(surveyDiv.getElementsByTagName('style').length).toBe(1)
         expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
         expect(surveyDiv.getElementsByClassName('survey-question').length).toBe(1)
+    })
+
+    test('renderSurveysPreview renders the intro screen for the intro sentinel page index (-1)', () => {
+        const mockSurvey = {
+            id: 'testSurveyIntro',
+            name: 'Test survey with intro',
+            type: SurveyType.Popover,
+            appearance: {
+                displayIntroScreen: true,
+                introScreenHeader: 'Welcome!',
+                introScreenDescription: 'Two quick questions.',
+                introScreenButtonText: 'Get started',
+            },
+            start_date: '2021-01-01T00:00:00.000Z',
+            description: 'This is a survey description',
+            linked_flag_key: null,
+            questions: [
+                {
+                    question: 'How satisfied are you with our newest product?',
+                    description: 'This is a question description',
+                    descriptionContentType: 'text',
+                    type: SurveyQuestionType.Rating,
+                    display: 'number',
+                    scale: 10,
+                    lowerBoundLabel: 'Not Satisfied',
+                    upperBoundLabel: 'Very Satisfied',
+                },
+            ],
+            conditions: {},
+            end_date: null,
+            targeting_flag_key: null,
+        }
+        const surveyDiv = document.createElement('div')
+        renderSurveysPreview({ survey: mockSurvey as Survey, parentElement: surveyDiv, previewPageIndex: -1 })
+        expect(surveyDiv.getElementsByClassName('intro-screen').length).toBe(1)
+        expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(0)
+        expect(surveyDiv.querySelector('.intro-screen-header')!.textContent).toBe('Welcome!')
+        expect(surveyDiv.querySelector('.intro-screen-body')!.textContent).toBe('Two quick questions.')
+        expect(surveyDiv.querySelector('.form-submit')!.textContent).toBe('Get started')
+
+        // Page index 0 renders the first question, not the intro
+        const questionDiv = document.createElement('div')
+        renderSurveysPreview({ survey: mockSurvey as Survey, parentElement: questionDiv, previewPageIndex: 0 })
+        expect(questionDiv.getElementsByClassName('intro-screen').length).toBe(0)
+        expect(questionDiv.getElementsByClassName('survey-form').length).toBe(1)
+        expect(questionDiv.getElementsByClassName('survey-question').length).toBe(1)
     })
 
     test('renderSurveysPreview marks up question with html when no content type is selected by default', () => {

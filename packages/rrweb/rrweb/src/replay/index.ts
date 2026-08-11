@@ -153,6 +153,14 @@ export class Replayer {
   // Used to track StyleSheetObjects adopted on multiple document hosts.
   private styleMirror: StyleSheetMirror = new StyleSheetMirror();
 
+  // Hosts whose AdoptedStyleSheet event was applied before their shadow root
+  // was attached, keyed by node id; adopted when the shadow root appears.
+  private pendingAdoptedStyleSheets: Map<number, number[]> = new Map();
+
+  // Latest adoption per host, keyed by node id; a wall-clock retry armed by
+  // an older AdoptedStyleSheet event must not overwrite a newer one.
+  private adoptedStyleSheetTokens: Map<number, object> = new Map();
+
   // Used to track video & audio elements, and keep them in sync with general playback.
   private mediaManager: MediaManager;
 
@@ -320,6 +328,16 @@ export class Replayer {
           this.applyAdoptedStyleSheet(data);
         });
         this.adoptedStyleSheets = [];
+
+        // the virtual dom diff attaches shadow roots without going through
+        // applyMutation, so finish any adoptions that were pending
+        this.pendingAdoptedStyleSheets.forEach((styleIds, id) => {
+          this.applyAdoptedStyleSheet({
+            source: IncrementalSource.AdoptedStyleSheet,
+            id,
+            styleIds,
+          });
+        });
       }
 
       if (this.mousePos) {
@@ -365,6 +383,8 @@ export class Replayer {
       this.firstFullSnapshot = null;
       this.mirror.reset();
       this.styleMirror.reset();
+      this.pendingAdoptedStyleSheets.clear();
+      this.adoptedStyleSheetTokens.clear();
       this.mediaManager.reset();
       this.lastScrollMap.clear();
     };
@@ -653,6 +673,8 @@ export class Replayer {
     // Reset caches and mirrors
     this.mirror.reset();
     this.styleMirror.reset();
+    this.pendingAdoptedStyleSheets.clear();
+    this.adoptedStyleSheetTokens.clear();
     this.mediaManager.reset();
     this.resetCache();
 
@@ -915,6 +937,8 @@ export class Replayer {
           }
           this.mediaManager.reset();
           this.styleMirror.reset();
+          this.pendingAdoptedStyleSheets.clear();
+          this.adoptedStyleSheetTokens.clear();
           this.rebuildFullSnapshot(event, isSync);
           // 'instant' so the offset is not animated when the page sets scroll-behavior: smooth
           this.iframe.contentWindow?.scrollTo({
@@ -1738,6 +1762,17 @@ export class Replayer {
           (parent as Element | RRElement).attachShadow({ mode: 'open' });
           parent = (parent as Element | RRElement).shadowRoot! as Node | RRNode;
         } else parent = parent.shadowRoot as Node | RRNode;
+        // adopt stylesheets whose event arrived before this shadow root existed
+        const pendingStyleIds = this.pendingAdoptedStyleSheets.get(
+          mutation.parentId,
+        );
+        if (pendingStyleIds && !this.usingVirtualDom) {
+          this.applyAdoptedStyleSheet({
+            source: IncrementalSource.AdoptedStyleSheet,
+            id: mutation.parentId,
+            styleIds: pendingStyleIds,
+          });
+        }
       }
 
       let previous: Node | RRNode | null = null;
@@ -2056,6 +2091,21 @@ export class Replayer {
                 if (tn) {
                   textarea.appendChild(tn as TNode);
                 }
+              } else if (
+                attributeName === 'xlink:href' &&
+                (
+                  mirror.getMeta(target as Node & RRNode) as
+                    | serializedElementNodeWithId
+                    | null
+                )?.isSVG
+              ) {
+                // without its namespace the attribute is inert on SVG elements;
+                // mirrors rebuild and rrdom's diffProps
+                (target as Element | RRElement).setAttributeNS(
+                  'http://www.w3.org/1999/xlink',
+                  attributeName,
+                  value,
+                );
               } else {
                 (target as Element | RRElement).setAttribute(
                   attributeName,
@@ -2283,6 +2333,9 @@ export class Replayer {
   private applyAdoptedStyleSheet(data: adoptedStyleSheetData) {
     const targetHost = this.mirror.getNode(data.id);
     if (!targetHost) return;
+    // supersede retries still pending from an older event for this host
+    const token = {};
+    this.adoptedStyleSheetTokens.set(data.id, token);
     // Create StyleSheet objects which will be adopted after.
     data.styles?.forEach((style) => {
       let newStyleSheet: CSSStyleSheet | null = null;
@@ -2291,10 +2344,12 @@ export class Replayer {
        * The replayer has to get the correct host window to recreate a StyleSheetObject.
        */
       let hostWindow: IWindow | null = null;
-      if (hasShadowRoot(targetHost))
-        hostWindow = targetHost.ownerDocument?.defaultView || null;
-      else if (targetHost.nodeName === '#document')
+      if (targetHost.nodeName === '#document')
         hostWindow = (targetHost as Document).defaultView;
+      else
+        // don't require the host's shadow root to exist yet: the mutation
+        // attaching it may arrive after this event, and rules are only sent once
+        hostWindow = targetHost.ownerDocument?.defaultView || null;
 
       if (!hostWindow) return;
       try {
@@ -2316,22 +2371,38 @@ export class Replayer {
     const MAX_RETRY_TIME = 10;
     let count = 0;
     const adoptStyleSheets = (targetHost: Node, styleIds: number[]) => {
+      // a newer AdoptedStyleSheet event for this host supersedes this one
+      if (this.adoptedStyleSheetTokens.get(data.id) !== token) return;
       const stylesToAdopt = styleIds
         .map((styleId) => this.styleMirror.getStyle(styleId))
         .filter((style) => style !== null) as CSSStyleSheet[];
-      if (hasShadowRoot(targetHost))
+      let adopted = false;
+      if (hasShadowRoot(targetHost)) {
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         (targetHost as HTMLElement).shadowRoot!.adoptedStyleSheets =
           stylesToAdopt;
-      else if (targetHost.nodeName === '#document')
+        adopted = true;
+      } else if (targetHost.nodeName === '#document') {
         (targetHost as Document).adoptedStyleSheets = stylesToAdopt;
+        adopted = true;
+      }
+      // remember hosts that can't adopt yet so applyMutation can finish the
+      // adoption when it attaches the shadow root, independent of the
+      // wall-clock retries below (which pause/buffering can outlast)
+      if (adopted) this.pendingAdoptedStyleSheets.delete(data.id);
+      else this.pendingAdoptedStyleSheets.set(data.id, styleIds);
 
       /**
        * In the live mode where events are transferred over network without strict order guarantee, some newer events are applied before some old events and adopted stylesheets may haven't been created.
-       * This retry mechanism can help resolve this situation.
+       * The same applies to recorded streams when this event was emitted before the mutation that attaches the host's shadow root.
+       * This retry mechanism can help resolve these situations.
        */
-      if (stylesToAdopt.length !== styleIds.length && count < MAX_RETRY_TIME) {
-        setTimeout(
+      if (
+        (!adopted || stylesToAdopt.length !== styleIds.length) &&
+        count < MAX_RETRY_TIME
+      ) {
+        // tracked so destroy() cancels retries still pending on teardown
+        this.addTimeout(
           () => adoptStyleSheets(targetHost, styleIds),
           0 + 100 * count,
         );
