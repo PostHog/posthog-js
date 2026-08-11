@@ -923,6 +923,11 @@ export class PostHogPersistence {
             this._splitStorage = wantSplit
             this.props = props
             this.save()
+            if (config.cookieWinsOnConflict && config.persistence.toLowerCase() === 'localstorage+cookie') {
+                // Storage migration clears the shared cookie. Restore it before
+                // another subdomain can initialize during the debounce window.
+                this.flush()
+            }
         } else if (cookiePrecedenceChanged) {
             this._storage = newStore
         }

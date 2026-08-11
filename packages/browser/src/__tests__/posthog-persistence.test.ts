@@ -1074,6 +1074,7 @@ describe('persistence', () => {
                 const newConfig = {
                     ...makeConfig('localStorage+cookie', true),
                     cookie_persisted_properties: ['custom_property'],
+                    persistence_save_debounce_ms: 250,
                 }
                 lib.update_config(newConfig, oldConfig)
 
