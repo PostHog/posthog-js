@@ -24,7 +24,11 @@ const ingestionPaths = ['/s/', '/e/', '/i/']
 export class RequestRouter {
     instance: PostHog
     private _regionCache: Record<string, RequestRouterRegion> = {}
-    private _ingestionEndpoints = new Set<string>()
+    private _ingestionEndpoints?: {
+        apiHost: string
+        rewriteRequestPath: PostHog['config']['rewriteRequestPath']
+        urls: Set<string>
+    }
 
     constructor(instance: PostHog) {
         this.instance = instance
@@ -102,20 +106,30 @@ export class RequestRouter {
         }
 
         let rewrittenUrl = url
-        if (this.instance.config.rewriteRequestPath) {
+        const rewriteRequestPath = this.instance.config.rewriteRequestPath
+        if (rewriteRequestPath) {
             // `URL` is intentionally exposed by this opt-in hook so callers can inspect and update each component safely.
             const resolvedUrl = convertToURL(url)?.href || url
-            rewrittenUrl = this.instance.config.rewriteRequestPath(new URL(resolvedUrl)).toString()
+            rewrittenUrl = rewriteRequestPath(new URL(resolvedUrl)).toString()
         }
 
         if (
-            this.instance.config.rewriteRequestPath &&
+            rewriteRequestPath &&
             target === 'api' &&
             ingestionPaths.some((ingestionPath) => path.indexOf(ingestionPath) === 0)
         ) {
             const urlKey = this._urlKey(rewrittenUrl)
             if (urlKey) {
-                this._ingestionEndpoints.add(urlKey)
+                const apiHost = this.apiHost
+                let ingestionEndpoints = this._ingestionEndpoints
+                if (
+                    ingestionEndpoints?.apiHost !== apiHost ||
+                    ingestionEndpoints.rewriteRequestPath !== rewriteRequestPath
+                ) {
+                    ingestionEndpoints = { apiHost, rewriteRequestPath, urls: new Set() }
+                    this._ingestionEndpoints = ingestionEndpoints
+                }
+                ingestionEndpoints.urls.add(urlKey)
             }
         }
 
@@ -123,8 +137,14 @@ export class RequestRouter {
     }
 
     isIngestionEndpoint(url: string): boolean {
+        const ingestionEndpoints = this._ingestionEndpoints
         const urlKey = this._urlKey(url)
-        return !!urlKey && this._ingestionEndpoints.has(urlKey)
+        return (
+            ingestionEndpoints?.apiHost === this.apiHost &&
+            ingestionEndpoints.rewriteRequestPath === this.instance.config.rewriteRequestPath &&
+            !!urlKey &&
+            ingestionEndpoints.urls.has(urlKey)
+        )
     }
 
     endpointFor(target: RequestRouterTarget, path: string = ''): string {

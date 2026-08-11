@@ -219,6 +219,36 @@ describe('request-router', () => {
             expect(requestRouter.isIngestionEndpoint(`${eventsEndpoint}?ip=0`)).toBe(true)
             expect(requestRouter.isIngestionEndpoint('https://proxy.example.com/customer-api/')).toBe(false)
         })
+
+        it('invalidates rewritten ingestion paths when rewriteRequestPath changes', () => {
+            const requestRouter = router('https://proxy.example.com', undefined, {
+                rewriteRequestPath: (url: URL) => {
+                    url.pathname = '/old-replay/'
+                    return url
+                },
+            })
+            const oldEndpoint = requestRouter.endpointFor('api', '/s/')
+
+            requestRouter.instance.config.rewriteRequestPath = (url: URL) => {
+                url.pathname = '/new-replay/'
+                return url
+            }
+
+            expect(requestRouter.isIngestionEndpoint(oldEndpoint)).toBe(false)
+            expect(requestRouter.isIngestionEndpoint(requestRouter.endpointFor('api', '/s/'))).toBe(true)
+        })
+
+        it('invalidates rewritten ingestion paths when api_host changes', () => {
+            const requestRouter = router('https://old-proxy.example.com', undefined, {
+                rewriteRequestPath: (url: URL) => url,
+            })
+            const oldEndpoint = requestRouter.endpointFor('api', '/s/')
+
+            requestRouter.instance.config.api_host = 'https://new-proxy.example.com'
+
+            expect(requestRouter.isIngestionEndpoint(oldEndpoint)).toBe(false)
+            expect(requestRouter.isIngestionEndpoint(requestRouter.endpointFor('api', '/s/'))).toBe(true)
+        })
     })
 
     describe('flags_api_host configuration', () => {
