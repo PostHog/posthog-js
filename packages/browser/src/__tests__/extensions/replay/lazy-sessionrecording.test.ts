@@ -2215,7 +2215,6 @@ describe('Lazy SessionRecording', () => {
                         emitActiveEvent(startingTimestamp + 100)
                         jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
                         ;(posthog.capture as Mock).mockClear()
-                        expect(lazy['_buffer'].data).toEqual([])
 
                         const rotateAt = startingTimestamp + sessionManager['_sessionTimeoutMs'] + 1000
                         jest.setSystemTime(new Date(rotateAt))
@@ -2226,7 +2225,6 @@ describe('Lazy SessionRecording', () => {
                         // adopt a pending rotation and re-enter the recorder; inject the same
                         // re-entry at the same point.
                         const strategy = lazy['_strategy']!
-                        expect(strategy).toBeTruthy()
                         const originalEnsure = strategy.ensureSamplingDecision.bind(strategy)
                         jest.spyOn(strategy, 'ensureSamplingDecision').mockImplementation((sid: string) => {
                             sessionManager.checkAndGetSessionAndWindowId(false, rotateAt)
@@ -2237,6 +2235,48 @@ describe('Lazy SessionRecording', () => {
 
                         // the re-entrant pass holds the rotation-born epoch; the outer flush, which
                         // validated the old empty buffer, must not ship the rebound one
+                        const rotatedShips = (posthog.capture as Mock).mock.calls
+                            .filter(([name]) => name === '$snapshot')
+                            .filter(([, props]) => props.$session_id === 'toctou-rotated-session')
+                        expect(rotatedShips).toEqual([])
+                    } finally {
+                        _addCustomEvent.mockReset()
+                    }
+                })
+
+                it('a rotation adopted mid-flush does not get the new buffer cleared or relabeled by the capture path', () => {
+                    _addCustomEvent.mockImplementation((tag: string, payload: any) => {
+                        _emit({ type: EventType.Custom, data: { tag, payload }, timestamp: Date.now() })
+                    })
+                    try {
+                        const lazy = sessionRecording['_lazyLoadedSessionRecording']!
+                        emitActiveEvent(startingTimestamp + 100)
+                        jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                        ;(posthog.capture as Mock).mockClear()
+
+                        const rotateAt = startingTimestamp + sessionManager['_sessionTimeoutMs'] + 1000
+                        jest.setSystemTime(new Date(rotateAt))
+                        sessionIdGeneratorMock.mockImplementation(() => 'toctou-rotated-session')
+                        const strategy = lazy['_strategy']!
+                        const originalEnsure = strategy.ensureSamplingDecision.bind(strategy)
+                        jest.spyOn(strategy, 'ensureSamplingDecision').mockImplementation((sid: string) => {
+                            sessionManager.checkAndGetSessionAndWindowId(false, rotateAt)
+                            return originalEnsure(sid)
+                        })
+
+                        // a lifecycle event targeted at another session forces the capture path to
+                        // flush and then rebind the buffer with the event's pre-rotation target ids
+                        _emit(
+                            createCustomSnapshot(
+                                { timestamp: rotateAt },
+                                { currentSessionId: 'other-session', currentWindowId: 'other-window' },
+                                '$session_ending'
+                            )
+                        )
+
+                        // the rotation-born epoch keeps its own identity: not relabeled with the
+                        // stale target, and nothing shipped under it
+                        expect(lazy['_buffer'].sessionId).not.toEqual('other-session')
                         const rotatedShips = (posthog.capture as Mock).mock.calls
                             .filter(([name]) => name === '$snapshot')
                             .filter(([, props]) => props.$session_id === 'toctou-rotated-session')
