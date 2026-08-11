@@ -149,7 +149,7 @@ describe('request-router', () => {
         })
     })
 
-    describe('rewrite_request_path configuration', () => {
+    describe('rewriteRequestPath configuration', () => {
         it('rewrites API, feature flag, and asset paths after resolving their hosts', () => {
             const pathMap: Record<string, string> = {
                 '/e/': '/events/',
@@ -164,7 +164,7 @@ describe('request-router', () => {
             })
             const requestRouter = router('https://proxy.example.com', undefined, {
                 flags_api_host: 'https://flags-proxy.example.com',
-                rewrite_request_path: rewriteRequestPath,
+                rewriteRequestPath,
             })
 
             expect(requestRouter.endpointFor('api', '/e/')).toBe('https://proxy.example.com/events/')
@@ -191,7 +191,7 @@ describe('request-router', () => {
                 return url
             })
             const requestRouter = router('/ingest', undefined, {
-                rewrite_request_path: rewriteRequestPath,
+                rewriteRequestPath,
             })
 
             expect(requestRouter.endpointFor('api', '/e/')).toBe(`${window.location.origin}/custom-events/`)
@@ -200,7 +200,7 @@ describe('request-router', () => {
 
         it('tracks rewritten ingestion paths for session replay network capture', () => {
             const requestRouter = router('https://proxy.example.com', undefined, {
-                rewrite_request_path: (url: URL) => {
+                rewriteRequestPath: (url: URL) => {
                     const pathMap: Record<string, string> = {
                         '/s/': '/replay/',
                         '/i/v0/e/': '/events/',

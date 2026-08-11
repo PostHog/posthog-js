@@ -1094,7 +1094,7 @@ export interface PostHogConfig {
      * ```js
      * posthog.init('phc_...', {
      *     api_host: 'https://a.example.com',
-     *     rewrite_request_path: (url) => {
+     *     rewriteRequestPath: (url) => {
      *         if (url.pathname === '/e/') {
      *             url.pathname = '/my-events/'
      *         } else if (url.pathname === '/s/') {
@@ -1110,7 +1110,7 @@ export interface PostHogConfig {
      * @param url - The fully resolved request URL. It may be mutated or replaced.
      * @returns The URL that the SDK should request.
      */
-    rewrite_request_path?: (url: URL) => URL
+    rewriteRequestPath?: (url: URL) => URL
 
     /**
      * If using a reverse proxy for `api_host` then this should be the actual PostHog app URL (e.g. https://us.posthog.com).

@@ -786,11 +786,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
             if (canRecordNetwork) {
                 // The unversioned recorder can run with older cores, so this router method must be feature-detected.
-                const isIngestionEndpoint =
-                    isFunction(this._instance.config.rewrite_request_path) &&
-                    isFunction(this._instance.requestRouter.isIngestionEndpoint)
-                        ? this._instance.requestRouter.isIngestionEndpoint.bind(this._instance.requestRouter)
-                        : undefined
+                const isIngestionEndpoint = isFunction(this._instance.requestRouter.isIngestionEndpoint)
+                    ? this._instance.requestRouter.isIngestionEndpoint.bind(this._instance.requestRouter)
+                    : undefined
                 plugins.push(
                     networkPlugin(
                         buildNetworkRequestOptions(

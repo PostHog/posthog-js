@@ -102,14 +102,14 @@ export class RequestRouter {
         }
 
         let rewrittenUrl = url
-        if (this.instance.config.rewrite_request_path) {
+        if (this.instance.config.rewriteRequestPath) {
             // `URL` is intentionally exposed by this opt-in hook so callers can inspect and update each component safely.
             const resolvedUrl = convertToURL(url)?.href || url
-            rewrittenUrl = this.instance.config.rewrite_request_path(new URL(resolvedUrl)).toString()
+            rewrittenUrl = this.instance.config.rewriteRequestPath(new URL(resolvedUrl)).toString()
         }
 
         if (
-            this.instance.config.rewrite_request_path &&
+            this.instance.config.rewriteRequestPath &&
             target === 'api' &&
             ingestionPaths.some((ingestionPath) => path.indexOf(ingestionPath) === 0)
         ) {
