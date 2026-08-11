@@ -149,6 +149,78 @@ describe('request-router', () => {
         })
     })
 
+    describe('rewrite_request_path configuration', () => {
+        it('rewrites API, feature flag, and asset paths after resolving their hosts', () => {
+            const pathMap: Record<string, string> = {
+                '/e/': '/events/',
+                '/s/': '/replay/',
+                '/flags/': '/features/',
+                '/static/1.370.0/recorder.js': '/recorder-1.370.0.js',
+                '/array/test-token/config.js': '/project-config.js',
+            }
+            const rewriteRequestPath = jest.fn((url: URL) => {
+                url.pathname = pathMap[url.pathname] ?? url.pathname
+                return url
+            })
+            const requestRouter = router('https://proxy.example.com', undefined, {
+                flags_api_host: 'https://flags-proxy.example.com',
+                rewrite_request_path: rewriteRequestPath,
+            })
+
+            expect(requestRouter.endpointFor('api', '/e/')).toBe('https://proxy.example.com/events/')
+            expect(requestRouter.endpointFor('api', '/s/')).toBe('https://proxy.example.com/replay/')
+            expect(requestRouter.endpointFor('flags', '/flags/?v=2')).toBe(
+                'https://flags-proxy.example.com/features/?v=2'
+            )
+            expect(requestRouter.endpointFor('assets', '/static/1.370.0/recorder.js')).toBe(
+                'https://proxy.example.com/recorder-1.370.0.js'
+            )
+            expect(requestRouter.endpointFor('assets', '/array/test-token/config.js')).toBe(
+                'https://proxy.example.com/project-config.js'
+            )
+
+            expect(requestRouter.endpointFor('ui', '/project/test')).toBe('https://proxy.example.com/project/test')
+            expect(rewriteRequestPath).toHaveBeenCalledTimes(5)
+        })
+
+        it('resolves relative API hosts before invoking the hook', () => {
+            let inputPathname: string | undefined
+            const rewriteRequestPath = jest.fn((url: URL) => {
+                inputPathname = url.pathname
+                url.pathname = '/custom-events/'
+                return url
+            })
+            const requestRouter = router('/ingest', undefined, {
+                rewrite_request_path: rewriteRequestPath,
+            })
+
+            expect(requestRouter.endpointFor('api', '/e/')).toBe(`${window.location.origin}/custom-events/`)
+            expect(inputPathname).toBe('/ingest/e/')
+        })
+
+        it('tracks rewritten ingestion paths for session replay network capture', () => {
+            const requestRouter = router('https://proxy.example.com', undefined, {
+                rewrite_request_path: (url: URL) => {
+                    const pathMap: Record<string, string> = {
+                        '/s/': '/replay/',
+                        '/i/v0/e/': '/events/',
+                    }
+                    url.pathname = pathMap[url.pathname] ?? url.pathname
+                    return url
+                },
+            })
+
+            const replayEndpoint = requestRouter.endpointFor('api', '/s/')
+            const eventsEndpoint = requestRouter.endpointFor('api', '/i/v0/e/')
+
+            expect(replayEndpoint).toBe('https://proxy.example.com/replay/')
+            expect(eventsEndpoint).toBe('https://proxy.example.com/events/')
+            expect(requestRouter.isIngestionEndpoint(`${replayEndpoint}?compression=gzip-js`)).toBe(true)
+            expect(requestRouter.isIngestionEndpoint(`${eventsEndpoint}?ip=0`)).toBe(true)
+            expect(requestRouter.isIngestionEndpoint('https://proxy.example.com/customer-api/')).toBe(false)
+        })
+    })
+
     describe('flags_api_host configuration', () => {
         it('should use flags_api_host when set', () => {
             const mockPostHog = {

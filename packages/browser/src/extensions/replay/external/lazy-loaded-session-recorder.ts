@@ -785,8 +785,20 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             const canRecordNetwork = !isLocalhost() || this._forceAllowLocalhostNetworkCapture
 
             if (canRecordNetwork) {
+                // The unversioned recorder can run with older cores, so this router method must be feature-detected.
+                const isIngestionEndpoint =
+                    isFunction(this._instance.config.rewrite_request_path) &&
+                    isFunction(this._instance.requestRouter.isIngestionEndpoint)
+                        ? this._instance.requestRouter.isIngestionEndpoint.bind(this._instance.requestRouter)
+                        : undefined
                 plugins.push(
-                    networkPlugin(buildNetworkRequestOptions(this._instance.config, this._networkPayloadCapture))
+                    networkPlugin(
+                        buildNetworkRequestOptions(
+                            this._instance.config,
+                            this._networkPayloadCapture,
+                            isIngestionEndpoint
+                        )
+                    )
                 )
             } else {
                 logger.info('NetworkCapture not started because we are on localhost.')
