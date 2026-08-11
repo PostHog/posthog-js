@@ -1027,6 +1027,23 @@ describe('persistence', () => {
                 expect(cookieStore._parse(persistenceName).distinct_id).toBe('identified-user')
             })
 
+            it('preserves the shared cookie when enabling precedence also rebuilds storage', () => {
+                document.cookie = encodeCookie({ distinct_id: 'anonymous' })
+                localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'anonymous' }))
+                const oldConfig = makeConfig('localStorage+cookie', false)
+                const lib = new PostHogPersistence(oldConfig)
+
+                document.cookie = encodeCookie({ distinct_id: 'identified-user' })
+                const newConfig = {
+                    ...makeConfig('localStorage+cookie', true),
+                    cookie_persisted_properties: ['custom_property'],
+                }
+                lib.update_config(newConfig, oldConfig)
+
+                expect(lib.props.distinct_id).toBe('identified-user')
+                expect(cookieStore._parse(persistenceName).distinct_id).toBe('identified-user')
+            })
+
             it('flag on: localStorage-only keys are preserved (cookie does not carry them)', () => {
                 document.cookie = encodeCookie({ distinct_id: 'from_cookie' })
                 localStorage.setItem(

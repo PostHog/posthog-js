@@ -862,16 +862,21 @@ export class PostHogPersistence {
     }
 
     update_config(config: PostHogConfig, oldConfig: PostHogConfig, isDisabled?: boolean): void {
-        this._config = config
-        this._default_expiry = this._expire_days = config['cookie_expiration']
-        this.set_disabled(config['disable_persistence'] || !!isDisabled)
-        this.set_cross_subdomain(config['cross_subdomain_cookie'])
-        this.set_secure(config['secure_cookie'])
-
         const persistenceChanged =
             config.persistence !== oldConfig.persistence ||
             !isArrayContentsEqual(config.cookie_persisted_properties || [], oldConfig.cookie_persisted_properties || [])
         const cookiePrecedenceChanged = config.cookieWinsOnConflict !== oldConfig.cookieWinsOnConflict
+
+        this._config = config
+        // Adopt the shared cookie before any config setter or storage migration
+        // can clear it. This also covers enabling precedence in the same
+        // set_config call that changes cookie or split-storage routing.
+        this.syncCookieProperties()
+
+        this._default_expiry = this._expire_days = config['cookie_expiration']
+        this.set_disabled(config['disable_persistence'] || !!isDisabled)
+        this.set_cross_subdomain(config['cross_subdomain_cookie'])
+        this.set_secure(config['secure_cookie'])
 
         // `_buildStorage` re-resolves both the backend and `_splitStorageEligible`,
         // so on a persistence change build the new store first, then derive the
@@ -892,12 +897,7 @@ export class PostHogPersistence {
             this.props = props
             this.save()
         } else if (cookiePrecedenceChanged) {
-            // Do not clear first: when cookie precedence is enabled, clearing
-            // would delete the shared state before it can win. Preserve pending
-            // local-only props and reconcile just the cookie-backed values.
             this._storage = newStore
-            this._lastSeenCookiePropertiesFingerprint = undefined
-            this.syncCookieProperties()
         }
     }
 
