@@ -6,8 +6,8 @@
  * Segment user object
  */
 export type SegmentUser = {
-    anonymousId(): string | undefined
-    id(): string | undefined
+    anonymousId(): string | null | undefined
+    id(): string | null | undefined
 }
 
 /**
@@ -15,7 +15,7 @@ export type SegmentUser = {
  */
 export type SegmentAnalytics = {
     user: () => SegmentUser | Promise<SegmentUser>
-    register: (integration: SegmentPlugin) => Promise<void>
+    register: (integration: any) => Promise<any>
 }
 
 /**
