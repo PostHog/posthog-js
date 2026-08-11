@@ -2,9 +2,11 @@ import type { ApiResponse } from '@posthog/browser-common'
 import {
     ENABLED_FEATURE_FLAGS,
     PERSISTENCE_ACTIVE_FEATURE_FLAGS,
+    PERSISTENCE_FEATURE_FLAG_DETAILS,
     PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
     PERSISTENCE_FEATURE_FLAG_PAYLOADS,
     PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+    PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
     STORED_PERSON_PROPERTIES_KEY,
 } from '../constants'
 import { MutableFeatureFlagsConfigSource } from '../feature-flags-config'
@@ -149,6 +151,75 @@ describe('PostHogFeatureFlags extension lifecycle', () => {
 
         featureFlags.getFeatureFlag('changed')
         expect(producer()).toBe(updated)
+        featureFlags.dispose()
+    })
+
+    it('snapshots feature flag persistence after loading a v2 response', async () => {
+        const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
+        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+        featureFlags.setup(posthog._getBrowserClientAdapter())
+
+        featureFlags.receivedFeatureFlags({
+            flags: {
+                'boolean-flag': {
+                    key: 'boolean-flag',
+                    enabled: true,
+                    variant: undefined,
+                    reason: { code: 'condition_match', condition_index: 0, description: 'matched boolean condition' },
+                    metadata: {
+                        id: 1,
+                        version: 2,
+                        description: 'Boolean flag',
+                        payload: undefined,
+                        has_experiment: false,
+                    },
+                },
+                'variant-flag': {
+                    key: 'variant-flag',
+                    enabled: true,
+                    variant: 'control',
+                    reason: { code: 'condition_match', condition_index: 1, description: 'matched variant condition' },
+                    metadata: {
+                        id: 2,
+                        version: 3,
+                        description: 'Variant flag',
+                        payload: '{"layout":"compact"}',
+                        has_experiment: true,
+                    },
+                },
+                'disabled-flag': {
+                    key: 'disabled-flag',
+                    enabled: false,
+                    variant: undefined,
+                    reason: { code: 'no_condition_match', condition_index: undefined, description: 'no match' },
+                    metadata: {
+                        id: 3,
+                        version: 4,
+                        description: 'Disabled flag',
+                        payload: undefined,
+                    },
+                },
+            },
+            requestId: 'flags-request-id',
+            evaluatedAt: 1700000000000,
+            minimalFlagCalledEvents: true,
+        })
+
+        expect({
+            [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: posthog.persistence?.get_property(PERSISTENCE_ACTIVE_FEATURE_FLAGS),
+            [ENABLED_FEATURE_FLAGS]: posthog.persistence?.get_property(ENABLED_FEATURE_FLAGS),
+            [PERSISTENCE_FEATURE_FLAG_DETAILS]: posthog.persistence?.get_property(PERSISTENCE_FEATURE_FLAG_DETAILS),
+            [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: posthog.persistence?.get_property(PERSISTENCE_FEATURE_FLAG_PAYLOADS),
+            [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: posthog.persistence?.get_property(
+                PERSISTENCE_FEATURE_FLAG_REQUEST_ID
+            ),
+            [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: posthog.persistence?.get_property(
+                PERSISTENCE_FEATURE_FLAG_EVALUATED_AT
+            ),
+            [PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS]: posthog.persistence?.get_property(
+                PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS
+            ),
+        }).toMatchSnapshot()
         featureFlags.dispose()
     })
 
