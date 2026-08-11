@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.415.6
+
+### Patch Changes
+
+- [#4500](https://github.com/PostHog/posthog-js/pull/4500) [`d773405`](https://github.com/PostHog/posthog-js/commit/d77340520e3ef4d3f105cf4af248aafd50e2e536) Thanks [@ksvat](https://github.com/ksvat)! - Fix session recording starting from arbitrarily old persisted configs.
+
+    Recording configs persisted by SDK versions before 1.347.2 carry no `cache_timestamp`. The core freshness check treated these undated configs as always fresh, so the recorder started immediately under their settings. A device whose stored config predated a customer's config change kept recording under the old triggers, sample rate, and masking settings indefinitely.
+
+    The core now treats undated persisted configs as stale. Recording waits for a fresh remote config before it starts, the same path every dated config older than one hour already takes. The lazy recorder bundle is unchanged: it still accepts undated configs, because old cores that load the latest bundle cannot recover from a rejected config (INC-749). (2026-08-11)
+
 ## 1.415.5
 
 ### Patch Changes
