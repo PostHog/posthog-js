@@ -262,26 +262,24 @@ describe('reset()', () => {
             expect(instance.featureFlags.getFlags()).toEqual([])
         })
 
-        it('rejects an invalid bootstrap session ID before clearing state', () => {
+        it('logs and preserves state for an invalid bootstrap session ID', () => {
             const initialDistinctId = instance.get_distinct_id()
             const initialSessionId = instance.sessionManager!.checkAndGetSessionAndWindowId().sessionId
 
-            expect(() => instance.reset({ bootstrap: { sessionID: 'invalid-session-id' } })).toThrow('Not a valid UUID')
+            expect(() => instance.reset({ bootstrap: { sessionID: 'invalid-session-id' } })).not.toThrow()
 
             expect(instance.get_distinct_id()).toEqual(initialDistinctId)
             expect(instance.sessionManager!.checkAndGetSessionAndWindowId().sessionId).toEqual(initialSessionId)
         })
 
-        it('rejects a future bootstrap session ID before clearing state', () => {
+        it('logs and preserves state for a future bootstrap session ID', () => {
             const initialDistinctId = instance.get_distinct_id()
             const futureTimestampHex = (Date.now() + 23 * 60 * 60 * 1000).toString(16).padStart(12, '0')
             const futureSessionID = `${futureTimestampHex.slice(0, 8)}-${futureTimestampHex.slice(
                 8
             )}-7000-8000-000000000000`
 
-            expect(() => instance.reset({ bootstrap: { sessionID: futureSessionID } })).toThrow(
-                'Bootstrap sessionID cannot be in the future'
-            )
+            expect(() => instance.reset({ bootstrap: { sessionID: futureSessionID } })).not.toThrow()
 
             expect(instance.get_distinct_id()).toEqual(initialDistinctId)
         })

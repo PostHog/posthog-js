@@ -3168,8 +3168,8 @@ export class PostHog implements PostHogInterface {
         }
         // Validate before clearing any state so an invalid session ID leaves the current user untouched.
         const bootstrapSessionID = bootstrap?.sessionID
-        if (!isUndefined(bootstrapSessionID)) {
-            validateBootstrapSessionId(bootstrapSessionID)
+        if (!isUndefined(bootstrapSessionID) && !validateBootstrapSessionId(bootstrapSessionID)) {
+            return
         }
         this.config.bootstrap = bootstrap || {}
 

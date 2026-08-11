@@ -1686,6 +1686,11 @@
               "code": "\n\n// reset and generate new device ID\nposthog.reset(true)  // also resets device_id\n\n\n"
             },
             {
+              "id": "reset_with_a_custom_anonymous_id_and_bootstrapped_feature_flags",
+              "name": "reset with a custom anonymous ID and bootstrapped feature flags",
+              "code": "\n\n// reset with a custom anonymous ID and bootstrapped feature flags\nposthog.reset({\n    bootstrap: {\n        distinctID: myAnonymousID,\n        isIdentifiedID: false,\n        featureFlags: { 'my-flag': true },\n    }\n})\n\n\n"
+            },
+            {
               "id": "with_opt_out_capturing_by_default,_reset()_before_opting_in,_never_after",
               "name": "with opt_out_capturing_by_default, reset() before opting in, never after",
               "code": "\n\n// with opt_out_capturing_by_default, reset() before opting in, never after\nposthog.reset()\nposthog.opt_in_capturing()\n\n\n\n"
@@ -1694,10 +1699,10 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "Whether to generate a new device ID as well as a new distinct ID.",
+              "description": "Boolean to reset the device ID (legacy), or reset options including bootstrap values.",
               "isOptional": true,
-              "type": "boolean",
-              "name": "reset_device_id"
+              "type": "boolean | ResetOptions",
+              "name": "options"
             }
           ],
           "returnType": {
@@ -3700,7 +3705,7 @@
         },
         {
           "description": "Reset the user's identity and start a new session.",
-          "type": "(reset_device_id?: boolean) => void",
+          "type": "(options?: boolean | ResetOptions) => void",
           "name": "reset"
         },
         {

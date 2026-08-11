@@ -19,10 +19,16 @@ export const MAX_SESSION_IDLE_TIMEOUT_SECONDS = 10 * 60 * 60 // 10 hours
 export const MIN_SESSION_IDLE_TIMEOUT_SECONDS = 60 // 1 minute
 const SESSION_LENGTH_LIMIT_MILLISECONDS = 24 * 3600 * 1000 // 24 hours
 
-export const validateBootstrapSessionId = (sessionID: string, timestamp = new Date().getTime()): void => {
-    const sessionStartTimestamp = uuid7ToTimestampMs(sessionID)
-    if (sessionStartTimestamp > timestamp) {
-        throw new Error('Bootstrap sessionID cannot be in the future')
+export const validateBootstrapSessionId = (sessionID: string, timestamp = new Date().getTime()): boolean => {
+    try {
+        if (uuid7ToTimestampMs(sessionID) > timestamp) {
+            logger.error('Bootstrap sessionID cannot be in the future')
+            return false
+        }
+        return true
+    } catch (e) {
+        logger.error('Invalid sessionID in bootstrap', e)
+        return false
     }
 }
 

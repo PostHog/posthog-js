@@ -489,6 +489,7 @@
         "_patchSiteAppElementInsertionMethods",
         "_pauseRecording",
         "_pendingActivatedItems",
+        "_pendingBootstrapSession",
         "_pendingCompressionEvents",
         "_pendingRemoteConfig",
         "_pendingSaveTimer",
