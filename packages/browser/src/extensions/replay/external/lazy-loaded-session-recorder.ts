@@ -1916,6 +1916,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _flushBuffer(): SnapshotBuffer {
         this._clearFlushBufferTimer()
 
+        // every check below validates this buffer; the ship at the bottom must not touch any other
+        const validatedBuffer = this._buffer
+
         // hold the buffer rather than ship a billable recording for an epoch nobody touched
         if (this._holdFlushUntilInteraction) {
             return this._buffer
@@ -1937,6 +1940,17 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         if (this.status === BUFFERING || this.status === PAUSED || this.status === DISABLED || isBelowMinimumDuration) {
             this._scheduleFlushBuffer()
+            return this._buffer
+        }
+
+        // the sampling, duration and status reads above consult the session manager, which can
+        // synchronously adopt a pending session rotation and re-enter this recorder: stop(),
+        // restart, and the replay of queued events all run before control returns here. When that
+        // happens this._buffer is the NEW epoch's buffer — typically held, and never validated by
+        // the checks above — and shipping it here is how held rotation-born markers leaked out as
+        // empty billable recordings. The re-entrant pass already flushed or held the new epoch
+        // correctly, so this outer pass must ship only the buffer it validated, or nothing.
+        if (this._buffer !== validatedBuffer) {
             return this._buffer
         }
 

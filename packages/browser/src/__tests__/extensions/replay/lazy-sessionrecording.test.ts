@@ -2204,6 +2204,48 @@ describe('Lazy SessionRecording', () => {
                     ])
                 })
 
+                it("a session rotation adopted mid-flush does not ship the new epoch's buffer", () => {
+                    // Production rrweb delivers addCustomEvent synchronously through emit, which is
+                    // what makes rotation adoption re-entrant.
+                    _addCustomEvent.mockImplementation((tag: string, payload: any) => {
+                        _emit({ type: EventType.Custom, data: { tag, payload }, timestamp: Date.now() })
+                    })
+                    try {
+                        const lazy = sessionRecording['_lazyLoadedSessionRecording']!
+                        emitActiveEvent(startingTimestamp + 100)
+                        jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                        ;(posthog.capture as Mock).mockClear()
+                        expect(lazy['_buffer'].data).toEqual([])
+
+                        const rotateAt = startingTimestamp + sessionManager['_sessionTimeoutMs'] + 1000
+                        jest.setSystemTime(new Date(rotateAt))
+                        sessionIdGeneratorMock.mockImplementation(() => 'toctou-rotated-session')
+
+                        // The flush consults the session manager after its hold and content checks
+                        // (sampling, minimum duration, status). In production that consultation can
+                        // adopt a pending rotation and re-enter the recorder; inject the same
+                        // re-entry at the same point.
+                        const strategy = lazy['_strategy']!
+                        expect(strategy).toBeTruthy()
+                        const originalEnsure = strategy.ensureSamplingDecision.bind(strategy)
+                        jest.spyOn(strategy, 'ensureSamplingDecision').mockImplementation((sid: string) => {
+                            sessionManager.checkAndGetSessionAndWindowId(false, rotateAt)
+                            return originalEnsure(sid)
+                        })
+
+                        lazy['_flushBuffer']()
+
+                        // the re-entrant pass holds the rotation-born epoch; the outer flush, which
+                        // validated the old empty buffer, must not ship the rebound one
+                        const rotatedShips = (posthog.capture as Mock).mock.calls
+                            .filter(([name]) => name === '$snapshot')
+                            .filter(([, props]) => props.$session_id === 'toctou-rotated-session')
+                        expect(rotatedShips).toEqual([])
+                    } finally {
+                        _addCustomEvent.mockReset()
+                    }
+                })
+
                 it('an interaction after many idle rotations ships one session, not the held backlog', () => {
                     runExternalRotations(startingTimestamp, 1)
 
