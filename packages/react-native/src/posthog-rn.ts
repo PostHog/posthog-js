@@ -46,7 +46,7 @@ import {
 } from './types'
 import { getRemoteConfigBool, getRemoteConfigNumber, isHermes, isMacOS, isValidSampleRate, isWeb } from './utils'
 import { withReactNativeNavigation } from './frameworks/wix-navigation'
-import { OptionalReactNativePlugin } from './optional/OptionalPlugin'
+import { OptionalReactNativePlugin, OptionalReactNativePluginVersion } from './optional/OptionalPlugin'
 import { ErrorTracking, ErrorTrackingOptions } from './error-tracking'
 
 export { PostHogPersistedProperty }
@@ -2477,9 +2477,20 @@ export class PostHog extends PostHogCore {
         `Ignoring invalid remote config sessionRecording.sampleRate '${remoteSampleRateRaw}'. Expected a number between 0 and 1.`
       )
     }
-    if (typeof sampleRate === 'number') {
+    if (localSampleRateValid !== undefined && remoteSampleRateValid !== undefined) {
+      this._logger.warn(
+        `Local sessionReplayConfig.sampleRate (${localSampleRateValid}) overrides the remote sampleRate ` +
+          `(${remoteSampleRateValid}). The project setting is ignored while the local option is set. ` +
+          `Remove sessionReplayConfig.sampleRate to follow the project setting.`
+      )
+    } else if (typeof sampleRate === 'number') {
       const source = localSampleRateValid !== undefined ? 'local config' : 'remote config'
       this._logger.info(`sampleRate set from ${source} (${sampleRate}).`)
+    } else if (cachedRemoteConfig === undefined) {
+      this._logger.warn(
+        'Session replay starts with no sampleRate because no remote config is cached yet. ' +
+          'Every session records until the project setting arrives on the next launch.'
+      )
     }
 
     const sdkReplayConfig = {
@@ -2495,7 +2506,11 @@ export class PostHog extends PostHogCore {
       throttleDelayMs,
     }
 
-    this._logger.info(`Native PostHog plugin replay config: ${JSON.stringify(sdkReplayConfig)}`)
+    this._logger.info(
+      `Native PostHog plugin (version ${OptionalReactNativePluginVersion ?? 'unknown'}) replay config: ${JSON.stringify(
+        sdkReplayConfig
+      )}`
+    )
 
     // if Flags API has not returned yet, we will start session replay with default config.
     const sessionReplay = this.getPersistedProperty(PostHogPersistedProperty.SessionReplay) ?? {}
