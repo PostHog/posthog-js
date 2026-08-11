@@ -277,49 +277,86 @@ describe('conversation-id', () => {
   })
 
   /**
-   * Two ways to lose, pulling opposite directions. Both have happened, so both get a
-   * guard. See ADR-0010.
+   * The invariant, as assertions: schemas are the trusted channel and may direct the
+   * agent strictly; results are untrusted data and may only state facts. See ADR-0010.
    *
-   * Overreach: a tool result is untrusted input, and a client that refuses
-   * instructions found in one is behaving correctly. Every phrase banned below
-   * shipped at some point — `[SERVER]:` impersonating a privileged speaker, `Reuse`
-   * and `Read and follow` commanding the agent, `Required` claiming a necessity that
-   * was untrue, `every subsequent` promising something composed schemas cannot
-   * honour, `do not issue parallel tool calls` dictating execution strategy, and
-   * `never invent one` prohibiting rather than stating the consequence.
-   *
-   * Note this bans *those* phrasings, not the imperative mood as such: a schema
-   * description saying "pass that same value here" is ordinary API documentation,
-   * because the client fetched it at `tools/list` as part of the tool contract.
-   *
-   * Underreach: "analytics"/"telemetry"/a vendor name are true of what PostHog does
-   * with the handle and useless to the agent, which would reasonably conclude the
-   * value is safe to drop — trading a visible refusal for silent non-compliance,
-   * which is worse because it looks like it works.
+   * The split matters in both directions, and getting it backwards has already
+   * happened once each way. Putting instructions in a *result* is the bug that
+   * prompted this rewrite — clients refuse them, correctly. But sanding the
+   * instructions out of a *schema* to match is the opposite error: it gives the agent
+   * room to invent handles, fire parallel first calls, and generally drift, with
+   * nothing left anywhere to stop it. The strictness has to live somewhere, and the
+   * schema is where it is legitimate.
    */
   describe('agent-facing strings', () => {
-    const OVERREACH =
-      /\byou must\b|\bReuse\b|\bRequired\b|Read and follow|every subsequent|\[SERVER\]|do not issue|never invent/i
-    const DISCOUNTABLE = /analytics|telemetry|tracking|metadata|posthog/i
+    const declaredOutputSchema = addConversationStateToOutputSchema({
+      name: 'tool',
+      outputSchema: { type: 'object', properties: {} },
+    }).outputSchema as {
+      properties: Record<string, { properties: Record<string, { description: string }> }>
+    }
 
-    const AGENT_FACING: Array<[string, string]> = [
-      ['content block', buildConversationIdContentBlock('019fd2b0-3333-7333-8333-333333333333').text],
-      ['conversation_id parameter description', DEFAULT_CONVERSATION_ID_DESCRIPTION],
-      ...collectDescriptions(
-        'output schema',
-        addConversationStateToOutputSchema({
-          name: 'tool',
-          outputSchema: { type: 'object', properties: {} },
-        }).outputSchema
-      ),
+    const SCHEMA_DESCRIPTIONS: Array<[string, string]> = [
+      ['conversation_id parameter', DEFAULT_CONVERSATION_ID_DESCRIPTION],
+      ...collectDescriptions('output schema', declaredOutputSchema),
     ]
 
-    it.each(AGENT_FACING)('%s issues no instruction', (_label, text) => {
-      expect(text).not.toMatch(OVERREACH)
+    /**
+     * The two descriptions that document the handle *value*, as opposed to the
+     * `_conversation` wrapper around it. These are the ones that have to carry the
+     * rules, since they are what an agent reads when deciding what to send back.
+     */
+    const HANDLE_DESCRIPTIONS: Array<[string, string]> = [
+      ['conversation_id parameter', DEFAULT_CONVERSATION_ID_DESCRIPTION],
+      [
+        'output schema conversation_id field',
+        declaredOutputSchema.properties._conversation.properties.conversation_id.description,
+      ],
+    ]
+    const RESULT_STRINGS: Array<[string, string]> = [
+      ['content block', buildConversationIdContentBlock('019fd2b0-3333-7333-8333-333333333333').text],
+    ]
+    const ALL = [...SCHEMA_DESCRIPTIONS, ...RESULT_STRINGS]
+
+    /**
+     * Results state facts. Every phrase here shipped in one: `[SERVER]:` impersonating
+     * a privileged speaker, `Reuse` and `Read and follow` commanding the agent,
+     * `Required` claiming a necessity that was untrue, `every subsequent` promising
+     * something composed schemas cannot honour.
+     */
+    const RESULT_OVERREACH = /\byou must\b|\bReuse\b|\bRequired\b|Read and follow|every subsequent|\[SERVER\]/i
+
+    /**
+     * True of what PostHog does with the handle, useless to the agent, and read as
+     * "safe to drop" — trading a visible refusal for silent non-compliance, which is
+     * worse because it looks like it works. Banned in both channels.
+     */
+    const DISCOUNTABLE = /analytics|telemetry|tracking|metadata|posthog/i
+
+    it.each(RESULT_STRINGS)('%s states a fact and issues no instruction', (_label, text) => {
+      expect(text).not.toMatch(RESULT_OVERREACH)
     })
 
-    it.each(AGENT_FACING)('%s does not invite the agent to discount it', (_label, text) => {
+    it.each(ALL)('%s does not invite the agent to discount it', (_label, text) => {
       expect(text).not.toMatch(DISCOUNTABLE)
+    })
+
+    // The counterweight. Without these, "no instructions in results" quietly erodes
+    // into "no instructions anywhere", which is how the agent gets permission to
+    // drift. Both schema descriptions must keep forbidding invented handles, and the
+    // parameter must keep forbidding the parallel first calls that fork a session.
+    it.each(HANDLE_DESCRIPTIONS)('%s forbids inventing a handle', (_label, text) => {
+      expect(text).toMatch(/never invent/i)
+    })
+
+    it('the conversation_id parameter forbids parallel calls before the handle exists', () => {
+      expect(DEFAULT_CONVERSATION_ID_DESCRIPTION).toMatch(/do not issue parallel tool calls/i)
+    })
+
+    // Accurate strictness only: a composed schema never got the parameter, so no
+    // description may claim every tool takes it.
+    it.each(ALL)('%s does not over-promise which tools accept the handle', (_label, text) => {
+      expect(text).not.toMatch(/every subsequent tool call|on every tool/i)
     })
   })
 })

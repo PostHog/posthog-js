@@ -33,7 +33,11 @@ Concretely:
 
 - **The `content` block states the handle.** `conversation_id=<id> — this server's handle for the current conversation. Tools that declare an optional conversation_id parameter accept this value.` The second sentence is scoped rather than universal, so it stays true for composed-schema tools, and the agent can verify it against `tools/list` itself.
 - **`_mcp_instructions` → `_conversation`, carrying `{ conversation_id }` only.** The `instructions` string is gone from the payload, the declared schema, and the interface.
-- **The input-schema description carries the copy-forward guidance.** "…pass that same value here" is a mild imperative, and appropriate: it is ordinary API documentation in an artifact the client fetched as part of the contract. `never invent one` becomes a statement of consequence ("A value the server did not issue is ignored and replaced"), which is what `resolveConversationId` actually does. `do not issue parallel tool calls until you have it` is dropped outright — a demand on the agent's execution strategy is far outside what this parameter may ask for. The cost is that parallel first calls each mint a handle and split the session; accepted, since this is analytics grouping rather than correctness.
+- **The schema descriptions keep every rule, unchanged and strict.** `Echo the conversation_id from the server's previous response. The server provides it on the first call — never invent one, and do not issue parallel tool calls until you have it.` This is the trusted channel; strictness here is the *point* of the split, not something to be traded away alongside the result text.
+
+  A first draft of this ADR softened it — `never invent one` restated as a consequence ("a value the server did not issue is ignored and replaced"), the parallel-call clause dropped as an overreach, `Optional` added. That was the invariant applied to the wrong channel, and each edit gave back exactly the drift the parameter exists to prevent. Explaining that an invented value is quietly replaced tells the agent nothing bad happens if it invents one. The parallel-call clause is a genuine ordering constraint, not a demand on execution strategy: parallel first calls each mint a distinct handle and fork one conversation into several sessions, and the spec puts precisely this kind of policy in the tool contract. `Optional` is true of the JSON Schema (the property is never added to `required`) and corrosive in prose, which is where the agent decides whether to bother.
+
+  The output schema's `conversation_id` field carries the same rules for the same reason. The one edit that survived is an accuracy fix: its original "on every subsequent tool call" is now "on subsequent tool calls that declare one", because a composed schema never received the parameter and rejects it.
 - **`enableConversationId` accepts an object form** — `{ description?, resultText? }` — matching the `context` option. `resultText: false` leaves `content` byte-identical for operators who want no result footprint at all.
 
 ### The two-sided vocabulary constraint
@@ -47,7 +51,15 @@ The way out is that the honest functional description is also the compelling one
 
 **"PostHog" therefore appears nowhere on the wire.** It did not before this change either — every `PostHog*` constant is an outbound event property — but it is now a rule with a test behind it, for three reasons. The handle really is the customer's server's, and PostHog is only the library that minted it. A third-party name inside someone else's tool result is *more* injection-shaped, not less. And the analytics disclosure is the operator's to make through their own privacy policy, not something to broadcast into every agent transcript.
 
-`src/__tests__/conversation-id.test.ts` enforces all three bans (overreaching phrasings, discountable vocabulary, vendor branding) across the content block and every declared schema description. Each banned phrase shipped at some point; the guard is revert-checked against all five original strings.
+### The guard has to pull both ways
+
+`src/__tests__/conversation-id.test.ts` encodes the split rather than a blanket ban, because the failure is symmetric and both halves have now occurred:
+
+- **Results** must not overreach — no `[SERVER]:`, `Reuse`, `Required`, `Read and follow`, `every subsequent`. Each shipped in one. Revert-checked against the originals.
+- **Both channels** must avoid discountable vocabulary and vendor branding.
+- **Schema descriptions must stay strict** — the descriptions documenting the handle are asserted to keep forbidding invented values, and the input parameter to keep forbidding parallel first calls.
+
+That last group is the counterweight. Without it, "no instructions in results" erodes into "no instructions anywhere", which is how the agent ends up with permission to drift and nothing left to stop it. It is also revert-checked: reinstating the softened wording fails it.
 
 ## Consequences
 

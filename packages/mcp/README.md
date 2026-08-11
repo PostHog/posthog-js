@@ -119,10 +119,20 @@ and, for tools that got the `outputSchema` declaration, the handle mirrored into
 { "_conversation": { "conversation_id": "019a3f2c-7b41-7c8e-9d02-3f5a1b6c8e40" } }
 ```
 
-Both channels carry the handle as data. Neither instructs the agent — the "pass this value forward"
-guidance lives in the `conversation_id` parameter's schema description, which clients fetch at
-`tools/list` as part of the tool contract. Results are untrusted input, and clients that refuse
-instructions found in one are behaving correctly. See ADR-0010.
+Both channels carry the handle as data. Neither instructs the agent: results are untrusted input, and
+clients that refuse instructions found in one are behaving correctly.
+
+The rules live in the `conversation_id` parameter's schema description instead, which clients fetch
+at `tools/list` as part of the tool contract — and they are strict there, because that is the channel
+where strictness is legitimate:
+
+> Echo the conversation_id from the server's previous response. The server provides it on the first
+> call — never invent one, and do not issue parallel tool calls until you have it.
+
+Both prohibitions are load-bearing. An agent that invents a handle would fork the session (the SDK
+discards values it did not issue, so those calls each get a fresh one), and parallel first calls each
+mint a distinct handle before any result has come back. Pass `{ description: '…' }` to reword this,
+but keep both constraints. See ADR-0010.
 
 PostHog derives `$session_id` from the handle (hashed, so it doesn't collide with the Session Replay
 namespace) and records the raw value as `$mcp_conversation_id`. The handle itself is not branded —
@@ -137,8 +147,6 @@ instrument(server, posthog, {
   enableConversationId: { resultText: false },
 })
 ```
-
-`{ description: '…' }` overrides the text on the injected parameter if you'd rather word it yourself.
 
 ### Reading request headers in a callback
 

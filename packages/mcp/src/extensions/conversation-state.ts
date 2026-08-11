@@ -30,8 +30,13 @@ export const CONVERSATION_STATE_KEY = '_conversation'
 const CONVERSATION_STATE_FIELD_DESCRIPTION =
   "Conversation state issued by this server, alongside this tool's own output."
 
+// Schema, so it directs the agent as strictly as the input parameter does — same
+// trusted channel, same rules, and the client read both at `tools/list`. Only the
+// original's "on every subsequent tool call" is gone: a tool whose schema is composed
+// (`oneOf`/`allOf`/`anyOf`/`$ref`) never had `conversation_id` injected and rejects
+// it, so the universal was a promise this SDK cannot keep. See ADR-0010.
 const CONVERSATION_ID_FIELD_DESCRIPTION =
-  "This server's handle for the current conversation. Tools that declare an optional conversation_id parameter accept this value."
+  'Echo this exact value as the conversation_id argument on subsequent tool calls that declare one — never invent a value.'
 
 export interface ConversationStateInjectableTool {
   name?: string
