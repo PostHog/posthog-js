@@ -408,6 +408,68 @@ describe('budgeted snapshot lifecycle hardening', () => {
     }
   }, 30_000);
 
+  it('a shadow-root scroll during a checkout walk is not lost to the re-arm window', async () => {
+    // the host sits behind 2000 filler nodes, so a sliced checkout walk
+    // reaches it late: a scroll dispatched at walk start lands squarely in
+    // the window where init() has torn the root's scroll listener down
+    fillBody();
+    const host = document.createElement('div');
+    const shadow = host.attachShadow({ mode: 'open' });
+    const inner = document.createElement('div');
+    inner.textContent = 'scrollable shadow content';
+    shadow.appendChild(inner);
+    document.body.appendChild(host);
+
+    const events: eventWithTime[] = [];
+    stop = record({
+      emit: (event) => {
+        events.push(event as eventWithTime);
+      },
+      fullSnapshotYieldBudgetMs: 1,
+    });
+
+    await vi.waitFor(
+      () => {
+        expect(
+          events.filter((e) => e.type === EventType.FullSnapshot),
+        ).toHaveLength(1);
+      },
+      { timeout: 10_000 },
+    );
+    await settle();
+    const innerId = record.mirror.getId(inner);
+    expect(innerId).toBeGreaterThan(0);
+
+    // checkout: init() disconnects every shadow observer at walk start
+    record.takeFullSnapshot(true);
+    expect(events.filter((e) => e.type === EventType.FullSnapshot)).toHaveLength(
+      1,
+    );
+    // observed while the walk is in flight and the walker has not reached
+    // the host yet; without the up-front re-arm nothing is listening
+    inner.dispatchEvent(new Event('scroll', { bubbles: true }));
+
+    await vi.waitFor(
+      () => {
+        expect(
+          events.filter((e) => e.type === EventType.FullSnapshot),
+        ).toHaveLength(2);
+      },
+      { timeout: 10_000 },
+    );
+    // the scroll observer throttles; give its trailing edge time to land
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    const scrolls = events.filter(
+      (e) =>
+        e.type === EventType.IncrementalSnapshot &&
+        (e as { data: { source: IncrementalSource } }).data.source ===
+          IncrementalSource.Scroll &&
+        (e as unknown as { data: { id: number } }).data.id === innerId,
+    );
+    expect(scrolls.length).toBeGreaterThan(0);
+  }, 30_000);
+
   it('order-independent SDK control events bypass the held window', async () => {
     fillBody();
     const events: eventWithTime[] = [];

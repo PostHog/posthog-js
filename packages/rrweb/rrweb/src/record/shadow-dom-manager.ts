@@ -31,6 +31,13 @@ export class ShadowDomManager {
   // Handlers are tagged with the document that owns their shadow root so a
   // single iframe can be torn down without disconnecting the rest of the page.
   private restoreHandlers: { doc: Document; handler: () => void }[] = [];
+  // Registry of every root ever observed, surviving reset(): a time-sliced
+  // checkout re-arms these up front instead of waiting for the walker to
+  // reach each host, which left scrolls and mutations inside a shadow root
+  // unobserved for the whole walk window. Strong refs are no new retention:
+  // the mirror already pins every serialized node between checkouts. Pruned
+  // of detached hosts on every re-arm.
+  private knownShadowRoots = new Set<ShadowRoot>();
 
   constructor(options: {
     mutationCb: mutationCallBack;
@@ -56,6 +63,7 @@ export class ShadowDomManager {
     if (!isNativeShadowDom(shadowRoot)) return;
     if (this.shadowDoms.has(shadowRoot)) return;
     this.shadowDoms.add(shadowRoot);
+    this.knownShadowRoots.add(shadowRoot);
     // Derive the owning document from the host so a shadow root nested in an
     // iframe is keyed to that iframe's document, not whatever the caller passed
     // (takeFullSnapshot's onSerialize hands us the top-level document).
@@ -192,5 +200,30 @@ export class ShadowDomManager {
       }
     }
     this.restoreHandlers = remaining;
+    for (const root of this.knownShadowRoots) {
+      if ((dom.host(root)?.ownerDocument ?? null) === doc) {
+        this.knownShadowRoots.delete(root);
+      }
+    }
+  }
+
+  /**
+   * Re-arm observers for every known, still-attached shadow root right away.
+   * A time-sliced walk calls this after init(): waiting for the walker to
+   * reach each host (onSerialize -> addShadowRoot) leaves that root's scroll
+   * listener and mutation observer disconnected for the walk window, losing
+   * the incremental trail (the snapshot's rr_scrollTop converges, the events
+   * do not). Re-armed buffers are born before the walk locks the buffers, so
+   * they join the held window like any others.
+   */
+  public reobserveKnownRoots(doc: Document) {
+    for (const root of [...this.knownShadowRoots]) {
+      const host = dom.host(root);
+      if (!host || !inDom(host)) {
+        this.knownShadowRoots.delete(root);
+        continue;
+      }
+      this.addShadowRoot(root, doc);
+    }
   }
 }

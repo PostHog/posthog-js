@@ -1876,6 +1876,13 @@ function record<T = eventWithTime>(
     // When we take a full snapshot, old tracked StyleSheets need to be removed.
     stylesheetManager.reset();
     shadowDomManager.init();
+    // On a checkout, init() just disconnected every shadow root's observers,
+    // and the walker only re-arms each root when it reaches its host — on a
+    // sliced walk that is a seconds-long blind window for shadow scrolls and
+    // mutations. Re-arm known roots now; their buffers are born before the
+    // lock below, so they join the held window like any others. (The
+    // synchronous path has no window: nothing runs during its snapshot.)
+    shadowDomManager.reobserveKnownRoots(document);
 
     budgetedSnapshotInFlight = true;
     activeBudgetedSnapshot = transaction;
