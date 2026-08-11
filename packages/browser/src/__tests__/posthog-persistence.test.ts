@@ -1096,6 +1096,28 @@ describe('persistence', () => {
                 expect(lib.props.distinct_id).toBe('anonymous')
             })
 
+            it('reconciles a sibling cookie before re-enabling persistence with a storage migration', () => {
+                document.cookie = encodeCookie({ distinct_id: 'anonymous' })
+                localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'anonymous' }))
+                const oldConfig = {
+                    ...makeConfig('localStorage+cookie', true),
+                    disable_persistence: true,
+                    persistence_save_debounce_ms: 250,
+                }
+                const lib = new PostHogPersistence(oldConfig, true)
+
+                document.cookie = encodeCookie({ distinct_id: 'identified-user' })
+                const newConfig = {
+                    ...oldConfig,
+                    disable_persistence: false,
+                    cookie_persisted_properties: ['custom_property'],
+                }
+                lib.update_config(newConfig, oldConfig, false)
+
+                expect(lib.props.distinct_id).toBe('identified-user')
+                expect(cookieStore._parse(persistenceName).distinct_id).toBe('identified-user')
+            })
+
             it('enabling cookie precedence through update_config adopts the shared cookie without clearing it', () => {
                 document.cookie = encodeCookie({ distinct_id: 'anonymous' })
                 localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'anonymous' }))

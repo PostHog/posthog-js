@@ -207,9 +207,9 @@ export class PostHogPersistence {
         return this._syncCookieProperties(this._config)
     }
 
-    private _syncCookieProperties(config: PostHogConfig): boolean {
+    private _syncCookieProperties(config: PostHogConfig, ignoreDisabled: boolean = false): boolean {
         if (
-            this._disabled ||
+            (this._disabled && !ignoreDisabled) ||
             this._cookieSyncSuppressed ||
             !config.cookieWinsOnConflict ||
             config.persistence.toLowerCase() !== 'localstorage+cookie'
@@ -258,10 +258,10 @@ export class PostHogPersistence {
         return true
     }
 
-    _beginCookieSyncSuppression(): boolean {
+    _beginCookieSyncSuppression(ignoreDisabled: boolean = false): boolean {
         if (
             !this._cookieSyncSuppressed &&
-            !this._disabled &&
+            (!this._disabled || ignoreDisabled) &&
             this._config.cookieWinsOnConflict &&
             this._config.persistence.toLowerCase() === 'localstorage+cookie'
         ) {
@@ -933,11 +933,13 @@ export class PostHogPersistence {
         const cookiePrecedenceChanged = config.cookieWinsOnConflict !== oldConfig.cookieWinsOnConflict
 
         const disabled = config['disable_persistence'] || !!isDisabled
+        const reEnabling = !!this._disabled && !disabled
         // Reconcile through the old routing before replacing it. PostHog mutates
         // its config object before calling this method, so use the old snapshot
-        // explicitly rather than relying on this._config.
+        // explicitly rather than relying on this._config. A configuration change
+        // that re-enables persistence may read the shared cookie before writes resume.
         if (!disabled) {
-            this._syncCookieProperties(oldConfig)
+            this._syncCookieProperties(oldConfig, reEnabling)
         }
 
         this._config = config
@@ -948,10 +950,13 @@ export class PostHogPersistence {
             // Newly added cookie-backed keys are still local-only in the current
             // cookie. Keep the old key set authoritative until migration writes
             // the first snapshot under the new configuration.
-            this._syncCookieProperties({
-                ...config,
-                cookie_persisted_properties: oldConfig.cookie_persisted_properties,
-            })
+            this._syncCookieProperties(
+                {
+                    ...config,
+                    cookie_persisted_properties: oldConfig.cookie_persisted_properties,
+                },
+                reEnabling
+            )
         }
 
         // `_buildStorage` re-resolves both the backend and `_splitStorageEligible`,
@@ -965,7 +970,7 @@ export class PostHogPersistence {
             config['cross_subdomain_cookie'] !== this._cross_subdomain || config['secure_cookie'] !== this._secure
 
         const cookieSyncSuppressionStarted =
-            !disabled && (storageMigration || cookieOptionsChanged) && this._beginCookieSyncSuppression()
+            !disabled && (storageMigration || cookieOptionsChanged) && this._beginCookieSyncSuppression(reEnabling)
         try {
             this._default_expiry = this._expire_days = config['cookie_expiration']
             this.set_disabled(disabled)
