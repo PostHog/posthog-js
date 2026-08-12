@@ -847,6 +847,7 @@ describe('persistence', () => {
                 expect(lib.props.$device_id).toBe('anon-uuid')
                 expect(lib.props.$sesid).toEqual([9999, 'new-sid', 9999])
                 expect(lib.props.$user_state).toBe('identified')
+                expect(lib.props.$user_id).toBe('user@x.com')
                 expect(lib.props.$initial_person_info).toEqual({
                     u: 'https://app.example.com/dash',
                     r: 'https://www.example.com/',

@@ -8,6 +8,7 @@ import {
     SESSION_ID,
     SESSION_RECORDING_IS_SAMPLED,
     USER_STATE,
+    USER_STATE_IDENTIFIED,
 } from './constants'
 
 import { isArray, isNull, isUndefined } from '@posthog/core'
@@ -380,7 +381,14 @@ export const createLocalPlusCookieStore = (
                             // the shared cookie. Drop them when the authoritative
                             // cookie identity differs during initial load, matching
                             // live reconciliation behavior.
-                            delete localStorageData.$user_id
+                            if (
+                                safeCookieProperties[USER_STATE] === USER_STATE_IDENTIFIED &&
+                                DISTINCT_ID in safeCookieProperties
+                            ) {
+                                localStorageData.$user_id = safeCookieProperties[DISTINCT_ID]
+                            } else {
+                                delete localStorageData.$user_id
+                            }
                             delete localStorageData.__alias
                         }
                     }
