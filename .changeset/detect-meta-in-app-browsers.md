@@ -3,6 +3,7 @@
 'posthog-js-lite': minor
 '@posthog/core': minor
 '@posthog/types': minor
+'@posthog/browser-common': patch
 ---
 
 feat(browser): detect Facebook and Instagram in-app browsers

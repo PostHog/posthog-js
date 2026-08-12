@@ -3121,6 +3121,11 @@
           "name": "detect_google_search_app"
         },
         {
+          "description": "Detect Meta's in-app browsers (Facebook, Instagram) as their own `$browser`\nvalue instead of the webview they embed — Chrome on Android, Mobile Safari\non iOS. The Android Facebook browser is detected via its `FB_IAB`/`FBAV`\nmarkers and Instagram via its `Instagram` marker. The iOS Facebook browser\nis already detected unconditionally via its `FBIOS` marker.\n\nOff by default for backwards-compatibility: enabling it reattributes\nexisting in-app traffic away from Chrome / Mobile Safari, which would\notherwise look like those browsers suddenly losing share. The `2026-08-30`\nconfig default opts in.",
+          "type": "boolean",
+          "name": "detect_meta_in_app_browsers"
+        },
+        {
           "description": "Determines whether PostHog should disable all surveys functionality.",
           "type": "boolean",
           "name": "disable_surveys"
@@ -3295,7 +3300,7 @@
           "name": "properties_string_max_length"
         },
         {
-          "description": "Configuration defaults for breaking changes. When set to a specific date,\nenables new default behaviors that were introduced on that date.\n\n- `'unset'`: Use legacy default behaviors\n- `'2025-05-24'`: Use updated default behaviors (e.g. capture_pageview defaults to 'history_change')\n- `'2025-11-30'`: Defaults from '2025-05-24' plus additional changes (e.g. strict minimum duration for replay and rageclick content ignore list defaults to active)\n- `'2026-01-30'`: Defaults from '2025-11-30' plus external_scripts_inject_target defaults to 'head' (avoids SSR hydration errors)\n- `'2026-05-30'`: Defaults from '2026-01-30' plus `persistence_save_debounce_ms` defaults to `250`, `split_storage` and `detect_google_search_app` default to `true`, and rageclick defaults also exclude stepper controls and text-selection surfaces\n- `'2026-06-25'`: Defaults from '2026-05-30' plus `session_recording.streamNetworkBody` defaults to `true` (streams network bodies to enforce the payload size limit)",
+          "description": "Configuration defaults for breaking changes. When set to a specific date,\nenables new default behaviors that were introduced on that date.\n\n- `'unset'`: Use legacy default behaviors\n- `'2025-05-24'`: Use updated default behaviors (e.g. capture_pageview defaults to 'history_change')\n- `'2025-11-30'`: Defaults from '2025-05-24' plus additional changes (e.g. strict minimum duration for replay and rageclick content ignore list defaults to active)\n- `'2026-01-30'`: Defaults from '2025-11-30' plus external_scripts_inject_target defaults to 'head' (avoids SSR hydration errors)\n- `'2026-05-30'`: Defaults from '2026-01-30' plus `persistence_save_debounce_ms` defaults to `250`, `split_storage` and `detect_google_search_app` default to `true`, and rageclick defaults also exclude stepper controls and text-selection surfaces\n- `'2026-06-25'`: Defaults from '2026-05-30' plus `session_recording.streamNetworkBody` defaults to `true` (streams network bodies to enforce the payload size limit)\n- `'2026-08-30'`: Defaults from '2026-06-25' plus `detect_meta_in_app_browsers` defaults to `true` (detects Facebook and Instagram in-app browsers instead of the webview they embed)",
           "type": "ConfigDefaults",
           "name": "defaults"
         },
