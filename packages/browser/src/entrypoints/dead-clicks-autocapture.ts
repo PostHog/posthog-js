@@ -58,17 +58,20 @@ function checkTimeout(value: number | undefined, thresholdMs: number) {
     return isNumber(value) && value >= thresholdMs
 }
 
+// a liveness transition only counts if it fired within the suppression window on one side of the
+// click. this is the single definition of "in window" — it gates every recorded delay, so once a
+// delay lands on a candidate `_checkClicks` can trust it is already in range.
+function livenessDelayInWindow(delay: number): number | undefined {
+    return delay >= 0 && delay < LIVENESS_SUPPRESSION_MS ? delay : undefined
+}
+
 // a liveness signal (visibility/focus) that fired shortly BEFORE the click — the click that woke
 // or refocused the tab. read once when the candidate is queued; only a change inside the
 // suppression window counts, so a long-ago transition can neither suppress the click nor (as it
 // once wrongly did) mark it dead. the AFTER-the-click direction is recorded separately, as the
 // event fires, by `_recordLivenessSignal`.
 function priorLivenessDelay(clickTimestamp: number, lastSeenAt: number | undefined): number | undefined {
-    if (!lastSeenAt) {
-        return undefined
-    }
-    const delay = clickTimestamp - lastSeenAt
-    return delay >= 0 && delay < LIVENESS_SUPPRESSION_MS ? delay : undefined
+    return lastSeenAt ? livenessDelayInWindow(clickTimestamp - lastSeenAt) : undefined
 }
 
 // How dead-click detection works
@@ -315,8 +318,8 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     // overwritten the click-correlated one. keeps the closest transition, only within the window.
     private _recordLivenessSignal(field: 'visibilityChangedDelayMs' | 'focusChangedDelayMs', firedAt: number): void {
         this._clicks.forEach((click) => {
-            const delay = firedAt - click.timestamp
-            if (delay >= 0 && delay < LIVENESS_SUPPRESSION_MS && (isUndefined(click[field]) || delay < click[field]!)) {
+            const delay = livenessDelayInWindow(firedAt - click.timestamp)
+            if (isNumber(delay) && (isUndefined(click[field]) || delay < click[field]!)) {
                 click[field] = delay
             }
         })
@@ -510,10 +513,10 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             const hadSelectionChange =
                 isNumber(click.selectionChangedDelayMs) &&
                 click.selectionChangedDelayMs < this._config.selection_change_threshold_ms
-            const hadVisibilityChange =
-                isNumber(click.visibilityChangedDelayMs) && click.visibilityChangedDelayMs < LIVENESS_SUPPRESSION_MS
-            const hadFocusChange =
-                isNumber(click.focusChangedDelayMs) && click.focusChangedDelayMs < LIVENESS_SUPPRESSION_MS
+            // visibility/focus delays are only ever recorded when already inside the suppression
+            // window (see `livenessDelayInWindow`), so their presence alone means "suppress"
+            const hadVisibilityChange = isNumber(click.visibilityChangedDelayMs)
+            const hadFocusChange = isNumber(click.focusChangedDelayMs)
 
             if (hadScroll || hadMutation || hadSelectionChange || hadVisibilityChange || hadFocusChange) {
                 continue
