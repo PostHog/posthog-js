@@ -1003,6 +1003,33 @@ describe('persistence', () => {
                 expect(cookieStore._parse(persistenceName).distinct_id).toBe('new-anonymous')
             })
 
+            it('flag on: suppression publishes only the complete identity snapshot without debounce', () => {
+                document.cookie = encodeCookie({ distinct_id: 'anonymous', $user_state: 'anonymous' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({ distinct_id: 'anonymous', $user_state: 'anonymous' })
+                )
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+
+                lib._beginCookieSyncSuppression()
+                lib.register({ distinct_id: 'identified-user' })
+                expect(cookieStore._parse(persistenceName)).toMatchObject({
+                    distinct_id: 'anonymous',
+                    $user_state: 'anonymous',
+                })
+                lib.register({ $user_state: 'identified' })
+                expect(cookieStore._parse(persistenceName)).toMatchObject({
+                    distinct_id: 'anonymous',
+                    $user_state: 'anonymous',
+                })
+                lib._endCookieSyncSuppression()
+
+                expect(cookieStore._parse(persistenceName)).toMatchObject({
+                    distinct_id: 'identified-user',
+                    $user_state: 'identified',
+                })
+            })
+
             it('flag on: a local identity update is not rolled back before its cookie write', () => {
                 document.cookie = encodeCookie({ distinct_id: 'anonymous' })
                 localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'anonymous' }))

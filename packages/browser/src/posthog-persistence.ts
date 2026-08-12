@@ -290,10 +290,10 @@ export class PostHogPersistence {
                 clearTimeout(this._pendingSaveTimer)
                 this._pendingSaveTimer = undefined
             }
-            // Force the complete local snapshot through even if an earlier
-            // write in this transaction seeded the no-op fingerprint.
+            // Force the complete local snapshot through without reconciling a
+            // stale sibling write observed during this authoritative transaction.
             delete this._slotState[MAIN_STORAGE_SLOT]
-            this._writeNow()
+            this._writeNow(true)
         } finally {
             this._cookieSyncSuppressed = false
         }
@@ -548,15 +548,19 @@ export class PostHogPersistence {
         this._writeNow()
     }
 
-    private _writeNow(): void {
-        if (this._disabled) {
+    private _writeNow(forceSuppressedSnapshot = false): void {
+        if (this._disabled || (this._cookieSyncSuppressed && !forceSuppressedSnapshot)) {
             return
         }
 
         // Reconcile immediately before writing as well as before capture. This
         // closes the debounce window where a sibling identify/reset could
         // otherwise be overwritten by this tab's pending stale whole-blob save.
-        this.syncCookieProperties()
+        // A transaction ending suppression owns its complete snapshot and must
+        // not adopt a sibling write that arrived while it was in progress.
+        if (!forceSuppressedSnapshot) {
+            this.syncCookieProperties()
+        }
 
         if (this._splitStorage) {
             this._writeNowSplit()
