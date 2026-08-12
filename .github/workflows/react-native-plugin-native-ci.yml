@@ -244,8 +244,18 @@ jobs:
         working-directory: ${{ env.SPM_EXAMPLE_DIR }}
 
       - name: Convert the iOS project to React Native full SwiftPM
-        run: npx react-native spm add --deintegrate --yes
+        run: |
+          npx react-native spm add --deintegrate --yes
+          hermesc="$PWD/../node_modules/hermes-compiler/hermesc/osx-bin/hermesc"
+          sed -i '' -E "s#HERMES_CLI_PATH = .*;#HERMES_CLI_PATH = \"$hermesc\";#" \
+            PosthogReactNativeSpmExample.xcodeproj/project.pbxproj
         working-directory: ${{ env.SPM_EXAMPLE_DIR }}/ios
+
+      - name: Verify the pinned Hermes compiler matches SwiftPM Hermes
+        run: |
+          hermesc=node_modules/hermes-compiler/hermesc/osx-bin/hermesc
+          "$hermesc" -version | grep 'HBC bytecode version: 99'
+        working-directory: ${{ env.SPM_EXAMPLE_DIR }}
 
       - name: Build Debug with SwiftPM
         run: |
