@@ -381,6 +381,12 @@ export class PostHogPersistence {
         try {
             if (publish) {
                 this._publishSuppressedCookieSnapshot()
+            } else if (!isUndefined(this._pendingSaveTimer)) {
+                // A failed identify/reset may have scheduled saves before it
+                // threw. Do not let one run after suppression is released and
+                // publish the incomplete transaction asynchronously.
+                clearTimeout(this._pendingSaveTimer)
+                this._pendingSaveTimer = undefined
             }
         } finally {
             this._cookieSyncSuppressed = false

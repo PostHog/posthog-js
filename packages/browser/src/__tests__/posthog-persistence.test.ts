@@ -1111,6 +1111,24 @@ describe('persistence', () => {
                 expect(cookieStore._parse(persistenceName).distinct_id).toBe('new-anonymous')
             })
 
+            it('flag on: canceling suppression drops pending partial writes', () => {
+                jest.useFakeTimers()
+                const config = {
+                    ...makeConfig('localStorage+cookie', true),
+                    persistence_save_debounce_ms: 250,
+                }
+                const lib = new PostHogPersistence(config)
+                const cookieBefore = document.cookie
+
+                lib._beginCookieSyncSuppression()
+                lib.register({ distinct_id: 'partial-identity', $user_state: 'identified' })
+                lib._endCookieSyncSuppression(false)
+                jest.advanceTimersByTime(250)
+
+                expect(document.cookie).toBe(cookieBefore)
+                jest.useRealTimers()
+            })
+
             it('flag on: suppression publishes only the complete identity snapshot without debounce', () => {
                 document.cookie = encodeCookie({ distinct_id: 'anonymous', $user_state: 'anonymous' })
                 localStorage.setItem(
