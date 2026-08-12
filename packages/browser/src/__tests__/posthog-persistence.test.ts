@@ -940,6 +940,23 @@ describe('persistence', () => {
                 expect(cookieStore._parse(persistenceName).distinct_id).toBe('identified-user')
             })
 
+            it('flag on: does not mark a failed cookie mirror as observed', () => {
+                document.cookie = encodeCookie({ distinct_id: 'anonymous', $user_state: 'anonymous' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({ distinct_id: 'anonymous', $user_state: 'anonymous' })
+                )
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+                const setSpy = jest.spyOn(cookieStore, '_set').mockImplementation(() => false)
+
+                lib.register({ distinct_id: 'identified-user', $user_state: 'identified' })
+                setSpy.mockRestore()
+
+                expect(lib.syncCookieProperties()).toBe(false)
+                expect(lib.props.distinct_id).toBe('identified-user')
+                expect(lib.props.$user_state).toBe('identified')
+            })
+
             it('flag on: does not hide a sibling update that lands immediately after a write', () => {
                 document.cookie = encodeCookie({ distinct_id: 'anonymous', $user_state: 'anonymous' })
                 localStorage.setItem(

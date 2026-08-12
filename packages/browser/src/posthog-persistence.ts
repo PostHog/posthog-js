@@ -210,10 +210,18 @@ export class PostHogPersistence {
                 )
                 const customCookieProperties = this._config.cookie_persisted_properties || []
                 const metadata = getCookiePersistedPropertiesMetadata(cookieProperties, customCookieProperties)
-                this._lastSeenCookiePropertiesFingerprint =
+                const expectedFingerprint =
                     JSON.stringify(cookieProperties) +
                     '|' +
                     (customCookieProperties.length > 0 ? JSON.stringify(metadata) : '')
+                // `localStorage+cookie._set` reports localStorage success even if
+                // its best-effort cookie mirror fails. Advance the observed
+                // fingerprint only when the shared cookie actually contains this
+                // exact snapshot. A different value may be either the old cookie
+                // or a sibling write, and must remain eligible for reconciliation.
+                if (getCookiePropertiesFingerprint(this._name) === expectedFingerprint) {
+                    this._lastSeenCookiePropertiesFingerprint = expectedFingerprint
+                }
             } catch {}
             return
         }
