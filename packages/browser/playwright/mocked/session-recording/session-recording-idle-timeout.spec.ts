@@ -374,16 +374,16 @@ test.describe('Session recording - recording idle (activity timeout) within one 
         const incrementalAfterWake = afterWake.findIndex((s) => s.type === 3)
         // the mirror-healing full snapshot must exist, and must come before any
         // post-wake incremental, or the player applies mutations to a stale tree
-        expect(fullSnapshotAfterWake, `expected a full snapshot after wake in ${JSON.stringify(afterWake)}`).toBeGreaterThan(-1)
+        expect(
+            fullSnapshotAfterWake,
+            `expected a full snapshot after wake in ${JSON.stringify(afterWake)}`
+        ).toBeGreaterThan(-1)
         expect(fullSnapshotAfterWake).toBeLessThan(incrementalAfterWake)
 
         // the mutations that happened while idle are not in the event stream (they were
         // dropped) - the full snapshot is the only record of them
         const idleEraMutations = snapshotData.filter(
-            (s) =>
-                s.type === 3 &&
-                s.data?.source === 0 &&
-                JSON.stringify(s.data).includes('created-while-going-idle')
+            (s) => s.type === 3 && s.data?.source === 0 && JSON.stringify(s.data).includes('created-while-going-idle')
         )
         expect(idleEraMutations).toEqual([])
         // but the wake full snapshot carries the post-idle DOM state

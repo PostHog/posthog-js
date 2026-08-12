@@ -448,6 +448,7 @@
         "_mutableConfigSource",
         "_mutationObserver",
         "_mutationThrottler",
+        "_mutationsDroppedWhileIdle",
         "_name",
         "_needsIdentification",
         "_networkPayloadCapture",
