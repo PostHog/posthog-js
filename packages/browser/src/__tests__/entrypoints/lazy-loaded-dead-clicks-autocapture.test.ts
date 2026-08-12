@@ -339,21 +339,61 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             expect(fakeInstance.capture).not.toHaveBeenCalled()
         })
 
-        it.each([
-            { scenario: 'visibility change after click', clickTimestamp: 900, visibilityTimestamp: 999 },
-            { scenario: 'visibility change just before click', clickTimestamp: 950, visibilityTimestamp: 900 },
-        ])('$scenario, not a dead click', ({ clickTimestamp, visibilityTimestamp }) => {
+        it('visibility change shortly after click, not a dead click', () => {
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
                 node: document.body,
                 originalEvent: { type: 'click' } as MouseEvent,
-                timestamp: clickTimestamp,
+                timestamp: 900,
             })
-            lazyLoadedDeadClicksAutocapture['_lastVisibilityChange'] = visibilityTimestamp
+            // visibility changed 99ms after the click, within the threshold, so the click did something
+            lazyLoadedDeadClicksAutocapture['_lastVisibilityChange'] = 999
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
             expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
+
+        it('visibility change before the click is ignored, so the click keeps waiting', () => {
+            lazyLoadedDeadClicksAutocapture['_clicks'].push({
+                node: document.body,
+                originalEvent: { type: 'click' } as MouseEvent,
+                timestamp: 950,
+            })
+            // a visibility change from _before_ the click tells us nothing about whether it was dead
+            lazyLoadedDeadClicksAutocapture['_lastVisibilityChange'] = 900
+
+            lazyLoadedDeadClicksAutocapture['_checkClicks']()
+
+            // the stale change decides nothing: the click is neither dropped as alive nor flagged as
+            // dead, it stays queued until another signal or the absolute timeout resolves it
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
+            expect(lazyLoadedDeadClicksAutocapture['_clicks'][0].visibilityChangedDelayMs).toBeUndefined()
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
+
+        it('a stale visibility change from before the click does not trigger the visibility timeout', () => {
+            lazyLoadedDeadClicksAutocapture['_clicks'].push({
+                node: document.body,
+                originalEvent: { type: 'click' } as MouseEvent,
+                timestamp: -3000,
+            })
+            // the tab was backgrounded long before this click; the old Math.abs() turned that large
+            // gap into a spurious multi-second "response" and flagged the click as dead
+            lazyLoadedDeadClicksAutocapture['_lastVisibilityChange'] = -5000
+
+            lazyLoadedDeadClicksAutocapture['_checkClicks']()
+
+            // it is still captured (via the absolute timeout), but the visibility branch must stay quiet
+            expect(fakeInstance.capture).toHaveBeenCalledWith(
+                '$dead_click',
+                expect.objectContaining({
+                    $dead_click_absolute_timeout: true,
+                    $dead_click_visibility_changed_timeout: false,
+                    $dead_click_visibility_changed_delay_ms: undefined,
+                }),
+                { timestamp: new Date(-3000) }
+            )
         })
 
         it('click followed by a selection change outside of threshold, dead click', () => {

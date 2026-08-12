@@ -387,9 +387,14 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                 this._lastSelectionChanged && click.timestamp <= this._lastSelectionChanged
                     ? this._lastSelectionChanged - click.timestamp
                     : undefined
-            click.visibilityChangedDelayMs = this._lastVisibilityChange
-                ? Math.abs(click.timestamp - this._lastVisibilityChange)
-                : undefined
+            // only a visibility change _after_ the click tells us anything about whether the click
+            // was dead. matching the mutation/selection branches (rather than Math.abs against the
+            // last visibility change ever) stops a tab that was backgrounded before the click from
+            // being read as a multi-second "response" and flagging every later click as dead.
+            click.visibilityChangedDelayMs =
+                this._lastVisibilityChange && click.timestamp <= this._lastVisibilityChange
+                    ? this._lastVisibilityChange - click.timestamp
+                    : undefined
 
             const scrollTimeout = checkTimeout(click.scrollDelayMs, this._config.scroll_threshold_ms)
             const selectionChangedTimeout = checkTimeout(
