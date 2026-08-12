@@ -7,7 +7,6 @@ import {
     COOKIELESS_ON_REJECT,
     DEVICE_ID,
     DEVICE_MODEL,
-    DISTINCT_ID,
     PERSON_PROFILES_IDENTIFIED_ONLY,
     USER_STATE_ANONYMOUS,
     USER_STATE_IDENTIFIED,
@@ -1653,13 +1652,8 @@ export class PostHog implements PostHogInterface {
         // Cookies do not emit cross-origin storage events. Reconcile before
         // reading any event properties so already-open sibling subdomains pick
         // up identify/reset changes, including for replay snapshot events.
-        const previousDistinctId = this.persistence.get_property(DISTINCT_ID)
-        const previousUserState = this.persistence.get_property(USER_STATE)
-        if (
-            this.persistence.syncCookieProperties() &&
-            (this.persistence.get_property(DISTINCT_ID) !== previousDistinctId ||
-                this.persistence.get_property(USER_STATE) !== previousUserState)
-        ) {
+        this.persistence.syncCookieProperties()
+        if (this.persistence.consumeCookieIdentityChange()) {
             this._cachedPersonProperties = null
             this.reloadFeatureFlags()
             this.unregister(FLAG_CALL_REPORTED)

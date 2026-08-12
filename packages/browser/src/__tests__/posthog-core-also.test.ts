@@ -569,6 +569,7 @@ describe('posthog core', () => {
                 props: {},
                 register: jest.fn(),
                 syncCookieProperties: jest.fn(),
+                consumeCookieIdentityChange: jest.fn(),
             } as unknown as PostHogPersistence,
             sessionPersistence: {
                 properties: () => ({ distinct_id: 'abc', persistent: 'prop' }),
@@ -634,6 +635,7 @@ describe('posthog core', () => {
                     props.$user_state = 'identified'
                     return true
                 }),
+                consumeCookieIdentityChange: jest.fn().mockReturnValue(true),
             } as unknown as PostHogPersistence
             const sessionPersistence = {
                 properties: () => ({}),
@@ -663,6 +665,7 @@ describe('posthog core', () => {
                     props.$user_state = 'anonymous'
                     return true
                 }),
+                consumeCookieIdentityChange: jest.fn().mockReturnValue(true),
             } as unknown as PostHogPersistence
             const sessionPersistence = {
                 properties: () => ({}),

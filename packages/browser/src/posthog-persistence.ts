@@ -155,6 +155,10 @@ export class PostHogPersistence {
     // this fingerprint to cheaply detect identity changes made on sibling subdomains.
     private _lastSeenCookiePropertiesFingerprint: string | undefined
     private _lastSeenMainCookieValue: string | undefined
+    // Identity changes can be adopted by background persistence writes before
+    // capture runs. Keep the transition pending until core performs the flag and
+    // person-cache side effects associated with the new identity.
+    private _cookieIdentityChangePending = false
     // A local reset or storage migration owns the next cookie snapshot. Ignore
     // sibling writes until the complete replacement has been published.
     private _cookieSyncSuppressed = false
@@ -323,6 +327,7 @@ export class PostHogPersistence {
             cookieProperties[DISTINCT_ID] !== previousDistinctId ||
             cookieProperties[USER_STATE] !== previousUserState
         ) {
+            this._cookieIdentityChangePending = true
             // `$user_id` is localStorage-only, but it is bound to the current
             // identity. Never carry the previous logged-in user across a sibling
             // identify/reset adopted from the shared cookie.
@@ -334,6 +339,12 @@ export class PostHogPersistence {
             this._deleteProp(ALIAS_ID_KEY)
         }
         return true
+    }
+
+    consumeCookieIdentityChange(): boolean {
+        const changed = this._cookieIdentityChangePending
+        this._cookieIdentityChangePending = false
+        return changed
     }
 
     _beginCookieSyncSuppression(ignoreDisabled: boolean = false): boolean {

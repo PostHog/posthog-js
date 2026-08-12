@@ -116,7 +116,7 @@ describe('createLocalPlusCookieStore._set', () => {
         })
     })
 
-    it('does not publish the main cookie when custom-key metadata cannot be persisted', () => {
+    it('publishes built-in identity when custom-key metadata cannot be persisted', () => {
         const name = 'ph_x_posthog'
         cookieStore._set(name, { distinct_id: 'anonymous' })
         const store = createLocalPlusCookieStore(['custom_property'], true)
@@ -129,7 +129,7 @@ describe('createLocalPlusCookieStore._set', () => {
 
         store._set(name, { distinct_id: 'identified-user', custom_property: 'custom' })
 
-        expect(cookieStore._parse(name)).toEqual({ distinct_id: 'anonymous' })
+        expect(cookieStore._parse(name)).toEqual({ distinct_id: 'identified-user' })
         setSpy.mockRestore()
     })
 

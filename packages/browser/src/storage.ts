@@ -407,6 +407,13 @@ export const createLocalPlusCookieStore = (
                         // whose omitted custom keys would have ambiguous semantics.
                         cookieStore._set(metadataName, metadata, days, cross_subdomain, is_secure, debug)
                         if (cookieStore._get(metadataName) !== JSON.stringify(metadata)) {
+                            // Keep cross-subdomain identity/session propagation even
+                            // when custom-key metadata exceeds cookie limits. With no
+                            // matching sidecar, omitted custom keys are conservatively
+                            // non-authoritative.
+                            cookieStore._remove(metadataName, cross_subdomain)
+                            const builtInCookieProperties = getCookiePersistedProperties(value)
+                            cookieStore._set(name, builtInCookieProperties, days, cross_subdomain, is_secure, debug)
                             return stored
                         }
                     }
