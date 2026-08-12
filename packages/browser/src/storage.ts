@@ -370,6 +370,17 @@ export const createLocalPlusCookieStore = (
                                 delete localStorageData[key]
                             }
                         })
+                        if (
+                            cookieProperties[DISTINCT_ID] !== localStorageData[DISTINCT_ID] ||
+                            cookieProperties[USER_STATE] !== localStorageData[USER_STATE]
+                        ) {
+                            // Identity-bound local fields are not mirrored into
+                            // the shared cookie. Drop them when the authoritative
+                            // cookie identity differs during initial load, matching
+                            // live reconciliation behavior.
+                            delete localStorageData.$user_id
+                            delete localStorageData.__alias
+                        }
                     }
                     value = extend(localStorageData, safeCookieProperties)
                 } else {

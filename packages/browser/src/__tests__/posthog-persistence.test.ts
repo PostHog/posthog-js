@@ -878,6 +878,8 @@ describe('persistence', () => {
                         $user_state: 'identified',
                         custom_property: 'old-user',
                         local_only_property: 'preserved',
+                        $user_id: 'identified-user',
+                        __alias: 'old-alias',
                     })
                 )
                 const config = {
@@ -890,6 +892,8 @@ describe('persistence', () => {
                 expect(lib.props.distinct_id).toBe('new-anonymous')
                 expect(lib.props.custom_property).toBeUndefined()
                 expect(lib.props.local_only_property).toBe('preserved')
+                expect(lib.props.$user_id).toBeUndefined()
+                expect(lib.props.__alias).toBeUndefined()
                 expect(JSON.parse(localStorage.getItem(persistenceName)!).custom_property).toBeUndefined()
             })
 
