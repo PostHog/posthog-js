@@ -3267,6 +3267,7 @@ export class PostHog implements PostHogInterface {
         }
 
         const cookieSyncSuppressionStarted = this.persistence?._beginCookieSyncSuppression?.()
+        let resetCompleted = false
         try {
             this.persistence?.clear()
             this.sessionPersistence?.clear()
@@ -3342,12 +3343,13 @@ export class PostHog implements PostHogInterface {
             // Clear HMAC identity verification fields
             delete this.config.identity_distinct_id
             delete this.config.identity_hash
+            resetCompleted = true
         } finally {
             if (cookieSyncSuppressionStarted) {
                 // Publish the reset identity as one complete cookie before another
                 // sibling tab can resurrect the pre-reset state. Always release
                 // suppression, including when a customer callback throws.
-                this.persistence?._endCookieSyncSuppression?.()
+                this.persistence?._endCookieSyncSuppression?.(resetCompleted)
             }
         }
 

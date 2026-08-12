@@ -1738,12 +1738,14 @@ describe('posthog core', () => {
                 cookieWinsOnConflict: true,
             })
             const endSuppression = jest.spyOn(posthog.persistence!, '_endCookieSyncSuppression')
+            const publish = jest.spyOn(posthog.persistence!, '_publishSuppressedCookieSnapshot')
             posthog.config.get_device_id = () => {
                 throw error
             }
 
             expect(() => posthog.reset()).toThrow(error)
-            expect(endSuppression).toHaveBeenCalledTimes(1)
+            expect(endSuppression).toHaveBeenCalledWith(false)
+            expect(publish).not.toHaveBeenCalled()
             expect((posthog.persistence! as any)._cookieSyncSuppressed).toBe(false)
         })
 

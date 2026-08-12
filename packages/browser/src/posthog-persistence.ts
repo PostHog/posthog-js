@@ -361,12 +361,14 @@ export class PostHogPersistence {
         this._writeNow(true)
     }
 
-    _endCookieSyncSuppression(): void {
+    _endCookieSyncSuppression(publish: boolean = true): void {
         if (!this._cookieSyncSuppressed) {
             return
         }
         try {
-            this._publishSuppressedCookieSnapshot()
+            if (publish) {
+                this._publishSuppressedCookieSnapshot()
+            }
         } finally {
             this._cookieSyncSuppressed = false
         }
