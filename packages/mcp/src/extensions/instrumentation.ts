@@ -515,9 +515,15 @@ export async function handleListToolsRequest(
   const data = getServerTrackingData(server)
   const startTime = new Date()
   const sessionId = getSessionId(server, extra)
-  // Snapshot before metadata resolution or the list handler can yield to a
-  // concurrent request using the same instrumented server.
-  const requestAttribution = getSessionInfo(server, data, sessionId)
+  // Snapshot before identify, metadata resolution, or the list handler can yield
+  // to a concurrent request using the same instrumented server.
+  const sessionInfo = getSessionInfo(server, data, sessionId)
+  // `getSessionInfo` only surfaces an identity some earlier request already
+  // cached on this instance. On a per-request instance that cache is always
+  // empty, so without resolving `identify` here too, `tools/list` would be the
+  // one request path that never attributes to a person.
+  const identity = data ? await handleIdentify(server, data, sessionId, request, sessionInfo, extra) : undefined
+  const requestAttribution = withIdentity(sessionInfo, identity)
   const event: McpEvent = {
     sessionId,
     parameters: buildCapturedMcpParameters(request),
