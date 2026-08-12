@@ -92,6 +92,19 @@ test('already-open sibling subdomains adopt identify and reset cookie changes', 
     ).toBeUndefined()
 })
 
+test('explicit identify wins after an unobserved sibling cookie update', async ({ page, context }) => {
+    await startOnSubdomain(page, context, 'a')
+
+    const sibling = await context.newPage()
+    await startOnSubdomain(sibling, context, 'b')
+
+    await sibling.evaluate(() => (window as WindowWithPostHog).posthog?.identify('sibling-user'))
+    await page.evaluate(() => (window as WindowWithPostHog).posthog?.identify('explicit-user'))
+
+    expect(await distinctId(page)).toBe('explicit-user')
+    expect(await captureDistinctId(sibling, 'after-explicit-identify')).toBe('explicit-user')
+})
+
 test('a persistence-disabled subdomain does not adopt a sibling identity', async ({ page, context }) => {
     await startOnSubdomain(page, context, 'a')
     const firstAnonymousId = await distinctId(page)
