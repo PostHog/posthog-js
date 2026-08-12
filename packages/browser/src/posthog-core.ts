@@ -2742,8 +2742,12 @@ export class PostHog implements PostHogInterface {
         }
 
         // Adopt any sibling identity first, then make this explicit identify
-        // authoritative until its complete replacement cookie is published.
-        this.persistence.syncCookieProperties()
+        // authoritative until its complete replacement cookie is published. Keep
+        // the pre-sync identity so adopting the requested ID still performs the
+        // normal feature-flag identity-change side effects in this tab.
+        const preSyncDistinctId = this.get_distinct_id()
+        const identityChangedDuringSync =
+            this.persistence.syncCookieProperties() && this.get_distinct_id() !== preSyncDistinctId
         const cookieSyncSuppressionStarted = this.persistence._beginCookieSyncSuppression()
         try {
             const previous_distinct_id = this.get_distinct_id()
@@ -2788,7 +2792,7 @@ export class PostHog implements PostHogInterface {
                 if (this.config.cookieWinsOnConflict) {
                     // Publish the identity transition before capture so sibling
                     // subdomains never observe the old cookie during the debounce window.
-                    this.persistence.flush()
+                    this.persistence._publishSuppressedCookieSnapshot()
                 }
 
                 this.capture(
@@ -2816,7 +2820,7 @@ export class PostHog implements PostHogInterface {
                 const setOnceProperties = userPropertiesToSetOnce || {}
                 this.setPersonPropertiesForFlags({ $set: setProperties, $set_once: setOnceProperties }, false)
                 if (this.config.cookieWinsOnConflict) {
-                    this.persistence.flush()
+                    this.persistence._publishSuppressedCookieSnapshot()
                 }
                 this.capture('$set', { $set: setProperties, $set_once: setOnceProperties })
 
@@ -2837,7 +2841,7 @@ export class PostHog implements PostHogInterface {
             // Reload active feature flags if the distinct ID changes. Clear stored flag calls because they belong to the
             // previous identity. A same-ID transition only needs a reload when the caller supplied properties that can
             // affect flag evaluation; the anonymous/identified state itself is not part of the /flags request.
-            if (identityDidChange) {
+            if (identityDidChange || identityChangedDuringSync) {
                 this.reloadFeatureFlags()
                 if (this.featureFlags) {
                     this.featureFlags.resetFlagCallReported()
@@ -3261,85 +3265,88 @@ export class PostHog implements PostHogInterface {
         }
 
         const cookieSyncSuppressionStarted = this.persistence?._beginCookieSyncSuppression?.()
-        this.persistence?.clear()
-        this.sessionPersistence?.clear()
-        this._sessionRegisteredPropKeys.clear()
-        this._persistSessionRegisteredPropKeys()
+        try {
+            this.persistence?.clear()
+            this.sessionPersistence?.clear()
+            this._sessionRegisteredPropKeys.clear()
+            this._persistSessionRegisteredPropKeys()
 
-        if (!isUndefined(recordingRemoteConfig)) {
-            this.persistence?.register({ [SESSION_RECORDING_REMOTE_CONFIG]: recordingRemoteConfig })
-        }
-        this.surveys?.reset()
-        // Stop the refresh interval before resetting flags — featureFlags.reset() clears
-        // the debouncer, so if the order were reversed a pending refresh could fire after reset.
-        this._remoteConfigLoader?.stop()
-        this.featureFlags?.reset()
-        this.conversations?.reset()
-        this.logs?.reset()
-        this.metrics?.reset()
-        this.persistence?.set_property(USER_STATE, USER_STATE_ANONYMOUS)
-        this.sessionManager?.resetSessionId()
-        this._cachedPersonProperties = null
-        if (this.config.cookieless_mode === COOKIELESS_ALWAYS) {
-            this.register_once(
-                {
-                    distinct_id: COOKIELESS_SENTINEL_VALUE,
-                    $device_id: null,
-                },
-                ''
-            )
-        } else {
-            const uuid = this.config.get_device_id(uuidv7())
-            this.register_once(
-                {
-                    distinct_id: uuid,
-                    $device_id: reset_device_id ? uuid : device_id,
-                },
-                ''
-            )
-            if (!reset_device_id && !isUndefined(device_model)) {
-                this.register({ [DEVICE_MODEL]: device_model })
+            if (!isUndefined(recordingRemoteConfig)) {
+                this.persistence?.register({ [SESSION_RECORDING_REMOTE_CONFIG]: recordingRemoteConfig })
             }
-        }
-
-        this.register(
-            {
-                $last_posthog_reset: new Date().toISOString(),
-            },
-            1
-        )
-
-        if (bootstrap) {
-            // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
-            // eslint-disable-next-line posthog-js/no-direct-undefined-check
-            if (bootstrap.distinctID !== undefined && !this._inCookielessMode()) {
-                this.persistence?.set_property(
-                    USER_STATE,
-                    bootstrap.isIdentifiedID ? USER_STATE_IDENTIFIED : USER_STATE_ANONYMOUS
+            this.surveys?.reset()
+            // Stop the refresh interval before resetting flags — featureFlags.reset() clears
+            // the debouncer, so if the order were reversed a pending refresh could fire after reset.
+            this._remoteConfigLoader?.stop()
+            this.featureFlags?.reset()
+            this.conversations?.reset()
+            this.logs?.reset()
+            this.metrics?.reset()
+            this.persistence?.set_property(USER_STATE, USER_STATE_ANONYMOUS)
+            this.sessionManager?.resetSessionId()
+            this._cachedPersonProperties = null
+            if (this.config.cookieless_mode === COOKIELESS_ALWAYS) {
+                this.register_once(
+                    {
+                        distinct_id: COOKIELESS_SENTINEL_VALUE,
+                        $device_id: null,
+                    },
+                    ''
                 )
-                this.register({ distinct_id: bootstrap.distinctID })
+            } else {
+                const uuid = this.config.get_device_id(uuidv7())
+                this.register_once(
+                    {
+                        distinct_id: uuid,
+                        $device_id: reset_device_id ? uuid : device_id,
+                    },
+                    ''
+                )
+                if (!reset_device_id && !isUndefined(device_model)) {
+                    this.register({ [DEVICE_MODEL]: device_model })
+                }
             }
 
-            this.featureFlags?.initialize()
+            this.register(
+                {
+                    $last_posthog_reset: new Date().toISOString(),
+                },
+                1
+            )
 
-            if (
-                !isUndefined(bootstrapSessionID) &&
-                !this.sessionManager?.setBootstrapSessionId(bootstrapSessionID, true)
-            ) {
-                const bootstrapWithoutSessionID = { ...bootstrap }
-                delete bootstrapWithoutSessionID.sessionID
-                this.config.bootstrap = bootstrapWithoutSessionID
+            if (bootstrap) {
+                // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
+                // eslint-disable-next-line posthog-js/no-direct-undefined-check
+                if (bootstrap.distinctID !== undefined && !this._inCookielessMode()) {
+                    this.persistence?.set_property(
+                        USER_STATE,
+                        bootstrap.isIdentifiedID ? USER_STATE_IDENTIFIED : USER_STATE_ANONYMOUS
+                    )
+                    this.register({ distinct_id: bootstrap.distinctID })
+                }
+
+                this.featureFlags?.initialize()
+
+                if (
+                    !isUndefined(bootstrapSessionID) &&
+                    !this.sessionManager?.setBootstrapSessionId(bootstrapSessionID, true)
+                ) {
+                    const bootstrapWithoutSessionID = { ...bootstrap }
+                    delete bootstrapWithoutSessionID.sessionID
+                    this.config.bootstrap = bootstrapWithoutSessionID
+                }
             }
-        }
 
-        // Clear HMAC identity verification fields
-        delete this.config.identity_distinct_id
-        delete this.config.identity_hash
-
-        if (cookieSyncSuppressionStarted) {
-            // Publish the reset identity as one complete cookie before another
-            // sibling tab can resurrect the pre-reset state.
-            this.persistence?._endCookieSyncSuppression?.()
+            // Clear HMAC identity verification fields
+            delete this.config.identity_distinct_id
+            delete this.config.identity_hash
+        } finally {
+            if (cookieSyncSuppressionStarted) {
+                // Publish the reset identity as one complete cookie before another
+                // sibling tab can resurrect the pre-reset state. Always release
+                // suppression, including when a customer callback throws.
+                this.persistence?._endCookieSyncSuppression?.()
+            }
         }
 
         // Reload feature flags for the reset user, just like identify()

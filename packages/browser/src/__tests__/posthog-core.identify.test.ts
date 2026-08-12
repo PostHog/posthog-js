@@ -59,6 +59,30 @@ describe('identify()', () => {
         expect(instance.register).toHaveBeenCalledWith({ distinct_id: 'a-new-id' })
     })
 
+    it('reloads flags when synchronization adopts the requested identity', () => {
+        instance.config.cookieWinsOnConflict = true
+        jest.spyOn(instance.persistence!, 'syncCookieProperties').mockImplementation(() => {
+            instance.persistence!.props.distinct_id = 'a-new-id'
+            instance.persistence!.props.$user_state = 'identified'
+            return true
+        })
+
+        instance.identify('a-new-id')
+
+        expect(instance.featureFlags?.reloadFeatureFlags).toHaveBeenCalledTimes(1)
+        expect(instance.featureFlags?.resetFlagCallReported).toHaveBeenCalledTimes(1)
+    })
+
+    it('publishes the identified snapshot before capturing the identify event', () => {
+        instance.config.cookieWinsOnConflict = true
+        const publish = jest.spyOn(instance.persistence!, '_publishSuppressedCookieSnapshot')
+        const capture = jest.spyOn(instance, 'capture')
+
+        instance.identify('a-new-id')
+
+        expect(publish.mock.invocationCallOrder[0]).toBeLessThan(capture.mock.invocationCallOrder[0]!)
+    })
+
     it('calls capture when identity changes', () => {
         instance.persistence!.props['distinct_id'] = 'oldIdentity'
 

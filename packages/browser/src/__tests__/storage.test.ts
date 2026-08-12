@@ -5,6 +5,7 @@ import {
     resetSubDomainCache,
     sessionStore,
     createLocalPlusCookieStore,
+    getCookiePersistedPropertiesMetadataName,
     cookieStore,
     resetLocalStorageSupported,
 } from '../storage'
@@ -99,6 +100,20 @@ describe('createLocalPlusCookieStore._set', () => {
     beforeEach(() => {
         resetLocalStorageSupported()
         window?.localStorage.clear()
+    })
+
+    it('stores custom-key metadata outside the event-visible persistence cookie', () => {
+        const name = 'ph_x_posthog'
+        const store = createLocalPlusCookieStore(['custom_property'], true)
+
+        store._set(name, { distinct_id: 'abc', custom_property: 'custom' })
+
+        expect(cookieStore._parse(name)).toEqual({ distinct_id: 'abc', custom_property: 'custom' })
+        expect(cookieStore._parse(name)).not.toHaveProperty('$cookie_persisted_properties')
+        expect(cookieStore._parse(getCookiePersistedPropertiesMetadataName(name))).toEqual({
+            p: ['custom_property'],
+            f: JSON.stringify({ distinct_id: 'abc', custom_property: 'custom' }),
+        })
     })
 
     it('reports the localStorage write succeeded even when the cookie mirror throws', () => {

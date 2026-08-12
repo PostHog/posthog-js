@@ -1704,6 +1704,22 @@ describe('posthog core', () => {
             expect(posthog.persistence!.props['some_user_prop']).toBeUndefined()
         })
 
+        it('releases cookie synchronization suppression when device ID generation throws', async () => {
+            const error = new Error('device id failed')
+            const posthog = await createPosthogInstance(uuidv7(), {
+                persistence: 'localStorage+cookie',
+                cookieWinsOnConflict: true,
+            })
+            const endSuppression = jest.spyOn(posthog.persistence!, '_endCookieSyncSuppression')
+            posthog.config.get_device_id = () => {
+                throw error
+            }
+
+            expect(() => posthog.reset()).toThrow(error)
+            expect(endSuppression).toHaveBeenCalledTimes(1)
+            expect((posthog.persistence! as any)._cookieSyncSuppressed).toBe(false)
+        })
+
         it('does not crash when no recording remote config has been stored', async () => {
             const posthog = await createPosthogInstance(uuidv7(), { persistence: 'memory' })
 

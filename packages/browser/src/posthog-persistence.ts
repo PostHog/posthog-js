@@ -3,10 +3,12 @@
 import { each, extend, stripEmptyProperties, addEventListener } from '@posthog/browser-common/utils/general-utils'
 import {
     COOKIE_PERSISTED_PROPERTIES,
-    COOKIE_PERSISTED_PROPERTIES_MARKER,
     cookieStore,
     createLocalPlusCookieStore,
     getCookiePersistedProperties,
+    getCookiePersistedPropertiesFromMetadata,
+    getCookiePersistedPropertiesMetadata,
+    getCookiePropertiesFingerprint,
     localStore,
     memoryStore,
     sessionStore,
@@ -14,12 +16,15 @@ import {
 import { PersistentStore, PostHogConfig, Properties } from './types'
 import { document, window } from '@posthog/browser-common/utils/globals'
 import {
+    DISTINCT_ID,
     EVENT_TIMERS_KEY,
     INITIAL_CAMPAIGN_PARAMS,
     INITIAL_PERSON_INFO,
     INITIAL_REFERRER_INFO,
     PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
     SURVEYS_LOADED_AT,
+    USER_STATE,
+    USER_STATE_IDENTIFIED,
 } from './constants'
 import { getPersistenceKeyPolicy, PERSISTENCE_STORAGE_GROUPS, PersistenceStorageGroup } from './persistence-key-policy'
 
@@ -199,18 +204,21 @@ export class PostHogPersistence {
             // shared cookie. A sibling can update the cookie immediately after our
             // write; recording that later value here would hide an unseen update.
             try {
-                this._lastSeenCookiePropertiesFingerprint = JSON.stringify(
-                    getCookiePersistedProperties(
-                        props,
-                        this._config.cookie_persisted_properties || [],
-                        this._config.cookieWinsOnConflict
-                    )
+                const cookieProperties = getCookiePersistedProperties(
+                    props,
+                    this._config.cookie_persisted_properties || []
                 )
+                const customCookieProperties = this._config.cookie_persisted_properties || []
+                const metadata = getCookiePersistedPropertiesMetadata(cookieProperties, customCookieProperties)
+                this._lastSeenCookiePropertiesFingerprint =
+                    JSON.stringify(cookieProperties) +
+                    '|' +
+                    (customCookieProperties.length > 0 ? JSON.stringify(metadata) : '')
             } catch {}
             return
         }
         try {
-            this._lastSeenCookiePropertiesFingerprint = cookieStore._get(this._name) || undefined
+            this._lastSeenCookiePropertiesFingerprint = getCookiePropertiesFingerprint(this._name)
         } catch {}
     }
 
@@ -237,10 +245,11 @@ export class PostHogPersistence {
         try {
             cookieValue = cookieStore._get(this._name) || undefined
         } catch {}
-        if (!cookieValue || cookieValue === this._lastSeenCookiePropertiesFingerprint) {
+        const cookieFingerprint = getCookiePropertiesFingerprint(this._name)
+        if (!cookieValue || cookieFingerprint === this._lastSeenCookiePropertiesFingerprint) {
             return false
         }
-        this._lastSeenCookiePropertiesFingerprint = cookieValue
+        this._lastSeenCookiePropertiesFingerprint = cookieFingerprint
 
         let cookieProperties: Properties
         try {
@@ -248,11 +257,9 @@ export class PostHogPersistence {
         } catch {
             return false
         }
-        const persistedPropertyMarker = cookieProperties[COOKIE_PERSISTED_PROPERTIES_MARKER]
-        delete cookieProperties[COOKIE_PERSISTED_PROPERTIES_MARKER]
         const authoritativeCookieProperties = [
             ...COOKIE_PERSISTED_PROPERTIES,
-            ...(isArray(persistedPropertyMarker) ? persistedPropertyMarker : []),
+            ...getCookiePersistedPropertiesFromMetadata(this._name, cookieValue),
         ]
         const invalidCookieProperties: Record<string, true> = {}
         Object.keys(cookieProperties).forEach((key) => {
@@ -266,6 +273,7 @@ export class PostHogPersistence {
             return false
         }
 
+        const previousDistinctId = this.props[DISTINCT_ID]
         const nextProps = extend({}, this.props)
         const cookiePersistedProperties = [
             ...COOKIE_PERSISTED_PROPERTIES,
@@ -281,6 +289,16 @@ export class PostHogPersistence {
             }
         })
         this.props = extend(nextProps, cookieProperties)
+        if (cookieProperties[DISTINCT_ID] !== previousDistinctId) {
+            // `$user_id` is localStorage-only, but it is bound to the current
+            // identity. Never carry the previous logged-in user across a sibling
+            // identify/reset adopted from the shared cookie.
+            if (cookieProperties[USER_STATE] === USER_STATE_IDENTIFIED) {
+                this.props.$user_id = cookieProperties[DISTINCT_ID]
+            } else {
+                delete this.props.$user_id
+            }
+        }
         return true
     }
 
@@ -297,19 +315,26 @@ export class PostHogPersistence {
         return false
     }
 
+    _publishSuppressedCookieSnapshot(): void {
+        if (!this._cookieSyncSuppressed) {
+            return
+        }
+        if (!isUndefined(this._pendingSaveTimer)) {
+            clearTimeout(this._pendingSaveTimer)
+            this._pendingSaveTimer = undefined
+        }
+        // Force the complete local snapshot through without reconciling a
+        // stale sibling write observed during this authoritative transaction.
+        delete this._slotState[MAIN_STORAGE_SLOT]
+        this._writeNow(true)
+    }
+
     _endCookieSyncSuppression(): void {
         if (!this._cookieSyncSuppressed) {
             return
         }
         try {
-            if (!isUndefined(this._pendingSaveTimer)) {
-                clearTimeout(this._pendingSaveTimer)
-                this._pendingSaveTimer = undefined
-            }
-            // Force the complete local snapshot through without reconciling a
-            // stale sibling write observed during this authoritative transaction.
-            delete this._slotState[MAIN_STORAGE_SLOT]
-            this._writeNow(true)
+            this._publishSuppressedCookieSnapshot()
         } finally {
             this._cookieSyncSuppressed = false
         }

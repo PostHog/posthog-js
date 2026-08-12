@@ -542,6 +542,7 @@
         "_processQueuedEvents",
         "_productTourManager",
         "_prop",
+        "_publishSuppressedCookieSnapshot",
         "_queue",
         "_queuedCompressionEvents",
         "_queuedRRWebEvents",

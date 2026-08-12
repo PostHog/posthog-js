@@ -28,6 +28,8 @@ import { window } from '@posthog/browser-common/utils/globals'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import {
     cookieStore,
+    getCookiePersistedPropertiesMetadata,
+    getCookiePersistedPropertiesMetadataName,
     localStore,
     resetLocalStorageSupported,
     resetSessionStorageSupported,
@@ -863,11 +865,12 @@ describe('persistence', () => {
             })
 
             it('flag on: reopening after a sibling reset removes stale cookie-backed localStorage properties', () => {
-                document.cookie = encodeCookie({
-                    distinct_id: 'new-anonymous',
-                    $user_state: 'anonymous',
-                    $cookie_persisted_properties: ['custom_property'],
-                })
+                const cookieProperties = { distinct_id: 'new-anonymous', $user_state: 'anonymous' }
+                document.cookie = encodeCookie(cookieProperties)
+                cookieStore._set(
+                    getCookiePersistedPropertiesMetadataName(persistenceName),
+                    getCookiePersistedPropertiesMetadata(cookieProperties, ['custom_property'])
+                )
                 localStorage.setItem(
                     persistenceName,
                     JSON.stringify({
@@ -966,7 +969,11 @@ describe('persistence', () => {
                 document.cookie = encodeCookie({ distinct_id: 'identified-user', $user_state: 'identified' })
                 localStorage.setItem(
                     persistenceName,
-                    JSON.stringify({ distinct_id: 'identified-user', $user_state: 'identified' })
+                    JSON.stringify({
+                        distinct_id: 'identified-user',
+                        $user_state: 'identified',
+                        $user_id: 'identified-user',
+                    })
                 )
                 const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
 
@@ -975,6 +982,7 @@ describe('persistence', () => {
                 expect(lib.syncCookieProperties()).toBe(true)
                 expect(lib.props.distinct_id).toBe('new-anonymous')
                 expect(lib.props.$user_state).toBe('anonymous')
+                expect(lib.props.$user_id).toBeUndefined()
             })
 
             it('flag on: a sibling reset removes stale cookie-persisted properties without removing local-only data', () => {
@@ -993,11 +1001,12 @@ describe('persistence', () => {
                 }
                 const lib = new PostHogPersistence(config)
 
-                document.cookie = encodeCookie({
-                    distinct_id: 'new-anonymous',
-                    $user_state: 'anonymous',
-                    $cookie_persisted_properties: ['custom_property'],
-                })
+                const resetCookieProperties = { distinct_id: 'new-anonymous', $user_state: 'anonymous' }
+                document.cookie = encodeCookie(resetCookieProperties)
+                cookieStore._set(
+                    getCookiePersistedPropertiesMetadataName(persistenceName),
+                    getCookiePersistedPropertiesMetadata(resetCookieProperties, ['custom_property'])
+                )
                 lib.register({ another_local_property: 'also-preserved' })
 
                 expect(lib.props.custom_property).toBeUndefined()
