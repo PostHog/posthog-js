@@ -957,6 +957,42 @@ describe('persistence', () => {
                 expect(lib.props.$user_state).toBe('identified')
             })
 
+            it('flag on: explicit registration wins over an unobserved sibling value', () => {
+                document.cookie = encodeCookie({ distinct_id: 'anonymous', custom_property: 'sibling-value' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({ distinct_id: 'anonymous', custom_property: 'local-value' })
+                )
+                const lib = new PostHogPersistence({
+                    ...makeConfig('localStorage+cookie', true),
+                    cookie_persisted_properties: ['custom_property'],
+                })
+                document.cookie = encodeCookie({ distinct_id: 'anonymous', custom_property: 'new-sibling-value' })
+
+                lib.register({ custom_property: 'explicit-value' })
+
+                expect(lib.props.custom_property).toBe('explicit-value')
+                expect(cookieStore._parse(persistenceName).custom_property).toBe('explicit-value')
+            })
+
+            it('flag on: explicit removal wins over an unobserved sibling value', () => {
+                document.cookie = encodeCookie({ distinct_id: 'anonymous', custom_property: 'old-value' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({ distinct_id: 'anonymous', custom_property: 'old-value' })
+                )
+                const lib = new PostHogPersistence({
+                    ...makeConfig('localStorage+cookie', true),
+                    cookie_persisted_properties: ['custom_property'],
+                })
+                document.cookie = encodeCookie({ distinct_id: 'anonymous', custom_property: 'new-sibling-value' })
+
+                lib.unregister('custom_property')
+
+                expect(lib.props.custom_property).toBeUndefined()
+                expect(cookieStore._parse(persistenceName).custom_property).toBeUndefined()
+            })
+
             it('flag on: does not hide a sibling update that lands immediately after a write', () => {
                 document.cookie = encodeCookie({ distinct_id: 'anonymous', $user_state: 'anonymous' })
                 localStorage.setItem(

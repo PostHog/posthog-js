@@ -153,6 +153,7 @@ export class PostHogPersistence {
     // Cookies do not emit cross-origin storage events, so captures and writes use
     // this fingerprint to cheaply detect identity changes made on sibling subdomains.
     private _lastSeenCookiePropertiesFingerprint: string | undefined
+    private _lastSeenMainCookieValue: string | undefined
     // A local reset or storage migration owns the next cookie snapshot. Ignore
     // sibling writes until the complete replacement has been published.
     private _cookieSyncSuppressed = false
@@ -225,6 +226,7 @@ export class PostHogPersistence {
                     getCookiePropertiesFingerprint(this._name, currentCookieValue) === expectedFingerprint
                 ) {
                     this._lastSeenCookiePropertiesFingerprint = expectedFingerprint
+                    this._lastSeenMainCookieValue = currentCookieValue
                 }
             } catch {}
             return
@@ -234,6 +236,7 @@ export class PostHogPersistence {
             this._lastSeenCookiePropertiesFingerprint = cookieValue
                 ? getCookiePropertiesFingerprint(this._name, cookieValue)
                 : undefined
+            this._lastSeenMainCookieValue = cookieValue
         } catch {}
     }
 
@@ -260,13 +263,13 @@ export class PostHogPersistence {
         try {
             cookieValue = cookieStore._get(this._name) || undefined
         } catch {}
-        if (!cookieValue) {
+        if (!cookieValue || cookieValue === this._lastSeenMainCookieValue) {
+            // Ignore sidecar-only changes. Metadata is meaningful only together
+            // with a new main snapshot, and treating it as a sibling identity
+            // update could roll back a local write when the main mirror failed.
             return false
         }
         const cookieFingerprint = getCookiePropertiesFingerprint(this._name, cookieValue)
-        if (cookieFingerprint === this._lastSeenCookiePropertiesFingerprint) {
-            return false
-        }
 
         let cookieProperties: Properties
         try {
@@ -281,6 +284,7 @@ export class PostHogPersistence {
             return false
         }
         this._lastSeenCookiePropertiesFingerprint = cookieFingerprint
+        this._lastSeenMainCookieValue = cookieValue
         const authoritativeCookieProperties = [
             ...COOKIE_PERSISTED_PROPERTIES,
             ...getCookiePersistedPropertiesFromMetadata(this._name, cookieValue),
@@ -815,6 +819,7 @@ export class PostHogPersistence {
             this._slotState = {}
         }
         this._lastSeenCookiePropertiesFingerprint = undefined
+        this._lastSeenMainCookieValue = undefined
     }
 
     // removes the storage entry and deletes all loaded data
@@ -833,6 +838,9 @@ export class PostHogPersistence {
 
     register_once(props: Properties, default_value: any, days?: number): boolean {
         if (isObject(props)) {
+            // Explicit local mutations are newer than any unobserved sibling
+            // snapshot. Reconcile first so the caller's values win afterward.
+            this.syncCookieProperties()
             if (isUndefined(default_value)) {
                 default_value = 'None'
             }
@@ -862,6 +870,7 @@ export class PostHogPersistence {
 
     register(props: Properties, days?: number): boolean {
         if (isObject(props)) {
+            this.syncCookieProperties()
             this._expire_days = isUndefined(days) ? this._default_expiry : days
 
             let hasChanges = false
@@ -882,6 +891,7 @@ export class PostHogPersistence {
     }
 
     unregister(propOrProps: string | readonly string[]): void {
+        this.syncCookieProperties()
         const props = typeof propOrProps === 'string' ? [propOrProps] : propOrProps
         let hasChanges = false
         for (const prop of props) {
