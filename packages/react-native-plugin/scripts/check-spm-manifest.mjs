@@ -15,7 +15,7 @@ assert.ok(spmVersion, 'Could not find the posthog-ios version in ios/Package.swi
 assert.equal(spmVersion, podspecVersion, 'The CocoaPods and SwiftPM posthog-ios version floors must match')
 assert.match(
   manifest,
-  /name: "ReactNativePlugin"/,
+  /\.library\(\s*name: "ReactNativePlugin"/,
   'The SwiftPM product name must match React Native’s derived name for @posthog/react-native-plugin'
 )
 assert.match(manifest, /swiftLanguageModes: \[\.v5\]/, 'The Swift package must preserve CocoaPods’ Swift 5 mode')
