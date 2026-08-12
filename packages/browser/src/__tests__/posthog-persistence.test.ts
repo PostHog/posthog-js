@@ -1002,6 +1002,19 @@ describe('persistence', () => {
                 expect(cookieStore._parse(persistenceName).custom_property).toBe('preserved')
             })
 
+            it.each([false, 0])('flag on: preserves a cookie-backed falsy value (%s)', (customValue) => {
+                const config = {
+                    ...makeConfig('localStorage+cookie', true),
+                    cookie_persisted_properties: ['custom_property'],
+                }
+                const lib = new PostHogPersistence(config)
+
+                lib.register({ distinct_id: 'identified-user', custom_property: customValue })
+
+                expect(cookieStore._parse(persistenceName).custom_property).toBe(customValue)
+                expect(new PostHogPersistence(config).props.custom_property).toBe(customValue)
+            })
+
             it('flag on: a live tab adopts a sibling identify before its next persistence write', () => {
                 document.cookie = encodeCookie({ distinct_id: 'anonymous', $user_state: 'anonymous' })
                 localStorage.setItem(

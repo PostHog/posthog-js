@@ -339,8 +339,9 @@ export const createLocalPlusCookieStore = (
                     cookiePersistedProperties[COOKIE_PERSISTED_PROPERTIES_MARKER] = customCookieProperties
                 }
                 cookiePropertiesToPersist.forEach((key) => {
-                    if (value[key]) {
-                        cookiePersistedProperties[key] = value[key]
+                    const persistedValue = value[key]
+                    if (!isUndefined(persistedValue) && !isNull(persistedValue) && persistedValue !== '') {
+                        cookiePersistedProperties[key] = persistedValue
                     }
                 })
 
