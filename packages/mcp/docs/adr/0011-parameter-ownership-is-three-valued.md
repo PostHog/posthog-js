@@ -9,11 +9,16 @@ The SDK injects a `context` property into every advertised tool's `inputSchema` 
 `tools/list`, so the agent supplies it on each `tools/call`. At call time one question has to be
 answered: **is this `context` argument ours, or one the host's own tool declares?**
 
-The answer was learned in the `tools/list` wrapper and cached on the server instance. A stateless
-server — `createMcpHandler`, `@rekog/mcp-nest` with `statefulMode: false`, any per-request topology —
-builds a fresh instance per HTTP request, so the instance serving a `tools/call` never served a
-listing. Ownership read `false`, and `$mcp_intent` was discarded on every call. This affected MCP SDK
-v1 as much as v2; v2 only makes per-request instances the norm.
+The answer was learned in the `tools/list` wrapper and cached on the server instance. Where the next
+request builds a *new* instance — `createMcpHandler`, or `@rekog/mcp-nest` in its stateless mode
+(`statelessMode: true` on 1.x, `statefulMode: false` on 2.x) — the instance serving a `tools/call`
+never served a listing. Ownership read `false`, and `$mcp_intent` was discarded on every call.
+
+The trigger is **instance lifetime, not statelessness**: a server that is stateless at the transport
+(`sessionIdGenerator: undefined`) but keeps one long-lived server object caches ownership fine and was
+never affected. Nor is it specific to the 2026-07-28 revision — a per-request instance on MCP SDK v1
+was affected identically; v2 only makes that topology the norm, being the only one that can serve the
+new revision.
 
 The defect is in what the answer could express, not in the lookup.
 `AnalyticsParameterOwnership.context` was a boolean, so it collapsed two states that call for
@@ -69,20 +74,20 @@ protects that case unconditionally, which is why ownership resolution — not a 
 answer here.
 
 Re-deriving ownership by replaying the host's `tools/list` handler on the call path is also rejected.
-On a stateless server "once per instance" means once per *call*, so a listing backed by a database or a
+Where instances are per-request, "once per instance" means once per *call*, so a listing backed by a database or a
 permissions filter is re-run on every tool call; a time-box converts a deadlock into a stall on every
 call rather than avoiding it; and a replay that passes no cursor rebuilds only the first page, silently
 mis-owning every tool beyond it.
 
 ## Consequences
 
-- `$mcp_intent` is captured on stateless servers, on both SDK majors.
+- `$mcp_intent` is captured on per-request instances, on both SDK majors.
 - On a server where ownership cannot be resolved, a `context` parameter the **host** declared is
   recorded as `$mcp_intent`. It stays within that project and is truncated like any other intent. Two
   one-line escapes: `context: false` disables injection and capture together, or drop the property in
   `beforeSend`.
 - Stripping behaviour is unchanged in every state, so no host tool starts losing an argument.
-- Unchanged and pre-existing: on a stateless server the injected `context` is not stripped, so a tool
+- Unchanged and pre-existing: where ownership is unresolved the injected `context` is not stripped, so a tool
   registered with a `.strict()` Zod object rejects the call with `-32602`. The raw-shape and plain
   `z.object()` forms drop unknown keys silently and are unaffected. All three advertise
   `additionalProperties: false`, so the advertised schema cannot tell them apart; detection would have
