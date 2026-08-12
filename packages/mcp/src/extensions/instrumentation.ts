@@ -109,6 +109,22 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     parameterOwnership,
     resolvedEventType === MCPAnalyticsEventType.mcpMissingCapability
   )
+  // Reading the `context` argument and removing it are different questions, and
+  // only one of them is dangerous.
+  //
+  // Removing an argument the *application* declared costs the customer their
+  // call, so the strip below stays gated on positive ownership. Reading it costs
+  // at worst a mislabelled property in the customer's own project — and refusing
+  // to read it costs the intent of every call on a stateless server, where no
+  // instance ever serves the `tools/list` that ownership is learned from.
+  //
+  // So: obey ownership when there is an answer, and read when there is not.
+  // "The application declared its own `context`" still suppresses capture; "this
+  // instance never served a listing" no longer does.
+  const canCaptureContextIntent =
+    resolvedEventType !== MCPAnalyticsEventType.mcpMissingCapability &&
+    isContextEnabled(data.options.context) &&
+    (ownership.context || !ownership.contextOwnershipKnown)
   const conversation = resolveConversationId(ownership.conversationId, request.params?.arguments)
   const downstreamRequest = cloneRequestWithoutOwnedAnalyticsArguments(request, ownership)
 
@@ -124,7 +140,8 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     startTime,
     conversation,
     ownership,
-    resolvedEventType
+    resolvedEventType,
+    canCaptureContextIntent
   )
   if (preparedEvent && explicitContextIntent) {
     setExplicitContextIntent(preparedEvent.event, explicitContextIntent)
@@ -150,15 +167,26 @@ interface PreparedToolEvent {
   requestAttribution: SessionInfo
 }
 
+/**
+ * Ownership as resolved for one request, plus whether it could be resolved at
+ * all. The distinction matters only for reading the `context` argument: an
+ * instance that never served a listing and holds no registry has no answer, and
+ * "no answer" must not read the same as "the application owns it".
+ */
+interface ActiveAnalyticsParameterOwnership extends AnalyticsParameterOwnership {
+  contextOwnershipKnown: boolean
+}
+
 function getActiveAnalyticsParameterOwnership(
   data: MCPAnalyticsData,
   toolName: string | undefined,
   override: AnalyticsParameterOwnership | undefined,
   isMissingCapabilityTool: boolean
-): AnalyticsParameterOwnership {
+): ActiveAnalyticsParameterOwnership {
   const listed = toolName ? data.toolAnalyticsParameterOwnership.get(toolName) : undefined
   const ownership = override ?? listed
   return {
+    contextOwnershipKnown: ownership !== undefined,
     context: !isMissingCapabilityTool && isContextEnabled(data.options.context) && ownership?.context === true,
     conversationId: data.options.enableConversationId === true && ownership?.conversationId === true,
     // Deliberately read off `listed`, never the override: only the advertised
@@ -199,7 +227,8 @@ async function prepareToolCallEvent(
   startTime: Date,
   conversation: ConversationIdResolution,
   ownership: AnalyticsParameterOwnership,
-  eventType: MCPAnalyticsEventType
+  eventType: MCPAnalyticsEventType,
+  canCaptureContextIntent: boolean
 ): Promise<PreparedToolEvent | null> {
   try {
     const sessionId = getSessionId(server, extra, conversation.conversationId)
@@ -237,7 +266,7 @@ async function prepareToolCallEvent(
     stampTransportIdentity(event, extra)
 
     await applyResolvedMetadata(event, data, request, extra)
-    setEventIntent(event, await resolveToolCallIntent(data, request, ownership.context, extra))
+    setEventIntent(event, await resolveToolCallIntent(data, request, canCaptureContextIntent, extra))
     return { event, requestAttribution }
   } catch (error) {
     data.logger(
