@@ -63,6 +63,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     private _lastScroll: number | undefined
     private _lastSelectionChanged: number | undefined
     private _lastVisibilityChange: number | undefined
+    private _lastFocusChange: number | undefined
     private _clicks: DeadClickCandidate[] = []
     private _checkClickTimer: number | undefined
     private _touchStart: { x: number; y: number; timestamp: number } | undefined
@@ -121,6 +122,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         this._startScrollObserver()
         this._startSelectionChangedObserver()
         this._startVisibilityChangeObserver()
+        this._startFocusChangeObserver()
         this._startMutationObserver(observerTarget)
         if (this._config.capture_dead_swipes) {
             this._startSwipeObserver()
@@ -152,6 +154,8 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         assignableWindow.removeEventListener('touchend', this._onTouchEnd, { capture: true })
         assignableWindow.removeEventListener('touchcancel', this._onTouchCancel, { capture: true })
         document?.removeEventListener('visibilitychange', this._onVisibilityChange)
+        assignableWindow.removeEventListener('blur', this._onFocusChange)
+        assignableWindow.removeEventListener('focus', this._onFocusChange)
         // so a gesture in flight when we stopped can't pair with a touchend after a restart
         this._touchStart = undefined
     }
@@ -222,9 +226,21 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     }
 
     private _onVisibilityChange = (): void => {
-        if (document?.visibilityState === 'visible') {
-            this._lastVisibilityChange = Date.now()
-        }
+        // record both directions: a tab going _hidden_ right after a click (the click opened a new
+        // tab) is as much a liveness signal as it becoming visible (the click that woke the tab)
+        this._lastVisibilityChange = Date.now()
+    }
+
+    // a click that opens a new window/popup may leave the current tab visible, so its only trace is
+    // the window losing focus. focus/blur are liveness signals too — they suppress a dead click, and
+    // like visibility they never cause one.
+    private _startFocusChangeObserver() {
+        addEventListener(assignableWindow, 'blur', this._onFocusChange)
+        addEventListener(assignableWindow, 'focus', this._onFocusChange)
+    }
+
+    private _onFocusChange = (): void => {
+        this._lastFocusChange = Date.now()
     }
 
     // `capture: true` mirrors the scroll observer so we see gestures on nested scrollable
@@ -393,15 +409,19 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                 this._lastSelectionChanged && click.timestamp <= this._lastSelectionChanged
                     ? this._lastSelectionChanged - click.timestamp
                     : undefined
-            // how close the click is to the tab (re)gaining visibility, on either side
-            // (_lastVisibilityChange only records becoming visible). this exists solely to _suppress_:
-            // a click landing right around a visibility change is usually the click that woke/focused
-            // the tab (e.g. tabbing back and clicking the body to bring it forward), which legitimately
-            // does nothing. a visibility change is never positive evidence that a click _was_ dead, so
-            // unlike mutation/selection it feeds no timeout branch — which is what used to flag every
-            // click in a session where the tab had ever been backgrounded (Math.abs vs a stale change).
+            // how close the click is to a visibility change, on either side. a tab going to/from
+            // hidden near a click — the click that opened a new tab, or the click that woke/focused
+            // the tab — is a liveness signal, so this exists solely to _suppress_ a dead click, never
+            // to cause one. that's why (unlike mutation/selection) it feeds no timeout branch: the old
+            // Math.abs-vs-stale-change comparison read a tab backgrounded long ago as a multi-second
+            // reply and flagged every later click in the session as dead.
             click.visibilityChangedDelayMs = this._lastVisibilityChange
                 ? Math.abs(click.timestamp - this._lastVisibilityChange)
+                : undefined
+            // same idea for window focus/blur: a click that opens a new window/popup may leave the tab
+            // visible, so the only trace is the current window losing focus. also suppress-only.
+            click.focusChangedDelayMs = this._lastFocusChange
+                ? Math.abs(click.timestamp - this._lastFocusChange)
                 : undefined
 
             const scrollTimeout = checkTimeout(click.scrollDelayMs, this._config.scroll_threshold_ms)
@@ -423,8 +443,10 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             const hadVisibilityChange =
                 isNumber(click.visibilityChangedDelayMs) &&
                 click.visibilityChangedDelayMs < VISIBILITY_CHANGE_SUPPRESSION_MS
+            const hadFocusChange =
+                isNumber(click.focusChangedDelayMs) && click.focusChangedDelayMs < VISIBILITY_CHANGE_SUPPRESSION_MS
 
-            if (hadScroll || hadMutation || hadSelectionChange || hadVisibilityChange) {
+            if (hadScroll || hadMutation || hadSelectionChange || hadVisibilityChange || hadFocusChange) {
                 continue
             }
 
@@ -479,6 +501,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                 [`${prefix}_absolute_delay_ms`]: click.absoluteDelayMs,
                 [`${prefix}_selection_changed_delay_ms`]: click.selectionChangedDelayMs,
                 [`${prefix}_visibility_changed_delay_ms`]: click.visibilityChangedDelayMs,
+                [`${prefix}_focus_changed_delay_ms`]: click.focusChangedDelayMs,
                 // undefined for clicks (stripped on serialization), like the delay fields above
                 $dead_swipe_direction: click.swipeDirection,
                 $dead_swipe_distance_px: click.swipeDistancePx,

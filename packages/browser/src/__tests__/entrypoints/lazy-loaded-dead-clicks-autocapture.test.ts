@@ -414,6 +414,37 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             )
         })
 
+        it('click that opens a new window (window loses focus shortly after) is suppressed, not a dead click', () => {
+            lazyLoadedDeadClicksAutocapture['_clicks'].push({
+                node: document.body,
+                originalEvent: { type: 'click' } as MouseEvent,
+                timestamp: 900,
+            })
+            // the click opened a new window/popup: the tab stays visible, so the only trace is the
+            // current window losing focus ~50ms later — evidence the click did something
+            lazyLoadedDeadClicksAutocapture['_lastFocusChange'] = 950
+
+            lazyLoadedDeadClicksAutocapture['_checkClicks']()
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
+
+        it('a stale focus change well before the click does not suppress or mark it dead', () => {
+            lazyLoadedDeadClicksAutocapture['_clicks'].push({
+                node: document.body,
+                originalEvent: { type: 'click' } as MouseEvent,
+                timestamp: 2000,
+            })
+            // a window focus/blur 1500ms before the click is outside the window, so it is ignored
+            lazyLoadedDeadClicksAutocapture['_lastFocusChange'] = 500
+
+            lazyLoadedDeadClicksAutocapture['_checkClicks']()
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
+
         it('click followed by a selection change outside of threshold, dead click', () => {
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
                 node: document.body,

@@ -285,8 +285,13 @@ export interface DeadClickCandidate {
     mutationDelayMs?: number
     // time between click and the most recent selection changed event
     selectionChangedDelayMs?: number
-    // time between click and the most recent visibility change event
+    // time (absolute, either side) between click and the most recent visibility change — a tab
+    // going to or from hidden near a click (opening a new tab, or waking the tab) is a liveness
+    // signal, so it only ever suppresses a dead click, never causes one
     visibilityChangedDelayMs?: number
+    // as above for window focus/blur — a click that opens a new window/popup may only surface as
+    // the current window losing focus, so this is the liveness signal for that case
+    focusChangedDelayMs?: number
     // if neither scroll nor mutation seen before threshold passed
     absoluteDelayMs?: number
 }
