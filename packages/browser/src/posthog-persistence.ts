@@ -493,7 +493,10 @@ export class PostHogPersistence {
             this._loadGroupEntries()
         }
 
-        this._rememberCurrentCookieProperties()
+        // `_parse()` may have read a different cookie than a reread here if a
+        // sibling writes concurrently. Let the first synchronization compare the
+        // current shared cookie with the loaded props instead of marking an
+        // arbitrary later snapshot as observed.
     }
 
     // Merge each group entry over `props`, which already holds the main blob.
