@@ -294,6 +294,9 @@ export interface DeadClickCandidate {
     // as above for window focus/blur — a click that opens a new window/popup may only surface as
     // the current window losing focus, so this is the liveness signal for that case
     focusChangedDelayMs?: number
+    // delay between the click and a fetch request starting after it (stamped as the request fires) —
+    // a click that kicks off async work is alive even if the visible response lands after the window
+    networkRequestDelayMs?: number
     // if neither scroll nor mutation seen before threshold passed
     absoluteDelayMs?: number
 }
