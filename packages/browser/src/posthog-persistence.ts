@@ -16,6 +16,7 @@ import {
 import { PersistentStore, PostHogConfig, Properties } from './types'
 import { document, window } from '@posthog/browser-common/utils/globals'
 import {
+    ALIAS_ID_KEY,
     DISTINCT_ID,
     EVENT_TIMERS_KEY,
     INITIAL_CAMPAIGN_PARAMS,
@@ -330,6 +331,7 @@ export class PostHogPersistence {
             } else {
                 delete this.props.$user_id
             }
+            delete this.props[ALIAS_ID_KEY]
         }
         return true
     }

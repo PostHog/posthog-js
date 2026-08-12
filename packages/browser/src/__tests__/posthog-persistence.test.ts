@@ -1026,6 +1026,7 @@ describe('persistence', () => {
                         distinct_id: 'identified-user',
                         $user_state: 'identified',
                         $user_id: 'identified-user',
+                        __alias: 'old-alias',
                     })
                 )
                 const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
@@ -1036,6 +1037,7 @@ describe('persistence', () => {
                 expect(lib.props.distinct_id).toBe('new-anonymous')
                 expect(lib.props.$user_state).toBe('anonymous')
                 expect(lib.props.$user_id).toBeUndefined()
+                expect(lib.props.__alias).toBeUndefined()
             })
 
             it('flag on: a same-ID sibling reset clears stale user identity', () => {
