@@ -4,14 +4,14 @@
     "repo": "PostHog/posthog-js",
     "item": "issue 4507",
     "url": "https://github.com/PostHog/posthog-js/issues/4507",
-    "conclusion": "Valid enhancement proposal, but the requested signal is not available through the existing recorder hook for all dead-click users and safely adding it needs a deliberate instrumentation design.",
+    "conclusion": "Valid dead-click detection enhancement, but request-start instrumentation needs an explicit scope and high-risk compatibility review before implementation.",
     "labels": [
       "enhancement",
       "feature/dead-clicks",
       "team/analytics-platform"
     ],
     "closed": false,
-    "updatedAt": "2026-08-12T13:55:31.715Z"
+    "updatedAt": "2026-08-12T14:00:35.994Z"
   },
   "PostHog/posthog-js/issue/4492": {
     "key": "PostHog/posthog-js/issue/4492",
