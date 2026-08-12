@@ -15,8 +15,9 @@ builds a fresh instance per HTTP request, so the instance serving a `tools/call`
 listing. Ownership read `false`, and `$mcp_intent` was discarded on every call. This affected MCP SDK
 v1 as much as v2; v2 only makes per-request instances the norm.
 
-The defect is in the type, not the lookup. `AnalyticsParameterOwnership.context` was a boolean, so it
-collapsed two states that call for opposite handling:
+The defect is in what the answer could express, not in the lookup.
+`AnalyticsParameterOwnership.context` was a boolean, so it collapsed two states that call for
+opposite handling:
 
 | Real state | Old value | Strip it? | Capture it? |
 |---|---|---|---|
@@ -45,14 +46,21 @@ should have kept costs them the call. These are not comparable, so they do not s
 into `structuredContent` fails the host's entire tool result under client-side ajv validation
 (ADR-0004), which is the breaking direction.
 
+**How it is represented.** `AnalyticsParameterOwnership.context` stays a boolean and keeps meaning
+exactly what it did — *we injected this, so it is safe to strip*. The third state is carried
+alongside it, as `contextOwnershipKnown` on the request-scoped `ActiveAnalyticsParameterOwnership`.
+Deliberately additive rather than a `ParameterOwner` union: every existing strip site reads the
+boolean and needed no edit, so the change cannot alter stripping by accident, and the diff shows that
+on its face. Only intent resolution reads the new flag.
+
 ## Correction to ADR-0004
 
 ADR-0004's Consequences closed with *"Open follow-up: a process-scoped ownership cache."*
-**Do not build that.** It was measured against SDK v2 to corrupt data: keyed on `_serverInfo`
-name/version, two servers sharing a name answer each other's ownership questions. In the reproduction,
-one tenant's tool that *declares* `context` as required received `{}` while another tenant's user text
-was shipped as `$mcp_intent` — silent argument deletion plus user data crossing tenants, strictly worse
-than the missing telemetry it fixes.
+**Do not build that.** It corrupts data by construction: keyed on `_serverInfo` name/version, two
+servers sharing a name answer each other's ownership questions. A host tool that declares `context`
+as required then has that argument stripped and receives `{}`, while the user's text is shipped as
+the other server's `$mcp_intent` — silent argument deletion plus user data crossing tenants, strictly
+worse than the missing telemetry it fixes.
 
 A sticky-`host` merge (once any instance observes a tool declaring its own `context`, that verdict is
 permanent) narrows the window but does not close it: a process that has never served the declaring
@@ -75,13 +83,14 @@ mis-owning every tool beyond it.
   `beforeSend`.
 - Stripping behaviour is unchanged in every state, so no host tool starts losing an argument.
 - Unchanged and pre-existing: on a stateless server the injected `context` is not stripped, so a tool
-  registered with a `.strict()` Zod object rejects the call with `-32602`. Measured — the raw-shape and
-  plain `z.object()` forms drop unknown keys silently and are unaffected, and all three advertise
-  `additionalProperties: false`, so the advertised schema cannot distinguish them. Detection would have
-  to read `_def.unknownKeys` off the registered schema, which is reachable only on the high-level path;
-  left as a separate follow-up.
+  registered with a `.strict()` Zod object rejects the call with `-32602`. The raw-shape and plain
+  `z.object()` forms drop unknown keys silently and are unaffected. All three advertise
+  `additionalProperties: false`, so the advertised schema cannot tell them apart; detection would have
+  to read `_def.unknownKeys` off the registered schema, which is reachable only on the high-level path.
+  Left as a separate follow-up.
 
 ## References
 
 - PostHog/posthog-js#4449 (the field report: ownership only learned in the `tools/list` wrapper)
+- PostHog/posthog-js#4502 (this change)
 - ADR-0004 (the follow-up this closes), ADR-0002 (`tools/list` analytics affordances)
