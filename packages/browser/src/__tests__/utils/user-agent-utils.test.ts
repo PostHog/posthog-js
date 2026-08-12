@@ -491,6 +491,91 @@ describe('user-agent-utils', () => {
             )
         })
 
+        describe('detectBrowser Meta in-app browsers', () => {
+            // Meta's in-app browsers embed a platform webview, so their UA reads as
+            // Chrome on Android and Mobile Safari on iOS. The Android Facebook
+            // browser stamps `FB_IAB`/`FBAV` and Instagram stamps `Instagram`.
+            const facebookAndroidUA =
+                'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 [FB_IAB/FB4A;FBAV/450.0.0.38.108;]'
+            const facebookIosUA =
+                'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 [FBAN/FBIOS;FBAV/450.0.0.38.108;FBBV/000000000]'
+            const instagramAndroidUA =
+                'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 Instagram 309.0.0.0.0 Android'
+            const instagramIosUA =
+                'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 309.0.0.0.0 (iPhone; iOS 17_0; en_US)'
+            const chromeAndroidUA =
+                'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'
+
+            const browserCases: {
+                name: string
+                userAgent: string
+                vendor: string
+                options?: { detectMetaInAppBrowsers?: boolean }
+                expectedBrowser: string
+            }[] = [
+                // off by default — in-app browsers fall through to the embedded webview
+                {
+                    name: 'off by default, Android Facebook reads as Chrome',
+                    userAgent: facebookAndroidUA,
+                    vendor: 'Google Inc.',
+                    expectedBrowser: 'Chrome',
+                },
+                {
+                    name: 'off by default, iOS Instagram reads as Mobile Safari',
+                    userAgent: instagramIosUA,
+                    vendor: 'Apple Computer, Inc.',
+                    expectedBrowser: 'Mobile Safari',
+                },
+                {
+                    name: 'off by default, Android Instagram reads as Chrome',
+                    userAgent: instagramAndroidUA,
+                    vendor: 'Google Inc.',
+                    expectedBrowser: 'Chrome',
+                },
+                // opted in — in-app browsers surface as their own value
+                {
+                    name: 'opted in, detects Android Facebook',
+                    userAgent: facebookAndroidUA,
+                    vendor: 'Google Inc.',
+                    options: { detectMetaInAppBrowsers: true },
+                    expectedBrowser: 'Facebook Mobile',
+                },
+                {
+                    name: 'opted in, detects iOS Instagram',
+                    userAgent: instagramIosUA,
+                    vendor: 'Apple Computer, Inc.',
+                    options: { detectMetaInAppBrowsers: true },
+                    expectedBrowser: 'Instagram',
+                },
+                {
+                    name: 'opted in, detects Android Instagram',
+                    userAgent: instagramAndroidUA,
+                    vendor: 'Google Inc.',
+                    options: { detectMetaInAppBrowsers: true },
+                    expectedBrowser: 'Instagram',
+                },
+                // opted in — non-Meta traffic is untouched
+                {
+                    name: 'opted in, leaves plain Chrome untouched',
+                    userAgent: chromeAndroidUA,
+                    vendor: 'Google Inc.',
+                    options: { detectMetaInAppBrowsers: true },
+                    expectedBrowser: 'Chrome',
+                },
+                // iOS Facebook is caught unconditionally via `FBIOS`, regardless of the option
+                {
+                    name: 'iOS Facebook reads as Facebook Mobile even when off (FBIOS marker)',
+                    userAgent: facebookIosUA,
+                    vendor: 'Apple Computer, Inc.',
+                    expectedBrowser: 'Facebook Mobile',
+                },
+            ]
+
+            it.each(browserCases)('detectBrowser: $name', ({ userAgent, vendor, options, expectedBrowser }) => {
+                expect(detectBrowser(userAgent, vendor, {}, options)).toBe(expectedBrowser)
+            })
+        })
+
         describe('detectDeviceType with options', () => {
             const desktopUA =
                 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'

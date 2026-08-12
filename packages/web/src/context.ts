@@ -55,6 +55,13 @@ function browser(userAgent: string, vendor: string, opera: boolean): string {
     return 'Microsoft Edge'
   } else if (includes(userAgent, 'FBIOS')) {
     return 'Facebook Mobile'
+  } else if (includes(userAgent, 'FB_IAB') || includes(userAgent, 'FBAV')) {
+    // Android Facebook in-app browser: `FB_IAB`/`FBAV` sit alongside `Chrome/`,
+    // so this must precede the Chrome branch.
+    return 'Facebook Mobile'
+  } else if (includes(userAgent, 'Instagram')) {
+    // Instagram in-app browser: `Chrome/` on Android, Mobile Safari on iOS.
+    return 'Instagram'
   } else if (includes(userAgent, 'Chrome')) {
     return 'Chrome'
   } else if (includes(userAgent, 'CriOS')) {

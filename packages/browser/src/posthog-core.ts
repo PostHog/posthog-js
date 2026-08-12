@@ -211,6 +211,7 @@ const defaultsThatVaryByConfig = (
     | 'persistence_save_debounce_ms'
     | 'split_storage'
     | 'detect_google_search_app'
+    | 'detect_meta_in_app_browsers'
     | 'disable_capture_url_hashes'
 > => ({
     rageclick:
@@ -233,6 +234,7 @@ const defaultsThatVaryByConfig = (
     persistence_save_debounce_ms: defaults && defaults >= '2026-05-30' ? 250 : 0,
     split_storage: !!(defaults && defaults >= '2026-05-30'),
     detect_google_search_app: !!(defaults && defaults >= '2026-05-30'),
+    detect_meta_in_app_browsers: !!(defaults && defaults >= '2026-08-30'),
     disable_capture_url_hashes: !!(defaults && defaults >= '2026-06-25'),
 })
 
@@ -1674,7 +1676,8 @@ export class PostHog implements PostHogInterface {
             this.config.mask_personal_data_properties,
             this.config.custom_personal_data_properties,
             this.config.detect_google_search_app,
-            this.config.disable_capture_url_hashes
+            this.config.disable_capture_url_hashes,
+            this.config.detect_meta_in_app_browsers
         )
 
         if (this.sessionManager) {

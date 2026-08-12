@@ -23,6 +23,7 @@ type PostHogWithFlags = Pick<PostHogInterface, 'setPersonPropertiesForFlags'> & 
         | 'mask_personal_data_properties'
         | 'custom_personal_data_properties'
         | 'detect_google_search_app'
+        | 'detect_meta_in_app_browsers'
         | 'disable_capture_url_hashes'
         | 'custom_campaign_params'
     >
@@ -35,7 +36,8 @@ export const setAllPersonProfilePropertiesAsPersonPropertiesForFlags = (posthog:
             posthog.config.mask_personal_data_properties,
             posthog.config.custom_personal_data_properties,
             posthog.config.detect_google_search_app,
-            posthog.config.disable_capture_url_hashes
+            posthog.config.disable_capture_url_hashes,
+            posthog.config.detect_meta_in_app_browsers
         ),
         getCampaignParams(
             posthog.config.custom_campaign_params,

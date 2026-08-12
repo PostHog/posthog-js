@@ -13,6 +13,7 @@ import { isFunction, isUndefined } from './type-utils'
  */
 const FACEBOOK = 'Facebook'
 const MOBILE = 'Mobile'
+const INSTAGRAM = 'Instagram'
 const IOS = 'iOS'
 const ANDROID = 'Android'
 const TABLET = 'Tablet'
@@ -41,6 +42,7 @@ const PLAYSTATION = 'PlayStation'
 const XBOX = 'Xbox'
 const ANDROID_MOBILE = ANDROID + ' ' + MOBILE
 const MOBILE_SAFARI = MOBILE + ' ' + SAFARI
+const FACEBOOK_MOBILE = FACEBOOK + ' ' + MOBILE
 const WINDOWS = 'Windows'
 const WINDOWS_PHONE = WINDOWS + ' Phone'
 const NOKIA = 'Nokia'
@@ -91,6 +93,12 @@ export interface BrowserDetectionOptions {
   // Surface the Google Search App as its own browser via its `GSA/` UA marker
   // instead of the underlying webview (Mobile Safari on iOS, Chrome on Android).
   detectGoogleSearchApp?: boolean
+  // Surface Meta's in-app browsers (Facebook, Instagram) instead of the webview
+  // they embed. The Android Facebook browser stamps `FB_IAB`/`FBAV` alongside
+  // `Chrome/`, and Instagram stamps `Instagram`, so without this both fall
+  // through to Chrome (Android) or Mobile Safari (iOS). The iOS Facebook browser
+  // is caught unconditionally by its `FBIOS` marker and is unaffected.
+  detectMetaInAppBrowsers?: boolean
 }
 
 const XBOX_REGEX = new RegExp(XBOX, 'i')
@@ -192,7 +200,17 @@ export const detectBrowser = function (
   } else if (includes(user_agent, DUCKDUCKGO + '/') || includes(user_agent, 'Ddg/')) {
     return DUCKDUCKGO
   } else if (includes(user_agent, 'FBIOS')) {
-    return FACEBOOK + ' ' + MOBILE
+    return FACEBOOK_MOBILE
+  }
+  // Meta's in-app browsers embed a platform webview, so their UA otherwise looks
+  // like Chrome (Android) or Mobile Safari (iOS). The Android Facebook browser
+  // stamps `FB_IAB`/`FBAV` and Instagram stamps `Instagram`, so we must match
+  // them before the Chrome and Safari branches. Opt-in because it reattributes
+  // traffic previously reported as Chrome / Mobile Safari.
+  else if (options?.detectMetaInAppBrowsers && (includes(user_agent, 'FB_IAB') || includes(user_agent, 'FBAV'))) {
+    return FACEBOOK_MOBILE
+  } else if (options?.detectMetaInAppBrowsers && includes(user_agent, INSTAGRAM)) {
+    return INSTAGRAM
   } else if (includes(user_agent, 'UCWEB') || includes(user_agent, 'UCBrowser')) {
     return 'UC Browser'
   } else if (includes(user_agent, 'CriOS')) {

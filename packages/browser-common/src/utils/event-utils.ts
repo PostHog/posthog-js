@@ -288,7 +288,8 @@ export function getEventProperties(
     maskPersonalDataProperties?: boolean,
     customPersonalDataProperties?: string[],
     detectGoogleSearchApp?: boolean,
-    disableCaptureUrlHashes: boolean = false
+    disableCaptureUrlHashes: boolean = false,
+    detectMetaInAppBrowsers?: boolean
 ): Properties {
     if (!userAgent) {
         return {}
@@ -301,6 +302,9 @@ export function getEventProperties(
     const browserOptions: BrowserDetectionOptions = {}
     if (!isUndefined(detectGoogleSearchApp)) {
         browserOptions.detectGoogleSearchApp = detectGoogleSearchApp
+    }
+    if (!isUndefined(detectMetaInAppBrowsers)) {
+        browserOptions.detectMetaInAppBrowsers = detectMetaInAppBrowsers
     }
 
     type DeviceDetectionOptions = NonNullable<Parameters<typeof detectDeviceType>[1]>

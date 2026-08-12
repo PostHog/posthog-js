@@ -457,7 +457,14 @@ export interface HeatmapConfig {
  * Configuration defaults snapshot used by `PostHogConfig.defaults`.
  * Later dates include all earlier default changes.
  */
-export type ConfigDefaults = '2026-06-25' | '2026-05-30' | '2026-01-30' | '2025-11-30' | '2025-05-24' | 'unset'
+export type ConfigDefaults =
+    | '2026-08-30'
+    | '2026-06-25'
+    | '2026-05-30'
+    | '2026-01-30'
+    | '2025-11-30'
+    | '2025-05-24'
+    | 'unset'
 
 export type ExternalIntegrationKind = 'intercom' | 'crispChat'
 
@@ -1400,6 +1407,22 @@ export interface PostHogConfig {
     detect_google_search_app?: boolean
 
     /**
+     * Detect Meta's in-app browsers (Facebook, Instagram) as their own `$browser`
+     * value instead of the webview they embed — Chrome on Android, Mobile Safari
+     * on iOS. The Android Facebook browser is detected via its `FB_IAB`/`FBAV`
+     * markers and Instagram via its `Instagram` marker. The iOS Facebook browser
+     * is already detected unconditionally via its `FBIOS` marker.
+     *
+     * Off by default for backwards-compatibility: enabling it reattributes
+     * existing in-app traffic away from Chrome / Mobile Safari, which would
+     * otherwise look like those browsers suddenly losing share. The `2026-08-30`
+     * config default opts in.
+     *
+     * @default false
+     */
+    detect_meta_in_app_browsers?: boolean
+
+    /**
      * Determines whether PostHog should disable all surveys functionality.
      *
      * @default false
@@ -1671,6 +1694,7 @@ export interface PostHogConfig {
      * - `'2026-01-30'`: Defaults from '2025-11-30' plus external_scripts_inject_target defaults to 'head' (avoids SSR hydration errors)
      * - `'2026-05-30'`: Defaults from '2026-01-30' plus `persistence_save_debounce_ms` defaults to `250`, `split_storage` and `detect_google_search_app` default to `true`, and rageclick defaults also exclude stepper controls and text-selection surfaces
      * - `'2026-06-25'`: Defaults from '2026-05-30' plus `session_recording.streamNetworkBody` defaults to `true` (streams network bodies to enforce the payload size limit)
+     * - `'2026-08-30'`: Defaults from '2026-06-25' plus `detect_meta_in_app_browsers` defaults to `true` (detects Facebook and Instagram in-app browsers instead of the webview they embed)
      *
      * @default 'unset'
      */

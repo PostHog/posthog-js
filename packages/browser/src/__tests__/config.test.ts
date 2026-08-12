@@ -129,6 +129,20 @@ describe('config', () => {
             ['2025-11-30', '2025-11-30' as const, false],
             ['2026-01-30', '2026-01-30' as const, false],
             ['2026-05-30', '2026-05-30' as const, false],
+            ['2026-06-25', '2026-06-25' as const, false],
+            ['2026-08-30', '2026-08-30' as const, true],
+        ])('detect_meta_in_app_browsers with defaults %s', (_label, defaults, expected) => {
+            const posthog = new PostHog()
+            posthog._init('test-token', defaults ? { defaults } : undefined)
+            expect(posthog.config.detect_meta_in_app_browsers).toBe(expected)
+        })
+
+        it.each([
+            ['unset', undefined, false],
+            ['2025-05-24', '2025-05-24' as const, false],
+            ['2025-11-30', '2025-11-30' as const, false],
+            ['2026-01-30', '2026-01-30' as const, false],
+            ['2026-05-30', '2026-05-30' as const, false],
             ['2026-06-25', '2026-06-25' as const, true],
         ])('disable_capture_url_hashes with defaults %s', (_label, defaults, expected) => {
             const posthog = new PostHog()
