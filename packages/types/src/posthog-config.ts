@@ -191,6 +191,19 @@ export interface BootstrapConfig {
     sessionID?: string
 }
 
+export interface ResetOptions {
+    /**
+     * Whether to generate a new device ID as well as a new distinct ID.
+     * @default false
+     */
+    resetDeviceID?: boolean
+
+    /**
+     * Identity, feature flag, and session values to apply after resetting.
+     */
+    bootstrap?: BootstrapConfig
+}
+
 export type SupportedWebVitalsMetrics = 'LCP' | 'CLS' | 'FCP' | 'INP'
 
 export interface PerformanceCaptureConfig {
