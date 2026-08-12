@@ -1910,9 +1910,10 @@ export abstract class PostHogCoreStateless {
     }
 
     return raceWithTimeout(doShutdown(), shutdownTimeoutMs, () => {
-      this._logger.error('Timed out while shutting down PostHog')
+      this._logger.critical('Timeout while shutting down PostHog. Some events may not have been sent.', {
+        shutdownTimeoutMs,
+      })
       hasTimedOut = true
-      throw 'Timeout while shutting down PostHog. Some events may not have been sent.'
     })
   }
 

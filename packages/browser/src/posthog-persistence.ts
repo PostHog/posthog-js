@@ -5,7 +5,6 @@ import { cookieStore, createLocalPlusCookieStore, localStore, memoryStore, sessi
 import { PersistentStore, PostHogConfig, Properties } from './types'
 import { document, window } from '@posthog/browser-common/utils/globals'
 import {
-    ENABLED_FEATURE_FLAGS,
     EVENT_TIMERS_KEY,
     INITIAL_CAMPAIGN_PARAMS,
     INITIAL_PERSON_INFO,
@@ -248,43 +247,14 @@ export class PostHogPersistence {
         return this._splitStorageEligible && !!config['split_storage']
     }
 
-    /**
-     * Check if the feature flag cache is stale based on the configured TTL.
-     * @param ttl Optional TTL override (uses config value if not provided)
-     * @internal
-     */
-    _isFeatureFlagCacheStale(ttl?: number): boolean {
-        const effectiveTtl = ttl ?? this._config.feature_flag_cache_ttl_ms
-        if (!effectiveTtl || effectiveTtl <= 0) {
-            return false
-        }
-        const evaluatedAt = this.props[PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]
-        // If evaluatedAt is missing or not a numeric timestamp, consider cache stale.
-        // This handles SDK upgrades where old cached flags lack evaluatedAt.
-        if (!evaluatedAt || typeof evaluatedAt !== 'number') {
-            return true
-        }
-        return Date.now() - evaluatedAt > effectiveTtl
-    }
-
     properties(): Properties {
         const p: Properties = {}
 
         each(this.props, (v, k) => {
             const policy = getPersistenceKeyPolicy(k)
 
-            if (policy?.exposure === 'derived') {
-                const shouldSkip = k === ENABLED_FEATURE_FLAGS ? () => this._isFeatureFlagCacheStale() : () => false
-
-                if (policy.shouldSkipFromEventProperties?.(v, shouldSkip)) {
-                    return
-                }
-
-                if (policy.transformToEventProperties) {
-                    extend(p, policy.transformToEventProperties(v))
-                }
-            } else if (!policy || policy.exposure === 'event') {
-                if (policy?.shouldSkipFromEventProperties?.(v, () => false)) {
+            if (!policy || policy.exposure === 'event') {
+                if (policy?.shouldSkipFromEventProperties?.(v)) {
                     return
                 }
 
@@ -703,9 +673,16 @@ export class PostHogPersistence {
         return false
     }
 
-    unregister(prop: string): void {
-        if (prop in this.props) {
-            this._deleteProp(prop)
+    unregister(propOrProps: string | readonly string[]): void {
+        const props = typeof propOrProps === 'string' ? [propOrProps] : propOrProps
+        let hasChanges = false
+        for (const prop of props) {
+            if (prop in this.props) {
+                this._deleteProp(prop)
+                hasChanges = true
+            }
+        }
+        if (hasChanges) {
             this.save()
         }
     }

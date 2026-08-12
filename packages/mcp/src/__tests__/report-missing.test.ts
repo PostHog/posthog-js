@@ -1,9 +1,11 @@
-import { CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
+import { type CallToolResult, CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
+import type { CallToolResult as V2CallToolResult } from '@modelcontextprotocol/server'
 import { z } from 'zod'
 import { instrument } from '../index'
 import { DEFAULT_CONTEXT_PARAMETER_DESCRIPTION } from '../extensions/constants'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
 import { getServerTrackingData } from '../extensions/internal'
+import { getMoreToolsResult } from '../index'
 import { EventCapture, fakePostHog } from './test-utils'
 import { resetTodos, setupTestServerAndClient } from './test-utils/client-server-factory'
 
@@ -299,5 +301,29 @@ describe('reportMissing (get_more_tools virtual tool)', () => {
 
       await capture.stop()
     })
+  })
+})
+
+/**
+ * Shipped code declares the MCP wire shapes structurally instead of importing
+ * them, because both SDK majors are optional peers and a type import of one
+ * would break `tsc` for a consumer that installed the other. The risk that
+ * creates is the *other* direction: a host passing what we return straight back
+ * to the SDK. This is a compile-time assertion — if the type we return drifts
+ * away from the SDK's, this file stops compiling, which is the point. It covers
+ * the exported surface; internal descriptors are read by us, never handed on.
+ */
+describe('results we hand back stay assignable to the SDK types', () => {
+  it('getMoreToolsResult() satisfies v1 CallToolResult', () => {
+    const result: CallToolResult = getMoreToolsResult()
+    expect(result.content).toHaveLength(1)
+  })
+
+  // Both majors, because either can drift away from our structural type — and v2
+  // is the likelier of the two, being the newer schema. Available only because
+  // this package now carries v2 as a devDependency.
+  it('getMoreToolsResult() satisfies v2 CallToolResult', () => {
+    const result: V2CallToolResult = getMoreToolsResult()
+    expect(result.content).toHaveLength(1)
   })
 })

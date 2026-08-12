@@ -3,10 +3,10 @@
 // Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
-import type { ListToolsResult } from '@modelcontextprotocol/sdk/types.js'
 import type {
   AnalyticsParameterOwnership,
   CompatibleRequestHandlerExtra,
+  CompatibleToolsListLike,
   MCPAnalyticsData,
   MCPRequestLike,
   MCPServerLike,
@@ -23,7 +23,7 @@ import {
   injectConversationIdPromptBack,
   resolveConversationId,
 } from './conversation-id'
-import { stampMetaClientInfo } from './client-identity'
+import { stampClientIdentity } from './client-identity'
 import { stampTransportIdentity } from './transport-identity'
 import { addInstructionsToOutputSchemas, mirrorInstructionsIntoStructuredContent } from './output-instructions'
 import { captureEvent } from './capture'
@@ -34,7 +34,8 @@ import { getServerTrackingData, handleIdentify, setServerTrackingData, withIdent
 import type { LoggerFn } from './logger'
 import { buildCapturedMcpParameters } from './mcp-payloads'
 import { readRequestHandlerMethod } from './mcp-sdk-compat'
-import { getSessionId, getSessionInfo, newSessionId } from './session'
+import { getRequestHeaders } from './request-headers'
+import { getSessionId, getSessionInfo, isModernEraRequest, newSessionId } from './session'
 import { encodeSessionId, readMcpSessionHeader, writeSessionIdToTransport } from './session-token'
 import { getReportMissingToolDescriptor, resolveMissingCapabilityToolName } from './tools'
 import { applyResolvedMetadata, isToolResultError } from './tracing-helpers'
@@ -138,7 +139,9 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   }
 
   const finalResult = applyConversationInstructions(preparedEvent?.event ?? null, result, conversation, ownership)
-  publishSuccessfulToolEvent(server, preparedEvent, finalResult, startTime, data.logger, takeCapturedError)
+  // `result`, not `finalResult`: the error is read from what the tool produced,
+  // before the conversation handle was written into it. See below.
+  publishSuccessfulToolEvent(server, preparedEvent, finalResult, startTime, data.logger, takeCapturedError, result)
   return finalResult
 }
 
@@ -228,7 +231,7 @@ async function prepareToolCallEvent(
     // Modern (stateless) clients carry client name/version + protocol version in
     // `_meta` on every request rather than at `initialize`; stamp them onto this
     // event now so concurrent requests can't cross-attribute it.
-    stampMetaClientInfo(event, request)
+    stampClientIdentity(event, request, extra, server)
     // Which *surface* of the client made this call lives only in the request
     // headers (HTTP transports); `clientInfo` can't tell a vendor's products apart.
     stampTransportIdentity(event, extra)
@@ -287,13 +290,26 @@ function applyConversationInstructions(
   return updated
 }
 
+/**
+ * @param result - what the caller receives, conversation handle included.
+ * @param resultBeforeInstructions - the same result as the tool produced it.
+ *
+ * The two differ once `enableConversationId` mints a handle, and the difference
+ * matters for errors. A tool that fails returns its message in `content`, and on
+ * MCP SDK v2 that flattened `isError` result is the only description of the
+ * failure we get — the throw never reaches our callback wrapper. Reading the
+ * error off the *delivered* result would therefore append the prompt-back to it,
+ * putting a fresh uuid inside `$mcp_error_message` on every failed call and
+ * splitting one recurring failure into as many groups as there were calls.
+ */
 function publishSuccessfulToolEvent(
   server: MCPServerLike,
   preparedEvent: PreparedToolEvent | null,
   result: unknown,
   startTime: Date,
   logger: LoggerFn,
-  takeCapturedError?: () => unknown
+  takeCapturedError?: () => unknown,
+  resultBeforeInstructions?: unknown
 ): void {
   if (!preparedEvent) {
     return
@@ -303,7 +319,7 @@ function publishSuccessfulToolEvent(
     if (isToolResultError(result)) {
       event.isError = true
       const capturedError = takeCapturedError?.()
-      event.error = captureException(capturedError ?? result)
+      event.error = captureException(capturedError ?? resultBeforeInstructions ?? result)
     } else {
       event.isError = false
     }
@@ -470,7 +486,7 @@ export async function isToolAdvertised(
   }
 
   try {
-    const response = (await listHandler({ method: 'tools/list', params: {} }, extra)) as ListToolsResult
+    const response = (await listHandler({ method: 'tools/list', params: {} }, extra)) as CompatibleToolsListLike
     if (!response || !Array.isArray(response.tools)) {
       return undefined
     }
@@ -495,7 +511,7 @@ export async function handleListToolsRequest(
   request: MCPRequestLike,
   extra: CompatibleRequestHandlerExtra | undefined,
   logger: LoggerFn
-): Promise<{ tools: ListToolsResult['tools'] }> {
+): Promise<{ tools: CompatibleToolsListLike['tools'] }> {
   const data = getServerTrackingData(server)
   const startTime = new Date()
   const sessionId = getSessionId(server, extra)
@@ -508,7 +524,7 @@ export async function handleListToolsRequest(
     eventType: MCPAnalyticsEventType.mcpToolsList,
     timestamp: startTime,
   }
-  stampMetaClientInfo(event, request)
+  stampClientIdentity(event, request, extra, server)
   stampTransportIdentity(event, extra)
 
   if (data) {
@@ -553,7 +569,7 @@ export async function handleListToolsRequest(
 
 function cacheToolAnalyticsParameterOwnership(
   cache: Map<string, AnalyticsParameterOwnership>,
-  tools: ListToolsResult['tools']
+  tools: CompatibleToolsListLike['tools']
 ): void {
   // Merge pages and concurrent enumerations; repeated tool names overwrite stale schemas.
   for (const tool of tools) {
@@ -563,7 +579,7 @@ function cacheToolAnalyticsParameterOwnership(
   }
 }
 
-function collectListedToolNames(tools: ListToolsResult['tools'] | undefined): string[] | undefined {
+function collectListedToolNames(tools: CompatibleToolsListLike['tools'] | undefined): string[] | undefined {
   if (!tools || tools.length === 0) {
     return
   }
@@ -579,10 +595,10 @@ async function getTracedToolsList(
   event: McpEvent,
   logger: LoggerFn,
   requestAttribution: SessionInfo
-): Promise<ListToolsResult['tools']> {
+): Promise<CompatibleToolsListLike['tools']> {
   try {
     const data = getServerTrackingData(server)
-    const originalResponse = (await originalListToolsHandler(request, extra)) as ListToolsResult
+    const originalResponse = (await originalListToolsHandler(request, extra)) as CompatibleToolsListLike
     // Injection must not mutate arrays reused or frozen by the server.
     let tools = [...(originalResponse.tools || [])]
 
@@ -634,7 +650,10 @@ async function getTracedToolsList(
   }
 }
 
-export function cacheToolDescriptions(cache: Map<string, string>, tools: ListToolsResult['tools'] | undefined): void {
+export function cacheToolDescriptions(
+  cache: Map<string, string>,
+  tools: CompatibleToolsListLike['tools'] | undefined
+): void {
   if (!tools) {
     return
   }
@@ -655,7 +674,10 @@ export function readToolMetaCategory(meta: unknown): string | undefined {
   return typeof category === 'string' && category.length > 0 ? category : undefined
 }
 
-export function cacheToolCategories(cache: Map<string, string>, tools: ListToolsResult['tools'] | undefined): void {
+export function cacheToolCategories(
+  cache: Map<string, string>,
+  tools: CompatibleToolsListLike['tools'] | undefined
+): void {
   if (!tools) {
     return
   }
@@ -688,9 +710,17 @@ function mintStatelessSessionOnInitialize(
   extra: CompatibleRequestHandlerExtra | undefined
 ): string | undefined {
   try {
-    const headers = extra?.requestInfo?.headers
-    if (!headers || typeof headers !== 'object') {
+    const headers = getRequestHeaders(extra)
+    if (!headers) {
       return undefined // not an HTTP transport (stdio/in-memory) — nothing to mint into
+    }
+    // 2026-07-28 removed sessions from the protocol: a server MUST NOT mint or
+    // echo `Mcp-Session-Id` under it. Today that era never reaches here anyway,
+    // because it has no `initialize` — but relying on that is relying on an SDK
+    // routing detail to keep us spec-compliant, so the era is asked directly.
+    // Per request, never per server: the same v2 server serves both.
+    if (isModernEraRequest(request, extra, server)) {
+      return undefined
     }
     if (readMcpSessionHeader(headers)) {
       return undefined // client already replays a session id (ours or the transport's)
@@ -820,7 +850,7 @@ export async function handleInitializeRequest(
   // Harmless for a legacy `initialize` (client info rides the body there, and the
   // negotiated protocol version below overrides any `_meta` one); picks up client
   // info if a client also sends it in `_meta`.
-  stampMetaClientInfo(event, request)
+  stampClientIdentity(event, request, extra, server)
   stampTransportIdentity(event, extra)
 
   await applyResolvedMetadata(event, data, request, extra)

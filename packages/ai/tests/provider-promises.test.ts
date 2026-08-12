@@ -2,6 +2,7 @@ import type { PostHog } from 'posthog-node'
 import PostHogAnthropic from '../src/anthropic'
 import PostHogOpenAI from '../src/openai'
 import { PostHogAzureOpenAI } from '../src/openai/azure'
+import { flushPromises } from './test-utils'
 
 const chatCompletion = {
   id: 'chatcmpl_provider_promise',
@@ -85,6 +86,12 @@ const jsonResponse = (body: unknown, requestIDHeader = 'x-request-id'): Response
     },
   })
 
+const eventStreamResponse = (events: unknown[]): Response =>
+  new Response(`${events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join('')}data: [DONE]\n\n`, {
+    status: 200,
+    headers: { 'content-type': 'text/event-stream' },
+  })
+
 const locationSchema = {
   type: 'object',
   properties: { city: { type: 'string' } },
@@ -131,6 +138,58 @@ describe('provider promise compatibility with real SDK resources', () => {
     expect(request_id).toBe('req_provider_promise')
     expect(fetch).toHaveBeenCalledTimes(1)
     expect(posthog.capture).toHaveBeenCalledTimes(1)
+  })
+
+  test('OpenAI responses.stream routes through the wrapped create method', async () => {
+    let providerBody: Record<string, unknown> | undefined
+    const fetch = jest.fn(async (request: RequestInfo | URL, init?: RequestInit) => {
+      const body = request instanceof Request ? await request.clone().text() : String(init?.body)
+      providerBody = JSON.parse(body)
+      return eventStreamResponse([
+        {
+          type: 'response.created',
+          sequence_number: 0,
+          response: { ...responsesResult, status: 'in_progress', output: [], usage: null },
+        },
+        {
+          type: 'response.completed',
+          sequence_number: 1,
+          response: responsesResult,
+        },
+      ])
+    })
+    const posthog = posthogClient()
+    const client = new PostHogOpenAI({ apiKey: 'test', posthog, fetch })
+
+    const stream = client.responses.stream({
+      model: 'gpt-4o-mini',
+      input: 'Where?',
+      posthogDistinctId: 'stream-user',
+      posthogTraceId: 'stream-trace',
+    })
+
+    expect(typeof stream.finalResponse).toBe('function')
+    const events = []
+    for await (const event of stream) {
+      events.push(event.type)
+    }
+    expect((await stream.finalResponse()).id).toBe(responsesResult.id)
+    await flushPromises()
+
+    expect(events).toEqual(['response.created', 'response.completed'])
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(providerBody).toMatchObject({ model: 'gpt-4o-mini', input: 'Where?', stream: true })
+    expect(providerBody).not.toHaveProperty('posthogDistinctId')
+    expect(providerBody).not.toHaveProperty('posthogTraceId')
+    expect(posthog.capture).toHaveBeenCalledTimes(1)
+    expect((posthog.capture as jest.Mock).mock.calls[0][0]).toMatchObject({
+      distinctId: 'stream-user',
+      event: '$ai_generation',
+      properties: {
+        $ai_trace_id: 'stream-trace',
+        $ai_completion_id: responsesResult.id,
+      },
+    })
   })
 
   test('Azure chat and responses parse compose through wrapped provider promises', async () => {

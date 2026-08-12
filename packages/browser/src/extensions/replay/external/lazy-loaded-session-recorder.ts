@@ -525,7 +525,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _strategy: RecordingStrategy | undefined
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
     private _fullSnapshotTimestamps: Array<[string, number]> = []
-    // ship-time FullSnapshot tracking for _ensureFullSnapshotForSession (unlike _fullSnapshotTimestamps, which records emit-time debug telemetry)
+    // the session a FullSnapshot was last captured for, read by _ensureFullSnapshotForSession and by
+    // the marker-only flush guard (unlike _fullSnapshotTimestamps, which records emit-time debug
+    // telemetry). Capture-time, not ship-time: a buffer cleared before it flushed leaves this set.
     private _lastFullSnapshotSessionId: string | undefined = undefined
     private _fullSnapshotHealAttemptedFor: string | undefined = undefined
 
@@ -783,8 +785,18 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             const canRecordNetwork = !isLocalhost() || this._forceAllowLocalhostNetworkCapture
 
             if (canRecordNetwork) {
+                // The unversioned recorder can run with older cores, so this router method must be feature-detected.
+                const isIngestionEndpoint = isFunction(this._instance.requestRouter.isIngestionEndpoint)
+                    ? this._instance.requestRouter.isIngestionEndpoint.bind(this._instance.requestRouter)
+                    : undefined
                 plugins.push(
-                    networkPlugin(buildNetworkRequestOptions(this._instance.config, this._networkPayloadCapture))
+                    networkPlugin(
+                        buildNetworkRequestOptions(
+                            this._instance.config,
+                            this._networkPayloadCapture,
+                            isIngestionEndpoint
+                        )
+                    )
                 )
             } else {
                 logger.info('NetworkCapture not started because we are on localhost.')
@@ -1895,13 +1907,43 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
     }
 
+    // Custom events are lifecycle markers (sessionIdle, $session_id_change, ...). A buffer holding
+    // nothing else has no content to render, so shipping it as a session's first block opens a
+    // recording that bills the customer and plays back as nothing. Once the session has a
+    // FullSnapshot, later marker-only blocks append to real content and are fine.
+    // $session_starting and $session_ending are exempt: they only exist in this stream, and
+    // dropping them would break the linking chain through a session that recorded nothing.
+    private _wouldOpenRecordingWithMarkersOnly(): boolean {
+        if (this._lastFullSnapshotSessionId === this._buffer.sessionId || this._buffer.data.length === 0) {
+            return false
+        }
+        return this._buffer.data.every(
+            (event) =>
+                event?.type === EventType.Custom && !isSessionEndingEvent(event) && !isSessionStartingEvent(event)
+        )
+    }
+
     private _flushBuffer(): SnapshotBuffer {
+        // cleared before the re-entrant reads below, so a flush they schedule survives this call
         this._clearFlushBufferTimer()
 
         // hold the buffer rather than ship a billable recording for an epoch nobody touched
         if (this._holdFlushUntilInteraction) {
             return this._buffer
         }
+
+        // keep the markers rather than open a recording with them: the next capture schedules another
+        // flush, so they ship alongside the content that follows, and go with the page if none does
+        if (this._wouldOpenRecordingWithMarkersOnly()) {
+            // unplayable either way, so a flush that finds them past the cap drops them rather than
+            // holding them. Only a flush checks this, so it bounds the common case, not every case
+            return this._buffer.size > RECORDING_MAX_EVENT_SIZE ? this._clearBuffer() : this._buffer
+        }
+
+        // the reads below consult the session manager, which can synchronously adopt a pending
+        // session rotation and re-enter this recorder, swapping this._buffer for the new epoch's;
+        // that pass flushes or holds it itself, so ship only the buffer these checks validated
+        const validatedBuffer = this._buffer
 
         // never flush while a sampling decision is missing (e.g. wiped by posthog.reset()) — an
         // undecided session reads as ACTIVE and would leak a batch it then decides not to record
@@ -1914,9 +1956,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return this._buffer
         }
 
-        if (this._buffer.data.length > 0) {
+        if (this._buffer !== validatedBuffer) {
+            return this._buffer
+        }
+
+        if (validatedBuffer.data.length > 0) {
             const snapshotHostname = this._currentMaskedHostname()
-            const snapshotEvents = splitBuffer(this._buffer)
+            const snapshotEvents = splitBuffer(validatedBuffer)
             snapshotEvents.forEach((snapshotBuffer) => {
                 this._flushedSizeTracker?.trackSize(snapshotBuffer.sessionId, snapshotBuffer.size)
                 this._captureSnapshot({
@@ -2010,7 +2056,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 !this._holdFlushUntilInteraction &&
                 this._buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE)
         ) {
+            const sessionBeforeFlush = this._sessionId
             this._buffer = this._flushBuffer()
+            // a rotation adopted re-entrantly during that flush owns this._buffer now; clearing it
+            // or relabeling it with this event's pre-rotation ids would mis-attribute the new
+            // epoch, so drop the stale event instead
+            if (this._sessionId !== sessionBeforeFlush) {
+                return
+            }
             // A suppressed flush (e.g. buffering, paused, held, below minimum duration) returns the buffer un-drained, and relabeling the prior session's events would mis-attribute them, so discard them instead.
             if (sessionChanged && this._buffer.data.length > 0) {
                 this._buffer = this._clearBuffer()

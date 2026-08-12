@@ -191,6 +191,19 @@ export interface BootstrapConfig {
     sessionID?: string
 }
 
+export interface ResetOptions {
+    /**
+     * Whether to generate a new device ID as well as a new distinct ID.
+     * @default false
+     */
+    resetDeviceID?: boolean
+
+    /**
+     * Identity, feature flag, and session values to apply after resetting.
+     */
+    bootstrap?: BootstrapConfig
+}
+
 export type SupportedWebVitalsMetrics = 'LCP' | 'CLS' | 'FCP' | 'INP'
 
 export interface PerformanceCaptureConfig {
@@ -1082,6 +1095,35 @@ export interface PostHogConfig {
      * @default null
      */
     flags_api_host?: string | null
+
+    /**
+     * Rewrites the URL used for PostHog API, feature flag, and asset requests.
+     * This is intended for customers who use a reverse proxy and need custom paths.
+     * The proxy must map the rewritten paths back to the canonical PostHog paths.
+     *
+     * UI links are not rewritten.
+     *
+     * @example
+     * ```js
+     * posthog.init('phc_...', {
+     *     api_host: 'https://a.example.com',
+     *     rewriteRequestPath: (url) => {
+     *         if (url.pathname === '/e/') {
+     *             url.pathname = '/my-events/'
+     *         } else if (url.pathname === '/s/') {
+     *             url.pathname = '/my-replay/'
+     *         } else if (url.pathname === '/flags/') {
+     *             url.pathname = '/my-flags/'
+     *         }
+     *         return url
+     *     },
+     * })
+     * ```
+     *
+     * @param url - The fully resolved request URL. It may be mutated or replaced.
+     * @returns The URL that the SDK should request.
+     */
+    rewriteRequestPath?: (url: URL) => URL
 
     /**
      * If using a reverse proxy for `api_host` then this should be the actual PostHog app URL (e.g. https://us.posthog.com).

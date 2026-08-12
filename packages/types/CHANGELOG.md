@@ -1,5 +1,22 @@
 # @posthog/types
 
+## 1.403.0
+
+### Minor Changes
+
+- [#4495](https://github.com/PostHog/posthog-js/pull/4495) [`e4b9947`](https://github.com/PostHog/posthog-js/commit/e4b9947c5fa197624133832ba13eba223ce6ab06) Thanks [@marandaneto](https://github.com/marandaneto)! - feat(browser): add `rewriteRequestPath` to customize API, feature flag, and asset paths for reverse proxies
+  (2026-08-12)
+
+- [#4493](https://github.com/PostHog/posthog-js/pull/4493) [`e34ebf9`](https://github.com/PostHog/posthog-js/commit/e34ebf996bf1f19857335df20de249955e9d3466) Thanks [@marandaneto](https://github.com/marandaneto)! - Add reset options for applying bootstrapped identity, feature flag, and session values after `posthog.reset()` while preserving the legacy boolean argument.
+  (2026-08-12)
+
+## 1.402.3
+
+### Patch Changes
+
+- [#4494](https://github.com/PostHog/posthog-js/pull/4494) [`deb6bb0`](https://github.com/PostHog/posthog-js/commit/deb6bb0cb7c8984262707addbb4bdc8cb4ee5825) Thanks [@marandaneto](https://github.com/marandaneto)! - fix(types): accept current and legacy Segment Analytics SDK types in the Segment integration config
+  (2026-08-11)
+
 ## 1.402.2
 
 ### Patch Changes

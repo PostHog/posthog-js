@@ -23,7 +23,9 @@ import {
 } from '../../../extensions/replay/external/sessionrecording-utils'
 import { PostHog } from '../../../posthog-core'
 import {
+    CapturedNetworkRequest,
     FlagsResponse,
+    NetworkRecordOptions,
     PerformanceCaptureConfig,
     PostHogConfig,
     Property,
@@ -366,6 +368,7 @@ describe('Lazy SessionRecording', () => {
                         },
                     })
                 )
+                sessionRecording.onRRwebEmit(createFullSnapshot({ timestamp: Date.now() }))
                 const snapshot = createCustomSnapshot({ timestamp: Date.now() })
                 sessionRecording.onRRwebEmit(snapshot)
                 ;(posthog.capture as Mock).mockClear()
@@ -392,6 +395,7 @@ describe('Lazy SessionRecording', () => {
                         },
                     })
                 )
+                sessionRecording.onRRwebEmit(createFullSnapshot({ timestamp: Date.now() }))
                 const snapshot = createCustomSnapshot({ timestamp: Date.now() })
                 sessionRecording.onRRwebEmit(snapshot)
                 ;(posthog.capture as Mock).mockClear()
@@ -427,6 +431,7 @@ describe('Lazy SessionRecording', () => {
                         },
                     })
                 )
+                sessionRecording.onRRwebEmit(createFullSnapshot({ timestamp: Date.now() }))
                 const snapshot = createCustomSnapshot({ timestamp: Date.now() })
                 sessionRecording.onRRwebEmit(snapshot)
                 ;(posthog.capture as Mock).mockClear()
@@ -461,6 +466,7 @@ describe('Lazy SessionRecording', () => {
                         },
                     })
                 )
+                sessionRecording.onRRwebEmit(createFullSnapshot({ timestamp: Date.now() }))
                 const snapshot = createCustomSnapshot({ timestamp: Date.now() })
                 sessionRecording.onRRwebEmit(snapshot)
                 ;(posthog.capture as Mock).mockClear()
@@ -491,6 +497,7 @@ describe('Lazy SessionRecording', () => {
                         },
                     })
                 )
+                sessionRecording.onRRwebEmit(createFullSnapshot({ timestamp: Date.now() }))
                 const snapshot = createCustomSnapshot({ timestamp: Date.now() })
                 sessionRecording.onRRwebEmit(snapshot)
                 ;(posthog.capture as Mock).mockClear()
@@ -827,6 +834,37 @@ describe('Lazy SessionRecording', () => {
                     ).toBe(expected)
                 }
             )
+        })
+
+        describe('network capture plugin', () => {
+            it('filters ingestion paths when rewriteRequestPath is configured after the plugin starts', () => {
+                const getRecordNetworkPlugin = jest.fn((options: NetworkRecordOptions) => ({
+                    name: 'network',
+                    observer: undefined,
+                    options,
+                }))
+                assignableWindow.__PosthogExtensions__!.rrwebPlugins = { getRecordNetworkPlugin }
+                posthog.config.session_recording.recordBody = true
+
+                const lazyLoadedSessionRecording = new LazyLoadedSessionRecording(posthog, true)
+                lazyLoadedSessionRecording['_forceAllowLocalhostNetworkCapture'] = true
+                lazyLoadedSessionRecording['_gatherRRWebPlugins']()
+
+                const networkOptions = getRecordNetworkPlugin.mock.calls[0][0]
+                posthog.config.rewriteRequestPath = (url) => {
+                    if (url.pathname === '/s/') {
+                        url.pathname = '/custom-replay/'
+                    }
+                    return url
+                }
+                const rewrittenEndpoint = posthog.requestRouter.endpointFor('api', '/s/')
+
+                expect(
+                    networkOptions.maskRequestFn!({
+                        name: rewrittenEndpoint,
+                    } as CapturedNetworkRequest)
+                ).toBeUndefined()
+            })
         })
 
         describe('masking config', () => {
@@ -2145,6 +2183,142 @@ describe('Lazy SessionRecording', () => {
                     expect(shippedSessionIds()).toEqual(new Set([sessionId]))
                 })
 
+                // The Jul 2026 idle-rotation family: an idle tab rotates, the markers for the
+                // rotation land in the new session's empty buffer, and shipping them opens a
+                // recording that bills the customer and plays back as nothing.
+                function rotateToASessionWithNoContent(): void {
+                    const rotateAt = startingTimestamp + sessionManager['_sessionTimeoutMs'] + 1000
+                    jest.setSystemTime(new Date(rotateAt))
+                    sessionIdGeneratorMock.mockImplementation(() => 'rotated-empty-session')
+                    sessionManager.checkAndGetSessionAndWindowId(false, rotateAt)
+                    releaseInteractionHold()
+                    ;(posthog.capture as Mock).mockClear()
+                }
+
+                it.each([
+                    ['idle markers alone never open a recording', 'sessionIdle', 0],
+                    ['session-linking markers still open one, the chain needs them', '$session_ending', 1],
+                ])('%s', (_name, tag, expectedRecordings) => {
+                    rotateToASessionWithNoContent()
+
+                    _emit(createCustomSnapshot({ timestamp: Date.now() }, {}, tag as string))
+                    sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+                    expect(shippedSessionIds().size).toEqual(expectedRecordings)
+                })
+
+                it('drops held markers once they pass the buffer size cap', () => {
+                    rotateToASessionWithNoContent()
+                    const lazy = sessionRecording['_lazyLoadedSessionRecording']
+
+                    _emit(createCustomSnapshot({ timestamp: Date.now() }, {}, 'sessionIdle'))
+                    lazy['_buffer'].size = RECORDING_MAX_EVENT_SIZE + 1
+                    lazy['_flushBuffer']()
+
+                    expect(shippedSessionIds().size).toEqual(0)
+                    expect(lazy['_buffer'].data).toEqual([])
+                })
+
+                it('holds idle markers until content arrives, then ships them with it', () => {
+                    rotateToASessionWithNoContent()
+
+                    _emit(createCustomSnapshot({ timestamp: Date.now() }, {}, 'sessionIdle'))
+                    sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+                    expect(shippedSessionIds().size).toEqual(0)
+
+                    _emit(createFullSnapshot({ timestamp: Date.now() }))
+                    sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+                    const shipped = (posthog.capture as Mock).mock.calls.filter(([name]) => name === '$snapshot')
+                    expect(shipped).toHaveLength(1)
+                    expect((shipped[0][1].$snapshot_data as any[]).map((e) => e.type)).toEqual([
+                        EventType.Custom,
+                        EventType.FullSnapshot,
+                    ])
+                })
+
+                it("a session rotation adopted mid-flush does not ship the new epoch's buffer", () => {
+                    // Production rrweb delivers addCustomEvent synchronously through emit, which is
+                    // what makes rotation adoption re-entrant.
+                    _addCustomEvent.mockImplementation((tag: string, payload: any) => {
+                        _emit({ type: EventType.Custom, data: { tag, payload }, timestamp: Date.now() })
+                    })
+                    try {
+                        const lazy = sessionRecording['_lazyLoadedSessionRecording']!
+                        emitActiveEvent(startingTimestamp + 100)
+                        jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                        ;(posthog.capture as Mock).mockClear()
+
+                        const rotateAt = startingTimestamp + sessionManager['_sessionTimeoutMs'] + 1000
+                        jest.setSystemTime(new Date(rotateAt))
+                        sessionIdGeneratorMock.mockImplementation(() => 'toctou-rotated-session')
+
+                        // The flush consults the session manager after its hold and content checks
+                        // (sampling, minimum duration, status). In production that consultation can
+                        // adopt a pending rotation and re-enter the recorder; inject the same
+                        // re-entry at the same point.
+                        const strategy = lazy['_strategy']!
+                        const originalEnsure = strategy.ensureSamplingDecision.bind(strategy)
+                        jest.spyOn(strategy, 'ensureSamplingDecision').mockImplementation((sid: string) => {
+                            sessionManager.checkAndGetSessionAndWindowId(false, rotateAt)
+                            return originalEnsure(sid)
+                        })
+
+                        lazy['_flushBuffer']()
+
+                        // the re-entrant pass holds the rotation-born epoch; the outer flush, which
+                        // validated the old empty buffer, must not ship the rebound one
+                        const rotatedShips = (posthog.capture as Mock).mock.calls
+                            .filter(([name]) => name === '$snapshot')
+                            .filter(([, props]) => props.$session_id === 'toctou-rotated-session')
+                        expect(rotatedShips).toEqual([])
+                    } finally {
+                        _addCustomEvent.mockReset()
+                    }
+                })
+
+                it('a rotation adopted mid-flush does not get the new buffer cleared or relabeled by the capture path', () => {
+                    _addCustomEvent.mockImplementation((tag: string, payload: any) => {
+                        _emit({ type: EventType.Custom, data: { tag, payload }, timestamp: Date.now() })
+                    })
+                    try {
+                        const lazy = sessionRecording['_lazyLoadedSessionRecording']!
+                        emitActiveEvent(startingTimestamp + 100)
+                        jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                        ;(posthog.capture as Mock).mockClear()
+
+                        const rotateAt = startingTimestamp + sessionManager['_sessionTimeoutMs'] + 1000
+                        jest.setSystemTime(new Date(rotateAt))
+                        sessionIdGeneratorMock.mockImplementation(() => 'toctou-rotated-session')
+                        const strategy = lazy['_strategy']!
+                        const originalEnsure = strategy.ensureSamplingDecision.bind(strategy)
+                        jest.spyOn(strategy, 'ensureSamplingDecision').mockImplementation((sid: string) => {
+                            sessionManager.checkAndGetSessionAndWindowId(false, rotateAt)
+                            return originalEnsure(sid)
+                        })
+
+                        // a lifecycle event targeted at another session forces the capture path to
+                        // flush and then rebind the buffer with the event's pre-rotation target ids
+                        _emit(
+                            createCustomSnapshot(
+                                { timestamp: rotateAt },
+                                { currentSessionId: 'other-session', currentWindowId: 'other-window' },
+                                '$session_ending'
+                            )
+                        )
+
+                        // the rotation-born epoch keeps its own identity: not relabeled with the
+                        // stale target, and nothing shipped under it
+                        expect(lazy['_buffer'].sessionId).not.toEqual('other-session')
+                        const rotatedShips = (posthog.capture as Mock).mock.calls
+                            .filter(([name]) => name === '$snapshot')
+                            .filter(([, props]) => props.$session_id === 'toctou-rotated-session')
+                        expect(rotatedShips).toEqual([])
+                    } finally {
+                        _addCustomEvent.mockReset()
+                    }
+                })
+
                 it('an interaction after many idle rotations ships one session, not the held backlog', () => {
                     runExternalRotations(startingTimestamp, 1)
 
@@ -2926,6 +3100,9 @@ describe('Lazy SessionRecording', () => {
             })
 
             it('does not compress custom events', () => {
+                _emit(createFullSnapshot())
+                sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+                ;(posthog.capture as Mock).mockClear()
                 _emit(createCustomSnapshot(undefined, { tag: 'wat' }))
                 sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
 
@@ -4308,6 +4485,7 @@ describe('Lazy SessionRecording', () => {
                 document.dispatchEvent(new Event('visibilitychange'))
 
                 sessionRecording.startIfEnabledOrStop()
+                sessionRecording.onRRwebEmit(createFullSnapshot({ timestamp: Date.now() }))
                 const snapshot = createCustomSnapshot({ timestamp: Date.now() })
                 sessionRecording.onRRwebEmit(snapshot)
                 ;(posthog.capture as Mock).mockClear()
