@@ -34,7 +34,12 @@ module.exports = {
                 preferFrozenLockfile: false,
                 verifyDepsBeforeRun: true,
                 minimumReleaseAge: 4320,
-                minimumReleaseAgeExclude: ['node-forge@1.3.2', 'dompurify@3.3.2', '@posthog/cli'],
+                minimumReleaseAgeExclude: [
+                    ...(config.minimumReleaseAgeExclude ?? []),
+                    'node-forge@1.3.2',
+                    'dompurify@3.3.2',
+                    '@posthog/cli',
+                ],
                 onlyBuiltDependencies: ['@posthog/cli'],
             })
         },
