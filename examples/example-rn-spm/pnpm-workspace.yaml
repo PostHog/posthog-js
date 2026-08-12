@@ -5,6 +5,7 @@ minimumReleaseAge: 10080
 
 minimumReleaseAgeExclude:
     - '@posthog/core@1.47.0'
+    - '@posthog/core@1.47.1'
     - '@posthog/types@1.403.0'
     - '@react-native/asset-utils@0.87.0'
     - '@react-native/babel-plugin-codegen@0.87.0'
