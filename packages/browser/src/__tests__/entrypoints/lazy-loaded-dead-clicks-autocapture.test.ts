@@ -821,6 +821,19 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             expect(lazyLoadedDeadClicksAutocapture['_clicks'][0].networkRequestDelayMs).toBeUndefined()
         })
 
+        it('ignores third-party telemetry beacons (Sentry, subdomain) so they cannot stand in as a response', () => {
+            const underlying = jest.fn()
+            installOver(underlying)
+            queueClickAt(900)
+
+            jest.setSystemTime(950)
+            // matches the recorder's shared payloadHostDenyList entry '.ingest.sentry.io' by suffix
+            ;(assignableWindow.fetch as (...a: unknown[]) => unknown)('https://o1234.ingest.sentry.io/api/5/envelope/')
+
+            expect(underlying).toHaveBeenCalled()
+            expect(lazyLoadedDeadClicksAutocapture['_clicks'][0].networkRequestDelayMs).toBeUndefined()
+        })
+
         it('still stamps for an app request whose URL merely contains a PostHog host in the query', () => {
             const underlying = jest.fn()
             installOver(underlying)

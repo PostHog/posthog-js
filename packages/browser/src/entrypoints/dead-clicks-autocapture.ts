@@ -14,6 +14,7 @@ import { getNativeMutationObserverImplementation } from '@posthog/browser-common
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { convertToURL } from '@posthog/browser-common/utils/request-utils'
 import { patch } from '../extensions/replay/rrweb-plugins/patch'
+import { THIRD_PARTY_TELEMETRY_HOST_DENY_LIST } from '@posthog/browser-common/utils/network-deny-list'
 
 function asCandidate(event: MouseEvent | TouchEvent, extra: Partial<DeadClickCandidate>): DeadClickCandidate | null {
     const eventTarget = getEventTarget(event)
@@ -106,7 +107,8 @@ function priorLivenessDelay(clickTimestamp: number, lastSeenAt: number | undefin
 //   - focus:      a window focus/blur (a click that opened a new window/popup may only surface as
 //                 the current window losing focus) < LIVENESS_SUPPRESSION_MS on either side
 //   - network:    a fetch request started after the click (async buttons) < NETWORK_REQUEST_SUPPRESSION_MS
-//                 — request start, not completion; PostHog's own requests are excluded. after-click only
+//                 — request start, not completion; after-click only. PostHog's own ingestion and the
+//                 recorder's shared third-party telemetry hosts (analytics/error beacons) are excluded
 // visibility/focus are recorded onto each queued candidate the instant they fire (like scroll), not
 // read from a single shared timestamp when the click is checked. that matters because a click that
 // hides/blurs the tab suspends the ~1s `_checkClicks` timer while hidden; by the time it resumes the
@@ -128,7 +130,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     private _lastFocusChange: number | undefined
     private _restoreFetchPatch: (() => void) | undefined
     private _networkObserverActive = false
-    private _postHogHosts: string[] = []
+    private _excludedHostSuffixes: string[] = []
     private _clicks: DeadClickCandidate[] = []
     private _checkClickTimer: number | undefined
     private _touchStart: { x: number; y: number; timestamp: number } | undefined
@@ -347,13 +349,13 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     // fetch (returns a noop), tags the wrapper, and — via its layer chain — restores cleanly even when
     // another library wrapped fetch on top. A request that starts after a click stamps the queued
     // candidates the instant it fires (like visibility/focus), so a slow response still suppresses and
-    // a later background request can't overwrite the click-correlated one. PostHog's own requests are
-    // skipped so our background traffic can't stand in as a click's response.
+    // a later background request can't overwrite the click-correlated one. PostHog's own requests and
+    // known third-party telemetry beacons are skipped so background traffic can't stand in as a response.
     private _startNetworkObserver() {
         if (this._networkObserverActive) {
             return
         }
-        this._postHogHosts = this._collectPostHogHosts()
+        this._excludedHostSuffixes = this._collectExcludedHostSuffixes()
         const self = this
         this._restoreFetchPatch = patch(
             assignableWindow,
@@ -361,7 +363,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             (originalFetch) =>
                 function (this: unknown, ...args: unknown[]) {
                     try {
-                        if (self._networkObserverActive && !self._isPostHogRequest(args[0])) {
+                        if (self._networkObserverActive && !self._isExcludedRequest(args[0])) {
                             self._recordLivenessSignal(
                                 'networkRequestDelayMs',
                                 Date.now(),
@@ -388,27 +390,34 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         this._networkObserverActive = false
         this._restoreFetchPatch?.()
         this._restoreFetchPatch = undefined
-        this._postHogHosts = []
+        this._excludedHostSuffixes = []
     }
 
-    // the PostHog hosts to skip, resolved once at install time (config is static) so the per-request
-    // check does no DOM-allocating URL parsing for the page's own traffic
-    private _collectPostHogHosts(): string[] {
+    // Host suffixes whose fetches must not count as a click's response, resolved once at install time
+    // (config is static). Two groups: PostHog's own ingestion / config hosts (from the customer's
+    // api_host / ui_host / flags_api_host — these can be reverse-proxied to any domain, so they must
+    // come from config, not a hard-coded list), and the session recorder's shared third-party
+    // telemetry deny list (Sentry, LogRocket, Clarity, GA, Datadog, Segment, Amplitude, Mixpanel,
+    // Hotjar, FullStory, ...) — analytics and error beacons that fire in the background and would
+    // otherwise stand in as the click's response. The shared list is the single source of truth that
+    // session replay's network capture also uses, so adding a vendor there benefits both.
+    private _collectExcludedHostSuffixes(): string[] {
         const config = this.instance.config
-        const hosts: string[] = []
+        const suffixes: string[] = [...THIRD_PARTY_TELEMETRY_HOST_DENY_LIST]
         for (const raw of [config?.api_host, config?.ui_host, config?.flags_api_host]) {
             const host = raw ? convertToURL(raw)?.host : undefined
             if (host) {
-                hosts.push(host.toLowerCase())
+                suffixes.push(host)
             }
         }
-        return hosts
+        return suffixes.map((suffix) => suffix.toLowerCase())
     }
 
-    // best-effort: skip our own ingestion / config traffic. runs on every fetch the page makes, so the
-    // common case (not one of ours) stays allocation-free via a cheap substring pre-check.
-    private _isPostHogRequest(input: unknown): boolean {
-        if (!this._postHogHosts.length) {
+    // best-effort: skip our own ingestion / config traffic and known third-party telemetry beacons.
+    // runs on every fetch the page makes, so the common case (not excluded) stays allocation-free via a
+    // cheap substring pre-check before any URL parse.
+    private _isExcludedRequest(input: unknown): boolean {
+        if (!this._excludedHostSuffixes.length) {
             return false
         }
         let url: string | undefined
@@ -425,14 +434,15 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             return false
         }
         const haystack = url.toLowerCase()
-        // cheap first pass: if none of our hosts even appear as a substring it can't be ours, so we
-        // skip the anchor-element parse entirely — the hot path for the page's own requests
-        if (!this._postHogHosts.some((host) => haystack.indexOf(host) !== -1)) {
+        // cheap first pass: if no excluded suffix even appears as a substring it can't match, so we
+        // skip the anchor-element parse entirely — the hot path for the page's own app requests
+        if (!this._excludedHostSuffixes.some((suffix) => haystack.indexOf(suffix) !== -1)) {
             return false
         }
-        // confirm with a real host parse so our host merely appearing in a path/query doesn't match
-        const requestHost = convertToURL(url)?.host
-        return !!requestHost && this._postHogHosts.indexOf(requestHost.toLowerCase()) !== -1
+        // confirm against the real host so a suffix merely appearing in a path/query doesn't match, and
+        // so subdomains match the way the recorder's deny list does (e.g. o1.ingest.sentry.io)
+        const requestHost = convertToURL(url)?.host?.toLowerCase()
+        return !!requestHost && this._excludedHostSuffixes.some((suffix) => requestHost.endsWith(suffix))
     }
 
     // `capture: true` mirrors the scroll observer so we see gestures on nested scrollable

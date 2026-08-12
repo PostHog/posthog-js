@@ -4,6 +4,7 @@ import { convertToURL } from '@posthog/browser-common/utils/request-utils'
 import { logger } from '@posthog/browser-common/utils/logger'
 import { shouldCaptureValue } from '@posthog/browser-common/utils/autocapture-utils'
 import { each } from '@posthog/browser-common/utils/general-utils'
+import { THIRD_PARTY_TELEMETRY_HOST_DENY_LIST } from '@posthog/browser-common/utils/network-deny-list'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 
@@ -56,31 +57,8 @@ export const defaultNetworkOptions: Required<NetworkRecordOptions> = {
         'resource',
     ],
     payloadSizeLimitBytes: MAX_PAYLOAD_SIZE_BYTES,
-    payloadHostDenyList: [
-        '.lr-ingest.io',
-        '.ingest.sentry.io',
-        '.clarity.ms',
-        // NB no leading dot here
-        // GA4/gtag beacons go to *.google-analytics.com; with Google Signals on they also hit
-        // analytics.google.com (region1.analytics.google.com/g/collect), so deny both
-        'google-analytics.com',
-        'analytics.google.com',
-        // New Relic browser agent (bam + bam-cell)
-        'nr-data.net',
-        // Datadog browser RUM intake
-        'datadoghq.com',
-        'datadoghq.eu',
-        'ddog-gov.com',
-        // other third-party analytics / session-replay vendors whose telemetry has no replay value
-        'segment.io',
-        'rudderstack.com',
-        'amplitude.com',
-        'mixpanel.com',
-        // Hotjar uses both .com and .io for data collection
-        'hotjar.com',
-        'hotjar.io',
-        'fullstory.com',
-    ],
+    // shared with dead-click autocapture; see network-deny-list.ts for the single source of truth
+    payloadHostDenyList: [...THIRD_PARTY_TELEMETRY_HOST_DENY_LIST],
     streamNetworkBody: false,
 }
 
