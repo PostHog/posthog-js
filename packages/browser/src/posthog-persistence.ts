@@ -331,7 +331,7 @@ export class PostHogPersistence {
             } else {
                 delete this.props.$user_id
             }
-            delete this.props[ALIAS_ID_KEY]
+            this._deleteProp(ALIAS_ID_KEY)
         }
         return true
     }
