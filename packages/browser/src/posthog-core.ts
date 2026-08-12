@@ -467,6 +467,7 @@ export class PostHog implements PostHogInterface {
     private readonly _extensions: Extension[] = []
     private readonly _extensionEventPropertyProducers: Array<() => Record<string, unknown>> = []
     private _browserClientAdapter: BrowserClientAdapter | undefined
+    private _featureFlagsReloadingUnsubscribe: (() => void) | undefined
 
     private _replaceExtension<T extends Extension>(oldExt: T | undefined, newExt: T): T {
         if (oldExt) {
@@ -760,6 +761,8 @@ export class PostHog implements PostHogInterface {
             })
         }
 
+        this._enrollFeatureFlags()
+
         // Conditionally defer extension initialization based on config
         if (this.config.__preview_deferred_init_extensions) {
             // EXPERIMENTAL: Defer non-critical extension initialization to next tick
@@ -913,6 +916,29 @@ export class PostHog implements PostHogInterface {
         return this
     }
 
+    private _enrollFeatureFlags(): void {
+        const FeatureFlagsClass =
+            this.config.__extensionClasses?.featureFlags ?? PostHog.__defaultExtensionClasses?.featureFlags
+        if (!FeatureFlagsClass) {
+            return
+        }
+        if (!this.featureFlags || !(this.featureFlags instanceof FeatureFlagsClass)) {
+            this._featureFlagsReloadingUnsubscribe?.()
+            this._featureFlagsReloadingUnsubscribe = undefined
+            this.featureFlags = new FeatureFlagsClass(this)
+        }
+        if (isFunction(this.featureFlags.onReloading) && isFunction(this.featureFlags.setup)) {
+            if (!this._featureFlagsReloadingUnsubscribe) {
+                this._featureFlagsReloadingUnsubscribe = this.featureFlags.onReloading(() => {
+                    this._internalEventEmitter.emit('featureFlagsReloading', true)
+                })
+                void this._getBrowserClientAdapter().add(this.featureFlags)
+            }
+        } else {
+            this.featureFlags.initialize?.()
+        }
+    }
+
     private _initExtensions(startInCookielessMode: boolean): void {
         // we don't support IE11 anymore, so performance.now is safe
         // eslint-disable-next-line compat/compat
@@ -922,9 +948,6 @@ export class PostHog implements PostHogInterface {
 
         // Due to name mangling, we can't easily iterate and assign these extensions
         // The assignment needs to also be mangled. Thus, the loop is unrolled.
-        if (ext.featureFlags) {
-            this._extensions.push((this.featureFlags = this.featureFlags ?? new ext.featureFlags(this)))
-        }
         if (ext.exceptions) {
             this._extensions.push((this.exceptions = this.exceptions ?? new ext.exceptions(this)))
         }
@@ -1402,18 +1425,6 @@ export class PostHog implements PostHogInterface {
             return
         }
 
-        if (this._extensionEventPropertyProducers.length > 0) {
-            const dynamicProperties: Properties = {}
-            for (const producer of this._extensionEventPropertyProducers.slice()) {
-                try {
-                    extend(dynamicProperties, producer() as Properties)
-                } catch (error) {
-                    logger.error('Failed to produce browser extension event properties', error)
-                }
-            }
-            properties = { ...dynamicProperties, ...(properties ?? {}) }
-        }
-
         if (properties?.$current_url && !isString(properties?.$current_url)) {
             logger.error(
                 'Invalid `$current_url` property provided to `posthog.capture`. Input must be a string. Ignoring provided value.'
@@ -1735,8 +1746,22 @@ export class PostHog implements PostHogInterface {
             }
         })
 
+        const dynamicProperties: Properties = {}
+        if (this._extensionEventPropertyProducers.length > 0) {
+            for (const producer of this._extensionEventPropertyProducers.slice()) {
+                try {
+                    extend(dynamicProperties, producer() as Properties)
+                } catch (error) {
+                    logger.error('Failed to produce browser extension event properties', error)
+                }
+            }
+        }
+
         // update properties with pageview info and super-properties
-        properties = extend({}, infoProperties, persistenceProperties, sessionPersistenceProperties, properties)
+        properties = extend({}, infoProperties, persistenceProperties, sessionPersistenceProperties, {
+            ...dynamicProperties,
+            ...properties,
+        })
 
         properties['$is_identified'] = this._isIdentified()
 
@@ -2782,7 +2807,11 @@ export class PostHog implements PostHogInterface {
         // affect flag evaluation; the anonymous/identified state itself is not part of the /flags request.
         if (identityDidChange) {
             this.reloadFeatureFlags()
-            this.unregister(FLAG_CALL_REPORTED)
+            if (this.featureFlags) {
+                this.featureFlags.resetFlagCallReported()
+            } else {
+                this.unregister(FLAG_CALL_REPORTED)
+            }
         } else if (shouldTransitionToIdentified && (userPropertiesToSet || userPropertiesToSetOnce)) {
             this.reloadFeatureFlags()
         }
@@ -3272,7 +3301,11 @@ export class PostHog implements PostHogInterface {
         void this.metrics?.flush('sendBeacon')
         this._requestQueue?.unload()
         this._retryQueue?.unload()
-        this.featureFlags?.destroy()
+        try {
+            this.featureFlags?.destroy()
+        } catch (error) {
+            logger.error('Error while destroying feature flags', error)
+        }
     }
 
     /**
@@ -3532,6 +3565,8 @@ export class PostHog implements PostHogInterface {
                     localStore._is_supported() && localStore._remove('ph_debug')
                 }
             }
+
+            this.featureFlags?.updateConfig?.(this.config, this._shouldDisableFlags())
 
             this.exceptionObserver?.onConfigChange()
             this.exceptions?.onConfigChange()

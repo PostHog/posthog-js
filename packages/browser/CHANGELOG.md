@@ -1,5 +1,53 @@
 # posthog-js
 
+## 1.415.7
+
+### Patch Changes
+
+- [#4318](https://github.com/PostHog/posthog-js/pull/4318) [`847d963`](https://github.com/PostHog/posthog-js/commit/847d9639de3191baec3c52f5e33179a2fcbd5139) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Migrate browser feature flags to the shared extension lifecycle while preserving the public feature flag facade, persistence compatibility, request behavior, and event enrichment.
+  (2026-08-12)
+
+## 1.415.6
+
+### Patch Changes
+
+- [#4500](https://github.com/PostHog/posthog-js/pull/4500) [`d773405`](https://github.com/PostHog/posthog-js/commit/d77340520e3ef4d3f105cf4af248aafd50e2e536) Thanks [@ksvat](https://github.com/ksvat)! - Fix session recording starting from arbitrarily old persisted configs.
+
+    Recording configs persisted by SDK versions before 1.347.2 carry no `cache_timestamp`. The core freshness check treated these undated configs as always fresh, so the recorder started immediately under their settings. A device whose stored config predated a customer's config change kept recording under the old triggers, sample rate, and masking settings indefinitely.
+
+    The core now treats undated persisted configs as stale. Recording waits for a fresh remote config before it starts, the same path every dated config older than one hour already takes. The lazy recorder bundle is unchanged: it still accepts undated configs, because old cores that load the latest bundle cannot recover from a rejected config (INC-749). (2026-08-11)
+
+## 1.415.5
+
+### Patch Changes
+
+- [#4497](https://github.com/PostHog/posthog-js/pull/4497) [`d62e42e`](https://github.com/PostHog/posthog-js/commit/d62e42e64330788191558511adc7dae97a038813) Thanks [@hpouillot](https://github.com/hpouillot)! - Fix a Chrome renderer crash (grey "Aw, Snap" tab) that could occur when closing an in-app survey.
+
+    The survey close path wrapped the survey container's DOM removal in `document.startViewTransition`. Removing the element inside the transition callback left the captured snapshot pointing at a removed node, which on heavy SPAs triggered a Chromium renderer crash and took down the whole tab.
+
+    The close path now only animates a fade-out inside the transition and lets React tear the container down once the transition settles. It also guards against overlapping transitions (a second close while one is animating) and always settles the popup state if the transition is skipped or interrupted, so the survey can never be left visible with a stale reference. (2026-08-11)
+
+## 1.415.4
+
+### Patch Changes
+
+- [#4494](https://github.com/PostHog/posthog-js/pull/4494) [`deb6bb0`](https://github.com/PostHog/posthog-js/commit/deb6bb0cb7c8984262707addbb4bdc8cb4ee5825) Thanks [@marandaneto](https://github.com/marandaneto)! - fix(types): accept current and legacy Segment Analytics SDK types in the Segment integration config
+  (2026-08-11)
+- Updated dependencies [[`deb6bb0`](https://github.com/PostHog/posthog-js/commit/deb6bb0cb7c8984262707addbb4bdc8cb4ee5825)]:
+    - @posthog/types@1.402.3
+
+## 1.415.3
+
+### Patch Changes
+
+- [#4488](https://github.com/PostHog/posthog-js/pull/4488) [`23db844`](https://github.com/PostHog/posthog-js/commit/23db8444c94d3424739b6ff5439c6068c2e68088) Thanks [@TueHaulund](https://github.com/TueHaulund)! - fix(replay): never ship a buffer swapped in by a re-entrant session rotation mid-flush
+  (2026-08-11)
+
+- [#4474](https://github.com/PostHog/posthog-js/pull/4474) [`e06bf52`](https://github.com/PostHog/posthog-js/commit/e06bf52590664882b27dc2d7bbad613f4ccd6422) Thanks [@dependabot](https://github.com/apps/dependabot)! - dependencies updates: - Updated dependency [`dompurify@^3.4.13` ↗︎](https://www.npmjs.com/package/dompurify/v/3.4.13) (from `^3.4.12`, in `dependencies`) (2026-08-11)
+
+- [#4435](https://github.com/PostHog/posthog-js/pull/4435) [`1cbbe6a`](https://github.com/PostHog/posthog-js/commit/1cbbe6aabe13e4dca32aea6eb567a00f05ca7d7b) Thanks [@arnohillen](https://github.com/arnohillen)! - fix(replay): stop dropping adopted stylesheets that arrive before the host's shadow root is attached. When the recorder's full snapshot races a web component's hydration, the AdoptedStyleSheet event can be recorded before the mutation that attaches the host's shadow root. The replayer silently dropped those styles for the rest of the page view, so components styled via `shadowRoot.adoptedStyleSheets` (Stencil, Lit) rendered completely unstyled. The replayer now constructs the stylesheet even when the shadow root does not exist yet and keeps retrying adoption until it is attached.
+  (2026-08-11)
+
 ## 1.415.2
 
 ### Patch Changes
