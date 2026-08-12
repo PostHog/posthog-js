@@ -259,6 +259,24 @@ export const COOKIE_PERSISTED_PROPERTIES = [
 // custom key from a reset snapshot that intentionally omitted it.
 export const COOKIE_PERSISTED_PROPERTIES_MARKER = '$cookie_persisted_properties'
 
+export const getCookiePersistedProperties = (
+    value: Properties,
+    customCookieProperties: readonly string[] = [],
+    preferCookieOnConflict: boolean = false
+): Properties => {
+    const cookiePersistedProperties: Properties = {}
+    if (preferCookieOnConflict && customCookieProperties.length > 0) {
+        cookiePersistedProperties[COOKIE_PERSISTED_PROPERTIES_MARKER] = customCookieProperties
+    }
+    ;[...COOKIE_PERSISTED_PROPERTIES, ...customCookieProperties].forEach((key) => {
+        const persistedValue = value[key]
+        if (!isUndefined(persistedValue) && !isNull(persistedValue) && persistedValue !== '') {
+            cookiePersistedProperties[key] = persistedValue
+        }
+    })
+    return cookiePersistedProperties
+}
+
 /**
  * Creates a localPlusCookieStore instance with custom cookie-persisted properties.
  *
@@ -334,16 +352,11 @@ export const createLocalPlusCookieStore = (
             // it on every later save.
             const stored = localStore._set(name, value, undefined, undefined, debug)
             try {
-                const cookiePersistedProperties: Record<string, any> = {}
-                if (preferCookieOnConflict && customCookieProperties.length > 0) {
-                    cookiePersistedProperties[COOKIE_PERSISTED_PROPERTIES_MARKER] = customCookieProperties
-                }
-                cookiePropertiesToPersist.forEach((key) => {
-                    const persistedValue = value[key]
-                    if (!isUndefined(persistedValue) && !isNull(persistedValue) && persistedValue !== '') {
-                        cookiePersistedProperties[key] = persistedValue
-                    }
-                })
+                const cookiePersistedProperties = getCookiePersistedProperties(
+                    value,
+                    customCookieProperties,
+                    preferCookieOnConflict
+                )
 
                 if (Object.keys(cookiePersistedProperties).length) {
                     cookieStore._set(name, cookiePersistedProperties, days, cross_subdomain, is_secure, debug)

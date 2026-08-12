@@ -6,6 +6,7 @@ import {
     COOKIE_PERSISTED_PROPERTIES_MARKER,
     cookieStore,
     createLocalPlusCookieStore,
+    getCookiePersistedProperties,
     localStore,
     memoryStore,
     sessionStore,
@@ -189,8 +190,23 @@ export class PostHogPersistence {
         return isNumber(value) && value > 0 ? value : 0
     }
 
-    private _rememberCurrentCookieProperties(): void {
+    private _rememberCurrentCookieProperties(props?: Properties): void {
         if (!this._config.cookieWinsOnConflict || this._config.persistence.toLowerCase() !== 'localstorage+cookie') {
+            return
+        }
+        if (props) {
+            // Remember exactly what this write attempted instead of rereading the
+            // shared cookie. A sibling can update the cookie immediately after our
+            // write; recording that later value here would hide an unseen update.
+            try {
+                this._lastSeenCookiePropertiesFingerprint = JSON.stringify(
+                    getCookiePersistedProperties(
+                        props,
+                        this._config.cookie_persisted_properties || [],
+                        this._config.cookieWinsOnConflict
+                    )
+                )
+            } catch {}
             return
         }
         try {
@@ -567,8 +583,9 @@ export class PostHogPersistence {
             return
         }
 
-        this._writeEntry(this._storage, this._name, this.props, MAIN_STORAGE_SLOT)
-        this._rememberCurrentCookieProperties()
+        if (this._writeEntry(this._storage, this._name, this.props, MAIN_STORAGE_SLOT)) {
+            this._rememberCurrentCookieProperties(this.props)
+        }
     }
 
     // Partition `props` by storage group and write each entry independently:
@@ -584,8 +601,9 @@ export class PostHogPersistence {
     // skip a needed rewrite.
     private _writeNowSplit(): void {
         const { main, groups } = this._partitionProps()
-        this._writeEntry(this._storage, this._name, main, MAIN_STORAGE_SLOT)
-        this._rememberCurrentCookieProperties()
+        if (this._writeEntry(this._storage, this._name, main, MAIN_STORAGE_SLOT)) {
+            this._rememberCurrentCookieProperties(main)
+        }
         for (const group of PERSISTENCE_STORAGE_GROUPS) {
             const groupProps = groups[group]
             // Don't materialize an entry just to hold `{}`: skip a group that is
@@ -650,7 +668,7 @@ export class PostHogPersistence {
     // JSON.stringify can throw on BigInt / circular refs. We let the
     // underlying storage layer keep its existing try/catch behaviour
     // (log and drop) by falling through on serialization errors.
-    private _writeEntry(storage: PersistentStore, name: string, props: Properties, slot: StorageSlot): void {
+    private _writeEntry(storage: PersistentStore, name: string, props: Properties, slot: StorageSlot): boolean {
         const state = this._slotWriteState(slot)
         // Fast path for group slots (localStorage-only): when nothing in the
         // group changed since its last successful write, skip the JSON.stringify
@@ -658,7 +676,7 @@ export class PostHogPersistence {
         // it is small, changes on nearly every write, and carries cookie options
         // in its fingerprint, so it always serializes.
         if (slot !== MAIN_STORAGE_SLOT && !state.dirty && !isUndefined(state.fingerprint)) {
-            return
+            return false
         }
 
         let fingerprint: string | undefined
@@ -666,7 +684,7 @@ export class PostHogPersistence {
             fingerprint = this._entryFingerprint(props, slot)
             if (fingerprint === state.fingerprint) {
                 state.dirty = false
-                return
+                return false
             }
         } catch {
             // serialization failed (BigInt / circular ref); fall through to
@@ -690,6 +708,7 @@ export class PostHogPersistence {
             if (!isUndefined(fingerprint)) {
                 state.fingerprint = fingerprint
             }
+            return true
         } else if (this._config.debug) {
             // The durable write did not land (e.g. localStorage quota). The slot
             // stays dirty / un-fingerprinted so the next save retries it; surface
@@ -697,6 +716,7 @@ export class PostHogPersistence {
             // otherwise silently strand the flag cache — is visible.
             logger.warn(`failed to persist storage entry "${name}"; will retry on next save`)
         }
+        return false
     }
 
     // `keepGroupEntries` is set by the cookie-option setters (set_secure /

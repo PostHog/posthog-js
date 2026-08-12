@@ -937,6 +937,31 @@ describe('persistence', () => {
                 expect(cookieStore._parse(persistenceName).distinct_id).toBe('identified-user')
             })
 
+            it('flag on: does not hide a sibling update that lands immediately after a write', () => {
+                document.cookie = encodeCookie({ distinct_id: 'anonymous', $user_state: 'anonymous' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({ distinct_id: 'anonymous', $user_state: 'anonymous' })
+                )
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+                const writeEntry = (lib as any)._writeEntry.bind(lib)
+                const writeSpy = jest.spyOn(lib as any, '_writeEntry').mockImplementation((...args: any[]) => {
+                    const stored = writeEntry(...args)
+                    // Models a sibling write after our storage write but before
+                    // `_rememberCurrentCookieProperties` runs.
+                    document.cookie = encodeCookie({ distinct_id: 'identified-user', $user_state: 'identified' })
+                    return stored
+                })
+
+                lib.register({ local_only_property: 'preserved' })
+                writeSpy.mockRestore()
+
+                expect(lib.syncCookieProperties()).toBe(true)
+                expect(lib.props.distinct_id).toBe('identified-user')
+                expect(lib.props.$user_state).toBe('identified')
+                expect(lib.props.local_only_property).toBe('preserved')
+            })
+
             it('flag on: a live tab adopts a sibling reset before its next capture', () => {
                 document.cookie = encodeCookie({ distinct_id: 'identified-user', $user_state: 'identified' })
                 localStorage.setItem(
