@@ -52,6 +52,10 @@ const LEGACY_RESERVED_PERSISTENCE_KEYS = new Set([
     '$heatmaps_enabled_server_side',
     '$sesid',
     '$enabled_feature_flags',
+    '$active_feature_flags',
+    '$feature_flag_payloads',
+    '$feature_flag_request_id',
+    '$override_feature_flags',
     '$error_tracking_suppression_rules',
     '$user_state',
     '$early_access_features',
@@ -259,110 +263,10 @@ describe('persistence', () => {
             expect(library.props['$referrer']).toBe('https://hedgebox.net/files/abc.png')
         })
 
-        it('extracts enabled feature flags', () => {
-            library.register({
-                $enabled_feature_flags: {
-                    'checkout-redesign': 'compact',
-                    'priority-support': true,
-                    'retired-dashboard': false,
-                },
-            })
-
-            expect(library.props['$enabled_feature_flags']).toEqual({
-                'checkout-redesign': 'compact',
-                'priority-support': true,
-                'retired-dashboard': false,
-            })
-            expect(library.properties()).toEqual({
-                '$feature/checkout-redesign': 'compact',
-                '$feature/priority-support': true,
-                '$feature/retired-dashboard': false,
-            })
-            expect({
-                persisted: library.props['$enabled_feature_flags'],
-                eventProperties: library.properties(),
-            }).toMatchSnapshot()
-        })
-
-        it('skips $feature/ properties when cache is stale and TTL is configured', () => {
-            const config = {
-                ...makePostHogConfig('test', persistenceMode),
-                feature_flag_cache_ttl_ms: 60 * 60 * 1000, // 1 hour TTL
-            }
-            const lib = new PostHogPersistence(config)
-
-            // Set evaluated_at to 2 hours ago (stale)
-            const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000
-            lib.register({
-                $enabled_feature_flags: { flag: 'variant', other: true },
-                $feature_flag_evaluated_at: twoHoursAgo,
-            })
-
-            // Should not include $feature/ properties since cache is stale
-            expect(lib.properties()).toEqual({})
-            lib.clear()
-        })
-
-        it('includes $feature/ properties when cache is fresh', () => {
-            const config = {
-                ...makePostHogConfig('test', persistenceMode),
-                feature_flag_cache_ttl_ms: 60 * 60 * 1000, // 1 hour TTL
-            }
-            const lib = new PostHogPersistence(config)
-
-            // Set evaluated_at to 30 minutes ago (fresh)
-            const thirtyMinutesAgo = Date.now() - 30 * 60 * 1000
-            lib.register({
-                $enabled_feature_flags: { flag: 'variant', other: true },
-                $feature_flag_evaluated_at: thirtyMinutesAgo,
-            })
-
-            // Should include $feature/ properties since cache is fresh
-            expect(lib.properties()).toEqual({
-                '$feature/flag': 'variant',
-                '$feature/other': true,
-            })
-            lib.clear()
-        })
-
-        it('includes $feature/ properties when TTL is not configured', () => {
-            const config = {
-                ...makePostHogConfig('test', persistenceMode),
-                // No feature_flag_cache_ttl_ms set
-            }
-            const lib = new PostHogPersistence(config)
-
-            // Set evaluated_at to a year ago
-            const oneYearAgo = Date.now() - 365 * 24 * 60 * 60 * 1000
-            lib.register({
-                $enabled_feature_flags: { flag: 'variant', other: true },
-                $feature_flag_evaluated_at: oneYearAgo,
-            })
-
-            // Should include $feature/ properties since TTL is not configured
-            expect(lib.properties()).toEqual({
-                '$feature/flag': 'variant',
-                '$feature/other': true,
-            })
-            lib.clear()
-        })
-
-        it('treats non-numeric evaluatedAt as stale when TTL is configured', () => {
-            const config = {
-                ...makePostHogConfig('test', persistenceMode),
-                feature_flag_cache_ttl_ms: 60 * 60 * 1000, // 1 hour TTL
-            }
-            const lib = new PostHogPersistence(config)
-
-            // Set evaluated_at to an ISO string instead of a timestamp
-            lib.register({
-                $enabled_feature_flags: { flag: 'variant' },
-                $feature_flag_evaluated_at: '2025-01-01T00:00:00Z',
-            })
-
-            // Should not include $feature/ properties since evaluatedAt is not a number
-            expect(lib.properties()).toEqual({})
-            lib.clear()
+        it('keeps enabled feature flags out of persistence event properties', () => {
+            library.register({ $enabled_feature_flags: { flag: 'variant', other: true } })
+            expect(library.props['$enabled_feature_flags']).toEqual({ flag: 'variant', other: true })
+            expect(library.properties()).toEqual({})
         })
 
         it('should not return hidden properties()', () => {
@@ -385,13 +289,13 @@ describe('persistence', () => {
             expect(library.properties()).toEqual({})
         })
 
-        it.each([
-            [PERSISTENCE_FEATURE_FLAG_PAYLOADS, { 'flag-a': '{"key":"value"}' }],
-            [SURVEYS_ACTIVATED, ['survey-1']],
-        ])('should include explicitly event-visible SDK property %s in event properties', (key, value) => {
-            library.register({ [key]: value })
-            expect(library.properties()).toEqual({ [key]: value })
-        })
+        it.each([[SURVEYS_ACTIVATED, ['survey-1']]])(
+            'should include explicitly event-visible SDK property %s in event properties',
+            (key, value) => {
+                library.register({ [key]: value })
+                expect(library.properties()).toEqual({ [key]: value })
+            }
+        )
 
         it.each(LEGACY_EVENT_VISIBLE_SDK_PERSISTENCE_KEYS)(
             'keeps legacy event-visible SDK persistence property %s visible in event properties',

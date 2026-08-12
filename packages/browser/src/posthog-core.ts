@@ -72,6 +72,7 @@ import {
     QueuedRequestWithOptions,
     RemoteConfigResult,
     RequestCallback,
+    ResetOptions,
     SessionIdChangedCallback,
     SnippetArrayItem,
     ToolbarParams,
@@ -471,6 +472,7 @@ export class PostHog implements PostHogInterface {
     private readonly _extensions: Extension[] = []
     private readonly _extensionEventPropertyProducers: Array<() => Record<string, unknown>> = []
     private _browserClientAdapter: BrowserClientAdapter | undefined
+    private _featureFlagsReloadingUnsubscribe: (() => void) | undefined
 
     private _replaceExtension<T extends Extension>(oldExt: T | undefined, newExt: T): T {
         if (oldExt) {
@@ -764,6 +766,8 @@ export class PostHog implements PostHogInterface {
             })
         }
 
+        this._enrollFeatureFlags()
+
         // Conditionally defer extension initialization based on config
         if (this.config.__preview_deferred_init_extensions) {
             // EXPERIMENTAL: Defer non-critical extension initialization to next tick
@@ -917,6 +921,29 @@ export class PostHog implements PostHogInterface {
         return this
     }
 
+    private _enrollFeatureFlags(): void {
+        const FeatureFlagsClass =
+            this.config.__extensionClasses?.featureFlags ?? PostHog.__defaultExtensionClasses?.featureFlags
+        if (!FeatureFlagsClass) {
+            return
+        }
+        if (!this.featureFlags || !(this.featureFlags instanceof FeatureFlagsClass)) {
+            this._featureFlagsReloadingUnsubscribe?.()
+            this._featureFlagsReloadingUnsubscribe = undefined
+            this.featureFlags = new FeatureFlagsClass(this)
+        }
+        if (isFunction(this.featureFlags.onReloading) && isFunction(this.featureFlags.setup)) {
+            if (!this._featureFlagsReloadingUnsubscribe) {
+                this._featureFlagsReloadingUnsubscribe = this.featureFlags.onReloading(() => {
+                    this._internalEventEmitter.emit('featureFlagsReloading', true)
+                })
+                void this._getBrowserClientAdapter().add(this.featureFlags)
+            }
+        } else {
+            this.featureFlags.initialize?.()
+        }
+    }
+
     private _initExtensions(startInCookielessMode: boolean): void {
         // we don't support IE11 anymore, so performance.now is safe
         // eslint-disable-next-line compat/compat
@@ -926,9 +953,6 @@ export class PostHog implements PostHogInterface {
 
         // Due to name mangling, we can't easily iterate and assign these extensions
         // The assignment needs to also be mangled. Thus, the loop is unrolled.
-        if (ext.featureFlags) {
-            this._extensions.push((this.featureFlags = this.featureFlags ?? new ext.featureFlags(this)))
-        }
         if (ext.exceptions) {
             this._extensions.push((this.exceptions = this.exceptions ?? new ext.exceptions(this)))
         }
@@ -1406,18 +1430,6 @@ export class PostHog implements PostHogInterface {
             return
         }
 
-        if (this._extensionEventPropertyProducers.length > 0) {
-            const dynamicProperties: Properties = {}
-            for (const producer of this._extensionEventPropertyProducers.slice()) {
-                try {
-                    extend(dynamicProperties, producer() as Properties)
-                } catch (error) {
-                    logger.error('Failed to produce browser extension event properties', error)
-                }
-            }
-            properties = { ...dynamicProperties, ...(properties ?? {}) }
-        }
-
         if (properties?.$current_url && !isString(properties?.$current_url)) {
             logger.error(
                 'Invalid `$current_url` property provided to `posthog.capture`. Input must be a string. Ignoring provided value.'
@@ -1752,8 +1764,22 @@ export class PostHog implements PostHogInterface {
             }
         })
 
+        const dynamicProperties: Properties = {}
+        if (this._extensionEventPropertyProducers.length > 0) {
+            for (const producer of this._extensionEventPropertyProducers.slice()) {
+                try {
+                    extend(dynamicProperties, producer() as Properties)
+                } catch (error) {
+                    logger.error('Failed to produce browser extension event properties', error)
+                }
+            }
+        }
+
         // update properties with pageview info and super-properties
-        properties = extend({}, infoProperties, persistenceProperties, sessionPersistenceProperties, properties)
+        properties = extend({}, infoProperties, persistenceProperties, sessionPersistenceProperties, {
+            ...dynamicProperties,
+            ...properties,
+        })
 
         properties['$is_identified'] = this._isIdentified()
 
@@ -2813,7 +2839,11 @@ export class PostHog implements PostHogInterface {
             // affect flag evaluation; the anonymous/identified state itself is not part of the /flags request.
             if (identityDidChange) {
                 this.reloadFeatureFlags()
-                this.unregister(FLAG_CALL_REPORTED)
+                if (this.featureFlags) {
+                    this.featureFlags.resetFlagCallReported()
+                } else {
+                    this.unregister(FLAG_CALL_REPORTED)
+                }
             } else if (shouldTransitionToIdentified && (userPropertiesToSet || userPropertiesToSetOnce)) {
                 this.reloadFeatureFlags()
             }
@@ -3165,6 +3195,18 @@ export class PostHog implements PostHogInterface {
      *
      * @example
      * ```js
+     * // reset with a custom anonymous ID and bootstrapped feature flags
+     * posthog.reset({
+     *     bootstrap: {
+     *         distinctID: myAnonymousID,
+     *         isIdentifiedID: false,
+     *         featureFlags: { 'my-flag': true },
+     *     }
+     * })
+     * ```
+     *
+     * @example
+     * ```js
      * // with opt_out_capturing_by_default, reset() before opting in, never after
      * posthog.reset()
      * posthog.opt_in_capturing()
@@ -3172,17 +3214,27 @@ export class PostHog implements PostHogInterface {
      *
      * @public
      *
-     * @param {boolean} [reset_device_id] Whether to generate a new device ID as well as a new distinct ID.
+     * @param options Boolean to reset the device ID (legacy), or reset options including bootstrap values.
      */
-    reset(reset_device_id?: boolean): void {
-        this._reset(reset_device_id)
+    reset(options?: boolean | ResetOptions): void {
+        const reset_device_id = isBoolean(options) ? options : options?.resetDeviceID
+        const bootstrap = isBoolean(options) ? undefined : options?.bootstrap
+        this._reset(reset_device_id, false, bootstrap)
     }
 
-    private _reset(reset_device_id?: boolean, isConsentTransition = false): void {
+    private _reset(
+        reset_device_id?: boolean,
+        isConsentTransition = false,
+        bootstrap?: ResetOptions['bootstrap']
+    ): void {
         logger.info('reset')
         if (!this.__loaded) {
             return logger.uninitializedWarning('posthog.reset')
         }
+        const bootstrapSessionID = bootstrap?.sessionID
+        this.config.bootstrap = bootstrap || this._originalUserConfig?.bootstrap || {}
+        this.featureFlags?.updateConfig?.(this.config, this._shouldDisableFlags())
+
         const device_id = this.get_property(DEVICE_ID)
         // $device_model describes the physical device, not the user, so preserve it across reset()
         // the same way $device_id is — it is only ever re-resolved at init.
@@ -3257,17 +3309,40 @@ export class PostHog implements PostHogInterface {
             1
         )
 
+        if (bootstrap) {
+            // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
+            // eslint-disable-next-line posthog-js/no-direct-undefined-check
+            if (bootstrap.distinctID !== undefined && !this._inCookielessMode()) {
+                this.persistence?.set_property(
+                    USER_STATE,
+                    bootstrap.isIdentifiedID ? USER_STATE_IDENTIFIED : USER_STATE_ANONYMOUS
+                )
+                this.register({ distinct_id: bootstrap.distinctID })
+            }
+
+            this.featureFlags?.initialize()
+
+            if (
+                !isUndefined(bootstrapSessionID) &&
+                !this.sessionManager?.setBootstrapSessionId(bootstrapSessionID, true)
+            ) {
+                const bootstrapWithoutSessionID = { ...bootstrap }
+                delete bootstrapWithoutSessionID.sessionID
+                this.config.bootstrap = bootstrapWithoutSessionID
+            }
+        }
+
         // Clear HMAC identity verification fields
         delete this.config.identity_distinct_id
         delete this.config.identity_hash
 
         if (cookieSyncSuppressionStarted) {
-            // Publish the new anonymous identity as one complete cookie before
-            // another sibling tab can resurrect the pre-reset state.
+            // Publish the reset identity as one complete cookie before another
+            // sibling tab can resurrect the pre-reset state.
             this.persistence?._endCookieSyncSuppression?.()
         }
 
-        // Reload feature flags for the new anonymous user, just like identify()
+        // Reload feature flags for the reset user, just like identify()
         // does when the distinct_id changes.
         this.reloadFeatureFlags()
     }
@@ -3315,7 +3390,11 @@ export class PostHog implements PostHogInterface {
         void this.metrics?.flush('sendBeacon')
         this._requestQueue?.unload()
         this._retryQueue?.unload()
-        this.featureFlags?.destroy()
+        try {
+            this.featureFlags?.destroy()
+        } catch (error) {
+            logger.error('Error while destroying feature flags', error)
+        }
     }
 
     /**
@@ -3575,6 +3654,8 @@ export class PostHog implements PostHogInterface {
                     localStore._is_supported() && localStore._remove('ph_debug')
                 }
             }
+
+            this.featureFlags?.updateConfig?.(this.config, this._shouldDisableFlags())
 
             this.exceptionObserver?.onConfigChange()
             this.exceptions?.onConfigChange()

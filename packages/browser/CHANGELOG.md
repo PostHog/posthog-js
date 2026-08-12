@@ -1,5 +1,32 @@
 # posthog-js
 
+## 1.415.7
+
+### Patch Changes
+
+- [#4318](https://github.com/PostHog/posthog-js/pull/4318) [`847d963`](https://github.com/PostHog/posthog-js/commit/847d9639de3191baec3c52f5e33179a2fcbd5139) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Migrate browser feature flags to the shared extension lifecycle while preserving the public feature flag facade, persistence compatibility, request behavior, and event enrichment.
+  (2026-08-12)
+
+## 1.415.6
+
+### Patch Changes
+
+- [#4500](https://github.com/PostHog/posthog-js/pull/4500) [`d773405`](https://github.com/PostHog/posthog-js/commit/d77340520e3ef4d3f105cf4af248aafd50e2e536) Thanks [@ksvat](https://github.com/ksvat)! - Fix session recording starting from arbitrarily old persisted configs.
+
+    Recording configs persisted by SDK versions before 1.347.2 carry no `cache_timestamp`. The core freshness check treated these undated configs as always fresh, so the recorder started immediately under their settings. A device whose stored config predated a customer's config change kept recording under the old triggers, sample rate, and masking settings indefinitely.
+
+    The core now treats undated persisted configs as stale. Recording waits for a fresh remote config before it starts, the same path every dated config older than one hour already takes. The lazy recorder bundle is unchanged: it still accepts undated configs, because old cores that load the latest bundle cannot recover from a rejected config (INC-749). (2026-08-11)
+
+## 1.415.5
+
+### Patch Changes
+
+- [#4497](https://github.com/PostHog/posthog-js/pull/4497) [`d62e42e`](https://github.com/PostHog/posthog-js/commit/d62e42e64330788191558511adc7dae97a038813) Thanks [@hpouillot](https://github.com/hpouillot)! - Fix a Chrome renderer crash (grey "Aw, Snap" tab) that could occur when closing an in-app survey.
+
+    The survey close path wrapped the survey container's DOM removal in `document.startViewTransition`. Removing the element inside the transition callback left the captured snapshot pointing at a removed node, which on heavy SPAs triggered a Chromium renderer crash and took down the whole tab.
+
+    The close path now only animates a fade-out inside the transition and lets React tear the container down once the transition settles. It also guards against overlapping transitions (a second close while one is animating) and always settles the popup state if the transition is skipped or interrupted, so the survey can never be left visible with a stale reference. (2026-08-11)
+
 ## 1.415.4
 
 ### Patch Changes
