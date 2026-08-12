@@ -345,8 +345,10 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                 originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: 900,
             })
-            // visibility changed 99ms after the click, within the threshold, so the click did something
-            lazyLoadedDeadClicksAutocapture['_lastVisibilityChange'] = 999
+            // the visibilitychange fires 99ms after the click and is stamped onto the queued
+            // candidate the moment it fires, so the click is treated as having done something
+            jest.setSystemTime(999)
+            lazyLoadedDeadClicksAutocapture['_onVisibilityChange']()
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
@@ -355,14 +357,14 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         })
 
         it('click ~800ms after the tab becomes visible is suppressed as a wake-up click', () => {
-            lazyLoadedDeadClicksAutocapture['_clicks'].push({
-                node: document.body,
-                originalEvent: { type: 'click' } as MouseEvent,
-                timestamp: 1000,
-            })
-            // the user tabbed back and, 800ms later, clicked the body to focus the page; that click
-            // does nothing but is not dead — and the gap is wider than the old 100ms window allowed
-            lazyLoadedDeadClicksAutocapture['_lastVisibilityChange'] = 200
+            // the tab becomes visible at t=200; 800ms later the user clicks the body to focus the
+            // page. that click does nothing but is not dead, and the gap is wider than the old 100ms
+            // window allowed — the before-the-click direction is recorded when the candidate is queued
+            jest.setSystemTime(200)
+            lazyLoadedDeadClicksAutocapture['_onVisibilityChange']()
+
+            jest.setSystemTime(1000)
+            triggerMouseEvent(document.body, 'click')
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
@@ -371,47 +373,74 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         })
 
         it('a stale visibility change well before the click is ignored, so the click keeps waiting', () => {
-            lazyLoadedDeadClicksAutocapture['_clicks'].push({
-                node: document.body,
-                originalEvent: { type: 'click' } as MouseEvent,
-                timestamp: 2000,
-            })
-            // a visibility change 1500ms before the click is outside the wake-up window, so it neither
-            // suppresses the click nor (unlike before) marks it dead
-            lazyLoadedDeadClicksAutocapture['_lastVisibilityChange'] = 500
+            // a visibility change 1500ms before the click is outside the wake-up window, so the
+            // candidate records no visibility delay and the change neither suppresses nor marks it dead
+            jest.setSystemTime(500)
+            lazyLoadedDeadClicksAutocapture['_onVisibilityChange']()
+
+            jest.setSystemTime(2000)
+            triggerMouseEvent(document.body, 'click')
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
             // the stale change decides nothing: the click stays queued until another signal or the
-            // absolute timeout resolves it
+            // absolute timeout resolves it, and carries no misleading visibility delay
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
-            expect(lazyLoadedDeadClicksAutocapture['_clicks'][0].visibilityChangedDelayMs).toBe(1500)
+            expect(lazyLoadedDeadClicksAutocapture['_clicks'][0].visibilityChangedDelayMs).toBeUndefined()
             expect(fakeInstance.capture).not.toHaveBeenCalled()
         })
 
-        it('a stale visibility change from before the click does not mark the click dead', () => {
+        it('a stale shared visibility timestamp from before the click does not mark the click dead', () => {
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
                 node: document.body,
                 originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: -3000,
             })
-            // the tab was backgrounded long before this click; the old code turned that large gap into
-            // a spurious multi-second "response" and flagged the click as dead via the visibility branch
+            // the tab was backgrounded long before this click. the old code read this shared timestamp
+            // at check time and turned the large gap into a spurious multi-second "response", flagging
+            // the click as dead via the visibility branch. the check no longer reads it, so the
+            // candidate has no in-window visibility signal
             lazyLoadedDeadClicksAutocapture['_lastVisibilityChange'] = -5000
 
+            jest.setSystemTime(1000)
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
             // it is still captured (via the absolute timeout), but the visibility branch never marks
-            // a click dead, so its timeout stays false regardless of how large the delay is
+            // a click dead and it carries no misleading visibility delay
             expect(fakeInstance.capture).toHaveBeenCalledWith(
                 '$dead_click',
                 expect.objectContaining({
                     $dead_click_absolute_timeout: true,
                     $dead_click_visibility_changed_timeout: false,
-                    $dead_click_visibility_changed_delay_ms: 2000,
+                    $dead_click_visibility_changed_delay_ms: undefined,
                 }),
                 { timestamp: new Date(-3000) }
             )
+        })
+
+        it('click that hides the tab is suppressed even when the tab returns long after (delayed hide→show)', () => {
+            // the click opens a new tab at t=1000 and the tab is hidden ~1ms later. `_checkClicks` is
+            // suspended while the tab is backgrounded; the user returns 10s later, firing a second
+            // visibilitychange. because the click-correlated hide was stamped onto the candidate when
+            // it fired, the later show cannot overwrite it — so the click is correctly suppressed
+            // rather than flagged dead by the absolute timeout. this is the regression the single
+            // shared `_lastVisibilityChange` timestamp used to cause.
+            lazyLoadedDeadClicksAutocapture['_clicks'].push({
+                node: document.body,
+                originalEvent: { type: 'click' } as MouseEvent,
+                timestamp: 1000,
+            })
+
+            jest.setSystemTime(1001)
+            lazyLoadedDeadClicksAutocapture['_onVisibilityChange']()
+
+            jest.setSystemTime(11000)
+            lazyLoadedDeadClicksAutocapture['_onVisibilityChange']()
+
+            lazyLoadedDeadClicksAutocapture['_checkClicks']()
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
         })
 
         it('click that opens a new window (window loses focus shortly after) is suppressed, not a dead click', () => {
@@ -421,8 +450,31 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                 timestamp: 900,
             })
             // the click opened a new window/popup: the tab stays visible, so the only trace is the
-            // current window losing focus ~50ms later — evidence the click did something
-            lazyLoadedDeadClicksAutocapture['_lastFocusChange'] = 950
+            // current window losing focus ~50ms later, stamped onto the candidate as the blur fires
+            jest.setSystemTime(950)
+            lazyLoadedDeadClicksAutocapture['_onFocusChange']()
+
+            lazyLoadedDeadClicksAutocapture['_checkClicks']()
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
+
+        it('click that opens a new window is suppressed even when focus returns long after (delayed blur→focus)', () => {
+            // same regression as the delayed hide→show case, for window focus/blur: the click blurs
+            // the window at ~1ms, focus returns 10s later, and the click-correlated blur must not be
+            // overwritten by the later focus
+            lazyLoadedDeadClicksAutocapture['_clicks'].push({
+                node: document.body,
+                originalEvent: { type: 'click' } as MouseEvent,
+                timestamp: 1000,
+            })
+
+            jest.setSystemTime(1001)
+            lazyLoadedDeadClicksAutocapture['_onFocusChange']()
+
+            jest.setSystemTime(11000)
+            lazyLoadedDeadClicksAutocapture['_onFocusChange']()
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
@@ -431,17 +483,17 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         })
 
         it('a stale focus change well before the click does not suppress or mark it dead', () => {
-            lazyLoadedDeadClicksAutocapture['_clicks'].push({
-                node: document.body,
-                originalEvent: { type: 'click' } as MouseEvent,
-                timestamp: 2000,
-            })
-            // a window focus/blur 1500ms before the click is outside the window, so it is ignored
-            lazyLoadedDeadClicksAutocapture['_lastFocusChange'] = 500
+            // a window focus/blur 1500ms before the click is outside the window, so it records no delay
+            jest.setSystemTime(500)
+            lazyLoadedDeadClicksAutocapture['_onFocusChange']()
+
+            jest.setSystemTime(2000)
+            triggerMouseEvent(document.body, 'click')
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
+            expect(lazyLoadedDeadClicksAutocapture['_clicks'][0].focusChangedDelayMs).toBeUndefined()
             expect(fakeInstance.capture).not.toHaveBeenCalled()
         })
 

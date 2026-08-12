@@ -58,9 +58,17 @@ function checkTimeout(value: number | undefined, thresholdMs: number) {
     return isNumber(value) && value >= thresholdMs
 }
 
-// absolute delay between a click and a `lastSeenAt` timestamp, either side of the click
-function absDelay(clickTimestamp: number, lastSeenAt: number | undefined): number | undefined {
-    return lastSeenAt ? Math.abs(clickTimestamp - lastSeenAt) : undefined
+// a liveness signal (visibility/focus) that fired shortly BEFORE the click — the click that woke
+// or refocused the tab. read once when the candidate is queued; only a change inside the
+// suppression window counts, so a long-ago transition can neither suppress the click nor (as it
+// once wrongly did) mark it dead. the AFTER-the-click direction is recorded separately, as the
+// event fires, by `_recordLivenessSignal`.
+function priorLivenessDelay(clickTimestamp: number, lastSeenAt: number | undefined): number | undefined {
+    if (!lastSeenAt) {
+        return undefined
+    }
+    const delay = clickTimestamp - lastSeenAt
+    return delay >= 0 && delay < LIVENESS_SUPPRESSION_MS ? delay : undefined
 }
 
 // How dead-click detection works
@@ -85,9 +93,14 @@ function absDelay(clickTimestamp: number, lastSeenAt: number | undefined): numbe
 //   - selection:  a selectionchange        < selection_change_threshold_ms (default 100)
 //   - visibility: a visibilitychange (either direction — the tab going hidden because the click
 //                 opened a new tab, or becoming visible as the click woke/focused it)
-//                 < LIVENESS_SUPPRESSION_MS, measured either side of the click
+//                 < LIVENESS_SUPPRESSION_MS on either side of the click
 //   - focus:      a window focus/blur (a click that opened a new window/popup may only surface as
-//                 the current window losing focus) < LIVENESS_SUPPRESSION_MS, either side
+//                 the current window losing focus) < LIVENESS_SUPPRESSION_MS on either side
+// visibility/focus are recorded onto each queued candidate the instant they fire (like scroll), not
+// read from a single shared timestamp when the click is checked. that matters because a click that
+// hides/blurs the tab suspends the ~1s `_checkClicks` timer while hidden; by the time it resumes the
+// tab has usually come back, and a shared timestamp would have been overwritten by that later
+// transition, losing the click-correlated one and misjudging the click as dead.
 //
 // Timeout signals (a click with no liveness signal is dead if any one fired). Note visibility and
 // focus are deliberately absent here — they are liveness-only and never mark a click dead:
@@ -211,9 +224,18 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     private _onClick = (event: Event): void => {
         const click = asCandidate(event as MouseEvent, { type: 'click' })
         if (!isNull(click) && !this._ignore(click)) {
-            this._clicks.push(click)
+            this._queueCandidate(click)
         }
         this._scheduleCheck()
+    }
+
+    // queue a candidate, first recording any liveness signal that fired just BEFORE the click (the
+    // click that woke/refocused the tab). the AFTER-the-click direction is stamped later, as the
+    // event fires, by `_recordLivenessSignal`.
+    private _queueCandidate(candidate: DeadClickCandidate): void {
+        candidate.visibilityChangedDelayMs = priorLivenessDelay(candidate.timestamp, this._lastVisibilityChange)
+        candidate.focusChangedDelayMs = priorLivenessDelay(candidate.timestamp, this._lastFocusChange)
+        this._clicks.push(candidate)
     }
 
     private _scheduleCheck() {
@@ -265,8 +287,11 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
 
     private _onVisibilityChange = (): void => {
         // record both directions: a tab going _hidden_ right after a click (the click opened a new
-        // tab) is as much a liveness signal as it becoming visible (the click that woke the tab)
-        this._lastVisibilityChange = Date.now()
+        // tab) is as much a liveness signal as it becoming visible (the click that woke the tab).
+        // stamp queued candidates now, before a hidden tab can suspend `_checkClicks`.
+        const firedAt = Date.now()
+        this._lastVisibilityChange = firedAt
+        this._recordLivenessSignal('visibilityChangedDelayMs', firedAt)
     }
 
     // a click that opens a new window/popup may leave the current tab visible, so its only trace is
@@ -278,7 +303,23 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     }
 
     private _onFocusChange = (): void => {
-        this._lastFocusChange = Date.now()
+        const firedAt = Date.now()
+        this._lastFocusChange = firedAt
+        this._recordLivenessSignal('focusChangedDelayMs', firedAt)
+    }
+
+    // stamp each queued candidate with how long AFTER its click this liveness signal fired, the
+    // moment the event arrives. recording it immediately — rather than reading a single shared
+    // timestamp when `_checkClicks` finally runs — is what makes it robust: a hidden tab suspends
+    // `_checkClicks`, and by the time it resumes a later transition (the tab coming back) would have
+    // overwritten the click-correlated one. keeps the closest transition, only within the window.
+    private _recordLivenessSignal(field: 'visibilityChangedDelayMs' | 'focusChangedDelayMs', firedAt: number): void {
+        this._clicks.forEach((click) => {
+            const delay = firedAt - click.timestamp
+            if (delay >= 0 && delay < LIVENESS_SUPPRESSION_MS && (isUndefined(click[field]) || delay < click[field]!)) {
+                click[field] = delay
+            }
+        })
     }
 
     // `capture: true` mirrors the scroll observer so we see gestures on nested scrollable
@@ -356,7 +397,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             swipeDistancePx: Math.round(Math.sqrt(distanceSq)),
         })
         if (!isNull(swipe) && !this._ignore(swipe)) {
-            this._clicks.push(swipe)
+            this._queueCandidate(swipe)
         }
         this._scheduleCheck()
     }
@@ -447,16 +488,11 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                 this._lastSelectionChanged && click.timestamp <= this._lastSelectionChanged
                     ? this._lastSelectionChanged - click.timestamp
                     : undefined
-            // how close the click is to a visibility change, on either side. a tab going to/from
-            // hidden near a click — the click that opened a new tab, or the click that woke/focused
-            // the tab — is a liveness signal, so this exists solely to _suppress_ a dead click, never
-            // to cause one. that's why (unlike mutation/selection) it feeds no timeout branch: the old
-            // Math.abs-vs-stale-change comparison read a tab backgrounded long ago as a multi-second
-            // reply and flagged every later click in the session as dead.
-            click.visibilityChangedDelayMs = absDelay(click.timestamp, this._lastVisibilityChange)
-            // same idea for window focus/blur: a click that opens a new window/popup may leave the tab
-            // visible, so the only trace is the current window losing focus. also suppress-only.
-            click.focusChangedDelayMs = absDelay(click.timestamp, this._lastFocusChange)
+            // visibilityChangedDelayMs / focusChangedDelayMs are already recorded on the candidate as
+            // the events fire (see `_queueCandidate` for the before-the-click direction and
+            // `_recordLivenessSignal` for after) — nothing to compute here. both are liveness-only: a
+            // tab/window transition near a click is evidence the click did something, so they only
+            // ever _suppress_ a dead click and (unlike mutation/selection) feed no timeout branch.
 
             const scrollTimeout = checkTimeout(click.scrollDelayMs, this._config.scroll_threshold_ms)
             const selectionChangedTimeout = checkTimeout(
