@@ -298,6 +298,101 @@ test.describe('Session recording - idle timeout behavior', () => {
     })
 })
 
+test.describe('Session recording - recording idle (activity timeout) within one session', () => {
+    // recording idle is the 5-minute activity pause _within_ a session (custom events
+    // sessionIdle / sessionNoLongerIdle), not the 30-minute session rotation above
+    const idleStartOptions = {
+        ...startOptions,
+        options: {
+            session_recording: {
+                compress_events: false,
+                // very short so the test can cross the idle threshold quickly
+                session_idle_threshold_ms: 600,
+            },
+        },
+    }
+
+    test.beforeEach(async ({ page, context }) => {
+        await page.waitingForNetworkCausedBy({
+            urlPatternsToWaitFor: ['**/*recorder.js*'],
+            action: async () => {
+                await start(idleStartOptions, page, context)
+            },
+        })
+        await waitForSessionRecordingToStart(page)
+        await page.resetCapturedEvents()
+    })
+
+    test('takes a full snapshot on wake when the DOM mutated while recording was idle', async ({ page }) => {
+        // establish user activity, then stay quiet past the idle threshold
+        await page.locator('[data-cy-input]').type('pre idle activity')
+        await page.waitForTimeout(800)
+
+        // a non-interactive DOM mutation after the threshold sends the recorder idle;
+        // rrweb observes it but the recorder drops it, so the player's mirror goes stale
+        await page.evaluate(() => {
+            const el = document.createElement('div')
+            el.id = 'created-while-going-idle'
+            el.textContent = 'swapped in while idle'
+            document.body.appendChild(el)
+        })
+        await page.waitForTimeout(200)
+
+        // keep mutating while idle - all of this is invisible to the event stream
+        await page.evaluate(() => {
+            document.getElementById('created-while-going-idle')?.remove()
+            const el = document.createElement('div')
+            el.id = 'swapped-while-idle'
+            el.textContent = 'replacement subtree'
+            document.body.appendChild(el)
+        })
+        await page.waitForTimeout(200)
+
+        // user returns: recording must re-sync the player with a fresh full snapshot
+        await page.waitingForNetworkCausedBy({
+            urlPatternsToWaitFor: ['**/ses/*'],
+            action: async () => {
+                await page.locator('[data-cy-input]').type('back from idle')
+            },
+        })
+        // let the post-wake buffer flush ship everything
+        await page.waitForTimeout(2500)
+
+        const capturedEvents = await page.capturedEvents()
+        const snapshotData = capturedEvents
+            .filter((e) => e.event === '$snapshot')
+            .flatMap((e) => e['properties']['$snapshot_data'] as any[])
+
+        const tags = snapshotData.map((s) => ({ type: s.type, tag: s.data?.tag ?? null }))
+        const idleIndex = tags.findIndex((s) => s.tag === 'sessionIdle')
+        const wakeIndex = tags.findIndex((s) => s.tag === 'sessionNoLongerIdle')
+        expect(idleIndex, `expected a sessionIdle event in ${JSON.stringify(tags)}`).toBeGreaterThan(-1)
+        expect(wakeIndex, `expected a sessionNoLongerIdle event in ${JSON.stringify(tags)}`).toBeGreaterThan(idleIndex)
+
+        const afterWake = tags.slice(wakeIndex + 1)
+        const fullSnapshotAfterWake = afterWake.findIndex((s) => s.type === 2)
+        const incrementalAfterWake = afterWake.findIndex((s) => s.type === 3)
+        // the mirror-healing full snapshot must exist, and must come before any
+        // post-wake incremental, or the player applies mutations to a stale tree
+        expect(fullSnapshotAfterWake, `expected a full snapshot after wake in ${JSON.stringify(afterWake)}`).toBeGreaterThan(-1)
+        expect(fullSnapshotAfterWake).toBeLessThan(incrementalAfterWake)
+
+        // the mutations that happened while idle are not in the event stream (they were
+        // dropped) - the full snapshot is the only record of them
+        const idleEraMutations = snapshotData.filter(
+            (s) =>
+                s.type === 3 &&
+                s.data?.source === 0 &&
+                JSON.stringify(s.data).includes('created-while-going-idle')
+        )
+        expect(idleEraMutations).toEqual([])
+        // but the wake full snapshot carries the post-idle DOM state
+        const fullSnapshots = snapshotData.filter((s) => s.type === 2)
+        const wakeSnapshot = fullSnapshots[fullSnapshots.length - 1]
+        expect(JSON.stringify(wakeSnapshot.data)).toContain('swapped-while-idle')
+    })
+})
+
 test.describe('Session recording - idle timeout with sampling', () => {
     test.beforeEach(async ({ page, context }) => {
         await page.waitingForNetworkCausedBy({

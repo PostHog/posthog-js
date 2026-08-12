@@ -485,6 +485,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
      */
     private _queuedRRWebEvents: QueuedRRWebEvent[] = []
     private _isIdle: boolean | 'unknown' = 'unknown'
+    // mutations rrweb observed while confirmed idle are dropped, not buffered, so the
+    // player's mirror no longer matches the live DOM; when > 0 only a fresh full
+    // snapshot on wake stops later incrementals referencing nodes the player never saw
+    private _mutationsDroppedWhileIdle = 0
     // true while the current epoch has had no user interaction; a held epoch is
     // discarded (not shipped) by stop or a subsequent rotation
     private _holdFlushUntilInteraction = false
@@ -1770,6 +1774,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // When in an idle state we keep recording but don't capture the events,
         // we don't want to return early if idle is 'unknown'
         if (this._isIdle === true && !isAllowedWhenIdle(event)) {
+            if (event.type === EventType.IncrementalSnapshot && event.data.source === IncrementalSource.Mutation) {
+                this._mutationsDroppedWhileIdle++
+            }
             return
         }
 
@@ -2227,6 +2234,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 // or else we get multiple idle events
                 // if there are lots of non-user activity events being emitted
                 this._isIdle = true
+                this._mutationsDroppedWhileIdle = 0
 
                 // don't take full snapshots while idle
                 clearInterval(this._fullSnapshotTimer)
@@ -2298,6 +2306,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 this._releaseHoldAndFlush()
             }
             if (returningFromIdle) {
+                if (this._mutationsDroppedWhileIdle > 0) {
+                    this._mutationsDroppedWhileIdle = 0
+                    this._tryTakeFullSnapshot()
+                }
                 this._scheduleFullSnapshot()
             }
         }

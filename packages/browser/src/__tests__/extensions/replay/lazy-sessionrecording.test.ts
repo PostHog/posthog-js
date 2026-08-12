@@ -1373,17 +1373,68 @@ describe('Lazy SessionRecording', () => {
 
                 // the fourth snapshot should not trigger a flush because the session id has not changed...
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
-                    // as we return from idle we will capture a full snapshot _before_ the fourth snapshot
-                    data: [fourthSnapshot],
-                    sizes: [68],
+                    // the mutation that triggered idle was dropped, so returning from idle
+                    // captures a full snapshot _before_ the fourth snapshot to re-sync the player
+                    data: [createFullSnapshot(), fourthSnapshot],
+                    sizes: [20, 68],
                     sessionId: firstSessionId,
-                    size: 68,
+                    size: 88,
                     windowId: expect.any(String),
                 })
 
                 // because not enough time passed while idle we still have the same session id at the end of this sequence
                 const endingSessionId = sessionRecording['_lazyLoadedSessionRecording']['_sessionId']
                 expect(endingSessionId).toEqual(firstSessionId)
+            })
+
+            it('takes a full snapshot on return from idle when mutations were dropped while idle', () => {
+                const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock
+
+                emitActiveEvent(startingTimestamp + 100)
+                // flush so the buffer only holds what the idle cycle produces
+                sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+                // a non-interactive mutation past the threshold declares idle and is dropped
+                emitInactiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000, true)
+                takeFullSnapshot.mockClear()
+
+                // the DOM keeps mutating while idle; rrweb observes it but the recorder drops it
+                _emit({
+                    ...createIncrementalMutationEvent(),
+                    timestamp: startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 2000,
+                })
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual(true)
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([])
+
+                // user returns: the player's mirror is stale, so we must re-sync it
+                const wakeEvent = emitActiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 3000)
+
+                expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
+                // the full snapshot is buffered before the wake event, so the replayed
+                // stream never applies post-idle incrementals to a pre-idle tree
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([
+                    createFullSnapshot(),
+                    wakeEvent,
+                ])
+            })
+
+            it('does not take an immediate full snapshot on return from idle when no mutations were dropped', () => {
+                const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock
+
+                emitActiveEvent(startingTimestamp + 100)
+
+                // a plugin event past the threshold declares idle without any dropped mutation
+                _emit({
+                    ...createPluginSnapshot({}),
+                    timestamp: startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000,
+                } as eventWithTime)
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual(true)
+                takeFullSnapshot.mockClear()
+
+                // the DOM did not change while idle, so the mirror is still in sync on wake
+                emitActiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 2000)
+
+                expect(takeFullSnapshot).not.toHaveBeenCalled()
             })
 
             it('rotates session if idle for (MAX_SESSION_IDLE_TIMEOUT) 30 minutes', () => {
