@@ -3197,6 +3197,7 @@ export class PostHog implements PostHogInterface {
         }
         const bootstrapSessionID = bootstrap?.sessionID
         this.config.bootstrap = bootstrap || this._originalUserConfig?.bootstrap || {}
+        this.featureFlags?.updateConfig?.(this.config, this._shouldDisableFlags())
 
         const device_id = this.get_property(DEVICE_ID)
         // $device_model describes the physical device, not the user, so preserve it across reset()
@@ -3288,7 +3289,9 @@ export class PostHog implements PostHogInterface {
                 !isUndefined(bootstrapSessionID) &&
                 !this.sessionManager?.setBootstrapSessionId(bootstrapSessionID, true)
             ) {
-                this.config.bootstrap = { ...bootstrap, sessionID: undefined }
+                const bootstrapWithoutSessionID = { ...bootstrap }
+                delete bootstrapWithoutSessionID.sessionID
+                this.config.bootstrap = bootstrapWithoutSessionID
             }
         }
 
