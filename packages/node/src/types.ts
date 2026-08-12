@@ -336,6 +336,13 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * new PostHog('key', { isServer: false })
    */
   isServer?: boolean
+  /**
+   * Capture full AI content: PostHog AI wrapper events route through the
+   * dedicated AI capture endpoint, skip string truncation, and pass media
+   * (base64 / data URIs) through unredacted. Privacy mode always wins.
+   * Defaults to false.
+   */
+  enableFullAiCapture?: boolean
 } & ExceptionRateLimiterConfig
 
 export type PostHogFeatureFlag = {

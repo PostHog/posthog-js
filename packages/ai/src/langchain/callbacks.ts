@@ -13,6 +13,7 @@ import { sanitizeLangChain } from '../sanitization'
 import { stringifyError } from '../serializeError'
 import { warnIfPostHogAiGateway } from '../gatewayWarning'
 import { isObject } from '../typeGuards'
+import { captureAiEvent } from '../captureAiEvent'
 
 // Mirror LangGraph's isGraphBubbleUp guard without adding LangGraph as a dependency. Every
 // LangGraph control-flow exception (GraphInterrupt, NodeInterrupt, ParentCommand, GraphDrained,
@@ -338,7 +339,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     const runNameFound = this._getLangchainRunName(serialized, { extraParams, runName }) || 'generation'
     const generation: GenerationMetadata = {
       name: runNameFound,
-      input: sanitizeLangChain(messages),
+      input: sanitizeLangChain(messages, this.client),
       startTime: Date.now(),
     }
     if (extraParams) {
@@ -388,7 +389,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
 
   private _safeCapture(message: EventMessage): void {
     try {
-      this.client.capture(message)
+      captureAiEvent(this.client, message)
     } catch {
       // Telemetry delivery must never affect the LangChain callback lifecycle.
     }
@@ -685,7 +686,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     }
 
     // Sanitize the message content to redact base64 images
-    return sanitizeLangChain(messageDict) as Record<string, any>
+    return sanitizeLangChain(messageDict, this.client) as Record<string, any>
   }
 
   private _extractStopReason(output: LLMResult): string | undefined {

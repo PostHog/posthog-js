@@ -6,6 +6,7 @@ import type { TokenUsage } from './types'
 import { stringifyError } from './serializeError'
 import { AIEvent, CostOverride, getTokensSource, hasTokenOverrides, withPrivacyMode } from './utils'
 import { warnIfPostHogAiGateway } from './gatewayWarning'
+import { captureAiEvent, captureAiEventImmediate } from './captureAiEvent'
 
 /**
  * Options for `captureAiGeneration`. Mirrors the `$ai_generation` event shape
@@ -222,9 +223,9 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
     }
 
     if (options.captureImmediate) {
-      await client.captureImmediate(event)
+      await captureAiEventImmediate(client, event)
     } else {
-      client.capture(event)
+      captureAiEvent(client, event)
     }
   } catch (error) {
     // Telemetry failures must never affect the instrumented provider call.

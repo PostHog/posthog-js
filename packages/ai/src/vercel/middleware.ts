@@ -25,6 +25,7 @@ import {
 import { captureAiGeneration } from '../captureAiGeneration'
 import { redactBase64DataUrl, sanitizeVercel } from '../sanitization'
 import { isObject, isString } from '../typeGuards'
+import { isFullAiCaptureEnabled, type FullAiCaptureGate } from '../captureAiEvent'
 
 // Union types for dual version support
 type LanguageModel = LanguageModelV2 | LanguageModelV3
@@ -79,12 +80,14 @@ type OutputContentItem =
   | { type: 'file'; name: string; mediaType: string; data: string }
   | { type: 'source'; sourceType: string; id: string; url: string; title: string }
 
-const redactFileData = (data: unknown, mediaType?: string): string | undefined => {
+const redactFileData = (data: unknown, mediaType?: string, client?: FullAiCaptureGate): string | undefined => {
   if (data instanceof URL) {
-    return redactBase64DataUrl(data.toString(), data.protocol === 'data:' ? mediaType : undefined)
+    return isFullAiCaptureEnabled(client)
+      ? data.toString()
+      : redactBase64DataUrl(data.toString(), data.protocol === 'data:' ? mediaType : undefined)
   }
   if (isString(data)) {
-    return redactBase64DataUrl(data, mediaType)
+    return isFullAiCaptureEnabled(client) ? data : redactBase64DataUrl(data, mediaType)
   }
   return undefined
 }
@@ -101,7 +104,7 @@ const mapVercelParams = (params: any): Record<string, any> => {
   }
 }
 
-const mapVercelPrompt = (messages: LanguageModelPrompt): PostHogInput[] => {
+const mapVercelPrompt = (messages: LanguageModelPrompt, client?: FullAiCaptureGate): PostHogInput[] => {
   // Map and truncate individual content
   const inputs: PostHogInput[] = messages.map((message) => {
     let content: any
@@ -111,7 +114,7 @@ const mapVercelPrompt = (messages: LanguageModelPrompt): PostHogInput[] => {
       content = [
         {
           type: 'text',
-          text: truncate(toContentString(message.content)),
+          text: truncate(toContentString(message.content), client),
         },
       ]
     } else {
@@ -121,11 +124,11 @@ const mapVercelPrompt = (messages: LanguageModelPrompt): PostHogInput[] => {
           if (c.type === 'text') {
             return {
               type: 'text',
-              text: truncate(c.text),
+              text: truncate(c.text, client),
             }
           } else if (c.type === 'file') {
             // Redact base64 data URLs and raw base64 to prevent oversized events
-            const fileData = redactFileData(c.data, c.mediaType) ?? 'raw files not supported'
+            const fileData = redactFileData(c.data, c.mediaType, client) ?? 'raw files not supported'
 
             return {
               type: 'file',
@@ -135,7 +138,7 @@ const mapVercelPrompt = (messages: LanguageModelPrompt): PostHogInput[] => {
           } else if (c.type === 'reasoning') {
             return {
               type: 'reasoning',
-              text: truncate(c.text),
+              text: truncate(c.text, client),
             }
           } else if (c.type === 'tool-call') {
             return {
@@ -163,7 +166,7 @@ const mapVercelPrompt = (messages: LanguageModelPrompt): PostHogInput[] => {
         content = [
           {
             type: 'text',
-            text: truncate(toContentString(message.content)),
+            text: truncate(toContentString(message.content), client),
           },
         ]
       }
@@ -209,10 +212,10 @@ const mapVercelPrompt = (messages: LanguageModelPrompt): PostHogInput[] => {
   return inputs
 }
 
-const mapVercelOutput = (result: LanguageModelContent[]): PostHogInput[] => {
+const mapVercelOutput = (result: LanguageModelContent[], client?: FullAiCaptureGate): PostHogInput[] => {
   const content: OutputContentItem[] = result.map((item) => {
     if (item.type === 'text') {
-      return { type: 'text', text: truncate(item.text) }
+      return { type: 'text', text: truncate(item.text, client) }
     }
     if (item.type === 'tool-call') {
       const toolCall = item as { input?: unknown; args?: unknown; arguments?: unknown }
@@ -227,14 +230,19 @@ const mapVercelOutput = (result: LanguageModelContent[]): PostHogInput[] => {
       }
     }
     if (item.type === 'reasoning') {
-      return { type: 'reasoning', text: truncate(item.text) }
+      return { type: 'reasoning', text: truncate(item.text, client) }
     }
     if (item.type === 'file') {
       // Handle files similar to input mapping - avoid large base64 data
-      let fileData = redactFileData(item.data, item.mediaType) ?? `[binary ${item.mediaType} file]`
+      let fileData = redactFileData(item.data, item.mediaType, client) ?? `[binary ${item.mediaType} file]`
 
-      // If not redacted and still large, replace with size indicator
-      if (typeof item.data === 'string' && fileData === item.data && item.data.length > 1000) {
+      // Skipped under full AI capture: media stays untouched, so no placeholder swap either.
+      if (
+        !isFullAiCaptureEnabled(client) &&
+        typeof item.data === 'string' &&
+        fileData === item.data &&
+        item.data.length > 1000
+      ) {
         fileData = `[${item.mediaType} file - ${item.data.length} bytes]`
       }
 
@@ -255,7 +263,7 @@ const mapVercelOutput = (result: LanguageModelContent[]): PostHogInput[] => {
       }
     }
     // Fallback for unknown types - try to extract text if possible
-    return { type: 'text', text: truncate(JSON.stringify(item)) }
+    return { type: 'text', text: truncate(JSON.stringify(item), client) }
   })
 
   if (content.length > 0) {
@@ -269,7 +277,7 @@ const mapVercelOutput = (result: LanguageModelContent[]): PostHogInput[] => {
   // otherwise stringify and truncate
   try {
     const jsonOutput = JSON.stringify(result)
-    return [{ content: truncate(jsonOutput), role: 'assistant' }]
+    return [{ content: truncate(jsonOutput, client), role: 'assistant' }]
   } catch {
     console.error('Error stringifying output')
     return []
@@ -511,7 +519,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             mergedOptions.posthogModelOverride ?? (result.response?.modelId ? result.response.modelId : model.modelId)
           const provider = mergedOptions.posthogProviderOverride ?? extractProvider(model)
           // result.content is undefined when the model returns only tool calls with no text output
-          const content = mapVercelOutput((result.content ?? []) as LanguageModelContent[])
+          const content = mapVercelOutput((result.content ?? []) as LanguageModelContent[], phClient)
           const latency = (Date.now() - startTime) / 1000
           const providerMetadata = result.providerMetadata
           const additionalTokenValues = extractAdditionalTokenValues(providerMetadata, result.usage)
@@ -563,7 +571,9 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             ...baseOptions,
             model: modelId,
             provider: provider,
-            input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
+            input: mergedOptions.posthogPrivacyMode
+              ? ''
+              : mapVercelPrompt(params.prompt as LanguageModelPrompt, phClient),
             output: content,
             latency,
             baseURL,
@@ -581,7 +591,9 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             ...baseOptions,
             model: modelId,
             provider: model.provider,
-            input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
+            input: mergedOptions.posthogPrivacyMode
+              ? ''
+              : mapVercelPrompt(params.prompt as LanguageModelPrompt, phClient),
             output: [],
             latency: 0,
             baseURL,
@@ -733,10 +745,10 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
               const timeToFirstToken = firstTokenTime !== undefined ? (firstTokenTime - startTime) / 1000 : undefined
               const content: OutputContentItem[] = []
               if (reasoningText) {
-                content.push({ type: 'reasoning', text: truncate(reasoningText) })
+                content.push({ type: 'reasoning', text: truncate(reasoningText, phClient) })
               }
               if (generatedText) {
-                content.push({ type: 'text', text: truncate(generatedText) })
+                content.push({ type: 'text', text: truncate(generatedText, phClient) })
               }
 
               for (const toolCall of toolCallsInProgress.values()) {
@@ -782,8 +794,10 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
                 ...baseOptions,
                 model: modelId,
                 provider: provider,
-                input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
-                output,
+                input: mergedOptions.posthogPrivacyMode
+                  ? ''
+                  : mapVercelPrompt(params.prompt as LanguageModelPrompt, phClient),
+                output: output,
                 latency,
                 timeToFirstToken,
                 baseURL,
@@ -844,7 +858,9 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
             ...baseOptions,
             model: modelId,
             provider: provider,
-            input: mergedOptions.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt as LanguageModelPrompt),
+            input: mergedOptions.posthogPrivacyMode
+              ? ''
+              : mapVercelPrompt(params.prompt as LanguageModelPrompt, phClient),
             output: [],
             latency: 0,
             baseURL,

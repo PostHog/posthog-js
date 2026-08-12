@@ -565,6 +565,45 @@ describe('PostHogOpenAI - Jest test suite', () => {
     )
   })
 
+  conditionalTest('preserves images when the client enables multimodal capture', async () => {
+    Object.assign(mockPostHogClient, { enableFullAiCapture: true })
+    const dataUrl = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...'
+
+    await client.chat.completions.create({
+      model: 'gpt-4',
+      messages: [
+        {
+          role: 'user',
+          content: [{ type: 'image_url', image_url: { url: dataUrl } }],
+        } as any,
+      ],
+      posthogDistinctId: 'test-id',
+    })
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    expect(JSON.stringify(captureArgs[0].properties['$ai_input'])).toContain(dataUrl)
+  })
+
+  conditionalTest('redacts images when the client does not enable multimodal capture', async () => {
+    const dataUrl = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...'
+
+    await client.chat.completions.create({
+      model: 'gpt-4',
+      messages: [
+        {
+          role: 'user',
+          content: [{ type: 'image_url', image_url: { url: dataUrl } }],
+        } as any,
+      ],
+      posthogDistinctId: 'test-id',
+    })
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    expect(JSON.stringify(captureArgs[0].properties['$ai_input'])).toContain('redacted')
+  })
+
   test('chat completions create preserves OpenAI APIPromise helpers', async () => {
     const promise = client.chat.completions.create({
       model: 'gpt-4',

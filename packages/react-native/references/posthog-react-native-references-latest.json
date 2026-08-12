@@ -3838,6 +3838,10 @@
       "name": "PostHogPersistedProperty",
       "properties": [
         {
+          "type": "\"ai_capture_queue\"",
+          "name": "AiCaptureQueue"
+        },
+        {
           "type": "\"ai_queue\"",
           "name": "AiQueue"
         },
