@@ -2745,6 +2745,7 @@ export class PostHog implements PostHogInterface {
         const identityChangedDuringSync =
             this.persistence.syncCookieProperties() && this.get_distinct_id() !== preSyncDistinctId
         const cookieSyncSuppressionStarted = this.persistence._beginCookieSyncSuppression()
+        let identifyCompleted = false
         try {
             const previous_distinct_id = this.get_distinct_id()
             this.register({ $user_id: new_distinct_id })
@@ -2847,9 +2848,12 @@ export class PostHog implements PostHogInterface {
             } else if (shouldTransitionToIdentified && (userPropertiesToSet || userPropertiesToSetOnce)) {
                 this.reloadFeatureFlags()
             }
+            identifyCompleted = true
         } finally {
             if (cookieSyncSuppressionStarted) {
-                this.persistence._endCookieSyncSuppression()
+                // Do not publish a partially assembled identity when a customer
+                // callback or capture hook throws during identify().
+                this.persistence._endCookieSyncSuppression(identifyCompleted)
             }
         }
     }

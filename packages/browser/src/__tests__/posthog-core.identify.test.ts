@@ -73,6 +73,20 @@ describe('identify()', () => {
         expect(instance.featureFlags?.resetFlagCallReported).toHaveBeenCalledTimes(1)
     })
 
+    it('releases suppression without publishing a final snapshot when identify throws', () => {
+        instance.config.cookieWinsOnConflict = true
+        jest.spyOn(instance.persistence!, '_beginCookieSyncSuppression').mockReturnValue(true)
+        const endSuppression = jest.spyOn(instance.persistence!, '_endCookieSyncSuppression')
+        const publish = jest.spyOn(instance.persistence!, '_publishSuppressedCookieSnapshot')
+        jest.spyOn(instance.persistence!, 'set_property').mockImplementation(() => {
+            throw new Error('persistence failed')
+        })
+
+        expect(() => instance.identify('a-new-id')).toThrow()
+        expect(endSuppression).toHaveBeenCalledWith(false)
+        expect(publish).not.toHaveBeenCalled()
+    })
+
     it('publishes the identified snapshot before capturing the identify event', () => {
         instance.config.cookieWinsOnConflict = true
         const publish = jest.spyOn(instance.persistence!, '_publishSuppressedCookieSnapshot')
