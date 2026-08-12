@@ -109,21 +109,10 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     parameterOwnership,
     resolvedEventType === MCPAnalyticsEventType.mcpMissingCapability
   )
-  // Reading the `context` argument and removing it are different questions, and
-  // only one of them is dangerous.
-  //
-  // Removing an argument the *application* declared costs the customer their
-  // call, so the strip below stays gated on positive ownership. Reading it costs
-  // at worst a mislabelled property in the customer's own project — and refusing
-  // to read it costs the intent of every call on a server that builds a fresh
-  // instance per request, where the instance serving `tools/call` never served
-  // the `tools/list` that ownership is learned from. The trigger is instance
-  // lifetime, not statelessness: a transport-stateless server that keeps one
-  // long-lived server object caches ownership and is unaffected.
-  //
-  // So: obey ownership when there is an answer, and read when there is not.
-  // "The application declared its own `context`" still suppresses capture; "this
-  // instance never served a listing" no longer does.
+  // Reading the argument and removing it are separate questions: deleting one the
+  // application declared costs the customer their call, so the strip below still
+  // requires positive ownership, while reading it when ownership is unresolved
+  // costs at worst a mislabelled property. ADR-0011.
   const canCaptureContextIntent =
     resolvedEventType !== MCPAnalyticsEventType.mcpMissingCapability &&
     isContextEnabled(data.options.context) &&
@@ -171,10 +160,8 @@ interface PreparedToolEvent {
 }
 
 /**
- * Ownership as resolved for one request, plus whether it could be resolved at
- * all. The distinction matters only for reading the `context` argument: an
- * instance that never served a listing and holds no registry has no answer, and
- * "no answer" must not read the same as "the application owns it".
+ * Ownership for one request, plus whether it could be resolved at all — "no
+ * answer" must not read the same as "the application owns it".
  */
 interface ActiveAnalyticsParameterOwnership extends AnalyticsParameterOwnership {
   contextOwnershipKnown: boolean
