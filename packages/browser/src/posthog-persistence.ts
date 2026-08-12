@@ -219,14 +219,21 @@ export class PostHogPersistence {
                 // fingerprint only when the shared cookie actually contains this
                 // exact snapshot. A different value may be either the old cookie
                 // or a sibling write, and must remain eligible for reconciliation.
-                if (getCookiePropertiesFingerprint(this._name) === expectedFingerprint) {
+                const currentCookieValue = cookieStore._get(this._name) || undefined
+                if (
+                    currentCookieValue &&
+                    getCookiePropertiesFingerprint(this._name, currentCookieValue) === expectedFingerprint
+                ) {
                     this._lastSeenCookiePropertiesFingerprint = expectedFingerprint
                 }
             } catch {}
             return
         }
         try {
-            this._lastSeenCookiePropertiesFingerprint = getCookiePropertiesFingerprint(this._name)
+            const cookieValue = cookieStore._get(this._name) || undefined
+            this._lastSeenCookiePropertiesFingerprint = cookieValue
+                ? getCookiePropertiesFingerprint(this._name, cookieValue)
+                : undefined
         } catch {}
     }
 
@@ -253,11 +260,13 @@ export class PostHogPersistence {
         try {
             cookieValue = cookieStore._get(this._name) || undefined
         } catch {}
-        const cookieFingerprint = getCookiePropertiesFingerprint(this._name)
-        if (!cookieValue || cookieFingerprint === this._lastSeenCookiePropertiesFingerprint) {
+        if (!cookieValue) {
             return false
         }
-        this._lastSeenCookiePropertiesFingerprint = cookieFingerprint
+        const cookieFingerprint = getCookiePropertiesFingerprint(this._name, cookieValue)
+        if (cookieFingerprint === this._lastSeenCookiePropertiesFingerprint) {
+            return false
+        }
 
         let cookieProperties: Properties
         try {
@@ -265,6 +274,13 @@ export class PostHogPersistence {
         } catch {
             return false
         }
+        // If the main cookie changed while its metadata was read, retry on the
+        // next synchronization rather than applying the old values while marking
+        // the new snapshot as observed.
+        if ((cookieStore._get(this._name) || undefined) !== cookieValue) {
+            return false
+        }
+        this._lastSeenCookiePropertiesFingerprint = cookieFingerprint
         const authoritativeCookieProperties = [
             ...COOKIE_PERSISTED_PROPERTIES,
             ...getCookiePersistedPropertiesFromMetadata(this._name, cookieValue),

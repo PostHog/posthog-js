@@ -300,13 +300,8 @@ export const getCookiePersistedPropertiesFromMetadata = (
     }
 }
 
-export const getCookiePropertiesFingerprint = (name: string): string | undefined => {
-    const cookieValue = cookieStore._get(name) || undefined
-    if (!cookieValue) {
-        return undefined
-    }
-    return cookieValue + '|' + (cookieStore._get(getCookiePersistedPropertiesMetadataName(name)) || '')
-}
+export const getCookiePropertiesFingerprint = (name: string, cookieValue: string): string =>
+    cookieValue + '|' + (cookieStore._get(getCookiePersistedPropertiesMetadataName(name)) || '')
 
 /**
  * Creates a localPlusCookieStore instance with custom cookie-persisted properties.
@@ -327,17 +322,19 @@ export const createLocalPlusCookieStore = (
         ...localStore,
         _parse: function (name) {
             try {
+                let cookieValue: string | undefined
                 let cookieProperties: Properties = {}
                 try {
-                    // See if there's a cookie stored with data.
-                    cookieProperties = cookieStore._parse(name) || {}
+                    // Read the main cookie once so values and metadata validation
+                    // always refer to the same snapshot.
+                    cookieValue = cookieStore._get(name) || undefined
+                    cookieProperties = cookieValue ? JSON.parse(cookieValue) || {} : {}
                 } catch {}
                 const localStorageData: Properties = JSON.parse(localStore._get(name) || '{}')
                 let value: Properties
                 if (preferCookieOnConflict) {
                     // Built-in keys are stable and authoritative for legacy cookies too.
                     // Separate metadata adds only custom keys understood by the writer.
-                    const cookieValue = cookieStore._get(name) || undefined
                     const authoritativeCookieProperties = [
                         ...COOKIE_PERSISTED_PROPERTIES,
                         ...getCookiePersistedPropertiesFromMetadata(name, cookieValue),
