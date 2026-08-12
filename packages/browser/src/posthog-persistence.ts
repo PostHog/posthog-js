@@ -324,8 +324,8 @@ export class PostHogPersistence {
         })
         this.props = extend(nextProps, cookieProperties)
         if (
-            cookieProperties[DISTINCT_ID] !== previousDistinctId ||
-            cookieProperties[USER_STATE] !== previousUserState
+            (DISTINCT_ID in cookieProperties && cookieProperties[DISTINCT_ID] !== previousDistinctId) ||
+            (USER_STATE in cookieProperties && cookieProperties[USER_STATE] !== previousUserState)
         ) {
             this._cookieIdentityChangePending = true
             // `$user_id` is localStorage-only, but it is bound to the current

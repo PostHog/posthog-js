@@ -371,8 +371,10 @@ export const createLocalPlusCookieStore = (
                             }
                         })
                         if (
-                            cookieProperties[DISTINCT_ID] !== localStorageData[DISTINCT_ID] ||
-                            cookieProperties[USER_STATE] !== localStorageData[USER_STATE]
+                            (DISTINCT_ID in safeCookieProperties &&
+                                safeCookieProperties[DISTINCT_ID] !== localStorageData[DISTINCT_ID]) ||
+                            (USER_STATE in safeCookieProperties &&
+                                safeCookieProperties[USER_STATE] !== localStorageData[USER_STATE])
                         ) {
                             // Identity-bound local fields are not mirrored into
                             // the shared cookie. Drop them when the authoritative

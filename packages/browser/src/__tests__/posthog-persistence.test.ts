@@ -1348,6 +1348,20 @@ describe('persistence', () => {
                 expect(lib.props.$device_id).toBe('d1')
             })
 
+            it('flag on: malformed identity does not clear valid local identity metadata', () => {
+                document.cookie = encodeCookie({ distinct_id: null, $sesid: [1000, 'new-session', 1000] })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({ distinct_id: 'valid-local-id', $user_id: 'valid-local-id', __alias: 'alias' })
+                )
+
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+
+                expect(lib.props.distinct_id).toBe('valid-local-id')
+                expect(lib.props.$user_id).toBe('valid-local-id')
+                expect(lib.props.__alias).toBe('alias')
+            })
+
             it('flag on: defensive filter - null cookie value does NOT clobber valid localStorage value', () => {
                 document.cookie = encodeCookie({ distinct_id: null })
                 localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'valid' }))
