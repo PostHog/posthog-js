@@ -43,11 +43,12 @@ function deadEventName(candidate: DeadClickCandidate): '$dead_click' | '$dead_sw
 // root — so a swipe over them can never be judged dead
 const UNOBSERVABLE_SURFACE_SELECTOR = 'canvas,video,audio,embed,object'
 
-// a click within this window of the tab (re)gaining visibility is treated as the click that
-// woke/focused the tab and suppressed rather than flagged dead. wider than the other thresholds
-// because a real "tab back, then click the page" gesture has a human-scale gap (refocus, move the
-// mouse, click); still short enough that a genuinely dead click a while after refocusing is caught.
-const VISIBILITY_CHANGE_SUPPRESSION_MS = 1000
+// a click within this window of a visibility or window focus/blur change is treated as the click
+// that woke/focused the tab (or opened a new tab/window) and suppressed rather than flagged dead.
+// wider than the other thresholds because a real "tab back, then click the page" gesture has a
+// human-scale gap (refocus, move the mouse, click); still short enough that a genuinely dead click
+// a while after refocusing is caught.
+const LIVENESS_SUPPRESSION_MS = 1000
 
 function hasModifierKey(event: MouseEvent | TouchEvent): boolean {
     return event.ctrlKey || event.metaKey || event.altKey || event.shiftKey
@@ -55,6 +56,11 @@ function hasModifierKey(event: MouseEvent | TouchEvent): boolean {
 
 function checkTimeout(value: number | undefined, thresholdMs: number) {
     return isNumber(value) && value >= thresholdMs
+}
+
+// absolute delay between a click and a `lastSeenAt` timestamp, either side of the click
+function absDelay(clickTimestamp: number, lastSeenAt: number | undefined): number | undefined {
+    return lastSeenAt ? Math.abs(clickTimestamp - lastSeenAt) : undefined
 }
 
 // How dead-click detection works
@@ -79,9 +85,9 @@ function checkTimeout(value: number | undefined, thresholdMs: number) {
 //   - selection:  a selectionchange        < selection_change_threshold_ms (default 100)
 //   - visibility: a visibilitychange (either direction — the tab going hidden because the click
 //                 opened a new tab, or becoming visible as the click woke/focused it)
-//                 < VISIBILITY_CHANGE_SUPPRESSION_MS, measured either side of the click
+//                 < LIVENESS_SUPPRESSION_MS, measured either side of the click
 //   - focus:      a window focus/blur (a click that opened a new window/popup may only surface as
-//                 the current window losing focus) < VISIBILITY_CHANGE_SUPPRESSION_MS, either side
+//                 the current window losing focus) < LIVENESS_SUPPRESSION_MS, either side
 //
 // Timeout signals (a click with no liveness signal is dead if any one fired). Note visibility and
 // focus are deliberately absent here — they are liveness-only and never mark a click dead:
@@ -447,14 +453,10 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             // to cause one. that's why (unlike mutation/selection) it feeds no timeout branch: the old
             // Math.abs-vs-stale-change comparison read a tab backgrounded long ago as a multi-second
             // reply and flagged every later click in the session as dead.
-            click.visibilityChangedDelayMs = this._lastVisibilityChange
-                ? Math.abs(click.timestamp - this._lastVisibilityChange)
-                : undefined
+            click.visibilityChangedDelayMs = absDelay(click.timestamp, this._lastVisibilityChange)
             // same idea for window focus/blur: a click that opens a new window/popup may leave the tab
             // visible, so the only trace is the current window losing focus. also suppress-only.
-            click.focusChangedDelayMs = this._lastFocusChange
-                ? Math.abs(click.timestamp - this._lastFocusChange)
-                : undefined
+            click.focusChangedDelayMs = absDelay(click.timestamp, this._lastFocusChange)
 
             const scrollTimeout = checkTimeout(click.scrollDelayMs, this._config.scroll_threshold_ms)
             const selectionChangedTimeout = checkTimeout(
@@ -473,10 +475,9 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                 isNumber(click.selectionChangedDelayMs) &&
                 click.selectionChangedDelayMs < this._config.selection_change_threshold_ms
             const hadVisibilityChange =
-                isNumber(click.visibilityChangedDelayMs) &&
-                click.visibilityChangedDelayMs < VISIBILITY_CHANGE_SUPPRESSION_MS
+                isNumber(click.visibilityChangedDelayMs) && click.visibilityChangedDelayMs < LIVENESS_SUPPRESSION_MS
             const hadFocusChange =
-                isNumber(click.focusChangedDelayMs) && click.focusChangedDelayMs < VISIBILITY_CHANGE_SUPPRESSION_MS
+                isNumber(click.focusChangedDelayMs) && click.focusChangedDelayMs < LIVENESS_SUPPRESSION_MS
 
             if (hadScroll || hadMutation || hadSelectionChange || hadVisibilityChange || hadFocusChange) {
                 continue
