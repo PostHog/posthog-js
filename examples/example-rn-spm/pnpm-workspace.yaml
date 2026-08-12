@@ -1,6 +1,8 @@
 packages:
     - '.'
 
+minimumReleaseAge: 10080
+
 minimumReleaseAgeExclude:
     - '@posthog/types@1.402.3'
     - '@react-native/asset-utils@0.87.0'
