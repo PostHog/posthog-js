@@ -1,7 +1,7 @@
 import { document } from '@posthog/browser-common/utils/globals'
 import { assignableWindow, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { PostHog } from '../posthog-core'
-import { isNull, isNumber, isUndefined } from '@posthog/core'
+import { isNull, isNumber, isObject, isUndefined } from '@posthog/core'
 import {
     getEventTarget,
     shouldCaptureDeadClick,
@@ -12,6 +12,8 @@ import { autocapturePropertiesForElement } from '../autocapture'
 import { isElementInToolbar, isElementNode, isTag } from '@posthog/browser-common/utils/element-utils'
 import { getNativeMutationObserverImplementation } from '@posthog/browser-common/utils/prototype-utils'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
+import { convertToURL } from '@posthog/browser-common/utils/request-utils'
+import { patch } from '../extensions/replay/rrweb-plugins/patch'
 
 function asCandidate(event: MouseEvent | TouchEvent, extra: Partial<DeadClickCandidate>): DeadClickCandidate | null {
     const eventTarget = getEventTarget(event)
@@ -49,6 +51,13 @@ const UNOBSERVABLE_SURFACE_SELECTOR = 'canvas,video,audio,embed,object'
 // human-scale gap (refocus, move the mouse, click); still short enough that a genuinely dead click
 // a while after refocusing is caught.
 const LIVENESS_SUPPRESSION_MS = 1000
+
+// a click that starts a fetch request clearly did something, even when the visible response lands
+// after our window (async buttons). request *start* is what matters — not completion — so a slow
+// response still suppresses. deliberately tighter than the liveness window: a click-triggered request
+// fires almost immediately, and the wider it is the more likely the page's own background traffic
+// (polling, prefetch) coincides with a click and suppresses a genuinely dead one.
+const NETWORK_REQUEST_SUPPRESSION_MS = 300
 
 function hasModifierKey(event: MouseEvent | TouchEvent): boolean {
     return event.ctrlKey || event.metaKey || event.altKey || event.shiftKey
@@ -96,6 +105,8 @@ function priorLivenessDelay(clickTimestamp: number, lastSeenAt: number | undefin
 //                 < LIVENESS_SUPPRESSION_MS on either side of the click
 //   - focus:      a window focus/blur (a click that opened a new window/popup may only surface as
 //                 the current window losing focus) < LIVENESS_SUPPRESSION_MS on either side
+//   - network:    a fetch request started after the click (async buttons) < NETWORK_REQUEST_SUPPRESSION_MS
+//                 — request start, not completion; PostHog's own requests are excluded. after-click only
 // visibility/focus are recorded onto each queued candidate the instant they fire (like scroll), not
 // read from a single shared timestamp when the click is checked. that matters because a click that
 // hides/blurs the tab suspends the ~1s `_checkClicks` timer while hidden; by the time it resumes the
@@ -115,6 +126,9 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     private _lastSelectionChanged: number | undefined
     private _lastVisibilityChange: number | undefined
     private _lastFocusChange: number | undefined
+    private _restoreFetchPatch: (() => void) | undefined
+    private _networkObserverActive = false
+    private _postHogHosts: string[] = []
     private _clicks: DeadClickCandidate[] = []
     private _checkClickTimer: number | undefined
     private _touchStart: { x: number; y: number; timestamp: number } | undefined
@@ -174,6 +188,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         this._startSelectionChangedObserver()
         this._startVisibilityChangeObserver()
         this._startFocusChangeObserver()
+        this._startNetworkObserver()
         this._startMutationObserver(observerTarget)
         if (this._config.capture_dead_swipes) {
             this._startSwipeObserver()
@@ -207,6 +222,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         document?.removeEventListener('visibilitychange', this._onVisibilityChange)
         assignableWindow.removeEventListener('blur', this._onFocusChange)
         assignableWindow.removeEventListener('focus', this._onFocusChange)
+        this._stopNetworkObserver()
         // so a gesture in flight when we stopped can't pair with a touchend after a restart
         this._touchStart = undefined
     }
@@ -313,13 +329,110 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     // timestamp when `_checkClicks` finally runs — is what makes it robust: a hidden tab suspends
     // `_checkClicks`, and by the time it resumes a later transition (the tab coming back) would have
     // overwritten the click-correlated one. keeps the closest transition, only within the window.
-    private _recordLivenessSignal(field: 'visibilityChangedDelayMs' | 'focusChangedDelayMs', firedAt: number): void {
+    private _recordLivenessSignal(
+        field: 'visibilityChangedDelayMs' | 'focusChangedDelayMs' | 'networkRequestDelayMs',
+        firedAt: number,
+        windowMs: number = LIVENESS_SUPPRESSION_MS
+    ): void {
         this._clicks.forEach((click) => {
             const delay = firedAt - click.timestamp
-            if (delay >= 0 && delay < LIVENESS_SUPPRESSION_MS && (isUndefined(click[field]) || delay < click[field]!)) {
+            if (delay >= 0 && delay < windowMs && (isUndefined(click[field]) || delay < click[field]!)) {
                 click[field] = delay
             }
         })
+    }
+
+    // Wrap `fetch` via the SDK's shared `patch` helper (same one the recorder's network capture,
+    // history autocapture, and tracing headers use): it swallows install failures on a non-writable
+    // fetch (returns a noop), tags the wrapper, and — via its layer chain — restores cleanly even when
+    // another library wrapped fetch on top. A request that starts after a click stamps the queued
+    // candidates the instant it fires (like visibility/focus), so a slow response still suppresses and
+    // a later background request can't overwrite the click-correlated one. PostHog's own requests are
+    // skipped so our background traffic can't stand in as a click's response.
+    private _startNetworkObserver() {
+        if (this._networkObserverActive) {
+            return
+        }
+        this._postHogHosts = this._collectPostHogHosts()
+        const self = this
+        this._restoreFetchPatch = patch(
+            assignableWindow,
+            'fetch',
+            (originalFetch) =>
+                function (this: unknown, ...args: unknown[]) {
+                    try {
+                        if (self._networkObserverActive && !self._isPostHogRequest(args[0])) {
+                            self._recordLivenessSignal(
+                                'networkRequestDelayMs',
+                                Date.now(),
+                                NETWORK_REQUEST_SUPPRESSION_MS
+                            )
+                        }
+                    } catch {
+                        // instrumentation must never break the page's fetch
+                    }
+                    // called straight through: arguments, return value, promise, and any synchronous
+                    // throw all propagate exactly as if we weren't in the chain
+                    return (originalFetch as (...a: unknown[]) => unknown).apply(this, args)
+                }
+        )
+        this._networkObserverActive = true
+    }
+
+    private _stopNetworkObserver() {
+        if (!this._networkObserverActive) {
+            return
+        }
+        // clear the flag first so, in the rare case `patch` cannot splice us out (buried under a
+        // non-posthog wrapper), our wrapper records nothing rather than acting on a stopped run
+        this._networkObserverActive = false
+        this._restoreFetchPatch?.()
+        this._restoreFetchPatch = undefined
+        this._postHogHosts = []
+    }
+
+    // the PostHog hosts to skip, resolved once at install time (config is static) so the per-request
+    // check does no DOM-allocating URL parsing for the page's own traffic
+    private _collectPostHogHosts(): string[] {
+        const config = this.instance.config
+        const hosts: string[] = []
+        for (const raw of [config?.api_host, config?.ui_host, config?.flags_api_host]) {
+            const host = raw ? convertToURL(raw)?.host : undefined
+            if (host) {
+                hosts.push(host.toLowerCase())
+            }
+        }
+        return hosts
+    }
+
+    // best-effort: skip our own ingestion / config traffic. runs on every fetch the page makes, so the
+    // common case (not one of ours) stays allocation-free via a cheap substring pre-check.
+    private _isPostHogRequest(input: unknown): boolean {
+        if (!this._postHogHosts.length) {
+            return false
+        }
+        let url: string | undefined
+        if (typeof input === 'string') {
+            url = input
+        } else if (isObject(input)) {
+            // URL objects expose `href`, Request objects expose `url` — read whichever is a string
+            const candidate = (input as { href?: unknown; url?: unknown }).href ?? (input as { url?: unknown }).url
+            if (typeof candidate === 'string') {
+                url = candidate
+            }
+        }
+        if (!url) {
+            return false
+        }
+        const haystack = url.toLowerCase()
+        // cheap first pass: if none of our hosts even appear as a substring it can't be ours, so we
+        // skip the anchor-element parse entirely — the hot path for the page's own requests
+        if (!this._postHogHosts.some((host) => haystack.indexOf(host) !== -1)) {
+            return false
+        }
+        // confirm with a real host parse so our host merely appearing in a path/query doesn't match
+        const requestHost = convertToURL(url)?.host
+        return !!requestHost && this._postHogHosts.indexOf(requestHost.toLowerCase()) !== -1
     }
 
     // `capture: true` mirrors the scroll observer so we see gestures on nested scrollable
@@ -514,8 +627,17 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                 isNumber(click.visibilityChangedDelayMs) && click.visibilityChangedDelayMs < LIVENESS_SUPPRESSION_MS
             const hadFocusChange =
                 isNumber(click.focusChangedDelayMs) && click.focusChangedDelayMs < LIVENESS_SUPPRESSION_MS
+            const hadNetworkRequest =
+                isNumber(click.networkRequestDelayMs) && click.networkRequestDelayMs < NETWORK_REQUEST_SUPPRESSION_MS
 
-            if (hadScroll || hadMutation || hadSelectionChange || hadVisibilityChange || hadFocusChange) {
+            if (
+                hadScroll ||
+                hadMutation ||
+                hadSelectionChange ||
+                hadVisibilityChange ||
+                hadFocusChange ||
+                hadNetworkRequest
+            ) {
                 continue
             }
 
@@ -571,6 +693,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                 [`${prefix}_selection_changed_delay_ms`]: click.selectionChangedDelayMs,
                 [`${prefix}_visibility_changed_delay_ms`]: click.visibilityChangedDelayMs,
                 [`${prefix}_focus_changed_delay_ms`]: click.focusChangedDelayMs,
+                [`${prefix}_network_request_delay_ms`]: click.networkRequestDelayMs,
                 // undefined for clicks (stripped on serialization), like the delay fields above
                 $dead_swipe_direction: click.swipeDirection,
                 $dead_swipe_distance_px: click.swipeDistancePx,

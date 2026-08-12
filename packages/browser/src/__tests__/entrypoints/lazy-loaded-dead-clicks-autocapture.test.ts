@@ -41,6 +41,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         fakeInstance = {
             config: {
                 capture_dead_clicks: true,
+                api_host: 'https://us.i.posthog.com',
             },
             persistence: {
                 props: {},
@@ -751,6 +752,113 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             triggerMouseEvent(document.body, 'click', { ctrlKey: true, shiftKey: true })
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks'].length).toBe(0)
+        })
+    })
+
+    describe('network liveness signal', () => {
+        let originalFetch: typeof fetch | undefined
+
+        beforeEach(() => {
+            // reset any observer the outer start() installed, then snapshot the real fetch
+            lazyLoadedDeadClicksAutocapture['_stopNetworkObserver']()
+            originalFetch = assignableWindow.fetch
+        })
+
+        afterEach(() => {
+            assignableWindow.fetch = originalFetch as typeof fetch
+        })
+
+        const installOver = (impl: unknown) => {
+            lazyLoadedDeadClicksAutocapture['_stopNetworkObserver']()
+            assignableWindow.fetch = impl as typeof fetch
+            lazyLoadedDeadClicksAutocapture['_startNetworkObserver']()
+        }
+
+        const queueClickAt = (timestamp: number) => {
+            lazyLoadedDeadClicksAutocapture['_clicks'].push({
+                node: document.body,
+                originalEvent: { type: 'click' } as MouseEvent,
+                timestamp,
+            })
+        }
+
+        it('suppresses a dead click when a fetch started shortly after it', () => {
+            queueClickAt(900)
+            // a request started 50ms after the click — the click kicked off async work
+            lazyLoadedDeadClicksAutocapture['_recordLivenessSignal']('networkRequestDelayMs', 950, 300)
+
+            lazyLoadedDeadClicksAutocapture['_checkClicks']()
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
+
+        it('stamps the queued candidate and passes the call through to the underlying fetch', () => {
+            const underlying = jest.fn().mockReturnValue('sentinel')
+            installOver(underlying)
+            queueClickAt(900)
+
+            jest.setSystemTime(950)
+            const result = (assignableWindow.fetch as (...a: unknown[]) => unknown)('https://example.com/api', {
+                method: 'POST',
+            })
+
+            expect(underlying).toHaveBeenCalledWith('https://example.com/api', { method: 'POST' })
+            expect(result).toBe('sentinel')
+            expect(lazyLoadedDeadClicksAutocapture['_clicks'][0].networkRequestDelayMs).toBe(50)
+        })
+
+        it("ignores PostHog's own requests so they can't stand in as a click's response", () => {
+            const underlying = jest.fn()
+            installOver(underlying)
+            queueClickAt(900)
+
+            jest.setSystemTime(950)
+            // api_host is https://us.i.posthog.com in the fake instance config
+            ;(assignableWindow.fetch as (...a: unknown[]) => unknown)('https://us.i.posthog.com/e/')
+
+            expect(underlying).toHaveBeenCalled()
+            expect(lazyLoadedDeadClicksAutocapture['_clicks'][0].networkRequestDelayMs).toBeUndefined()
+        })
+
+        it('still stamps for an app request whose URL merely contains a PostHog host in the query', () => {
+            const underlying = jest.fn()
+            installOver(underlying)
+            queueClickAt(900)
+
+            jest.setSystemTime(950)
+            ;(assignableWindow.fetch as (...a: unknown[]) => unknown)(
+                'https://app.example.com/track?ref=us.i.posthog.com'
+            )
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks'][0].networkRequestDelayMs).toBe(50)
+        })
+
+        it('a request beyond the tight window does not stamp the candidate', () => {
+            const underlying = jest.fn()
+            installOver(underlying)
+            queueClickAt(900)
+
+            jest.setSystemTime(1300) // 400ms after the click, beyond the 300ms window
+            ;(assignableWindow.fetch as (...a: unknown[]) => unknown)('https://example.com/api')
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks'][0].networkRequestDelayMs).toBeUndefined()
+        })
+
+        it('does not throw and leaves fetch untouched when window.fetch is non-writable (hardened page)', () => {
+            lazyLoadedDeadClicksAutocapture['_stopNetworkObserver']()
+            const frozen = jest.fn()
+            Object.defineProperty(assignableWindow, 'fetch', { value: frozen, writable: false, configurable: true })
+
+            // patch swallows the failed assignment and returns a noop, so init never throws
+            expect(() => lazyLoadedDeadClicksAutocapture['_startNetworkObserver']()).not.toThrow()
+            expect(assignableWindow.fetch).toBe(frozen)
+
+            Object.defineProperty(assignableWindow, 'fetch', {
+                value: originalFetch,
+                writable: true,
+                configurable: true,
+            })
         })
     })
 })
