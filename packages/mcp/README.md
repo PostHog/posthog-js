@@ -122,11 +122,15 @@ identify: async (request, extra) => {
 the agent to say why it is calling, and records the answer as `$mcp_intent`. It is stripped before
 your tool runs wherever the SDK can confirm the parameter is its own.
 
-On a server that builds a fresh instance per HTTP request — `createMcpHandler`, `@rekog/mcp-nest`,
-any stateless topology — that confirmation is not available: ownership is learned while serving
+On a server that builds a fresh instance per HTTP request — `createMcpHandler`, or `@rekog/mcp-nest`
+in its stateless mode — that confirmation is not available: ownership is learned while serving
 `tools/list`, and the instance handling a `tools/call` never served one. There the SDK records the
 argument but does **not** strip it, because deleting an argument your tool declared would cost you
 the call, while an extra key usually costs nothing.
+
+What matters is instance lifetime, not statelessness. A server that is stateless at the transport
+(`sessionIdGenerator: undefined`) but keeps one long-lived server object learns ownership from the
+first `tools/list` and keeps it, so none of the above applies to it.
 
 The consequence worth knowing: if **your own** tool declares a parameter named `context` and the SDK
 cannot tell that it is yours, its value is recorded as `$mcp_intent`. It never leaves your project,

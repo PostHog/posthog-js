@@ -115,8 +115,11 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
   // Removing an argument the *application* declared costs the customer their
   // call, so the strip below stays gated on positive ownership. Reading it costs
   // at worst a mislabelled property in the customer's own project — and refusing
-  // to read it costs the intent of every call on a stateless server, where no
-  // instance ever serves the `tools/list` that ownership is learned from.
+  // to read it costs the intent of every call on a server that builds a fresh
+  // instance per request, where the instance serving `tools/call` never served
+  // the `tools/list` that ownership is learned from. The trigger is instance
+  // lifetime, not statelessness: a transport-stateless server that keeps one
+  // long-lived server object caches ownership and is unaffected.
   //
   // So: obey ownership when there is an answer, and read when there is not.
   // "The application declared its own `context`" still suppresses capture; "this
