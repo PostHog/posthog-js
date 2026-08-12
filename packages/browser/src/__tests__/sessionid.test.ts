@@ -110,6 +110,22 @@ describe('Session ID manager', () => {
             expect(sessionStartTimestamp).toEqual(timestamp)
         })
 
+        it('ignores a future bootstrap session during initialization', () => {
+            ;(uuid7ToTimestampMs as jest.Mock).mockReturnValue(now + 23 * 60 * 60 * 1000)
+            const sessionIdManager = new SessionIdManager(
+                createMockPostHog({
+                    config: { ...config, bootstrap: { sessionID: 'future-bootstrap-session-id' } },
+                    persistence: persistence as PostHogPersistence,
+                    register: jest.fn(),
+                })
+            )
+
+            expect(sessionIdManager.checkAndGetSessionAndWindowId(false, now)).toMatchObject({
+                sessionId: 'newUUID',
+                sessionStartTimestamp: now,
+            })
+        })
+
         it('defers a reset bootstrap session until the next session check', () => {
             const sessionIdManager = sessionIdMgr(persistence)
             sessionIdManager.checkAndGetSessionAndWindowId(false, now)
@@ -155,22 +171,31 @@ describe('Session ID manager', () => {
             })
         })
 
-        it('does not defer a bootstrapped session whose timestamp is in the future', () => {
+        it('accepts a bootstrapped session within the clock-skew tolerance', () => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager.resetSessionId()
+            ;(uuid7ToTimestampMs as jest.Mock).mockReturnValue(now + 30 * 1000)
+
+            expect(sessionIdManager.setBootstrapSessionId('slightly-future-bootstrap-session-id', true)).toBe(true)
+            ;(uuidv7 as jest.Mock).mockReturnValueOnce('new-window-id')
+            expect(sessionIdManager.checkAndGetSessionAndWindowId(false, now)).toMatchObject({
+                sessionId: 'slightly-future-bootstrap-session-id',
+                windowId: 'new-window-id',
+                sessionStartTimestamp: now + 30 * 1000,
+            })
+        })
+
+        it('rejects a bootstrapped session beyond the clock-skew tolerance', () => {
             const sessionIdManager = sessionIdMgr(persistence)
             sessionIdManager.resetSessionId()
             ;(uuid7ToTimestampMs as jest.Mock).mockReturnValue(now + 23 * 60 * 60 * 1000)
-            sessionIdManager.setBootstrapSessionId('future-bootstrap-session-id', true)
-            ;(uuidv7 as jest.Mock).mockReturnValueOnce('fresh-session-id').mockReturnValueOnce('fresh-window-id')
 
+            expect(sessionIdManager.setBootstrapSessionId('future-bootstrap-session-id', true)).toBe(false)
+            ;(uuidv7 as jest.Mock).mockReturnValueOnce('fresh-session-id').mockReturnValueOnce('fresh-window-id')
             expect(sessionIdManager.checkAndGetSessionAndWindowId(false, now)).toMatchObject({
                 sessionId: 'fresh-session-id',
                 windowId: 'fresh-window-id',
                 sessionStartTimestamp: now,
-                changeReason: {
-                    noSessionId: true,
-                    activityTimeout: false,
-                    sessionPastMaximumLength: true,
-                },
             })
         })
 

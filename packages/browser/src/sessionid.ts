@@ -18,17 +18,19 @@ export const DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS = 30 * 60 // 30 minutes
 export const MAX_SESSION_IDLE_TIMEOUT_SECONDS = 10 * 60 * 60 // 10 hours
 export const MIN_SESSION_IDLE_TIMEOUT_SECONDS = 60 // 1 minute
 const SESSION_LENGTH_LIMIT_MILLISECONDS = 24 * 3600 * 1000 // 24 hours
+const BOOTSTRAP_SESSION_CLOCK_SKEW_TOLERANCE_MILLISECONDS = 60 * 1000 // 1 minute
 
-export const validateBootstrapSessionId = (sessionID: string, timestamp = new Date().getTime()): boolean => {
+const parseBootstrapSessionId = (sessionID: string, timestamp = new Date().getTime()): number | undefined => {
     try {
-        if (uuid7ToTimestampMs(sessionID) > timestamp) {
+        const sessionStartTimestamp = uuid7ToTimestampMs(sessionID)
+        if (sessionStartTimestamp > timestamp + BOOTSTRAP_SESSION_CLOCK_SKEW_TOLERANCE_MILLISECONDS) {
             logger.error('Bootstrap sessionID cannot be in the future')
-            return false
+            return undefined
         }
-        return true
+        return sessionStartTimestamp
     } catch (e) {
         logger.error('Invalid sessionID in bootstrap', e)
-        return false
+        return undefined
     }
 }
 
@@ -320,17 +322,17 @@ export class SessionIdManager {
 
     // Reset defers bootstrap assignment until the next session check so rotation listeners
     // observe the same event-driven lifecycle as a normal reset, rather than starting a replay immediately.
-    setBootstrapSessionId(sessionID: string, deferUntilNextSession = false): void {
-        try {
-            const sessionStartTimestamp = uuid7ToTimestampMs(sessionID)
-            if (deferUntilNextSession) {
-                this._pendingBootstrapSession = { sessionId: sessionID, sessionStartTimestamp }
-            } else {
-                this._setSessionId(sessionID, new Date().getTime(), sessionStartTimestamp)
-            }
-        } catch (e) {
-            logger.error('Invalid sessionID in bootstrap', e)
+    setBootstrapSessionId(sessionID: string, deferUntilNextSession = false): boolean {
+        const sessionStartTimestamp = parseBootstrapSessionId(sessionID)
+        if (isUndefined(sessionStartTimestamp)) {
+            return false
         }
+        if (deferUntilNextSession) {
+            this._pendingBootstrapSession = { sessionId: sessionID, sessionStartTimestamp }
+        } else {
+            this._setSessionId(sessionID, new Date().getTime(), sessionStartTimestamp)
+        }
+        return true
     }
 
     /**
@@ -407,7 +409,8 @@ export class SessionIdManager {
         const pendingBootstrapSession = this._pendingBootstrapSession
         const pendingBootstrapSessionPastMaximumLength =
             !!pendingBootstrapSession &&
-            (pendingBootstrapSession.sessionStartTimestamp > timestamp ||
+            (pendingBootstrapSession.sessionStartTimestamp >
+                timestamp + BOOTSTRAP_SESSION_CLOCK_SKEW_TOLERANCE_MILLISECONDS ||
                 timestamp - pendingBootstrapSession.sessionStartTimestamp > SESSION_LENGTH_LIMIT_MILLISECONDS)
         const sessionPastMaximumLength = pendingBootstrapSession
             ? pendingBootstrapSessionPastMaximumLength

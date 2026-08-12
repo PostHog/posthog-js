@@ -247,32 +247,30 @@ describe('reset()', () => {
             expect(instance.featureFlags.getFeatureFlagPayload('inactive-flag')).toEqual(undefined)
         })
 
-        it('clears earlier bootstrap values on a later plain reset', () => {
-            instance.reset({
-                bootstrap: {
-                    distinctID: 'custom-anon-id',
-                    featureFlags: { 'active-flag': true },
-                    sessionID: uuidv7(),
-                },
+        it('restores init bootstrap metadata on a later plain reset', async () => {
+            instance = await createPosthogInstance(uuidv7(), {
+                api_host: 'https://test.com',
+                token: 'testtoken',
+                bootstrap: { featureFlags: { 'init-flag': true } },
             })
+            instance.reset({ bootstrap: { featureFlags: { 'reset-flag': true } } })
 
             instance.reset()
 
-            expect(instance.config.bootstrap).toEqual({})
+            expect(instance.config.bootstrap).toEqual({ featureFlags: { 'init-flag': true } })
             expect(instance.featureFlags.getFlags()).toEqual([])
         })
 
-        it('logs and preserves state for an invalid bootstrap session ID', () => {
+        it('logs an invalid bootstrap session ID but still resets', () => {
             const initialDistinctId = instance.get_distinct_id()
-            const initialSessionId = instance.sessionManager!.checkAndGetSessionAndWindowId().sessionId
 
             expect(() => instance.reset({ bootstrap: { sessionID: 'invalid-session-id' } })).not.toThrow()
 
-            expect(instance.get_distinct_id()).toEqual(initialDistinctId)
-            expect(instance.sessionManager!.checkAndGetSessionAndWindowId().sessionId).toEqual(initialSessionId)
+            expect(instance.get_distinct_id()).not.toEqual(initialDistinctId)
+            expect(instance.config.bootstrap).toEqual({})
         })
 
-        it('logs and preserves state for a future bootstrap session ID', () => {
+        it('logs a future bootstrap session ID but still resets', () => {
             const initialDistinctId = instance.get_distinct_id()
             const futureTimestampHex = (Date.now() + 23 * 60 * 60 * 1000).toString(16).padStart(12, '0')
             const futureSessionID = `${futureTimestampHex.slice(0, 8)}-${futureTimestampHex.slice(
@@ -281,7 +279,8 @@ describe('reset()', () => {
 
             expect(() => instance.reset({ bootstrap: { sessionID: futureSessionID } })).not.toThrow()
 
-            expect(instance.get_distinct_id()).toEqual(initialDistinctId)
+            expect(instance.get_distinct_id()).not.toEqual(initialDistinctId)
+            expect(instance.config.bootstrap).toEqual({})
         })
 
         it('applies a bootstrapped session ID and rotates the window', () => {
@@ -302,6 +301,19 @@ describe('reset()', () => {
                 sessionPastMaximumLength: false,
                 crossTabAdoption: false,
             })
+        })
+
+        it('does not apply a bootstrapped distinct ID in on-reject cookieless mode', async () => {
+            instance = await createPosthogInstance(uuidv7(), {
+                api_host: 'https://test.com',
+                token: 'testtoken',
+                cookieless_mode: 'on_reject',
+                opt_out_capturing_by_default: true,
+            })
+
+            instance.reset({ bootstrap: { distinctID: 'custom-anon-id' } })
+
+            expect(instance.get_distinct_id()).not.toEqual('custom-anon-id')
         })
 
         it('does not replace the cookieless sentinel with a bootstrapped distinct ID', async () => {

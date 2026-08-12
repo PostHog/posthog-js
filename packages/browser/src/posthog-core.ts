@@ -47,7 +47,7 @@ import { DEFAULT_FLUSH_INTERVAL_MS, RequestQueue } from './request-queue'
 import { RetryQueue } from './retry-queue'
 import { ScrollManager } from './scroll-manager'
 import { SessionPropsManager } from './session-props'
-import { SessionIdManager, validateBootstrapSessionId } from './sessionid'
+import { SessionIdManager } from './sessionid'
 import { localStore, sessionStore } from './storage'
 import {
     CaptureLogOptions,
@@ -3166,12 +3166,8 @@ export class PostHog implements PostHogInterface {
         if (!this.__loaded) {
             return logger.uninitializedWarning('posthog.reset')
         }
-        // Validate before clearing any state so an invalid session ID leaves the current user untouched.
         const bootstrapSessionID = bootstrap?.sessionID
-        if (!isUndefined(bootstrapSessionID) && !validateBootstrapSessionId(bootstrapSessionID)) {
-            return
-        }
-        this.config.bootstrap = bootstrap || {}
+        this.config.bootstrap = bootstrap || this._originalUserConfig?.bootstrap || {}
 
         const device_id = this.get_property(DEVICE_ID)
         // $device_model describes the physical device, not the user, so preserve it across reset()
@@ -3249,7 +3245,7 @@ export class PostHog implements PostHogInterface {
         if (bootstrap) {
             // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
             // eslint-disable-next-line posthog-js/no-direct-undefined-check
-            if (bootstrap.distinctID !== undefined && this.config.cookieless_mode !== COOKIELESS_ALWAYS) {
+            if (bootstrap.distinctID !== undefined && !this._inCookielessMode()) {
                 this.persistence?.set_property(
                     USER_STATE,
                     bootstrap.isIdentifiedID ? USER_STATE_IDENTIFIED : USER_STATE_ANONYMOUS
@@ -3259,8 +3255,11 @@ export class PostHog implements PostHogInterface {
 
             this.featureFlags?.initialize()
 
-            if (!isUndefined(bootstrapSessionID)) {
-                this.sessionManager?.setBootstrapSessionId(bootstrapSessionID, true)
+            if (
+                !isUndefined(bootstrapSessionID) &&
+                !this.sessionManager?.setBootstrapSessionId(bootstrapSessionID, true)
+            ) {
+                this.config.bootstrap = { ...bootstrap, sessionID: undefined }
             }
         }
 
