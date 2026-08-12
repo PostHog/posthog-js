@@ -650,6 +650,33 @@ describe('posthog core', () => {
             expect(persistence.unregister).toHaveBeenCalledWith(FLAG_CALL_REPORTED)
         })
 
+        it('reloads flags for a same-ID sibling identity-state transition', () => {
+            const props = { distinct_id: 'shared-id', $user_state: 'identified' }
+            const persistence = {
+                props,
+                properties: () => ({ ...props }),
+                remove_event_timer: jest.fn(),
+                get_property: (key: string) => props[key as keyof typeof props],
+                register: jest.fn(),
+                unregister: jest.fn(),
+                syncCookieProperties: jest.fn().mockImplementation(() => {
+                    props.$user_state = 'anonymous'
+                    return true
+                }),
+            } as unknown as PostHogPersistence
+            const sessionPersistence = {
+                properties: () => ({}),
+                get_property: () => undefined,
+            } as unknown as PostHogPersistence
+            posthog = posthogWith({}, { ...overrides, persistence, sessionPersistence })
+            const reloadFeatureFlags = jest.spyOn(posthog, 'reloadFeatureFlags').mockImplementation(() => {})
+
+            posthog.calculateEventProperties('custom_event', {}, new Date(), uuid)
+
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+            expect(persistence.unregister).toHaveBeenCalledWith(FLAG_CALL_REPORTED)
+        })
+
         it('sets $lib_custom_api_host if api_host is not the default', () => {
             posthog = posthogWith(
                 {

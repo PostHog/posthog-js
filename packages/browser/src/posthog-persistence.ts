@@ -302,6 +302,7 @@ export class PostHogPersistence {
         }
 
         const previousDistinctId = this.props[DISTINCT_ID]
+        const previousUserState = this.props[USER_STATE]
         const nextProps = extend({}, this.props)
         const cookiePersistedProperties = [
             ...COOKIE_PERSISTED_PROPERTIES,
@@ -317,7 +318,10 @@ export class PostHogPersistence {
             }
         })
         this.props = extend(nextProps, cookieProperties)
-        if (cookieProperties[DISTINCT_ID] !== previousDistinctId) {
+        if (
+            cookieProperties[DISTINCT_ID] !== previousDistinctId ||
+            cookieProperties[USER_STATE] !== previousUserState
+        ) {
             // `$user_id` is localStorage-only, but it is bound to the current
             // identity. Never carry the previous logged-in user across a sibling
             // identify/reset adopted from the shared cookie.

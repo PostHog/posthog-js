@@ -1038,6 +1038,21 @@ describe('persistence', () => {
                 expect(lib.props.$user_id).toBeUndefined()
             })
 
+            it('flag on: a same-ID sibling reset clears stale user identity', () => {
+                document.cookie = encodeCookie({ distinct_id: 'shared-id', $user_state: 'identified' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({ distinct_id: 'shared-id', $user_state: 'identified', $user_id: 'shared-id' })
+                )
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+
+                document.cookie = encodeCookie({ distinct_id: 'shared-id', $user_state: 'anonymous' })
+
+                expect(lib.syncCookieProperties()).toBe(true)
+                expect(lib.props.$user_state).toBe('anonymous')
+                expect(lib.props.$user_id).toBeUndefined()
+            })
+
             it('flag on: a sibling reset removes stale cookie-persisted properties without removing local-only data', () => {
                 document.cookie = encodeCookie({ distinct_id: 'identified-user', custom_property: 'old-user' })
                 localStorage.setItem(
