@@ -23,7 +23,9 @@ import {
 } from '../../../extensions/replay/external/sessionrecording-utils'
 import { PostHog } from '../../../posthog-core'
 import {
+    CapturedNetworkRequest,
     FlagsResponse,
+    NetworkRecordOptions,
     PerformanceCaptureConfig,
     PostHogConfig,
     Property,
@@ -832,6 +834,37 @@ describe('Lazy SessionRecording', () => {
                     ).toBe(expected)
                 }
             )
+        })
+
+        describe('network capture plugin', () => {
+            it('filters ingestion paths when rewriteRequestPath is configured after the plugin starts', () => {
+                const getRecordNetworkPlugin = jest.fn((options: NetworkRecordOptions) => ({
+                    name: 'network',
+                    observer: undefined,
+                    options,
+                }))
+                assignableWindow.__PosthogExtensions__!.rrwebPlugins = { getRecordNetworkPlugin }
+                posthog.config.session_recording.recordBody = true
+
+                const lazyLoadedSessionRecording = new LazyLoadedSessionRecording(posthog, true)
+                lazyLoadedSessionRecording['_forceAllowLocalhostNetworkCapture'] = true
+                lazyLoadedSessionRecording['_gatherRRWebPlugins']()
+
+                const networkOptions = getRecordNetworkPlugin.mock.calls[0][0]
+                posthog.config.rewriteRequestPath = (url) => {
+                    if (url.pathname === '/s/') {
+                        url.pathname = '/custom-replay/'
+                    }
+                    return url
+                }
+                const rewrittenEndpoint = posthog.requestRouter.endpointFor('api', '/s/')
+
+                expect(
+                    networkOptions.maskRequestFn!({
+                        name: rewrittenEndpoint,
+                    } as CapturedNetworkRequest)
+                ).toBeUndefined()
+            })
         })
 
         describe('masking config', () => {

@@ -71,7 +71,7 @@ export class BrowserClientAdapter implements Client, Disposable {
     private _disposed = false
 
     constructor(readonly instance: PostHog) {
-        this._logger = logger.createLogger('[BrowserExtensions]')
+        this._logger = logger
         this._latestRemoteConfigResult = instance._lastRemoteConfig
         this.kv = new BrowserClientKeyValueStore(instance)
         this.onEvent = (handler) => {
@@ -105,7 +105,7 @@ export class BrowserClientAdapter implements Client, Disposable {
             }
             return createDisposable(unsubscribe)
         }
-        this._runtime = new ExtensionRuntime(this._logger, this)
+        this._runtime = new ExtensionRuntime(logger.createLogger('[BrowserExtensions]'), this)
     }
 
     get logger(): Logger {

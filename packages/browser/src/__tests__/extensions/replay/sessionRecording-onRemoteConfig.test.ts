@@ -508,6 +508,23 @@ describe('SessionRecording', () => {
             expect(sessionRecording.status).toBe('awaiting_config')
         })
 
+        it('awaits config when config fetch fails and persisted config has no cache_timestamp', () => {
+            // configs persisted by pre-cache_timestamp SDK versions can be arbitrarily old,
+            // so they must not start recording under their stale trigger/sampling settings
+            posthog.persistence?.register({
+                [SESSION_RECORDING_REMOTE_CONFIG]: {
+                    enabled: true,
+                    endpoint: '/s/',
+                },
+            })
+
+            // Remote config fetch fails
+            sessionRecording.onRemoteConfig(makeFlagsResponse({}))
+
+            expect(loadScriptMock).toHaveBeenCalled()
+            expect(sessionRecording.status).toBe('awaiting_config')
+        })
+
         it('transitions to missing_config when config refresh fails', () => {
             posthog.persistence?.register({
                 [SESSION_RECORDING_REMOTE_CONFIG]: {

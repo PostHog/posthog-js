@@ -2,7 +2,7 @@
   "id": "posthog-js",
   "hogRef": "0.3",
   "info": {
-    "version": "<version>",
+    "version": "1.415.7",
     "id": "posthog-js",
     "title": "PostHog JavaScript Web SDK",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
@@ -1686,11 +1686,6 @@
               "code": "\n\n// reset and generate new device ID\nposthog.reset(true)  // also resets device_id\n\n\n"
             },
             {
-              "id": "reset_with_a_custom_anonymous_id_and_bootstrapped_feature_flags",
-              "name": "reset with a custom anonymous ID and bootstrapped feature flags",
-              "code": "\n\n// reset with a custom anonymous ID and bootstrapped feature flags\nposthog.reset({\n    bootstrap: {\n        distinctID: myAnonymousID,\n        isIdentifiedID: false,\n        featureFlags: { 'my-flag': true },\n    }\n})\n\n\n"
-            },
-            {
               "id": "with_opt_out_capturing_by_default,_reset()_before_opting_in,_never_after",
               "name": "with opt_out_capturing_by_default, reset() before opting in, never after",
               "code": "\n\n// with opt_out_capturing_by_default, reset() before opting in, never after\nposthog.reset()\nposthog.opt_in_capturing()\n\n\n\n"
@@ -1699,10 +1694,10 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "Boolean to reset the device ID (legacy), or reset options including bootstrap values.",
+              "description": "Whether to generate a new device ID as well as a new distinct ID.",
               "isOptional": true,
-              "type": "boolean | ResetOptions",
-              "name": "options"
+              "type": "boolean",
+              "name": "reset_device_id"
             }
           ],
           "returnType": {
@@ -2972,11 +2967,6 @@
           "name": "flags_api_host"
         },
         {
-          "description": "Rewrites the URL used for PostHog API, feature flag, and asset requests.\nThis is intended for customers who use a reverse proxy and need custom paths.\nThe proxy must map the rewritten paths back to the canonical PostHog paths.\n\nUI links are not rewritten.",
-          "type": "(url: URL) => URL",
-          "name": "rewriteRequestPath"
-        },
-        {
           "description": "If using a reverse proxy for `api_host` then this should be the actual PostHog app URL (e.g. https://us.posthog.com).\nThis ensures that links to PostHog point to the correct host.",
           "type": "string",
           "name": "ui_host"
@@ -3710,7 +3700,7 @@
         },
         {
           "description": "Reset the user's identity and start a new session.",
-          "type": "(options?: boolean | ResetOptions) => void",
+          "type": "(reset_device_id?: boolean) => void",
           "name": "reset"
         },
         {
