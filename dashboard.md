@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4507](https://github.com/PostHog/posthog-js/issues/4507) | Valid enhancement proposal, but the requested signal is not available through the existing recorder hook for all dead-click users and safely adding it needs a deliberate instrumentation design. | enhancement, feature/dead-clicks, team/analytics-platform |  | no | 2026-08-12T13:55:31.715Z |
 | PostHog/posthog-js | [issue 4492](https://github.com/PostHog/posthog-js/issues/4492) | Valid cross-platform integration feature request, but it is not a small SDK change and is blocked in part by the separate official WeChat Mini Program SDK work in #4491. | enhancement, web, team/client-libraries |  | no | 2026-08-11T12:51:49.580Z |
 | PostHog/posthog-js | [issue 4491](https://github.com/PostHog/posthog-js/issues/4491) | Valid, well-scoped feature request for a new officially supported runtime SDK; it is not a small compatibility fix. | enhancement, web |  | no | 2026-08-11T12:50:50.139Z |
 | PostHog/posthog-js | [issue 4483](https://github.com/PostHog/posthog-js/issues/4483) | Confirmed MCP compatibility and security-UX bug: the opt-in conversation correlation feature intentionally places imperative instructions in tool results, which Claude can reasonably reject as prompt injection. | feature/mcp-analytics, team/ai-observability |  | no | 2026-08-10T14:41:37.482Z |
