@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.415.7
+
+### Patch Changes
+
+- [#4318](https://github.com/PostHog/posthog-js/pull/4318) [`847d963`](https://github.com/PostHog/posthog-js/commit/847d9639de3191baec3c52f5e33179a2fcbd5139) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Migrate browser feature flags to the shared extension lifecycle while preserving the public feature flag facade, persistence compatibility, request behavior, and event enrichment.
+  (2026-08-12)
+
 ## 1.415.6
 
 ### Patch Changes
