@@ -112,8 +112,25 @@ describe('createLocalPlusCookieStore._set', () => {
         expect(cookieStore._parse(name)).not.toHaveProperty('$cookie_persisted_properties')
         expect(cookieStore._parse(getCookiePersistedPropertiesMetadataName(name))).toEqual({
             p: ['custom_property'],
-            f: JSON.stringify({ distinct_id: 'abc', custom_property: 'custom' }),
+            f: expect.any(String),
         })
+    })
+
+    it('does not publish the main cookie when custom-key metadata cannot be persisted', () => {
+        const name = 'ph_x_posthog'
+        cookieStore._set(name, { distinct_id: 'anonymous' })
+        const store = createLocalPlusCookieStore(['custom_property'], true)
+        const cookieSet = cookieStore._set
+        const setSpy = jest
+            .spyOn(cookieStore, '_set')
+            .mockImplementation((cookieName, ...args) =>
+                cookieName === getCookiePersistedPropertiesMetadataName(name) ? false : cookieSet(cookieName, ...args)
+            )
+
+        store._set(name, { distinct_id: 'identified-user', custom_property: 'custom' })
+
+        expect(cookieStore._parse(name)).toEqual({ distinct_id: 'anonymous' })
+        setSpy.mockRestore()
     })
 
     it('reports the localStorage write succeeded even when the cookie mirror throws', () => {

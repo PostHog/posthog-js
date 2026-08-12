@@ -277,12 +277,25 @@ export const getCookiePersistedProperties = (
     return cookiePersistedProperties
 }
 
+const getCookieSnapshotFingerprint = (cookieValue: string): string => {
+    // Two independent 32-bit hashes plus the byte length keep the sidecar
+    // compact even when the main cookie is close to its 4 KB limit.
+    let first = 5381
+    let second = 2166136261
+    for (let i = 0; i < cookieValue.length; i++) {
+        const code = cookieValue.charCodeAt(i)
+        first = (first * 33) ^ code
+        second = Math.imul(second ^ code, 16777619)
+    }
+    return cookieValue.length.toString(36) + '.' + (first >>> 0).toString(36) + '.' + (second >>> 0).toString(36)
+}
+
 export const getCookiePersistedPropertiesMetadata = (
     cookieProperties: Properties,
     customCookieProperties: readonly string[]
 ): Properties => ({
     p: customCookieProperties,
-    f: JSON.stringify(cookieProperties),
+    f: getCookieSnapshotFingerprint(JSON.stringify(cookieProperties)),
 })
 
 export const getCookiePersistedPropertiesFromMetadata = (
@@ -294,7 +307,7 @@ export const getCookiePersistedPropertiesFromMetadata = (
     }
     try {
         const metadata = cookieStore._parse(getCookiePersistedPropertiesMetadataName(name))
-        return metadata?.f === cookieValue && isArray(metadata.p) ? metadata.p : []
+        return metadata?.f === getCookieSnapshotFingerprint(cookieValue) && isArray(metadata.p) ? metadata.p : []
     } catch {
         return []
     }
@@ -381,19 +394,23 @@ export const createLocalPlusCookieStore = (
                 const cookiePersistedProperties = getCookiePersistedProperties(value, customCookieProperties)
 
                 if (Object.keys(cookiePersistedProperties).length) {
-                    // Write the main snapshot first. Until its matching metadata
-                    // lands, readers conservatively retain omitted custom keys.
-                    cookieStore._set(name, cookiePersistedProperties, days, cross_subdomain, is_secure, debug)
                     if (preferCookieOnConflict && customCookieProperties.length > 0) {
-                        cookieStore._set(
-                            getCookiePersistedPropertiesMetadataName(name),
-                            getCookiePersistedPropertiesMetadata(cookiePersistedProperties, customCookieProperties),
-                            days,
-                            cross_subdomain,
-                            is_secure,
-                            debug
+                        const metadataName = getCookiePersistedPropertiesMetadataName(name)
+                        const metadata = getCookiePersistedPropertiesMetadata(
+                            cookiePersistedProperties,
+                            customCookieProperties
                         )
+                        // Publish and verify metadata before the main snapshot. A
+                        // reader in between sees metadata that does not match the
+                        // old main cookie and conservatively retains custom keys.
+                        // If the sidecar cannot land, do not publish a main snapshot
+                        // whose omitted custom keys would have ambiguous semantics.
+                        cookieStore._set(metadataName, metadata, days, cross_subdomain, is_secure, debug)
+                        if (cookieStore._get(metadataName) !== JSON.stringify(metadata)) {
+                            return stored
+                        }
                     }
+                    cookieStore._set(name, cookiePersistedProperties, days, cross_subdomain, is_secure, debug)
                 }
             } catch (err) {
                 localStore._error(err)
