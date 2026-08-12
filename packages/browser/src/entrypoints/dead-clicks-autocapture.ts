@@ -43,6 +43,12 @@ function deadEventName(candidate: DeadClickCandidate): '$dead_click' | '$dead_sw
 // root — so a swipe over them can never be judged dead
 const UNOBSERVABLE_SURFACE_SELECTOR = 'canvas,video,audio,embed,object'
 
+// a click within this window of the tab (re)gaining visibility is treated as the click that
+// woke/focused the tab and suppressed rather than flagged dead. wider than the other thresholds
+// because a real "tab back, then click the page" gesture has a human-scale gap (refocus, move the
+// mouse, click); still short enough that a genuinely dead click a while after refocusing is caught.
+const VISIBILITY_CHANGE_SUPPRESSION_MS = 1000
+
 function hasModifierKey(event: MouseEvent | TouchEvent): boolean {
     return event.ctrlKey || event.metaKey || event.altKey || event.shiftKey
 }
@@ -387,18 +393,14 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                 this._lastSelectionChanged && click.timestamp <= this._lastSelectionChanged
                     ? this._lastSelectionChanged - click.timestamp
                     : undefined
-            // only a visibility change _after_ the click can be positive evidence that the click was
-            // dead. matching the mutation/selection branches (rather than Math.abs against the last
-            // visibility change ever) stops a tab that was backgrounded before the click from being
-            // read as a multi-second "response" and timing every later click out as dead.
-            click.visibilityChangedDelayMs =
-                this._lastVisibilityChange && click.timestamp <= this._lastVisibilityChange
-                    ? this._lastVisibilityChange - click.timestamp
-                    : undefined
-            // suppression still looks at the nearest visibility change on either side: a change close
-            // to the click (e.g. the user refocusing the tab just before clicking) means we can't
-            // trust the click as dead. only stale/far changes are ignored, which is the whole fix.
-            const visibilityProximityMs = this._lastVisibilityChange
+            // how close the click is to the tab (re)gaining visibility, on either side
+            // (_lastVisibilityChange only records becoming visible). this exists solely to _suppress_:
+            // a click landing right around a visibility change is usually the click that woke/focused
+            // the tab (e.g. tabbing back and clicking the body to bring it forward), which legitimately
+            // does nothing. a visibility change is never positive evidence that a click _was_ dead, so
+            // unlike mutation/selection it feeds no timeout branch — which is what used to flag every
+            // click in a session where the tab had ever been backgrounded (Math.abs vs a stale change).
+            click.visibilityChangedDelayMs = this._lastVisibilityChange
                 ? Math.abs(click.timestamp - this._lastVisibilityChange)
                 : undefined
 
@@ -419,24 +421,14 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                 isNumber(click.selectionChangedDelayMs) &&
                 click.selectionChangedDelayMs < this._config.selection_change_threshold_ms
             const hadVisibilityChange =
-                isNumber(visibilityProximityMs) && visibilityProximityMs < this._config.selection_change_threshold_ms
+                isNumber(click.visibilityChangedDelayMs) &&
+                click.visibilityChangedDelayMs < VISIBILITY_CHANGE_SUPPRESSION_MS
 
             if (hadScroll || hadMutation || hadSelectionChange || hadVisibilityChange) {
                 continue
             }
 
-            const visibilityChangedTimeout = checkTimeout(
-                click.visibilityChangedDelayMs,
-                this._config.selection_change_threshold_ms
-            )
-
-            if (
-                scrollTimeout ||
-                mutationTimeout ||
-                absoluteTimeout ||
-                selectionChangedTimeout ||
-                visibilityChangedTimeout
-            ) {
+            if (scrollTimeout || mutationTimeout || absoluteTimeout || selectionChangedTimeout) {
                 const prefix = deadEventName(click)
                 if (prefix === '$dead_swipe') {
                     if (this._deadSwipesCaptured >= this._config.max_dead_swipes_per_page_load) {
@@ -452,7 +444,9 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                     [`${prefix}_mutation_timeout`]: mutationTimeout,
                     [`${prefix}_absolute_timeout`]: absoluteTimeout,
                     [`${prefix}_selection_changed_timeout`]: selectionChangedTimeout,
-                    [`${prefix}_visibility_changed_timeout`]: visibilityChangedTimeout,
+                    // visibility changes only ever suppress a dead click, never cause one; kept in the
+                    // payload (always false) so the event shape is unchanged for existing consumers
+                    [`${prefix}_visibility_changed_timeout`]: false,
                 })
             } else if (click.absoluteDelayMs < this._config.mutation_threshold_ms) {
                 // keep waiting until next check
