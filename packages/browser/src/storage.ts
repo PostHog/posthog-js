@@ -10,7 +10,7 @@ import {
     USER_STATE,
 } from './constants'
 
-import { isNull, isUndefined } from '@posthog/core'
+import { isArray, isNull, isUndefined } from '@posthog/core'
 import { logger } from '@posthog/browser-common/utils/logger'
 import { window, document } from '@posthog/browser-common/utils/globals'
 import { getCookieValue } from '@posthog/browser-common/utils/cookie-utils'
@@ -254,6 +254,11 @@ export const COOKIE_PERSISTED_PROPERTIES = [
     USER_STATE,
 ]
 
+// Records which keys the writer considered cookie-backed. This lets a newer
+// configuration distinguish an old cookie that never carried a newly added
+// custom key from a reset snapshot that intentionally omitted it.
+export const COOKIE_PERSISTED_PROPERTIES_MARKER = '$cookie_persisted_properties'
+
 /**
  * Creates a localPlusCookieStore instance with custom cookie-persisted properties.
  *
@@ -279,8 +284,17 @@ export const createLocalPlusCookieStore = (
                     cookieProperties = cookieStore._parse(name) || {}
                 } catch {}
                 const localStorageData: Properties = JSON.parse(localStore._get(name) || '{}')
+                const persistedPropertyMarker = cookieProperties[COOKIE_PERSISTED_PROPERTIES_MARKER]
+                delete cookieProperties[COOKIE_PERSISTED_PROPERTIES_MARKER]
                 let value: Properties
                 if (preferCookieOnConflict) {
+                    // Built-in keys are stable and authoritative for legacy cookies too.
+                    // The marker adds only custom keys understood by the writer, keeping
+                    // the common cookie compact while allowing intentional removals.
+                    const authoritativeCookieProperties = [
+                        ...COOKIE_PERSISTED_PROPERTIES,
+                        ...(isArray(persistedPropertyMarker) ? persistedPropertyMarker : []),
+                    ]
                     // Defensive: skip null / empty-string cookie values so a malformed
                     // legacy cookie cannot wipe out valid localStorage data.
                     const safeCookieProperties: Properties = {}
@@ -290,12 +304,12 @@ export const createLocalPlusCookieStore = (
                             safeCookieProperties[key] = v
                         }
                     }
-                    // A non-empty cookie is the complete shared snapshot. Remove
-                    // cookie-backed keys it omits so a subdomain reopened after
-                    // reset cannot resurrect prior-user values from localStorage.
+                    // A non-empty cookie is the complete shared snapshot for the key
+                    // set understood by its writer. Remove omitted keys so a subdomain
+                    // reopened after reset cannot resurrect prior-user values.
                     if (Object.keys(safeCookieProperties).length > 0) {
                         cookiePropertiesToPersist.forEach((key) => {
-                            if (!(key in cookieProperties)) {
+                            if (authoritativeCookieProperties.indexOf(key) !== -1 && !(key in cookieProperties)) {
                                 delete localStorageData[key]
                             }
                         })
@@ -321,6 +335,9 @@ export const createLocalPlusCookieStore = (
             const stored = localStore._set(name, value, undefined, undefined, debug)
             try {
                 const cookiePersistedProperties: Record<string, any> = {}
+                if (preferCookieOnConflict && customCookieProperties.length > 0) {
+                    cookiePersistedProperties[COOKIE_PERSISTED_PROPERTIES_MARKER] = customCookieProperties
+                }
                 cookiePropertiesToPersist.forEach((key) => {
                     if (value[key]) {
                         cookiePersistedProperties[key] = value[key]

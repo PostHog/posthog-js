@@ -3,6 +3,7 @@
 import { each, extend, stripEmptyProperties, addEventListener } from '@posthog/browser-common/utils/general-utils'
 import {
     COOKIE_PERSISTED_PROPERTIES,
+    COOKIE_PERSISTED_PROPERTIES_MARKER,
     cookieStore,
     createLocalPlusCookieStore,
     localStore,
@@ -232,6 +233,12 @@ export class PostHogPersistence {
         } catch {
             return false
         }
+        const persistedPropertyMarker = cookieProperties[COOKIE_PERSISTED_PROPERTIES_MARKER]
+        delete cookieProperties[COOKIE_PERSISTED_PROPERTIES_MARKER]
+        const authoritativeCookieProperties = [
+            ...COOKIE_PERSISTED_PROPERTIES,
+            ...(isArray(persistedPropertyMarker) ? persistedPropertyMarker : []),
+        ]
         const invalidCookieProperties: Record<string, true> = {}
         Object.keys(cookieProperties).forEach((key) => {
             const value = cookieProperties[key]
@@ -250,7 +257,11 @@ export class PostHogPersistence {
             ...(config.cookie_persisted_properties || []),
         ]
         cookiePersistedProperties.forEach((key) => {
-            if (!(key in cookieProperties) && !invalidCookieProperties[key]) {
+            if (
+                authoritativeCookieProperties.indexOf(key) !== -1 &&
+                !(key in cookieProperties) &&
+                !invalidCookieProperties[key]
+            ) {
                 delete nextProps[key]
             }
         })
@@ -989,6 +1000,13 @@ export class PostHogPersistence {
                 this.save()
             } else if (cookiePrecedenceChanged) {
                 this._storage = newStore
+                if (!disabled) {
+                    // Persist the reconciled snapshot immediately. In particular,
+                    // when precedence is disabled, a later reload must not let the
+                    // stale localStorage value become authoritative again.
+                    delete this._slotState[MAIN_STORAGE_SLOT]
+                    this._writeNow()
+                }
             }
         } finally {
             if (cookieSyncSuppressionStarted) {

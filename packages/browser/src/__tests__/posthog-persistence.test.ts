@@ -959,7 +959,11 @@ describe('persistence', () => {
             })
 
             it('flag on: reopening after a sibling reset removes stale cookie-backed localStorage properties', () => {
-                document.cookie = encodeCookie({ distinct_id: 'new-anonymous', $user_state: 'anonymous' })
+                document.cookie = encodeCookie({
+                    distinct_id: 'new-anonymous',
+                    $user_state: 'anonymous',
+                    $cookie_persisted_properties: ['custom_property'],
+                })
                 localStorage.setItem(
                     persistenceName,
                     JSON.stringify({
@@ -980,6 +984,22 @@ describe('persistence', () => {
                 expect(lib.props.custom_property).toBeUndefined()
                 expect(lib.props.local_only_property).toBe('preserved')
                 expect(JSON.parse(localStorage.getItem(persistenceName)!).custom_property).toBeUndefined()
+            })
+
+            it('flag on: preserves a newly configured cookie-backed property when a legacy cookie omits it', () => {
+                document.cookie = encodeCookie({ distinct_id: 'identified-user' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({ distinct_id: 'identified-user', custom_property: 'preserved' })
+                )
+
+                const lib = new PostHogPersistence({
+                    ...makeConfig('localStorage+cookie', true),
+                    cookie_persisted_properties: ['custom_property'],
+                })
+
+                expect(lib.props.custom_property).toBe('preserved')
+                expect(cookieStore._parse(persistenceName).custom_property).toBe('preserved')
             })
 
             it('flag on: a live tab adopts a sibling identify before its next persistence write', () => {
@@ -1031,7 +1051,11 @@ describe('persistence', () => {
                 }
                 const lib = new PostHogPersistence(config)
 
-                document.cookie = encodeCookie({ distinct_id: 'new-anonymous', $user_state: 'anonymous' })
+                document.cookie = encodeCookie({
+                    distinct_id: 'new-anonymous',
+                    $user_state: 'anonymous',
+                    $cookie_persisted_properties: ['custom_property'],
+                })
                 lib.register({ another_local_property: 'also-preserved' })
 
                 expect(lib.props.custom_property).toBeUndefined()
@@ -1130,6 +1154,21 @@ describe('persistence', () => {
 
                 expect(lib.props.distinct_id).toBe('identified-user')
                 expect(cookieStore._parse(persistenceName).distinct_id).toBe('identified-user')
+            })
+
+            it('persists a reconciled cookie snapshot when disabling precedence', () => {
+                document.cookie = encodeCookie({ distinct_id: 'anonymous' })
+                localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'anonymous' }))
+                const oldConfig = makeConfig('localStorage+cookie', true)
+                const lib = new PostHogPersistence(oldConfig)
+
+                document.cookie = encodeCookie({ distinct_id: 'identified-user' })
+                const newConfig = makeConfig('localStorage+cookie', false)
+                lib.update_config(newConfig, oldConfig)
+
+                expect(lib.props.distinct_id).toBe('identified-user')
+                expect(localStore._parse(persistenceName).distinct_id).toBe('identified-user')
+                expect(new PostHogPersistence(newConfig).props.distinct_id).toBe('identified-user')
             })
 
             it('preserves the shared cookie when enabling precedence also rebuilds storage', () => {
