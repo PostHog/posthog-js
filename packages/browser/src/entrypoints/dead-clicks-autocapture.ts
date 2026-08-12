@@ -57,6 +57,38 @@ function checkTimeout(value: number | undefined, thresholdMs: number) {
     return isNumber(value) && value >= thresholdMs
 }
 
+// How dead-click detection works
+// ================================
+// A click (or swipe) is queued as a candidate, then re-examined ~1s later in `_checkClicks`. It is
+// reported as a `$dead_click` only if — after the click — NO liveness/suppression signal fired
+// within its window AND at least one timeout signal fired. In short: something-happened-fast wins
+// (alive), otherwise nothing-happened-in-time loses (dead).
+//
+// Gate signals (checked in `_ignore` before the click is ever queued — never even a candidate):
+//   - element is inside the PostHog toolbar
+//   - same node clicked again within 1s (dedupe of repeated clicks)
+//   - target is the <html> node or not an element
+//   - target matches `css_selector_ignorelist`
+//   - a modifier key is held (ctrl/meta/alt/shift) unless `capture_clicks_with_modifier_keys`
+//   - (clicks only) target is an anchor — a legitimate activation; swipes are still candidates
+//
+// Liveness / suppression signals (any one, within its window after the click => alive, dropped).
+// These say "the click did something", so they only ever suppress; none can mark a click dead:
+//   - mutation:   a DOM mutation           < mutation_threshold_ms (default 2500)
+//   - scroll:     the page/an element scrolled < scroll_threshold_ms (default 100)
+//   - selection:  a selectionchange        < selection_change_threshold_ms (default 100)
+//   - visibility: a visibilitychange (either direction — the tab going hidden because the click
+//                 opened a new tab, or becoming visible as the click woke/focused it)
+//                 < VISIBILITY_CHANGE_SUPPRESSION_MS, measured either side of the click
+//   - focus:      a window focus/blur (a click that opened a new window/popup may only surface as
+//                 the current window losing focus) < VISIBILITY_CHANGE_SUPPRESSION_MS, either side
+//
+// Timeout signals (a click with no liveness signal is dead if any one fired). Note visibility and
+// focus are deliberately absent here — they are liveness-only and never mark a click dead:
+//   - mutation timeout:  a mutation, but only after mutation_threshold_ms
+//   - scroll timeout:    a scroll, but only after scroll_threshold_ms
+//   - selection timeout: a selectionchange, but only after selection_change_threshold_ms
+//   - absolute timeout:  nothing at all within mutation_threshold_ms * 1.1 (the catch-all backstop)
 class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptureInterface {
     private _mutationObserver: MutationObserver | undefined
     private _lastMutation: number | undefined
