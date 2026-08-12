@@ -206,6 +206,9 @@ describe('reset()', () => {
         })
 
         it('applies bootstrapped feature flags and payloads', () => {
+            // Keep the asynchronous flags reload from racing this synchronous bootstrap assertion on slower CI workers.
+            jest.spyOn(instance, 'reloadFeatureFlags').mockImplementation()
+
             instance.reset({
                 bootstrap: {
                     featureFlags: {
