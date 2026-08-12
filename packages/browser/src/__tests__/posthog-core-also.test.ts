@@ -356,6 +356,33 @@ describe('posthog core', () => {
             )
         })
 
+        it('rewrites payloads sent to the configured analytics endpoint', () => {
+            const posthog = posthogWith(
+                {
+                    ...defaultConfig,
+                    request_batching: false,
+                    rewriteRequestPath: (url) => {
+                        if (url.pathname === '/i/v0/e/') {
+                            url.pathname = '/events/'
+                        }
+                        return url
+                    },
+                },
+                defaultOverrides
+            )
+            posthog._onRemoteConfig({ ok: true, config: { analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig })
+
+            posthog.capture('event-name', { foo: 'bar', length: 0 })
+
+            const rewrittenEndpoint = 'https://us.i.posthog.com/events/'
+            expect(posthog._send_request).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    url: rewrittenEndpoint,
+                })
+            )
+            expect(posthog.requestRouter.isIngestionEndpoint(rewrittenEndpoint)).toBe(true)
+        })
+
         it('sends session recordings with sent_at in the body', () => {
             const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
 
