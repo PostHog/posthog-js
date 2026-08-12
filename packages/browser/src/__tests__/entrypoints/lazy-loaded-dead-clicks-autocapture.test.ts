@@ -354,14 +354,31 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             expect(fakeInstance.capture).not.toHaveBeenCalled()
         })
 
-        it('visibility change before the click is ignored, so the click keeps waiting', () => {
+        it('visibility change shortly before click, not a dead click', () => {
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
                 node: document.body,
                 originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: 950,
             })
-            // a visibility change from _before_ the click tells us nothing about whether it was dead
+            // the tab was refocused 50ms before the click, within the threshold, so we can't trust
+            // the click as dead even though the change happened just before it
             lazyLoadedDeadClicksAutocapture['_lastVisibilityChange'] = 900
+
+            lazyLoadedDeadClicksAutocapture['_checkClicks']()
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
+        })
+
+        it('a stale visibility change well before the click is ignored, so the click keeps waiting', () => {
+            lazyLoadedDeadClicksAutocapture['_clicks'].push({
+                node: document.body,
+                originalEvent: { type: 'click' } as MouseEvent,
+                timestamp: 950,
+            })
+            // a visibility change 200ms before the click (beyond the threshold) tells us nothing
+            // about whether the click was dead
+            lazyLoadedDeadClicksAutocapture['_lastVisibilityChange'] = 750
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 

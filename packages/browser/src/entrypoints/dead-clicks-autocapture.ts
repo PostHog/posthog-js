@@ -387,14 +387,20 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                 this._lastSelectionChanged && click.timestamp <= this._lastSelectionChanged
                     ? this._lastSelectionChanged - click.timestamp
                     : undefined
-            // only a visibility change _after_ the click tells us anything about whether the click
-            // was dead. matching the mutation/selection branches (rather than Math.abs against the
-            // last visibility change ever) stops a tab that was backgrounded before the click from
-            // being read as a multi-second "response" and flagging every later click as dead.
+            // only a visibility change _after_ the click can be positive evidence that the click was
+            // dead. matching the mutation/selection branches (rather than Math.abs against the last
+            // visibility change ever) stops a tab that was backgrounded before the click from being
+            // read as a multi-second "response" and timing every later click out as dead.
             click.visibilityChangedDelayMs =
                 this._lastVisibilityChange && click.timestamp <= this._lastVisibilityChange
                     ? this._lastVisibilityChange - click.timestamp
                     : undefined
+            // suppression still looks at the nearest visibility change on either side: a change close
+            // to the click (e.g. the user refocusing the tab just before clicking) means we can't
+            // trust the click as dead. only stale/far changes are ignored, which is the whole fix.
+            const visibilityProximityMs = this._lastVisibilityChange
+                ? Math.abs(click.timestamp - this._lastVisibilityChange)
+                : undefined
 
             const scrollTimeout = checkTimeout(click.scrollDelayMs, this._config.scroll_threshold_ms)
             const selectionChangedTimeout = checkTimeout(
@@ -413,8 +419,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                 isNumber(click.selectionChangedDelayMs) &&
                 click.selectionChangedDelayMs < this._config.selection_change_threshold_ms
             const hadVisibilityChange =
-                isNumber(click.visibilityChangedDelayMs) &&
-                click.visibilityChangedDelayMs < this._config.selection_change_threshold_ms
+                isNumber(visibilityProximityMs) && visibilityProximityMs < this._config.selection_change_threshold_ms
 
             if (hadScroll || hadMutation || hadSelectionChange || hadVisibilityChange) {
                 continue
