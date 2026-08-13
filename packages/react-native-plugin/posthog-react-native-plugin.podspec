@@ -19,7 +19,7 @@ Pod::Spec.new do |s|
   s.platforms    = { :ios => min_ios_version_supported, :osx => '10.15' }
   s.source       = { :git => "https://github.com/PostHog/posthog-js.git", :tag => "@posthog/react-native-plugin@#{s.version}" }
 
-  s.source_files = "ios/**/*.{swift,h,hpp,m,mm,c,cpp}"
+  s.source_files = "ios/PosthogReactNativePlugin.{swift,h,hpp,m,mm,c,cpp}"
 
   # Default: resolve posthog-ios via CocoaPods trunk.
   # Opt-in: set `posthog.useSpm` to `"true"` in the consumer's
