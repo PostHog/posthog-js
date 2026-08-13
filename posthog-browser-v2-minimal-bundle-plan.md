@@ -584,13 +584,13 @@ const posthog = await createPostHog({
 
 `projectToken` is required at the type and runtime boundaries. The package has no default singleton. The current unit suite, lint, formatting, and diff checks pass.
 
-The current capture fixture is approximately 19.4 KiB minified and 6.4 KiB gzip, but this is not a compliant baseline. The prototype still omits required behavior. The first Capture V1 transform, Fetch attempt, and result-classification slice added approximately 2.6 KiB minified and 0.9 KiB gzip. An ESM `version`-only consumer is approximately 50 bytes gzip, while the current CommonJS form retains approximately 6.3 KiB gzip. Re-evaluate CommonJS publication before release.
+The current capture fixture is approximately 21.6 KiB minified and 7.2 KiB gzip, but this is not a compliant baseline. The prototype still omits required behavior. The first Capture V1 transform, Fetch attempt, and result-classification slice added approximately 2.6 KiB minified and 0.9 KiB gzip. Bounded selective retry, transient status handling, jittered backoff, and `Retry-After` added approximately 2.2 KiB minified and 0.8 KiB gzip. An ESM `version`-only consumer is approximately 50 bytes gzip, while the current CommonJS form retains approximately 6.3 KiB gzip. Re-evaluate CommonJS publication before release.
 
 Known blockers and gaps:
 
 - Browser-next satisfies the current `@posthog/browser-common` `Client` and `KeyValueStore` type contracts. The shared conformance suite now runs against the legacy browser adapter, browser-next, and `TestClient`.
 - Browser-next type checking, declaration generation, build, and bundle measurement pass when run directly. The filtered pnpm command can still trigger unrelated workspace dependency repair in this checkout.
-- The current event request uses the Capture Analytics V1 endpoint, event/batch transform, required normal-Fetch headers, and result classification. It does not yet retry transport failures, retryable statuses, or retry-marked events.
+- The current event request uses the Capture Analytics V1 endpoint, event/batch transform, required normal-Fetch headers, result classification, bounded selective retry, and transient-status/network backoff. It does not yet use a bounded queue, request timeout/elapsed budget, compression, payload limits, teardown delivery, or rate limiting.
 - The Capture V1 RFC defines browser Beacon query fallbacks, but the current deployed-source backend still requires headers and has not implemented its V1 query type.
 - No lane abstraction currently isolates queue, endpoint, serialization, size, transport, and retry policy.
 - Consent can be bypassed by extension requests and can become stale across active clients.
@@ -621,7 +621,8 @@ Decisions that still need an explicit answer:
         - [ ] Promote retained scenarios to durable browser-next suites before the transitional legacy adapter is removed.
         - [ ] Add the browser-next analytics queue, retry, teardown, and rate-limit cases after those mechanisms exist.
         - [x] Port the Capture Analytics V1 transform, normal-Fetch request, and response-classification harness.
-        - [ ] Add selective partial-retry, attempt-metadata, and retry-exhaustion cases with the analytics queue.
+        - [x] Add selective partial-retry, attempt-metadata, status/transport retry, backoff, `Retry-After`, consent/disposal cancellation, and retry-exhaustion cases to the sender harness.
+        - [ ] Run the sender through the future bounded analytics queue and its admission/flush lifecycle.
 - [ ] **P0.4**: Add same-origin multi-client storage interleavings.
 - [ ] **P0.5**: Add PR #4496 cookie cases to the cookie-adapter corpus.
 - [ ] **P0.6**: Add transport and storage fault injection.
