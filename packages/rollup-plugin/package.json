@@ -30,7 +30,8 @@
     ],
     "dependencies": {
         "@posthog/cli": "catalog:",
-        "@posthog/plugin-utils": "workspace:^"
+        "@posthog/plugin-utils": "workspace:^",
+        "magic-string": "^0.30.17"
     },
     "peerDependencies": {
         "rollup": ">= 4.0.0"
