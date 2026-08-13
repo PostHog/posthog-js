@@ -34,22 +34,6 @@ const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
 
 const logger = createLogger('[AutoCapture]')
 
-function compileUrlPatternList(
-    patterns: (string | RegExp)[] | undefined,
-    listName: 'allowlist' | 'ignorelist'
-): RegExp[] | undefined {
-    return patterns
-        ?.map((pattern) => {
-            try {
-                return new RegExp(pattern)
-            } catch (error) {
-                logger.error(`Invalid URL ${listName} pattern ignored`, pattern, error)
-                return undefined
-            }
-        })
-        .filter((pattern): pattern is RegExp => !!pattern)
-}
-
 function limitText(length: number, text: string): string {
     if (text.length > length) {
         return text.slice(0, length) + '...'
@@ -304,10 +288,6 @@ export class Autocapture implements Extension {
         disableCaptureUrlHashes: false,
         remoteRequestsDisabled: false,
     }
-    private _urlAllowlistInput?: (string | RegExp)[]
-    private _urlIgnorelistInput?: (string | RegExp)[]
-    private _compiledUrlAllowlist?: RegExp[]
-    private _compiledUrlIgnorelist?: RegExp[]
     private _remoteConfigSubscription?: Disposable
     private _domEventHandler?: EventListener
     private _copiedTextHandler?: EventListener
@@ -320,6 +300,7 @@ export class Autocapture implements Extension {
     }
 
     setup(client: Client): void {
+        this._compileUrlPatterns()
         this._client = client
         const subscription = client.onRemoteConfig(
             this.onRemoteConfig.bind(this) as Parameters<Client['onRemoteConfig']>[0]
@@ -348,29 +329,11 @@ export class Autocapture implements Extension {
         return this._config
     }
 
-    private _compileUrlPatterns(): void {
-        const allowlist = this._config.url_allowlist
-        if (!this._samePatterns(allowlist, this._urlAllowlistInput)) {
-            this._compiledUrlAllowlist = compileUrlPatternList(allowlist, 'allowlist')
-            this._urlAllowlistInput = allowlist?.slice()
-        }
-        this._config.url_allowlist = this._compiledUrlAllowlist
-
-        const ignorelist = this._config.url_ignorelist
-        if (!this._samePatterns(ignorelist, this._urlIgnorelistInput)) {
-            this._compiledUrlIgnorelist = compileUrlPatternList(ignorelist, 'ignorelist')
-            this._urlIgnorelistInput = ignorelist?.slice()
-        }
-        this._config.url_ignorelist = this._compiledUrlIgnorelist
-    }
-
-    private _samePatterns(current?: (string | RegExp)[], previous?: (string | RegExp)[]): boolean {
-        return (
-            !!current &&
-            !!previous &&
-            current.length === previous.length &&
-            current.every((url, index) => url === previous[index])
-        )
+    private _compileUrlPatterns(): Readonly<AutocaptureConfig> {
+        this._refreshConfig()
+        this._config.url_allowlist = this._config.url_allowlist?.map((url) => new RegExp(url))
+        this._config.url_ignorelist = this._config.url_ignorelist?.map((url) => new RegExp(url))
+        return this._config
     }
 
     _addDomEventHandlers(): void {
@@ -514,8 +477,7 @@ export class Autocapture implements Extension {
             target = (target.parentNode || null) as Element | null
         }
 
-        const config = this._refreshConfig()
-        this._compileUrlPatterns()
+        const config = this._compileUrlPatterns()
         if (eventName === '$autocapture' && e.type === 'click' && e instanceof MouseEvent) {
             if (
                 !!config.rageclick &&

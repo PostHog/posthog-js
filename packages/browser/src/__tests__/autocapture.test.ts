@@ -20,7 +20,6 @@ import { window } from '@posthog/browser-common/utils/globals'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { isUndefined } from '@posthog/core'
-import Config from '../config'
 
 // JS DOM doesn't have ClipboardEvent, so we need to mock it
 // see https://github.com/jsdom/jsdom/issues/1568
@@ -153,69 +152,23 @@ describe('Autocapture system', () => {
             expect(config).not.toBe(posthog.config)
         })
 
-        it('compiles and caches URL patterns inside the extension', () => {
-            posthog.config.autocapture = { url_allowlist: ['https://example.com/.*'] }
+        it('compiles URL patterns without mutating the browser config', () => {
+            const urlAllowlist = ['https://example.com/.*']
+            posthog.config.autocapture = { url_allowlist: urlAllowlist }
             const extension = new BrowserAutocapture(posthog)
-            extension['_compileUrlPatterns']()
-            const compiled = extension['_config'].url_allowlist?.[0]
 
-            extension['_refreshConfig']()
-            extension['_compileUrlPatterns']()
+            const config = extension['_compileUrlPatterns']()
 
-            expect(compiled).toBeInstanceOf(RegExp)
-            expect(extension['_config'].url_allowlist?.[0]).toBe(compiled)
-
-            posthog.config.autocapture.url_allowlist?.push('https://posthog.com/.*')
-            extension['_refreshConfig']()
-            extension['_compileUrlPatterns']()
-
-            expect(extension['_config'].url_allowlist).toHaveLength(2)
-            expect(extension['_config'].url_allowlist?.[0]).not.toBe(compiled)
+            expect(config.url_allowlist).toEqual([new RegExp('https://example.com/.*')])
+            expect(posthog.config.autocapture.url_allowlist).toBe(urlAllowlist)
         })
 
-        it('filters invalid URL patterns and logs each failure once', () => {
-            const previousDebug = Config.DEBUG
-            const consoleError = jest.spyOn(window!.console, 'error').mockImplementation()
-
-            try {
-                Config.DEBUG = true
-                posthog.config.autocapture = {
-                    url_allowlist: ['https://example.com/.*', '['],
-                    url_ignorelist: ['(', 'https://posthog.com/.*'],
-                }
-                const extension = new BrowserAutocapture(posthog)
-
-                extension['_compileUrlPatterns']()
-
-                expect(extension['_config'].url_allowlist).toEqual([new RegExp('https://example.com/.*')])
-                expect(extension['_config'].url_ignorelist).toEqual([new RegExp('https://posthog.com/.*')])
-                expect(consoleError).toHaveBeenCalledTimes(2)
-                expect(consoleError).toHaveBeenCalledWith(
-                    '[PostHog.js] [AutoCapture]',
-                    'Invalid URL allowlist pattern ignored',
-                    '[',
-                    expect.any(SyntaxError)
-                )
-                expect(consoleError).toHaveBeenCalledWith(
-                    '[PostHog.js] [AutoCapture]',
-                    'Invalid URL ignorelist pattern ignored',
-                    '(',
-                    expect.any(SyntaxError)
-                )
-
-                extension['_refreshConfig']()
-                extension['_compileUrlPatterns']()
-
-                expect(consoleError).toHaveBeenCalledTimes(2)
-            } finally {
-                Config.DEBUG = previousDebug
-                consoleError.mockRestore()
-            }
-        })
-
-        it('does not throw during initialization and fails closed for an invalid URL pattern', async () => {
+        it.each([
+            ['allowlist', { url_allowlist: ['https://example.com/.*', '['] }],
+            ['ignorelist', { url_ignorelist: ['https://posthog.com/.*', '('] }],
+        ])('fails autocapture initialization for an invalid URL %s', async (_, autocaptureConfig) => {
             const instance = await createPosthogInstance(uuidv7(), {
-                autocapture: { url_allowlist: ['['] },
+                autocapture: autocaptureConfig,
                 capture_pageview: false,
             })
             const capture = jest.spyOn(instance, 'capture')
@@ -223,8 +176,8 @@ describe('Autocapture system', () => {
             document.body.appendChild(button)
 
             simulateClick(button)
-            simulateClick(button)
 
+            expect(instance.autocapture?.isEnabled).toBe(false)
             expect(capture).not.toHaveBeenCalled()
         })
 
