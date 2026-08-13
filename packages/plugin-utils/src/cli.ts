@@ -2,13 +2,21 @@ import { ResolvedPluginConfig } from './config'
 import { spawnLocal } from './spawn-local'
 
 /**
- * Build CLI arguments for `posthog-cli sourcemap process`.
+ * `process` injects chunk ids into the built files on disk and uploads them.
+ * `upload` only reads the files, expecting chunk ids to already be present
+ * (e.g. injected in-memory by a bundler plugin before the files were written).
+ */
+export type SourcemapCliCommand = 'process' | 'upload'
+
+/**
+ * Build CLI arguments for `posthog-cli sourcemap <command>`.
  */
 export function buildSourcemapCliArgs(
     config: ResolvedPluginConfig,
-    mode: { stdin: true } | { directory: string }
+    mode: { stdin: true } | { directory: string },
+    command: SourcemapCliCommand = 'process'
 ): string[] {
-    const args = ['sourcemap', 'process']
+    const args = ['sourcemap', command]
 
     if ('stdin' in mode) {
         args.push('--stdin')
@@ -28,7 +36,11 @@ export function buildSourcemapCliArgs(
         args.push('--build', config.sourcemaps.build)
     }
 
-    if (config.sourcemaps.deleteAfterUpload) {
+    // On `upload` the caller owns map deletion: `--delete-after` also rewrites
+    // the .js files (stripping sourcemap references), and callers pick `upload`
+    // precisely because the written files must not change — e.g. Subresource
+    // Integrity hashes were already computed from them.
+    if (config.sourcemaps.deleteAfterUpload && command === 'process') {
         args.push('--delete-after')
     }
 
@@ -58,10 +70,10 @@ export function buildCliEnv(config: ResolvedPluginConfig): NodeJS.ProcessEnv {
  */
 export async function runSourcemapCli(
     config: ResolvedPluginConfig,
-    options: { filePaths: string[] } | { directory: string }
+    options: ({ filePaths: string[] } | { directory: string }) & { command?: SourcemapCliCommand }
 ): Promise<void> {
     const mode = 'filePaths' in options ? { stdin: true as const } : { directory: options.directory }
-    const args = buildSourcemapCliArgs(config, mode)
+    const args = buildSourcemapCliArgs(config, mode, options.command ?? 'process')
     const env = buildCliEnv(config)
 
     const spawnOptions: Parameters<typeof spawnLocal>[2] = {
