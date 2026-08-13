@@ -1,5 +1,12 @@
 # @posthog/types
 
+## 1.404.0
+
+### Minor Changes
+
+- [#4485](https://github.com/PostHog/posthog-js/pull/4485) [`8bc63c3`](https://github.com/PostHog/posthog-js/commit/8bc63c368e46d0f392a45712d2a72f9f97fcbd3e) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Default external dependency loading to versioned asset paths with automatic fallback to legacy paths, and add a `strict_script_versioning: 'fallback'` mode.
+  (2026-08-13)
+
 ## 1.403.1
 
 ### Patch Changes
