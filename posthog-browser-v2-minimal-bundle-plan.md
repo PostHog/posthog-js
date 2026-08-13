@@ -133,7 +133,9 @@ For same-origin local storage, prevent stale whole-record writes and observe ide
 
 Reactive notification frameworks can remain optional. Fresh reads, conflict-safe writes, and stale-writer protection cannot.
 
-Full historical-state migration can remain in a compatibility entry point. Recognition of a prior explicit denial must run before the first analytics write or request in every supported upgrade path.
+Consent uses the portable default key `__ph_opt_in_out_<project-token>` and interoperable `0`/`1` values. `consentPersistenceName` overrides that key verbatim without appending the project token. The logical key is independent of the identity persistence key and applies to whichever consent storage adapter is selected. Readers accept the established yes/no-like value forms so existing default and custom-name decisions remain valid across SDKs.
+
+Full historical-state migration can remain in a compatibility entry point. That entry maps `consent_persistence_name` to `consentPersistenceName`. Deprecated prefix-derived keys and migration between storage backends are compatibility behavior, not root behavior. Recognition of a prior explicit denial must run before the first analytics write or request in every supported upgrade path.
 
 ## Main design rule
 
@@ -592,7 +594,7 @@ Known blockers and gaps:
 - The Capture V1 RFC defines browser Beacon query fallbacks, but the current deployed-source backend still requires headers and has not implemented its V1 query type.
 - No lane abstraction currently isolates queue, endpoint, serialization, size, transport, and retry policy.
 - Consent can be bypassed by extension requests and can become stale across active clients.
-- Legacy explicit-denial storage is not recognized.
+- The agreed shared default/custom consent-key contract and interoperable value encoding are not yet implemented.
 - Persistence uses stale whole-record snapshots and is not safe across tabs.
 - Identity, reset, session/window, batching, retry, unload, rate-limit, and serialization behavior are incomplete.
 - The minimal fixture can fail before a successful declaration build because it imports the package through its public self-reference.
@@ -602,7 +604,7 @@ Decisions that still need an explicit answer:
 - [ ] **D1**: Decide whether the package is an upgrade-compatible replacement or a narrower API with behavior-compatible capture.
 - [x] **D2**: Use Capture Analytics V1 at `POST /i/v1/analytics/events` for the root analytics lane; do not use the legacy `/e/` contract.
 - [ ] **D3**: Approve reset consent and device-ID semantics.
-- [ ] **D4**: Decide which legacy consent backends every upgrade path must recognize.
+- [x] **D4**: Use `__ph_opt_in_out_<project-token>` by default, preserve custom consent names through `consentPersistenceName`, and use interoperable `0`/`1` values. Keep deprecated prefix-derived keys and backend migration in a compatibility entry point.
 - [ ] **D5**: Decide whether DNT and cookieless modes are root contracts, standard-preset contracts, or unsupported alpha behavior.
 - [ ] **D6**: Decide the final ESM and CommonJS publication policy.
 - [ ] **D7**: Decide whether a new session also creates a new window ID. Legacy `posthog-js` rotates both after reset, idle timeout, and maximum length. The current browser-next state rotates only the session ID.
