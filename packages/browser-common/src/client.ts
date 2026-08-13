@@ -76,7 +76,10 @@ export interface SendRequestInit {
     query?: Record<string, string>
     /** Additional headers merged with the host SDK's configured request headers. */
     headers?: Record<string, string>
-    /** Browser transport to prefer. `sendBeacon` returns a best-effort response immediately. */
+    /**
+     * Browser transport to prefer. Fetch is the normal runtime transport. Use `sendBeacon` only for an eligible
+     * best-effort teardown POST. Its response confirms browser handoff, not delivery.
+     */
     transport?: RequestTransport
     /** Abort the request if it does not complete within this many milliseconds. */
     timeoutMs?: number

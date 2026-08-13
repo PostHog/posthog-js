@@ -23,6 +23,19 @@ import { version } from './version'
 
 const DEFAULT_API_HOST = 'https://us.i.posthog.com'
 const DEFAULT_REMOTE_CONFIG_TIMEOUT_MS = 10_000
+const INVALID_DISTINCT_IDS = ['$posthog_cookieless', 'distinct_id', 'distinctid', 'undefined', 'null']
+
+const isNonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0
+const isValidDistinctId = (value: unknown): value is string =>
+    isNonEmptyString(value) && !INVALID_DISTINCT_IDS.includes(value.toLowerCase())
+
+const deepFreeze = <T>(value: T): T => {
+    if (value && typeof value === 'object') {
+        Object.values(value as Record<string, unknown>).forEach(deepFreeze)
+        Object.freeze(value)
+    }
+    return value
+}
 
 interface CaptureEnvelope {
     uuid: string
@@ -58,6 +71,8 @@ const eventTimestamp = (timestamp: Date | undefined): string => {
 class PostHogBrowserClient implements PostHog {
     readonly logger: Client['logger']
     readonly kv: Client['kv']
+    readonly library = Object.freeze({ name: 'web', version })
+    readonly initialPersonProperties: Readonly<Record<string, unknown>>
     readonly onRemoteConfig: Client['onRemoteConfig']
     readonly onEvent: Client['onEvent']
     readonly onNewSession: PostHog['onNewSession']
@@ -79,9 +94,18 @@ class PostHogBrowserClient implements PostHog {
     private _remoteConfigPromise: Promise<RemoteConfig | undefined> | undefined
     private _disposed = false
 
-    constructor(projectToken: string, options: PostHogOptions) {
+    constructor(options: PostHogOptions) {
+        const { projectToken } = options
         this.projectToken = projectToken
         this.logger = createLogger('[PostHog]', options.debug ?? false)
+        const initialPersonProperties = options.initialPersonProperties
+        try {
+            this.initialPersonProperties = initialPersonProperties
+                ? deepFreeze(JSON.parse(JSON.stringify(initialPersonProperties)) as Record<string, unknown>)
+                : Object.freeze({})
+        } catch {
+            this.initialPersonProperties = Object.freeze({})
+        }
         this._remoteConfigPublisher = new Publisher((error) =>
             this.logger.error('A remote configuration listener failed', error)
         )
@@ -117,10 +141,10 @@ class PostHogBrowserClient implements PostHog {
                 ? DEFAULT_REMOTE_CONFIG_TIMEOUT_MS
                 : Math.max(0, options.remoteConfigTimeoutMs)
 
-        this.kv = this._state.keyValueStore('core')
+        this.kv = this._state.keyValueStore('core', () => this._canUseState())
         this._latestRemoteConfigResult = this._remoteConfig ? { ok: true, config: this._remoteConfig } : undefined
         this.onRemoteConfig = (handler) => {
-            if (this._disposed) {
+            if (!this._canUseState()) {
                 return { dispose() {} }
             }
 
@@ -152,6 +176,10 @@ class PostHogBrowserClient implements PostHog {
         return this._state.anonymousId
     }
 
+    get deviceId(): string | undefined {
+        return this._blocked || this.hasOptedOut() ? undefined : this._state.deviceId
+    }
+
     get groups(): Record<string, string> {
         return this._state.groups
     }
@@ -165,7 +193,7 @@ class PostHogBrowserClient implements PostHog {
         properties: Record<string, unknown> | null = null,
         options: CaptureOptions = {}
     ): Promise<void> {
-        if (this._disposed || this._blocked || this.hasOptedOut() || !event) {
+        if (this._disposed || this._blocked || this.hasOptedOut() || !isNonEmptyString(event)) {
             return
         }
 
@@ -180,7 +208,7 @@ class PostHogBrowserClient implements PostHog {
 
         const sessionUpdate = this._state.sessionForEvent()
         if (sessionUpdate.reason) {
-            this._publishNewSession({ ...sessionUpdate.session, reason: sessionUpdate.reason })
+            this._newSessionPublisher.publish({ ...sessionUpdate.session, reason: sessionUpdate.reason })
         }
         const session = sessionUpdate.session
         const finalProperties: Record<string, unknown> = {
@@ -188,6 +216,7 @@ class PostHogBrowserClient implements PostHog {
             ...(properties ?? {}),
             token: this.projectToken,
             distinct_id: this.distinctId,
+            $device_id: this.deviceId,
             $groups: this.groups,
             $session_id: session.sessionId,
             $window_id: session.windowId,
@@ -232,22 +261,26 @@ class PostHogBrowserClient implements PostHog {
         set?: Record<string, unknown>,
         setOnce?: Record<string, unknown>
     ): Promise<void> {
-        if (!distinctId || this._disposed || this.hasOptedOut()) {
+        if (!isValidDistinctId(distinctId) || this._disposed || this._blocked || this.hasOptedOut()) {
             return
         }
 
         const previousDistinctId = this.distinctId
         const wasIdentified = this._state.isIdentified
         const captureOptions: CaptureOptions = {}
-        if (set !== undefined) {
+        if (set) {
             captureOptions.set = set
         }
-        if (setOnce !== undefined) {
+        if (setOnce) {
             captureOptions.setOnce = setOnce
         }
+        const hasPersonProperties = !!set || !!setOnce
 
         if (distinctId === previousDistinctId) {
-            if (set !== undefined || setOnce !== undefined) {
+            if (!wasIdentified) {
+                this._state.identify(distinctId)
+                await this.capture('$set', null, { set: set ?? {}, setOnce: setOnce ?? {} })
+            } else if (hasPersonProperties) {
                 await this.capture('$set', null, captureOptions)
             }
             return
@@ -256,31 +289,40 @@ class PostHogBrowserClient implements PostHog {
         this._state.identify(distinctId)
         if (!wasIdentified) {
             await this.capture('$identify', { $anon_distinct_id: previousDistinctId }, captureOptions)
-        } else if (set !== undefined || setOnce !== undefined) {
+        } else if (hasPersonProperties) {
             await this.capture('$set', null, captureOptions)
         }
     }
 
     async group(type: string, key: string, properties?: Record<string, unknown>): Promise<void> {
-        if (!type || !key || this._disposed || this.hasOptedOut()) {
+        if (
+            !isNonEmptyString(type) ||
+            !isNonEmptyString(key) ||
+            this._disposed ||
+            this._blocked ||
+            this.hasOptedOut()
+        ) {
             return
         }
 
-        this._state.group(type, key)
+        const changed = this._state.group(type, key)
+        if (!changed && !properties) {
+            return
+        }
         await this.capture('$groupidentify', {
             $group_type: type,
             $group_key: key,
-            $group_set: properties ?? {},
+            ...(properties ? { $group_set: properties } : {}),
         })
     }
 
     reset(): void {
-        if (this._disposed) {
+        if (this._disposed || this._blocked) {
             return
         }
 
         const session = this._state.reset()
-        this._publishNewSession({ ...session, reason: 'reset' })
+        this._newSessionPublisher.publish({ ...session, reason: 'reset' })
     }
 
     async flush(): Promise<void> {
@@ -326,13 +368,13 @@ class PostHogBrowserClient implements PostHog {
     }
 
     sendRequest(path: string, init?: SendRequestInit): Promise<ApiResponse> {
-        return this._disposed
-            ? Promise.resolve(createFailedResponse(new Error('The PostHog client is disposed')))
-            : sendRequest(this._requestRuntime, path, init)
+        return this._canUseState()
+            ? sendRequest(this._requestRuntime, path, init)
+            : Promise.resolve(createFailedResponse(new Error('PostHog requests are disabled')))
     }
 
     async getRemoteConfig(): Promise<RemoteConfig | undefined> {
-        if (this._disposed) {
+        if (!this._canUseState()) {
             return undefined
         }
         if (this._remoteConfig !== undefined || !this._remoteConfigLoader) {
@@ -349,7 +391,7 @@ class PostHogBrowserClient implements PostHog {
                 timeoutResult,
             ])
                 .then((remoteConfig) => {
-                    if (this._disposed) {
+                    if (!this._canUseState()) {
                         return undefined
                     }
 
@@ -362,7 +404,7 @@ class PostHogBrowserClient implements PostHog {
                 })
                 .catch((error: unknown) => {
                     this.logger.error('Remote configuration failed', error)
-                    if (!this._disposed) {
+                    if (this._canUseState()) {
                         this._latestRemoteConfigResult = { ok: false }
                         this._remoteConfigPublisher.publish(this._latestRemoteConfigResult)
                     }
@@ -383,17 +425,26 @@ class PostHogBrowserClient implements PostHog {
     }
 
     installExtension(extension: Extension): Promise<Disposable> {
-        if (this._disposed) {
-            return Promise.reject(new Error('The PostHog client is disposed'))
+        if (!this._canUseState()) {
+            return Promise.reject(new Error('PostHog extensions are disabled'))
         }
         return this._registry.install(extension)
     }
 
-    loadExtension(loader: () => Promise<Extension>): Promise<Disposable> {
-        if (this._disposed) {
-            return Promise.reject(new Error('The PostHog client is disposed'))
+    async loadExtension(loader: () => Promise<Extension>): Promise<Disposable> {
+        if (!this._canUseState()) {
+            throw new Error('PostHog extensions are disabled')
         }
-        return this._registry.load(loader)
+        const extension = await loader()
+        if (!this._canUseState()) {
+            try {
+                await extension.dispose?.()
+            } catch (error) {
+                this.logger.error(`Failed to dispose disabled extension "${extension.name}"`, error)
+            }
+            throw new Error('PostHog extensions are disabled')
+        }
+        return this._registry.install(extension)
     }
 
     async dispose(): Promise<void> {
@@ -413,7 +464,7 @@ class PostHogBrowserClient implements PostHog {
     private _createExtensionClient(extensionName: string): Client {
         const host = this
         const logger = this.logger.createLogger(extensionName)
-        const kv = this._state.keyValueStore(extensionName)
+        const kv = this._state.keyValueStore(extensionName, () => this._canUseState())
 
         return {
             get distinctId() {
@@ -421,6 +472,15 @@ class PostHogBrowserClient implements PostHog {
             },
             get anonymousId() {
                 return host.anonymousId
+            },
+            get deviceId() {
+                return host.deviceId
+            },
+            get library() {
+                return host.library
+            },
+            get initialPersonProperties() {
+                return host.initialPersonProperties
             },
             get groups() {
                 return host.groups
@@ -441,17 +501,17 @@ class PostHogBrowserClient implements PostHog {
         }
     }
 
-    private _publishNewSession(session: NewSessionInfo): void {
-        this._newSessionPublisher.publish(session)
+    private _canUseState(): boolean {
+        return !this._disposed && !this._blocked && !this.hasOptedOut()
     }
 }
 
-export const createPostHog = async (projectToken: string, options: PostHogOptions = {}): Promise<PostHog> => {
-    if (!projectToken) {
+export const createPostHog = async (options: PostHogOptions): Promise<PostHog> => {
+    if (!options?.projectToken) {
         throw new Error('A PostHog project token is required')
     }
 
-    const client = new PostHogBrowserClient(projectToken, options)
+    const client = new PostHogBrowserClient(options)
     for (const extension of options.extensions ?? []) {
         try {
             await client.installExtension(extension)
