@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.11.6
+
+### Patch Changes
+
+- [#4515](https://github.com/PostHog/posthog-js/pull/4515) [`5698fd5`](https://github.com/PostHog/posthog-js/commit/5698fd503ad84a13ec9ff6ffb3e88a986ec79968) Thanks [@gesh](https://github.com/gesh)! - Attribute `$mcp_tool_call` and `$mcp_initialize` to the client that made the request. Both stamped client identity after awaiting the `identify` callback, so a handshake arriving on the same server instance meanwhile could rename the event; `$mcp_initialize` additionally read the previously handshaked client rather than the one in its own request body.
+  (2026-08-13)
+
 ## 0.11.5
 
 ### Patch Changes
