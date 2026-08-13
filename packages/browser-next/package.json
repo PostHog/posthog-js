@@ -12,6 +12,7 @@
     "sideEffects": false,
     "files": [
         "dist",
+        "ARCHITECTURE.md",
         "README.md"
     ],
     "main": "dist/index.js",
