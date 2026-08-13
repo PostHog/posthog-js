@@ -118,6 +118,35 @@ describe('PostHogTracingProcessor', () => {
       expect(call.properties.$ai_latency).toBeDefined()
     })
 
+    it('routes trace events through captureAi when the client opted into the AI lane', async () => {
+      const aiLaneClient = {
+        ...createMockClient(),
+        enableFullAiCapture: true,
+        captureAi: jest.fn(),
+      }
+      const aiLaneProcessor = new PostHogTracingProcessor({
+        client: aiLaneClient,
+        distinctId: 'test-user',
+        privacyMode: false,
+      })
+
+      const trace = createMockTrace()
+      await aiLaneProcessor.onTraceStart(trace as any)
+      await aiLaneProcessor.onTraceEnd(trace as any)
+
+      expect(aiLaneClient.captureAi).toHaveBeenCalledTimes(1)
+      expect(aiLaneClient.capture).not.toHaveBeenCalled()
+      const call = aiLaneClient.captureAi.mock.calls[0][0]
+
+      expect(call.event).toBe('$ai_trace')
+      expect(call.distinctId).toBe('test-user')
+      expect(call.properties.$ai_trace_id).toBe('trace_123456789')
+      expect(call.properties.$ai_trace_name).toBe('Test Workflow')
+      expect(call.properties.$ai_provider).toBe('openai')
+      expect(call.properties.$ai_framework).toBe('openai-agents')
+      expect(call.properties.$ai_latency).toBeDefined()
+    })
+
     it('includes group_id in trace and span events as both session and group id', async () => {
       const trace = createMockTrace({ groupId: 'group_abc' })
       const span = createMockSpan({ spanData: { type: 'generation', model: 'gpt-4o' } })
@@ -486,6 +515,34 @@ describe('PostHogTracingProcessor', () => {
       expect(call.properties.$ai_input).toContain('[truncated]')
       expect(typeof call.properties.$ai_output_choices).toBe('string')
       expect(call.properties.$ai_output_choices).toContain('[truncated]')
+    })
+
+    it('keeps oversized structured payloads intact when multimodal passthrough is enabled', async () => {
+      const largeContent = 'x'.repeat(220000)
+      const multimodalClient = { ...createMockClient(), enableFullAiCapture: true }
+      const multimodalProcessor = new PostHogTracingProcessor({
+        client: multimodalClient,
+        distinctId: 'test-user',
+        privacyMode: false,
+      })
+      const span = createMockSpan({
+        spanData: {
+          type: 'generation',
+          input: [{ role: 'user', content: largeContent }],
+          output: [{ role: 'assistant', content: largeContent }],
+          model: 'gpt-4o',
+        },
+      })
+
+      await multimodalProcessor.onSpanStart(span as any)
+      await multimodalProcessor.onSpanEnd(span as any)
+
+      const call = multimodalClient.capture.mock.calls[0][0]
+
+      expect(Array.isArray(call.properties.$ai_input)).toBe(true)
+      expect(call.properties.$ai_input).toEqual([{ role: 'user', content: largeContent }])
+      expect(Array.isArray(call.properties.$ai_output_choices)).toBe(true)
+      expect(call.properties.$ai_output_choices).toEqual([{ role: 'assistant', content: largeContent }])
     })
   })
 
