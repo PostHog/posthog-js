@@ -29,6 +29,9 @@ module.exports = {
         '^@posthog/browser-common/config$': '<rootDir>/../browser-common/src/config.ts',
         '^@posthog/browser-common/constants$': '<rootDir>/../browser-common/src/constants.ts',
         '^@posthog/browser-common/extension-runtime$': '<rootDir>/../browser-common/src/extension-runtime.ts',
+        '^@posthog/browser-common/pubsub$': '<rootDir>/../browser-common/src/pubsub.ts',
+        '^@posthog/browser-common/tests/client-conformance$':
+            '<rootDir>/../browser-common/tests/helpers/client-conformance.ts',
         '^@posthog/browser-common/utils/(.*)$': '<rootDir>/../browser-common/src/utils/$1.ts',
         '^@posthog/core/surveys$': '<rootDir>/../core/src/surveys/index.ts',
     },
