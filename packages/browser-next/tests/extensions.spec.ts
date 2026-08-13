@@ -1,7 +1,10 @@
 import type { Client } from '@posthog/browser-common'
 
-import { createPostHog, type Extension } from '../src'
-import { createFetch, type SentRequest } from './helpers'
+import { createPostHog, type Extension, type RemoteConfig } from '../src'
+import { createFetch, MemoryStorage, type SentRequest } from './helpers'
+
+const createRemoteConfig = (overrides: Partial<RemoteConfig> = {}): RemoteConfig =>
+    ({ supportedCompression: [], ...overrides }) as RemoteConfig
 
 interface FlagCapability extends Extension {
     getFlag(key: string): string | undefined
@@ -31,7 +34,8 @@ describe('@posthog/browser extensions', () => {
         const requests: SentRequest[] = []
         const events: string[] = []
         const extension = flagExtension(events)
-        const posthog = await createPostHog('ph_test', {
+        const posthog = await createPostHog({
+            projectToken: 'ph_test',
             storage: false,
             navigator: false,
             fetch: createFetch(requests),
@@ -50,14 +54,15 @@ describe('@posthog/browser extensions', () => {
         let storedValue: unknown
         const extension: Extension = {
             name: '__proto__',
-            async setup(client) {
-                await client.kv.set('polluted', 'safe')
-                storedValue = await client.kv.get('polluted')
+            setup(client) {
+                client.kv.set('polluted', 'safe')
+                storedValue = client.kv.get('polluted')
             },
             dispose() {},
         }
 
-        const posthog = await createPostHog('ph_test', {
+        const posthog = await createPostHog({
+            projectToken: 'ph_test',
             storage: false,
             navigator: false,
             fetch: false,
@@ -73,13 +78,14 @@ describe('@posthog/browser extensions', () => {
         const values: unknown[] = []
         const createExtension = (name: string, value: string): Extension => ({
             name,
-            async setup(client) {
-                await client.kv.set('shared-key', value)
-                values.push(await client.kv.get('shared-key'))
+            setup(client) {
+                client.kv.set('shared-key', value)
+                values.push(client.kv.get('shared-key'))
             },
             dispose() {},
         })
-        const posthog = await createPostHog('ph_test', {
+        const posthog = await createPostHog({
+            projectToken: 'ph_test',
             storage: false,
             navigator: false,
             fetch: false,
@@ -88,6 +94,145 @@ describe('@posthog/browser extensions', () => {
 
         expect(values).toEqual(['first', 'second'])
         await posthog.dispose()
+    })
+
+    it('blocks extension key-value access after denial and disposal without changing persistence', async () => {
+        const storage = new MemoryStorage()
+        let client: Client | undefined
+        const extension: Extension = {
+            name: 'stateful',
+            setup(extensionClient) {
+                client = extensionClient
+            },
+            dispose() {},
+        }
+        const posthog = await createPostHog({
+            projectToken: 'ph_test',
+            storage,
+            navigator: false,
+            fetch: false,
+            extensions: [extension],
+        })
+        client?.kv.set('retained', true)
+
+        posthog.optOut()
+        client?.kv.set('denied', true)
+        client?.kv.remove('retained')
+        expect(client?.kv.get('retained')).toBeUndefined()
+        posthog.optIn()
+        expect(client?.kv.get('retained')).toBeUndefined()
+        expect(client?.kv.get('denied')).toBeUndefined()
+        client?.kv.set('after_grant', true)
+
+        await posthog.dispose()
+        client?.kv.set('disposed', true)
+        client?.kv.remove('after_grant')
+        const reloaded = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
+        const reloadedClient = await reloaded.installExtension({
+            name: 'stateful',
+            setup(nextClient) {
+                expect(nextClient.kv.get('after_grant')).toBe(true)
+                expect(nextClient.kv.get('disposed')).toBeUndefined()
+            },
+            dispose() {},
+        })
+        reloadedClient.dispose()
+    })
+
+    it('provides live client identity and stable SDK metadata', async () => {
+        let client: Client | undefined
+        const posthog = await createPostHog({
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: false,
+            fetch: false,
+            initialPersonProperties: { initial: { source: 'person-property' } },
+            extensions: [
+                {
+                    name: 'identity',
+                    setup(extensionClient) {
+                        client = extensionClient
+                    },
+                    dispose() {},
+                },
+            ],
+        })
+        const initialAnonymousId = posthog.anonymousId
+
+        expect(client?.anonymousId).toBe(initialAnonymousId)
+        expect(client?.deviceId).toBe(initialAnonymousId)
+        expect(client?.library).toEqual({ name: 'web', version: expect.any(String) })
+        expect(client?.initialPersonProperties).toEqual({ initial: { source: 'person-property' } })
+        expect(Object.isFrozen(client?.library)).toBe(true)
+        expect(Object.isFrozen(client?.initialPersonProperties)).toBe(true)
+        expect(Object.isFrozen(client?.initialPersonProperties.initial)).toBe(true)
+
+        posthog.optOut()
+        expect(client?.deviceId).toBeUndefined()
+        posthog.optIn()
+        const postConsentAnonymousId = posthog.anonymousId
+        expect(client?.deviceId).toBe(postConsentAnonymousId)
+        await posthog.identify('user-123')
+        expect(client?.distinctId).toBe('user-123')
+        expect(client?.anonymousId).toBe(postConsentAnonymousId)
+        expect(client?.deviceId).toBe(postConsentAnonymousId)
+    })
+
+    it('gates extension transport and remote configuration with consent and bot filtering', async () => {
+        const requests: SentRequest[] = []
+        const denied = await createPostHog({
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: false,
+            fetch: createFetch(requests),
+            optOutByDefault: true,
+            remoteConfigLoader: async () => ({ supportedCompression: [] }) as never,
+        })
+
+        await expect(denied.sendRequest('/flags/')).resolves.toMatchObject({ statusCode: 0 })
+        await expect(denied.getRemoteConfig()).resolves.toBeUndefined()
+        await expect(denied.installExtension({ name: 'denied', setup() {}, dispose() {} })).rejects.toThrow('disabled')
+
+        const blocked = await createPostHog({
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: { userAgent: 'Googlebot/2.1' },
+            fetch: createFetch(requests),
+            remoteConfigLoader: async () => ({ supportedCompression: [] }) as never,
+        })
+        await expect(blocked.sendRequest('/flags/')).resolves.toMatchObject({ statusCode: 0 })
+        await expect(blocked.getRemoteConfig()).resolves.toBeUndefined()
+        expect(requests).toHaveLength(0)
+    })
+
+    it('drops remote configuration and extension loading completed after denial', async () => {
+        let finishConfig: ((value: RemoteConfig) => void) | undefined
+        const remoteConfig = new Promise<RemoteConfig>((resolve) => {
+            finishConfig = resolve
+        })
+        let finishExtension: ((value: Extension) => void) | undefined
+        const extension = new Promise<Extension>((resolve) => {
+            finishExtension = resolve
+        })
+        const dispose = jest.fn()
+        const posthog = await createPostHog({
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: false,
+            fetch: false,
+            remoteConfigLoader: () => remoteConfig,
+        })
+        const configResult = posthog.getRemoteConfig()
+        const extensionResult = posthog.loadExtension(() => extension)
+
+        posthog.optOut()
+        finishConfig?.(createRemoteConfig({ hasFeatureFlags: true }))
+        finishExtension?.({ name: 'late', setup: jest.fn(), dispose })
+
+        await expect(configResult).resolves.toBeUndefined()
+        await expect(extensionResult).rejects.toThrow('disabled')
+        expect(dispose).toHaveBeenCalledTimes(1)
+        expect(posthog.getExtension('late')).toBeUndefined()
     })
 
     it('provides the shared project token and request transport', async () => {
@@ -102,7 +247,8 @@ describe('@posthog/browser extensions', () => {
             },
         }
 
-        const posthog = await createPostHog('ph_test', {
+        const posthog = await createPostHog({
+            projectToken: 'ph_test',
             storage: false,
             navigator: false,
             fetch: createFetch(requests),
@@ -116,7 +262,7 @@ describe('@posthog/browser extensions', () => {
     })
 
     it('rejects duplicate names', async () => {
-        const posthog = await createPostHog('ph_test', { storage: false, navigator: false, fetch: false })
+        const posthog = await createPostHog({ projectToken: 'ph_test', storage: false, navigator: false, fetch: false })
         await posthog.installExtension(flagExtension([]))
 
         await expect(posthog.installExtension(flagExtension([]))).rejects.toThrow('already installed')
@@ -131,7 +277,7 @@ describe('@posthog/browser extensions', () => {
             },
             dispose,
         }
-        const posthog = await createPostHog('ph_test', { storage: false, navigator: false, fetch: false })
+        const posthog = await createPostHog({ projectToken: 'ph_test', storage: false, navigator: false, fetch: false })
 
         await expect(posthog.installExtension(failed)).rejects.toThrow('setup failed')
         expect(dispose).toHaveBeenCalledTimes(1)
@@ -151,7 +297,7 @@ describe('@posthog/browser extensions', () => {
             },
             dispose,
         }
-        const posthog = await createPostHog('ph_test', { storage: false, navigator: false, fetch: false })
+        const posthog = await createPostHog({ projectToken: 'ph_test', storage: false, navigator: false, fetch: false })
 
         const installation = posthog.installExtension(extension)
         await posthog.dispose()
@@ -175,7 +321,8 @@ describe('@posthog/browser extensions', () => {
             dispose: failedDispose,
         }
 
-        const posthog = await createPostHog('ph_test', {
+        const posthog = await createPostHog({
+            projectToken: 'ph_test',
             storage: false,
             navigator: false,
             fetch: createFetch(requests),
@@ -201,7 +348,8 @@ describe('@posthog/browser extensions', () => {
                 events.push(`${name}:dispose`)
             },
         })
-        const posthog = await createPostHog('ph_test', {
+        const posthog = await createPostHog({
+            projectToken: 'ph_test',
             storage: false,
             navigator: false,
             fetch: false,

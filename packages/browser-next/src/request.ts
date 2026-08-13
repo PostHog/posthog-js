@@ -7,8 +7,6 @@ export const createFailedResponse = (error?: unknown): ApiResponse => ({
     error,
 })
 
-const beaconResponse = (): ApiResponse => ({ statusCode: 202 })
-
 const toApiResponse = async (response: Response): Promise<ApiResponse> => {
     const text = await response.text()
     let json: unknown
@@ -67,7 +65,7 @@ export const sendRequest = async (
             const data =
                 body === undefined || typeof Blob !== 'function' ? body : new Blob([body], { type: 'application/json' })
             if (runtime.navigator.sendBeacon(url.toString(), data)) {
-                return beaconResponse()
+                return { statusCode: 202 }
             }
         } catch {
             // Fall back to Fetch with keepalive.

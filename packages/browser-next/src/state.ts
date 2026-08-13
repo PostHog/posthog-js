@@ -13,6 +13,7 @@ interface PersistedSession {
 
 interface PersistedState {
     version: 1
+    deviceId: string
     anonymousId: string
     distinctId: string
     isIdentified: boolean
@@ -94,10 +95,10 @@ const createSession = (now = Date.now()): PersistedSession => ({
     lastActivityTimestamp: now,
 })
 
-const createInitialState = (): PersistedState => {
-    const anonymousId = createId()
+const createInitialState = (deviceId = createId(), anonymousId = deviceId): PersistedState => {
     return {
         version: 1,
+        deviceId,
         anonymousId,
         distinctId: anonymousId,
         isIdentified: false,
@@ -120,13 +121,20 @@ const parseState = (value: string | null): PersistedState | undefined => {
 
         const anonymousId = parsed.anonymousId
         const distinctId = parsed.distinctId
+        const deviceId = typeof parsed.deviceId === 'string' ? parsed.deviceId : anonymousId
         const session = readSession(parsed.session)
-        if (typeof anonymousId !== 'string' || typeof distinctId !== 'string' || !session) {
+        if (
+            typeof deviceId !== 'string' ||
+            typeof anonymousId !== 'string' ||
+            typeof distinctId !== 'string' ||
+            !session
+        ) {
             return undefined
         }
 
         return {
             version: 1,
+            deviceId,
             anonymousId,
             distinctId,
             isIdentified: parsed.isIdentified === true || distinctId !== anonymousId,
@@ -148,7 +156,7 @@ export const getDefaultStorage = (): StorageLike | undefined => {
 }
 
 export class BrowserState {
-    private _state: PersistedState = createInitialState()
+    private _state: PersistedState
     private _consent: ConsentState
     private readonly _stateKey: string
     private readonly _consentKey: string
@@ -164,7 +172,22 @@ export class BrowserState {
         this._stateKey = persistenceKey ?? `ph_${projectToken}_posthog_browser_v2`
         this._consentKey = `${this._stateKey}_consent`
         this._consent = optOutByDefault ? 'denied' : 'implicit'
-        this._load()
+        const storedConsent = this._read(this._consentKey)
+        if (storedConsent === 'granted' || storedConsent === 'denied') {
+            this._consent = storedConsent
+        }
+        if (this._consent === 'denied') {
+            this._state = createInitialState()
+            this._remove(this._stateKey)
+        } else {
+            this._state = parseState(this._read(this._stateKey)) ?? createInitialState()
+            this._lastActivityWriteTimestamp = this._state.session.lastActivityTimestamp
+            this._save()
+        }
+    }
+
+    get deviceId(): string {
+        return this._state.deviceId
     }
 
     get anonymousId(): string {
@@ -201,9 +224,13 @@ export class BrowserState {
         this._save()
     }
 
-    group(type: string, key: string): void {
+    group(type: string, key: string): boolean {
+        if (this._state.groups[type] === key) {
+            return false
+        }
         this._state.groups[type] = key
         this._save()
+        return true
     }
 
     sessionForEvent(now = Date.now()): SessionUpdate {
@@ -231,7 +258,7 @@ export class BrowserState {
     }
 
     reset(): SessionContext {
-        this._state = createInitialState()
+        this._state = createInitialState(this._state.deviceId, createId())
         this._lastActivityWriteTimestamp = this._state.session.lastActivityTimestamp
         this._save()
         return this.session
@@ -250,48 +277,62 @@ export class BrowserState {
         this._writeConsent()
     }
 
-    keyValueStore(namespace: string): KeyValueStore {
+    keyValueStore(namespace: string, canAccess: () => boolean = () => true): KeyValueStore {
         const values = (): Record<string, unknown> => {
             if (!Object.prototype.hasOwnProperty.call(this._state.extensionData, namespace)) {
                 this._state.extensionData[namespace] = emptyRecord<unknown>()
             }
             return this._state.extensionData[namespace] ?? emptyRecord<unknown>()
         }
+        const read = (key: string): unknown => {
+            if (!canAccess()) {
+                return undefined
+            }
+            const value = values()[key]
+            return value === undefined ? undefined : cloneJson(value)
+        }
 
         return {
-            get: async <T = unknown>(key: string): Promise<T | undefined> => {
-                const value = values()[key]
-                return value === undefined ? undefined : cloneJson(value as T)
-            },
-            set: async (key: string, value: unknown): Promise<void> => {
-                if (value === null || value === undefined) {
-                    delete values()[key]
-                } else {
-                    values()[key] = cloneJson(value)
+            initialize(): void {},
+            get: (<T = unknown>(keyOrKeys: string | readonly string[]): T | Partial<T> | undefined => {
+                if (typeof keyOrKeys === 'string') {
+                    return read(keyOrKeys) as T | undefined
+                }
+                const entries = emptyRecord<unknown>()
+                for (const key of keyOrKeys) {
+                    const value = read(key)
+                    if (value !== undefined) {
+                        entries[key] = value
+                    }
+                }
+                return entries as Partial<T>
+            }) as KeyValueStore['get'],
+            set: ((keyOrValues: string | Record<string, unknown>, value?: unknown): void => {
+                if (!canAccess()) {
+                    return
+                }
+                const namespaceValues = values()
+                const entries = typeof keyOrValues === 'string' ? { [keyOrValues]: value } : keyOrValues
+                for (const [key, entry] of Object.entries(entries)) {
+                    if (entry === undefined) {
+                        delete namespaceValues[key]
+                    } else {
+                        namespaceValues[key] = cloneJson(entry)
+                    }
+                }
+                this._save()
+            }) as KeyValueStore['set'],
+            remove: (keyOrKeys: string | readonly string[]): void => {
+                if (!canAccess()) {
+                    return
+                }
+                const namespaceValues = values()
+                for (const key of typeof keyOrKeys === 'string' ? [keyOrKeys] : keyOrKeys) {
+                    delete namespaceValues[key]
                 }
                 this._save()
             },
-            remove: async (key: string): Promise<void> => {
-                delete values()[key]
-                this._save()
-            },
         }
-    }
-
-    private _load(): void {
-        const storedConsent = this._read(this._consentKey)
-        if (storedConsent === 'granted' || storedConsent === 'denied') {
-            this._consent = storedConsent
-        }
-
-        if (this._consent === 'denied') {
-            this._remove(this._stateKey)
-            return
-        }
-
-        this._state = parseState(this._read(this._stateKey)) ?? this._state
-        this._lastActivityWriteTimestamp = this._state.session.lastActivityTimestamp
-        this._save()
     }
 
     private _save(): void {

@@ -8,7 +8,6 @@ interface ExtensionRecord {
 
 export class ExtensionRegistry {
     private readonly _records = new Map<string, ExtensionRecord>()
-    private readonly _order: string[] = []
     private _disposed = false
 
     constructor(
@@ -25,7 +24,6 @@ export class ExtensionRegistry {
         if (this._disposed) {
             throw new Error('The extension registry is disposed')
         }
-
         const { name } = extension
         if (!name || this._records.has(name)) {
             throw new Error(`An extension named "${name}" is already installed`)
@@ -33,8 +31,6 @@ export class ExtensionRegistry {
 
         const record: ExtensionRecord = { extension, disposed: false, ready: false }
         this._records.set(name, record)
-        this._order.push(name)
-
         try {
             await extension.setup(this._createClient(name))
             if (this._disposed || record.disposed) {
@@ -42,7 +38,9 @@ export class ExtensionRegistry {
             }
             record.ready = true
         } catch (error) {
-            this._forget(name, record)
+            if (this._records.get(name) === record) {
+                this._records.delete(name)
+            }
             try {
                 await this._disposeRecord(record)
             } catch (disposeError) {
@@ -54,17 +52,12 @@ export class ExtensionRegistry {
         let active = true
         return {
             dispose: async (): Promise<void> => {
-                if (!active) {
-                    return
+                if (active) {
+                    active = false
+                    await this._remove(name)
                 }
-                active = false
-                await this._remove(name)
             },
         }
-    }
-
-    async load(loader: () => Promise<Extension>): Promise<Disposable> {
-        return this.install(await loader())
     }
 
     async dispose(): Promise<void> {
@@ -72,42 +65,29 @@ export class ExtensionRegistry {
             return
         }
         this._disposed = true
-
-        const names = [...this._order].reverse()
-        for (const name of names) {
+        const records = Array.from(this._records.values()).reverse()
+        this._records.clear()
+        for (const record of records) {
             try {
-                await this._remove(name)
+                await this._disposeRecord(record)
             } catch (error) {
-                this._logger.error(`Extension "${name}" cleanup failed`, error)
+                this._logger.error(`Extension "${record.extension.name}" cleanup failed`, error)
             }
-        }
-    }
-
-    private _forget(name: string, record: ExtensionRecord): void {
-        if (this._records.get(name) === record) {
-            this._records.delete(name)
-        }
-        const index = this._order.indexOf(name)
-        if (index !== -1) {
-            this._order.splice(index, 1)
         }
     }
 
     private async _remove(name: string): Promise<void> {
         const record = this._records.get(name)
-        if (!record) {
-            return
+        if (record) {
+            this._records.delete(name)
+            await this._disposeRecord(record)
         }
-
-        this._forget(name, record)
-        await this._disposeRecord(record)
     }
 
     private async _disposeRecord(record: ExtensionRecord): Promise<void> {
-        if (record.disposed) {
-            return
+        if (!record.disposed) {
+            record.disposed = true
+            await record.extension.dispose?.()
         }
-        record.disposed = true
-        await record.extension.dispose?.()
     }
 }

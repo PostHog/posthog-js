@@ -31,6 +31,8 @@ export interface NewSessionInfo extends SessionContext {
 }
 
 export interface PostHogOptions {
+    /** PostHog project token. */
+    projectToken: string
     /** PostHog API origin. */
     apiHost?: string
     /** Origin used for requests targeting feature flags. Defaults to `apiHost`. */
@@ -47,6 +49,8 @@ export interface PostHogOptions {
     navigator?: BrowserNavigator | false
     /** Start with capture disabled until `optIn()` runs. */
     optOutByDefault?: boolean
+    /** Initial person properties exposed to feature-evaluation extensions. */
+    initialPersonProperties?: Record<string, unknown>
     /** Disable the default user-agent bot filter. */
     disableBotDetection?: boolean
     /** Add blocked user-agent fragments to the default bot filter. */
