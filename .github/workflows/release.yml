@@ -413,14 +413,32 @@ jobs:
                   emoji_reaction: 'x'
 
     # Wait for the full publish matrix so newly bumped workspace dependencies are available on npm.
-    # The posthog-js tag points at this release commit only when this run published a new browser SDK version.
+    # A package tag points at this release commit only when this run published that package.
     dispatch-posthog-upgrade:
-        name: Dispatch PostHog upgrade
+        name: Dispatch ${{ matrix.package.name }} upgrade
         needs: [version-bump, publish]
         runs-on: ubuntu-latest
         permissions:
             contents: read
             actions: write
+        strategy:
+            fail-fast: false
+            matrix:
+                package:
+                    - name: posthog-js
+                      path: packages/browser
+                    - name: '@posthog/react'
+                      path: packages/react
+                    - name: posthog-node
+                      path: packages/node
+                    - name: posthog-js-lite
+                      path: packages/web
+                    - name: posthog-react-native
+                      path: packages/react-native
+                    - name: '@posthog/mcp'
+                      path: packages/mcp
+                    - name: '@posthog/rollup-plugin'
+                      path: packages/rollup-plugin
         steps:
             - name: Checkout repository
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -428,16 +446,18 @@ jobs:
                   ref: ${{ needs.version-bump.outputs.commit-hash }}
                   fetch-depth: 1
 
-            - name: Check whether posthog-js was published by this release
+            - name: Check whether ${{ matrix.package.name }} was published by this release
               id: release-metadata
               env:
+                  PACKAGE_NAME: ${{ matrix.package.name }}
+                  PACKAGE_PATH: ${{ matrix.package.path }}
                   RELEASE_SHA: ${{ needs.version-bump.outputs.commit-hash }}
               run: |
                   set -euo pipefail
 
-                  package_version=$(jq -r '.version' packages/browser/package.json)
-                  package_ref="posthog-js@v$package_version"
-                  tag_sha=$(git ls-remote --tags origin "refs/tags/posthog-js@$package_version" | awk 'NR == 1 { print $1 }')
+                  package_version=$(jq -r '.version' "$PACKAGE_PATH/package.json")
+                  package_ref="$PACKAGE_NAME@$package_version"
+                  tag_sha=$(git ls-remote --tags origin "refs/tags/$package_ref" | awk 'NR == 1 { print $1 }')
 
                   was_published=false
                   if [ "$tag_sha" = "$RELEASE_SHA" ]; then
@@ -458,6 +478,7 @@ jobs:
               continue-on-error: true
               if: steps.release-metadata.outputs.was_published == 'true'
               env:
+                  PACKAGE_NAME: ${{ matrix.package.name }}
                   PACKAGE_VERSION: ${{ steps.release-metadata.outputs.package_version }}
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               run: |
@@ -467,7 +488,7 @@ jobs:
                        https://api.github.com/repos/posthog/posthog-js/actions/workflows/posthog-upgrade.yml/dispatches \
                        -d "$(jq -n \
                          --arg ref "main" \
-                         --arg package_name "posthog-js" \
+                         --arg package_name "$PACKAGE_NAME" \
                          --arg package_version "$PACKAGE_VERSION" \
                          '{ref: $ref, inputs: {package_name: $package_name, package_version: $package_version}}' \
                        )"
@@ -488,7 +509,7 @@ jobs:
                         "repository": "${{ github.repository }}",
                         "sdk": "posthog-js",
                         "jobName": "dispatch-posthog-upgrade",
-                        "packageName": "posthog-js",
+                        "packageName": "${{ matrix.package.name }}",
                         "packageVersion": "${{ steps.release-metadata.outputs.package_version || 'unknown' }}",
                         "actionUrl": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
                         "failedStepName": "dispatch-posthog-upgrade",

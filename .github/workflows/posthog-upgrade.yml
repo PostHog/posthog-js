@@ -9,6 +9,12 @@ on:
                 required: true
                 options:
                     - posthog-js
+                    - '@posthog/react'
+                    - posthog-node
+                    - posthog-js-lite
+                    - posthog-react-native
+                    - '@posthog/mcp'
+                    - '@posthog/rollup-plugin'
             package_version:
                 description: 'Package version to upgrade to'
                 required: true
@@ -77,8 +83,34 @@ jobs:
                   PACKAGE_NAME: ${{ github.event.inputs.package_name }}
                   PACKAGE_VERSION: ${{ github.event.inputs.package_version }}
               run: |
-                  sed -i "s|${PACKAGE_NAME}:.*|${PACKAGE_NAME}: ^${PACKAGE_VERSION}|" pnpm-workspace.yaml
-                  pnpm i --no-frozen-lockfile
+                  set -euo pipefail
+
+                  package_spec="${PACKAGE_NAME}@${PACKAGE_VERSION}"
+                  root_package_spec="$package_spec"
+
+                  case "$PACKAGE_NAME" in
+                      posthog-js)
+                          sed -i "s|    posthog-js:.*|    posthog-js: ^${PACKAGE_VERSION}|" pnpm-workspace.yaml
+                          pnpm install --no-frozen-lockfile
+                          ;;
+                      @posthog/react)
+                          sed -i "s|    '@posthog/react':.*|    '@posthog/react': ^${PACKAGE_VERSION}|" pnpm-workspace.yaml
+                          pnpm install --no-frozen-lockfile
+                          ;;
+                      @posthog/mcp)
+                          root_package_spec="@posthog/mcp-analytics@npm:@posthog/mcp@${PACKAGE_VERSION}"
+                          pnpm update --recursive "$root_package_spec"
+                          ;;
+                      *)
+                          pnpm update --recursive "$root_package_spec"
+                          ;;
+                  esac
+
+                  # Desktop is a standalone workspace with its own lockfile. Exempt only the package
+                  # released by this workflow and its freshly published internal PostHog dependencies.
+                  pnpm --dir products/desktop \
+                      --config.minimum-release-age-exclude="$PACKAGE_NAME posthog-js posthog-js-lite posthog-node @posthog/*" \
+                      update --recursive "$package_spec"
 
             - name: Generate pull request details
               id: generate-pr-details
