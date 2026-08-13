@@ -2011,6 +2011,13 @@ export async function snapshotWithBudget(
     container: Node | null;
     depth: number;
     needsMask: boolean | undefined;
+    /**
+     * The walk generation `needsMask` was computed in. The page runs between
+     * slices, so an inherited "unmasked" decision from an earlier generation
+     * may be stale (an ancestor above the direct parent gained a mask class)
+     * and is re-derived from the live DOM at pop time.
+     */
+    maskGeneration: number;
     preserveWhiteSpace: boolean;
   };
 
@@ -2026,9 +2033,13 @@ export async function snapshotWithBudget(
       container: null,
       depth: 0,
       needsMask: undefined,
+      maskGeneration: 0,
       preserveWhiteSpace: preserveWhiteSpace ?? true,
     },
   ];
+  // Bumped whenever page code may have run since the walk last worked (a
+  // settled yield, a flushSync entered while the driver was parked).
+  let pageRanGeneration = 0;
   let sliceStart = performance.now();
   const walkStart = sliceStart;
   // Captured once: only a walk that STARTS hidden may finish in one task
@@ -2129,9 +2140,20 @@ export async function snapshotWithBudget(
       }
     }
 
+    // An "unmasked" decision inherited across a yield can be stale: an
+    // ancestor above the direct parent may have gained a mask class while
+    // the page ran, and a write into an existing text node would then
+    // serialize unmasked into stored bytes no mutation ever corrects.
+    // Re-derive it from the live DOM; a "masked" decision stays frozen
+    // (over-masking is the safe direction).
+    let needsMask = item.needsMask;
+    if (needsMask === false && item.maskGeneration !== pageRanGeneration) {
+      needsMask = undefined;
+    }
+
     const sn = serializeNodeWithId(node, {
       ...perNodeOptions,
-      needsMask: item.needsMask,
+      needsMask,
       preserveWhiteSpace: item.preserveWhiteSpace,
       depth,
     });
@@ -2163,7 +2185,7 @@ export async function snapshotWithBudget(
     }
 
     // children inherit needsMask exactly as the recursive path computes it
-    let childNeedsMask = item.needsMask;
+    let childNeedsMask = needsMask;
     if (!childNeedsMask) {
       const checkAncestors = childNeedsMask === undefined;
       childNeedsMask = needMaskingText(
@@ -2191,6 +2213,7 @@ export async function snapshotWithBudget(
           container: childContainer,
           depth: depth + 1,
           needsMask: childNeedsMask,
+          maskGeneration: pageRanGeneration,
           preserveWhiteSpace: childPreserveWhiteSpace,
         });
       }
@@ -2227,6 +2250,9 @@ export async function snapshotWithBudget(
       // sliceStart is stale); count it so a pagehide drain shows up in the
       // completed walk's slice telemetry
       const drainStart = performance.now();
+      // the page ran while the driver was parked; stale mask decisions
+      // must re-derive during the drain too
+      pageRanGeneration++;
       let drained = 0;
       try {
         while (stack.length > 0) {
@@ -2318,6 +2344,7 @@ export async function snapshotWithBudget(
           if (!(startedHidden && n.visibilityState === 'hidden')) {
             endSlice(sliceStart);
             await Promise.race([doYield(), parkedDriverWoken]);
+            pageRanGeneration++;
             if (drainError) {
               throw drainError;
             }

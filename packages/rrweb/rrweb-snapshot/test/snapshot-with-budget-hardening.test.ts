@@ -499,3 +499,76 @@ describe('snapshotWithBudget hardening', () => {
     await expect(walkPromise).resolves.toBe(root);
   });
 });
+
+describe('mid-walk mask changes against already-walked ancestors', () => {
+  const SECRET = 'SECRET-SSN-123-45-6789';
+
+  // grandparent > parent > [filler spans, then the target text node]; the
+  // filler guarantees the walk yields between the parent's pop and the
+  // target's pop, so a mask decision frozen at push time can go stale
+  function buildMaskRaceDoc(): Document {
+    const dom = new JSDOM(
+      `<!DOCTYPE html><html><head></head><body>
+        <div id="grandparent"><div id="parent"></div></div>
+      </body></html>`,
+      { url: 'https://example.com/' },
+    );
+    const doc = dom.window.document;
+    const parent = doc.getElementById('parent')!;
+    for (let i = 0; i < 20; i++) {
+      const span = doc.createElement('span');
+      span.textContent = `filler-${i}`;
+      parent.appendChild(span);
+    }
+    parent.appendChild(doc.createTextNode('innocuous'));
+    return doc;
+  }
+
+  it.each([
+    ['grandparent', 'grandparent'],
+    ['direct parent', 'parent'],
+  ])(
+    '%s gains the mask class mid-walk: an in-place write into an existing text node is masked',
+    async (_label, ancestorId) => {
+      cleanupSnapshot();
+      const doc = buildMaskRaceDoc();
+      const ancestor = doc.getElementById(ancestorId)!;
+      const target = doc.getElementById('parent')!.lastChild as Text;
+
+      let yields = 0;
+      const result = await snapshotWithBudget(doc, {
+        ...OPTIONS,
+        mirror: new Mirror(),
+        yieldBudgetMs: 0.000001,
+        yieldFn: () => {
+          yields++;
+          if (yields === 1) {
+            ancestor.classList.add('maskmask');
+            target.data = SECRET;
+          }
+          return Promise.resolve();
+        },
+      });
+
+      expect(yields).toBeGreaterThan(0);
+      expect(JSON.stringify(result)).not.toContain(SECRET);
+    },
+  );
+
+  it('an ancestor masked before the walk stays masked for children popped after a yield', async () => {
+    cleanupSnapshot();
+    const doc = buildMaskRaceDoc();
+    doc.getElementById('grandparent')!.classList.add('maskmask');
+    const target = doc.getElementById('parent')!.lastChild as Text;
+    target.data = SECRET;
+
+    const result = await snapshotWithBudget(doc, {
+      ...OPTIONS,
+      mirror: new Mirror(),
+      yieldBudgetMs: 0.000001,
+      yieldFn: () => Promise.resolve(),
+    });
+
+    expect(JSON.stringify(result)).not.toContain(SECRET);
+  });
+});
