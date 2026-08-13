@@ -22,9 +22,12 @@ export {
   resetMaxDepthState,
   getLastSnapshotCost,
   getMutationCost,
+  getDeferredStylesheetStats,
+  getDiscardedDurationSamples,
   resetSnapshotCostState,
   type SnapshotCost,
   type MutationCost,
+  type DeferredStylesheetStats,
 } from '@posthog/rrweb-snapshot';
 
 // exports style.css from replay
