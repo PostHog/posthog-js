@@ -192,5 +192,23 @@ describe('deferred extension initialization', () => {
             expect(posthog.sessionRecording).toBeDefined()
             expect(posthog.autocapture).toBeDefined()
         })
+
+        it('does not set up autocapture after shutdown', async () => {
+            const setup = jest.fn()
+            class TestAutocapture {
+                readonly name = 'autocapture'
+                setup = setup
+            }
+
+            const posthog = await createPosthogInstance(uuidv7(), {
+                __preview_deferred_init_extensions: true,
+                __extensionClasses: { autocapture: TestAutocapture as any },
+                capture_pageview: false,
+            })
+            await posthog.shutdown()
+            await new Promise((resolve) => setTimeout(resolve, 20))
+
+            expect(setup).not.toHaveBeenCalled()
+        })
     })
 })

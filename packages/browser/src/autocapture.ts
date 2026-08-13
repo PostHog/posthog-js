@@ -1,3 +1,4 @@
+import type { Client, Disposable, Extension } from '@posthog/browser-common'
 import { addEventListener, each, extend } from '@posthog/browser-common/utils/general-utils'
 import {
     autocaptureCompatibleElements,
@@ -18,17 +19,16 @@ import {
 } from '@posthog/browser-common/utils/autocapture-utils'
 
 import RageClick from './extensions/rageclick'
-import { AutocaptureConfig, EventName, Properties, RemoteConfigResult } from './types'
-import { PostHog } from './posthog-core'
+import { EventName, Properties, RemoteConfigResult } from './types'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
+import type { AutocaptureConfig, AutocaptureConfigSource } from './autocapture-config'
 
-import { isBoolean, isFunction, isNull, isObject, stripUrlHash } from '@posthog/core'
+import { isBoolean, isFunction, isNull, stripUrlHash } from '@posthog/core'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { document, window } from '@posthog/browser-common/utils/globals'
 import { convertToURL } from '@posthog/browser-common/utils/request-utils'
 import { isElementNode, isShadowRoot, isTag, isTextNode } from '@posthog/browser-common/utils/element-utils'
 import { includes } from '@posthog/core'
-import type { Extension } from './extensions/types'
 
 const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
 
@@ -272,30 +272,90 @@ export function autocapturePropertiesForElement(
 }
 
 export class Autocapture implements Extension {
-    instance: PostHog
+    readonly name = 'autocapture'
     _initialized: boolean = false
     _isDisabledServerSide: boolean | null = null
     _hasReceivedConfigResponse: boolean = false
     _elementSelectors: Set<string> | null
     rageclicks: RageClick
     _elementsChainAsString = false
+    private _client?: Client
+    private readonly _config: AutocaptureConfig = {
+        enabled: false,
+        rageclick: false,
+        maskAllElementAttributes: false,
+        maskAllText: false,
+        disableCaptureUrlHashes: false,
+        remoteRequestsDisabled: false,
+    }
+    private _urlAllowlistInput?: (string | RegExp)[]
+    private _urlIgnorelistInput?: (string | RegExp)[]
+    private _compiledUrlAllowlist?: RegExp[]
+    private _compiledUrlIgnorelist?: RegExp[]
+    private _remoteConfigSubscription?: Disposable
+    private _domEventHandler?: EventListener
+    private _copiedTextHandler?: EventListener
+    private _disposed = false
 
-    constructor(instance: PostHog) {
-        this.instance = instance
-        this.rageclicks = new RageClick(instance.config.rageclick)
+    constructor(private readonly _configSource: AutocaptureConfigSource) {
+        this._refreshConfig()
+        this.rageclicks = new RageClick(this._config.rageclick)
         this._elementSelectors = null
     }
 
-    initialize() {
+    setup(client: Client): void {
+        this._client = client
+        const subscription = client.onRemoteConfig(
+            this.onRemoteConfig.bind(this) as Parameters<Client['onRemoteConfig']>[0]
+        )
+        if (this._disposed) {
+            subscription.dispose()
+            return
+        }
+        this._remoteConfigSubscription = subscription
         this.startIfEnabled()
     }
 
-    private get _config(): AutocaptureConfig {
-        const config = isObject(this.instance.config.autocapture) ? this.instance.config.autocapture : {}
-        // precompile the regex
-        config.url_allowlist = config.url_allowlist?.map((url) => new RegExp(url))
-        config.url_ignorelist = config.url_ignorelist?.map((url) => new RegExp(url))
-        return config
+    dispose(): void {
+        if (this._disposed) {
+            return
+        }
+        this._disposed = true
+        this._client = undefined
+        this._remoteConfigSubscription?.dispose()
+        this._remoteConfigSubscription = undefined
+        this._removeDomEventHandlers()
+    }
+
+    private _refreshConfig(): Readonly<AutocaptureConfig> {
+        this._configSource.refresh(this._config)
+        this._compileUrlPatterns()
+        return this._config
+    }
+
+    private _compileUrlPatterns(): void {
+        const allowlist = this._config.url_allowlist
+        if (!this._samePatterns(allowlist, this._urlAllowlistInput)) {
+            this._urlAllowlistInput = allowlist?.slice()
+            this._compiledUrlAllowlist = allowlist?.map((url) => new RegExp(url))
+        }
+        this._config.url_allowlist = this._compiledUrlAllowlist
+
+        const ignorelist = this._config.url_ignorelist
+        if (!this._samePatterns(ignorelist, this._urlIgnorelistInput)) {
+            this._urlIgnorelistInput = ignorelist?.slice()
+            this._compiledUrlIgnorelist = ignorelist?.map((url) => new RegExp(url))
+        }
+        this._config.url_ignorelist = this._compiledUrlIgnorelist
+    }
+
+    private _samePatterns(current?: (string | RegExp)[], previous?: (string | RegExp)[]): boolean {
+        return (
+            !!current &&
+            !!previous &&
+            current.length === previous.length &&
+            current.every((url, index) => url === previous[index])
+        )
     }
 
     _addDomEventHandlers(): void {
@@ -308,42 +368,60 @@ export class Autocapture implements Extension {
             return
         }
 
-        const handler = (e: Event) => {
+        const handler = (this._domEventHandler = (e: Event) => {
             e = e || window?.event
             try {
                 this._captureEvent(e)
             } catch (error) {
                 logger.error('Failed to capture event', error)
             }
-        }
+        })
 
         addEventListener(document, 'submit', handler, { capture: true })
         addEventListener(document, 'change', handler, { capture: true })
         addEventListener(document, 'click', handler, { capture: true })
 
-        if (this._config.capture_copied_text) {
-            const copiedTextHandler = (e: Event) => {
+        if (this._refreshConfig().capture_copied_text) {
+            const copiedTextHandler = (this._copiedTextHandler = (e: Event) => {
                 e = e || window?.event
                 try {
                     this._captureEvent(e, COPY_AUTOCAPTURE_EVENT)
                 } catch (error) {
                     logger.error('Failed to capture copy/cut event', error)
                 }
-            }
+            })
 
             addEventListener(document, 'copy', copiedTextHandler, { capture: true })
             addEventListener(document, 'cut', copiedTextHandler, { capture: true })
         }
     }
 
-    public startIfEnabled() {
-        if (this.isEnabled && !this._initialized) {
+    private _removeDomEventHandlers(): void {
+        if (this._domEventHandler) {
+            document?.removeEventListener('submit', this._domEventHandler, true)
+            document?.removeEventListener('change', this._domEventHandler, true)
+            document?.removeEventListener('click', this._domEventHandler, true)
+            this._domEventHandler = undefined
+        }
+        if (this._copiedTextHandler) {
+            document?.removeEventListener('copy', this._copiedTextHandler, true)
+            document?.removeEventListener('cut', this._copiedTextHandler, true)
+            this._copiedTextHandler = undefined
+        }
+        this._initialized = false
+    }
+
+    public startIfEnabled(): void {
+        if (!this._disposed && this.isEnabled && !this._initialized) {
             this._addDomEventHandlers()
             this._initialized = true
         }
     }
 
-    public onRemoteConfig(result: RemoteConfigResult) {
+    public onRemoteConfig(result: RemoteConfigResult): void {
+        if (this._disposed) {
+            return
+        }
         this._hasReceivedConfigResponse = true
         if (!result.ok) {
             // Failed fetch = opt-out unknown: keep the last known persisted server
@@ -362,11 +440,7 @@ export class Autocapture implements Extension {
         // keep the last known server value, as with a failed fetch.
         const optOut = response['autocapture_opt_out']
         if (isBoolean(optOut)) {
-            if (this.instance.persistence) {
-                this.instance.persistence.register({
-                    [AUTOCAPTURE_DISABLED_SERVER_SIDE]: optOut,
-                })
-            }
+            this._client?.kv.set(AUTOCAPTURE_DISABLED_SERVER_SIDE, optOut)
             // store this in-memory in case persistence is disabled
             this._isDisabledServerSide = optOut
         }
@@ -393,19 +467,23 @@ export class Autocapture implements Extension {
     }
 
     public get isEnabled(): boolean {
-        const persistedServerDisabled = this.instance.persistence?.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]
+        if (this._disposed) {
+            return false
+        }
+        const persistedServerDisabled = this._client?.kv.get<boolean>(AUTOCAPTURE_DISABLED_SERVER_SIDE)
         const memoryDisabled = this._isDisabledServerSide
 
         // The /flags-disabled bypass only applies while no config outcome has arrived;
         // once a response (or failure) has been seen, an unknown opt-out stays off.
-        const clientConfigOnly = this.instance._shouldDisableFlags() && !this._hasReceivedConfigResponse
+        const config = this._refreshConfig()
+        const clientConfigOnly = config.remoteRequestsDisabled && !this._hasReceivedConfigResponse
         if (isNull(memoryDisabled) && !isBoolean(persistedServerDisabled) && !clientConfigOnly) {
             // We only enable if we know that the server has not disabled it
             return false
         }
 
         const disabledServer = this._isDisabledServerSide ?? !!persistedServerDisabled
-        const disabledClient = !this.instance.config.autocapture
+        const disabledClient = !config.enabled
         return !disabledClient && !disabledServer
     }
 
@@ -421,12 +499,13 @@ export class Autocapture implements Extension {
             target = (target.parentNode || null) as Element | null
         }
 
+        const config = this._refreshConfig()
         if (eventName === '$autocapture' && e.type === 'click' && e instanceof MouseEvent) {
             if (
-                !!this.instance.config.rageclick &&
+                !!config.rageclick &&
                 this.rageclicks?.isRageClick(e.clientX, e.clientY, e.timeStamp || new Date().getTime())
             ) {
-                if (shouldCaptureRageclick(target, this.instance.config.rageclick)) {
+                if (shouldCaptureRageclick(target, config.rageclick)) {
                     this._captureEvent(e, '$rageclick')
                 }
             }
@@ -438,23 +517,23 @@ export class Autocapture implements Extension {
             shouldCaptureDomEvent(
                 target,
                 e,
-                this._config,
+                config,
                 // mostly this method cares about the target element, but in the case of copy events,
                 // we want some of the work this check does without insisting on the target element's type
                 isCopyAutocapture,
                 // we also don't want to restrict copy checks to clicks,
                 // so we pass that knowledge in here, rather than add the logic inside the check
                 isCopyAutocapture ? ['copy', 'cut'] : undefined,
-                this.instance
+                { config: { get_current_url: config.getCurrentUrl } }
             )
         ) {
             const { props, explicitNoCapture } = autocapturePropertiesForElement(target, {
                 e,
-                maskAllElementAttributes: this.instance.config.mask_all_element_attributes,
-                maskAllText: this.instance.config.mask_all_text,
-                elementAttributeIgnoreList: this._config.element_attribute_ignorelist,
+                maskAllElementAttributes: config.maskAllElementAttributes,
+                maskAllText: config.maskAllText,
+                elementAttributeIgnoreList: config.element_attribute_ignorelist,
                 elementsChainAsString: this._elementsChainAsString,
-                disableCaptureUrlHashes: this.instance.config.disable_capture_url_hashes,
+                disableCaptureUrlHashes: config.disableCaptureUrlHashes,
             })
 
             if (explicitNoCapture) {
@@ -478,7 +557,9 @@ export class Autocapture implements Extension {
                 props['$copy_type'] = clipType
             }
 
-            this.instance.capture(eventName, props)
+            void this._client
+                ?.capture(eventName, props)
+                .catch((error) => logger.error('Failed to capture event', error))
             return true
         }
     }

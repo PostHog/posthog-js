@@ -14,6 +14,8 @@ import {
 import { AutocaptureConfig, FlagsResponse, PostHogConfig, RageclickConfig } from '../types'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
 import { PostHog } from '../posthog-core'
+import type { AutocaptureConfigSource } from '../autocapture-config'
+import { BrowserAutocapture } from '../browser-autocapture'
 import { window } from '@posthog/browser-common/utils/globals'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
@@ -99,6 +101,148 @@ describe('Autocapture system', () => {
             configurable: true,
             enumerable: true,
             value: originalWindowLocation,
+        })
+    })
+
+    describe('extension lifecycle', () => {
+        it('constructs with one SDK-neutral internal config', () => {
+            const configSource: AutocaptureConfigSource = {
+                refresh: (config) => {
+                    config.enabled = true
+                    config.rageclick = false
+                    config.maskAllElementAttributes = false
+                    config.maskAllText = false
+                    config.disableCaptureUrlHashes = false
+                    config.remoteRequestsDisabled = true
+                },
+            }
+            const extension = new Autocapture(configSource)
+
+            expect(extension).not.toHaveProperty('instance')
+            expect(extension).not.toHaveProperty('_settings')
+            expect(extension['_config']).toEqual({
+                enabled: true,
+                rageclick: false,
+                maskAllElementAttributes: false,
+                maskAllText: false,
+                disableCaptureUrlHashes: false,
+                remoteRequestsDisabled: true,
+                url_allowlist: undefined,
+                url_ignorelist: undefined,
+            })
+        })
+
+        it('adapts browser config into its stable internal config', () => {
+            const extension = new BrowserAutocapture(posthog)
+            const config = extension['_config']
+
+            void extension.isEnabled
+
+            expect(extension['_config']).toBe(config)
+            expect(config).toMatchObject({
+                enabled: !!posthog.config.autocapture,
+                rageclick: posthog.config.rageclick,
+                maskAllElementAttributes: posthog.config.mask_all_element_attributes,
+                maskAllText: posthog.config.mask_all_text,
+                disableCaptureUrlHashes: posthog.config.disable_capture_url_hashes,
+                getCurrentUrl: posthog.config.get_current_url,
+                remoteRequestsDisabled: posthog._shouldDisableFlags(),
+            })
+            expect(config).not.toBe(posthog.config)
+        })
+
+        it('compiles and caches URL patterns inside the extension', () => {
+            posthog.config.autocapture = { url_allowlist: ['https://example.com/.*'] }
+            const extension = new BrowserAutocapture(posthog)
+            const compiled = extension['_config'].url_allowlist?.[0]
+
+            void extension.isEnabled
+
+            expect(compiled).toBeInstanceOf(RegExp)
+            expect(extension['_config'].url_allowlist?.[0]).toBe(compiled)
+
+            posthog.config.autocapture.url_allowlist?.push('https://posthog.com/.*')
+            void extension.isEnabled
+
+            expect(extension['_config'].url_allowlist).toHaveLength(2)
+            expect(extension['_config'].url_allowlist?.[0]).not.toBe(compiled)
+        })
+
+        it('receives set_config updates through its compatibility config source', () => {
+            autocapture.onRemoteConfig({ ok: true, config: { autocapture_opt_out: false } as FlagsResponse })
+
+            posthog.set_config({ autocapture: false })
+
+            expect(autocapture.isEnabled).toBe(false)
+        })
+
+        it('receives each remote config result once', async () => {
+            const onRemoteConfig = jest.spyOn(Autocapture.prototype, 'onRemoteConfig')
+            const instance = await createPosthogInstance(uuidv7(), { capture_pageview: false })
+            onRemoteConfig.mockClear()
+            const result = { ok: true, config: { autocapture_opt_out: false } as FlagsResponse } as const
+
+            instance._onRemoteConfig(result)
+
+            expect(onRemoteConfig).toHaveBeenCalledTimes(1)
+            expect(onRemoteConfig).toHaveBeenCalledWith(result)
+            await instance.shutdown()
+            onRemoteConfig.mockRestore()
+        })
+
+        it('stops receiving remote config after shutdown', async () => {
+            const onRemoteConfig = jest.spyOn(Autocapture.prototype, 'onRemoteConfig')
+            const instance = await createPosthogInstance(uuidv7(), { capture_pageview: false })
+            await instance.shutdown()
+            onRemoteConfig.mockClear()
+
+            instance._onRemoteConfig({ ok: false })
+
+            expect(onRemoteConfig).not.toHaveBeenCalled()
+            onRemoteConfig.mockRestore()
+        })
+
+        it('releases remote config and DOM listeners on dispose', () => {
+            const remoteConfigDispose = jest.fn()
+            const initialize = jest.fn()
+            const capture = jest.fn().mockResolvedValue(undefined)
+            let remoteConfigHandler: ((result: RemoteConfigResult) => void) | undefined
+            const extension = new Autocapture({
+                refresh: (config) => {
+                    config.enabled = true
+                    config.capture_copied_text = true
+                    config.rageclick = false
+                    config.maskAllElementAttributes = false
+                    config.maskAllText = false
+                    config.disableCaptureUrlHashes = false
+                    config.remoteRequestsDisabled = true
+                },
+            })
+            const client = {
+                capture,
+                kv: { initialize, get: jest.fn(), set: jest.fn(), remove: jest.fn() },
+                onRemoteConfig: (handler: (result: RemoteConfigResult) => void) => {
+                    remoteConfigHandler = handler
+                    return { dispose: remoteConfigDispose }
+                },
+            } as any
+            const captureEvent = jest.spyOn(extension as any, '_captureEvent')
+
+            extension.setup(client)
+            expect(extension['_initialized']).toBe(true)
+            extension.dispose()
+            extension.dispose()
+
+            remoteConfigHandler?.({ ok: true, config: { autocapture_opt_out: false } as FlagsResponse })
+            simulateClick(document.createElement('button'))
+            document.dispatchEvent(new Event('copy', { bubbles: true }))
+
+            expect(initialize).not.toHaveBeenCalled()
+            expect(remoteConfigDispose).toHaveBeenCalledTimes(1)
+            expect(extension['_hasReceivedConfigResponse']).toBe(false)
+            expect(extension['_initialized']).toBe(false)
+            expect(captureEvent).not.toHaveBeenCalled()
+            expect(capture).not.toHaveBeenCalled()
         })
     })
 
@@ -1506,7 +1650,7 @@ describe('Autocapture system', () => {
             })
 
             it('is enabled when flags were disabled and no config outcome ever arrived', () => {
-                posthog.config.advanced_disable_flags = true
+                posthog.set_config({ advanced_disable_flags: true })
                 expect(autocapture.isEnabled).toBe(true)
             })
         })
