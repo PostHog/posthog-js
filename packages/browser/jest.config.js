@@ -11,7 +11,14 @@ const testingLibraryPreactMain = require.resolve('@testing-library/preact') // .
 const testingLibraryPreactCjs = path.dirname(testingLibraryPreactMain) // .../dist/cjs/
 
 module.exports = {
-    testPathIgnorePatterns: ['/node_modules/', '/cypress/', '/react/', '/test_data/', '/testcafe/'],
+    testPathIgnorePatterns: [
+        '/node_modules/',
+        '/cypress/',
+        '/react/',
+        '/test_data/',
+        '/testcafe/',
+        '/browser-next-differential/(browser-next-adapter|harness|legacy-browser-adapter|scenarios)\\.ts$',
+    ],
     moduleFileExtensions: ['js', 'json', 'ts', 'tsx'],
     setupFilesAfterEnv: ['./src/__tests__/setup.js'],
     modulePathIgnorePatterns: ['<rootDir>/lib/', 'src/__tests__/setup.js', 'src/__tests__/helpers/'],
