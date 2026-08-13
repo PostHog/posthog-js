@@ -96,10 +96,36 @@ describe('sessionStore', () => {
     })
 })
 
-describe('createLocalPlusCookieStore._set', () => {
+describe('createLocalPlusCookieStore', () => {
     beforeEach(() => {
         resetLocalStorageSupported()
         window?.localStorage.clear()
+    })
+
+    it.each(['"string"', '123', 'true', '[]'])(
+        'ignores non-object cookie roots without throwing: %s',
+        (cookieValue) => {
+            const name = 'ph_x_posthog'
+            window?.localStorage.setItem(name, JSON.stringify({ distinct_id: 'local-id' }))
+            document.cookie = `${name}=${encodeURIComponent(cookieValue)}; path=/`
+            const store = createLocalPlusCookieStore([], true)
+
+            expect(() => store._parse(name)).not.toThrow()
+            expect(store._parse(name)).toEqual({ distinct_id: 'local-id' })
+        }
+    )
+
+    it('does not merge unsafe cookie property names', () => {
+        const name = 'ph_x_posthog'
+        window?.localStorage.setItem(name, JSON.stringify({ distinct_id: 'local-id' }))
+        document.cookie = `${name}=${encodeURIComponent('{"__proto__":{"polluted":true},"distinct_id":"cookie-id"}')}; path=/`
+        const store = createLocalPlusCookieStore([], true)
+
+        const value = store._parse(name)!
+
+        expect(value.distinct_id).toBe('cookie-id')
+        expect(value).not.toHaveProperty('polluted')
+        expect(Object.getPrototypeOf(value)).toBe(Object.prototype)
     })
 
     it('stores custom-key metadata outside the event-visible persistence cookie', () => {

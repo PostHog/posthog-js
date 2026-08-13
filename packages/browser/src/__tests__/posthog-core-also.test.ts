@@ -642,12 +642,14 @@ describe('posthog core', () => {
                 get_property: () => undefined,
             } as unknown as PostHogPersistence
             posthog = posthogWith({}, { ...overrides, persistence, sessionPersistence })
+            posthog._cachedPersonProperties = 'previous-identity'
             const reloadFeatureFlags = jest.spyOn(posthog, 'reloadFeatureFlags').mockImplementation(() => {})
 
             const properties = posthog.calculateEventProperties('custom_event', {}, new Date(), uuid)
 
             expect(properties.distinct_id).toBe('identified-user')
             expect(properties.$is_identified).toBe(true)
+            expect(posthog._cachedPersonProperties).toBeNull()
             expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
             expect(persistence.unregister).toHaveBeenCalledWith(FLAG_CALL_REPORTED)
         })
@@ -672,10 +674,12 @@ describe('posthog core', () => {
                 get_property: () => undefined,
             } as unknown as PostHogPersistence
             posthog = posthogWith({}, { ...overrides, persistence, sessionPersistence })
+            posthog._cachedPersonProperties = 'previous-identity'
             const reloadFeatureFlags = jest.spyOn(posthog, 'reloadFeatureFlags').mockImplementation(() => {})
 
             posthog.calculateEventProperties('custom_event', {}, new Date(), uuid)
 
+            expect(posthog._cachedPersonProperties).toBeNull()
             expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
             expect(persistence.unregister).toHaveBeenCalledWith(FLAG_CALL_REPORTED)
         })

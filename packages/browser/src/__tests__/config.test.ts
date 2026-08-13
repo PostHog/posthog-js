@@ -156,6 +156,7 @@ describe('config', () => {
 
         it.each([
             ['unset', undefined, false],
+            ['explicit unset', 'unset' as const, false],
             ['2025-05-24', '2025-05-24' as const, false],
             ['2025-11-30', '2025-11-30' as const, false],
             ['2026-01-30', '2026-01-30' as const, false],

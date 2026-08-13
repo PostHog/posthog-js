@@ -387,6 +387,7 @@
         "_keepaliveDisabled",
         "_lastActivityTimestamp",
         "_lastCheckedUrl",
+        "_lastCookieSyncTimestamp",
         "_lastFullSnapshotSessionId",
         "_lastHref",
         "_lastMessageTimestamp",

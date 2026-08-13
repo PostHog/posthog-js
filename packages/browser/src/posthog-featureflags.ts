@@ -1615,7 +1615,8 @@ export class PostHogFeatureFlags implements Extension {
     reset(): void {
         this._requestGeneration++
         this._additionalReloadRequested = false
-        this._rebuildEventProperties()
+        this._baseEventProperties = {}
+        this._eventPropertiesWithFlagValues = {}
         this._hasLoadedFlags = false
         this._reloadingDisabled = false
         this._flagsLoadedFromRemote = false

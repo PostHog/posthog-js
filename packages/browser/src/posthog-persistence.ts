@@ -9,6 +9,7 @@ import {
     getCookiePersistedPropertiesFromMetadata,
     getCookiePersistedPropertiesMetadata,
     getCookiePropertiesFingerprint,
+    getSafeCookieProperties,
     localStore,
     memoryStore,
     sessionStore,
@@ -278,7 +279,7 @@ export class PostHogPersistence {
 
         let cookieProperties: Properties
         try {
-            cookieProperties = JSON.parse(cookieValue) || {}
+            cookieProperties = getSafeCookieProperties(JSON.parse(cookieValue))
         } catch {
             return false
         }

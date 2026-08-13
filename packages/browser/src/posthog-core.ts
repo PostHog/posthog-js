@@ -18,6 +18,15 @@ import {
     EVENT_PAGEVIEW,
     FLAG_CALL_REPORTED,
     PEOPLE_DISTINCT_ID_KEY,
+    PERSISTENCE_ACTIVE_FEATURE_FLAGS,
+    PERSISTENCE_FEATURE_FLAG_DETAILS,
+    PERSISTENCE_FEATURE_FLAG_ERRORS,
+    PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
+    PERSISTENCE_FEATURE_FLAG_PAYLOADS,
+    PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+    ENABLED_FEATURE_FLAGS,
+    STORED_GROUP_PROPERTIES_KEY,
+    STORED_PERSON_PROPERTIES_KEY,
     PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
     SDK_DEBUG_EXTENSIONS_INIT_METHOD,
     SDK_DEBUG_EXTENSIONS_INIT_TIME_MS,
@@ -235,7 +244,7 @@ const defaultsThatVaryByConfig = (
     split_storage: !!(defaults && defaults >= '2026-05-30'),
     detect_google_search_app: !!(defaults && defaults >= '2026-05-30'),
     disable_capture_url_hashes: !!(defaults && defaults >= '2026-06-25'),
-    cookieWinsOnConflict: !!(defaults && defaults >= '2026-08-29'),
+    cookieWinsOnConflict: !!(defaults && defaults !== 'unset' && defaults >= '2026-08-29'),
 })
 
 // NOTE: Remember to update `types.ts` when changing a default value
@@ -1655,6 +1664,20 @@ export class PostHog implements PostHogInterface {
         this.persistence.syncCookieProperties()
         if (this.persistence.consumeCookieIdentityChange()) {
             this._cachedPersonProperties = null
+            if (this.persistence.get_property(USER_STATE) === USER_STATE_ANONYMOUS) {
+                this.persistence.unregister([
+                    STORED_PERSON_PROPERTIES_KEY,
+                    STORED_GROUP_PROPERTIES_KEY,
+                    PERSISTENCE_ACTIVE_FEATURE_FLAGS,
+                    ENABLED_FEATURE_FLAGS,
+                    PERSISTENCE_FEATURE_FLAG_DETAILS,
+                    PERSISTENCE_FEATURE_FLAG_PAYLOADS,
+                    PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+                    PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
+                    PERSISTENCE_FEATURE_FLAG_ERRORS,
+                ])
+                this.featureFlags?.reset()
+            }
             this.reloadFeatureFlags()
             this.unregister(FLAG_CALL_REPORTED)
         }
@@ -1693,7 +1716,8 @@ export class PostHog implements PostHogInterface {
         if (this.sessionManager) {
             const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId(
                 readOnly,
-                timestamp.getTime()
+                timestamp.getTime(),
+                true
             )
             properties['$session_id'] = sessionId
             properties['$window_id'] = windowId

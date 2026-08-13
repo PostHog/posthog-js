@@ -39,6 +39,10 @@ const parseBootstrapSessionId = (sessionID: string, timestamp = new Date().getTi
 // Tradeoff: sibling tabs only observe activity once it has been persisted —
 // in-memory ticks within this window are invisible across tabs.
 export const ACTIVITY_TIMESTAMP_PERSIST_GRANULARITY_MS = 5_000
+// Session checks run for every accepted replay event. Ordinary captures force a
+// reconciliation before reaching the session manager; direct/replay checks are
+// bounded so they do not synchronously scan document.cookie for every event.
+export const SESSION_COOKIE_SYNC_INTERVAL_MS = 1_000
 
 export class SessionIdManager {
     private readonly _sessionIdGenerator: () => string
@@ -54,6 +58,7 @@ export class SessionIdManager {
 
     private _sessionActivityTimestamp: number | null
     private _lastPersistedActivityTimestamp: number | null = null
+    private _lastCookieSyncTimestamp: number | null = null
     private _sessionIdChangedHandlers: SessionIdChangedCallback[] = []
     private readonly _sessionTimeoutMs: number
 
@@ -396,19 +401,30 @@ export class SessionIdManager {
      * @param {boolean} readOnly (optional) Defaults to False. Should be set to True when the call to the function should not extend or cycle the session (e.g. being called for non-user generated events)
      * @param {Number} timestamp (optional) Defaults to the current time. The timestamp to be stored with the sessionId (used when determining if a new sessionId should be generated)
      */
-    checkAndGetSessionAndWindowId(readOnly = false, _timestamp: number | null = null) {
+    checkAndGetSessionAndWindowId(
+        readOnly = false,
+        _timestamp: number | null = null,
+        persistenceAlreadySynced = false
+    ) {
         if (this._config.cookieless_mode === COOKIELESS_ALWAYS) {
             throw new Error('checkAndGetSessionAndWindowId should not be called with cookieless_mode="always"')
         }
         const timestamp = _timestamp || new Date().getTime()
 
         const managedSessionIdBeforeCookieSync = this._sessionId
-        this._persistence.syncCookieProperties?.()
+        if (persistenceAlreadySynced) {
+            this._lastCookieSyncTimestamp = timestamp
+        } else if (
+            isNull(this._lastCookieSyncTimestamp) ||
+            timestamp < this._lastCookieSyncTimestamp ||
+            timestamp - this._lastCookieSyncTimestamp >= SESSION_COOKIE_SYNC_INTERVAL_MS
+        ) {
+            this._persistence.syncCookieProperties?.()
+            this._lastCookieSyncTimestamp = timestamp
+        }
         let [, sessionId, startTimestamp] = this._getSessionId()
         const cookieSessionAdoption =
-            !isNull(managedSessionIdBeforeCookieSync) &&
-            !isUndefined(managedSessionIdBeforeCookieSync) &&
-            sessionId !== managedSessionIdBeforeCookieSync
+            !isUndefined(managedSessionIdBeforeCookieSync) && sessionId !== managedSessionIdBeforeCookieSync
         const lastActivityTimestamp = this._freshestActivityTimestamp()
         let windowId = this._getWindowId()
 
@@ -448,6 +464,7 @@ export class SessionIdManager {
             ;[, sessionId, startTimestamp] = this._getSessionId()
         }
         if (noSessionId || activityTimeout || sessionPastMaximumLength) {
+            crossTabAdoption = false
             const usePendingBootstrapSession = pendingBootstrapSession && !pendingBootstrapSessionPastMaximumLength
             sessionId = usePendingBootstrapSession ? pendingBootstrapSession.sessionId : this._sessionIdGenerator()
             windowId = this._windowIdGenerator()

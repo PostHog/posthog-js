@@ -11,7 +11,7 @@ import {
     USER_STATE_IDENTIFIED,
 } from './constants'
 
-import { isArray, isNull, isUndefined } from '@posthog/core'
+import { isArray, isNull, isObject, isUndefined } from '@posthog/core'
 import { logger } from '@posthog/browser-common/utils/logger'
 import { window, document } from '@posthog/browser-common/utils/globals'
 import { getCookieValue } from '@posthog/browser-common/utils/cookie-utils'
@@ -264,6 +264,21 @@ const COOKIE_PERSISTED_PROPERTIES_METADATA_SUFFIX = '_cpm'
 export const getCookiePersistedPropertiesMetadataName = (name: string): string =>
     name + COOKIE_PERSISTED_PROPERTIES_METADATA_SUFFIX
 
+const UNSAFE_COOKIE_PROPERTY_KEYS = ['__proto__', 'constructor', 'prototype']
+
+export const getSafeCookieProperties = (value: unknown): Properties => {
+    if (!isObject(value)) {
+        return {}
+    }
+    const safeProperties: Properties = {}
+    Object.keys(value).forEach((key) => {
+        if (UNSAFE_COOKIE_PROPERTY_KEYS.indexOf(key) === -1) {
+            safeProperties[key] = value[key]
+        }
+    })
+    return safeProperties
+}
+
 export const getCookiePersistedProperties = (
     value: Properties,
     customCookieProperties: readonly string[] = []
@@ -342,7 +357,7 @@ export const createLocalPlusCookieStore = (
                     // Read the main cookie once so values and metadata validation
                     // always refer to the same snapshot.
                     cookieValue = cookieStore._get(name) || undefined
-                    cookieProperties = cookieValue ? JSON.parse(cookieValue) || {} : {}
+                    cookieProperties = cookieValue ? getSafeCookieProperties(JSON.parse(cookieValue)) : {}
                 } catch {}
                 const localStorageData: Properties = JSON.parse(localStore._get(name) || '{}')
                 let value: Properties
@@ -356,12 +371,12 @@ export const createLocalPlusCookieStore = (
                     // Defensive: skip null / empty-string cookie values so a malformed
                     // legacy cookie cannot wipe out valid localStorage data.
                     const safeCookieProperties: Properties = {}
-                    for (const key in cookieProperties) {
+                    Object.keys(cookieProperties).forEach((key) => {
                         const v = cookieProperties[key]
                         if (!isNull(v) && v !== '') {
                             safeCookieProperties[key] = v
                         }
-                    }
+                    })
                     // A non-empty cookie is the complete shared snapshot for the key
                     // set understood by its writer. Remove omitted keys so a subdomain
                     // reopened after reset cannot resurrect prior-user values.

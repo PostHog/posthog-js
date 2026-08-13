@@ -15,7 +15,7 @@ import { satisfies } from 'compare-versions'
  */
 export const compatSkips: { range: string; test: string; reason: string }[] = [
     {
-        range: '<1.415.5',
+        range: '<1.417.0',
         test: 'already-open sibling subdomains adopt identify and reset cookie changes',
         reason: 'live cross-subdomain cookie reconciliation is added by this change',
     },

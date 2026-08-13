@@ -1,4 +1,4 @@
-import { BrowserContext, Page } from '@playwright/test'
+import { BrowserContext, Page, Request } from '@playwright/test'
 import { expect, test, WindowWithPostHog } from './utils/posthog-playwright-test-base'
 import { start } from './utils/setup'
 
@@ -38,6 +38,15 @@ async function startOnSubdomain(page: Page, context: BrowserContext, subdomain: 
     })
 }
 
+function getFlagsPayload(request: Request): Record<string, any> {
+    const body = request.postData()
+    const data = body?.match(/data=(.*)/)?.[1]
+    if (!data) {
+        throw new Error('Expected an encoded flags payload')
+    }
+    return JSON.parse(Buffer.from(decodeURIComponent(data), 'base64').toString())
+}
+
 async function distinctId(page: Page): Promise<string | undefined> {
     return page.evaluate(() => (window as WindowWithPostHog).posthog?.get_distinct_id())
 }
@@ -75,14 +84,33 @@ test('already-open sibling subdomains adopt identify and reset cookie changes', 
         await page.evaluate(() => (window as WindowWithPostHog).posthog?.get_property('cross_domain_property'))
     ).toBe('old-user')
 
+    await page.evaluate(() => {
+        const posthog = (window as WindowWithPostHog).posthog
+        posthog?.setPersonPropertiesForFlags({ plan: 'pro' }, false)
+        posthog?.setGroupPropertiesForFlags({ organization: { plan: 'enterprise' } }, false)
+    })
+    const flagsRequests: Request[] = []
+    page.on('request', (request) => {
+        if (request.url().includes('/flags/')) {
+            flagsRequests.push(request)
+        }
+    })
+
     await sibling.evaluate(() => (window as WindowWithPostHog).posthog?.reset())
     const resetAnonymousId = await distinctId(sibling)
     expect(resetAnonymousId).toBeTruthy()
     expect(resetAnonymousId).not.toBe('identified-user')
     expect(await captureDistinctId(page, 'after-sibling-reset')).toBe(resetAnonymousId)
+    const resetEvent = (await page.capturedEvents()).find((event) => event.event === 'after-sibling-reset')
+    expect(resetEvent?.properties).not.toHaveProperty('$feature/session-recording-player')
     expect(
         await page.evaluate(() => (window as WindowWithPostHog).posthog?.get_property('cross_domain_property'))
     ).toBeUndefined()
+    await expect.poll(() => flagsRequests.length).toBeGreaterThan(0)
+    const flagsPayload = getFlagsPayload(flagsRequests[flagsRequests.length - 1])
+    expect(flagsPayload.distinct_id).toBe(resetAnonymousId)
+    expect(flagsPayload.person_properties).not.toHaveProperty('plan')
+    expect(flagsPayload.group_properties).toBeUndefined()
 
     // Capturing from the reset tab proves the stale tab did not republish the
     // old cookie-backed property after it observed the reset.
