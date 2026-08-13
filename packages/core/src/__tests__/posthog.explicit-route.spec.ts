@@ -113,6 +113,18 @@ describe('PostHog Core explicit queue route', () => {
     expect(queueEvents(posthog, PostHogPersistedProperty.Queue)).toEqual([])
   })
 
+  it('reset() preserves the AiCaptureQueue route alongside the default queue', () => {
+    const [posthog] = createClient()
+
+    posthog.enqueueOnRoute('explicit', 'lane_event')
+    posthog.enqueueOnRoute(undefined, 'normal_event')
+
+    posthog.reset()
+
+    expect(queueEvents(posthog, PostHogPersistedProperty.AiCaptureQueue)).toEqual(['lane_event'])
+    expect(queueEvents(posthog, PostHogPersistedProperty.Queue)).toEqual(['normal_event'])
+  })
+
   it('sendImmediate honors the explicit route', async () => {
     const [posthog] = createClient()
 

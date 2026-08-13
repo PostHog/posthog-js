@@ -87,6 +87,8 @@ describe('AI capture lane wiring (Node SDK)', () => {
   it('drops events over 8MiB with a name-and-size-only error log, delivering the rest', async () => {
     const posthog = harness.makeClient()
     posthog.debug(true)
+    const onError = jest.fn()
+    posthog.on('error', onError)
     const pad = 'x'.repeat(9 * 1024 * 1024)
     posthog.captureAi({ distinctId: 'u', event: '$ai_generation', properties: { pad } })
     posthog.captureAi({ distinctId: 'u', event: '$ai_span', properties: {} })
@@ -97,6 +99,13 @@ describe('AI capture lane wiring (Node SDK)', () => {
     expect(errorLog).toContain('$ai_generation')
     expect(errorLog).toMatch(/\d+ bytes/)
     expect(errorLog).not.toContain('xxxx')
+
+    expect(onError).toHaveBeenCalledTimes(1)
+    const emittedError = onError.mock.calls[0][0]
+    expect(emittedError).toBeInstanceOf(Error)
+    expect(emittedError.message).toContain('$ai_generation')
+    expect(emittedError.message).toMatch(/\d+ bytes/)
+    expect(emittedError.message).not.toContain('xxxx')
   })
 
   it('splits multi-MB batches into byte-bounded requests', async () => {
@@ -143,6 +152,8 @@ describe('AI capture lane wiring (Node SDK)', () => {
   it('drops a single event that still 413s alone, without throwing, and keeps the lane usable', async () => {
     const posthog = harness.makeClient()
     posthog.debug(true)
+    const onError = jest.fn()
+    posthog.on('error', onError)
     harness.fetch.mockImplementation((url: any) =>
       Promise.resolve(url.includes('/i/v0/ai/batch/') ? v413Response() : v0Response())
     )
@@ -154,6 +165,12 @@ describe('AI capture lane wiring (Node SDK)', () => {
     const errorLog = (console.error as jest.Mock).mock.calls.flat().join(' ')
     expect(errorLog).toContain('$ai_undeliverable')
     expect(errorLog).toMatch(/\d+ bytes/)
+
+    expect(onError).toHaveBeenCalledTimes(1)
+    const emittedError = onError.mock.calls[0][0]
+    expect(emittedError).toBeInstanceOf(Error)
+    expect(emittedError.message).toContain('$ai_undeliverable')
+    expect(emittedError.message).toMatch(/\d+ bytes/)
 
     harness.useDefaultRouting()
     posthog.captureAi({ distinctId: 'u', event: '$ai_next', properties: {} })

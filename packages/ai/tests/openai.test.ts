@@ -1323,6 +1323,41 @@ describe('PostHogOpenAI - Jest test suite', () => {
     })
   })
 
+  describe('full AI capture', () => {
+    test('preserves binary image content in a streaming Responses output when enabled', async () => {
+      Object.assign(mockPostHogClient, { enableFullAiCapture: true })
+      const binary = 'A'.repeat(80)
+      const response = {
+        ...mockOpenAiParsedResponse,
+        id: 'resp_full_capture',
+        status: 'completed',
+        output: [{ type: 'image_generation_call', id: 'image-1', status: 'completed', result: binary }],
+        usage: { input_tokens: 11, output_tokens: 7, total_tokens: 18 },
+      }
+      const chunks = [{ type: 'response.completed', sequence_number: 0, response }]
+      const ResponsesMock: any = openaiModule.Responses
+      ResponsesMock.prototype.create = jest
+        .fn()
+        .mockImplementation(() => createMockAPIPromise(createMockAsyncIterator(chunks)))
+
+      const stream = await client.responses.create({
+        model: 'gpt-4',
+        input: 'Hello',
+        stream: true,
+        posthogDistinctId: 'test-id',
+      })
+      for await (const _chunk of stream) {
+        // consume the returned stream while analytics consumes its monitored copy
+      }
+      await flushPromises()
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const properties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+      expect(JSON.stringify(properties['$ai_output_choices'])).toContain(binary)
+      expect(JSON.stringify(properties)).not.toContain('redacted')
+    })
+  })
+
   describe('Responses cache creation tokens', () => {
     const usageWithCacheWrite = {
       input_tokens: 33400,

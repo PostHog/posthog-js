@@ -433,6 +433,38 @@ export interface IPostHog {
   captureImmediate({ distinctId, event, properties, groups, flags, sendFeatureFlags }: EventMessage): Promise<void>
 
   /**
+   * @description Capture an AI event on the dedicated AI capture endpoint.
+   * Beta: the signature is stable; operational limits (per-event size cap, batching, endpoint) may change without notice. Delivery is async, and no redaction or truncation is applied to the payload.
+   * @param distinctId which uniquely identifies your user
+   * @param event We recommend using [verb] [noun], like movie played or movie updated to easily identify what your events mean later on.
+   * @param properties OPTIONAL | which can be a object with any information you'd like to add
+   * @param groups OPTIONAL | object of what groups are related to this event, example: { company: 'id:5' }. Can be used to analyze companies instead of users.
+   * @param flags OPTIONAL | A `FeatureFlagEvaluations` snapshot from `evaluateFlags()`. Attaches those exact flag values to the event with no extra network call.
+   * @param sendFeatureFlags OPTIONAL | Deprecated — prefer `flags`. Fires a hidden `/flags` request on capture to enrich the event with flag values.
+   * @returns The event UUID, or `undefined` when the client is disabled
+   */
+  captureAi({ distinctId, event, properties, groups, flags, sendFeatureFlags }: EventMessage): string | undefined
+
+  /**
+   * @description Capture an AI event on the dedicated AI capture endpoint, resolving after the send completes. Use in short-lived processes (serverless) where the runtime may freeze before a background flush runs.
+   * @param distinctId which uniquely identifies your user
+   * @param event We recommend using [verb] [noun], like movie played or movie updated to easily identify what your events mean later on.
+   * @param properties OPTIONAL | which can be a object with any information you'd like to add
+   * @param groups OPTIONAL | object of what groups are related to this event, example: { company: 'id:5' }. Can be used to analyze companies instead of users.
+   * @param flags OPTIONAL | A `FeatureFlagEvaluations` snapshot from `evaluateFlags()`. Attaches those exact flag values to the event with no extra network call.
+   * @param sendFeatureFlags OPTIONAL | Deprecated — prefer `flags`. Fires a hidden `/flags` request on capture to enrich the event with flag values.
+   * @returns The event UUID, or `undefined` when the client is disabled
+   */
+  captureAiImmediate({
+    distinctId,
+    event,
+    properties,
+    groups,
+    flags,
+    sendFeatureFlags,
+  }: EventMessage): Promise<string | undefined>
+
+  /**
    * @description Identify lets you add metadata on your users so you can more easily identify who they are in PostHog,
    * and even do things like segment users by these properties.
    * An identify call requires:

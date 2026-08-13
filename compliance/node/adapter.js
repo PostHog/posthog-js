@@ -47,9 +47,10 @@ async function discardClient() {
     try {
         client.clearFlushTimer?.()
         client.setPersistedProperty?.('queue', [])
-        // v1 mode routes $ai_* events to a separate queue; clear it too so they can't
-        // leak into the next scenario.
+        // v1 mode routes $ai_* events to a separate queue, and captureAi() events to
+        // their own dedicated queue; clear both so they can't leak into the next scenario.
         client.setPersistedProperty?.('ai_queue', [])
+        client.setPersistedProperty?.('ai_capture_queue', [])
         await client.shutdown(1)
     } catch (error) {
         // Ignore reset-time shutdown errors; the next test starts with a fresh client.

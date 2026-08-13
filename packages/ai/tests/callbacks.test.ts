@@ -1846,6 +1846,53 @@ describe('LangChainCallbackHandler trace/span state sanitization', () => {
     expect(outputState).toContain('[base64 image/jpeg redacted]')
     expect(outputState).not.toContain('AAAAAAAA')
   })
+
+  it('preserves base64 data URLs in a $ai_span input/output state when full AI capture is enabled', () => {
+    const fullCaptureClient = {
+      capture: jest.fn(),
+      enableFullAiCapture: true,
+    } as unknown as PostHog
+    const handler = new LangChainCallbackHandler({ client: fullCaptureClient })
+
+    const dataUrl = 'data:image/jpeg;base64,' + 'A'.repeat(2000)
+    const serialized = {
+      lc: 1,
+      type: 'constructor' as const,
+      id: ['langchain', 'schema', 'runnable', 'RunnableSequence'],
+      kwargs: {},
+    }
+    const runId = 'run_span_full_capture'
+    const parentRunId = 'parent_run_full_capture'
+
+    handler.handleChainStart(
+      serialized,
+      {
+        messages: [
+          {
+            content: [
+              { type: 'text', text: 'describe this image' },
+              { type: 'image_url', image_url: { url: dataUrl } },
+            ],
+          },
+        ],
+      } as any,
+      runId,
+      parentRunId
+    )
+    handler.handleChainEnd({ echoed: dataUrl, parsed: { title: 'ok' } }, runId, parentRunId)
+
+    expect(fullCaptureClient.capture).toHaveBeenCalledTimes(1)
+    const [captureCall] = (fullCaptureClient.capture as jest.Mock).mock.calls
+    expect(captureCall[0].event).toBe('$ai_span')
+
+    const inputState = JSON.stringify(captureCall[0].properties['$ai_input_state'])
+    expect(inputState).toContain(dataUrl)
+    expect(inputState).not.toContain('redacted')
+
+    const outputState = JSON.stringify(captureCall[0].properties['$ai_output_state'])
+    expect(outputState).toContain(dataUrl)
+    expect(outputState).not.toContain('redacted')
+  })
 })
 
 describe('LangChainCallbackHandler LangGraph interrupts', () => {

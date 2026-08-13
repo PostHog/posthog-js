@@ -152,7 +152,7 @@ const mapVercelPrompt = (messages: LanguageModelPrompt, client?: FullAiCaptureGa
               type: 'tool-result',
               toolCallId: c.toolCallId,
               toolName: c.toolName,
-              output: sanitizeVercel(c.output),
+              output: sanitizeVercel(c.output, client),
               isError: c.isError,
             }
           }
@@ -177,6 +177,12 @@ const mapVercelPrompt = (messages: LanguageModelPrompt, client?: FullAiCaptureGa
       content,
     }
   })
+
+  // Full AI capture means no truncation of any kind; the aggregate trim below exists
+  // only to keep the default-mode payload under MAX_OUTPUT_SIZE.
+  if (isFullAiCaptureEnabled(client)) {
+    return inputs
+  }
 
   try {
     // Trim the inputs array until its serialized JSON size fits within MAX_OUTPUT_SIZE.
@@ -797,7 +803,7 @@ export const wrapVercelLanguageModel = <T extends LanguageModel>(
                 input: mergedOptions.posthogPrivacyMode
                   ? ''
                   : mapVercelPrompt(params.prompt as LanguageModelPrompt, phClient),
-                output: output,
+                output,
                 latency,
                 timeToFirstToken,
                 baseURL,

@@ -462,7 +462,10 @@ export class WrappedResponses extends Responses {
       ...posthogParams,
       model: openAIParams.model ?? result.model,
       provider: 'openai',
-      input: formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions),
+      input: formatOpenAIResponsesInput(
+        sanitizeOpenAIResponse(openAIParams.input, this.phClient),
+        openAIParams.instructions
+      ),
       output: formatResponseOpenAI({ output: result.output }),
       latency: getBackgroundResponseLatency(result),
       baseURL: this.baseURL,
@@ -617,7 +620,7 @@ export class WrappedResponses extends Responses {
                   sanitizeOpenAIResponse(openAIParams.input, this.phClient),
                   openAIParams.instructions
                 ),
-                output: sanitizeOpenAIResponse(finalContent),
+                output: sanitizeOpenAIResponse(finalContent, this.phClient),
                 latency,
                 timeToFirstToken,
                 baseURL: this.baseURL,
@@ -1122,7 +1125,7 @@ export class WrappedTranscriptions extends Transcriptions {
                 model: openAIParams.model,
                 provider: 'openai',
                 input: openAIParams.prompt,
-                output: sanitizeOpenAIResponse(finalContent),
+                output: sanitizeOpenAIResponse(finalContent, this.phClient),
                 latency,
                 timeToFirstToken,
                 baseURL: this.baseURL,
@@ -1170,7 +1173,7 @@ export class WrappedTranscriptions extends Transcriptions {
               model: openAIParams.model,
               provider: 'openai',
               input: openAIParams.prompt,
-              output: sanitizeOpenAIResponse(result.text),
+              output: sanitizeOpenAIResponse(result.text, this.phClient),
               latency,
               baseURL: this.baseURL,
               modelParameters: getModelParams(body),

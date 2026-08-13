@@ -317,6 +317,39 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       expect(input).toContain('[base64 image/png redacted]')
     })
 
+    it('preserves binary content nested in tool results when the client enables multimodal capture', async () => {
+      const binary = 'U0hPUlQgVE9PTCBSRVNVTFQ='
+      const clientWithMultimodal = mockPostHogClient as PostHog & { enableFullAiCapture?: boolean }
+      clientWithMultimodal.enableFullAiCapture = true
+      const baseModel = createMockV3Model('tool-model')
+      const model = withTracing(baseModel, clientWithMultimodal, { posthogDistinctId: 'test-user' })
+      const params = {
+        prompt: [
+          {
+            role: 'tool',
+            content: [
+              {
+                type: 'tool-result',
+                toolCallId: 'tool-call-id',
+                toolName: 'read-file',
+                output: {
+                  type: 'content',
+                  value: [{ type: 'media', data: binary, mediaType: 'image/png' }],
+                },
+              },
+            ],
+          },
+        ],
+      } as any
+
+      await model.doGenerate(params)
+
+      expect(baseModel.doGenerate).toHaveBeenCalledWith(params)
+      const input = JSON.stringify((mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties['$ai_input'])
+      expect(input).toContain(binary)
+      expect(input).not.toContain('redacted')
+    })
+
     it('redacts data URL objects from input while preserving HTTP URL objects', async () => {
       const binary = 'SU5QVVQgVVJMIERBVEE='
       const dataUrl = new URL(`data:audio/wav;base64,${binary}`)
@@ -1134,6 +1167,32 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         expect(JSON.stringify(input).length).toBeLessThan(210_000)
       }
     )
+
+    it('skips the oversized-prompt aggregate trim entirely when the client enables multimodal capture', async () => {
+      const clientWithMultimodal = mockPostHogClient as PostHog & { enableFullAiCapture?: boolean }
+      clientWithMultimodal.enableFullAiCapture = true
+      const baseModel = createMockV3Model('gpt-4')
+      const model = withTracing(baseModel, clientWithMultimodal, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-trim-bypass',
+      })
+
+      // Same oversized prompt as the default-mode trim test above: well past MAX_OUTPUT_SIZE (200kb).
+      const oversizedPrompt = Array.from({ length: 100 }, (_, i) => ({
+        role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+        content: [{ type: 'text' as const, text: 'x'.repeat(15_000) }],
+      }))
+
+      await model.doGenerate({ prompt: oversizedPrompt as any })
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+      const input = captureCall[0].properties.$ai_input as Array<{ role: string; content: unknown }>
+      expect(input).toHaveLength(oversizedPrompt.length)
+      expect(input.some((message) => message.role === 'posthog')).toBe(false)
+      expect(JSON.stringify(input).length).toBeGreaterThan(1_000_000)
+    })
 
     it('skips truncation of oversized output when the client enables multimodal capture', async () => {
       const oversizedText = 'y'.repeat(250_000)

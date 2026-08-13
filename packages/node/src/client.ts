@@ -497,9 +497,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   ): Promise<void> {
     const { batches, dropped } = partitionAiBatch(batchMessages)
     for (const { event, bytes } of dropped) {
-      this._logger.error(
-        `Event ${event} (${bytes} bytes) exceeds the ${AI_MAX_EVENT_BYTES / (1024 * 1024)}MiB limit for ${AI_CAPTURE_ENDPOINT_PATH}, dropping.`
-      )
+      const message = `Event ${event} (${bytes} bytes) exceeds the ${AI_MAX_EVENT_BYTES / (1024 * 1024)}MiB limit for ${AI_CAPTURE_ENDPOINT_PATH}, dropping.`
+      this._logger.error(message)
+      this._events.emit('error', new Error(message))
     }
     for (const batch of batches) {
       await this.sendAiSubBatch(batch, retryOptions)
@@ -520,9 +520,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       if (batch.length === 1) {
         const [event] = batch
         const eventName = typeof event.event === 'string' ? event.event : 'unknown'
-        this._logger.error(
-          `Event ${eventName} (${eventByteSize(event)} bytes) was rejected with 413 by ${AI_CAPTURE_ENDPOINT_PATH} on its own, dropping.`
-        )
+        const message = `Event ${eventName} (${eventByteSize(event)} bytes) was rejected with 413 by ${AI_CAPTURE_ENDPOINT_PATH} on its own, dropping.`
+        this._logger.error(message)
+        this._events.emit('error', new Error(message))
         return
       }
       const mid = Math.ceil(batch.length / 2)
