@@ -228,15 +228,6 @@ jobs:
                       --title "$PR_TITLE" \
                       --body "$PR_BODY"
 
-            - name: Enable automerge
-              env:
-                  GH_TOKEN: ${{ steps.upgrader.outputs.token }}
-                  PR_NUMBER: ${{ steps.main-repo-pr.outputs.pull-request-number }}
-              run: |
-                  if [ "$(gh pr view "$PR_NUMBER" --repo PostHog/posthog --json autoMergeRequest --jq '.autoMergeRequest != null')" = "false" ]; then
-                      gh pr merge "$PR_NUMBER" --repo PostHog/posthog --auto --squash
-                  fi
-
             - name: Assign reviewers
               env:
                   GH_TOKEN: ${{ steps.upgrader.outputs.token }}
