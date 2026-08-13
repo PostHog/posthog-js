@@ -995,6 +995,21 @@ describe('time-sliced full snapshot converges on replay', () => {
     // the live sheet has 3 rules; the replayed sheet must too — not 5
     const opsRules = (result.opsResult as { rules: string[] }).rules;
     expect(opsRules.length).toBe(3);
+    // correct drops are still counted: a coverage-gate regression that eats
+    // deltas must be visible in the completed diagnostic
+    const completed = result.events.find(
+      (e) =>
+        e.type === 5 &&
+        (e.data as { tag?: string; payload?: { status?: string } }).tag ===
+          'budgeted-full-snapshot' &&
+        (e.data as { payload: { status: string } }).payload.status ===
+          'completed',
+    );
+    expect(completed).toBeDefined();
+    expect(
+      (completed!.data as { payload: { coveredHeldCssDeltas: number } })
+        .payload.coveredHeldCssDeltas,
+    ).toBe(2);
   });
 
   it('held events replayed by the flush do not re-trip checkoutEveryNth', async () => {

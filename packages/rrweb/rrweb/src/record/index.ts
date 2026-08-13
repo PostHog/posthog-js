@@ -1605,6 +1605,10 @@ function record<T = eventWithTime>(
     let deferredMutationRecords = 0;
     let droppedHeldEvents = 0;
     let failedHeldEventDeliveries = 0;
+    // Correct drops, counted separately from the lossy ones: a regression in
+    // the coverage gate would otherwise silently eat CSS deltas with no
+    // production signal.
+    let coveredHeldCssDeltas = 0;
     // Every delivery below re-enters the consumer, and the consumer can
     // rotate the recorder from any of them. The early returns land in the
     // finally blocks, which release this transaction's own state either way
@@ -1710,6 +1714,7 @@ function record<T = eventWithTime>(
         };
         for (const held of queuedEvents) {
           if (heldCssomDeltaCoveredBySnapshot(transaction, held)) {
+            coveredHeldCssDeltas++;
             continue;
           }
           if (
@@ -1767,6 +1772,7 @@ function record<T = eventWithTime>(
           const stillPending = new Set(mirror.getUnclaimedReservedIds());
           for (const held of deferred) {
             if (heldCssomDeltaCoveredBySnapshot(transaction, held)) {
+              coveredHeldCssDeltas++;
               continue;
             }
             const scrubbed = scrubUnclaimedIds(held.event, stillPending);
@@ -1890,6 +1896,7 @@ function record<T = eventWithTime>(
         deferredMutationRecords,
         droppedHeldEventCount: droppedHeldEvents,
         failedHeldEventDeliveries,
+        coveredHeldCssDeltas,
         deferredStylesheets: deferredStylesheetCount,
       });
       // the diagnostic went through the consumer; a rotation from it owns
