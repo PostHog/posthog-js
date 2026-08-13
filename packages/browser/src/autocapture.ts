@@ -34,6 +34,22 @@ const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
 
 const logger = createLogger('[AutoCapture]')
 
+function compileUrlPatternList(
+    patterns: (string | RegExp)[] | undefined,
+    listName: 'allowlist' | 'ignorelist'
+): RegExp[] | undefined {
+    return patterns
+        ?.map((pattern) => {
+            try {
+                return new RegExp(pattern)
+            } catch (error) {
+                logger.error(`Invalid URL ${listName} pattern ignored`, pattern, error)
+                return undefined
+            }
+        })
+        .filter((pattern): pattern is RegExp => !!pattern)
+}
+
 function limitText(length: number, text: string): string {
     if (text.length > length) {
         return text.slice(0, length) + '...'
@@ -340,14 +356,14 @@ export class Autocapture implements Extension {
     private _compileUrlPatterns(): void {
         const allowlist = this._config.url_allowlist
         if (!this._samePatterns(allowlist, this._urlAllowlistInput)) {
-            this._compiledUrlAllowlist = allowlist?.map((url) => new RegExp(url))
+            this._compiledUrlAllowlist = compileUrlPatternList(allowlist, 'allowlist')
             this._urlAllowlistInput = allowlist?.slice()
         }
         this._config.url_allowlist = this._compiledUrlAllowlist
 
         const ignorelist = this._config.url_ignorelist
         if (!this._samePatterns(ignorelist, this._urlIgnorelistInput)) {
-            this._compiledUrlIgnorelist = ignorelist?.map((url) => new RegExp(url))
+            this._compiledUrlIgnorelist = compileUrlPatternList(ignorelist, 'ignorelist')
             this._urlIgnorelistInput = ignorelist?.slice()
         }
         this._config.url_ignorelist = this._compiledUrlIgnorelist

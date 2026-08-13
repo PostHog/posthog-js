@@ -20,6 +20,7 @@ import { window } from '@posthog/browser-common/utils/globals'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { isUndefined } from '@posthog/core'
+import Config from '../config'
 
 // JS DOM doesn't have ClipboardEvent, so we need to mock it
 // see https://github.com/jsdom/jsdom/issues/1568
@@ -170,6 +171,46 @@ describe('Autocapture system', () => {
 
             expect(extension['_config'].url_allowlist).toHaveLength(2)
             expect(extension['_config'].url_allowlist?.[0]).not.toBe(compiled)
+        })
+
+        it('filters invalid URL patterns and logs each failure once', () => {
+            const previousDebug = Config.DEBUG
+            const consoleError = jest.spyOn(window!.console, 'error').mockImplementation()
+
+            try {
+                Config.DEBUG = true
+                posthog.config.autocapture = {
+                    url_allowlist: ['https://example.com/.*', '['],
+                    url_ignorelist: ['(', 'https://posthog.com/.*'],
+                }
+                const extension = new BrowserAutocapture(posthog)
+
+                extension['_compileUrlPatterns']()
+
+                expect(extension['_config'].url_allowlist).toEqual([new RegExp('https://example.com/.*')])
+                expect(extension['_config'].url_ignorelist).toEqual([new RegExp('https://posthog.com/.*')])
+                expect(consoleError).toHaveBeenCalledTimes(2)
+                expect(consoleError).toHaveBeenCalledWith(
+                    '[PostHog.js] [AutoCapture]',
+                    'Invalid URL allowlist pattern ignored',
+                    '[',
+                    expect.any(SyntaxError)
+                )
+                expect(consoleError).toHaveBeenCalledWith(
+                    '[PostHog.js] [AutoCapture]',
+                    'Invalid URL ignorelist pattern ignored',
+                    '(',
+                    expect.any(SyntaxError)
+                )
+
+                extension['_refreshConfig']()
+                extension['_compileUrlPatterns']()
+
+                expect(consoleError).toHaveBeenCalledTimes(2)
+            } finally {
+                Config.DEBUG = previousDebug
+                consoleError.mockRestore()
+            }
         })
 
         it('does not throw during initialization and fails closed for an invalid URL pattern', async () => {
