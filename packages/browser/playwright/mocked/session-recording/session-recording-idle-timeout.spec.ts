@@ -355,14 +355,31 @@ test.describe('Session recording - recording idle (activity timeout) within one 
                 await page.locator('[data-cy-input]').type('back from idle')
             },
         })
-        // let the post-wake buffer flush ship everything
-        await page.waitForTimeout(2500)
+        const collectSnapshotData = async (): Promise<any[]> => {
+            const capturedEvents = await page.capturedEvents()
+            return capturedEvents
+                .filter((e) => e.event === '$snapshot')
+                .flatMap((e) => e['properties']['$snapshot_data'] as any[])
+        }
 
-        const capturedEvents = await page.capturedEvents()
-        const snapshotData = capturedEvents
-            .filter((e) => e.event === '$snapshot')
-            .flatMap((e) => e['properties']['$snapshot_data'] as any[])
+        // poll until the post-wake flush has shipped the wake marker and a full snapshot
+        await expect
+            .poll(
+                async () => {
+                    const tags = (await collectSnapshotData()).map((s) => ({ type: s.type, tag: s.data?.tag ?? null }))
+                    const wakeIndex = tags.findIndex((s) => s.tag === 'sessionNoLongerIdle')
+                    if (wakeIndex === -1) {
+                        return 'waiting for sessionNoLongerIdle'
+                    }
+                    return tags.slice(wakeIndex + 1).some((s) => s.type === 2)
+                        ? 'wake full snapshot shipped'
+                        : 'waiting for wake full snapshot'
+                },
+                { timeout: 10000 }
+            )
+            .toBe('wake full snapshot shipped')
 
+        const snapshotData = await collectSnapshotData()
         const tags = snapshotData.map((s) => ({ type: s.type, tag: s.data?.tag ?? null }))
         const idleIndex = tags.findIndex((s) => s.tag === 'sessionIdle')
         const wakeIndex = tags.findIndex((s) => s.tag === 'sessionNoLongerIdle')

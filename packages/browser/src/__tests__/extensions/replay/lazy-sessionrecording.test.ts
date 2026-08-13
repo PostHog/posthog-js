@@ -1437,6 +1437,87 @@ describe('Lazy SessionRecording', () => {
                 expect(takeFullSnapshot).not.toHaveBeenCalled()
             })
 
+            it.each([
+                ['a mutation', createIncrementalMutationEvent(), true],
+                ['a stylesheet rule change', createIncrementalStyleSheetEvent({ adds: [] }), true],
+                // a periodic full snapshot can itself cross the idle threshold and be dropped
+                ['a full snapshot', createFullSnapshot(), true],
+                ['a canvas mutation', createIncrementalSnapshot({ data: { source: 9 } }), false],
+                ['a plugin event', createPluginSnapshot({}), false],
+            ] as [string, eventWithTime, boolean][])(
+                'when %s crosses the idle threshold and is dropped, wake heals: %s',
+                (_name: string, droppedEvent: eventWithTime, heals: boolean) => {
+                    const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record
+                        .takeFullSnapshot as Mock
+
+                    emitActiveEvent(startingTimestamp + 100)
+
+                    // the event itself declares idle in _updateWindowAndSessionIds, then the
+                    // idle gate drops it - the timer-driven full snapshot sequence hits this
+                    _emit({
+                        ...droppedEvent,
+                        timestamp: startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000,
+                    } as eventWithTime)
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual(true)
+                    takeFullSnapshot.mockClear()
+
+                    emitActiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 2000)
+
+                    expect(takeFullSnapshot).toHaveBeenCalledTimes(heals ? 1 : 0)
+                }
+            )
+
+            it('retries the healing snapshot on the next wake when taking it fails', () => {
+                const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock
+
+                emitActiveEvent(startingTimestamp + 100)
+
+                // idle with a dropped mutation
+                emitInactiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000, true)
+                takeFullSnapshot.mockClear()
+
+                // the wake heal fails, so no full snapshot event is emitted
+                takeFullSnapshot.mockImplementationOnce(() => {
+                    throw new Error('rrweb not ready')
+                })
+                emitActiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 2000)
+                expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
+                // the drop signal survives the failed take
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_eventsDroppedWhileIdle']).toBeGreaterThan(0)
+
+                // idle again with no new drops, then wake: the heal is retried
+                _emit({
+                    ...createPluginSnapshot({}),
+                    timestamp: startingTimestamp + 2 * RECORDING_IDLE_THRESHOLD_MS + 3000,
+                } as eventWithTime)
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual(true)
+                emitActiveEvent(startingTimestamp + 2 * RECORDING_IDLE_THRESHOLD_MS + 4000)
+
+                expect(takeFullSnapshot.mock.calls.length).toBeGreaterThanOrEqual(2)
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_eventsDroppedWhileIdle']).toEqual(0)
+            })
+
+            it('does not take a healing snapshot on wake when the session is not sampled or active', () => {
+                const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock
+                const lazyRecording = sessionRecording['_lazyLoadedSessionRecording']
+
+                emitActiveEvent(startingTimestamp + 100)
+
+                // idle with a dropped mutation
+                emitInactiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000, true)
+                takeFullSnapshot.mockClear()
+
+                // a sampled-out session's buffer is discarded, so serializing the DOM on
+                // wake would be pure cost
+                Object.defineProperty(lazyRecording, 'status', { get: () => 'buffering', configurable: true })
+                try {
+                    emitActiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 2000)
+                    expect(takeFullSnapshot).not.toHaveBeenCalled()
+                } finally {
+                    delete (lazyRecording as any).status
+                }
+            })
+
             it('rotates session if idle for (MAX_SESSION_IDLE_TIMEOUT) 30 minutes', () => {
                 const firstActivityTimestamp = startingTimestamp + 100
                 const secondActivityTimestamp = startingTimestamp + 200
