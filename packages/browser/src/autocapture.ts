@@ -298,7 +298,7 @@ export class Autocapture implements Extension {
     private _disposed = false
 
     constructor(private readonly _configSource: AutocaptureConfigSource) {
-        this._refreshConfig()
+        this._configSource.refresh(this._config)
         this.rageclicks = new RageClick(this._config.rageclick)
         this._elementSelectors = null
     }
@@ -316,6 +316,11 @@ export class Autocapture implements Extension {
         this.startIfEnabled()
     }
 
+    /** @deprecated Internal browser-v1 lifecycle method. */
+    initialize(): void {
+        this.startIfEnabled()
+    }
+
     dispose(): void {
         if (this._disposed) {
             return
@@ -329,22 +334,21 @@ export class Autocapture implements Extension {
 
     private _refreshConfig(): Readonly<AutocaptureConfig> {
         this._configSource.refresh(this._config)
-        this._compileUrlPatterns()
         return this._config
     }
 
     private _compileUrlPatterns(): void {
         const allowlist = this._config.url_allowlist
         if (!this._samePatterns(allowlist, this._urlAllowlistInput)) {
-            this._urlAllowlistInput = allowlist?.slice()
             this._compiledUrlAllowlist = allowlist?.map((url) => new RegExp(url))
+            this._urlAllowlistInput = allowlist?.slice()
         }
         this._config.url_allowlist = this._compiledUrlAllowlist
 
         const ignorelist = this._config.url_ignorelist
         if (!this._samePatterns(ignorelist, this._urlIgnorelistInput)) {
-            this._urlIgnorelistInput = ignorelist?.slice()
             this._compiledUrlIgnorelist = ignorelist?.map((url) => new RegExp(url))
+            this._urlIgnorelistInput = ignorelist?.slice()
         }
         this._config.url_ignorelist = this._compiledUrlIgnorelist
     }
@@ -500,6 +504,7 @@ export class Autocapture implements Extension {
         }
 
         const config = this._refreshConfig()
+        this._compileUrlPatterns()
         if (eventName === '$autocapture' && e.type === 'click' && e instanceof MouseEvent) {
             if (
                 !!config.rageclick &&

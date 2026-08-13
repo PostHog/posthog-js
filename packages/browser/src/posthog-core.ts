@@ -125,7 +125,7 @@ import { ExternalIntegrations } from './extensions/external-integration'
 import { BrowserClientAdapter } from './extensions/browser-client'
 import type { Extension as BrowserCommonExtension } from '@posthog/browser-common'
 import type { PostHogSurveys } from './posthog-surveys'
-import type { Autocapture } from './autocapture'
+import type { BrowserAutocapture } from './browser-autocapture'
 import type { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
 import type { ExceptionObserver } from './extensions/exception-autocapture'
 import type { HistoryAutocapture } from './extensions/history-autocapture'
@@ -429,7 +429,7 @@ export class PostHog implements PostHogInterface {
     sessionPropsManager?: SessionPropsManager
     requestRouter: RequestRouter
     siteApps?: SiteApps
-    autocapture?: Autocapture
+    autocapture?: BrowserAutocapture
     heatmaps?: Heatmaps
     tracingHeaders?: TracingHeaders
     webVitalsAutocapture?: WebVitalsAutocapture
@@ -984,7 +984,7 @@ export class PostHog implements PostHogInterface {
             })
         }
         if (ext.autocapture) {
-            this._enrollExtension((this.autocapture = new ext.autocapture(this)), initTasks)
+            this._enrollExtension((this.autocapture = new ext.autocapture(this) as BrowserAutocapture), initTasks)
         }
         if (ext.surveys) {
             this._extensions.push((this.surveys = this.surveys ?? new ext.surveys(this)))

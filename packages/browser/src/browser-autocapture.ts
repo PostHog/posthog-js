@@ -31,7 +31,10 @@ class BrowserAutocaptureConfigSource implements AutocaptureConfigSource {
 
 /** Browser-v1 compatibility wrapper for the SDK-neutral autocapture extension. */
 export class BrowserAutocapture extends Autocapture {
+    instance: PostHog
+
     constructor(instance: PostHog) {
         super(new BrowserAutocaptureConfigSource(instance))
+        this.instance = instance
     }
 }

@@ -118,7 +118,6 @@ describe('Autocapture system', () => {
             }
             const extension = new Autocapture(configSource)
 
-            expect(extension).not.toHaveProperty('instance')
             expect(extension).not.toHaveProperty('_settings')
             expect(extension['_config']).toEqual({
                 enabled: true,
@@ -135,6 +134,8 @@ describe('Autocapture system', () => {
         it('adapts browser config into its stable internal config', () => {
             const extension = new BrowserAutocapture(posthog)
             const config = extension['_config']
+
+            expect(extension.instance).toBe(posthog)
 
             void extension.isEnabled
 
@@ -154,18 +155,36 @@ describe('Autocapture system', () => {
         it('compiles and caches URL patterns inside the extension', () => {
             posthog.config.autocapture = { url_allowlist: ['https://example.com/.*'] }
             const extension = new BrowserAutocapture(posthog)
+            extension['_compileUrlPatterns']()
             const compiled = extension['_config'].url_allowlist?.[0]
 
-            void extension.isEnabled
+            extension['_refreshConfig']()
+            extension['_compileUrlPatterns']()
 
             expect(compiled).toBeInstanceOf(RegExp)
             expect(extension['_config'].url_allowlist?.[0]).toBe(compiled)
 
             posthog.config.autocapture.url_allowlist?.push('https://posthog.com/.*')
-            void extension.isEnabled
+            extension['_refreshConfig']()
+            extension['_compileUrlPatterns']()
 
             expect(extension['_config'].url_allowlist).toHaveLength(2)
             expect(extension['_config'].url_allowlist?.[0]).not.toBe(compiled)
+        })
+
+        it('does not throw during initialization and fails closed for an invalid URL pattern', async () => {
+            const instance = await createPosthogInstance(uuidv7(), {
+                autocapture: { url_allowlist: ['['] },
+                capture_pageview: false,
+            })
+            const capture = jest.spyOn(instance, 'capture')
+            const button = document.createElement('button')
+            document.body.appendChild(button)
+
+            simulateClick(button)
+            simulateClick(button)
+
+            expect(capture).not.toHaveBeenCalled()
         })
 
         it('receives set_config updates through its compatibility config source', () => {
@@ -174,6 +193,15 @@ describe('Autocapture system', () => {
             posthog.set_config({ autocapture: false })
 
             expect(autocapture.isEnabled).toBe(false)
+        })
+
+        it('retains the browser-v1 initialize method', () => {
+            const extension = new BrowserAutocapture(posthog)
+            const startIfEnabled = jest.spyOn(extension, 'startIfEnabled')
+
+            extension.initialize()
+
+            expect(startIfEnabled).toHaveBeenCalledTimes(1)
         })
 
         it('receives each remote config result once', async () => {
