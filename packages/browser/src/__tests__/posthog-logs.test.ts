@@ -1,5 +1,6 @@
 import { PostHogLogs } from '../posthog-logs'
 import { PostHog } from '../posthog-core'
+import { LOGS_CAPTURE_ENABLED_SERVER_SIDE } from '../constants'
 
 import { assignableWindow } from '../utils/globals'
 
@@ -185,6 +186,169 @@ describe('posthog-logs', () => {
                 logs.onRemoteConfig({ ok: true, config: response })
 
                 expect(loadIfEnabledSpy).toHaveBeenCalled()
+            })
+
+            it.each([
+                { captureConsoleLogs: true, expected: true },
+                { captureConsoleLogs: false, expected: false },
+            ])(
+                'should persist $expected when captureConsoleLogs is $captureConsoleLogs',
+                ({ captureConsoleLogs, expected }) => {
+                    const response = {
+                        supportedCompression: [],
+                        toolbarParams: {},
+                        toolbarVersion: 'toolbar' as const,
+                        isAuthenticated: false,
+                        siteApps: [],
+                        logs: { captureConsoleLogs },
+                    }
+
+                    logs.onRemoteConfig({ ok: true, config: response })
+
+                    expect((mockPostHog as any).persistence.register).toHaveBeenCalledWith({
+                        [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: expected,
+                    })
+                }
+            )
+
+            it('should not touch persistence when captureConsoleLogs is absent', () => {
+                const response = {
+                    supportedCompression: [],
+                    toolbarParams: {},
+                    toolbarVersion: 'toolbar' as const,
+                    isAuthenticated: false,
+                    siteApps: [],
+                }
+
+                logs.onRemoteConfig({ ok: true, config: response })
+
+                expect((mockPostHog as any).persistence.register).not.toHaveBeenCalled()
+            })
+        })
+
+        describe('initialize console recorder', () => {
+            const buildInstanceWithPersistedBit = () =>
+                ({
+                    ...mockPostHog,
+                    persistence: {
+                        register: jest.fn(),
+                        props: { [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: true },
+                    },
+                }) as unknown as PostHog
+
+            const remoteConfigResult = (captureConsoleLogs: boolean) => ({
+                ok: true as const,
+                config: {
+                    supportedCompression: [],
+                    toolbarParams: {},
+                    toolbarVersion: 'toolbar' as const,
+                    isAuthenticated: false,
+                    siteApps: [],
+                    logs: { captureConsoleLogs },
+                },
+            })
+
+            let logsFromPersisted: PostHogLogs
+            // The global test setup makes real console methods throw, and the
+            // recorder passes every call through to them. Swap in inert stubs
+            // for the duration of these tests, then restore the setup versions.
+            const RECORDER_LEVELS = ['debug', 'log', 'warn', 'error', 'info'] as const
+            let setupConsoleMethods: Partial<Record<(typeof RECORDER_LEVELS)[number], any>>
+
+            beforeEach(() => {
+                setupConsoleMethods = {}
+                for (const level of RECORDER_LEVELS) {
+                    setupConsoleMethods[level] = assignableWindow.console[level]
+                    assignableWindow.console[level] = jest.fn()
+                }
+            })
+
+            afterEach(() => {
+                logsFromPersisted?.reset()
+                for (const level of RECORDER_LEVELS) {
+                    assignableWindow.console[level] = setupConsoleMethods[level]
+                }
+            })
+
+            it('should buffer console entries instead of loading when the persisted bit is set', () => {
+                logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
+                logsFromPersisted.initialize()
+
+                expect((logsFromPersisted as any)._isLogsEnabled).toBe(false)
+                expect(mockLoadExternalDependency).not.toHaveBeenCalled()
+
+                assignableWindow.console.log('buffered message', 42)
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(1)
+            })
+
+            it('should not patch console when the persisted bit is absent', () => {
+                const originalLog = assignableWindow.console.log
+                logs.initialize()
+                expect(assignableWindow.console.log).toBe(originalLog)
+                expect((logs as any)._isRecordingConsole).toBe(false)
+            })
+
+            it('should replay buffered entries through the console pipeline and restore console when remote config enables logs', () => {
+                logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
+                const originalLog = assignableWindow.console.log
+                logsFromPersisted.initialize()
+
+                assignableWindow.console.log('hello', { a: 1 })
+
+                const captureSpy = jest.spyOn(logsFromPersisted, '_captureConsoleLog').mockImplementation(() => {})
+                logsFromPersisted.onRemoteConfig(remoteConfigResult(true))
+
+                expect(assignableWindow.console.log).toBe(originalLog)
+                expect(captureSpy).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        body: 'hello {"a":1}',
+                        level: 'info',
+                        attributes: expect.objectContaining({ 'log.source': 'console.log' }),
+                    })
+                )
+                expect(mockLoadExternalDependency).toHaveBeenCalled()
+            })
+
+            it('should drop the buffer and restore console when remote config disables logs', () => {
+                logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
+                const originalInfo = assignableWindow.console.info
+                logsFromPersisted.initialize()
+
+                assignableWindow.console.info('never sent')
+
+                const captureSpy = jest.spyOn(logsFromPersisted, '_captureConsoleLog')
+                logsFromPersisted.onRemoteConfig(remoteConfigResult(false))
+
+                expect(assignableWindow.console.info).toBe(originalInfo)
+                expect(captureSpy).not.toHaveBeenCalled()
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(0)
+                expect(mockLoadExternalDependency).not.toHaveBeenCalled()
+            })
+
+            it('should stop recording and drop the buffer when remote config fails', () => {
+                logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
+                const originalLog = assignableWindow.console.log
+                logsFromPersisted.initialize()
+
+                assignableWindow.console.log('lost to a failed config fetch')
+
+                logsFromPersisted.onRemoteConfig({ ok: false } as any)
+
+                expect(assignableWindow.console.log).toBe(originalLog)
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(0)
+            })
+
+            it('should cap the console buffer at the configured max size', () => {
+                const instance = buildInstanceWithPersistedBit()
+                ;(instance as any).config.logs = { maxBufferSize: 3 }
+                logsFromPersisted = new PostHogLogs(instance)
+                logsFromPersisted.initialize()
+
+                for (let i = 0; i < 10; i++) {
+                    assignableWindow.console.info('entry', i)
+                }
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(3)
+                ;(instance as any).config.logs = undefined
             })
         })
 
