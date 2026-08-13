@@ -530,7 +530,7 @@ export async function handleListToolsRequest(
   request: MCPRequestLike,
   extra: CompatibleRequestHandlerExtra | undefined,
   logger: LoggerFn
-): Promise<{ tools: CompatibleToolsListLike['tools'] }> {
+): Promise<CompatibleToolsListLike> {
   const data = getServerTrackingData(server)
   const startTime = new Date()
   const sessionId = getSessionId(server, extra)
@@ -550,7 +550,7 @@ export async function handleListToolsRequest(
     await applyResolvedMetadata(event, data, request, extra)
   }
 
-  const tools = await getTracedToolsList(
+  const response = await getTracedToolsList(
     server,
     originalListToolsHandler,
     request,
@@ -559,12 +559,13 @@ export async function handleListToolsRequest(
     logger,
     requestAttribution
   )
+  const tools = response.tools
 
   if (!data) {
     logger(
       'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called instrument(server, options) before using tool calls.'
     )
-    return { tools }
+    return response
   }
 
   if (tools.length === 0) {
@@ -575,15 +576,15 @@ export async function handleListToolsRequest(
     event.isError = true
     event.duration = Date.now() - startTime.getTime()
     captureEvent(server, event, data.logger, requestAttribution)
-    return { tools }
+    return response
   }
 
-  event.response = { tools }
+  event.response = response
   event.listedToolNames = collectListedToolNames(tools)
   event.isError = false
   event.duration = Date.now() - startTime.getTime()
   captureEvent(server, event, data.logger, requestAttribution)
-  return { tools }
+  return response
 }
 
 function cacheToolAnalyticsParameterOwnership(
@@ -614,7 +615,7 @@ async function getTracedToolsList(
   event: McpEvent,
   logger: LoggerFn,
   requestAttribution: SessionInfo
-): Promise<CompatibleToolsListLike['tools']> {
+): Promise<CompatibleToolsListLike> {
   try {
     const data = getServerTrackingData(server)
     const originalResponse = (await originalListToolsHandler(request, extra)) as CompatibleToolsListLike
@@ -656,7 +657,8 @@ async function getTracedToolsList(
       cacheToolCategories(data.toolCategories, tools)
     }
 
-    return tools
+    // Spread, never enumerate — fields later revisions add survive by default.
+    return { ...originalResponse, tools }
   } catch (error) {
     logger(
       `Warning: Original list tools handler failed, this suggests an error PostHog MCP analytics did not cause - ${error}`
