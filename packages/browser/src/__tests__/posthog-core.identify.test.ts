@@ -42,6 +42,7 @@ describe('identify()', () => {
                 setPersonPropertiesForFlags: jest.fn(),
                 unsetPersonPropertiesForFlags: jest.fn(),
                 reloadFeatureFlags: jest.fn(),
+                reset: jest.fn(),
                 resetFlagCallReported: jest.fn(),
             },
             unregister: jest.fn(),
