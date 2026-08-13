@@ -74,6 +74,24 @@ describe('external-scripts-loader', () => {
             expect(callback).toHaveBeenCalledTimes(2)
         })
 
+        it('does not add duplicate scripts when called before the document body exists', () => {
+            const body = document!.body
+            body.remove()
+            const firstCallback = jest.fn()
+            const secondCallback = jest.fn()
+
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', firstCallback)
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', secondCallback)
+            document!.documentElement.appendChild(body)
+            document!.dispatchEvent(new Event('DOMContentLoaded'))
+
+            const scripts = document!.getElementsByTagName('script')
+            expect(scripts).toHaveLength(1)
+            scripts[0].dispatchEvent(new Event('load'))
+            expect(firstCallback).toHaveBeenCalledTimes(1)
+            expect(secondCallback).toHaveBeenCalledTimes(1)
+        })
+
         it('adds script when no preexisting scripts exist', () => {
             assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', callback)
             const scripts = document!.getElementsByTagName('script')
@@ -89,10 +107,113 @@ describe('external-scripts-loader', () => {
             expect(callback).toHaveBeenCalledWith('uh-oh')
         })
 
+        it('falls back to the legacy asset path when a versioned asset fails to load', () => {
+            mockPostHog.config.strict_script_versioning = 'fallback'
+
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', callback)
+            let scripts = document!.getElementsByTagName('script')
+            expect(scripts[0].src).toBe('https://us-assets.i.posthog.com/static/1.0.0/recorder.js')
+
+            scripts[0].dispatchEvent(new Event('error'))
+            scripts = document!.getElementsByTagName('script')
+            expect(scripts).toHaveLength(1)
+            expect(scripts[0].src).toBe('https://us-assets.i.posthog.com/static/recorder.js?v=1.0.0')
+            expect(callback).not.toHaveBeenCalled()
+
+            scripts[0].dispatchEvent(new Event('load'))
+            expect(callback).toHaveBeenCalledWith(undefined, expect.any(Event))
+        })
+
+        it('returns the legacy asset error when both paths fail to load', () => {
+            mockPostHog.config.strict_script_versioning = 'fallback'
+
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', callback)
+            document!.getElementsByTagName('script')[0].dispatchEvent(new Event('error'))
+            document!.getElementsByTagName('script')[0].onerror!('legacy-error')
+
+            expect(callback).toHaveBeenCalledWith('legacy-error')
+        })
+
+        it('coalesces concurrent callers across the fallback attempt', () => {
+            mockPostHog.config.strict_script_versioning = 'fallback'
+            const firstCallback = jest.fn()
+            const secondCallback = jest.fn()
+            const lateCallback = jest.fn()
+
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', firstCallback)
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', secondCallback)
+            document!.getElementsByTagName('script')[0].dispatchEvent(new Event('error'))
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', lateCallback)
+
+            const scripts = document!.getElementsByTagName('script')
+            expect(scripts).toHaveLength(1)
+            expect(scripts[0].src).toBe('https://us-assets.i.posthog.com/static/recorder.js?v=1.0.0')
+            scripts[0].dispatchEvent(new Event('load'))
+
+            for (const loadCallback of [firstCallback, secondCallback, lateCallback]) {
+                expect(loadCallback).toHaveBeenCalledTimes(1)
+                expect(loadCallback).toHaveBeenCalledWith(undefined, expect.any(Event))
+            }
+        })
+
+        it('shares the terminal fallback error with concurrent and later callers', () => {
+            mockPostHog.config.strict_script_versioning = 'fallback'
+            const firstCallback = jest.fn()
+            const secondCallback = jest.fn()
+            const lateCallback = jest.fn()
+
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', firstCallback)
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', secondCallback)
+            document!.getElementsByTagName('script')[0].dispatchEvent(new Event('error'))
+
+            const fallbackScript = document!.getElementsByTagName('script')[0]
+            fallbackScript.dispatchEvent(new Event('error'))
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', lateCallback)
+
+            expect(document!.getElementsByTagName('script')).toHaveLength(1)
+            for (const loadCallback of [firstCallback, secondCallback, lateCallback]) {
+                expect(loadCallback).toHaveBeenCalledTimes(1)
+                expect(loadCallback).toHaveBeenCalledWith(expect.any(Event))
+            }
+        })
+
+        it('does not fall back when strict versioning is enabled', () => {
+            mockPostHog.config.strict_script_versioning = true
+
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', callback)
+            document!.getElementsByTagName('script')[0].dispatchEvent(new Event('error'))
+
+            expect(document!.getElementsByTagName('script')).toHaveLength(1)
+            expect(callback).toHaveBeenCalledWith(expect.any(Event))
+        })
+
+        it('does not fall back after a versioned asset loads successfully', () => {
+            mockPostHog.config.strict_script_versioning = 'fallback'
+
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', callback)
+            document!.getElementsByTagName('script')[0].dispatchEvent(new Event('load'))
+
+            expect(document!.getElementsByTagName('script')).toHaveLength(1)
+            expect(callback).toHaveBeenCalledWith(undefined, expect.any(Event))
+        })
+
         it('keeps the legacy toolbar cache-busting path by default', () => {
             jest.useFakeTimers()
             jest.setSystemTime(1726067100000)
             assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'toolbar', callback)
+            expect(document!.getElementsByTagName('script')[0].src).toBe(
+                'https://us-assets.i.posthog.com/static/toolbar.js?v=1.0.0&t=1726067100000'
+            )
+        })
+
+        it('cache-busts the legacy toolbar path when falling back', () => {
+            jest.useFakeTimers()
+            jest.setSystemTime(1726067100000)
+            mockPostHog.config.strict_script_versioning = 'fallback'
+
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'toolbar', callback)
+            document!.getElementsByTagName('script')[0].dispatchEvent(new Event('error'))
+
             expect(document!.getElementsByTagName('script')[0].src).toBe(
                 'https://us-assets.i.posthog.com/static/toolbar.js?v=1.0.0&t=1726067100000'
             )

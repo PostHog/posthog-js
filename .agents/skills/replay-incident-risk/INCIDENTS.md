@@ -8,7 +8,7 @@ Each entry describes the mechanism, not the blast radius. Internal impact number
 
 ## Class 1: Version skew across the lazy-load boundary
 
-**The single most repeated cause.** The recorder, surveys, web-vitals, and tracing-headers extensions are lazy-loaded from the CDN. With `strict_script_versioning: false` (the default for most teams), the `?v=` query param is only a cache-buster: the CDN serves the **latest published bundle to every SDK version, including npm-pinned ones** (`external-scripts-loader.ts`). Publishing an extension change is a fleet-wide deploy with no rollout control.
+**The single most repeated cause.** The recorder, surveys, web-vitals, and tracing-headers extensions are lazy-loaded from the CDN. With `strict_script_versioning: false`, the `?v=` query param is only a cache-buster: the CDN serves the **latest published bundle to every SDK version, including npm-pinned ones** (`external-scripts-loader.ts`). The default `'fallback'` mode loads the exact SDK version first but can still use this legacy path if the versioned asset is unavailable. Publishing an extension change remains a fleet-wide deploy with no rollout control for SDKs that use the legacy path.
 
 The canonical failure: new extension code assumes something only newer cores provide (a function, a config field, a persisted value), or changes a cross-boundary function signature. Old cores load the new bundle and break.
 
