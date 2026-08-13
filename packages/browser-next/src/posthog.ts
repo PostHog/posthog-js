@@ -232,7 +232,9 @@ class PostHogBrowserClient implements PostHog {
             timestamp: eventTimestamp(options.timestamp),
         }
 
-        const delivery = sendCaptureV1Batch(this._requestRuntime, [message], version)
+        const delivery = sendCaptureV1Batch(this._requestRuntime, [message], version, {
+            canRetry: () => this._canUseState(),
+        })
         this._pendingDeliveries.add(delivery)
         void delivery.then(
             () => this._pendingDeliveries.delete(delivery),

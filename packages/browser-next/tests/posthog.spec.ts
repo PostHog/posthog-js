@@ -240,6 +240,83 @@ describe('@posthog/browser core', () => {
         })
     })
 
+    it('does not retry analytics after consent is revoked', async () => {
+        const client: { current?: Awaited<ReturnType<typeof createPostHog>> } = {}
+        const fetch = jest.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>().mockImplementation(async () => {
+            client.current?.optOut()
+            return new Response('{}', { status: 503 })
+        })
+        const posthog = await createPostHog({ projectToken: 'ph_test', storage: false, navigator: false, fetch })
+        client.current = posthog
+
+        await posthog.capture('consent_revoked_during_delivery')
+
+        expect(fetch).toHaveBeenCalledTimes(1)
+    })
+
+    it('settles capture and flush without retrying when consent is revoked during real backoff', async () => {
+        jest.useFakeTimers()
+        try {
+            const fetch = jest
+                .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+                .mockResolvedValue(new Response('{}', { status: 503 }))
+            const posthog = await createPostHog({ projectToken: 'ph_test', storage: false, navigator: false, fetch })
+
+            let captureSettled = false
+            let flushSettled = false
+            const capture = posthog.capture('consent_revoked_during_backoff').then(() => {
+                captureSettled = true
+            })
+            const flush = posthog.flush().then(() => {
+                flushSettled = true
+            })
+            await jest.advanceTimersByTimeAsync(0)
+            expect(fetch).toHaveBeenCalledTimes(1)
+            expect(jest.getTimerCount()).toBe(1)
+            expect(captureSettled).toBe(false)
+            expect(flushSettled).toBe(false)
+
+            posthog.optOut()
+            await jest.runOnlyPendingTimersAsync()
+            await Promise.all([capture, flush])
+
+            expect(fetch).toHaveBeenCalledTimes(1)
+            expect(captureSettled).toBe(true)
+            expect(flushSettled).toBe(true)
+        } finally {
+            jest.useRealTimers()
+        }
+    })
+
+    it('settles disposal without retrying when disposed during real backoff', async () => {
+        jest.useFakeTimers()
+        try {
+            const fetch = jest
+                .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+                .mockResolvedValue(new Response('{}', { status: 503 }))
+            const posthog = await createPostHog({ projectToken: 'ph_test', storage: false, navigator: false, fetch })
+
+            const capture = posthog.capture('disposed_during_backoff')
+            await jest.advanceTimersByTimeAsync(0)
+            expect(fetch).toHaveBeenCalledTimes(1)
+            expect(jest.getTimerCount()).toBe(1)
+
+            let disposalSettled = false
+            const disposal = Promise.resolve(posthog.dispose()).then(() => {
+                disposalSettled = true
+            })
+            await Promise.resolve()
+            expect(disposalSettled).toBe(false)
+            await jest.runOnlyPendingTimersAsync()
+            await Promise.all([capture, disposal])
+
+            expect(fetch).toHaveBeenCalledTimes(1)
+            expect(disposalSettled).toBe(true)
+        } finally {
+            jest.useRealTimers()
+        }
+    })
+
     it('persists opt-out without retaining identity state', async () => {
         const storage = new MemoryStorage()
         const requests: SentRequest[] = []

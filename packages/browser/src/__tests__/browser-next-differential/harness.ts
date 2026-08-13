@@ -187,10 +187,11 @@ export class ControlledRuntime {
                 ),
             }
         }
-        return new Response(JSON.stringify(responseBody), {
+        return {
             status: 200,
-            headers: { 'Content-Type': 'application/json' },
-        })
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+            text: async () => JSON.stringify(responseBody),
+        } as Response
     }
 
     restore(): void {
