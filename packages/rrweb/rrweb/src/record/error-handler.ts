@@ -13,6 +13,21 @@ export function unregisterErrorHandler() {
 }
 
 /**
+ * Report an error caught outside a wrapped callback to the configured
+ * `errorHandler`. Returns true when a handler consumed it.
+ */
+export function reportError(error: unknown): boolean {
+  if (!errorHandler) {
+    return false;
+  }
+  try {
+    return errorHandler(error) === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Wrap callbacks in a wrapper that allows to pass errors to a configured `errorHandler` method.
  *
  * Host API patches must set `context` to `host`. Their callback boundary also

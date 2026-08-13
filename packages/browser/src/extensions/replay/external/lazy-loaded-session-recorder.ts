@@ -454,8 +454,22 @@ function getSessionStartingPayload(e: eventWithTime): SessionStartingPayload | n
     return isSessionStartingEvent(e) ? (e.data.payload as SessionStartingPayload) : null
 }
 
+/** Recorder-emitted telemetry about a budgeted (time-sliced) full snapshot:
+ *  one event per completed walk, plus one per degraded outcome. */
+function isBudgetedSnapshotDiagnosticEvent(e: eventWithTime): e is eventWithTime & customEvent {
+    return isCustomEvent(e, 'budgeted-full-snapshot')
+}
+
 function isAllowedWhenIdle(e: eventWithTime): boolean {
-    return isSessionIdleEvent(e) || isSessionEndingEvent(e) || isSessionStartingEvent(e)
+    // budgeted snapshot diagnostics are allowed through: a walk that started while
+    // active can settle after the idle threshold flips, and dropping the report
+    // here would hide exactly the walks worth seeing in production
+    return (
+        isSessionIdleEvent(e) ||
+        isSessionEndingEvent(e) ||
+        isSessionStartingEvent(e) ||
+        isBudgetedSnapshotDiagnosticEvent(e)
+    )
 }
 
 /** When we put the recording into a paused state, we add a custom event.
@@ -525,6 +539,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _strategy: RecordingStrategy | undefined
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
     private _fullSnapshotTimestamps: Array<[string, number]> = []
+    // headline numbers from completed budgeted (time-sliced) full snapshots,
+    // surfaced as $sdk_debug_replay_budgeted_snapshot_* session properties:
+    // per-metric worst case across the recording, except _dropped which accumulates
+    private _budgetedSnapshotMs: number | undefined
+    private _budgetedSnapshotSlices: number | undefined
+    private _budgetedSnapshotSlowestSliceMs: number | undefined
+    private _budgetedSnapshotHeldHighWater: number | undefined
+    private _budgetedSnapshotDropped: number | undefined
     // the session a FullSnapshot was last captured for, read by _ensureFullSnapshotForSession and by
     // the marker-only flush guard (unlike _fullSnapshotTimestamps, which records emit-time debug
     // telemetry). Capture-time, not ship-time: a buffer cleared before it flushed leaves this set.
@@ -1209,6 +1231,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         // calling addEventListener multiple times is safe and will not add duplicates
         addEventListener(window, 'beforeunload', this._onBeforeUnload)
+        // Registered after rrweb's own pagehide handler (added when the recorder
+        // started above), which synchronously finishes any in-flight time-sliced
+        // FullSnapshot. beforeunload fires BEFORE pagehide, so this second drain
+        // is what actually ships that rescued snapshot; it also covers bfcache
+        // navigations where beforeunload may not fire at all.
+        addEventListener(window, 'pagehide', this._onPageHide)
         addEventListener(window, 'offline', this._onOffline)
         addEventListener(window, 'online', this._onOnline)
         addEventListener(document, 'visibilitychange', this._onVisibilityChange)
@@ -1355,6 +1383,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _teardown() {
         window?.removeEventListener('beforeunload', this._onBeforeUnload)
+        window?.removeEventListener('pagehide', this._onPageHide)
         window?.removeEventListener('offline', this._onOffline)
         window?.removeEventListener('online', this._onOnline)
         document?.removeEventListener('visibilitychange', this._onVisibilityChange)
@@ -1756,6 +1785,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             if (this._fullSnapshotTimestamps.length > 6) {
                 this._fullSnapshotTimestamps = this._fullSnapshotTimestamps.slice(-6)
             }
+        }
+
+        if (isBudgetedSnapshotDiagnosticEvent(rawEvent)) {
+            this._trackBudgetedSnapshotTelemetry(rawEvent.data.payload)
         }
 
         // Route lifecycle events using their payload IDs:
@@ -2174,6 +2207,17 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._flushBuffer()
     }
 
+    private _onPageHide = (): void => {
+        // Force rrweb to finish any in-flight sliced snapshot BEFORE draining:
+        // relying on listener registration order breaks when the recorder
+        // started before DOMContentLoaded (rrweb then registers its pagehide
+        // handler at window load, after ours). The call is a no-op when
+        // nothing is in flight or the handler ran first anyway.
+        getRRWebRecord()?.drainPendingSnapshotForUnload?.()
+        // same drain as beforeunload; this is the last chance to ship it
+        this._onBeforeUnload()
+    }
+
     private _onOffline = (): void => {
         this._tryAddCustomEvent('browser offline', {})
     }
@@ -2307,6 +2351,28 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._strategy?.clearConditionalRecordingPersistence()
     }
 
+    private _trackBudgetedSnapshotTelemetry(payload: unknown): void {
+        if (!isObject(payload)) {
+            return
+        }
+        const p = payload as Record<string, unknown>
+        if (p.status !== 'completed') {
+            return
+        }
+        const maxOf = (current: number | undefined, value: unknown): number | undefined =>
+            isNumber(value) ? Math.max(current ?? 0, value) : current
+        this._budgetedSnapshotMs = maxOf(this._budgetedSnapshotMs, p.walkMs)
+        this._budgetedSnapshotSlices = maxOf(this._budgetedSnapshotSlices, p.sliceCount)
+        this._budgetedSnapshotSlowestSliceMs = maxOf(this._budgetedSnapshotSlowestSliceMs, p.slowestSliceMs)
+        this._budgetedSnapshotHeldHighWater = maxOf(this._budgetedSnapshotHeldHighWater, p.heldEventHighWater)
+        // deferred mutation records are freeze semantics (delivered on unfreeze), not losses
+        const dropped =
+            (isNumber(p.droppedHeldEventCount) ? p.droppedHeldEventCount : 0) +
+            (isNumber(p.droppedMutationRecords) ? p.droppedMutationRecords : 0) +
+            (isNumber(p.failedHeldEventDeliveries) ? p.failedHeldEventDeliveries : 0)
+        this._budgetedSnapshotDropped = (this._budgetedSnapshotDropped ?? 0) + dropped
+    }
+
     get sdkDebugProperties(): Properties {
         const { sessionStartTimestamp } = this._sessionManager.checkAndGetSessionAndWindowId(true)
 
@@ -2318,6 +2384,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $sdk_debug_session_start: sessionStartTimestamp,
             $sdk_debug_replay_flushed_size: this._flushedSizeTracker?.currentTrackedSize(this.sessionId),
             $sdk_debug_replay_full_snapshots: this._fullSnapshotTimestamps,
+            $sdk_debug_replay_budgeted_snapshot_ms: this._budgetedSnapshotMs,
+            $sdk_debug_replay_budgeted_snapshot_slices: this._budgetedSnapshotSlices,
+            $sdk_debug_replay_budgeted_snapshot_slowest_slice_ms: this._budgetedSnapshotSlowestSliceMs,
+            $sdk_debug_replay_budgeted_snapshot_held_high_water: this._budgetedSnapshotHeldHighWater,
+            $sdk_debug_replay_budgeted_snapshot_dropped: this._budgetedSnapshotDropped,
             $snapshot_max_depth_exceeded: this._maxDepthExceeded,
             // slowest, not most recent: a full snapshot is one uninterruptible task, so
             // the worst one is the freeze a user would actually have noticed
@@ -2369,6 +2440,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             recordCrossOriginIframes: false,
             sampling: undefined,
             attributeFilter: undefined,
+            fullSnapshotYieldBudgetMs: undefined,
         }
 
         // only allows user to set our allowlisted options

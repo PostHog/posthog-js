@@ -47,6 +47,25 @@ export type recordOptions<T> = {
   emit?: (e: T, isCheckout?: boolean) => void;
   checkoutEveryNth?: number;
   checkoutEveryNms?: number;
+  /**
+   * Milliseconds of continuous main-thread work while serializing a full
+   * snapshot before yielding to the event loop; large documents can
+   * otherwise block the page for seconds in a single long task.
+   *
+   * The budget is cooperative, not a hard bound: the clock is only consulted
+   * between nodes, so a single expensive node (a large stylesheet, a canvas
+   * capture, a same-origin iframe document) can overshoot it within one
+   * slice. Events observed while the sliced snapshot is in flight are held
+   * and delivered after it, so their consumer-visible delivery is delayed by
+   * up to the walk's duration. If the snapshot cannot complete within its
+   * safety limits, the recorder retries once and then falls back to a
+   * synchronous snapshot, reporting each degradation as a custom event
+   * (tag: 'budgeted-full-snapshot').
+   *
+   * 0 (default) keeps the whole snapshot synchronous, exactly as before.
+   * Non-finite or non-positive values are treated as 0.
+   */
+  fullSnapshotYieldBudgetMs?: number;
   blockClass?: blockClass;
   blockSelector?: string;
   ignoreClass?: string;
@@ -158,6 +177,10 @@ export type observerParam = {
   processedNodeManager: ProcessedNodeManager;
   ignoreCSSAttributes: Set<string>;
   attributeFilter?: string[];
+  // See rrweb-snapshot's serializeTextNode: reports whether a <style>'s
+  // serialization carries the live CSSOM or the raw author text — which is
+  // what decides whether a held CSSOM delta is already inside the snapshot.
+  onStylesheetTextSerialized?: (textNode: Text, inlined: boolean) => void;
   plugins: Array<{
     observer: (
       cb: (...arg: Array<unknown>) => void,
@@ -196,6 +219,7 @@ export type MutationBufferParam = Pick<
   | 'canvasManager'
   | 'processedNodeManager'
   | 'attributeFilter'
+  | 'onStylesheetTextSerialized'
 >;
 
 export type ReplayPlugin = {

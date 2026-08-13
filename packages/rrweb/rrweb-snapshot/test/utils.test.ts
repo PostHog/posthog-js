@@ -470,6 +470,64 @@ describe('utils', () => {
     });
   });
 
+  describe('Mirror id reservation', () => {
+    it('keeps answering an existing reservation while the handout is paused', () => {
+      const mirror = createMirror();
+      let next = 10;
+      mirror.beginIdReservation(() => next++);
+
+      const reserved = document.createElement('div');
+      document.body.appendChild(reserved);
+      const id = mirror.getId(reserved);
+      expect(id).toBe(10);
+
+      mirror.pauseReservationHandout();
+
+      // the node that already holds a reservation keeps its id...
+      expect(mirror.getId(reserved)).toBe(id);
+      // ...while a node without one gets no NEW reservation
+      const fresh = document.createElement('div');
+      document.body.appendChild(fresh);
+      expect(mirror.getId(fresh)).toBe(-1);
+
+      mirror.endIdReservation();
+      document.body.removeChild(reserved);
+      document.body.removeChild(fresh);
+    });
+
+    it('keeps answering a reservation after its node was detached', () => {
+      const mirror = createMirror();
+      let next = 10;
+      mirror.beginIdReservation(() => next++);
+
+      const node = document.createElement('div');
+      document.body.appendChild(node);
+      const id = mirror.getId(node);
+      document.body.removeChild(node);
+
+      // events already held carry this id; it must stay answerable, and it
+      // stays pending so the flush scrub can drop those events for good
+      expect(mirror.getId(node)).toBe(id);
+      expect(mirror.getUnclaimedReservedIds()).toEqual([id]);
+
+      mirror.endIdReservation();
+    });
+
+    it('answers -1 again once the reservation transaction ends', () => {
+      const mirror = createMirror();
+      let next = 10;
+      mirror.beginIdReservation(() => next++);
+
+      const node = document.createElement('div');
+      document.body.appendChild(node);
+      expect(mirror.getId(node)).toBe(10);
+
+      mirror.endIdReservation();
+      expect(mirror.getId(node)).toBe(-1);
+      document.body.removeChild(node);
+    });
+  });
+
   describe('recompressBase64Image()', () => {
     const makeImg = (
       naturalWidth: number,

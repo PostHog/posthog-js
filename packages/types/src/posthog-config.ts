@@ -678,6 +678,29 @@ export interface SessionRecordingOptions {
     collectFonts?: boolean
 
     /**
+     * Milliseconds of continuous main-thread work while serializing a full
+     * snapshot before the recorder yields to the event loop. On pages with
+     * very large DOMs the full snapshot can otherwise block the main thread
+     * for seconds in a single long task.
+     *
+     * The budget is cooperative, not a hard bound: a single expensive node
+     * (a large stylesheet, a canvas capture, a same-origin iframe document)
+     * can overshoot it within one slice. Events observed while the sliced
+     * snapshot is in flight are delivered after it completes. If the
+     * snapshot cannot finish within its safety limits, the recorder retries
+     * once and then falls back to a synchronous snapshot; every degradation
+     * is reported as a replay custom event (tag: 'budgeted-full-snapshot').
+     *
+     * 0 (default) keeps the fully-synchronous behavior. Non-finite or
+     * non-positive values are treated as 0. This option is read from the
+     * client-side config only — it cannot be toggled remotely.
+     *
+     * Derived from `rrweb.record` options
+     * @default 0
+     */
+    fullSnapshotYieldBudgetMs?: number
+
+    /**
      * Derived from `rrweb.record` options
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
      * @default true

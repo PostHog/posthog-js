@@ -276,6 +276,40 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         expect(posthog.capture).toHaveBeenCalledTimes(1)
     })
 
+    it('drains pending async compression and flushes on pagehide', async () => {
+        let releaseCompression: () => void = () => {}
+        const compressionGate = new Promise<void>((resolve) => {
+            releaseCompression = resolve
+        })
+        const gzipCompress = jest.fn(async (input: string) => {
+            await compressionGate
+            return new Blob([gzipSync(strToU8(input))])
+        })
+
+        const { emit, posthog, lazyLoadedSessionRecording } = await setupLazyLoadedSessionRecording({
+            gzipSupported: true,
+            gzipCompress,
+        })
+
+        // a FullSnapshot rescued by rrweb's own pagehide handler lands here,
+        // after beforeunload already fired: only the pagehide listener
+        // (registered in start()) can still ship it
+        emit(createFullSnapshot({ content: 'pagehide rescued snapshot' }))
+        window.dispatchEvent(new Event('pagehide'))
+
+        expect(posthog.capture).toHaveBeenCalledWith(
+            '$snapshot',
+            expect.objectContaining({
+                $snapshot_data: [expect.objectContaining({ type: 2, cv: '2024-10', data: expect.any(String) })],
+            }),
+            expect.any(Object)
+        )
+
+        releaseCompression()
+        await lazyLoadedSessionRecording['_compressionQueue']
+        expect(posthog.capture).toHaveBeenCalledTimes(1)
+    })
+
     it('ships a full snapshot under the new session id when the recorder restarts while idle', async () => {
         const { emit, posthog, lazyLoadedSessionRecording } = await setupLazyLoadedSessionRecording({
             gzipSupported: true,

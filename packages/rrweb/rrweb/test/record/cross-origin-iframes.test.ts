@@ -218,6 +218,43 @@ describe('cross origin iframes', function (this: ISuite) {
       ).not.toBe(1);
     });
 
+    it('restamps child frame timestamps with the parent clock', async () => {
+      const frame = ctx.page.mainFrame().childFrames()[0];
+      await frame.evaluate(() => {
+        window.parent.postMessage(
+          {
+            type: 'rrweb',
+            event: {
+              type: 5,
+              timestamp: 1,
+              data: {
+                tag: 'skewed-child-clock',
+                payload: {},
+              },
+            },
+            origin: window.location.origin,
+            isCheckout: false,
+          },
+          '*',
+        );
+      });
+      await ctx.page.waitForFunction(
+        `window.snapshots.some(function (event) {
+          return event.type === ${EventType.Custom} &&
+            event.data.tag === 'skewed-child-clock';
+        })`,
+      );
+
+      const event = (await ctx.page.evaluate(
+        `window.snapshots.find(function (event) {
+          return event.type === ${EventType.Custom} &&
+            event.data.tag === 'skewed-child-clock';
+        })`,
+      )) as eventWithTime;
+      expect(event.timestamp).not.toBe(1);
+      expect(event.timestamp).toBeGreaterThan(1_000);
+    });
+
     it('should replace the existing DOM nodes on iframe navigation with `isAttachIframe`', async () => {
       await ctx.page.evaluate((url) => {
         const iframe = document.querySelector('iframe') as HTMLIFrameElement;
