@@ -1946,7 +1946,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         )
     }
 
-    private _flushBuffer(): SnapshotBuffer {
+    private _flushBuffer(unloading?: boolean): SnapshotBuffer {
         // cleared before the re-entrant reads below, so a flush they schedule survives this call
         this._clearFlushBufferTimer()
 
@@ -1988,15 +1988,18 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             const snapshotEvents = splitBuffer(validatedBuffer)
             snapshotEvents.forEach((snapshotBuffer) => {
                 this._flushedSizeTracker?.trackSize(snapshotBuffer.sessionId, snapshotBuffer.size)
-                this._captureSnapshot({
-                    $snapshot_bytes: snapshotBuffer.size,
-                    $snapshot_data: snapshotBuffer.data,
-                    $session_id: snapshotBuffer.sessionId,
-                    $window_id: snapshotBuffer.windowId,
-                    $lib: Config.LIB_NAME,
-                    $lib_version: Config.LIB_VERSION,
-                    $snapshot_host: snapshotHostname,
-                })
+                this._captureSnapshot(
+                    {
+                        $snapshot_bytes: snapshotBuffer.size,
+                        $snapshot_data: snapshotBuffer.data,
+                        $session_id: snapshotBuffer.sessionId,
+                        $window_id: snapshotBuffer.windowId,
+                        $lib: Config.LIB_NAME,
+                        $lib_version: Config.LIB_VERSION,
+                        $snapshot_host: snapshotHostname,
+                    },
+                    unloading
+                )
             })
 
             // Notify strategy that initial flush is complete (performance optimization)
@@ -2122,13 +2125,17 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
     }
 
-    private _captureSnapshot(properties: Properties) {
+    private _captureSnapshot(properties: Properties, unloading?: boolean) {
         // :TRICKY: Make sure we batch these requests, use a custom endpoint and don't truncate the strings.
         this._instance.capture('$snapshot', properties, {
             _url: this._instance.requestRouter.endpointFor('api', this._endpoint),
             _noTruncate: true,
             _batchKey: SESSION_RECORDING_BATCH_KEY,
             skip_client_rate_limiting: true,
+            // an unload flush cannot ride the batching queue: the core's pagehide
+            // handler has already run its one-shot queue drain by the time this
+            // recorder's handler fires, so an enqueued batch dies with the page
+            ...(unloading ? { send_instantly: true, transport: 'sendBeacon' as const } : {}),
         })
     }
 
@@ -2194,7 +2201,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // beforeunload cannot wait for async CompressionStream work. Synchronously
         // compress any queued events so sendBeacon can include them in this flush.
         this._drainCompressionQueueSync()
-        this._flushBuffer()
+        this._flushBuffer(true)
     }
 
     private _onPageHide = (): void => {

@@ -1874,6 +1874,22 @@ describe('Lazy SessionRecording', () => {
                     )
                 })
 
+                it('an unload flush bypasses the batching queue and ships via sendBeacon', () => {
+                    jest.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                    const snapshot = emitInactiveEvent(startingTimestamp + 100, 'unknown')
+                    ;(posthog.capture as Mock).mockClear()
+
+                    // the core's own pagehide handler has already drained the request
+                    // queue by the time this runs; an enqueued batch would die unsent
+                    sessionRecording['_lazyLoadedSessionRecording']['_onBeforeUnload']()
+
+                    expect(posthog.capture).toHaveBeenCalledWith(
+                        '$snapshot',
+                        expect.objectContaining({ $snapshot_data: expect.arrayContaining([snapshot]) }),
+                        expect.objectContaining({ send_instantly: true, transport: 'sendBeacon' })
+                    )
+                })
+
                 // an explicit override is intent to record, so it releases the fresh-start hold —
                 // including overrideTrigger('url'), unlike an organic URL trigger match
                 it.each([
