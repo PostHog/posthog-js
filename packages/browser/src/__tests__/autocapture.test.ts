@@ -236,15 +236,6 @@ describe('Autocapture system', () => {
             expect(autocapture.isEnabled).toBe(false)
         })
 
-        it('retains the browser-v1 initialize method', () => {
-            const extension = new BrowserAutocapture(posthog)
-            const startIfEnabled = jest.spyOn(extension, 'startIfEnabled')
-
-            extension.initialize()
-
-            expect(startIfEnabled).toHaveBeenCalledTimes(1)
-        })
-
         it('receives each remote config result once', async () => {
             const onRemoteConfig = jest.spyOn(Autocapture.prototype, 'onRemoteConfig')
             const instance = await createPosthogInstance(uuidv7(), { capture_pageview: false })

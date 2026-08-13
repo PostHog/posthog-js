@@ -332,11 +332,6 @@ export class Autocapture implements Extension {
         this.startIfEnabled()
     }
 
-    /** @deprecated Internal browser-v1 lifecycle method. */
-    initialize(): void {
-        this.startIfEnabled()
-    }
-
     dispose(): void {
         if (this._disposed) {
             return
