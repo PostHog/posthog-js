@@ -435,6 +435,8 @@ jobs:
                       path: packages/web
                     - name: posthog-react-native
                       path: packages/react-native
+                    - name: '@posthog/react-native-plugin'
+                      path: packages/react-native-plugin
                     - name: '@posthog/mcp'
                       path: packages/mcp
                     - name: '@posthog/rollup-plugin'
