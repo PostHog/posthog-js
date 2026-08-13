@@ -36,7 +36,8 @@ These rules are locked:
 - Capture uses Capture Analytics V1. The legacy `/e/` request is not parity input.
 - Consent, compact bot filtering, identity, sessions, same-origin conflict safety, the analytics lane, and no-throw behavior are root invariants.
 - A selected cookie adapter must preserve the required cross-subdomain identity and session semantics.
-- Prior explicit denial must be recognized on every supported upgrade path.
+- Consent uses `__ph_opt_in_out_<project-token>` by default, supports a verbatim custom `consentPersistenceName`, and stores interoperable `0`/`1` values.
+- Prior explicit denial under the configured consent key must be recognized before analytics work on every supported upgrade path. Deprecated prefix-derived keys and backend migration belong to a compatibility entry point.
 - General `capture()` always selects the analytics lane. An explicit product API selects an optional lane.
 - Normal analytics delivery uses Fetch. Beacon is a teardown option only after the V1 header-less contract is deployed and verified.
 
@@ -44,7 +45,6 @@ These decisions remain open:
 
 - **D1**: upgrade-compatible replacement or narrower API with behavior-compatible capture.
 - **D3**: reset consent and device-ID semantics.
-- **D4**: legacy consent backends required on each upgrade path.
 - **D5**: root, preset, or unsupported scope for DNT and cookieless modes.
 - **D6**: ESM and CommonJS publication policy. This does not change runtime behavior.
 - **D7**: whether reset, idle timeout, and maximum length also rotate the window ID.
@@ -73,8 +73,8 @@ These decisions remain open:
 | CNS-04 | CI    | Opt-out stops admission, purges queued analytics and prohibited state, cancels owned in-flight work when possible, and starts no retry. A request already handed to the browser cannot be recalled. | Partial | Consent/queue interleaving tests                               |
 | CNS-05 | CI    | Active same-origin clients observe a newer denial before capture, persistence, or extension requests.                                                                                               | Missing | Multi-client storage interleavings                             |
 | CNS-06 | CI    | Consent gates extension capture, `sendRequest()`, lane installation, remote configuration, and extension KV reads and writes.                                                                       | Present | Browser-next extension gating tests                            |
-| CNS-07 | CI    | Every supported upgrade path recognizes prior explicit denial before analytics work starts.                                                                                                         | Missing | Legacy-denial fixture matrix                                   |
-| CNS-08 | CO    | Full migration of historical consent keys and backends is supplied only by the approved upgrade composition. D4 selects the required sources.                                                       | Blocked | D4; cookie/local-storage migration fixtures                    |
+| CNS-07 | CI    | The default or configured consent key uses interoperable values, and every supported upgrade path recognizes prior explicit denial before analytics work starts.                                    | Missing | Default/custom consent-key fixture matrix                      |
+| CNS-08 | CO    | Deprecated prefix-derived keys and migration between consent storage backends are supplied only by an explicit compatibility composition.                                                           | Missing | Compatibility cookie/local-storage migration fixtures          |
 | CNS-09 | OP    | If DNT support is installed, a recognized DNT value denies analytics before persistence or transmission. D5 can reclassify its package scope.                                                       | Blocked | D5; legacy consent tests                                       |
 | CNS-10 | OP    | If a cookieless mode is installed, its pending, rejection, identity, and person-processing rules apply before capture. D5 can reclassify its scope.                                                 | Blocked | D5; cookieless differential tests                              |
 | CNS-11 | CO    | Legacy automatic `$opt_in` capture and deprecated consent option aliases do not enter root unless D1 requires them.                                                                                 | Blocked | D1; compatibility adapter tests                                |

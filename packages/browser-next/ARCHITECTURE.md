@@ -96,6 +96,8 @@ Keep the capture pipeline fixed and direct. Use compact explicit state machines.
 
 Review each core mechanism with compliance tests, bundle measurements, and module attribution. Move optional implementations out of core. Do not move a required invariant out only because it has a measurable cost.
 
+Consent uses `__ph_opt_in_out_<project-token>` by default and accepts a verbatim `consentPersistenceName` override. Store interoperable `0`/`1` values and accept the established yes/no-like forms. Keep this logical key independent of identity persistence and consistent across consent storage adapters. Deprecated prefix-derived keys and migration between storage backends belong in a compatibility entry point.
+
 The root analytics lane must use Capture Analytics V1 at `POST /i/v1/analytics/events`. It must not use the legacy `/e/` envelope. Normal delivery must use Fetch so the host can send required headers, observe the UUID-keyed result map, time out, rate limit, and retry only server-marked retry events.
 
 A lane owns one queue, endpoint, event/batch serializer, payload limits, compression, transport, response classification, retry policy, and teardown policy. Events with different policies must not share a batch. A failure in one lane must not requeue or resend an event already accepted in another lane. The root statically includes only the analytics lane. Optional product entry points can install additional lanes; the root must not contain their implementations or a product catalog.
