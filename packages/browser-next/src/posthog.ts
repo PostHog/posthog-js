@@ -13,6 +13,7 @@ import {
 import { Publisher } from '@posthog/browser-common/pubsub'
 
 import { isLikelyBot } from './bot-filter'
+import { sendCaptureV1Batch, type CaptureV1Message } from './capture-v1'
 import { ExtensionRegistry } from './extensions/registry'
 import { createId } from './id'
 import { createLogger } from './logger'
@@ -35,13 +36,6 @@ const deepFreeze = <T>(value: T): T => {
         Object.freeze(value)
     }
     return value
-}
-
-interface CaptureEnvelope {
-    uuid: string
-    event: string
-    properties: Record<string, unknown>
-    timestamp: string
 }
 
 const getDefaultFetch = (): BrowserFetch | undefined => {
@@ -230,14 +224,15 @@ class PostHogBrowserClient implements PostHog {
             finalProperties['$set_once'] = options.setOnce
         }
 
-        const envelope: CaptureEnvelope = {
+        const message: CaptureV1Message = {
             uuid: options.uuid ?? createId(),
             event,
+            distinctId: this.distinctId,
             properties: finalProperties,
             timestamp: eventTimestamp(options.timestamp),
         }
 
-        const delivery = this.sendRequest('/e/', { method: 'POST', body: envelope })
+        const delivery = sendCaptureV1Batch(this._requestRuntime, [message], version)
         this._pendingDeliveries.add(delivery)
         void delivery.then(
             () => this._pendingDeliveries.delete(delivery),

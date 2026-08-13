@@ -44,7 +44,8 @@ describe('@posthog/browser extensions', () => {
 
         expect(posthog.getExtension<FlagCapability>('flags')?.getFlag('beta')).toBe('enabled')
         await posthog.capture('event')
-        expect(requests[0]?.body?.properties).toMatchObject({ feature_context: 'ready' })
+        const batch = requests[0]?.body?.batch as Array<{ properties: Record<string, unknown> }> | undefined
+        expect(batch?.[0]?.properties).toMatchObject({ feature_context: 'ready' })
 
         await posthog.dispose()
         expect(events).toEqual(['flags:setup', 'flags:dispose'])

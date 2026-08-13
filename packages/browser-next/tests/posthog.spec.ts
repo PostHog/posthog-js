@@ -11,6 +11,9 @@ const createRemoteConfig = (overrides: Partial<RemoteConfig> = {}): RemoteConfig
         ...overrides,
     }) as RemoteConfig
 
+const captureEvent = (request: SentRequest | undefined): Record<string, unknown> | undefined =>
+    (request?.body?.batch as Record<string, unknown>[] | undefined)?.[0]
+
 describe('@posthog/browser core', () => {
     it('requires a project token in options', async () => {
         // @ts-expect-error Verify the runtime guard for untyped JavaScript consumers.
@@ -44,23 +47,40 @@ describe('@posthog/browser core', () => {
         )
 
         expect(requests).toHaveLength(1)
-        expect(requests[0]?.url.pathname).toBe('/e/')
-        expect(requests[0]?.url.searchParams.get('token')).toBe('ph_test')
-        expect(requests[0]?.body).toMatchObject({
-            uuid: 'event-uuid',
-            event: 'signed_up',
-            timestamp: '2026-01-02T03:04:05.000Z',
-            properties: {
-                dynamic: 'yes',
-                plan: 'pro',
-                token: 'ph_test',
-                distinct_id: posthog.distinctId,
-                $device_id: posthog.deviceId,
-                $set: { email: 'person@example.com' },
-                $set_once: { source: 'docs' },
-                $lib: 'web',
-            },
+        expect(requests[0]?.url.pathname).toBe('/i/v1/analytics/events')
+        expect(requests[0]?.url.search).toBe('')
+        expect(requests[0]?.init.headers).toMatchObject({
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer ph_test',
+            'PostHog-Sdk-Info': expect.stringMatching(/^posthog-js\//),
+            'PostHog-Attempt': '1',
+            'PostHog-Request-Id': expect.any(String),
+            'PostHog-Request-Timestamp': expect.any(String),
         })
+        expect(requests[0]?.body).toMatchObject({
+            created_at: expect.any(String),
+            batch: [
+                {
+                    uuid: 'event-uuid',
+                    event: 'signed_up',
+                    distinct_id: posthog.distinctId,
+                    timestamp: '2026-01-02T03:04:05.000Z',
+                    session_id: posthog.session.sessionId,
+                    window_id: posthog.session.windowId,
+                    options: {},
+                    properties: {
+                        dynamic: 'yes',
+                        plan: 'pro',
+                        $device_id: posthog.deviceId,
+                        $set: { email: 'person@example.com' },
+                        $set_once: { source: 'docs' },
+                    },
+                },
+            ],
+        })
+        expect(requests[0]?.body?.batch).not.toMatchObject([
+            { properties: { token: expect.anything(), distinct_id: expect.anything(), $lib: expect.anything() } },
+        ])
         expect(observed).toHaveLength(1)
     })
 
@@ -214,7 +234,10 @@ describe('@posthog/browser core', () => {
         posthog.optIn()
         await posthog.capture('after_consent')
 
-        expect(requests[0]?.body?.properties).toMatchObject({ distinct_id: anonymousId, $groups: {} })
+        expect(captureEvent(requests[0])).toMatchObject({
+            distinct_id: anonymousId,
+            properties: { $groups: {} },
+        })
     })
 
     it('persists opt-out without retaining identity state', async () => {
@@ -352,9 +375,10 @@ describe('@posthog/browser core', () => {
 
         await posthog.capture('event')
 
-        expect(requests[0]?.body?.properties).toMatchObject({
-            token: 'ph_test',
-            distinct_id: posthog.distinctId,
+        expect(captureEvent(requests[0])).toMatchObject({ distinct_id: posthog.distinctId })
+        expect(captureEvent(requests[0])?.properties).not.toMatchObject({
+            token: expect.anything(),
+            distinct_id: expect.anything(),
         })
     })
 
@@ -453,9 +477,10 @@ describe('@posthog/browser core', () => {
         await posthog.identify('later-user')
 
         expect(requests).toHaveLength(1)
-        expect(requests[0]?.body).toMatchObject({
+        expect(captureEvent(requests[0])).toMatchObject({
             event: '$set',
-            properties: { distinct_id: anonymousId, $set: {}, $set_once: {} },
+            distinct_id: anonymousId,
+            properties: { $set: {}, $set_once: {} },
         })
         expect(posthog.distinctId).toBe('later-user')
     })
@@ -473,9 +498,9 @@ describe('@posthog/browser core', () => {
         await posthog.group('organization', 'org-123')
         await posthog.group('organization', 'org-123', { name: 'Acme' })
 
-        expect(requests.map(({ body }) => body?.event)).toEqual(['$groupidentify', '$groupidentify'])
-        expect(requests[0]?.body?.properties).not.toHaveProperty('$group_set')
-        expect(requests[1]?.body?.properties).toMatchObject({ $group_set: { name: 'Acme' } })
+        expect(requests.map((request) => captureEvent(request)?.event)).toEqual(['$groupidentify', '$groupidentify'])
+        expect(captureEvent(requests[0])?.properties).not.toHaveProperty('$group_set')
+        expect(captureEvent(requests[1])?.properties).toMatchObject({ $group_set: { name: 'Acme' } })
     })
 
     it('does not merge a second identified user with the anonymous id', async () => {
@@ -491,9 +516,9 @@ describe('@posthog/browser core', () => {
         await posthog.identify('user-two')
 
         expect(requests).toHaveLength(1)
-        expect(requests[0]?.body).toMatchObject({
+        expect(captureEvent(requests[0])).toMatchObject({
             event: '$identify',
-            properties: { distinct_id: 'user-one' },
+            distinct_id: 'user-one',
         })
         expect(posthog.distinctId).toBe('user-two')
     })
