@@ -1,7 +1,7 @@
 {
     "extends": "@posthog-tooling/tsconfig-base",
     "compilerOptions": {
-        "rootDir": ".",
+        "rootDir": "..",
         "noEmit": true,
         "target": "ES2024",
         "lib": ["ES2024", "DOM", "DOM.Iterable"],
@@ -12,7 +12,13 @@
         "allowImportingTsExtensions": true,
         "verbatimModuleSyntax": true,
         "exactOptionalPropertyTypes": true,
-        "noUncheckedIndexedAccess": true
+        "noUncheckedIndexedAccess": true,
+        "baseUrl": ".",
+        "paths": {
+            "@posthog/browser-common/tests/client-conformance": [
+                "../browser-common/tests/helpers/client-conformance.ts"
+            ]
+        }
     },
     "include": ["src/**/*", "tests/**/*", "fixtures/**/*"]
 }
