@@ -11,6 +11,8 @@ import {
     FLAG_CALL_REPORTED,
     HEATMAPS_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_REMOTE_CONFIG,
+    STORED_GROUP_PROPERTIES_KEY,
+    STORED_PERSON_PROPERTIES_KEY,
     USER_STATE,
 } from '../constants'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
@@ -651,6 +653,9 @@ describe('posthog core', () => {
             expect(properties.$is_identified).toBe(true)
             expect(posthog._cachedPersonProperties).toBeNull()
             expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+            expect(persistence.unregister).toHaveBeenCalledWith(
+                expect.arrayContaining([STORED_PERSON_PROPERTIES_KEY, STORED_GROUP_PROPERTIES_KEY])
+            )
             expect(persistence.unregister).toHaveBeenCalledWith(FLAG_CALL_REPORTED)
         })
 

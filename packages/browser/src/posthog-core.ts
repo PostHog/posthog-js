@@ -1664,20 +1664,21 @@ export class PostHog implements PostHogInterface {
         this.persistence.syncCookieProperties()
         if (this.persistence.consumeCookieIdentityChange()) {
             this._cachedPersonProperties = null
-            if (this.persistence.get_property(USER_STATE) === USER_STATE_ANONYMOUS) {
-                this.persistence.unregister([
-                    STORED_PERSON_PROPERTIES_KEY,
-                    STORED_GROUP_PROPERTIES_KEY,
-                    PERSISTENCE_ACTIVE_FEATURE_FLAGS,
-                    ENABLED_FEATURE_FLAGS,
-                    PERSISTENCE_FEATURE_FLAG_DETAILS,
-                    PERSISTENCE_FEATURE_FLAG_PAYLOADS,
-                    PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
-                    PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
-                    PERSISTENCE_FEATURE_FLAG_ERRORS,
-                ])
-                this.featureFlags?.reset()
-            }
+            // All local flag state is identity-bound. A sibling can move directly
+            // from one identified user to another between synchronization points,
+            // so cleanup cannot depend on observing an intermediate anonymous state.
+            this.persistence.unregister([
+                STORED_PERSON_PROPERTIES_KEY,
+                STORED_GROUP_PROPERTIES_KEY,
+                PERSISTENCE_ACTIVE_FEATURE_FLAGS,
+                ENABLED_FEATURE_FLAGS,
+                PERSISTENCE_FEATURE_FLAG_DETAILS,
+                PERSISTENCE_FEATURE_FLAG_PAYLOADS,
+                PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+                PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
+                PERSISTENCE_FEATURE_FLAG_ERRORS,
+            ])
+            this.featureFlags?.reset()
             this.reloadFeatureFlags()
             this.unregister(FLAG_CALL_REPORTED)
         }
