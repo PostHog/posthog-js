@@ -163,6 +163,64 @@
           "path": "src/entrypoints/index.node.ts"
         },
         {
+          "category": "Capture",
+          "description": "Capture an AI event on the dedicated AI capture endpoint.\nBeta: the signature is stable; operational limits (per-event size cap, batching, endpoint) may change without notice. Delivery is async, and no redaction or truncation is applied to the payload.",
+          "details": null,
+          "id": "captureAi",
+          "showDocs": true,
+          "title": "captureAi",
+          "examples": [
+            {
+              "id": "captureai",
+              "name": "Generated example for captureAi",
+              "code": "// Generated example for captureAi\nposthog.captureAi();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The event properties",
+              "isOptional": false,
+              "type": "EventMessage",
+              "name": "props"
+            }
+          ],
+          "returnType": {
+            "id": "string | undefined",
+            "name": "string | undefined"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Capture",
+          "description": "Capture an AI event on the dedicated AI capture endpoint, resolving after the send completes. Use in short-lived processes (serverless) where the runtime may freeze before a background flush runs.",
+          "details": null,
+          "id": "captureAiImmediate",
+          "showDocs": true,
+          "title": "captureAiImmediate",
+          "examples": [
+            {
+              "id": "captureaiimmediate",
+              "name": "Generated example for captureAiImmediate",
+              "code": "// Generated example for captureAiImmediate\nposthog.captureAiImmediate();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "The event properties",
+              "isOptional": false,
+              "type": "EventMessage",
+              "name": "props"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<string | undefined>",
+            "name": "Promise<string | undefined>"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
           "category": "Error tracking",
           "description": "Capture an error exception as an event.",
           "details": null,
@@ -3478,6 +3536,11 @@
           "name": "isServer"
         },
         {
+          "description": "Capture full AI content: PostHog AI wrapper events route through the\ndedicated AI capture endpoint, skip string truncation, and pass media\n(base64 / data URIs) through unredacted. Privacy mode always wins.\nDefaults to false.",
+          "type": "boolean",
+          "name": "enableFullAiCapture"
+        },
+        {
           "description": "ADVANCED: alters the refill rate for the error tracking rate limiter's token bucket.\nNormally only altered alongside PostHog support guidance.\nAccepts values between 0 and 100.",
           "type": "number",
           "name": "exceptionRateLimiterRefillRate"
@@ -3494,6 +3557,10 @@
       "id": "PostHogPersistedProperty",
       "name": "PostHogPersistedProperty",
       "properties": [
+        {
+          "type": "\"ai_capture_queue\"",
+          "name": "AiCaptureQueue"
+        },
         {
           "type": "\"ai_queue\"",
           "name": "AiQueue"

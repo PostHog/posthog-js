@@ -233,6 +233,49 @@ describe('concurrent request attribution', () => {
     expect(listings[0].properties.$set).toBeUndefined()
   })
 
+  it('stamps the listing client before a slow identify lets another handshake replace it', async () => {
+    const identifyListStarted = deferred()
+    const releaseIdentifyList = deferred()
+    const server = createServer({
+      identify: async (request) => {
+        if (request.method === 'tools/list') {
+          identifyListStarted.resolve()
+          await releaseIdentifyList.promise
+        }
+        return { distinctId: 'user-a' }
+      },
+    })
+    const handshake = (name: string, version: string): MCPRequestLike => ({
+      method: 'initialize',
+      params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name, version } },
+    })
+
+    // client-a completes the handshake, so `getClientVersion()` — the last link of
+    // the identity chain, and the only one a legacy-era request ever reaches —
+    // answers 'client-a'.
+    await invokeInitialize(server, handshake('client-a', '1.0.0'), { requestInfo: { headers: {} } })
+
+    // A legacy-era listing: nothing in `_meta`, no envelope, no protocol header.
+    const listRequest = invokeListTools(server, { requestInfo: { headers: {} } })
+    await identifyListStarted.promise
+
+    // client-b handshakes on the same instance while the identify callback is still
+    // in flight, replacing what the accessor answers.
+    await invokeInitialize(server, handshake('client-b', '2.0.0'), { requestInfo: { headers: {} } })
+
+    releaseIdentifyList.resolve()
+    await listRequest
+    await flushCaptures()
+
+    const listings = capture.findCapturesByEvent('$mcp_tools_list')
+    expect(listings).toHaveLength(1)
+    expect(listings[0].distinct_id).toBe('user-a')
+    expect(listings[0].properties).toMatchObject({
+      $mcp_client_name: 'client-a',
+      $mcp_client_version: '1.0.0',
+    })
+  })
+
   it("uses each request's pre-await session source when deciding whether to publish identify", async () => {
     const identifyAStarted = deferred()
     const releaseIdentifyA = deferred()

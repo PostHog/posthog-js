@@ -12,6 +12,7 @@ import type {
 import { v4 as uuidv4 } from 'uuid'
 import { isString } from './typeGuards'
 import { redactBase64DataUrl } from './sanitization'
+import { isFullAiCaptureEnabled, type FullAiCaptureGate } from './captureAiEvent'
 
 type ChatCompletionCreateParamsBase = OpenAIOrignal.Chat.Completions.ChatCompletionCreateParams
 type MessageCreateParams = AnthropicOriginal.Messages.MessageCreateParams
@@ -149,7 +150,7 @@ export const getModelParams = (
 /**
  * Helper to format responses (non-streaming) for consumption
  */
-export const formatResponse = (response: any, provider: string): FormattedMessage[] => {
+export const formatResponse = (response: any, provider: string, client?: FullAiCaptureGate): FormattedMessage[] => {
   if (!response) {
     return []
   }
@@ -158,7 +159,7 @@ export const formatResponse = (response: any, provider: string): FormattedMessag
   } else if (provider === 'openai') {
     return formatResponseOpenAI(response)
   } else if (provider === 'gemini') {
-    return formatResponseGemini(response)
+    return formatResponseGemini(response, client)
   }
   return []
 }
@@ -301,7 +302,7 @@ export const buildInlineDataBlock = (
   return { type: 'document', inline_data: { mime_type: mimeType, data } }
 }
 
-export const formatResponseGemini = (response: any): FormattedMessage[] => {
+export const formatResponseGemini = (response: any, client?: FullAiCaptureGate): FormattedMessage[] => {
   const output: FormattedMessage[] = []
 
   if (response.candidates && Array.isArray(response.candidates)) {
@@ -339,7 +340,7 @@ export const formatResponseGemini = (response: any): FormattedMessage[] => {
             }
 
             // Sanitize base64 data for images and other large inline data
-            data = redactBase64DataUrl(data, mimeType)
+            data = isFullAiCaptureEnabled(client) ? data : redactBase64DataUrl(data, mimeType)
 
             content.push(buildInlineDataBlock(mimeType, data))
           }
@@ -399,10 +400,14 @@ function toSafeString(input: unknown): string {
   }
 }
 
-export const truncate = (input: unknown): string => {
+export const truncate = (input: unknown, client?: FullAiCaptureGate): string => {
   const str = toSafeString(input)
   if (str === '') {
     return ''
+  }
+
+  if (isFullAiCaptureEnabled(client)) {
+    return str
   }
 
   // Check if we need to truncate and ensure STRING_FORMAT is respected

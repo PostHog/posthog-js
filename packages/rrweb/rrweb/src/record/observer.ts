@@ -653,6 +653,10 @@ function initStyleSheetObserver(
       ) => {
         const [rule, index] = argumentsList;
 
+        // a pending budget-deferred inlining of this sheet must not emit its
+        // defer-time text over this (recorded or about-to-load) mutation
+        stylesheetManager.onCssomSheetMutation(thisArg);
+
         const { id, styleId } = getIdAndStyleId(
           thisArg,
           mirror,
@@ -693,6 +697,8 @@ function initStyleSheetObserver(
         argumentsList: [number],
       ) => {
         const [index] = argumentsList;
+
+        stylesheetManager.onCssomSheetMutation(thisArg);
 
         const { id, styleId } = getIdAndStyleId(
           thisArg,
@@ -835,6 +841,8 @@ function initStyleSheetObserver(
           ) => {
             const [rule, index] = argumentsList;
 
+            stylesheetManager.onCssomSheetMutation(thisArg.parentStyleSheet);
+
             const { id, styleId } = getIdAndStyleId(
               thisArg.parentStyleSheet,
               mirror,
@@ -873,6 +881,8 @@ function initStyleSheetObserver(
             argumentsList: [number],
           ) => {
             const [index] = argumentsList;
+
+            stylesheetManager.onCssomSheetMutation(thisArg.parentStyleSheet);
 
             const { id, styleId } = getIdAndStyleId(
               thisArg.parentStyleSheet,
@@ -1029,6 +1039,9 @@ function initStyleDeclarationObserver(
         if (ignoreCSSAttributes.has(property)) {
           return setProperty.apply(thisArg, [property, value, priority]);
         }
+        stylesheetManager.onCssomSheetMutation(
+          thisArg.parentRule?.parentStyleSheet,
+        );
         const { id, styleId } = getIdAndStyleId(
           thisArg.parentRule?.parentStyleSheet,
           mirror,
@@ -1068,6 +1081,9 @@ function initStyleDeclarationObserver(
         if (ignoreCSSAttributes.has(property)) {
           return removeProperty.apply(thisArg, [property]);
         }
+        stylesheetManager.onCssomSheetMutation(
+          thisArg.parentRule?.parentStyleSheet,
+        );
         const { id, styleId } = getIdAndStyleId(
           thisArg.parentRule?.parentStyleSheet,
           mirror,

@@ -116,6 +116,39 @@ identify: async (request, extra) => {
 }
 ```
 
+### What `$mcp_intent` records, and how to turn it off
+
+`context` defaults to **on**: the SDK adds a `context` parameter to every tool it advertises, asks
+the agent to say why it is calling, and records the answer as `$mcp_intent`. It is stripped before
+your tool runs wherever the SDK can confirm the parameter is its own.
+
+On a server that builds a fresh instance per HTTP request — `createMcpHandler`, or `@rekog/mcp-nest`
+in its stateless mode — that confirmation is not available: ownership is learned while serving
+`tools/list`, and the instance handling a `tools/call` never served one. There the SDK records the
+argument but does **not** strip it, because deleting an argument your tool declared would cost you
+the call, while an extra key usually costs nothing.
+
+What matters is instance lifetime, not statelessness. A server that is stateless at the transport
+(`sessionIdGenerator: undefined`) but keeps one long-lived server object learns ownership from the
+first `tools/list` and keeps it, so none of the above applies to it.
+
+The consequence worth knowing: if **your own** tool declares a parameter named `context` and the SDK
+cannot tell that it is yours, its value is recorded as `$mcp_intent`. It never leaves your project,
+and it is capped at 2048 characters. Two ways out, both one line:
+
+```ts
+instrument(server, posthog, { context: false })                   // no injection, no capture
+
+instrument(server, posthog, {                                     // keep it, drop the property
+  beforeSend: (event) => {
+    delete event.properties.$mcp_intent
+    return event
+  },
+})
+```
+
+`intentFallback` is the third option: supply the intent yourself when the agent did not send one.
+
 ### If you switched to `instrument(server.server)`
 
 Before v2 support landed, the compatibility gate rejected high-level v2 servers, and the usual

@@ -693,8 +693,15 @@ export interface SessionRecordingOptions {
 
     /**
      * Max CSSRules inlined synchronously per full snapshot. Sheets past the
-     * budget keep their `rel`/`href` (so replay can load them remotely) and
-     * are inlined across idle callbacks instead of blocking the snapshot.
+     * budget keep their `rel`/`href` and are inlined across idle callbacks
+     * instead of blocking the snapshot; the queue is flushed synchronously
+     * (bounded) when recording stops and on `pagehide`. The residual risk:
+     * replay falls back to loading a sheet from its original href (which may
+     * be purged, auth-gated, or renamed by replay time) only if the tab dies
+     * without `pagehide` firing, the teardown flush hits its safety cap, or
+     * stringifying the sheet fails.
+     * The default is applied by posthog-js when it starts the recorder; the
+     * recorder itself is unbounded without it.
      * Set 0 to inline everything up front (the pre-budget behaviour).
      * @default 10000
      */
