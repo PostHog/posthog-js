@@ -101,16 +101,59 @@ jobs:
                           root_package_spec="@posthog/mcp-analytics@npm:@posthog/mcp@${PACKAGE_VERSION}"
                           pnpm update --recursive "$root_package_spec"
                           ;;
+                      posthog-react-native|@posthog/rollup-plugin)
+                          # These packages are used only by the standalone Desktop workspace.
+                          ;;
                       *)
                           pnpm update --recursive "$root_package_spec"
                           ;;
                   esac
 
-                  # Desktop is a standalone workspace with its own lockfile. Exempt only the package
-                  # released by this workflow and its freshly published internal PostHog dependencies.
-                  pnpm --dir products/desktop \
-                      --config.minimum-release-age-exclude="$PACKAGE_NAME posthog-js posthog-js-lite posthog-node @posthog/*" \
-                      update --recursive "$package_spec"
+                  desktop_manifests_updated=$(node <<'NODE'
+                  const { globSync, readFileSync, writeFileSync } = require('node:fs')
+
+                  const packageName = process.env.PACKAGE_NAME
+                  const packageVersion = process.env.PACKAGE_VERSION
+                  let updated = 0
+
+                  for (const manifestPath of globSync('products/desktop/{apps,packages,tooling,tools}/*/package.json')) {
+                      const manifestText = readFileSync(manifestPath, 'utf8')
+                      const manifest = JSON.parse(manifestText)
+                      let updatedText = manifestText
+
+                      for (const section of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']) {
+                          const currentVersion = manifest[section]?.[packageName]
+                          if (!currentVersion) {
+                              continue
+                          }
+
+                          const prefix = currentVersion.startsWith('^') ? '^' : currentVersion.startsWith('~') ? '~' : ''
+                          const nextVersion = `${prefix}${packageVersion}`
+                          updatedText = updatedText.replace(
+                              `${JSON.stringify(packageName)}: ${JSON.stringify(currentVersion)}`,
+                              `${JSON.stringify(packageName)}: ${JSON.stringify(nextVersion)}`
+                          )
+                      }
+
+                      if (updatedText !== manifestText) {
+                          writeFileSync(manifestPath, updatedText)
+                          updated++
+                      }
+                  }
+
+                  process.stdout.write(String(updated))
+                  NODE
+                  )
+
+                  if [ "$desktop_manifests_updated" -gt 0 ]; then
+                      # Desktop is a standalone workspace with its own lockfile. semver@6.3.1 is
+                      # already locked there, but its npm metadata triggers pnpm's trust downgrade
+                      # check whenever the lockfile is regenerated. Keep the check for every other
+                      # dependency while allowing this existing version.
+                      pnpm --dir products/desktop install --no-frozen-lockfile \
+                          --trust-policy-exclude='semver@6.3.1' \
+                          --config.minimum-release-age-exclude="$PACKAGE_NAME posthog-js posthog-js-lite posthog-node @posthog/*"
+                  fi
 
             - name: Generate pull request details
               id: generate-pr-details
