@@ -32,6 +32,7 @@
         "build": "rslib build",
         "dev": "rslib build -w",
         "test:unit": "jest -c jest.config.cjs",
+        "test:capture-v1-live": "pnpm build && node scripts/check-capture-v1-live.mjs",
         "check-types": "tsc --noEmit --project tsconfig.json",
         "bundle-size": "pnpm build && node scripts/check-bundle-size.mjs",
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"

@@ -529,6 +529,200 @@ describe('Capture Analytics V1', () => {
         expect(result.error).toBeInstanceOf(Error)
     })
 
+    it('aborts a request that stalls before response headers', async () => {
+        jest.useFakeTimers()
+        try {
+            let signal: AbortSignal | undefined
+            const fetch = jest.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>().mockImplementation(
+                async (_input, init = {}) =>
+                    new Promise<Response>((_resolve, reject) => {
+                        signal = init.signal ?? undefined
+                        if (signal) {
+                            signal.onabort = () => reject(new Error('Fetch observed abort'))
+                        }
+                    })
+            )
+
+            const delivery = sendCaptureV1Batch(runtime(fetch), [message()], '1.2.3', {
+                maxAttempts: 1,
+                requestTimeoutMs: 1_000,
+                maxElapsedMs: 5_000,
+            })
+            await jest.advanceTimersByTimeAsync(999)
+            expect(fetch).toHaveBeenCalledTimes(1)
+
+            await jest.advanceTimersByTimeAsync(1)
+            const result = await delivery
+
+            expect(signal?.aborted).toBe(true)
+            expect(result).toMatchObject({ statusCode: 0, retry: ['event-uuid'], error: expect.anything() })
+            expect(result.error).toMatchObject({
+                name: 'AbortError',
+                message: 'Capture V1 request timed out waiting for response headers after 1000ms',
+            })
+            expect(jest.getTimerCount()).toBe(0)
+        } finally {
+            jest.useRealTimers()
+        }
+    })
+
+    it('cancels the body when an injected Fetch resolves after its timeout', async () => {
+        jest.useFakeTimers()
+        try {
+            let resolveFetch: ((response: Response) => void) | undefined
+            const fetch = jest.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>().mockImplementation(
+                () =>
+                    new Promise<Response>((resolve) => {
+                        resolveFetch = resolve
+                    })
+            )
+
+            const delivery = sendCaptureV1Batch(runtime(fetch), [message()], '1.2.3', {
+                maxAttempts: 1,
+                requestTimeoutMs: 1_000,
+                maxElapsedMs: 5_000,
+            })
+            await jest.advanceTimersByTimeAsync(1_000)
+            await delivery
+
+            const cancel = jest.fn().mockResolvedValue(undefined)
+            resolveFetch?.({ body: { cancel } } as unknown as Response)
+            await Promise.resolve()
+
+            expect(cancel).toHaveBeenCalledTimes(1)
+            expect(jest.getTimerCount()).toBe(0)
+        } finally {
+            jest.useRealTimers()
+        }
+    })
+
+    it('retries when reading a successful response body times out', async () => {
+        jest.useFakeTimers()
+        try {
+            const cancel = jest.fn().mockResolvedValue(undefined)
+            const stalledResponse = {
+                status: 200,
+                headers: new Headers(),
+                body: { cancel },
+                text: () => new Promise<string>(() => {}),
+            } as unknown as Response
+            const fetch = jest
+                .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+                .mockResolvedValueOnce(stalledResponse)
+                .mockResolvedValueOnce(new Response('{"results":{}}', { status: 200 }))
+            const sleep = jest.fn().mockResolvedValue(undefined)
+
+            const delivery = sendCaptureV1Batch(runtime(fetch), [message()], '1.2.3', {
+                maxAttempts: 2,
+                requestTimeoutMs: 1_000,
+                maxElapsedMs: 5_000,
+                sleep,
+                random: () => 0.5,
+            })
+            await jest.advanceTimersByTimeAsync(1_000)
+            const result = await delivery
+
+            expect(cancel).toHaveBeenCalledTimes(1)
+            expect(fetch).toHaveBeenCalledTimes(2)
+            expect(sleep).toHaveBeenCalledWith(3_000)
+            expect(result).toMatchObject({ statusCode: 200, retry: [], drops: [] })
+            expect(jest.getTimerCount()).toBe(0)
+        } finally {
+            jest.useRealTimers()
+        }
+    })
+
+    it('clamps an attempt timeout to the remaining elapsed budget', async () => {
+        jest.useFakeTimers()
+        try {
+            const fetch = jest
+                .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+                .mockImplementation(async () => new Promise<Response>(() => {}))
+
+            const delivery = sendCaptureV1Batch(runtime(fetch), [message()], '1.2.3', {
+                maxAttempts: 1,
+                requestTimeoutMs: 1_000,
+                maxElapsedMs: 500,
+            })
+            await jest.advanceTimersByTimeAsync(499)
+            expect(fetch).toHaveBeenCalledTimes(1)
+
+            await jest.advanceTimersByTimeAsync(1)
+            const result = await delivery
+
+            expect(result.error).toMatchObject({
+                name: 'AbortError',
+                message: 'Capture V1 request timed out waiting for response headers after 500ms',
+            })
+            expect(jest.getTimerCount()).toBe(0)
+        } finally {
+            jest.useRealTimers()
+        }
+    })
+
+    it('does not start Fetch when request setup exhausts the elapsed budget', async () => {
+        let elapsed = 0
+        const fetch = jest.fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+        const properties = {
+            nested: {
+                toJSON: () => {
+                    elapsed = 100
+                    return {}
+                },
+            },
+        }
+
+        const result = await sendCaptureV1Batch(runtime(fetch), [message({ properties })], '1.2.3', {
+            maxElapsedMs: 50,
+            elapsedNow: () => elapsed,
+        })
+
+        expect(fetch).not.toHaveBeenCalled()
+        expect(result.retry).toEqual(['event-uuid'])
+        expect(result.error).toHaveProperty('message', 'Capture V1 exhausted its elapsed retry budget')
+    })
+
+    it('does not start a backoff that would consume the remaining elapsed budget', async () => {
+        const fetch = jest
+            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+            .mockResolvedValue(new Response('{}', { status: 503, headers: { 'Retry-After': '10' } }))
+        const sleep = jest.fn().mockResolvedValue(undefined)
+
+        const result = await sendCaptureV1Batch(runtime(fetch), [message()], '1.2.3', {
+            maxElapsedMs: 5_000,
+            elapsedNow: () => 0,
+            sleep,
+            random: () => 0.5,
+        })
+
+        expect(fetch).toHaveBeenCalledTimes(1)
+        expect(sleep).not.toHaveBeenCalled()
+        expect(result.retry).toEqual(['event-uuid'])
+        expect(result.error).toHaveProperty('message', 'Capture V1 exhausted its elapsed retry budget')
+    })
+
+    it('does not start another attempt after backoff exhausts the elapsed budget', async () => {
+        let elapsed = 0
+        const fetch = jest
+            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+            .mockResolvedValue(new Response('{}', { status: 503 }))
+        const sleep = jest.fn().mockImplementation(async () => {
+            elapsed = 5_000
+        })
+
+        const result = await sendCaptureV1Batch(runtime(fetch), [message()], '1.2.3', {
+            maxElapsedMs: 4_000,
+            elapsedNow: () => elapsed,
+            sleep,
+            random: () => 0.5,
+        })
+
+        expect(sleep).toHaveBeenCalledWith(3_000)
+        expect(fetch).toHaveBeenCalledTimes(1)
+        expect(result.retry).toEqual(['event-uuid'])
+        expect(result.error).toHaveProperty('message', 'Capture V1 exhausted its elapsed retry budget')
+    })
+
     it('contains backoff failures', async () => {
         const fetch: BrowserFetch = async () => new Response('{}', { status: 503 })
 
