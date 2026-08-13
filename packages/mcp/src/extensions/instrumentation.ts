@@ -518,20 +518,26 @@ export async function handleListToolsRequest(
   // Snapshot before identify, metadata resolution, or the list handler can yield
   // to a concurrent request using the same instrumented server.
   const sessionInfo = getSessionInfo(server, data, sessionId)
-  // `getSessionInfo` only surfaces an identity some earlier request already
-  // cached on this instance. On a per-request instance that cache is always
-  // empty, so without resolving `identify` here too, `tools/list` would be the
-  // one request path that never attributes to a person.
-  const identity = data ? await handleIdentify(server, data, sessionId, request, sessionInfo, extra) : undefined
-  const requestAttribution = withIdentity(sessionInfo, identity)
   const event: McpEvent = {
     sessionId,
     parameters: buildCapturedMcpParameters(request),
     eventType: MCPAnalyticsEventType.mcpToolsList,
     timestamp: startTime,
   }
+  // Stamp before the identify await below. The last link of the identity chain is
+  // the server's own `getClientVersion()`, which a concurrent `initialize` can
+  // replace while a slow identify callback is in flight — and `captureEvent`
+  // prefers a stamped value over the `sessionInfo` snapshot, so a late stamp
+  // would win with the wrong client's name.
   stampClientIdentity(event, request, extra, server)
   stampTransportIdentity(event, extra)
+
+  // `getSessionInfo` only surfaces an identity some earlier request already
+  // cached on this instance. On a per-request instance that cache is always
+  // empty, so without resolving `identify` here too, `tools/list` would be the
+  // one request path that never attributes to a person.
+  const identity = data ? await handleIdentify(server, data, sessionId, request, sessionInfo, extra) : undefined
+  const requestAttribution = withIdentity(sessionInfo, identity)
 
   if (data) {
     await applyResolvedMetadata(event, data, request, extra)
