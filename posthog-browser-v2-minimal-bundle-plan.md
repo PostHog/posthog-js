@@ -582,13 +582,13 @@ const posthog = await createPostHog({
 
 `projectToken` is required at the type and runtime boundaries. The package has no default singleton. The current unit suite, lint, formatting, and diff checks pass.
 
-The current capture fixture is approximately 16.7 KiB minified and 5.5 KiB gzip, but this is not a compliant baseline. The prototype still omits required behavior. An ESM `version`-only consumer is approximately 50 bytes gzip, while the current CommonJS form retains approximately 6.3 KiB gzip. Re-evaluate CommonJS publication before release.
+The current capture fixture is approximately 19.4 KiB minified and 6.4 KiB gzip, but this is not a compliant baseline. The prototype still omits required behavior. The first Capture V1 transform, Fetch attempt, and result-classification slice added approximately 2.6 KiB minified and 0.9 KiB gzip. An ESM `version`-only consumer is approximately 50 bytes gzip, while the current CommonJS form retains approximately 6.3 KiB gzip. Re-evaluate CommonJS publication before release.
 
 Known blockers and gaps:
 
 - Browser-next satisfies the current `@posthog/browser-common` `Client` and `KeyValueStore` type contracts. The shared conformance suite now runs against the legacy browser adapter, browser-next, and `TestClient`.
 - Browser-next type checking, declaration generation, build, and bundle measurement pass when run directly. The filtered pnpm command can still trigger unrelated workspace dependency repair in this checkout.
-- The current event request uses neither the Capture Analytics V1 endpoint nor its event, batch, header, response, and partial-retry contracts.
+- The current event request uses the Capture Analytics V1 endpoint, event/batch transform, required normal-Fetch headers, and result classification. It does not yet retry transport failures, retryable statuses, or retry-marked events.
 - The Capture V1 RFC defines browser Beacon query fallbacks, but the current deployed-source backend still requires headers and has not implemented its V1 query type.
 - No lane abstraction currently isolates queue, endpoint, serialization, size, transport, and retry policy.
 - Consent can be bypassed by extension requests and can become stale across active clients.
@@ -618,7 +618,8 @@ Decisions that still need an explicit answer:
     - [x] Add browser-next invalid distinct-ID, group type/key, and event-name regression cases.
         - [ ] Promote retained scenarios to durable browser-next suites before the transitional legacy adapter is removed.
         - [ ] Add the browser-next analytics queue, retry, teardown, and rate-limit cases after those mechanisms exist.
-        - [ ] Port the Capture Analytics V1 transform, request, response-classification, and partial-retry harness.
+        - [x] Port the Capture Analytics V1 transform, normal-Fetch request, and response-classification harness.
+        - [ ] Add selective partial-retry, attempt-metadata, and retry-exhaustion cases with the analytics queue.
 - [ ] **P0.4**: Add same-origin multi-client storage interleavings.
 - [ ] **P0.5**: Add PR #4496 cookie cases to the cookie-adapter corpus.
 - [ ] **P0.6**: Add transport and storage fault injection.
@@ -644,7 +645,7 @@ Do not freeze more generic runtime contracts until this phase identifies the req
 - [ ] **P2.2**: Implement separate device, anonymous, and identified state.
 - [ ] **P2.3**: Implement conflict-safe local-storage persistence.
 - [ ] **P2.4**: Implement idle, maximum-length, window, and cross-tab session behavior.
-- [ ] **P2.5**: Implement the Capture V1 event transform, batch envelope, required Fetch headers, and result parser.
+- [x] **P2.5**: Implement the Capture V1 event transform, batch envelope, required Fetch headers, and result parser.
 - [ ] **P2.6**: Implement a small lane dispatcher and the root analytics lane with an independent bounded queue and policy.
 - [ ] **P2.7**: Implement in-memory batching and native compression within the analytics lane.
 - [ ] **P2.8**: Implement normal Fetch delivery and synchronous best-effort teardown delivery with V1 Beacon mode when supported, keepalive Fetch fallback, timeout, bounded partial retry, backoff, jitter, flush, unload, and rate limiting.
