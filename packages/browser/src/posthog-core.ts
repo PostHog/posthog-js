@@ -1639,6 +1639,11 @@ export class PostHog implements PostHogInterface {
         // preserve groups for direct identified-user transitions as identify() does.
         if (this.persistence.get_property(USER_STATE) === USER_STATE_ANONYMOUS) {
             this.persistence.unregister(GROUPS)
+            // A sibling reset clears both persistence stores. Remove session-only
+            // properties before this event is assembled under the anonymous ID.
+            this.sessionPersistence?.clear()
+            this._sessionRegisteredPropKeys.clear()
+            this._persistSessionRegisteredPropKeys()
         }
         this.featureFlags?.reset()
         if (reloadFeatureFlags) {

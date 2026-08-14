@@ -673,20 +673,26 @@ describe('posthog core', () => {
                 }),
                 consumeCookieIdentityChange: jest.fn().mockReturnValue(true),
             } as unknown as PostHogPersistence
+            const sessionProps: Record<string, unknown> = { sensitive_session_property: 'previous-user' }
             const sessionPersistence = {
-                properties: () => ({}),
+                properties: () => ({ ...sessionProps }),
                 get_property: () => undefined,
+                clear: jest.fn(() => {
+                    delete sessionProps.sensitive_session_property
+                }),
             } as unknown as PostHogPersistence
             posthog = posthogWith({}, { ...overrides, persistence, sessionPersistence })
             posthog._cachedPersonProperties = 'previous-identity'
             const reloadFeatureFlags = jest.spyOn(posthog, 'reloadFeatureFlags').mockImplementation(() => {})
 
-            posthog.calculateEventProperties('custom_event', {}, new Date(), uuid)
+            const properties = posthog.calculateEventProperties('custom_event', {}, new Date(), uuid)
 
+            expect(properties.sensitive_session_property).toBeUndefined()
             expect(posthog._cachedPersonProperties).toBeNull()
             expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
             expect(persistence.unregister).toHaveBeenCalledWith(expect.arrayContaining([FLAG_CALL_REPORTED]))
             expect(persistence.unregister).toHaveBeenCalledWith('$groups')
+            expect(sessionPersistence.clear).toHaveBeenCalledTimes(1)
         })
 
         it('sets $lib_custom_api_host if api_host is not the default', () => {
