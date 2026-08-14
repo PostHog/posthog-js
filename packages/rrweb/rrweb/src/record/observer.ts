@@ -83,31 +83,43 @@ export function initMutationObserver(
   rootEl: Node,
 ): { observer: MutationObserver; buffer: MutationBuffer } {
   const mutationBuffer = new MutationBuffer();
-  mutationBuffers.push(mutationBuffer);
   // see mutation.ts for details
   mutationBuffer.init(options);
-  const observer = new (mutationObserverCtor() as new (
-    callback: MutationCallback,
-  ) => MutationObserver)(
-    callbackWrapper(mutationBuffer.processMutations.bind(mutationBuffer)),
-  );
-  const mutationObserverInit: MutationObserverInit = {
-    attributes: true,
-    attributeOldValue: true,
-    characterData: true,
-    characterDataOldValue: true,
-    childList: true,
-    subtree: true,
-  };
-  // Delegate attribute filtering to the native MutationObserver: unlisted
-  // attributes never fire the callback, so they cost no recording CPU.
-  // An empty array would mean "observe no attributes at all", which is never
-  // what a caller wants and could come from bad config, so treat it as unset.
-  if (options.attributeFilter && options.attributeFilter.length > 0) {
-    mutationObserverInit.attributeFilter = options.attributeFilter;
+  let observer: MutationObserver | undefined;
+  try {
+    observer = new (mutationObserverCtor() as new (
+      callback: MutationCallback,
+    ) => MutationObserver)(
+      callbackWrapper(mutationBuffer.processMutations.bind(mutationBuffer)),
+    );
+    const mutationObserverInit: MutationObserverInit = {
+      attributes: true,
+      attributeOldValue: true,
+      characterData: true,
+      characterDataOldValue: true,
+      childList: true,
+      subtree: true,
+    };
+    // Delegate attribute filtering to the native MutationObserver: unlisted
+    // attributes never fire the callback, so they cost no recording CPU.
+    // An empty array would mean "observe no attributes at all", which is never
+    // what a caller wants and could come from bad config, so treat it as unset.
+    if (options.attributeFilter && options.attributeFilter.length > 0) {
+      mutationObserverInit.attributeFilter = options.attributeFilter;
+    }
+    observer.observe(rootEl, mutationObserverInit);
+    mutationBuffers.push(mutationBuffer);
+    return { observer, buffer: mutationBuffer };
+  } catch (error) {
+    try {
+      observer?.disconnect();
+      mutationBuffer.destroy();
+      mutationBuffer.reset();
+    } catch {
+      // Preserve the initialization error if best-effort cleanup also fails.
+    }
+    throw error;
   }
-  observer.observe(rootEl, mutationObserverInit);
-  return { observer, buffer: mutationBuffer };
 }
 
 function initMoveObserver({
@@ -1411,50 +1423,9 @@ export function initObservers(
   mergeHooks(o, hooks);
   let mutationObserver: MutationObserver | undefined;
   let mutationBuffer: MutationBuffer | undefined;
-  if (o.recordDOM) {
-    const result = initMutationObserver(o, o.doc);
-    mutationObserver = result.observer;
-    mutationBuffer = result.buffer;
-  }
-  const mousemoveHandler = initMoveObserver(o);
-  const mouseInteractionHandler = initMouseInteractionObserver(o);
-  const scrollHandler = initScrollObserver(o);
-  const viewportResizeHandler = initViewportResizeObserver(o, {
-    win: currentWindow,
-  });
-  const inputHandler = initInputObserver(o);
-  const mediaInteractionHandler = initMediaInteractionObserver(o);
+  const handlers: listenerHandler[] = [];
 
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
-  let styleSheetObserver = () => {};
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
-  let adoptedStyleSheetObserver = () => {};
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
-  let styleDeclarationObserver = () => {};
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
-  let fontObserver = () => {};
-  if (o.recordDOM) {
-    styleSheetObserver = initStyleSheetObserver(o, { win: currentWindow });
-    adoptedStyleSheetObserver = initAdoptedStyleSheetObserver(o, o.doc);
-    styleDeclarationObserver = initStyleDeclarationObserver(o, {
-      win: currentWindow,
-    });
-    if (o.collectFonts) {
-      fontObserver = initFontObserver(o);
-    }
-  }
-  const selectionObserver = initSelectionObserver(o);
-  const customElementObserver = initCustomElementObserver(o);
-
-  // plugins
-  const pluginHandlers: listenerHandler[] = [];
-  for (const plugin of o.plugins) {
-    pluginHandlers.push(
-      plugin.observer(plugin.callback, currentWindow, plugin.options),
-    );
-  }
-
-  return callbackWrapper(() => {
+  const cleanup = callbackWrapper(() => {
     // Clean up this observer's mutation buffer
     if (mutationBuffer) {
       mutationBuffer.destroy();
@@ -1469,20 +1440,57 @@ export function initObservers(
     // torn down) without touching the rest of the page's shadow observation.
     o.shadowDomManager.resetForDoc(o.doc);
     mutationObserver?.disconnect();
-    mousemoveHandler();
-    mouseInteractionHandler();
-    scrollHandler();
-    viewportResizeHandler();
-    inputHandler();
-    mediaInteractionHandler();
-    styleSheetObserver();
-    adoptedStyleSheetObserver();
-    styleDeclarationObserver();
-    fontObserver();
-    selectionObserver();
-    customElementObserver();
-    pluginHandlers.forEach((h) => h());
+    handlers.forEach((handler) => handler());
   });
+
+  try {
+    if (o.recordDOM) {
+      const result = initMutationObserver(o, o.doc);
+      mutationObserver = result.observer;
+      mutationBuffer = result.buffer;
+    }
+    handlers.push(initMoveObserver(o));
+    handlers.push(initMouseInteractionObserver(o));
+    handlers.push(initScrollObserver(o));
+    handlers.push(
+      initViewportResizeObserver(o, {
+        win: currentWindow,
+      }),
+    );
+    handlers.push(initInputObserver(o));
+    handlers.push(initMediaInteractionObserver(o));
+
+    if (o.recordDOM) {
+      handlers.push(initStyleSheetObserver(o, { win: currentWindow }));
+      handlers.push(initAdoptedStyleSheetObserver(o, o.doc));
+      handlers.push(
+        initStyleDeclarationObserver(o, {
+          win: currentWindow,
+        }),
+      );
+      if (o.collectFonts) {
+        handlers.push(initFontObserver(o));
+      }
+    }
+    handlers.push(initSelectionObserver(o));
+    handlers.push(initCustomElementObserver(o));
+
+    // plugins
+    for (const plugin of o.plugins) {
+      handlers.push(
+        plugin.observer(plugin.callback, currentWindow, plugin.options),
+      );
+    }
+  } catch (error) {
+    try {
+      cleanup();
+    } catch {
+      // Preserve the initialization error if best-effort cleanup also fails.
+    }
+    throw error;
+  }
+
+  return cleanup;
 }
 
 type CSSGroupingProp =
