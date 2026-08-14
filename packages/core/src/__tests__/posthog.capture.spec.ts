@@ -61,25 +61,39 @@ describe('PostHog Core', () => {
       })
     })
 
-    it('should serialize timestamp overrides as the equivalent UTC instant', async () => {
-      jest.setSystemTime(new Date('2022-01-01'))
+    it('should preserve Date timestamp overrides until serializing the equivalent UTC instant', async () => {
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 10 })
+      const timestamp = new Date('2021-01-02T03:04:05.000+05:30')
+      const captureListener = jest.fn()
+      posthog.on('capture', captureListener)
 
-      posthog.capture(
-        'custom-event',
-        { caller_timestamp: '2021-01-02T03:04:05.000+05:30' },
-        { timestamp: new Date('2021-01-02T03:04:05.000+05:30') }
-      )
+      posthog.capture('custom-event', {}, { timestamp })
+
+      expect(captureListener.mock.calls[0][0].timestamp).toBe(timestamp)
+      const queue = posthog.getPersistedProperty<any[]>(PostHogPersistedProperty.Queue)
+      expect(queue[0].message.timestamp).toBe(timestamp)
+
+      await posthog.flush()
+      const body = parseBody(mocks.fetch.mock.calls[0])
+      expect(body.batch[0]).toMatchObject({
+        event: 'custom-event',
+        timestamp: '2021-01-01T21:34:05.000Z',
+      })
+    })
+
+    it('should normalize string timestamp overrides from untyped callers at serialization', async () => {
+      const timestamp = '2021-01-02T03:04:05.123456+05:30'
+      const captureListener = jest.fn()
+      posthog.on('capture', captureListener)
+
+      posthog.capture('custom-event', {}, { timestamp: timestamp as unknown as Date })
+
+      expect(captureListener.mock.calls[0][0].timestamp).toBe(timestamp)
       await waitForPromises()
       const body = parseBody(mocks.fetch.mock.calls[0])
-      expect(body).toMatchObject({
-        api_key: 'TEST_API_KEY',
-        batch: [
-          {
-            event: 'custom-event',
-            properties: { caller_timestamp: '2021-01-02T03:04:05.000+05:30' },
-            timestamp: '2021-01-01T21:34:05.000Z',
-          },
-        ],
+      expect(body.batch[0]).toMatchObject({
+        event: 'custom-event',
+        timestamp: '2021-01-01T21:34:05.123456Z',
       })
     })
 
