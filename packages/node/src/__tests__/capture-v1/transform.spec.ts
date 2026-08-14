@@ -205,6 +205,11 @@ describe('capture v1 transform', () => {
       expect(event.timestamp).toBe('2024-01-15T05:00:00.000Z')
     })
 
+    it('preserves sub-millisecond precision when normalizing a string timestamp', () => {
+      const event = buildV1Event(baseMessage({ timestamp: '2024-01-15T10:30:00.123456+05:30' }))
+      expect(event.timestamp).toBe('2024-01-15T05:00:00.123456Z')
+    })
+
     it('converts a Date timestamp to the equivalent UTC ISO string', () => {
       const event = buildV1Event(
         baseMessage({ timestamp: new Date('2024-01-15T10:30:00.000-04:00') as unknown as JsonType })
