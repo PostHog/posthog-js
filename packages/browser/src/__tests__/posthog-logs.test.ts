@@ -20,6 +20,7 @@ describe('posthog-logs', () => {
         let mockPostHog: PostHog
         let logs: PostHogLogs
         let mockInitializeLogs: jest.Mock
+        let mockReplayConsoleBuffer: jest.Mock
         let mockLoadExternalDependency: jest.Mock
 
         const flagsResponse = {
@@ -41,6 +42,7 @@ describe('posthog-logs', () => {
 
             // Mock window and PostHog extensions
             mockInitializeLogs = jest.fn()
+            mockReplayConsoleBuffer = jest.fn()
             mockLoadExternalDependency = jest.fn((_instance, _name, callback) => {
                 callback(null) // Simulate successful loading
             })
@@ -48,7 +50,7 @@ describe('posthog-logs', () => {
             // Mock assignableWindow
             Object.defineProperty(assignableWindow, '__PosthogExtensions__', {
                 value: {
-                    logs: { initializeLogs: mockInitializeLogs },
+                    logs: { initializeLogs: mockInitializeLogs, replayConsoleBuffer: mockReplayConsoleBuffer },
                     loadExternalDependency: mockLoadExternalDependency,
                 },
                 writable: true,
@@ -288,25 +290,55 @@ describe('posthog-logs', () => {
                 expect((logs as any)._isRecordingConsole).toBe(false)
             })
 
-            it('should replay buffered entries through the console pipeline and restore console when remote config enables logs', () => {
+            it('should hand raw buffered entries to the entrypoint and unpatch console when remote config enables logs', () => {
                 logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
                 const originalLog = assignableWindow.console.log
                 logsFromPersisted.initialize()
 
-                assignableWindow.console.log('hello', { a: 1 })
+                const payload = { a: 1 }
+                assignableWindow.console.log('hello', payload)
 
-                const captureSpy = jest.spyOn(logsFromPersisted, '_captureConsoleLog').mockImplementation(() => {})
                 logsFromPersisted.onRemoteConfig(remoteConfigResult(true))
 
-                expect(assignableWindow.console.log).toBe(originalLog)
-                expect(captureSpy).toHaveBeenCalledWith(
-                    expect.objectContaining({
-                        body: 'hello {"a":1}',
-                        level: 'info',
-                        attributes: expect.objectContaining({ 'log.source': 'console.log' }),
-                    })
-                )
                 expect(mockLoadExternalDependency).toHaveBeenCalled()
+                expect(mockInitializeLogs).toHaveBeenCalled()
+                expect(assignableWindow.console.log).toBe(originalLog)
+                expect(mockReplayConsoleBuffer).toHaveBeenCalledWith(expect.anything(), [
+                    expect.objectContaining({ level: 'log', args: ['hello', payload], timestamp: expect.any(Number) }),
+                ])
+            })
+
+            it('should keep recording until the entrypoint has initialized', () => {
+                logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
+                logsFromPersisted.initialize()
+
+                assignableWindow.console.log('before config')
+
+                mockLoadExternalDependency.mockImplementationOnce((_instance, _name, callback) => {
+                    assignableWindow.console.log('while script loads')
+                    callback(null)
+                })
+                logsFromPersisted.onRemoteConfig(remoteConfigResult(true))
+
+                const entries = mockReplayConsoleBuffer.mock.calls[0][1]
+                expect(entries.map((e: any) => e.args[0])).toEqual(['before config', 'while script loads'])
+            })
+
+            it('should stop the recorder and drop the buffer when the logs script fails to load', () => {
+                logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
+                const originalLog = assignableWindow.console.log
+                logsFromPersisted.initialize()
+
+                assignableWindow.console.log('lost to a failed script load')
+
+                mockLoadExternalDependency.mockImplementationOnce((_instance, _name, callback) => {
+                    callback(new Error('load failed'))
+                })
+                logsFromPersisted.onRemoteConfig(remoteConfigResult(true))
+
+                expect(mockReplayConsoleBuffer).not.toHaveBeenCalled()
+                expect(assignableWindow.console.log).toBe(originalLog)
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(0)
             })
 
             it('should drop the buffer and restore console when remote config disables logs', () => {
@@ -316,13 +348,40 @@ describe('posthog-logs', () => {
 
                 assignableWindow.console.info('never sent')
 
-                const captureSpy = jest.spyOn(logsFromPersisted, '_captureConsoleLog')
                 logsFromPersisted.onRemoteConfig(remoteConfigResult(false))
 
                 expect(assignableWindow.console.info).toBe(originalInfo)
-                expect(captureSpy).not.toHaveBeenCalled()
+                expect(mockReplayConsoleBuffer).not.toHaveBeenCalled()
                 expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(0)
                 expect(mockLoadExternalDependency).not.toHaveBeenCalled()
+            })
+
+            it('should not buffer when the user has opted out', () => {
+                const instance = buildInstanceWithPersistedBit()
+                ;(instance as any).is_capturing = jest.fn(() => false)
+                logsFromPersisted = new PostHogLogs(instance)
+                logsFromPersisted.initialize()
+
+                assignableWindow.console.log('opted out')
+                expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(0)
+            })
+
+            it('should stop the recorder after the max age passes with no resolution', () => {
+                jest.useFakeTimers()
+                try {
+                    logsFromPersisted = new PostHogLogs(buildInstanceWithPersistedBit())
+                    const originalLog = assignableWindow.console.log
+                    logsFromPersisted.initialize()
+
+                    assignableWindow.console.log('held too long')
+                    jest.advanceTimersByTime(30000)
+
+                    expect(assignableWindow.console.log).toBe(originalLog)
+                    expect((logsFromPersisted as any)._consoleBuffer).toHaveLength(0)
+                    expect((logsFromPersisted as any)._isRecordingConsole).toBe(false)
+                } finally {
+                    jest.useRealTimers()
+                }
             })
 
             it('should stop recording and drop the buffer when remote config fails', () => {

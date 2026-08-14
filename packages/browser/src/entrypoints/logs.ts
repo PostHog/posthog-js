@@ -2,6 +2,7 @@ import { assignableWindow } from '../utils/globals'
 import { PostHog } from '../posthog-core'
 import { isArray, isBoolean, isFunction, isNull, isNumber, isObject } from '@posthog/core'
 import type { LogSeverityLevel } from '@posthog/types'
+import type { BufferedConsoleEntry } from '../types'
 
 const LOG_BODY_SIZE_LIMIT = 10000
 const LOG_ATTRIBUTES_LIMIT = 50
@@ -416,5 +417,34 @@ const initializeLogs = (posthog: PostHog) => {
     }
 }
 
+// Console calls the core bundle recorded before this script loaded.
+const replayConsoleBuffer = (posthog: PostHog, entries: BufferedConsoleEntry[]) => {
+    if (!posthog.is_capturing()) {
+        return
+    }
+    for (const entry of entries) {
+        try {
+            const {
+                body,
+                truncated,
+                attributes: flattenedAttributes,
+            } = stringifyArgsSafely(entry.args, LOG_BODY_SIZE_LIMIT)
+            posthog.logs?._captureConsoleLog({
+                level: LEVEL_MAP[entry.level],
+                body,
+                attributes: {
+                    'log.source': `console.${entry.level}`,
+                    'log.buffered_at': entry.timestamp,
+                    host: assignableWindow.location.host,
+                    ...(truncated ? { body_truncated: 'true' } : {}),
+                    ...flattenedAttributes,
+                },
+            })
+        } catch {
+            // A single unserializable entry should not drop the rest of the buffer.
+        }
+    }
+}
+
 assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
-assignableWindow.__PosthogExtensions__.logs = { initializeLogs }
+assignableWindow.__PosthogExtensions__.logs = { initializeLogs, replayConsoleBuffer }
