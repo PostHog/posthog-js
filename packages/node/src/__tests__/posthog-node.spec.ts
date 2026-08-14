@@ -422,15 +422,21 @@ describe('PostHog Node.js', () => {
       }
     )
 
-    it('should allow overriding timestamp', async () => {
+    it('should serialize timestamp overrides as the equivalent UTC instant', async () => {
       expect(mockedFetch).toHaveBeenCalledTimes(0)
-      posthog.capture({ event: 'custom-time', distinctId: '123', timestamp: new Date('2021-02-03') })
+      posthog.capture({
+        event: 'custom-time',
+        distinctId: '123',
+        properties: { callerTimestamp: '2021-02-03T04:05:06.000-04:00' },
+        timestamp: new Date('2021-02-03T04:05:06.000-04:00'),
+      })
       await waitForFlushTimer()
       const batchEvents = getLastBatchEvents()
       expect(batchEvents).toMatchObject([
         {
           distinct_id: '123',
-          timestamp: '2021-02-03T00:00:00.000Z',
+          properties: { callerTimestamp: '2021-02-03T04:05:06.000-04:00' },
+          timestamp: '2021-02-03T08:05:06.000Z',
           event: 'custom-time',
           uuid: expect.any(String),
         },

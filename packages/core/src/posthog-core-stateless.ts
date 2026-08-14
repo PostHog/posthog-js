@@ -1263,6 +1263,21 @@ export abstract class PostHogCoreStateless {
     return sanitizedMessage
   }
 
+  private normalizeTimestampForWire(timestamp: unknown): unknown {
+    const parsedTimestamp =
+      timestamp instanceof Date ? timestamp : typeof timestamp === 'string' ? new Date(timestamp) : null
+    if (!parsedTimestamp || Number.isNaN(parsedTimestamp.getTime())) {
+      return timestamp
+    }
+
+    const normalized = parsedTimestamp.toISOString()
+    const fractionalSeconds =
+      typeof timestamp === 'string' ? timestamp.match(/\.(\d+)(?:Z|[+-]\d{2}:?\d{2})?$/i)?.[1] : undefined
+    return fractionalSeconds && fractionalSeconds.length > 3
+      ? normalized.replace(/\.\d{3}Z$/, `.${fractionalSeconds}Z`)
+      : normalized
+  }
+
   protected prepareMessage(_message: any, options?: PostHogCaptureOptions): PostHogEventProperties {
     const message = {
       ..._message,
@@ -1459,7 +1474,14 @@ export abstract class PostHogCoreStateless {
   ): Promise<void> {
     const data: Record<string, any> = {
       api_key: this.apiKey,
-      batch: batchMessages,
+      batch: batchMessages.map((message) => {
+        if (!message) {
+          return message
+        }
+
+        const timestamp = this.normalizeTimestampForWire(message.timestamp)
+        return timestamp === message.timestamp ? message : { ...message, timestamp }
+      }),
       sent_at: currentISOTime(),
     }
 
