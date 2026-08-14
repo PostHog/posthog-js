@@ -1,4 +1,17 @@
 {
+  "PostHog/posthog-js/issue/4522": {
+    "key": "PostHog/posthog-js/issue/4522",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4522",
+    "url": "https://github.com/PostHog/posthog-js/issues/4522",
+    "conclusion": "Confirmed session-replay teardown bug in the bundled rrweb recorder.",
+    "labels": [
+      "feature/replay",
+      "team/client-libraries"
+    ],
+    "closed": false,
+    "updatedAt": "2026-08-14T08:29:43.692Z"
+  },
   "PostHog/posthog-js/issue/4507": {
     "key": "PostHog/posthog-js/issue/4507",
     "repo": "PostHog/posthog-js",
