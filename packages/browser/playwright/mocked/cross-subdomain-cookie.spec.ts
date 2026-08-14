@@ -87,7 +87,7 @@ test('already-open sibling subdomains adopt identify and reset cookie changes', 
     await page.evaluate(() => {
         const posthog = (window as WindowWithPostHog).posthog
         posthog?.setPersonPropertiesForFlags({ plan: 'pro' }, false)
-        posthog?.setGroupPropertiesForFlags({ organization: { plan: 'enterprise' } }, false)
+        posthog?.group('organization', 'previous-organization', { plan: 'enterprise' })
     })
     const flagsRequests: Request[] = []
     page.on('request', (request) => {
@@ -103,6 +103,7 @@ test('already-open sibling subdomains adopt identify and reset cookie changes', 
     expect(await captureDistinctId(page, 'after-sibling-reset')).toBe(resetAnonymousId)
     const resetEvent = (await page.capturedEvents()).find((event) => event.event === 'after-sibling-reset')
     expect(resetEvent?.properties).not.toHaveProperty('$feature/session-recording-player')
+    expect(resetEvent?.properties).not.toHaveProperty('$groups')
     expect(
         await page.evaluate(() => (window as WindowWithPostHog).posthog?.get_property('cross_domain_property'))
     ).toBeUndefined()

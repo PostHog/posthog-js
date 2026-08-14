@@ -6,8 +6,8 @@ import {
     cookieStore,
     createLocalPlusCookieStore,
     getCookiePersistedProperties,
-    getCookiePersistedPropertiesFromMetadata,
     getCookiePersistedPropertiesMetadata,
+    getCookiePersistedPropertiesMetadataState,
     getCookiePropertiesFingerprint,
     getSafeCookieProperties,
     localStore,
@@ -217,10 +217,7 @@ export class PostHogPersistence {
                 )
                 const customCookieProperties = this._config.cookie_persisted_properties || []
                 const metadata = getCookiePersistedPropertiesMetadata(cookieProperties, customCookieProperties)
-                const expectedFingerprint =
-                    JSON.stringify(cookieProperties) +
-                    '|' +
-                    (customCookieProperties.length > 0 ? JSON.stringify(metadata) : '')
+                const expectedFingerprint = JSON.stringify(cookieProperties) + '|' + JSON.stringify(metadata)
                 // `localStorage+cookie._set` reports localStorage success even if
                 // its best-effort cookie mirror fails. Advance the observed
                 // fingerprint only when the shared cookie actually contains this
@@ -291,10 +288,8 @@ export class PostHogPersistence {
         }
         this._lastSeenCookiePropertiesFingerprint = cookieFingerprint
         this._lastSeenMainCookieValue = cookieValue
-        const authoritativeCookieProperties = [
-            ...COOKIE_PERSISTED_PROPERTIES,
-            ...getCookiePersistedPropertiesFromMetadata(this._name, cookieValue),
-        ]
+        const metadataState = getCookiePersistedPropertiesMetadataState(this._name, cookieValue)
+        const authoritativeCookieProperties = [...COOKIE_PERSISTED_PROPERTIES, ...metadataState.properties]
         const invalidCookieProperties: Record<string, true> = {}
         Object.keys(cookieProperties).forEach((key) => {
             const value = cookieProperties[key]
@@ -320,7 +315,14 @@ export class PostHogPersistence {
                 !(key in cookieProperties) &&
                 !invalidCookieProperties[key]
             ) {
-                delete nextProps[key]
+                const localValue = nextProps[key]
+                const legacyFalsyBuiltIn =
+                    !metadataState.isValid &&
+                    COOKIE_PERSISTED_PROPERTIES.indexOf(key) !== -1 &&
+                    (localValue === false || localValue === 0)
+                if (!legacyFalsyBuiltIn) {
+                    delete nextProps[key]
+                }
             }
         })
         this.props = extend(nextProps, cookieProperties)

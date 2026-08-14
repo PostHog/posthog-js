@@ -14,6 +14,7 @@ import {
     PRODUCT_TOURS,
     PRODUCT_TOURS_ACTIVATED,
     SESSION_ID,
+    SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_REMOTE_CONFIG,
     SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX,
     SURVEYS,
@@ -925,6 +926,19 @@ describe('persistence', () => {
 
                 expect(cookieStore._parse(persistenceName).custom_property).toBe(customValue)
                 expect(new PostHogPersistence(config).props.custom_property).toBe(customValue)
+            })
+
+            it('flag on: a live tab preserves a falsy built-in omitted by a legacy sibling writer', () => {
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+                lib.register({ distinct_id: 'identified-user', [SESSION_RECORDING_IS_SAMPLED]: false })
+
+                // Older SDKs filtered falsy values while constructing the cookie.
+                // Their write invalidates the current sidecar fingerprint, so an
+                // omitted false is not an authoritative removal.
+                document.cookie = encodeCookie({ distinct_id: 'identified-user' })
+
+                expect(lib.syncCookieProperties()).toBe(true)
+                expect(lib.props[SESSION_RECORDING_IS_SAMPLED]).toBe(false)
             })
 
             it('flag on: a live tab adopts a sibling identify before its next persistence write', () => {

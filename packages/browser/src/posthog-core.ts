@@ -1633,6 +1633,40 @@ export class PostHog implements PostHogInterface {
         }
     }
 
+    private _processCookieIdentityChange(reloadFeatureFlags: boolean = true): boolean {
+        if (!this.persistence?.consumeCookieIdentityChange()) {
+            return false
+        }
+
+        this._cachedPersonProperties = null
+        // All local flag state is identity-bound. A sibling can move directly
+        // from one identified user to another between synchronization points,
+        // so cleanup cannot depend on observing an intermediate anonymous state.
+        const identityBoundProperties = [
+            STORED_PERSON_PROPERTIES_KEY,
+            STORED_GROUP_PROPERTIES_KEY,
+            PERSISTENCE_ACTIVE_FEATURE_FLAGS,
+            ENABLED_FEATURE_FLAGS,
+            PERSISTENCE_FEATURE_FLAG_DETAILS,
+            PERSISTENCE_FEATURE_FLAG_PAYLOADS,
+            PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+            PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
+            PERSISTENCE_FEATURE_FLAG_ERRORS,
+        ]
+        // reset() clears groups. Mirror that when adopting a sibling reset, but
+        // preserve groups for direct identified-user transitions as identify() does.
+        if (this.persistence.get_property(USER_STATE) === USER_STATE_ANONYMOUS) {
+            identityBoundProperties.push('$groups')
+        }
+        this.persistence.unregister(identityBoundProperties)
+        this.featureFlags?.reset()
+        if (reloadFeatureFlags) {
+            this.reloadFeatureFlags()
+        }
+        this.unregister(FLAG_CALL_REPORTED)
+        return true
+    }
+
     /**
      * This method is used internally to calculate the event properties before sending it to PostHog. It can also be
      * used by integrations (e.g. Segment) to enrich events with PostHog properties before sending them to Segment,
@@ -1662,26 +1696,7 @@ export class PostHog implements PostHogInterface {
         // reading any event properties so already-open sibling subdomains pick
         // up identify/reset changes, including for replay snapshot events.
         this.persistence.syncCookieProperties()
-        if (this.persistence.consumeCookieIdentityChange()) {
-            this._cachedPersonProperties = null
-            // All local flag state is identity-bound. A sibling can move directly
-            // from one identified user to another between synchronization points,
-            // so cleanup cannot depend on observing an intermediate anonymous state.
-            this.persistence.unregister([
-                STORED_PERSON_PROPERTIES_KEY,
-                STORED_GROUP_PROPERTIES_KEY,
-                PERSISTENCE_ACTIVE_FEATURE_FLAGS,
-                ENABLED_FEATURE_FLAGS,
-                PERSISTENCE_FEATURE_FLAG_DETAILS,
-                PERSISTENCE_FEATURE_FLAG_PAYLOADS,
-                PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
-                PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
-                PERSISTENCE_FEATURE_FLAG_ERRORS,
-            ])
-            this.featureFlags?.reset()
-            this.reloadFeatureFlags()
-            this.unregister(FLAG_CALL_REPORTED)
-        }
+        this._processCookieIdentityChange()
 
         // set defaults
         const startTimestamp = readOnly ? undefined : this.persistence.remove_event_timer(eventName)
@@ -2769,6 +2784,10 @@ export class PostHog implements PostHogInterface {
         const preSyncDistinctId = this.get_distinct_id()
         const identityChangedDuringSync =
             this.persistence.syncCookieProperties() && this.get_distinct_id() !== preSyncDistinctId
+        // Clean up the adopted identity before applying this call's explicit
+        // person properties. Consuming it during the $identify/$set capture would
+        // otherwise remove the properties that were just supplied by the caller.
+        const processedCookieIdentityChange = this._processCookieIdentityChange(false)
         const cookieSyncSuppressionStarted = this.persistence._beginCookieSyncSuppression()
         let identifyCompleted = false
         try {
@@ -2863,7 +2882,7 @@ export class PostHog implements PostHogInterface {
             // Reload active feature flags if the distinct ID changes. Clear stored flag calls because they belong to the
             // previous identity. A same-ID transition only needs a reload when the caller supplied properties that can
             // affect flag evaluation; the anonymous/identified state itself is not part of the /flags request.
-            if (identityDidChange || identityChangedDuringSync) {
+            if (identityDidChange || identityChangedDuringSync || processedCookieIdentityChange) {
                 this.reloadFeatureFlags()
                 if (this.featureFlags) {
                     this.featureFlags.resetFlagCallReported()

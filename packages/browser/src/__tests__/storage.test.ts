@@ -1,4 +1,5 @@
 import { window } from '@posthog/browser-common/utils/globals'
+import { SESSION_RECORDING_IS_SAMPLED } from '../constants'
 import {
     resetSessionStorageSupported,
     seekFirstNonPublicSubDomain,
@@ -126,6 +127,45 @@ describe('createLocalPlusCookieStore', () => {
         expect(value.distinct_id).toBe('cookie-id')
         expect(value).not.toHaveProperty('polluted')
         expect(Object.getPrototypeOf(value)).toBe(Object.prototype)
+    })
+
+    it('marks built-in-only snapshots as written by the current SDK', () => {
+        const name = 'ph_current_builtin_posthog'
+        const store = createLocalPlusCookieStore([], true)
+
+        store._set(name, { distinct_id: 'abc' })
+
+        expect(cookieStore._parse(getCookiePersistedPropertiesMetadataName(name))).toEqual({
+            p: [],
+            f: expect.any(String),
+        })
+    })
+
+    it('preserves a falsy built-in omitted by a legacy cookie writer', () => {
+        const name = 'ph_legacy_falsy_posthog'
+        const store = createLocalPlusCookieStore([], true)
+        window?.localStorage.setItem(
+            name,
+            JSON.stringify({ distinct_id: 'abc', [SESSION_RECORDING_IS_SAMPLED]: false })
+        )
+        cookieStore._set(name, { distinct_id: 'abc' })
+
+        expect(store._parse(name)).toEqual({
+            distinct_id: 'abc',
+            [SESSION_RECORDING_IS_SAMPLED]: false,
+        })
+    })
+
+    it('removes a falsy built-in omitted by a current authoritative snapshot', () => {
+        const name = 'ph_current_falsy_posthog'
+        const store = createLocalPlusCookieStore([], true)
+        store._set(name, { distinct_id: 'abc' })
+        window?.localStorage.setItem(
+            name,
+            JSON.stringify({ distinct_id: 'abc', [SESSION_RECORDING_IS_SAMPLED]: false })
+        )
+
+        expect(store._parse(name)).toEqual({ distinct_id: 'abc' })
     })
 
     it('stores custom-key metadata outside the event-visible persistence cookie', () => {

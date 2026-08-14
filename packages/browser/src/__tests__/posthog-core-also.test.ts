@@ -686,6 +686,7 @@ describe('posthog core', () => {
 
             expect(posthog._cachedPersonProperties).toBeNull()
             expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+            expect(persistence.unregister).toHaveBeenCalledWith(expect.arrayContaining(['$groups']))
             expect(persistence.unregister).toHaveBeenCalledWith(FLAG_CALL_REPORTED)
         })
 

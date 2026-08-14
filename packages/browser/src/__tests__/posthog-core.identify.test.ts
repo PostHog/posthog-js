@@ -74,6 +74,29 @@ describe('identify()', () => {
         expect(instance.featureFlags?.resetFlagCallReported).toHaveBeenCalledTimes(1)
     })
 
+    it('cleans an adopted cookie identity before applying explicit identify properties', () => {
+        instance.config.cookieWinsOnConflict = true
+        jest.spyOn(instance.persistence!, 'syncCookieProperties')
+            .mockImplementationOnce(() => {
+                instance.persistence!.props.distinct_id = 'sibling-anonymous-id'
+                instance.persistence!.props.$user_state = 'anonymous'
+                return true
+            })
+            .mockReturnValue(false)
+        jest.spyOn(instance.persistence!, 'consumeCookieIdentityChange')
+            .mockReturnValueOnce(true)
+            .mockReturnValue(false)
+        const unregister = jest.spyOn(instance.persistence!, 'unregister')
+        const setPersonPropertiesForFlags = instance.featureFlags!.setPersonPropertiesForFlags as jest.Mock
+
+        instance.identify('a-new-id', { plan: 'pro' })
+
+        expect(unregister.mock.invocationCallOrder[0]).toBeLessThan(
+            setPersonPropertiesForFlags.mock.invocationCallOrder[0]!
+        )
+        expect(setPersonPropertiesForFlags).toHaveBeenCalledWith({ $set: { plan: 'pro' }, $set_once: {} }, false)
+    })
+
     it('releases suppression without publishing a final snapshot when identify throws', () => {
         instance.config.cookieWinsOnConflict = true
         jest.spyOn(instance.persistence!, '_beginCookieSyncSuppression').mockReturnValue(true)

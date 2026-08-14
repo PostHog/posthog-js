@@ -541,6 +541,7 @@
         "_prepareFeatureFlagsForCallbacks",
         "_previousPageViewProperties",
         "_primary_window_exists_storage_key",
+        "_processCookieIdentityChange",
         "_processInitTaskQueue",
         "_processPrefillData",
         "_processQueuedCompressionEventSync",

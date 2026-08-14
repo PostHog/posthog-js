@@ -255,10 +255,11 @@ export const COOKIE_PERSISTED_PROPERTIES = [
     USER_STATE,
 ]
 
-// Custom-key metadata lives in a separate cookie so older SDKs cannot merge it
-// into event-visible persistence. The payload is tied to the exact main-cookie
-// snapshot; mixed-version or concurrent main-cookie writes invalidate stale
-// metadata instead of applying incorrect removal semantics.
+// Snapshot metadata lives in a separate cookie so older SDKs cannot merge it
+// into event-visible persistence. Besides custom-key authority, its presence
+// distinguishes current writers (which preserve falsy values) from legacy writers
+// that omitted them. The payload is tied to the exact main-cookie snapshot;
+// mixed-version or concurrent writes invalidate stale removal semantics.
 const COOKIE_PERSISTED_PROPERTIES_METADATA_SUFFIX = '_cpm'
 
 export const getCookiePersistedPropertiesMetadataName = (name: string): string =>
@@ -314,20 +315,26 @@ export const getCookiePersistedPropertiesMetadata = (
     f: getCookieSnapshotFingerprint(JSON.stringify(cookieProperties)),
 })
 
-export const getCookiePersistedPropertiesFromMetadata = (
+export const getCookiePersistedPropertiesMetadataState = (
     name: string,
     cookieValue: string | undefined
-): readonly string[] => {
+): { properties: readonly string[]; isValid: boolean } => {
     if (!cookieValue) {
-        return []
+        return { properties: [], isValid: false }
     }
     try {
         const metadata = cookieStore._parse(getCookiePersistedPropertiesMetadataName(name))
-        return metadata?.f === getCookieSnapshotFingerprint(cookieValue) && isArray(metadata.p) ? metadata.p : []
+        const isValid = metadata?.f === getCookieSnapshotFingerprint(cookieValue) && isArray(metadata.p)
+        return { properties: isValid ? metadata.p : [], isValid }
     } catch {
-        return []
+        return { properties: [], isValid: false }
     }
 }
+
+export const getCookiePersistedPropertiesFromMetadata = (
+    name: string,
+    cookieValue: string | undefined
+): readonly string[] => getCookiePersistedPropertiesMetadataState(name, cookieValue).properties
 
 export const getCookiePropertiesFingerprint = (name: string, cookieValue: string): string =>
     cookieValue + '|' + (cookieStore._get(getCookiePersistedPropertiesMetadataName(name)) || '')
@@ -364,10 +371,8 @@ export const createLocalPlusCookieStore = (
                 if (preferCookieOnConflict) {
                     // Built-in keys are stable and authoritative for legacy cookies too.
                     // Separate metadata adds only custom keys understood by the writer.
-                    const authoritativeCookieProperties = [
-                        ...COOKIE_PERSISTED_PROPERTIES,
-                        ...getCookiePersistedPropertiesFromMetadata(name, cookieValue),
-                    ]
+                    const metadataState = getCookiePersistedPropertiesMetadataState(name, cookieValue)
+                    const authoritativeCookieProperties = [...COOKIE_PERSISTED_PROPERTIES, ...metadataState.properties]
                     // Defensive: skip null / empty-string cookie values so a malformed
                     // legacy cookie cannot wipe out valid localStorage data.
                     const safeCookieProperties: Properties = {}
@@ -383,7 +388,14 @@ export const createLocalPlusCookieStore = (
                     if (Object.keys(safeCookieProperties).length > 0) {
                         cookiePropertiesToPersist.forEach((key) => {
                             if (authoritativeCookieProperties.indexOf(key) !== -1 && !(key in cookieProperties)) {
-                                delete localStorageData[key]
+                                const localValue = localStorageData[key]
+                                const legacyFalsyBuiltIn =
+                                    !metadataState.isValid &&
+                                    COOKIE_PERSISTED_PROPERTIES.indexOf(key) !== -1 &&
+                                    (localValue === false || localValue === 0)
+                                if (!legacyFalsyBuiltIn) {
+                                    delete localStorageData[key]
+                                }
                             }
                         })
                         if (
@@ -430,7 +442,7 @@ export const createLocalPlusCookieStore = (
                 const cookiePersistedProperties = getCookiePersistedProperties(value, customCookieProperties)
 
                 if (Object.keys(cookiePersistedProperties).length) {
-                    if (preferCookieOnConflict && customCookieProperties.length > 0) {
+                    if (preferCookieOnConflict) {
                         const metadataName = getCookiePersistedPropertiesMetadataName(name)
                         const metadata = getCookiePersistedPropertiesMetadata(
                             cookiePersistedProperties,
@@ -438,7 +450,8 @@ export const createLocalPlusCookieStore = (
                         )
                         // Publish and verify metadata before the main snapshot. A
                         // reader in between sees metadata that does not match the
-                        // old main cookie and conservatively retains custom keys.
+                        // old main cookie and conservatively retains custom keys and
+                        // legacy falsy built-ins.
                         // If the sidecar cannot land, do not publish a main snapshot
                         // whose omitted custom keys would have ambiguous semantics.
                         cookieStore._set(metadataName, metadata, days, cross_subdomain, is_secure, debug)
