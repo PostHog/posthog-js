@@ -1019,6 +1019,22 @@ describe('persistence', () => {
                 expect(lib.consumeCookieIdentityChange()).toBe(true)
             })
 
+            it('flag on: an anonymous ID change from a legacy writer clears prior event properties', () => {
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+                lib.register({
+                    distinct_id: 'old-anonymous',
+                    $user_state: 'anonymous',
+                    prior_user_property: 'private-value',
+                })
+
+                // Legacy writers can omit $user_state from their reset snapshot.
+                document.cookie = encodeCookie({ distinct_id: 'new-anonymous' })
+
+                expect(lib.syncCookieProperties()).toBe(true)
+                expect(lib.props.distinct_id).toBe('new-anonymous')
+                expect(lib.props.prior_user_property).toBeUndefined()
+            })
+
             it('flag on: a live tab adopts a sibling identify before its next persistence write', () => {
                 document.cookie = encodeCookie({ distinct_id: 'anonymous', $user_state: 'anonymous' })
                 localStorage.setItem(
@@ -1402,7 +1418,7 @@ describe('persistence', () => {
                 expect(cookieStore._parse(persistenceName).distinct_id).toBe('identified-user')
             })
 
-            it('flag on: localStorage-only keys are preserved (cookie does not carry them)', () => {
+            it('flag on: a legacy anonymous reset clears event properties but preserves hidden local state', () => {
                 document.cookie = encodeCookie({ distinct_id: 'from_cookie' })
                 localStorage.setItem(
                     persistenceName,
@@ -1418,7 +1434,7 @@ describe('persistence', () => {
 
                 expect(lib.props.distinct_id).toBe('from_cookie')
                 expect(lib.props.$surveys).toEqual(['s1', 's2'])
-                expect(lib.props.super_prop).toBe('value')
+                expect(lib.props.super_prop).toBeUndefined()
             })
 
             it('flag on: empty cookie is a no-op, localStorage round-trips intact', () => {

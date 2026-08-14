@@ -349,7 +349,9 @@ export class PostHogPersistence {
             this._cookieIdentityChangePending = true
             const siblingReset =
                 nextUserState === USER_STATE_ANONYMOUS &&
-                (previousUserState === USER_STATE_IDENTIFIED || cookieProperties[USER_STATE] === USER_STATE_ANONYMOUS)
+                (previousUserState === USER_STATE_IDENTIFIED ||
+                    cookieProperties[USER_STATE] === USER_STATE_ANONYMOUS ||
+                    (!isUndefined(previousDistinctId) && nextDistinctId !== previousDistinctId))
             if (siblingReset) {
                 // reset() clears event-visible persistence. Mirror that for a
                 // sibling reset without discarding hidden SDK state or values
@@ -553,7 +555,8 @@ export class PostHogPersistence {
                 const siblingReset =
                     nextUserState === USER_STATE_ANONYMOUS &&
                     (previousUserState === USER_STATE_IDENTIFIED ||
-                        cookieEntryBeforeMerge[USER_STATE] === USER_STATE_ANONYMOUS)
+                        cookieEntryBeforeMerge[USER_STATE] === USER_STATE_ANONYMOUS ||
+                        (!isUndefined(previousDistinctId) && nextDistinctId !== previousDistinctId))
                 if (siblingReset) {
                     clearStaleEventProperties(nextProps, cookieEntryBeforeMerge)
                 }
