@@ -17,6 +17,7 @@ import {
     EVENT_PAGELEAVE,
     EVENT_PAGEVIEW,
     FLAG_CALL_REPORTED,
+    GROUPS,
     PEOPLE_DISTINCT_ID_KEY,
     PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
     SDK_DEBUG_EXTENSIONS_INIT_METHOD,
@@ -1633,13 +1634,12 @@ export class PostHog implements PostHogInterface {
         // All local flag state is identity-bound. A sibling can move directly
         // from one identified user to another between synchronization points,
         // so cleanup cannot depend on observing an intermediate anonymous state.
-        const identityBoundProperties = [...COOKIE_IDENTITY_BOUND_LOCAL_PROPERTIES]
+        this.persistence.unregister(COOKIE_IDENTITY_BOUND_LOCAL_PROPERTIES)
         // reset() clears groups. Mirror that when adopting a sibling reset, but
         // preserve groups for direct identified-user transitions as identify() does.
         if (this.persistence.get_property(USER_STATE) === USER_STATE_ANONYMOUS) {
-            identityBoundProperties.push('$groups')
+            this.persistence.unregister(GROUPS)
         }
-        this.persistence.unregister(identityBoundProperties)
         this.featureFlags?.reset()
         if (reloadFeatureFlags) {
             this.reloadFeatureFlags()

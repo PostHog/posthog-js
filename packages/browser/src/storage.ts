@@ -6,6 +6,7 @@ import {
     ENABLED_FEATURE_FLAGS,
     ENABLE_PERSON_PROCESSING,
     FLAG_CALL_REPORTED,
+    GROUPS,
     INITIAL_PERSON_INFO,
     PERSISTENCE_ACTIVE_FEATURE_FLAGS,
     PERSISTENCE_FEATURE_FLAG_DETAILS,
@@ -441,7 +442,7 @@ export const createLocalPlusCookieStore = (
                                 delete localStorageData.$user_id
                             }
                             if (safeCookieProperties[USER_STATE] !== USER_STATE_IDENTIFIED) {
-                                delete localStorageData.$groups
+                                delete localStorageData[GROUPS]
                             }
                             delete localStorageData.__alias
                         }
