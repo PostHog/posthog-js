@@ -933,6 +933,30 @@ describe('persistence', () => {
                 expect(lib.props.$groups).toBeUndefined()
             })
 
+            it('flag on: startup identity adoption clears stale split flag storage', () => {
+                document.cookie = encodeCookie({ distinct_id: 'new-anonymous', $user_state: 'anonymous' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({ distinct_id: 'identified-user', $user_state: 'identified' })
+                )
+                localStorage.setItem(
+                    `${persistenceName}__flags`,
+                    JSON.stringify({
+                        [ENABLED_FEATURE_FLAGS]: ['previous-flag'],
+                        [PERSISTENCE_FEATURE_FLAG_DETAILS]: { 'previous-flag': { key: 'previous-flag' } },
+                    })
+                )
+
+                const lib = new PostHogPersistence({
+                    ...makeConfig('localStorage+cookie', true),
+                    split_storage: true,
+                })
+
+                expect(lib.props[ENABLED_FEATURE_FLAGS]).toBeUndefined()
+                expect(lib.props[PERSISTENCE_FEATURE_FLAG_DETAILS]).toBeUndefined()
+                expect(localStore._parse(`${persistenceName}__flags`)).toEqual({})
+            })
+
             it('flag on: preserves a newly configured cookie-backed property when a legacy cookie omits it', () => {
                 document.cookie = encodeCookie({ distinct_id: 'identified-user' })
                 localStorage.setItem(

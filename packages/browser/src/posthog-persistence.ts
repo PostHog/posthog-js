@@ -2,6 +2,7 @@
 
 import { each, extend, stripEmptyProperties, addEventListener } from '@posthog/browser-common/utils/general-utils'
 import {
+    COOKIE_IDENTITY_BOUND_LOCAL_PROPERTIES,
     COOKIE_PERSISTED_PROPERTIES,
     cookieStore,
     createLocalPlusCookieStore,
@@ -20,6 +21,7 @@ import {
     ALIAS_ID_KEY,
     DISTINCT_ID,
     EVENT_TIMERS_KEY,
+    GROUPS,
     INITIAL_CAMPAIGN_PARAMS,
     INITIAL_PERSON_INFO,
     INITIAL_REFERRER_INFO,
@@ -498,6 +500,9 @@ export class PostHogPersistence {
             return
         }
 
+        const reconcileCookieIdentity =
+            this._config.cookieWinsOnConflict && this._config.persistence.toLowerCase() === 'localstorage+cookie'
+        const localEntryBeforeMerge = reconcileCookieIdentity ? localStore._parse(this._name) : null
         const entry = this._storage._parse(this._name)
 
         if (entry) {
@@ -506,6 +511,49 @@ export class PostHogPersistence {
 
         if (this._splitStorage) {
             this._loadGroupEntries()
+        }
+
+        if (reconcileCookieIdentity && entry) {
+            const previousDistinctId = localEntryBeforeMerge?.[DISTINCT_ID]
+            const previousUserState = localEntryBeforeMerge?.[USER_STATE] ?? USER_STATE_ANONYMOUS
+            const nextDistinctId = entry[DISTINCT_ID]
+            const nextUserState = entry[USER_STATE] ?? USER_STATE_ANONYMOUS
+            if (nextDistinctId !== previousDistinctId || nextUserState !== previousUserState) {
+                const nextProps = extend({}, this.props)
+                COOKIE_IDENTITY_BOUND_LOCAL_PROPERTIES.forEach((key) => delete nextProps[key])
+                if (nextUserState === USER_STATE_ANONYMOUS) {
+                    delete nextProps[GROUPS]
+                }
+                this.props = nextProps
+
+                // Split entries are loaded after the main blob, so remove the
+                // previous identity's grouped flag state from both memory and its
+                // localStorage slot before a future load can restore it again.
+                const affectedGroups = new Set<PersistenceStorageGroup>()
+                COOKIE_IDENTITY_BOUND_LOCAL_PROPERTIES.forEach((key) => {
+                    const group = getPersistenceKeyPolicy(key)?.storageGroup
+                    if (group) {
+                        affectedGroups.add(group)
+                    }
+                })
+                affectedGroups.forEach((group) => {
+                    const groupProps: Properties = {}
+                    each(this.props, (value, key) => {
+                        if (getPersistenceKeyPolicy(key)?.storageGroup === group) {
+                            groupProps[key] = value
+                        }
+                    })
+                    if (isEmptyObject(groupProps)) {
+                        localStore._remove(this._groupEntryName(group))
+                        this._slotState[group] = {}
+                    } else if (localStore._set(this._groupEntryName(group), groupProps)) {
+                        this._slotState[group] = {
+                            persisted: true,
+                            fingerprint: this._entryFingerprint(groupProps, group),
+                        }
+                    }
+                })
+            }
         }
 
         // `_parse()` may have read a different cookie than a reread here if a
