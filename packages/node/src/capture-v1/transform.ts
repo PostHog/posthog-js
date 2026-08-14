@@ -74,7 +74,7 @@ function toRfc3339(timestamp: unknown): string {
     }
 
     const normalized = asDate.toISOString()
-    const fractionalSeconds = timestamp.match(/\.(\d+)(?:Z|[+-]\d{2}:?\d{2})$/i)?.[1]
+    const fractionalSeconds = timestamp.match(/\.(\d+)(?:Z|[+-]\d{2}:?\d{2})?$/i)?.[1]
     return fractionalSeconds && fractionalSeconds.length > 3
       ? normalized.replace(/\.\d{3}Z$/, `.${fractionalSeconds}Z`)
       : normalized

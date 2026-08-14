@@ -219,8 +219,8 @@ describe('capture v1 transform', () => {
 
     it('normalizes a timezone-less string from the configured non-UTC timezone', () => {
       expect(process.env.TZ).toBe('America/Los_Angeles')
-      const event = buildV1Event(baseMessage({ timestamp: '2024-01-15T10:30:00.000' }))
-      expect(event.timestamp).toBe('2024-01-15T18:30:00.000Z')
+      const event = buildV1Event(baseMessage({ timestamp: '2024-01-15T10:30:00.123456' }))
+      expect(event.timestamp).toBe('2024-01-15T18:30:00.123456Z')
     })
 
     it('treats a numeric timestamp as epoch milliseconds', () => {
