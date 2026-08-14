@@ -20,11 +20,20 @@ import { document, window } from '@posthog/browser-common/utils/globals'
 import {
     ALIAS_ID_KEY,
     DISTINCT_ID,
+    ENABLED_FEATURE_FLAGS,
     EVENT_TIMERS_KEY,
+    FLAG_CALL_REPORTED,
     INITIAL_CAMPAIGN_PARAMS,
     INITIAL_PERSON_INFO,
     INITIAL_REFERRER_INFO,
+    PERSISTENCE_ACTIVE_FEATURE_FLAGS,
+    PERSISTENCE_FEATURE_FLAG_DETAILS,
+    PERSISTENCE_FEATURE_FLAG_ERRORS,
     PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
+    PERSISTENCE_FEATURE_FLAG_PAYLOADS,
+    PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+    STORED_GROUP_PROPERTIES_KEY,
+    STORED_PERSON_PROPERTIES_KEY,
     SURVEYS_LOADED_AT,
     USER_STATE,
     USER_STATE_ANONYMOUS,
@@ -350,7 +359,15 @@ export class PostHogPersistence {
         if (nextDistinctId !== previousDistinctId || nextUserState !== previousUserState) {
             this._cookieIdentityChangePending = true
             sessionStore._set(getCookieIdentityChangePendingName(this._name), true)
-            COOKIE_IDENTITY_BOUND_LOCAL_PROPERTIES.forEach((key) => delete this.props[key])
+            this._deleteProp(STORED_PERSON_PROPERTIES_KEY)
+            this._deleteProp(PERSISTENCE_ACTIVE_FEATURE_FLAGS)
+            this._deleteProp(ENABLED_FEATURE_FLAGS)
+            this._deleteProp(PERSISTENCE_FEATURE_FLAG_DETAILS)
+            this._deleteProp(PERSISTENCE_FEATURE_FLAG_PAYLOADS)
+            this._deleteProp(PERSISTENCE_FEATURE_FLAG_REQUEST_ID)
+            this._deleteProp(PERSISTENCE_FEATURE_FLAG_EVALUATED_AT)
+            this._deleteProp(PERSISTENCE_FEATURE_FLAG_ERRORS)
+            this._deleteProp(FLAG_CALL_REPORTED)
             const siblingReset =
                 nextUserState === USER_STATE_ANONYMOUS &&
                 (previousUserState === USER_STATE_IDENTIFIED ||
@@ -361,6 +378,7 @@ export class PostHogPersistence {
                 // sibling reset without discarding hidden SDK state or values
                 // that the new shared-cookie snapshot explicitly carries.
                 clearStaleEventProperties(this.props, cookieProperties)
+                this._deleteProp(STORED_GROUP_PROPERTIES_KEY)
             }
             // `$user_id` is localStorage-only, but it is bound to the current
             // identity. Never carry the previous logged-in user across a sibling
@@ -568,6 +586,7 @@ export class PostHogPersistence {
                         (!isUndefined(previousDistinctId) && nextDistinctId !== previousDistinctId))
                 if (siblingReset) {
                     clearStaleEventProperties(nextProps, cookieEntryBeforeMerge)
+                    delete nextProps[STORED_GROUP_PROPERTIES_KEY]
                 }
                 this.props = nextProps
 

@@ -259,7 +259,6 @@ export const localStore: PersistentStore = {
 // Also makes sure we don't have to send a ton of data to the server
 export const COOKIE_IDENTITY_BOUND_LOCAL_PROPERTIES = [
     STORED_PERSON_PROPERTIES_KEY,
-    STORED_GROUP_PROPERTIES_KEY,
     PERSISTENCE_ACTIVE_FEATURE_FLAGS,
     ENABLED_FEATURE_FLAGS,
     PERSISTENCE_FEATURE_FLAG_DETAILS,
@@ -452,6 +451,7 @@ export const createLocalPlusCookieStore = (
                             }
                             if (safeCookieProperties[USER_STATE] !== USER_STATE_IDENTIFIED) {
                                 delete localStorageData[GROUPS]
+                                delete localStorageData[STORED_GROUP_PROPERTIES_KEY]
                             }
                             delete localStorageData.__alias
                         }

@@ -1042,6 +1042,10 @@ describe('persistence', () => {
                     JSON.stringify({ distinct_id: 'anonymous', $user_state: 'anonymous' })
                 )
                 const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+                lib.register({
+                    [STORED_PERSON_PROPERTIES_KEY]: { plan: 'free' },
+                    [STORED_GROUP_PROPERTIES_KEY]: { organization: { plan: 'enterprise' } },
+                })
 
                 // Another subdomain identifies the user while this instance remains open.
                 document.cookie = encodeCookie({ distinct_id: 'identified-user', $user_state: 'identified' })
@@ -1050,6 +1054,8 @@ describe('persistence', () => {
                 expect(lib.props.distinct_id).toBe('identified-user')
                 expect(lib.props.$user_state).toBe('identified')
                 expect(lib.props.local_only_property).toBe('preserved')
+                expect(lib.props[STORED_PERSON_PROPERTIES_KEY]).toBeUndefined()
+                expect(lib.props[STORED_GROUP_PROPERTIES_KEY]).toEqual({ organization: { plan: 'enterprise' } })
                 expect(cookieStore._parse(persistenceName).distinct_id).toBe('identified-user')
             })
 
