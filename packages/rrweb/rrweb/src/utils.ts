@@ -54,7 +54,8 @@ export function removeEventListenerSafely(
 // or a redirect), accessing properties on its contentWindow throws a
 // SecurityError. This applies to cleanup calls like removeEventListener
 // as well as the handler callbacks returned by `on()` above.
-export function callSafely(fn: () => void): void {
+export function callSafely(fn: listenerHandler | undefined): void {
+  if (typeof fn !== 'function') return;
   try {
     fn();
   } catch (error) {
