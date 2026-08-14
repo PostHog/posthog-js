@@ -9,6 +9,7 @@ import {
     AUTOCAPTURE_DISABLED_SERVER_SIDE,
     ENABLE_PERSON_PROCESSING,
     FLAG_CALL_REPORTED,
+    GROUPS,
     HEATMAPS_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_REMOTE_CONFIG,
     STORED_GROUP_PROPERTIES_KEY,
@@ -16,7 +17,7 @@ import {
     USER_STATE,
 } from '../constants'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
-import { PostHogConfig, RemoteConfig } from '../types'
+import { PostHogConfig, Properties, RemoteConfig } from '../types'
 import { configRenames, PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { SessionIdManager } from '../sessionid'
@@ -691,7 +692,62 @@ describe('posthog core', () => {
             expect(posthog._cachedPersonProperties).toBeNull()
             expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
             expect(persistence.unregister).toHaveBeenCalledWith(expect.arrayContaining([FLAG_CALL_REPORTED]))
-            expect(persistence.unregister).toHaveBeenCalledWith('$groups')
+            expect(persistence.unregister).not.toHaveBeenCalledWith(GROUPS)
+            expect(sessionPersistence.clear).toHaveBeenCalledTimes(1)
+        })
+
+        it('preserves groups registered after a sibling reset was reconciled', () => {
+            const props: Properties = {
+                distinct_id: 'new-anonymous',
+                $user_state: 'anonymous',
+                [GROUPS]: { organization: 'new-organization' },
+            }
+            const persistence = {
+                props,
+                properties: () => ({ ...props }),
+                remove_event_timer: jest.fn(),
+                get_property: (key: string) => props[key],
+                register: jest.fn(),
+                unregister: jest.fn(),
+                syncCookieProperties: jest.fn(),
+                consumeCookieIdentityChange: jest.fn().mockReturnValueOnce(true).mockReturnValue(false),
+            } as unknown as PostHogPersistence
+            const sessionPersistence = {
+                properties: () => ({}),
+                get_property: () => undefined,
+                clear: jest.fn(),
+            } as unknown as PostHogPersistence
+            posthog = posthogWith({}, { ...overrides, persistence, sessionPersistence })
+            jest.spyOn(posthog, 'reloadFeatureFlags').mockImplementation(() => {})
+
+            const properties = posthog.calculateEventProperties('custom_event', {}, new Date(), uuid)
+
+            expect(properties[GROUPS]).toEqual({ organization: 'new-organization' })
+            expect(persistence.unregister).not.toHaveBeenCalledWith(GROUPS)
+        })
+
+        it('clears a sibling reset before registering new session properties', () => {
+            const props = { distinct_id: 'new-anonymous', $user_state: 'anonymous' }
+            const persistence = {
+                props,
+                get_property: (key: string) => props[key as keyof typeof props],
+                unregister: jest.fn(),
+                syncCookieProperties: jest.fn(),
+                consumeCookieIdentityChange: jest.fn().mockReturnValueOnce(true),
+            } as unknown as PostHogPersistence
+            const sessionProps: Record<string, unknown> = { previous_user_property: 'private-value' }
+            const sessionPersistence = {
+                clear: jest.fn(() => {
+                    Object.keys(sessionProps).forEach((key) => delete sessionProps[key])
+                }),
+                register: jest.fn((properties: Record<string, unknown>) => Object.assign(sessionProps, properties)),
+            } as unknown as PostHogPersistence
+            posthog = posthogWith({}, { ...overrides, persistence, sessionPersistence })
+            jest.spyOn(posthog, 'reloadFeatureFlags').mockImplementation(() => {})
+
+            posthog.register_for_session({ current_user_property: 'current-value' })
+
+            expect(sessionProps).toEqual({ current_user_property: 'current-value' })
             expect(sessionPersistence.clear).toHaveBeenCalledTimes(1)
         })
 

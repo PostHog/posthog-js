@@ -17,7 +17,6 @@ import {
     EVENT_PAGELEAVE,
     EVENT_PAGEVIEW,
     FLAG_CALL_REPORTED,
-    GROUPS,
     PEOPLE_DISTINCT_ID_KEY,
     PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
     SDK_DEBUG_EXTENSIONS_INIT_METHOD,
@@ -1635,11 +1634,10 @@ export class PostHog implements PostHogInterface {
         // from one identified user to another between synchronization points,
         // so cleanup cannot depend on observing an intermediate anonymous state.
         this.persistence.unregister(COOKIE_IDENTITY_BOUND_LOCAL_PROPERTIES)
-        // reset() clears groups. Mirror that when adopting a sibling reset, but
-        // preserve groups for direct identified-user transitions as identify() does.
         if (this.persistence.get_property(USER_STATE) === USER_STATE_ANONYMOUS) {
-            this.persistence.unregister(GROUPS)
-            // A sibling reset clears both persistence stores. Remove session-only
+            // Persistent event properties, including groups, are cleared while
+            // reconciling the reset snapshot. Clear the separate session store
+            // here before assembling an event under the anonymous identity.
             // properties before this event is assembled under the anonymous ID.
             this.sessionPersistence?.clear()
             this._sessionRegisteredPropKeys.clear()
@@ -1989,6 +1987,8 @@ export class PostHog implements PostHogInterface {
      * @param {Object} properties An associative array of properties to store about the user
      */
     register_for_session(properties: Properties): void {
+        this.persistence?.syncCookieProperties()
+        this._processCookieIdentityChange()
         this.sessionPersistence?.register(properties)
         Object.keys(properties).forEach((key) => this._sessionRegisteredPropKeys.add(key))
         this._persistSessionRegisteredPropKeys()
@@ -3038,6 +3038,10 @@ export class PostHog implements PostHogInterface {
             return
         }
 
+        // Apply a sibling reset before reading or writing groups so this explicit
+        // mutation is newer than the adopted cookie snapshot.
+        this.persistence?.syncCookieProperties()
+        this._processCookieIdentityChange()
         const existingGroups = this.getGroups()
         const isNewGroup = existingGroups[groupType] !== groupKey
 
