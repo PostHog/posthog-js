@@ -8,12 +8,9 @@ import { isUndefined } from '@posthog/core'
 import {
     AUTOCAPTURE_DISABLED_SERVER_SIDE,
     ENABLE_PERSON_PROCESSING,
-    FLAG_CALL_REPORTED,
     GROUPS,
     HEATMAPS_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_REMOTE_CONFIG,
-    STORED_GROUP_PROPERTIES_KEY,
-    STORED_PERSON_PROPERTIES_KEY,
     USER_STATE,
 } from '../constants'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
@@ -654,9 +651,6 @@ describe('posthog core', () => {
             expect(properties.$is_identified).toBe(true)
             expect(posthog._cachedPersonProperties).toBeNull()
             expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
-            expect(persistence.unregister).toHaveBeenCalledWith(
-                expect.arrayContaining([STORED_PERSON_PROPERTIES_KEY, STORED_GROUP_PROPERTIES_KEY, FLAG_CALL_REPORTED])
-            )
         })
 
         it('reloads flags for a same-ID sibling identity-state transition', () => {
@@ -691,7 +685,6 @@ describe('posthog core', () => {
             expect(properties.sensitive_session_property).toBeUndefined()
             expect(posthog._cachedPersonProperties).toBeNull()
             expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
-            expect(persistence.unregister).toHaveBeenCalledWith(expect.arrayContaining([FLAG_CALL_REPORTED]))
             expect(persistence.unregister).not.toHaveBeenCalledWith(GROUPS)
             expect(sessionPersistence.clear).toHaveBeenCalledTimes(1)
         })

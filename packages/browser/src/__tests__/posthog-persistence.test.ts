@@ -1198,6 +1198,32 @@ describe('persistence', () => {
                 expect(cookieStore._parse(persistenceName).custom_property).toBeUndefined()
             })
 
+            it('flag on: a background write preserves pending identity cleanup across reload', () => {
+                document.cookie = encodeCookie({ distinct_id: 'identified-user', $user_state: 'identified' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({
+                        distinct_id: 'identified-user',
+                        $user_state: 'identified',
+                        prior_user_property: 'private-value',
+                        [STORED_PERSON_PROPERTIES_KEY]: { plan: 'pro' },
+                        [ENABLED_FEATURE_FLAGS]: ['previous-flag'],
+                    })
+                )
+                const config = makeConfig('localStorage+cookie', true)
+                const lib = new PostHogPersistence(config)
+
+                document.cookie = encodeCookie({ distinct_id: 'new-anonymous', $user_state: 'anonymous' })
+                lib.register({ current_user_property: 'current-value' })
+
+                expect(lib.props.prior_user_property).toBeUndefined()
+                expect(lib.props[STORED_PERSON_PROPERTIES_KEY]).toBeUndefined()
+                expect(lib.props[ENABLED_FEATURE_FLAGS]).toBeUndefined()
+                const reloaded = new PostHogPersistence(config)
+                expect(reloaded.props.current_user_property).toBe('current-value')
+                expect(reloaded.consumeCookieIdentityChange()).toBe(true)
+            })
+
             it('flag on: a local reset is not rolled back when a stale sibling writes during the clear window', () => {
                 document.cookie = encodeCookie({ distinct_id: 'identified-user', $user_state: 'identified' })
                 localStorage.setItem(

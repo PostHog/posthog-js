@@ -48,7 +48,7 @@ import { RetryQueue } from './retry-queue'
 import { ScrollManager } from './scroll-manager'
 import { SessionPropsManager } from './session-props'
 import { SessionIdManager } from './sessionid'
-import { COOKIE_IDENTITY_BOUND_LOCAL_PROPERTIES, localStore, sessionStore } from './storage'
+import { localStore, sessionStore } from './storage'
 import {
     CaptureLogOptions,
     CaptureOptions,
@@ -1630,10 +1630,6 @@ export class PostHog implements PostHogInterface {
         }
 
         this._cachedPersonProperties = null
-        // All local flag state is identity-bound. A sibling can move directly
-        // from one identified user to another between synchronization points,
-        // so cleanup cannot depend on observing an intermediate anonymous state.
-        this.persistence.unregister(COOKIE_IDENTITY_BOUND_LOCAL_PROPERTIES)
         if (this.persistence.get_property(USER_STATE) === USER_STATE_ANONYMOUS) {
             // Persistent event properties, including groups, are cleared while
             // reconciling the reset snapshot. Clear the separate session store

@@ -86,12 +86,12 @@ describe('identify()', () => {
         jest.spyOn(instance.persistence!, 'consumeCookieIdentityChange')
             .mockReturnValueOnce(true)
             .mockReturnValue(false)
-        const unregister = jest.spyOn(instance.persistence!, 'unregister')
+        const resetFeatureFlags = instance.featureFlags!.reset as jest.Mock
         const setPersonPropertiesForFlags = instance.featureFlags!.setPersonPropertiesForFlags as jest.Mock
 
         instance.identify('a-new-id', { plan: 'pro' })
 
-        expect(unregister.mock.invocationCallOrder[0]).toBeLessThan(
+        expect(resetFeatureFlags.mock.invocationCallOrder[0]).toBeLessThan(
             setPersonPropertiesForFlags.mock.invocationCallOrder[0]!
         )
         expect(setPersonPropertiesForFlags).toHaveBeenCalledWith({ $set: { plan: 'pro' }, $set_once: {} }, false)

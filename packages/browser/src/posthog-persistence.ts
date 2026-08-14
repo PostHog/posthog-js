@@ -67,6 +67,8 @@ const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['pers
     'memory',
 ]
 
+const getCookieIdentityChangePendingName = (name: string): string => `${name}_cookie_identity_change_pending`
+
 const parseName = (config: PostHogConfig): string => {
     let token = ''
     if (config['token']) {
@@ -347,6 +349,8 @@ export class PostHogPersistence {
         const nextUserState = this.props[USER_STATE]
         if (nextDistinctId !== previousDistinctId || nextUserState !== previousUserState) {
             this._cookieIdentityChangePending = true
+            sessionStore._set(getCookieIdentityChangePendingName(this._name), true)
+            COOKIE_IDENTITY_BOUND_LOCAL_PROPERTIES.forEach((key) => delete this.props[key])
             const siblingReset =
                 nextUserState === USER_STATE_ANONYMOUS &&
                 (previousUserState === USER_STATE_IDENTIFIED ||
@@ -372,8 +376,12 @@ export class PostHogPersistence {
     }
 
     consumeCookieIdentityChange(): boolean {
-        const changed = this._cookieIdentityChangePending
+        const pendingName = getCookieIdentityChangePendingName(this._name)
+        const changed = this._cookieIdentityChangePending || !!sessionStore._get(pendingName)
         this._cookieIdentityChangePending = false
+        if (changed) {
+            sessionStore._remove(pendingName)
+        }
         return changed
     }
 
@@ -550,6 +558,7 @@ export class PostHogPersistence {
             const nextUserState = entry[USER_STATE] ?? USER_STATE_ANONYMOUS
             if (nextDistinctId !== previousDistinctId || nextUserState !== previousUserState) {
                 this._cookieIdentityChangePending = true
+                sessionStore._set(getCookieIdentityChangePendingName(this._name), true)
                 const nextProps = extend({}, this.props)
                 COOKIE_IDENTITY_BOUND_LOCAL_PROPERTIES.forEach((key) => delete nextProps[key])
                 const siblingReset =
@@ -590,6 +599,13 @@ export class PostHogPersistence {
                     }
                 })
             }
+        }
+
+        // A write can durably adopt the new main-cookie identity before core has
+        // cleared the separate session persistence. Keep that cleanup pending
+        // across reloads in this browser tab.
+        if (sessionStore._get(getCookieIdentityChangePendingName(this._name))) {
+            this._cookieIdentityChangePending = true
         }
 
         // `_parse()` may have read a different cookie than a reread here if a
