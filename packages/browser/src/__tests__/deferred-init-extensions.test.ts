@@ -70,6 +70,37 @@ describe('deferred extension initialization', () => {
             expect(posthog.autocapture).toBeDefined()
         })
 
+        it('does not start autocapture before setup when set_config runs between deferred tasks', async () => {
+            const posthog = await createPosthogInstance(uuidv7(), {
+                __preview_deferred_init_extensions: true,
+                advanced_disable_flags: true,
+                autocapture: true,
+                capture_pageview: false,
+                disable_session_recording: true,
+            })
+            const initTasks: Array<() => void> = []
+            const processInitTaskQueue = jest
+                .spyOn(posthog as any, '_processInitTaskQueue')
+                .mockImplementation((queue: Array<() => void>) => initTasks.push(...queue))
+
+            await new Promise((resolve) => setTimeout(resolve, 20))
+
+            const autocapture = posthog.autocapture!
+            expect(autocapture['_client']).toBeUndefined()
+
+            posthog.set_config({ autocapture: true })
+
+            expect(autocapture['_initialized']).toBe(false)
+
+            initTasks.forEach((task) => task())
+
+            expect(autocapture['_client']).toBe(posthog._getBrowserClientAdapter())
+            expect(autocapture['_initialized']).toBe(true)
+
+            processInitTaskQueue.mockRestore()
+            await posthog.shutdown()
+        })
+
         it('should handle remote config arriving after extensions initialize', async () => {
             const token = uuidv7()
             const remoteConfig: RemoteConfig = {

@@ -390,7 +390,7 @@ export class Autocapture implements Extension {
     }
 
     public startIfEnabled(): void {
-        if (!this._disposed && this.isEnabled && !this._initialized) {
+        if (!this._disposed && this._client && this.isEnabled && !this._initialized) {
             this._addDomEventHandlers()
             this._initialized = true
         }
