@@ -110,6 +110,20 @@ describe('survey-event-receiver', () => {
             expect(registry.get('address_changed')).toEqual(['third-survey'])
         })
 
+        it('reuses and disposes its capture hook idempotently', () => {
+            const unsubscribe = jest.fn()
+            mockAddCaptureHook.mockReturnValue(unsubscribe)
+            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            surveyEventReceiver.register(surveysWithEvents)
+            surveyEventReceiver.register(surveysWithEvents)
+
+            surveyEventReceiver.dispose()
+            surveyEventReceiver.dispose()
+
+            expect(mockAddCaptureHook).toHaveBeenCalledTimes(1)
+            expect(unsubscribe).toHaveBeenCalledTimes(1)
+        })
+
         it('receiver activates survey on event', () => {
             const surveyEventReceiver = new SurveyEventReceiver(instance)
             surveyEventReceiver.register(surveysWithEvents)
@@ -973,6 +987,46 @@ describe('survey-event-receiver', () => {
                 ._getActionMatcher()
                 .on('$mypageview', createCaptureResult(myPageViewSurvey.conditions.actions.values[0].steps[0].event))
             expect(surveyEventReceiver.getSurveys()).toContain('my-pageview-survey')
+        })
+
+        it('replaces action definitions when surveys are refreshed', () => {
+            const survey = {
+                ...autoCaptureSurvey,
+                conditions: { actions: { values: [createAction(2, '$old_action')] } },
+            } as unknown as Survey
+            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            surveyEventReceiver.register([survey])
+            surveyEventReceiver.register([
+                {
+                    ...survey,
+                    conditions: { actions: { values: [createAction(2, '$new_action')] } },
+                } as unknown as Survey,
+            ])
+
+            surveyEventReceiver._getActionMatcher().on('$old_action', createCaptureResult('$old_action'))
+            expect(surveyEventReceiver.getSurveys()).not.toContain(survey.id)
+
+            surveyEventReceiver._getActionMatcher().on('$new_action', createCaptureResult('$new_action'))
+            expect(surveyEventReceiver.getSurveys()).toContain(survey.id)
+        })
+
+        it('clears trigger definitions when refreshed surveys have no triggers', () => {
+            const survey = {
+                ...autoCaptureSurvey,
+                conditions: {
+                    events: { values: [{ name: '$old_event' }] },
+                    actions: { values: [createAction(2, '$old_action')] },
+                },
+            } as unknown as Survey
+            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            surveyEventReceiver.register([survey])
+            expect(surveyEventReceiver.getEventToSurveys().has('$old_event')).toBe(true)
+
+            surveyEventReceiver.register([])
+            expect(surveyEventReceiver.getEventToSurveys().size).toBe(0)
+
+            surveyEventReceiver._getActionMatcher().on('$old_action', createCaptureResult('$old_action'))
+            expect(surveyEventReceiver.getSurveys()).not.toContain(survey.id)
         })
 
         it('can match action on current_url exact', () => {

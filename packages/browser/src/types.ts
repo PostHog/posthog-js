@@ -25,7 +25,7 @@ import type { SessionRecording } from './extensions/replay/session-recording'
 import type { Heatmaps } from './heatmaps'
 import type { PostHogProductTours } from './posthog-product-tours'
 import type { SiteApps } from './site-apps'
-import type { PostHogSurveys } from './posthog-surveys'
+import type { BrowserSurveys } from './browser-surveys'
 import type { Toolbar } from './extensions/toolbar'
 import type { PostHogExceptions } from './posthog-exceptions'
 import type { WebExperiments } from './web-experiments'
@@ -220,7 +220,7 @@ export type PostHogConfig = Omit<BasePostHogConfig, 'loaded'> & {
         webVitalsAutocapture?: ExtensionConstructor<WebVitalsAutocapture>
         exceptionObserver?: ExtensionConstructor<ExceptionObserver>
         deadClicksAutocapture?: ExtensionConstructor<DeadClicksAutocapture>
-        surveys?: ExtensionConstructor<PostHogSurveys>
+        surveys?: ExtensionConstructor<BrowserSurveys>
         toolbar?: ExtensionConstructor<Toolbar>
         experiments?: ExtensionConstructor<WebExperiments>
         conversations?: ExtensionConstructor<PostHogConversations>
