@@ -5,8 +5,8 @@ import { useOverridablePostHog } from './utils'
 
 export function useFeatureFlags(client?: PostHog): PostHogFlagsResponse['featureFlags'] | undefined {
   const posthog = useOverridablePostHog(client, 'useFeatureFlags')
-  const [featureFlags, setFeatureFlags] = useState<PostHogFlagsResponse['featureFlags'] | undefined>(
-    () => posthog?.getFeatureFlags()
+  const [featureFlags, setFeatureFlags] = useState<PostHogFlagsResponse['featureFlags'] | undefined>(() =>
+    posthog?.getFeatureFlags()
   )
 
   useEffect(() => {
