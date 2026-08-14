@@ -3,10 +3,12 @@ import { JSDOM } from 'jsdom';
 import record from '../../src/record';
 import {
   findAndRemoveIframeBuffer,
+  initMutationObserver,
   mutationBuffers,
 } from '../../src/record/observer';
 import { IframeManager } from '../../src/record/iframe-manager';
 import type { eventWithTime } from '@posthog/rrweb-types';
+import type { MutationBufferParam } from '../../src/types';
 import { createMirror } from '@posthog/rrweb-snapshot';
 
 describe('memory leak prevention', () => {
@@ -44,6 +46,24 @@ describe('memory leak prevention', () => {
   });
 
   describe('mutationBuffers cleanup', () => {
+    it('does not retain a buffer when mutation observer initialization fails', () => {
+      const canvasManager = {
+        acquire: vi.fn(),
+        reset: vi.fn(),
+      };
+
+      expect(() =>
+        initMutationObserver(
+          { canvasManager } as unknown as MutationBufferParam,
+          null as unknown as Node,
+        ),
+      ).toThrow();
+
+      expect(mutationBuffers).toHaveLength(0);
+      expect(canvasManager.acquire).toHaveBeenCalledOnce();
+      expect(canvasManager.reset).toHaveBeenCalledOnce();
+    });
+
     it('should clear mutationBuffers array after stopping recording', () => {
       const emit = (event: eventWithTime) => {
         events.push(event);

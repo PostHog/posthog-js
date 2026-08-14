@@ -83,31 +83,43 @@ export function initMutationObserver(
   rootEl: Node,
 ): { observer: MutationObserver; buffer: MutationBuffer } {
   const mutationBuffer = new MutationBuffer();
-  mutationBuffers.push(mutationBuffer);
   // see mutation.ts for details
   mutationBuffer.init(options);
-  const observer = new (mutationObserverCtor() as new (
-    callback: MutationCallback,
-  ) => MutationObserver)(
-    callbackWrapper(mutationBuffer.processMutations.bind(mutationBuffer)),
-  );
-  const mutationObserverInit: MutationObserverInit = {
-    attributes: true,
-    attributeOldValue: true,
-    characterData: true,
-    characterDataOldValue: true,
-    childList: true,
-    subtree: true,
-  };
-  // Delegate attribute filtering to the native MutationObserver: unlisted
-  // attributes never fire the callback, so they cost no recording CPU.
-  // An empty array would mean "observe no attributes at all", which is never
-  // what a caller wants and could come from bad config, so treat it as unset.
-  if (options.attributeFilter && options.attributeFilter.length > 0) {
-    mutationObserverInit.attributeFilter = options.attributeFilter;
+  let observer: MutationObserver | undefined;
+  try {
+    observer = new (mutationObserverCtor() as new (
+      callback: MutationCallback,
+    ) => MutationObserver)(
+      callbackWrapper(mutationBuffer.processMutations.bind(mutationBuffer)),
+    );
+    const mutationObserverInit: MutationObserverInit = {
+      attributes: true,
+      attributeOldValue: true,
+      characterData: true,
+      characterDataOldValue: true,
+      childList: true,
+      subtree: true,
+    };
+    // Delegate attribute filtering to the native MutationObserver: unlisted
+    // attributes never fire the callback, so they cost no recording CPU.
+    // An empty array would mean "observe no attributes at all", which is never
+    // what a caller wants and could come from bad config, so treat it as unset.
+    if (options.attributeFilter && options.attributeFilter.length > 0) {
+      mutationObserverInit.attributeFilter = options.attributeFilter;
+    }
+    observer.observe(rootEl, mutationObserverInit);
+    mutationBuffers.push(mutationBuffer);
+    return { observer, buffer: mutationBuffer };
+  } catch (error) {
+    try {
+      observer?.disconnect();
+      mutationBuffer.destroy();
+      mutationBuffer.reset();
+    } catch {
+      // Preserve the initialization error if best-effort cleanup also fails.
+    }
+    throw error;
   }
-  observer.observe(rootEl, mutationObserverInit);
-  return { observer, buffer: mutationBuffer };
 }
 
 function initMoveObserver({
