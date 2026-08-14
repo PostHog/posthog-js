@@ -1,6 +1,6 @@
 {
   "name": "@posthog/mcp",
-  "version": "0.11.0",
+  "version": "0.11.6",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -47,6 +47,7 @@
     "@babel/preset-env": "catalog:",
     "@babel/preset-typescript": "catalog:",
     "@modelcontextprotocol/sdk": "~1.29.0",
+    "@modelcontextprotocol/server": "~2.0.0",
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@rslib/core": "catalog:",
     "@types/jest": "catalog:",
@@ -57,7 +58,16 @@
   },
   "peerDependencies": {
     "@modelcontextprotocol/sdk": ">=1.26.0",
+    "@modelcontextprotocol/server": ">=2.0.0",
     "posthog-node": "^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@modelcontextprotocol/sdk": {
+      "optional": true
+    },
+    "@modelcontextprotocol/server": {
+      "optional": true
+    }
   },
   "keywords": [
     "posthog",

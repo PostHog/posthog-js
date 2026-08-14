@@ -8,6 +8,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "null",
     "string"
   ],
+  "rewriteRequestPath": [
+    "undefined",
+    "(url: URL) => URL"
+  ],
   "ui_host": [
     "null",
     "string"
@@ -312,7 +316,8 @@ exports[`config snapshot for PostHogConfig 1`] = `
   ],
   "strict_script_versioning": [
     "false",
-    "true"
+    "true",
+    "\\"fallback\\""
   ],
   "asset_host": [
     "null",

@@ -85,6 +85,7 @@ export type {
     AutocaptureConfig,
     RageclickConfig,
     BootstrapConfig,
+    ResetOptions,
     SupportedWebVitalsMetrics,
     PerformanceCaptureConfig,
     DeadClickCandidate,

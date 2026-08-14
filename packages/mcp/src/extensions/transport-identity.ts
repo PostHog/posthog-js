@@ -1,5 +1,6 @@
 import type { CompatibleRequestHandlerExtra, McpEvent } from '../types'
 import { readHeaderValue } from './headers'
+import { getRequestHeaders } from './request-headers'
 
 /**
  * Transport-level client identity: the two request headers that say *which
@@ -43,12 +44,17 @@ export interface TransportIdentity {
 }
 
 /**
- * Reads the transport identity headers off `extra.requestInfo.headers`. Returns
- * `undefined` when the request carries neither — including every stdio and
- * in-memory request, which has no `requestInfo` at all. Never throws.
+ * Reads the transport identity headers off the request. Returns `undefined`
+ * when the request carries neither — including every stdio and in-memory
+ * request, which has no HTTP headers at all. Never throws.
+ *
+ * Sourced through `getRequestHeaders` rather than `extra.requestInfo.headers`
+ * directly: MCP SDK v2 puts the request at `extra.http.req` as a WHATWG
+ * `Request`, so a v1-shaped read finds nothing and this whole feature would be
+ * silently inert on exactly the servers being adopted now.
  */
 export function readTransportIdentity(extra: CompatibleRequestHandlerExtra | undefined): TransportIdentity | undefined {
-  const headers = extra?.requestInfo?.headers
+  const headers = getRequestHeaders(extra)
   if (!headers) {
     return undefined
   }

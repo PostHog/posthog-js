@@ -205,7 +205,7 @@ function isRetryableFlagsFetchError(
   return code !== 'ECONNREFUSED'
 }
 
-function isPostHogFetchContentTooLargeError(err: unknown): err is PostHogFetchHttpError & { status: 413 } {
+export function isPostHogFetchContentTooLargeError(err: unknown): err is PostHogFetchHttpError & { status: 413 } {
   return typeof err === 'object' && err instanceof PostHogFetchHttpError && err.status === 413
 }
 
@@ -1162,7 +1162,7 @@ export abstract class PostHogCoreStateless {
     return this.getPersistedProperty<PostHogQueueItem[]>(this.persistedQueueKeyForRoute(route)) || []
   }
 
-  protected enqueue(type: string, _message: any, options?: PostHogCaptureOptions): void {
+  protected enqueue(type: string, _message: any, options?: PostHogCaptureOptions, explicitRoute?: string): void {
     this.wrap(() => {
       if (this.optedOut) {
         this._events.emit(type, `Library is disabled. Not sending event. To re-enable, call posthog.optIn()`)
@@ -1178,7 +1178,7 @@ export abstract class PostHogCoreStateless {
       }
       message = this.normalizeMessage(message)
 
-      const queueKey = this.persistedQueueKeyForRoute(this.getQueueRouteKey(message))
+      const queueKey = this.persistedQueueKeyForRoute(explicitRoute ?? this.getQueueRouteKey(message))
       const queue = this.getPersistedProperty<PostHogQueueItem[]>(queueKey) || []
 
       if (queue.length >= this.maxQueueSize) {
@@ -1202,7 +1202,12 @@ export abstract class PostHogCoreStateless {
     })
   }
 
-  protected async sendImmediate(type: string, _message: any, options?: PostHogCaptureOptions): Promise<void> {
+  protected async sendImmediate(
+    type: string,
+    _message: any,
+    options?: PostHogCaptureOptions,
+    explicitRoute?: string
+  ): Promise<void> {
     if (this.disabled) {
       this._logger.warn('The client is disabled')
       return
@@ -1227,7 +1232,7 @@ export abstract class PostHogCoreStateless {
     message = this.normalizeMessage(message)
 
     try {
-      await this.sendBatch([message], undefined, this.getQueueRouteKey(message))
+      await this.sendBatch([message], undefined, explicitRoute ?? this.getQueueRouteKey(message))
     } catch (err) {
       this._events.emit('error', err)
     }
@@ -1431,6 +1436,10 @@ export abstract class PostHogCoreStateless {
     return gzipCompress(payload, this.isDebug)
   }
 
+  protected getBatchEndpointPath(_route: string): string {
+    return '/batch/'
+  }
+
   /**
    * Builds and sends one `/batch/` request for the given already-normalized
    * messages, throwing on transport/HTTP error. Batch-size (413) shrinking,
@@ -1446,7 +1455,7 @@ export abstract class PostHogCoreStateless {
   protected async sendBatch(
     batchMessages: (PostHogEventProperties | undefined)[],
     retryOptions?: Partial<RetriableOptions>,
-    _route: string = DEFAULT_QUEUE_ROUTE
+    route: string = DEFAULT_QUEUE_ROUTE
   ): Promise<void> {
     const data: Record<string, any> = {
       api_key: this.apiKey,
@@ -1460,7 +1469,7 @@ export abstract class PostHogCoreStateless {
 
     const payload = safeJsonStringify(data)
 
-    const url = `${this.host}/batch/`
+    const url = `${this.host}${this.getBatchEndpointPath(route)}`
 
     const gzippedPayload = !this.disableCompression ? await this.compressPayload(payload) : null
     const fetchOptions: PostHogFetchOptions = {
@@ -1910,9 +1919,10 @@ export abstract class PostHogCoreStateless {
     }
 
     return raceWithTimeout(doShutdown(), shutdownTimeoutMs, () => {
-      this._logger.error('Timed out while shutting down PostHog')
+      this._logger.critical('Timeout while shutting down PostHog. Some events may not have been sent.', {
+        shutdownTimeoutMs,
+      })
       hasTimedOut = true
-      throw 'Timeout while shutting down PostHog. Some events may not have been sent.'
     })
   }
 

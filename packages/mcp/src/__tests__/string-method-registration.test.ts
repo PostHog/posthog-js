@@ -122,6 +122,33 @@ describe('setRequestHandler with string method names (MCP SDK v2)', () => {
     expect(toolCalls[0].properties.$mcp_is_error).toBe(false)
   })
 
+  /**
+   * The reporter's topology (posthog-js#4449): a stateless server binds handlers
+   * after `instrument()` with string method names, and each instance serves
+   * exactly one request — so a `tools/call` never shares an instance with a
+   * `tools/list`, and ownership of the injected `context` parameter is never
+   * learned. That used to discard `$mcp_intent` on every call, which is the
+   * whole reason the parameter is injected.
+   */
+  it('captures $mcp_intent on an instance that never served a tools/list', async () => {
+    const server = makeServer()
+    instrument(server, fakePostHog(), { context: true })
+
+    server.setRequestHandler('tools/call', (async (request: MCPRequestLike) => ({
+      content: [{ type: 'text', text: `trends for ${request.params?.arguments?.event}` }],
+    })) as any)
+
+    await dispatch(server, {
+      method: 'tools/call',
+      params: { name: 'get_trends', arguments: { event: 'pageview', context: 'user asked for Q3 revenue' } },
+    })
+    await new Promise((r) => setTimeout(r, 20))
+
+    const call = eventCapture.findCapturesByEvent('$mcp_tool_call')[0]
+    expect(call.properties.$mcp_intent).toBe('user asked for Q3 revenue')
+    expect(call.properties.$mcp_intent_source).toBe('context_parameter')
+  })
+
   it('wraps a tools/list handler registered after instrument() with a string method', async () => {
     const server = makeServer()
     instrument(server, fakePostHog(), { context: true })

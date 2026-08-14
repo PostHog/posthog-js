@@ -1112,6 +1112,57 @@ describe('PostHogAzureOpenAI - cache token reporting convention', () => {
   })
 })
 
+describe('PostHogAzureOpenAI - full AI capture', () => {
+  // Deliberately not `conditionalTest`: see the cache-token-reporting suite above for why —
+  // a credential-gated test would never run in CI and so would never catch the non-streaming
+  // chat path regressing back to redacting binary content under full capture.
+  test('preserves binary audio content in chat completions input/output when enabled', async () => {
+    const binary = 'A'.repeat(80)
+    const mockPostHogClient = new (PostHog as any)()
+    ;(mockPostHogClient as any).enableFullAiCapture = true
+    const client = new PostHogAzureOpenAI({
+      apiKey: 'mock-azure-key',
+      posthog: mockPostHogClient as any,
+    })
+
+    const chatResponse = {
+      id: 'chatcmpl-full-capture',
+      model: 'gpt-4o-audio-preview',
+      choices: [
+        {
+          index: 0,
+          finish_reason: 'stop',
+          message: {
+            role: 'assistant',
+            content: null,
+            audio: { id: 'audio-1', data: binary, transcript: 'hello', expires_at: 0 },
+          },
+        },
+      ],
+      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+    }
+    const ChatMock: any = openaiModule.Chat
+    ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue(chatResponse)
+
+    await client.chat.completions.create({
+      model: 'gpt-4o-audio-preview',
+      messages: [
+        {
+          role: 'user' as const,
+          content: [{ type: 'input_audio' as const, input_audio: { data: binary, format: 'wav' as const } }],
+        },
+      ],
+      posthogDistinctId: 'test-id',
+    })
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const { properties } = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
+    expect(JSON.stringify(properties['$ai_input'])).toContain(binary)
+    expect(JSON.stringify(properties['$ai_output_choices'])).toContain(binary)
+    expect(JSON.stringify(properties)).not.toContain('redacted')
+  })
+})
+
 describe('PostHogAzureOpenAI - Responses terminal statuses', () => {
   let mockPostHogClient: PostHog
   let client: PostHogAzureOpenAI
