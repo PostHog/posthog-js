@@ -166,6 +166,7 @@ export class PostHog {
       properties?: Record<string, unknown>
       groups?: Record<string, string | number>
       sendFeatureFlags?: boolean
+      /** UTC is preferred; non-UTC input is converted to UTC before capture. */
       timestamp?: Date
       uuid?: string
       disableGeoip?: boolean

@@ -3104,7 +3104,7 @@
           "name": "uuid"
         },
         {
-          "description": "If provided overrides the auto-generated timestamp",
+          "description": "If provided, overrides the auto-generated timestamp. UTC is preferred; non-UTC input is converted to UTC.",
           "type": "Date",
           "name": "timestamp"
         },

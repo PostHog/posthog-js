@@ -458,7 +458,7 @@ export interface McpCaptureCommon {
   groups?: Record<string, string>
   /** Extra event properties, spread onto the PostHog event verbatim. */
   properties?: JsonRecord
-  /** Event timestamp. Defaults to the time of the capture call. */
+  /** Event timestamp. Defaults to the capture time. UTC is preferred; non-UTC input is converted to UTC. */
   timestamp?: Date
 }
 
