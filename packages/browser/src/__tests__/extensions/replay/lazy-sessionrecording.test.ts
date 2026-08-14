@@ -1497,25 +1497,77 @@ describe('Lazy SessionRecording', () => {
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_eventsDroppedWhileIdle']).toEqual(0)
             })
 
-            it('does not take a healing snapshot on wake when the session is not sampled or active', () => {
+            it.each([
+                // a trigger-pending buffer ships on activation, so it needs the heal
+                ['a recording trigger is pending', true, 1],
+                // sampled-out buffering discards the buffer, so the heal is pure cost
+                ['no trigger is pending', false, 0],
+            ] as [string, boolean, number][])(
+                'buffering wake heal when %s: %i snapshot(s)',
+                (_name: string, hasPendingTriggers: boolean, expectedSnapshots: number) => {
+                    const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record
+                        .takeFullSnapshot as Mock
+                    const lazyRecording = sessionRecording['_lazyLoadedSessionRecording']
+
+                    emitActiveEvent(startingTimestamp + 100)
+                    lazyRecording['_flushBuffer']()
+
+                    // idle with a dropped mutation
+                    emitInactiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000, true)
+                    takeFullSnapshot.mockClear()
+
+                    Object.defineProperty(lazyRecording, 'status', { get: () => 'buffering', configurable: true })
+                    const pendingSpy = jest
+                        .spyOn(lazyRecording['_strategy']!, 'hasPendingTriggers')
+                        .mockReturnValue(hasPendingTriggers)
+                    try {
+                        const wakeEvent = emitActiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 2000)
+                        expect(takeFullSnapshot).toHaveBeenCalledTimes(expectedSnapshots)
+                        if (expectedSnapshots > 0) {
+                            // the heal lands in the buffer before the wake event, so when
+                            // trigger activation flushes, the shipped stream starts in sync
+                            const bufferedTypes = lazyRecording['_buffer'].data.map((e: any) => e.type)
+                            expect(bufferedTypes.indexOf(2)).toBeGreaterThan(-1)
+                            expect(bufferedTypes.indexOf(2)).toBeLessThan(
+                                lazyRecording['_buffer'].data.indexOf(wakeEvent)
+                            )
+                        }
+                    } finally {
+                        pendingSpy.mockRestore()
+                        delete (lazyRecording as any).status
+                    }
+                }
+            )
+
+            it('heals on wake when the mutation throttler swallowed an event while idle', () => {
                 const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock
                 const lazyRecording = sessionRecording['_lazyLoadedSessionRecording']
 
                 emitActiveEvent(startingTimestamp + 100)
 
-                // idle with a dropped mutation
-                emitInactiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000, true)
+                // idle via a plugin event, so nothing is counted yet
+                _emit({
+                    ...createPluginSnapshot({}),
+                    timestamp: startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000,
+                } as eventWithTime)
+                expect(lazyRecording['_isIdle']).toEqual(true)
                 takeFullSnapshot.mockClear()
 
-                // a sampled-out session's buffer is discarded, so serializing the DOM on
-                // wake would be pure cost
-                Object.defineProperty(lazyRecording, 'status', { get: () => 'buffering', configurable: true })
+                // a rate-limited attribute mutation is swallowed before the idle gate;
+                // while idle no later update can restore the attribute, so it must count
+                lazyRecording['_mutationThrottler'] = { throttleMutations: () => undefined } as any
                 try {
-                    emitActiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 2000)
-                    expect(takeFullSnapshot).not.toHaveBeenCalled()
+                    _emit({
+                        ...createIncrementalMutationEvent(),
+                        timestamp: startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 2000,
+                    })
                 } finally {
-                    delete (lazyRecording as any).status
+                    lazyRecording['_mutationThrottler'] = undefined
                 }
+                expect(lazyRecording['_eventsDroppedWhileIdle']).toBeGreaterThan(0)
+
+                emitActiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 3000)
+                expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
             })
 
             it('rotates session if idle for (MAX_SESSION_IDLE_TIMEOUT) 30 minutes', () => {

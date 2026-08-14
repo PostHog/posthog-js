@@ -1740,6 +1740,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         const throttledEvent = this._mutationThrottler ? this._mutationThrottler.throttleMutations(rawEvent) : rawEvent
 
         if (!throttledEvent) {
+            // when awake, a throttled attribute's later updates get through once the bucket
+            // refills; while idle those are dropped too, so only the wake heal restores them
+            if (this._isIdle === true) {
+                this._eventsDroppedWhileIdle++
+            }
             return
         }
 
@@ -2321,9 +2326,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 this._releaseHoldAndFlush()
             }
             if (returningFromIdle) {
+                // a trigger-pending buffer ships on activation, so it needs the heal as
+                // much as a live recording; only sampled-out and disabled states skip it
+                const bufferCanShip =
+                    ['sampled', 'active'].includes(this.status) || this._strategy?.hasPendingTriggers(this.sessionId)
                 // a snapshot from _releaseHoldAndFlush above has already cleared the
                 // counter by the time this check runs, so we never take two in one tick
-                if (this._eventsDroppedWhileIdle > 0 && ['sampled', 'active'].includes(this.status)) {
+                if (this._eventsDroppedWhileIdle > 0 && bufferCanShip) {
                     this._tryTakeFullSnapshot()
                 }
                 this._scheduleFullSnapshot()
