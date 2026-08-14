@@ -85,6 +85,8 @@ dependencies {
   //noinspection GradleDynamicVersion
   implementation "com.facebook.react:react-native:+"
   implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
-  implementation "com.posthog:posthog-android:3.58.0"
+  implementation "com.posthog:posthog-android:3.58.3"
+
+  testImplementation "junit:junit:4.13.2"
 }
 

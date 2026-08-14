@@ -15,6 +15,7 @@ import com.posthog.PostHog
 import com.posthog.PostHogConfig
 import com.posthog.android.PostHogAndroid
 import com.posthog.android.PostHogAndroidConfig
+import com.posthog.android.replay.PostHogSessionReplayConfig
 import com.posthog.internal.PostHogPreferences
 import com.posthog.internal.PostHogPreferences.Companion.ANONYMOUS_ID
 import com.posthog.internal.PostHogPreferences.Companion.DISTINCT_ID
@@ -158,6 +159,7 @@ class PosthogReactNativePluginModule(
               sessionReplayConfig.maskAllImages = maskAllImages
               sessionReplayConfig.maskAllTextInputs = maskAllTextInputs
               sessionReplayConfig.sampleRate = getDoubleOrNull(sdkReplayConfig, "sampleRate")
+              applyVerifyScreenshotMaskAlignment(sessionReplayConfig, sdkReplayConfig)
 
               val endpoint = getString(decideReplayConfig, "endpoint", "")
               if (endpoint.isNotEmpty()) {
@@ -633,4 +635,22 @@ class PosthogReactNativePluginModule(
             null
           }
   }
+}
+
+internal fun applyVerifyScreenshotMaskAlignment(
+  sessionReplayConfig: PostHogSessionReplayConfig,
+  sdkReplayConfig: ReadableMap?,
+) {
+  sessionReplayConfig.verifyScreenshotMaskAlignment =
+    runCatching {
+      if (
+        sdkReplayConfig != null &&
+        sdkReplayConfig.hasKey("verifyScreenshotMaskAlignment") &&
+        !sdkReplayConfig.isNull("verifyScreenshotMaskAlignment")
+      ) {
+        sdkReplayConfig.getBoolean("verifyScreenshotMaskAlignment")
+      } else {
+        false
+      }
+    }.getOrDefault(false)
 }
