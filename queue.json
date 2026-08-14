@@ -1,19 +1,4 @@
 {
   "version": 1,
-  "items": [
-    {
-      "id": "issue-4522-auto-none-no-comment-no-close-1786696077845",
-      "kind": "issue",
-      "number": 4522,
-      "mode": "auto",
-      "commandMention": "@posthog-watcher",
-      "enqueuedAt": "2026-08-14T08:27:57.845Z",
-      "source": {
-        "eventName": "issues",
-        "runId": 31783995165,
-        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/31783995165"
-      },
-      "attempts": 1
-    }
-  ]
+  "items": []
 }
