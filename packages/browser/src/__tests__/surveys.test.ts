@@ -1,16 +1,18 @@
 /// <reference lib="dom" />
 
 import { expect, it, describe, beforeEach, afterEach, jest } from '@jest/globals'
-import { SURVEYS_REQUEST_TIMEOUT_MS } from '../constants'
+import { act } from 'preact/test-utils'
+import { SURVEYS, SURVEYS_REQUEST_TIMEOUT_MS } from '../constants'
 import { generateSurveys, getNextSurveyStep, SurveyManager } from '../extensions/surveys'
 import {
     canActivateRepeatedly,
     getDisplayOrderChoices,
     getDisplayOrderQuestions,
+    getSurveyContainerClass,
 } from '../extensions/surveys/surveys-extension-utils'
 import { PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
-import { PostHogSurveys } from '../posthog-surveys'
+import { BrowserSurveys } from '../browser-surveys'
 import {
     MultipleSurveyQuestion,
     RatingSurveyQuestion,
@@ -29,13 +31,16 @@ import { RequestRouter } from '../utils/request-router'
 import { SurveyEventReceiver } from '../utils/survey-event-receiver'
 import { SURVEY_LOGGER as logger } from '../utils/survey-utils'
 import { createMockPostHog, createMockConfig } from './helpers/posthog-instance'
+import { createSurveysClient } from './helpers/surveys-client'
 
 describe('surveys', () => {
     let config: PostHogConfig
     let instance: PostHog
-    let surveys: PostHogSurveys
+    let surveys: BrowserSurveys
     let surveysResponse: { status?: number; surveys?: Survey[] }
     const originalWindowLocation = assignableWindow.location
+    const getSurveys = (forceReload = false): Promise<Survey[]> =>
+        new Promise((resolve) => surveys.getSurveys(resolve, forceReload))
 
     const flagsResponse = {
         featureFlags: {
@@ -221,7 +226,8 @@ describe('surveys', () => {
             loadExternalDependency: loadScriptMock,
         }
 
-        surveys = new PostHogSurveys(instance)
+        surveys = new BrowserSurveys(instance)
+        surveys.setup(createSurveysClient(instance))
         instance.surveys = surveys
         // all being squashed into a mock posthog so...
         instance.getActiveMatchingSurveys = instance.surveys.getActiveMatchingSurveys.bind(instance.surveys)
@@ -255,15 +261,14 @@ describe('surveys', () => {
         })
     })
 
-    it('getSurveys gets a list of surveys if not present already', () => {
-        surveys.getSurveys((data) => {
-            expect(data).toEqual(firstSurveys)
-        })
+    it('getSurveys gets a list of surveys if not present already', async () => {
+        expect(await getSurveys()).toEqual(firstSurveys)
         expect(instance._send_request).toHaveBeenCalledWith({
             url: 'https://us.i.posthog.com/api/surveys/?token=testtoken',
             timeout: SURVEYS_REQUEST_TIMEOUT_MS,
             method: 'GET',
             timestampMode: 'query',
+            fireCallbackOnDrop: true,
             callback: expect.any(Function),
         })
         expect(instance._send_request).toHaveBeenCalledTimes(1)
@@ -277,6 +282,53 @@ describe('surveys', () => {
         expect(instance._send_request).toHaveBeenCalledTimes(1)
     })
 
+    it('disposes automatic display polling and visibility handling', () => {
+        instance.getSurveys = jest.fn((callback) => callback([]))
+        const removeEventListener = jest.spyOn(document, 'removeEventListener')
+        const surveyManager = generateSurveys(instance, true)
+
+        surveyManager?.dispose()
+        surveyManager?.dispose()
+
+        expect(removeEventListener).toHaveBeenCalledWith('visibilitychange', expect.any(Function))
+        removeEventListener.mockRestore()
+    })
+
+    it('removes rendered survey DOM after a force reload replaces the persisted definitions', () => {
+        const survey = firstSurveys[0]
+        const surveyManager = new SurveyManager(instance)
+        surveyManager.handlePopoverSurvey(survey)
+        expect(document.querySelector(getSurveyContainerClass(survey, true))).not.toBeNull()
+
+        instance.persistence?.register({ [SURVEYS]: secondSurveys })
+        surveyManager.dispose()
+
+        expect(document.querySelector(getSurveyContainerClass(survey, true))).toBeNull()
+    })
+
+    it('unmounts surveys rendered through the public inline and popover helpers on dispose', () => {
+        const survey = firstSurveys[0]
+        const target = document.createElement('div')
+        document.body.appendChild(target)
+        const removeEventListener = jest.spyOn(window, 'removeEventListener')
+        const surveyManager = new SurveyManager(instance)
+
+        act(() => {
+            surveyManager.renderSurvey(survey, target)
+            surveyManager.renderPopover(survey)
+        })
+        expect(target.childElementCount).toBeGreaterThan(0)
+        expect(document.querySelector(getSurveyContainerClass(survey, true))).not.toBeNull()
+
+        act(() => surveyManager.dispose())
+
+        expect(target.childElementCount).toBe(0)
+        expect(document.querySelector(getSurveyContainerClass(survey, true))).toBeNull()
+        expect(removeEventListener).toHaveBeenCalledWith('PHSurveyClosed', expect.any(Function))
+        removeEventListener.mockRestore()
+        target.remove()
+    })
+
     it('posthog.reset() removes surveys tracking properties from storage', () => {
         localStorage.setItem('seenSurvey_XYZ', '1')
         localStorage.setItem('seenSurvey_ABC', '1')
@@ -287,12 +339,10 @@ describe('surveys', () => {
         expect(localStorage.getItem('seenSurvey_ABC')).toBeNull()
     })
 
-    it('getSurveys registers the survey event receiver if a survey has events', () => {
+    it('getSurveys registers the survey event receiver if a survey has events', async () => {
         surveysResponse = { surveys: surveysWithEvents }
         surveys.loadIfEnabled()
-        surveys.getSurveys((data) => {
-            expect(data).toEqual(surveysWithEvents)
-        }, true)
+        expect(await getSurveys(true)).toEqual(surveysWithEvents)
 
         const registry = surveys._surveyEventReceiver?.getEventToSurveys()
         expect(registry.has('user_subscribed')).toBeTruthy()
@@ -302,15 +352,14 @@ describe('surveys', () => {
         expect(registry.get('address_changed')).toEqual(['third-survey'])
     })
 
-    it('getSurveys force reloads when called with true', () => {
-        surveys.getSurveys((data) => {
-            expect(data).toEqual(firstSurveys)
-        })
+    it('getSurveys force reloads when called with true', async () => {
+        expect(await getSurveys()).toEqual(firstSurveys)
         expect(instance._send_request).toHaveBeenCalledWith({
             url: 'https://us.i.posthog.com/api/surveys/?token=testtoken',
             timeout: SURVEYS_REQUEST_TIMEOUT_MS,
             method: 'GET',
             timestampMode: 'query',
+            fireCallbackOnDrop: true,
             callback: expect.any(Function),
         })
         expect(instance._send_request).toHaveBeenCalledTimes(1)
@@ -318,18 +367,14 @@ describe('surveys', () => {
 
         surveysResponse = { surveys: secondSurveys }
 
-        surveys.getSurveys((data) => {
-            expect(data).toEqual(secondSurveys)
-        }, true)
+        expect(await getSurveys(true)).toEqual(secondSurveys)
         expect(instance.persistence?.props.$surveys).toEqual(secondSurveys)
         expect(instance._send_request).toHaveBeenCalledTimes(2)
     })
 
-    it('getSurveys returns empty array if surveys are undefined', () => {
+    it('getSurveys returns empty array if surveys are undefined', async () => {
         surveysResponse = { status: 0 }
-        surveys.getSurveys((data) => {
-            expect(data).toEqual([])
-        })
+        expect(await getSurveys()).toEqual([])
     })
 
     it('getSurveys returns empty array if surveys are disabled', () => {
@@ -354,6 +399,12 @@ describe('surveys', () => {
     })
 
     describe('getActiveMatchingSurveys', () => {
+        beforeEach(() => {
+            surveys.getSurveys = jest.fn((callback) =>
+                callback(instance.get_property(SURVEYS) ?? surveysResponse.surveys ?? [])
+            )
+        })
+
         const draftSurvey: Survey = {
             name: 'draft survey',
             description: 'draft survey description',
@@ -898,7 +949,7 @@ describe('surveys', () => {
         })
 
         it('should render in-app surveys (popover, widget, api)', () => {
-            surveysResponse = { surveys: [inAppSurvey] }
+            instance.persistence?.register({ [SURVEYS]: [inAppSurvey] })
             const mockRenderSurvey = jest.fn()
             ;(surveys as any)._surveyManager = { renderSurvey: mockRenderSurvey }
             const loggerWarnSpy = jest.spyOn(logger, 'warn')
@@ -914,7 +965,7 @@ describe('surveys', () => {
         })
 
         it('should not render external surveys and show warning', () => {
-            surveysResponse = { surveys: [externalSurvey] }
+            instance.persistence?.register({ [SURVEYS]: [externalSurvey] })
             const mockRenderSurvey = jest.fn()
             ;(surveys as any)._surveyManager = { renderSurvey: mockRenderSurvey }
             const loggerWarnSpy = jest.spyOn(logger, 'warn')
@@ -935,7 +986,7 @@ describe('surveys', () => {
         })
 
         it('should warn when survey is not found', () => {
-            surveysResponse = { surveys: [] }
+            instance.persistence?.register({ [SURVEYS]: [] })
             ;(surveys as any)._surveyManager = { renderSurvey: jest.fn() }
             const loggerWarnSpy = jest.spyOn(logger, 'warn')
 
@@ -945,7 +996,7 @@ describe('surveys', () => {
         })
 
         it('should warn when target element is not found', () => {
-            surveysResponse = { surveys: [inAppSurvey] }
+            instance.persistence?.register({ [SURVEYS]: [inAppSurvey] })
             ;(surveys as any)._surveyManager = { renderSurvey: jest.fn() }
             const loggerWarnSpy = jest.spyOn(logger, 'warn')
 
@@ -1635,7 +1686,7 @@ describe('surveys', () => {
         })
 
         it('can be disabled by config despite results of onRemoteConfig', () => {
-            surveys['_instance'].config.disable_surveys = true
+            instance.config.disable_surveys = true
             surveys.onRemoteConfig({
                 ok: true,
                 config: {
