@@ -869,8 +869,12 @@ describe('persistence', () => {
                 expect(localStorageAfter.distinct_id).toBe('from_cookie')
             })
 
-            it('flag on: reopening after a sibling reset removes stale cookie-backed localStorage properties', () => {
-                const cookieProperties = { distinct_id: 'new-anonymous', $user_state: 'anonymous' }
+            it('flag on: reopening after a sibling reset removes stale event-visible localStorage properties', () => {
+                const cookieProperties = {
+                    distinct_id: 'new-anonymous',
+                    $device_id: 'preserved-device',
+                    $user_state: 'anonymous',
+                }
                 document.cookie = encodeCookie(cookieProperties)
                 cookieStore._set(
                     getCookiePersistedPropertiesMetadataName(persistenceName),
@@ -901,8 +905,9 @@ describe('persistence', () => {
                 const lib = new PostHogPersistence(config)
 
                 expect(lib.props.distinct_id).toBe('new-anonymous')
+                expect(lib.props.$device_id).toBe('preserved-device')
                 expect(lib.props.custom_property).toBeUndefined()
-                expect(lib.props.local_only_property).toBe('preserved')
+                expect(lib.props.local_only_property).toBeUndefined()
                 expect(lib.props.$user_id).toBeUndefined()
                 expect(lib.props.__alias).toBeUndefined()
                 expect(lib.props.$groups).toBeUndefined()
@@ -911,6 +916,7 @@ describe('persistence', () => {
                 expect(lib.props[ENABLED_FEATURE_FLAGS]).toBeUndefined()
                 expect(lib.props[PERSISTENCE_FEATURE_FLAG_DETAILS]).toBeUndefined()
                 expect(lib.props[FLAG_CALL_REPORTED]).toBeUndefined()
+                expect(lib.consumeCookieIdentityChange()).toBe(true)
                 expect(JSON.parse(localStorage.getItem(persistenceName)!).custom_property).toBeUndefined()
             })
 
@@ -1146,7 +1152,7 @@ describe('persistence', () => {
                 expect(lib.props.$user_id).toBeUndefined()
             })
 
-            it('flag on: a sibling reset removes stale cookie-persisted properties without removing local-only data', () => {
+            it('flag on: a sibling reset removes prior local data before applying a new explicit registration', () => {
                 document.cookie = encodeCookie({ distinct_id: 'identified-user', custom_property: 'old-user' })
                 localStorage.setItem(
                     persistenceName,
@@ -1171,7 +1177,7 @@ describe('persistence', () => {
                 lib.register({ another_local_property: 'also-preserved' })
 
                 expect(lib.props.custom_property).toBeUndefined()
-                expect(lib.props.local_only_property).toBe('preserved')
+                expect(lib.props.local_only_property).toBeUndefined()
                 expect(lib.props.another_local_property).toBe('also-preserved')
                 expect(cookieStore._parse(persistenceName).custom_property).toBeUndefined()
             })

@@ -21,7 +21,6 @@ import {
     ALIAS_ID_KEY,
     DISTINCT_ID,
     EVENT_TIMERS_KEY,
-    GROUPS,
     INITIAL_CAMPAIGN_PARAMS,
     INITIAL_PERSON_INFO,
     INITIAL_REFERRER_INFO,
@@ -112,6 +111,15 @@ const isArrayContentsEqual = (arr1: readonly string[], arr2: readonly string[]):
     const sortedArr1 = [...arr1].sort()
     const sortedArr2 = [...arr2].sort()
     return sortedArr1.every((item, index) => item === sortedArr2[index])
+}
+
+const clearStaleEventProperties = (props: Properties, cookieProperties: Properties): void => {
+    each(props, (_value, key) => {
+        const policy = getPersistenceKeyPolicy(key)
+        if ((!policy || policy.exposure === 'event') && !Object.prototype.hasOwnProperty.call(cookieProperties, key)) {
+            delete props[key]
+        }
+    })
 }
 
 /**
@@ -339,6 +347,15 @@ export class PostHogPersistence {
         const nextUserState = this.props[USER_STATE]
         if (nextDistinctId !== previousDistinctId || nextUserState !== previousUserState) {
             this._cookieIdentityChangePending = true
+            const siblingReset =
+                nextUserState === USER_STATE_ANONYMOUS &&
+                (previousUserState === USER_STATE_IDENTIFIED || cookieProperties[USER_STATE] === USER_STATE_ANONYMOUS)
+            if (siblingReset) {
+                // reset() clears event-visible persistence. Mirror that for a
+                // sibling reset without discarding hidden SDK state or values
+                // that the new shared-cookie snapshot explicitly carries.
+                clearStaleEventProperties(this.props, cookieProperties)
+            }
             // `$user_id` is localStorage-only, but it is bound to the current
             // identity. Never carry the previous logged-in user across a sibling
             // identify/reset adopted from the shared cookie.
@@ -503,6 +520,17 @@ export class PostHogPersistence {
         const reconcileCookieIdentity =
             this._config.cookieWinsOnConflict && this._config.persistence.toLowerCase() === 'localstorage+cookie'
         const localEntryBeforeMerge = reconcileCookieIdentity ? localStore._parse(this._name) : null
+        let cookieEntryBeforeMerge: Properties = {}
+        if (reconcileCookieIdentity) {
+            try {
+                cookieEntryBeforeMerge = getSafeCookieProperties(cookieStore._parse(this._name))
+                each(cookieEntryBeforeMerge, (value, key) => {
+                    if (isUndefined(value) || isNull(value) || value === '') {
+                        delete cookieEntryBeforeMerge[key]
+                    }
+                })
+            } catch {}
+        }
         const entry = this._storage._parse(this._name)
 
         if (entry) {
@@ -519,10 +547,15 @@ export class PostHogPersistence {
             const nextDistinctId = entry[DISTINCT_ID]
             const nextUserState = entry[USER_STATE] ?? USER_STATE_ANONYMOUS
             if (nextDistinctId !== previousDistinctId || nextUserState !== previousUserState) {
+                this._cookieIdentityChangePending = true
                 const nextProps = extend({}, this.props)
                 COOKIE_IDENTITY_BOUND_LOCAL_PROPERTIES.forEach((key) => delete nextProps[key])
-                if (nextUserState === USER_STATE_ANONYMOUS) {
-                    delete nextProps[GROUPS]
+                const siblingReset =
+                    nextUserState === USER_STATE_ANONYMOUS &&
+                    (previousUserState === USER_STATE_IDENTIFIED ||
+                        cookieEntryBeforeMerge[USER_STATE] === USER_STATE_ANONYMOUS)
+                if (siblingReset) {
+                    clearStaleEventProperties(nextProps, cookieEntryBeforeMerge)
                 }
                 this.props = nextProps
 
