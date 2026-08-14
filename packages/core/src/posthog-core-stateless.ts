@@ -1259,6 +1259,9 @@ export abstract class PostHogCoreStateless {
     }
 
     sanitizedMessage.uuid = getEventUuid(sanitizedMessage.uuid, uuidv7)
+    if (sanitizedMessage.timestamp instanceof Date && !Number.isNaN(sanitizedMessage.timestamp.getTime())) {
+      sanitizedMessage.timestamp = sanitizedMessage.timestamp.toISOString()
+    }
 
     return sanitizedMessage
   }

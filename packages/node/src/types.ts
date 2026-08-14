@@ -55,6 +55,7 @@ export type EventMessage = Omit<IdentifyMessage, 'distinctId'> & {
    * request on capture and may return different values than the ones the code branched on.
    */
   sendFeatureFlags?: boolean | SendFeatureFlagsOptions
+  /** If provided, overrides the auto-generated timestamp. UTC is preferred; non-UTC input is converted to UTC. */
   timestamp?: Date
   /** If provided overrides the auto-generated event UUID. Must be a valid UUID. */
   uuid?: string

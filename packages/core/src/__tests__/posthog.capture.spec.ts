@@ -61,10 +61,14 @@ describe('PostHog Core', () => {
       })
     })
 
-    it('should allow overriding the timestamp', async () => {
+    it('should serialize timestamp overrides as the equivalent UTC instant', async () => {
       jest.setSystemTime(new Date('2022-01-01'))
 
-      posthog.capture('custom-event', { foo: 'bar' }, { timestamp: new Date('2021-01-02') })
+      posthog.capture(
+        'custom-event',
+        { caller_timestamp: '2021-01-02T03:04:05.000+05:30' },
+        { timestamp: new Date('2021-01-02T03:04:05.000+05:30') }
+      )
       await waitForPromises()
       const body = parseBody(mocks.fetch.mock.calls[0])
       expect(body).toMatchObject({
@@ -72,7 +76,8 @@ describe('PostHog Core', () => {
         batch: [
           {
             event: 'custom-event',
-            timestamp: '2021-01-02T00:00:00.000Z',
+            properties: { caller_timestamp: '2021-01-02T03:04:05.000+05:30' },
+            timestamp: '2021-01-01T21:34:05.000Z',
           },
         ],
       })
