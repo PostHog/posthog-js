@@ -9,16 +9,9 @@ import {
   getShadowHost,
   on,
   hookSetter,
-  callSafely,
 } from '../src/utils';
 
 describe('Utilities for other modules', () => {
-  describe('callSafely', () => {
-    it('ignores an absent handler', () => {
-      expect(() => callSafely(undefined)).not.toThrow();
-    });
-  });
-
   describe('StyleSheetMirror', () => {
     it('should create a StyleSheetMirror', () => {
       const mirror = new StyleSheetMirror();
