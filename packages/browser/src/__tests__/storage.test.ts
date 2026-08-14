@@ -152,6 +152,7 @@ describe('createLocalPlusCookieStore', () => {
 
         expect(store._parse(name)).toEqual({
             distinct_id: 'abc',
+            $user_state: 'anonymous',
             [SESSION_RECORDING_IS_SAMPLED]: false,
         })
     })
@@ -165,7 +166,7 @@ describe('createLocalPlusCookieStore', () => {
             JSON.stringify({ distinct_id: 'abc', [SESSION_RECORDING_IS_SAMPLED]: false })
         )
 
-        expect(store._parse(name)).toEqual({ distinct_id: 'abc' })
+        expect(store._parse(name)).toEqual({ distinct_id: 'abc', $user_state: 'anonymous' })
     })
 
     it('stores custom-key metadata outside the event-visible persistence cookie', () => {

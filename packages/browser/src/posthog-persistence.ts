@@ -26,6 +26,7 @@ import {
     PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
     SURVEYS_LOADED_AT,
     USER_STATE,
+    USER_STATE_ANONYMOUS,
     USER_STATE_IDENTIFIED,
 } from './constants'
 import { getPersistenceKeyPolicy, PERSISTENCE_STORAGE_GROUPS, PersistenceStorageGroup } from './persistence-key-policy'
@@ -326,16 +327,21 @@ export class PostHogPersistence {
             }
         })
         this.props = extend(nextProps, cookieProperties)
-        if (
-            (DISTINCT_ID in cookieProperties && cookieProperties[DISTINCT_ID] !== previousDistinctId) ||
-            (USER_STATE in cookieProperties && cookieProperties[USER_STATE] !== previousUserState)
-        ) {
+        // Older writers can omit $user_state entirely. Once that authoritative
+        // omission removes a prior identified state, represent it explicitly as
+        // anonymous so reset cleanup (including $groups) runs consistently.
+        if (!(USER_STATE in cookieProperties) && !(USER_STATE in this.props)) {
+            this._setProp(USER_STATE, USER_STATE_ANONYMOUS)
+        }
+        const nextDistinctId = this.props[DISTINCT_ID]
+        const nextUserState = this.props[USER_STATE]
+        if (nextDistinctId !== previousDistinctId || nextUserState !== previousUserState) {
             this._cookieIdentityChangePending = true
             // `$user_id` is localStorage-only, but it is bound to the current
             // identity. Never carry the previous logged-in user across a sibling
             // identify/reset adopted from the shared cookie.
-            if (cookieProperties[USER_STATE] === USER_STATE_IDENTIFIED) {
-                this.props.$user_id = cookieProperties[DISTINCT_ID]
+            if (nextUserState === USER_STATE_IDENTIFIED) {
+                this.props.$user_id = nextDistinctId
             } else {
                 delete this.props.$user_id
             }

@@ -914,6 +914,25 @@ describe('persistence', () => {
                 expect(JSON.parse(localStorage.getItem(persistenceName)!).custom_property).toBeUndefined()
             })
 
+            it('flag on: reopening treats an omitted user state as anonymous and clears groups', () => {
+                document.cookie = encodeCookie({ distinct_id: 'shared-id' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({
+                        distinct_id: 'shared-id',
+                        $user_state: 'identified',
+                        $user_id: 'shared-id',
+                        $groups: { organization: 'previous-organization' },
+                    })
+                )
+
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+
+                expect(lib.props.$user_state).toBe('anonymous')
+                expect(lib.props.$user_id).toBeUndefined()
+                expect(lib.props.$groups).toBeUndefined()
+            })
+
             it('flag on: preserves a newly configured cookie-backed property when a legacy cookie omits it', () => {
                 document.cookie = encodeCookie({ distinct_id: 'identified-user' })
                 localStorage.setItem(
@@ -954,6 +973,20 @@ describe('persistence', () => {
 
                 expect(lib.syncCookieProperties()).toBe(true)
                 expect(lib.props[SESSION_RECORDING_IS_SAMPLED]).toBe(false)
+            })
+
+            it('flag on: treats an authoritative omitted user state as an anonymous identity change', () => {
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+                lib.register({ distinct_id: 'shared-id', $user_state: 'identified', $user_id: 'shared-id' })
+
+                // A legacy sibling reset can retain the generated distinct ID but
+                // omit $user_state entirely.
+                document.cookie = encodeCookie({ distinct_id: 'shared-id' })
+
+                expect(lib.syncCookieProperties()).toBe(true)
+                expect(lib.props.$user_state).toBe('anonymous')
+                expect(lib.props.$user_id).toBeUndefined()
+                expect(lib.consumeCookieIdentityChange()).toBe(true)
             })
 
             it('flag on: a live tab adopts a sibling identify before its next persistence write', () => {

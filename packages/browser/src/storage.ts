@@ -19,6 +19,7 @@ import {
     STORED_GROUP_PROPERTIES_KEY,
     STORED_PERSON_PROPERTIES_KEY,
     USER_STATE,
+    USER_STATE_ANONYMOUS,
     USER_STATE_IDENTIFIED,
 } from './constants'
 
@@ -410,6 +411,8 @@ export const createLocalPlusCookieStore = (
                     // set understood by its writer. Remove omitted keys so a subdomain
                     // reopened after reset cannot resurrect prior-user values.
                     if (Object.keys(safeCookieProperties).length > 0) {
+                        const previousDistinctId = localStorageData[DISTINCT_ID]
+                        const previousUserState = localStorageData[USER_STATE] ?? USER_STATE_ANONYMOUS
                         cookiePropertiesToPersist.forEach((key) => {
                             if (authoritativeCookieProperties.indexOf(key) !== -1 && !(key in cookieProperties)) {
                                 const localValue = localStorageData[key]
@@ -422,12 +425,18 @@ export const createLocalPlusCookieStore = (
                                 }
                             }
                         })
-                        if (
-                            (DISTINCT_ID in safeCookieProperties &&
-                                safeCookieProperties[DISTINCT_ID] !== localStorageData[DISTINCT_ID]) ||
-                            (USER_STATE in safeCookieProperties &&
-                                safeCookieProperties[USER_STATE] !== localStorageData[USER_STATE])
-                        ) {
+                        if (!(USER_STATE in cookieProperties) && !(USER_STATE in localStorageData)) {
+                            localStorageData[USER_STATE] = USER_STATE_ANONYMOUS
+                        }
+                        const nextDistinctId =
+                            DISTINCT_ID in safeCookieProperties
+                                ? safeCookieProperties[DISTINCT_ID]
+                                : localStorageData[DISTINCT_ID]
+                        const nextUserState =
+                            USER_STATE in safeCookieProperties
+                                ? safeCookieProperties[USER_STATE]
+                                : localStorageData[USER_STATE]
+                        if (nextDistinctId !== previousDistinctId || nextUserState !== previousUserState) {
                             // Identity-bound local fields are not mirrored into
                             // the shared cookie. Drop them when the authoritative
                             // cookie identity differs during initial load, matching
