@@ -315,7 +315,12 @@ export class PostHogPersistence {
         const invalidCookieProperties: Record<string, true> = {}
         Object.keys(cookieProperties).forEach((key) => {
             const value = cookieProperties[key]
-            if (isUndefined(value) || isNull(value) || value === '') {
+            if (
+                isUndefined(value) ||
+                isNull(value) ||
+                value === '' ||
+                (key === USER_STATE && value !== USER_STATE_ANONYMOUS && value !== USER_STATE_IDENTIFIED)
+            ) {
                 invalidCookieProperties[key] = true
                 delete cookieProperties[key]
             }
@@ -323,6 +328,10 @@ export class PostHogPersistence {
         if (isEmptyObject(cookieProperties)) {
             return false
         }
+        const hasValidCookieIdentity =
+            DISTINCT_ID in cookieProperties ||
+            cookieProperties[USER_STATE] === USER_STATE_ANONYMOUS ||
+            cookieProperties[USER_STATE] === USER_STATE_IDENTIFIED
 
         const previousDistinctId = this.props[DISTINCT_ID]
         const previousUserState = this.props[USER_STATE]
@@ -335,7 +344,8 @@ export class PostHogPersistence {
             if (
                 authoritativeCookieProperties.indexOf(key) !== -1 &&
                 !(key in cookieProperties) &&
-                !invalidCookieProperties[key]
+                !invalidCookieProperties[key] &&
+                (hasValidCookieIdentity || (key !== DISTINCT_ID && key !== USER_STATE))
             ) {
                 const localValue = nextProps[key]
                 const legacyFalsyBuiltIn =
@@ -351,12 +361,12 @@ export class PostHogPersistence {
         // Older writers can omit $user_state entirely. Once that authoritative
         // omission removes a prior identified state, represent it explicitly as
         // anonymous so reset cleanup (including $groups) runs consistently.
-        if (!(USER_STATE in cookieProperties) && !(USER_STATE in this.props)) {
+        if (hasValidCookieIdentity && !(USER_STATE in cookieProperties) && !(USER_STATE in this.props)) {
             this._setProp(USER_STATE, USER_STATE_ANONYMOUS)
         }
         const nextDistinctId = this.props[DISTINCT_ID]
         const nextUserState = this.props[USER_STATE]
-        if (nextDistinctId !== previousDistinctId || nextUserState !== previousUserState) {
+        if (hasValidCookieIdentity && (nextDistinctId !== previousDistinctId || nextUserState !== previousUserState)) {
             this._cookieIdentityChangePending = true
             sessionStore._set(getCookieIdentityChangePendingName(this._name), true)
             this._deleteProp(STORED_PERSON_PROPERTIES_KEY)
@@ -1167,6 +1177,7 @@ export class PostHogPersistence {
         // to the current cookie even if the old-policy sync just fingerprinted it.
         if (!disabled && (persistenceModeChanged || cookiePersistedPropertiesChanged || cookiePrecedenceChanged)) {
             this._lastSeenCookiePropertiesFingerprint = undefined
+            this._lastSeenMainCookieValue = undefined
             // Newly added cookie-backed keys are still local-only in the current
             // cookie. Keep the old key set authoritative until migration writes
             // the first snapshot under the new configuration.

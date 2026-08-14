@@ -402,10 +402,18 @@ export const createLocalPlusCookieStore = (
                     const safeCookieProperties: Properties = {}
                     Object.keys(cookieProperties).forEach((key) => {
                         const v = cookieProperties[key]
-                        if (!isNull(v) && v !== '') {
+                        if (
+                            !isNull(v) &&
+                            v !== '' &&
+                            (key !== USER_STATE || v === USER_STATE_ANONYMOUS || v === USER_STATE_IDENTIFIED)
+                        ) {
                             safeCookieProperties[key] = v
                         }
                     })
+                    const hasValidCookieIdentity =
+                        DISTINCT_ID in safeCookieProperties ||
+                        safeCookieProperties[USER_STATE] === USER_STATE_ANONYMOUS ||
+                        safeCookieProperties[USER_STATE] === USER_STATE_IDENTIFIED
                     // A non-empty cookie is the complete shared snapshot for the key
                     // set understood by its writer. Remove omitted keys so a subdomain
                     // reopened after reset cannot resurrect prior-user values.
@@ -413,7 +421,11 @@ export const createLocalPlusCookieStore = (
                         const previousDistinctId = localStorageData[DISTINCT_ID]
                         const previousUserState = localStorageData[USER_STATE] ?? USER_STATE_ANONYMOUS
                         cookiePropertiesToPersist.forEach((key) => {
-                            if (authoritativeCookieProperties.indexOf(key) !== -1 && !(key in cookieProperties)) {
+                            if (
+                                authoritativeCookieProperties.indexOf(key) !== -1 &&
+                                !(key in cookieProperties) &&
+                                (hasValidCookieIdentity || (key !== DISTINCT_ID && key !== USER_STATE))
+                            ) {
                                 const localValue = localStorageData[key]
                                 const legacyFalsyBuiltIn =
                                     !metadataState.isValid &&
@@ -424,7 +436,11 @@ export const createLocalPlusCookieStore = (
                                 }
                             }
                         })
-                        if (!(USER_STATE in cookieProperties) && !(USER_STATE in localStorageData)) {
+                        if (
+                            hasValidCookieIdentity &&
+                            !(USER_STATE in cookieProperties) &&
+                            !(USER_STATE in localStorageData)
+                        ) {
                             localStorageData[USER_STATE] = USER_STATE_ANONYMOUS
                         }
                         const nextDistinctId =
@@ -435,7 +451,10 @@ export const createLocalPlusCookieStore = (
                             USER_STATE in safeCookieProperties
                                 ? safeCookieProperties[USER_STATE]
                                 : localStorageData[USER_STATE]
-                        if (nextDistinctId !== previousDistinctId || nextUserState !== previousUserState) {
+                        if (
+                            hasValidCookieIdentity &&
+                            (nextDistinctId !== previousDistinctId || nextUserState !== previousUserState)
+                        ) {
                             // Identity-bound local fields are not mirrored into
                             // the shared cookie. Drop them when the authoritative
                             // cookie identity differs during initial load, matching

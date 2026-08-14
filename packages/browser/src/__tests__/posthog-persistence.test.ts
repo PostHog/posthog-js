@@ -1367,6 +1367,25 @@ describe('persistence', () => {
                 expect(cookieStore._parse(persistenceName).distinct_id).toBe('identified-user')
             })
 
+            it('re-enabling precedence re-reads a cookie matching an older observed snapshot', () => {
+                const sharedCookie = { distinct_id: 'shared-anonymous', $user_state: 'anonymous' }
+                document.cookie = encodeCookie(sharedCookie)
+                localStorage.setItem(persistenceName, JSON.stringify(sharedCookie))
+                const enabledConfig = makeConfig('localStorage+cookie', true)
+                const lib = new PostHogPersistence(enabledConfig)
+                const disabledConfig = makeConfig('localStorage+cookie', false)
+
+                lib.update_config(disabledConfig, enabledConfig)
+                lib.register({ distinct_id: 'local-identified', $user_state: 'identified' })
+                // A sibling restores the byte-identical snapshot observed before
+                // precedence was disabled.
+                document.cookie = encodeCookie(sharedCookie)
+                lib.update_config(enabledConfig, disabledConfig)
+
+                expect(lib.props.distinct_id).toBe('shared-anonymous')
+                expect(lib.props.$user_state).toBe('anonymous')
+            })
+
             it('persists a reconciled cookie snapshot when disabling precedence', () => {
                 document.cookie = encodeCookie({ distinct_id: 'anonymous' })
                 localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'anonymous' }))
@@ -1493,12 +1512,36 @@ describe('persistence', () => {
                 document.cookie = encodeCookie({ distinct_id: null, $sesid: [1000, 'new-session', 1000] })
                 localStorage.setItem(
                     persistenceName,
-                    JSON.stringify({ distinct_id: 'valid-local-id', $user_id: 'valid-local-id', __alias: 'alias' })
+                    JSON.stringify({
+                        distinct_id: 'valid-local-id',
+                        $user_state: 'identified',
+                        $user_id: 'valid-local-id',
+                        __alias: 'alias',
+                    })
                 )
 
                 const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
 
                 expect(lib.props.distinct_id).toBe('valid-local-id')
+                expect(lib.props.$user_state).toBe('identified')
+                expect(lib.props.$user_id).toBe('valid-local-id')
+                expect(lib.props.__alias).toBe('alias')
+            })
+
+            it('flag on: a malformed live identity does not clear valid local identity metadata', () => {
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+                lib.register({
+                    distinct_id: 'valid-local-id',
+                    $user_state: 'identified',
+                    $user_id: 'valid-local-id',
+                    __alias: 'alias',
+                })
+
+                document.cookie = encodeCookie({ distinct_id: null, $sesid: [1000, 'new-session', 1000] })
+
+                expect(lib.syncCookieProperties()).toBe(true)
+                expect(lib.props.distinct_id).toBe('valid-local-id')
+                expect(lib.props.$user_state).toBe('identified')
                 expect(lib.props.$user_id).toBe('valid-local-id')
                 expect(lib.props.__alias).toBe('alias')
             })
