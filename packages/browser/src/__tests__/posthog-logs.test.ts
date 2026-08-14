@@ -1,3 +1,5 @@
+import type { Client } from '@posthog/browser-common'
+
 import { PostHogLogs } from '../posthog-logs'
 import { PostHog } from '../posthog-core'
 
@@ -18,6 +20,7 @@ describe('posthog-logs', () => {
     describe('PostHogLogs Class', () => {
         let mockPostHog: PostHog
         let logs: PostHogLogs
+        let mockDisposeLogs: jest.Mock
         let mockInitializeLogs: jest.Mock
         let mockLoadExternalDependency: jest.Mock
 
@@ -39,7 +42,8 @@ describe('posthog-logs', () => {
             jest.clearAllMocks()
 
             // Mock window and PostHog extensions
-            mockInitializeLogs = jest.fn()
+            mockDisposeLogs = jest.fn()
+            mockInitializeLogs = jest.fn(() => mockDisposeLogs)
             mockLoadExternalDependency = jest.fn((_instance, _name, callback) => {
                 callback(null) // Simulate successful loading
             })
@@ -109,6 +113,120 @@ describe('posthog-logs', () => {
             } as unknown as PostHog
 
             logs = new PostHogLogs(mockPostHog)
+        })
+
+        describe('shared extension lifecycle', () => {
+            it('subscribes to remote config during setup', () => {
+                const remoteConfigDispose = jest.fn()
+                let remoteConfigHandler: ((result: any) => void) | undefined
+                const client = {
+                    onRemoteConfig: jest.fn((handler: (result: any) => void) => {
+                        remoteConfigHandler = handler
+                        return { dispose: remoteConfigDispose }
+                    }),
+                } as unknown as Client
+
+                logs.setup(client)
+                remoteConfigHandler?.({ ok: true, config: flagsResponse })
+
+                expect(logs.name).toBe('logs')
+                expect(client.onRemoteConfig).toHaveBeenCalledTimes(1)
+                expect(mockInitializeLogs).toHaveBeenCalledWith(mockPostHog)
+
+                logs.dispose()
+                expect(remoteConfigDispose).toHaveBeenCalledTimes(1)
+                expect(mockDisposeLogs).toHaveBeenCalledTimes(1)
+            })
+
+            it('does not load twice when setup replays enabled remote config', () => {
+                let loadCallback: ((error?: unknown) => void) | undefined
+                mockLoadExternalDependency.mockImplementation((_instance, _name, callback) => {
+                    loadCallback = callback
+                })
+                const client = {
+                    onRemoteConfig: (handler: (result: any) => void) => {
+                        handler({ ok: true, config: flagsResponse })
+                        return { dispose: jest.fn() }
+                    },
+                } as unknown as Client
+
+                logs.setup(client)
+                loadCallback?.()
+
+                expect(mockLoadExternalDependency).toHaveBeenCalledTimes(1)
+                expect(mockInitializeLogs).toHaveBeenCalledTimes(1)
+            })
+
+            it('does not retry a synchronous replay load failure during setup', () => {
+                mockLoadExternalDependency.mockImplementation((_instance, _name, callback) => {
+                    callback(new Error('Loading failed'))
+                })
+                const client = {
+                    onRemoteConfig: (handler: (result: any) => void) => {
+                        handler({ ok: true, config: flagsResponse })
+                        return { dispose: jest.fn() }
+                    },
+                } as unknown as Client
+
+                logs.setup(client)
+
+                expect(mockLoadExternalDependency).toHaveBeenCalledTimes(1)
+                expect(mockInitializeLogs).not.toHaveBeenCalled()
+            })
+
+            it('releases resources and ignores late work on dispose', () => {
+                const remoteConfigDispose = jest.fn()
+                let remoteConfigHandler: ((result: any) => void) | undefined
+                const client = {
+                    onRemoteConfig: (handler: (result: any) => void) => {
+                        remoteConfigHandler = handler
+                        return { dispose: remoteConfigDispose }
+                    },
+                } as unknown as Client
+                const removeEventListener = jest.spyOn(window, 'removeEventListener')
+
+                logs.setup(client)
+                logs.dispose()
+                logs.dispose()
+                remoteConfigHandler?.({ ok: true, config: flagsResponse })
+
+                expect(remoteConfigDispose).toHaveBeenCalledTimes(1)
+                expect(removeEventListener).toHaveBeenCalledWith('online', expect.any(Function))
+                expect(mockLoadExternalDependency).not.toHaveBeenCalled()
+                removeEventListener.mockRestore()
+            })
+
+            it('does not initialize a lazy logs chunk after disposal', () => {
+                let loadCallback: ((error?: unknown) => void) | undefined
+                mockLoadExternalDependency.mockImplementation((_instance, _name, callback) => {
+                    loadCallback = callback
+                })
+                ;(logs as any)._isLogsEnabled = true
+
+                logs.loadIfEnabled()
+                logs.dispose()
+                loadCallback?.()
+
+                expect(mockInitializeLogs).not.toHaveBeenCalled()
+                expect((logs as any)._isLoaded).toBe(false)
+            })
+
+            it('preserves queued logs for the shutdown transport flush', () => {
+                jest.useFakeTimers()
+                try {
+                    logs.captureLog({ body: 'queued before shutdown' })
+
+                    logs.dispose()
+                    logs.flushLogs('sendBeacon')
+
+                    expect((logs as any)._queue).toHaveLength(0)
+                    expect(mockPostHog._send_request).toHaveBeenCalledWith(
+                        expect.objectContaining({ transport: 'sendBeacon', batchKey: 'logs' })
+                    )
+                } finally {
+                    jest.useRealTimers()
+                }
+            })
         })
 
         describe('onRemoteConfig', () => {

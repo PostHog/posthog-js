@@ -350,7 +350,10 @@ const originalConsoleMethod = (method: any): any => {
     return method
 }
 
-const initializeLogs = (posthog: PostHog) => {
+const initializeLogs = (posthog: PostHog): (() => void) => {
+    let instance: PostHog | undefined = posthog
+    const restoreConsoleMethods: Array<() => void> = []
+
     // `host` is carried here because the core SDK context has no equivalent. Session
     // attributes (window.id, sessionStartTimestamp, lastActivityTimestamp) are added
     // downstream by the core pipeline from the SDK context, alongside sessionId.
@@ -371,7 +374,8 @@ const initializeLogs = (posthog: PostHog) => {
                 // reopen the capture path while the outer invocation is still running.
                 let acquiredGuard = false
                 try {
-                    if (args.length > 0 && !isCapturingLog && posthog.is_capturing()) {
+                    const currentInstance = instance
+                    if (args.length > 0 && !isCapturingLog && currentInstance?.is_capturing()) {
                         isCapturingLog = true
                         acquiredGuard = true
                         const {
@@ -384,7 +388,7 @@ const initializeLogs = (posthog: PostHog) => {
                             ...(truncated ? { body_truncated: 'true' } : {}),
                         }
                         // The core pipeline adds posthogDistinctId and url.full from the SDK context.
-                        posthog.logs?._captureConsoleLog({
+                        currentInstance.logs?._captureConsoleLog({
                             level: LEVEL_MAP[level],
                             body,
                             attributes: {
@@ -413,6 +417,16 @@ const initializeLogs = (posthog: PostHog) => {
         // Flatten an existing marker if another console plugin already wrapped this method.
         ;(wrapped as any).__rrweb_original__ = originalConsoleMethod(originalConsoleLog)
         assignableWindow.console[level] = wrapped
+        restoreConsoleMethods.push(() => {
+            if (assignableWindow.console[level] === wrapped) {
+                assignableWindow.console[level] = originalConsoleLog
+            }
+        })
+    }
+
+    return () => {
+        instance = undefined
+        restoreConsoleMethods.forEach((restore) => restore())
     }
 }
 
