@@ -1,5 +1,12 @@
 # posthog-react-native
 
+## 4.63.2
+
+### Patch Changes
+
+- [#4528](https://github.com/PostHog/posthog-js/pull/4528) [`42281fa`](https://github.com/PostHog/posthog-js/commit/42281facbb400fa243107551aa6f955d4fd87807) Thanks [@luke-belton](https://github.com/luke-belton)! - Avoid rereading cached feature flag results on unrelated React Native component rerenders.
+  (2026-08-14)
+
 ## 4.63.1
 
 ### Patch Changes
