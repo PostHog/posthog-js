@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4524](https://github.com/PostHog/posthog-js/issues/4524) | Credible downstream supply-chain-gate compatibility report, but the repository cannot establish why Socket.dev assigns these scores or justify a metadata/release-process change yet. | question, team/client-libraries |  | no | 2026-08-14T11:52:47.685Z |
 | PostHog/posthog-js | [issue 4522](https://github.com/PostHog/posthog-js/issues/4522) | Confirmed session-replay teardown bug in the bundled rrweb recorder. | feature/replay, team/client-libraries |  | no | 2026-08-14T08:29:43.692Z |
 | PostHog/posthog-js | [issue 4507](https://github.com/PostHog/posthog-js/issues/4507) | Valid dead-click detection enhancement, but request-start instrumentation needs an explicit scope and high-risk compatibility review before implementation. | enhancement, feature/dead-clicks, team/analytics-platform |  | no | 2026-08-12T14:00:35.994Z |
 | PostHog/posthog-js | [issue 4492](https://github.com/PostHog/posthog-js/issues/4492) | Valid cross-platform integration feature request, but it is not a small SDK change and is blocked in part by the separate official WeChat Mini Program SDK work in #4491. | enhancement, web, team/client-libraries |  | no | 2026-08-11T12:51:49.580Z |
