@@ -3,6 +3,7 @@ import { PostHogPersistence } from '../posthog-persistence'
 import {
     DEVICE_ID,
     ENABLED_FEATURE_FLAGS,
+    FLAG_CALL_REPORTED,
     INITIAL_PERSON_INFO,
     PERSISTENCE_ACTIVE_FEATURE_FLAGS,
     PERSISTENCE_FEATURE_FLAG_DETAILS,
@@ -17,6 +18,8 @@ import {
     SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_REMOTE_CONFIG,
     SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX,
+    STORED_GROUP_PROPERTIES_KEY,
+    STORED_PERSON_PROPERTIES_KEY,
     SURVEYS,
     SURVEYS_ACTIVATED,
     SURVEYS_LOADED_AT,
@@ -882,6 +885,12 @@ describe('persistence', () => {
                         local_only_property: 'preserved',
                         $user_id: 'identified-user',
                         __alias: 'old-alias',
+                        $groups: { organization: 'previous-organization' },
+                        [STORED_PERSON_PROPERTIES_KEY]: { plan: 'pro' },
+                        [STORED_GROUP_PROPERTIES_KEY]: { organization: { plan: 'enterprise' } },
+                        [ENABLED_FEATURE_FLAGS]: ['previous-flag'],
+                        [PERSISTENCE_FEATURE_FLAG_DETAILS]: { 'previous-flag': { key: 'previous-flag' } },
+                        [FLAG_CALL_REPORTED]: { 'previous-flag': true },
                     })
                 )
                 const config = {
@@ -896,6 +905,12 @@ describe('persistence', () => {
                 expect(lib.props.local_only_property).toBe('preserved')
                 expect(lib.props.$user_id).toBeUndefined()
                 expect(lib.props.__alias).toBeUndefined()
+                expect(lib.props.$groups).toBeUndefined()
+                expect(lib.props[STORED_PERSON_PROPERTIES_KEY]).toBeUndefined()
+                expect(lib.props[STORED_GROUP_PROPERTIES_KEY]).toBeUndefined()
+                expect(lib.props[ENABLED_FEATURE_FLAGS]).toBeUndefined()
+                expect(lib.props[PERSISTENCE_FEATURE_FLAG_DETAILS]).toBeUndefined()
+                expect(lib.props[FLAG_CALL_REPORTED]).toBeUndefined()
                 expect(JSON.parse(localStorage.getItem(persistenceName)!).custom_property).toBeUndefined()
             })
 

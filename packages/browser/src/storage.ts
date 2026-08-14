@@ -3,10 +3,20 @@ import { PersistentStore, Properties } from './types'
 import {
     DEVICE_ID,
     DISTINCT_ID,
+    ENABLED_FEATURE_FLAGS,
     ENABLE_PERSON_PROCESSING,
+    FLAG_CALL_REPORTED,
     INITIAL_PERSON_INFO,
+    PERSISTENCE_ACTIVE_FEATURE_FLAGS,
+    PERSISTENCE_FEATURE_FLAG_DETAILS,
+    PERSISTENCE_FEATURE_FLAG_ERRORS,
+    PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
+    PERSISTENCE_FEATURE_FLAG_PAYLOADS,
+    PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
     SESSION_ID,
     SESSION_RECORDING_IS_SAMPLED,
+    STORED_GROUP_PROPERTIES_KEY,
+    STORED_PERSON_PROPERTIES_KEY,
     USER_STATE,
     USER_STATE_IDENTIFIED,
 } from './constants'
@@ -245,6 +255,19 @@ export const localStore: PersistentStore = {
 // Use localstorage for most data but still use cookie for COOKIE_PERSISTED_PROPERTIES
 // This solves issues with cookies having too much data in them causing headers too large
 // Also makes sure we don't have to send a ton of data to the server
+export const COOKIE_IDENTITY_BOUND_LOCAL_PROPERTIES = [
+    STORED_PERSON_PROPERTIES_KEY,
+    STORED_GROUP_PROPERTIES_KEY,
+    PERSISTENCE_ACTIVE_FEATURE_FLAGS,
+    ENABLED_FEATURE_FLAGS,
+    PERSISTENCE_FEATURE_FLAG_DETAILS,
+    PERSISTENCE_FEATURE_FLAG_PAYLOADS,
+    PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+    PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
+    PERSISTENCE_FEATURE_FLAG_ERRORS,
+    FLAG_CALL_REPORTED,
+]
+
 export const COOKIE_PERSISTED_PROPERTIES = [
     DEVICE_ID,
     DISTINCT_ID,
@@ -408,6 +431,7 @@ export const createLocalPlusCookieStore = (
                             // the shared cookie. Drop them when the authoritative
                             // cookie identity differs during initial load, matching
                             // live reconciliation behavior.
+                            COOKIE_IDENTITY_BOUND_LOCAL_PROPERTIES.forEach((key) => delete localStorageData[key])
                             if (
                                 safeCookieProperties[USER_STATE] === USER_STATE_IDENTIFIED &&
                                 DISTINCT_ID in safeCookieProperties
@@ -415,6 +439,9 @@ export const createLocalPlusCookieStore = (
                                 localStorageData.$user_id = safeCookieProperties[DISTINCT_ID]
                             } else {
                                 delete localStorageData.$user_id
+                            }
+                            if (safeCookieProperties[USER_STATE] !== USER_STATE_IDENTIFIED) {
+                                delete localStorageData.$groups
                             }
                             delete localStorageData.__alias
                         }

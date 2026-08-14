@@ -18,15 +18,6 @@ import {
     EVENT_PAGEVIEW,
     FLAG_CALL_REPORTED,
     PEOPLE_DISTINCT_ID_KEY,
-    PERSISTENCE_ACTIVE_FEATURE_FLAGS,
-    PERSISTENCE_FEATURE_FLAG_DETAILS,
-    PERSISTENCE_FEATURE_FLAG_ERRORS,
-    PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
-    PERSISTENCE_FEATURE_FLAG_PAYLOADS,
-    PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
-    ENABLED_FEATURE_FLAGS,
-    STORED_GROUP_PROPERTIES_KEY,
-    STORED_PERSON_PROPERTIES_KEY,
     PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS,
     SDK_DEBUG_EXTENSIONS_INIT_METHOD,
     SDK_DEBUG_EXTENSIONS_INIT_TIME_MS,
@@ -57,7 +48,7 @@ import { RetryQueue } from './retry-queue'
 import { ScrollManager } from './scroll-manager'
 import { SessionPropsManager } from './session-props'
 import { SessionIdManager } from './sessionid'
-import { localStore, sessionStore } from './storage'
+import { COOKIE_IDENTITY_BOUND_LOCAL_PROPERTIES, localStore, sessionStore } from './storage'
 import {
     CaptureLogOptions,
     CaptureOptions,
@@ -1642,17 +1633,7 @@ export class PostHog implements PostHogInterface {
         // All local flag state is identity-bound. A sibling can move directly
         // from one identified user to another between synchronization points,
         // so cleanup cannot depend on observing an intermediate anonymous state.
-        const identityBoundProperties = [
-            STORED_PERSON_PROPERTIES_KEY,
-            STORED_GROUP_PROPERTIES_KEY,
-            PERSISTENCE_ACTIVE_FEATURE_FLAGS,
-            ENABLED_FEATURE_FLAGS,
-            PERSISTENCE_FEATURE_FLAG_DETAILS,
-            PERSISTENCE_FEATURE_FLAG_PAYLOADS,
-            PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
-            PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
-            PERSISTENCE_FEATURE_FLAG_ERRORS,
-        ]
+        const identityBoundProperties = [...COOKIE_IDENTITY_BOUND_LOCAL_PROPERTIES]
         // reset() clears groups. Mirror that when adopting a sibling reset, but
         // preserve groups for direct identified-user transitions as identify() does.
         if (this.persistence.get_property(USER_STATE) === USER_STATE_ANONYMOUS) {
@@ -1663,7 +1644,6 @@ export class PostHog implements PostHogInterface {
         if (reloadFeatureFlags) {
             this.reloadFeatureFlags()
         }
-        this.unregister(FLAG_CALL_REPORTED)
         return true
     }
 

@@ -654,9 +654,8 @@ describe('posthog core', () => {
             expect(posthog._cachedPersonProperties).toBeNull()
             expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
             expect(persistence.unregister).toHaveBeenCalledWith(
-                expect.arrayContaining([STORED_PERSON_PROPERTIES_KEY, STORED_GROUP_PROPERTIES_KEY])
+                expect.arrayContaining([STORED_PERSON_PROPERTIES_KEY, STORED_GROUP_PROPERTIES_KEY, FLAG_CALL_REPORTED])
             )
-            expect(persistence.unregister).toHaveBeenCalledWith(FLAG_CALL_REPORTED)
         })
 
         it('reloads flags for a same-ID sibling identity-state transition', () => {
@@ -686,8 +685,7 @@ describe('posthog core', () => {
 
             expect(posthog._cachedPersonProperties).toBeNull()
             expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
-            expect(persistence.unregister).toHaveBeenCalledWith(expect.arrayContaining(['$groups']))
-            expect(persistence.unregister).toHaveBeenCalledWith(FLAG_CALL_REPORTED)
+            expect(persistence.unregister).toHaveBeenCalledWith(expect.arrayContaining(['$groups', FLAG_CALL_REPORTED]))
         })
 
         it('sets $lib_custom_api_host if api_host is not the default', () => {
