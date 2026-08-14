@@ -53,6 +53,7 @@
     "files": [
         "lib/*",
         "dist/*",
+        "!dist/*.map",
         "react/dist/**",
         "react/package.json",
         "react/surveys/package.json",
