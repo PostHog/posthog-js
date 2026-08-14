@@ -225,16 +225,6 @@ async function prepareToolCallEvent(
     // Snapshot token/client/protocol metadata synchronously, before identify or
     // metadata callbacks can yield and let another request replace shared state.
     const sessionInfo = getSessionInfo(server, data, sessionId)
-    const identity = await handleIdentify(
-      server,
-      data,
-      sessionId,
-      request,
-      sessionInfo,
-      extra,
-      !!conversation.conversationId
-    )
-    const requestAttribution = withIdentity(sessionInfo, identity)
 
     const toolName = request.params?.name
     const event: McpEvent = {
@@ -249,11 +239,27 @@ async function prepareToolCallEvent(
     }
     // Modern (stateless) clients carry client name/version + protocol version in
     // `_meta` on every request rather than at `initialize`; stamp them onto this
-    // event now so concurrent requests can't cross-attribute it.
+    // event now so concurrent requests can't cross-attribute it. Stamped before
+    // the identify await below for the same reason the snapshot is: the chain's
+    // last link is the server's own `getClientVersion()`, which a concurrent
+    // `initialize` can replace while an identify callback is in flight — and
+    // `captureEvent` prefers a stamped value over `sessionInfo`, so a late stamp
+    // would win with the wrong client's name.
     stampClientIdentity(event, request, extra, server)
     // Which *surface* of the client made this call lives only in the request
     // headers (HTTP transports); `clientInfo` can't tell a vendor's products apart.
     stampTransportIdentity(event, extra)
+
+    const identity = await handleIdentify(
+      server,
+      data,
+      sessionId,
+      request,
+      sessionInfo,
+      extra,
+      !!conversation.conversationId
+    )
+    const requestAttribution = withIdentity(sessionInfo, identity)
 
     await applyResolvedMetadata(event, data, request, extra)
     setEventIntent(event, await resolveToolCallIntent(data, request, canCaptureContextIntent, extra))
@@ -870,9 +876,6 @@ export async function handleInitializeRequest(
     clientName: initializeClientInfo?.name ?? sessionInfo.clientName,
     clientVersion: initializeClientInfo?.version ?? sessionInfo.clientVersion,
   }
-  const identity = await handleIdentify(server, data, sessionId, request, requestSessionInfo, extra)
-  const requestAttribution = withIdentity(requestSessionInfo, identity)
-
   const event: McpEvent = {
     sessionId,
     resourceName: request.params?.name || 'Unknown Tool Name',
@@ -880,11 +883,29 @@ export async function handleInitializeRequest(
     parameters: buildCapturedMcpParameters(request),
     timestamp: new Date(),
   }
-  // Harmless for a legacy `initialize` (client info rides the body there, and the
-  // negotiated protocol version below overrides any `_meta` one); picks up client
-  // info if a client also sends it in `_meta`.
+  // Picks up client info if a client also sends it in `_meta` (the negotiated
+  // protocol version below overrides any `_meta` one). Stamped before the
+  // identify await for the same reason the snapshot is taken there: the chain's
+  // last link is the server's own `getClientVersion()`, which a concurrent
+  // `initialize` can replace while an identify callback is in flight.
   stampClientIdentity(event, request, extra, server)
+  // A legacy `initialize` carries its client in the request body, which is the
+  // one place the chain does not read. That body is this request's own answer,
+  // so it outranks the accessor — which on a server that already handshaked
+  // still names the *previous* client, because the SDK only records this one
+  // when its handler runs further below. Without this, the second and every
+  // later handshake on a shared instance reports the first client's name, since
+  // `captureEvent` prefers a stamped value over `requestSessionInfo`.
+  if (initializeClientInfo?.name) {
+    event.clientName = initializeClientInfo.name
+  }
+  if (initializeClientInfo?.version) {
+    event.clientVersion = initializeClientInfo.version
+  }
   stampTransportIdentity(event, extra)
+
+  const identity = await handleIdentify(server, data, sessionId, request, requestSessionInfo, extra)
+  const requestAttribution = withIdentity(requestSessionInfo, identity)
 
   await applyResolvedMetadata(event, data, request, extra)
 

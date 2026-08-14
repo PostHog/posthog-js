@@ -1131,6 +1131,9 @@ importers:
       '@posthog/plugin-utils':
         specifier: workspace:^
         version: link:../plugin-utils
+      magic-string:
+        specifier: ^0.30.17
+        version: 0.30.21
     devDependencies:
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
@@ -37672,10 +37675,8 @@ snapshots:
       which: 2.0.2
       yargs: 17.7.2
     transitivePeerDependencies:
-      - bufferutil
       - supports-color
       - typescript
-      - utf-8-validate
 
   react-native-codegen@0.69.2(@babel/preset-env@7.28.5(@babel/core@7.28.5)):
     dependencies:

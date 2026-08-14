@@ -1,5 +1,16 @@
 # @posthog/nuxt
 
+## 1.7.82
+
+### Patch Changes
+
+- [#4516](https://github.com/PostHog/posthog-js/pull/4516) [`1c5bf6f`](https://github.com/PostHog/posthog-js/commit/1c5bf6fecb1edf49b0cb813d7ee63f2b47ba063e) Thanks [@marandaneto](https://github.com/marandaneto)! - Bump `@posthog/cli` to `~0.11.1`.
+  (2026-08-13)
+- Updated dependencies [[`c9086de`](https://github.com/PostHog/posthog-js/commit/c9086de42e1c7f102b6cca318c875bdf030d630f), [`b2c6830`](https://github.com/PostHog/posthog-js/commit/b2c683051fae7da40be872666a3e8cadf958f804)]:
+  - @posthog/core@1.48.0
+  - posthog-node@5.49.0
+  - posthog-js@1.416.1
+
 ## 1.7.81
 
 ### Patch Changes

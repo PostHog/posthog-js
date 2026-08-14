@@ -1,5 +1,17 @@
 # @posthog/core
 
+## 1.48.0
+
+### Minor Changes
+
+- [#4289](https://github.com/PostHog/posthog-js/pull/4289) [`c9086de`](https://github.com/PostHog/posthog-js/commit/c9086de42e1c7f102b6cca318c875bdf030d630f) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Public beta `captureAi()` / `captureAiImmediate()`: AI events on a dedicated isolated endpoint with the event UUID returned. New `enableFullAiCapture` option replaces the internal `_useAiLane` / `_enableMultimodalCapture`; wrappers route through the AI endpoint and skip redaction/truncation when set (privacy mode still wins).
+  (2026-08-13)
+
+### Patch Changes
+
+- Updated dependencies [[`b2c6830`](https://github.com/PostHog/posthog-js/commit/b2c683051fae7da40be872666a3e8cadf958f804)]:
+  - @posthog/types@1.403.1
+
 ## 1.47.1
 
 ### Patch Changes

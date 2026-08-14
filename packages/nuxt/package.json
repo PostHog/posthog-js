@@ -1,6 +1,6 @@
 {
   "name": "@posthog/nuxt",
-  "version": "1.7.81",
+  "version": "1.7.82",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },

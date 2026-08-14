@@ -1,5 +1,35 @@
 # @posthog/mcp
 
+## 0.11.6
+
+### Patch Changes
+
+- [#4515](https://github.com/PostHog/posthog-js/pull/4515) [`5698fd5`](https://github.com/PostHog/posthog-js/commit/5698fd503ad84a13ec9ff6ffb3e88a986ec79968) Thanks [@gesh](https://github.com/gesh)! - Attribute `$mcp_tool_call` and `$mcp_initialize` to the client that made the request. Both stamped client identity after awaiting the `identify` callback, so a handshake arriving on the same server instance meanwhile could rename the event; `$mcp_initialize` additionally read the previously handshaked client rather than the one in its own request body.
+  (2026-08-13)
+
+## 0.11.5
+
+### Patch Changes
+
+- [#4504](https://github.com/PostHog/posthog-js/pull/4504) [`48b1a0c`](https://github.com/PostHog/posthog-js/commit/48b1a0ce7f914a8dc15dc2c58fe6802954a917bb) Thanks [@gesh](https://github.com/gesh)! - Resolve `identify` on `tools/list`, so listings attribute to a person instead of falling back to the session id.
+  (2026-08-13)
+
+- [#4502](https://github.com/PostHog/posthog-js/pull/4502) [`bc2ec32`](https://github.com/PostHog/posthog-js/commit/bc2ec32d921d7cb49301290b32e814476ee1b9ac) Thanks [@gesh](https://github.com/gesh)! - Capture `$mcp_intent` on servers that build a fresh instance per request, where the `context` argument was previously discarded.
+
+  The SDK records the agent's answer to its injected `context` parameter only when it can confirm the parameter is one it injected — a fact learned while serving `tools/list` and cached on the server instance. Where the next request builds a new instance, that instance never served a listing, so the intent of every call was thrown away. The trigger is instance lifetime, not statelessness: a server that is stateless at the transport but keeps one long-lived server object was never affected, and a per-request instance on MCP SDK v1 was affected just as much as on v2.
+
+  Reading the argument and removing it are now separate decisions. Stripping still requires positive ownership and fails closed, because deleting an argument the application declared costs the customer their tool call. Reading costs at worst a mislabelled property, so it now happens whenever ownership cannot be resolved.
+
+  The trade-off: on such a server, a `context` parameter the application declared itself is recorded as `$mcp_intent`. Set `context: false` to disable injection and capture together, or drop the property in `beforeSend`. (2026-08-13)
+
+- [#4514](https://github.com/PostHog/posthog-js/pull/4514) [`245afe6`](https://github.com/PostHog/posthog-js/commit/245afe627d67ba9b00e35132c72e1686d491b9df) Thanks [@gesh](https://github.com/gesh)! - Preserve the `tools/list` response envelope, so instrumenting a paginated tool catalogue no longer hides its later pages.
+
+  The listing wrapper rebuilt the response as `{ tools }`, discarding every other field the application's handler had set — on both SDK majors. Most visibly `nextCursor`: a client stops enumerating when the cursor is absent, so tools on later pages became undiscoverable the moment `instrument()` was applied, with no error on either side. The wrapper now spreads the response and replaces only `tools`, which also preserves the 2026-07-28 caching directives `ttlMs` / `cacheScope` and result `_meta`. `$mcp_tools_list` captures the response as sent, envelope included. (2026-08-13)
+
+- Updated dependencies [[`c9086de`](https://github.com/PostHog/posthog-js/commit/c9086de42e1c7f102b6cca318c875bdf030d630f)]:
+  - @posthog/core@1.48.0
+  - posthog-node@5.49.0
+
 ## 0.11.4
 
 ### Patch Changes

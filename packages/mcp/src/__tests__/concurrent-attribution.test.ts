@@ -71,6 +71,13 @@ function invokeInitialize(
   return handler(request, extra)
 }
 
+function handshake(name: string, version: string): MCPRequestLike {
+  return {
+    method: 'initialize',
+    params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name, version } },
+  }
+}
+
 function setFakeTransport(server: MCPServerLike, transport: unknown): void {
   ;(server as unknown as { _transport?: unknown })._transport = transport
 }
@@ -177,6 +184,90 @@ describe('concurrent request attribution', () => {
       $mcp_client_name: 'client-b',
       $mcp_client_version: '2.0.0',
       $mcp_protocol_version: '2025-06-18',
+    })
+  })
+
+  it('stamps the calling client before a slow identify lets another handshake replace it', async () => {
+    const identifyCallStarted = deferred()
+    const releaseIdentifyCall = deferred()
+    const server = createServer({
+      identify: async (request) => {
+        if (request.method === 'tools/call') {
+          identifyCallStarted.resolve()
+          await releaseIdentifyCall.promise
+        }
+        return { distinctId: 'user-a' }
+      },
+    })
+
+    // client-a completes the handshake, so `getClientVersion()` — the last link of
+    // the identity chain, and the only one a legacy-era request ever reaches —
+    // answers 'client-a'.
+    await invokeInitialize(server, handshake('client-a', '1.0.0'), { requestInfo: { headers: {} } })
+
+    // A legacy-era call: nothing in `_meta`, no envelope, no protocol header.
+    const callRequest = invokeTool(server, 'A', { requestInfo: { headers: {} } })
+    await identifyCallStarted.promise
+
+    // client-b handshakes on the same instance while the identify callback is still
+    // in flight, replacing what the accessor answers.
+    await invokeInitialize(server, handshake('client-b', '2.0.0'), { requestInfo: { headers: {} } })
+
+    releaseIdentifyCall.resolve()
+    await callRequest
+    await flushCaptures()
+
+    const toolCalls = capture.findCapturesByEvent('$mcp_tool_call')
+    expect(toolCalls).toHaveLength(1)
+    expect(toolCalls[0].properties).toMatchObject({
+      $mcp_client_name: 'client-a',
+      $mcp_client_version: '1.0.0',
+    })
+  })
+
+  it('attributes each handshake to the client that sent it, not the one before it', async () => {
+    const server = createServer({})
+
+    await invokeInitialize(server, handshake('client-a', '1.0.0'), { requestInfo: { headers: {} } })
+    await invokeInitialize(server, handshake('client-b', '2.0.0'), { requestInfo: { headers: {} } })
+    await flushCaptures()
+
+    // `getClientVersion()` still names client-a while client-b's handshake is being
+    // instrumented — the SDK only records the new client further downstream — so
+    // the body each request carries has to outrank it.
+    const initializes = capture.findCapturesByEvent('$mcp_initialize')
+    expect(initializes.map((event) => event.properties.$mcp_client_name)).toEqual(['client-a', 'client-b'])
+    expect(initializes.map((event) => event.properties.$mcp_client_version)).toEqual(['1.0.0', '2.0.0'])
+  })
+
+  it('stamps the handshaking client before a slow identify lets another handshake replace it', async () => {
+    const identifyBStarted = deferred()
+    const releaseIdentifyB = deferred()
+    const server = createServer({
+      identify: async (request) => {
+        const clientName = (request.params?.clientInfo as { name?: string } | undefined)?.name
+        if (clientName === 'client-b') {
+          identifyBStarted.resolve()
+          await releaseIdentifyB.promise
+        }
+        return { distinctId: `user-${clientName}` }
+      },
+    })
+
+    await invokeInitialize(server, handshake('client-a', '1.0.0'), { requestInfo: { headers: {} } })
+
+    const initializeB = invokeInitialize(server, handshake('client-b', '2.0.0'), { requestInfo: { headers: {} } })
+    await identifyBStarted.promise
+    await invokeInitialize(server, handshake('client-c', '3.0.0'), { requestInfo: { headers: {} } })
+    releaseIdentifyB.resolve()
+    await initializeB
+    await flushCaptures()
+
+    const initializes = capture.findCapturesByEvent('$mcp_initialize')
+    const captureB = initializes.find((event) => event.distinct_id === 'user-client-b')
+    expect(captureB?.properties).toMatchObject({
+      $mcp_client_name: 'client-b',
+      $mcp_client_version: '2.0.0',
     })
   })
 

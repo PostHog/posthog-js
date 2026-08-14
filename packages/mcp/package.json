@@ -1,6 +1,6 @@
 {
   "name": "@posthog/mcp",
-  "version": "0.11.4",
+  "version": "0.11.6",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },

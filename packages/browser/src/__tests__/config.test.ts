@@ -213,7 +213,7 @@ describe('config', () => {
             const posthog = new PostHog()
             posthog._init('test-token')
 
-            expect(posthog.config.strict_script_versioning).toBe(false)
+            expect(posthog.config.strict_script_versioning).toBe('fallback')
             expect(posthog.config.asset_host).toBeNull()
         })
 
