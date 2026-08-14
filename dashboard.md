@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4525](https://github.com/PostHog/posthog-js/issues/4525) | Confirmed React Native performance bug with a small, behavior-preserving fix. | react-native, feature/flags, team/client-libraries | https://github.com/PostHog/posthog-js/pull/4526 | no | 2026-08-14T12:22:50.542Z |
 | PostHog/posthog-js | [issue 4524](https://github.com/PostHog/posthog-js/issues/4524) | Credible downstream supply-chain-gate compatibility report, but the repository cannot establish why Socket.dev assigns these scores or justify a metadata/release-process change yet. | question, team/client-libraries |  | no | 2026-08-14T11:52:47.685Z |
 | PostHog/posthog-js | [issue 4522](https://github.com/PostHog/posthog-js/issues/4522) | Confirmed session-replay teardown bug in the bundled rrweb recorder. | feature/replay, team/client-libraries |  | no | 2026-08-14T08:29:43.692Z |
 | PostHog/posthog-js | [issue 4507](https://github.com/PostHog/posthog-js/issues/4507) | Valid dead-click detection enhancement, but request-start instrumentation needs an explicit scope and high-risk compatibility review before implementation. | enhancement, feature/dead-clicks, team/analytics-platform |  | no | 2026-08-12T14:00:35.994Z |
