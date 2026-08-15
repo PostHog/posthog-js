@@ -1,5 +1,22 @@
 # posthog-react-native
 
+## 4.63.2
+
+### Patch Changes
+
+- [#4528](https://github.com/PostHog/posthog-js/pull/4528) [`42281fa`](https://github.com/PostHog/posthog-js/commit/42281facbb400fa243107551aa6f955d4fd87807) Thanks [@luke-belton](https://github.com/luke-belton)! - Avoid rereading cached feature flag results on unrelated React Native component rerenders.
+  (2026-08-14)
+
+## 4.63.1
+
+### Patch Changes
+
+- [#4526](https://github.com/PostHog/posthog-js/pull/4526) [`aba7d55`](https://github.com/PostHog/posthog-js/commit/aba7d55320ac13a5841af3eb2e859113f304e6f1) Thanks [@github-actions](https://github.com/apps/github-actions)! - Avoid re-reading the feature flag store when feature flag hooks rerender with unchanged inputs.
+  (2026-08-14)
+- Updated dependencies [[`0a0206f`](https://github.com/PostHog/posthog-js/commit/0a0206f907f4b58dc28f36aa1fc441b55c489faf), [`eb05237`](https://github.com/PostHog/posthog-js/commit/eb0523729c4f989663a38d3ce9d0e61d4f262ee1)]:
+  - @posthog/core@1.48.1
+  - @posthog/types@1.404.1
+
 ## 4.63.0
 
 ### Minor Changes
