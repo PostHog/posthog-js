@@ -996,7 +996,7 @@ describe('survey-event-receiver', () => {
             } as unknown as Survey
             const surveyEventReceiver = new SurveyEventReceiver(instance)
             surveyEventReceiver.register([survey])
-            surveyEventReceiver.register([
+            surveyEventReceiver.replace([
                 {
                     ...survey,
                     conditions: { actions: { values: [createAction(2, '$new_action')] } },
@@ -1022,7 +1022,7 @@ describe('survey-event-receiver', () => {
             surveyEventReceiver.register([survey])
             expect(surveyEventReceiver.getEventToSurveys().has('$old_event')).toBe(true)
 
-            surveyEventReceiver.register([])
+            surveyEventReceiver.replace([])
             expect(surveyEventReceiver.getEventToSurveys().size).toBe(0)
 
             surveyEventReceiver._getActionMatcher().on('$old_action', createCaptureResult('$old_action'))

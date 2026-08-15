@@ -18,6 +18,7 @@ const createConfigSource = (overrides: Partial<SurveysConfig> = {}) => {
     const receiver = {
         dispose: jest.fn(),
         register: jest.fn(),
+        replace: jest.fn(),
     }
     const extensions: SurveysExtensionHost = {
         generateSurveys: jest.fn(() => manager as any),
@@ -84,6 +85,35 @@ describe('PostHogSurveys shared extension lifecycle', () => {
 
         expect(client.kv.initialize).toHaveBeenCalledTimes(1)
         expect(client.onRemoteConfig).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps script loading deduplicated when remote config replays during setup', () => {
+        const { extensions, manager, source } = createConfigSource()
+        extensions.generateSurveys = undefined
+        let finishLoading!: () => void
+        extensions.loadExternalDependency = jest.fn((callback) => {
+            finishLoading = () => {
+                extensions.generateSurveys = jest.fn(() => manager as any)
+                callback()
+            }
+        })
+        const { client } = createClient()
+        ;(client.onRemoteConfig as jest.Mock).mockImplementation((handler: (result: RemoteConfigResult) => void) => {
+            handler({ ok: true, config: { surveys: true } as any })
+            return { dispose: jest.fn() }
+        })
+        const surveys = new PostHogSurveys(source)
+
+        surveys.setup(client)
+
+        expect(extensions.loadExternalDependency).toHaveBeenCalledTimes(1)
+        expect(surveys['_isInitializingSurveys']).toBe(true)
+
+        finishLoading()
+
+        expect(extensions.generateSurveys).toHaveBeenCalledTimes(1)
+        expect(source.createEventReceiver).toHaveBeenCalledTimes(1)
+        expect(surveys['_isInitializingSurveys']).toBe(false)
     })
 
     it('handles remote config once through the shared listener and preserves safe missing/failure behavior', () => {

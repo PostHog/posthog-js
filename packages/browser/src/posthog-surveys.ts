@@ -203,6 +203,7 @@ export class PostHogSurveys implements Extension {
             if (generateSurveys) {
                 // Surveys code is already loaded
                 this._completeSurveyInitialization(generateSurveys, isSurveysEnabled)
+                this._isInitializingSurveys = false
                 return
             }
 
@@ -211,28 +212,31 @@ export class PostHogSurveys implements Extension {
             if (!loadExternalDependency) {
                 // Cannot load surveys code
                 this._handleSurveyLoadError(LOAD_EXT_NOT_FOUND)
+                this._isInitializingSurveys = false
                 return
             }
 
-            // If we reach here, we need to load the dependency
+            // Keep the initialization guard active until the dependency callback completes.
             loadExternalDependency((err) => {
-                if (this._disposed) {
-                    return
-                }
-                const loadedExtensions = this._configSource.getExtensions()
-                if (err || !loadedExtensions?.generateSurveys) {
-                    this._handleSurveyLoadError('Could not load surveys script', err)
-                } else {
-                    // Need to get the function reference again inside the callback
-                    this._completeSurveyInitialization(loadedExtensions.generateSurveys, isSurveysEnabled)
+                try {
+                    if (this._disposed) {
+                        return
+                    }
+                    const loadedExtensions = this._configSource.getExtensions()
+                    if (err || !loadedExtensions?.generateSurveys) {
+                        this._handleSurveyLoadError('Could not load surveys script', err)
+                    } else {
+                        // Need to get the function reference again inside the callback
+                        this._completeSurveyInitialization(loadedExtensions.generateSurveys, isSurveysEnabled)
+                    }
+                } finally {
+                    this._isInitializingSurveys = false
                 }
             })
         } catch (e) {
+            this._isInitializingSurveys = false
             this._handleSurveyLoadError('Error initializing surveys', e)
             throw e
-        } finally {
-            // Ensure the flag is always reset
-            this._isInitializingSurveys = false
         }
     }
 
@@ -384,7 +388,7 @@ export class PostHogSurveys implements Extension {
             (survey) =>
                 isSurveyRunning(survey) && (doesSurveyActivateByEvent(survey) || doesSurveyActivateByAction(survey))
         )
-        this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
+        this._surveyEventReceiver?.replace(eventOrActionBasedSurveys)
 
         // Stamp when these definitions were fetched so the split-storage loader can tell a fresher
         // main-blob write-back from a stale `__surveys` entry.
