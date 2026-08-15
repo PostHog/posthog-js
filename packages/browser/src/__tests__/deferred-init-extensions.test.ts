@@ -276,5 +276,32 @@ describe('deferred extension initialization', () => {
 
             expect(setup).not.toHaveBeenCalled()
         })
+
+        it('disposes logs created after shutdown', async () => {
+            const savedDefaults = PostHog.__defaultExtensionClasses
+            PostHog.__defaultExtensionClasses = {}
+            const setup = jest.fn()
+            const dispose = jest.fn()
+            class TestLogs {
+                readonly name = 'logs'
+                setup = setup
+                dispose = dispose
+            }
+
+            try {
+                const posthog = await createPosthogInstance(uuidv7(), {
+                    __preview_deferred_init_extensions: true,
+                    __extensionClasses: { logs: TestLogs as any },
+                    capture_pageview: false,
+                })
+                await posthog.shutdown()
+                await new Promise((resolve) => setTimeout(resolve, 20))
+
+                expect(setup).not.toHaveBeenCalled()
+                expect(dispose).toHaveBeenCalledTimes(1)
+            } finally {
+                PostHog.__defaultExtensionClasses = savedDefaults
+            }
+        })
     })
 })

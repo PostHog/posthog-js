@@ -1,6 +1,11 @@
 import { PostHog } from '../posthog-core'
 import { PostHogConfig, RemoteConfig, RemoteConfigResult } from '../types'
-import { AllExtensions, FeatureFlagsExtensions, SurveysExtensions } from '../extensions/extension-bundles'
+import {
+    AllExtensions,
+    FeatureFlagsExtensions,
+    LogsExtensions,
+    SurveysExtensions,
+} from '../extensions/extension-bundles'
 import { BrowserAutocapture } from '../browser-autocapture'
 import { PostHogFeatureFlags } from '../posthog-featureflags'
 import { SessionRecording } from '../extensions/replay/session-recording'
@@ -191,6 +196,79 @@ describe('__extensionClasses enrollment', () => {
         expect(SurveysExtensions).toEqual(
             expect.objectContaining({ surveys: expect.any(Function), featureFlags: PostHogFeatureFlags })
         )
+    })
+
+    it('preserves the PostHog constructor and initialize contract for custom logs classes', async () => {
+        PostHog.__defaultExtensionClasses = {}
+        const initialize = jest.fn()
+        const setup = jest.fn()
+        let constructorArgument: PostHog | undefined
+
+        class LegacyLogs {
+            constructor(instance: PostHog) {
+                constructorArgument = instance
+            }
+
+            setup(): void {
+                setup()
+            }
+
+            initialize(): void {
+                initialize()
+            }
+        }
+
+        const posthog = await createPosthogInstance(undefined, {
+            __preview_deferred_init_extensions: false,
+            __extensionClasses: { logs: LegacyLogs as any },
+            capture_pageview: false,
+        })
+
+        expect(constructorArgument).toBe(posthog)
+        expect(initialize).toHaveBeenCalledTimes(1)
+        expect(setup).not.toHaveBeenCalled()
+    })
+
+    it('enrolls shared logs exactly once through the shared lifecycle', async () => {
+        PostHog.__defaultExtensionClasses = {}
+        const setup = jest.fn()
+        const initialize = jest.fn()
+        let constructorArgument: PostHog | undefined
+
+        class SharedLogs {
+            readonly name = 'logs'
+
+            constructor(instance: PostHog) {
+                constructorArgument = instance
+            }
+
+            setup(): void {
+                setup()
+            }
+
+            initialize(): void {
+                initialize()
+            }
+        }
+
+        const posthog = await createPosthogInstance(undefined, {
+            __preview_deferred_init_extensions: false,
+            __extensionClasses: { logs: SharedLogs as any },
+            capture_pageview: false,
+        })
+
+        expect(constructorArgument).toBe(posthog)
+        expect(setup).toHaveBeenCalledTimes(1)
+        expect(initialize).not.toHaveBeenCalled()
+    })
+
+    it('bundles logs through the shared lifecycle', () => {
+        PostHog.__defaultExtensionClasses = {}
+        const logs = new LogsExtensions.logs(new PostHog())
+
+        expect(logs.name).toBe('logs')
+        expect(logs.setup).toEqual(expect.any(Function))
+        logs.dispose()
     })
 
     it('preserves the PostHog constructor and initialize contract for custom autocapture classes', async () => {
