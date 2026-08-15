@@ -1634,7 +1634,6 @@ export class PostHog implements PostHogInterface {
             // Persistent event properties, including groups, are cleared while
             // reconciling the reset snapshot. Clear the separate session store
             // here before assembling an event under the anonymous identity.
-            // properties before this event is assembled under the anonymous ID.
             this.sessionPersistence?.clear()
             this._sessionRegisteredPropKeys.clear()
             this._persistSessionRegisteredPropKeys()
