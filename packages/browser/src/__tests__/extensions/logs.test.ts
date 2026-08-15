@@ -118,6 +118,28 @@ describe('logs entrypoint', () => {
             expect(assignableWindow.console.debug).not.toBe(originalMethods.debug)
         })
 
+        it('should restore the console methods it wrapped', () => {
+            const originalMethods = {
+                log: assignableWindow.console.log,
+                info: assignableWindow.console.info,
+                warn: assignableWindow.console.warn,
+                error: assignableWindow.console.error,
+                debug: assignableWindow.console.debug,
+            }
+            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+
+            const dispose = initializeLogs(mockPostHog)
+            dispose()
+            assignableWindow.console.log('after dispose')
+
+            expect(assignableWindow.console.log).toBe(originalMethods.log)
+            expect(assignableWindow.console.info).toBe(originalMethods.info)
+            expect(assignableWindow.console.warn).toBe(originalMethods.warn)
+            expect(assignableWindow.console.error).toBe(originalMethods.error)
+            expect(assignableWindow.console.debug).toBe(originalMethods.debug)
+            expect(mockEmit).not.toHaveBeenCalled()
+        })
+
         it('should not throw when called without a session manager', () => {
             const postHogWithoutSession = {
                 ...mockPostHog,
