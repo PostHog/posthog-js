@@ -175,20 +175,32 @@ export abstract class EventReceiver<T extends EventTriggerable> {
     }
 
     register(items: T[]): void {
+        this._register(items, false)
+    }
+
+    replace(items: T[]): void {
+        this._register(items, true)
+    }
+
+    private _register(items: T[], replace: boolean): void {
         if (isUndefined(this._instance?._addCaptureHook)) {
             return
         }
 
-        this._setupEventBasedItems(items)
-        this._setupActionBasedItems(items)
+        this._setupEventBasedItems(items, replace)
+        this._setupActionBasedItems(items, replace)
     }
 
-    private _setupActionBasedItems(items: T[]): void {
+    private _setupActionBasedItems(items: T[], replace: boolean): void {
         const actionBasedItems = items.filter((item) => item.conditions?.actions?.values?.length)
-        this._actionToItems.clear()
+        if (replace) {
+            this._actionToItems.clear()
+        }
 
         if (actionBasedItems.length === 0) {
-            this._actionMatcher?.register([])
+            if (replace) {
+                this._actionMatcher?.replace([])
+            }
             return
         }
 
@@ -204,15 +216,33 @@ export abstract class EventReceiver<T extends EventTriggerable> {
                 actions.push(action)
                 if (action.name) {
                     const matchingItems = this._actionToItems.get(action.name) ?? []
-                    matchingItems.push(item.id)
+                    if (!matchingItems.includes(item.id)) {
+                        matchingItems.push(item.id)
+                    }
                     this._actionToItems.set(action.name, matchingItems)
                 }
             })
         })
-        this._actionMatcher.register(actions)
+        if (replace) {
+            this._actionMatcher.replace(actions)
+        } else {
+            this._actionMatcher.register(actions)
+        }
     }
 
-    private _setupEventBasedItems(items: T[]) {
+    private _mergeItemMaps(target: Map<string, string[]>, source: Map<string, string[]>): void {
+        source.forEach((itemIds, eventName) => {
+            const matchingItems = target.get(eventName) ?? []
+            itemIds.forEach((itemId) => {
+                if (!matchingItems.includes(itemId)) {
+                    matchingItems.push(itemId)
+                }
+            })
+            target.set(eventName, matchingItems)
+        })
+    }
+
+    private _setupEventBasedItems(items: T[], replace: boolean): void {
         const eventBasedItems = items.filter(
             (item: T) => item.conditions?.events && item.conditions?.events?.values?.length > 0
         )
@@ -221,8 +251,15 @@ export abstract class EventReceiver<T extends EventTriggerable> {
             (item: T) => item.conditions?.cancelEvents && item.conditions?.cancelEvents?.values?.length > 0
         )
 
-        this._eventToItems = this._buildEventToItemMap(items, SurveyEventType.Activation)
-        this._cancelEventToItems = this._buildEventToItemMap(items, SurveyEventType.Cancellation)
+        const eventToItems = this._buildEventToItemMap(items, SurveyEventType.Activation)
+        const cancelEventToItems = this._buildEventToItemMap(items, SurveyEventType.Cancellation)
+        if (replace) {
+            this._eventToItems = eventToItems
+            this._cancelEventToItems = cancelEventToItems
+        } else {
+            this._mergeItemMaps(this._eventToItems, eventToItems)
+            this._mergeItemMaps(this._cancelEventToItems, cancelEventToItems)
+        }
         if (eventBasedItems.length === 0 && itemsWithCancelEvents.length === 0) {
             return
         }

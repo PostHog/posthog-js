@@ -30,8 +30,6 @@ export class ActionMatcher {
     }
 
     register(actions: SurveyActionType[]): void {
-        this._actionRegistry.clear()
-        this._actionEvents.clear()
         if (isUndefined(this._instance?._addCaptureHook)) {
             return
         }
@@ -44,16 +42,22 @@ export class ActionMatcher {
         })
 
         if (this._instance?.autocapture) {
-            const selectorsToWatch: Set<string> = new Set<string>()
-            actions.forEach((action) => {
+            const selectorsToWatch = new Set<string>()
+            this._actionRegistry.forEach((action) => {
                 action.steps?.forEach((step) => {
                     if (step?.selector) {
-                        selectorsToWatch.add(step?.selector)
+                        selectorsToWatch.add(step.selector)
                     }
                 })
             })
-            this._instance?.autocapture.setElementSelectors(selectorsToWatch)
+            this._instance.autocapture.setElementSelectors(selectorsToWatch)
         }
+    }
+
+    replace(actions: SurveyActionType[]): void {
+        this._actionRegistry.clear()
+        this._actionEvents.clear()
+        this.register(actions)
     }
 
     on(eventName: string, eventPayload?: CaptureResult) {
