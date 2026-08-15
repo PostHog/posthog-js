@@ -33,44 +33,60 @@ function findMaps(dir) {
     })
 }
 
-const distDir = path.join(PACKAGE_ROOT, 'dist')
-if (!fs.existsSync(distDir)) {
-    console.error('FAIL: dist/ is missing — run `pnpm build` before packing')
-    process.exit(1)
-}
-
-// Every directory in `files` that carries maps. `react/dist` is npm-only (the S3 upload takes
-// `dist/*.js{,.map}` and nothing else), so it's safe to strip here too.
-const maps = [distDir, path.join(PACKAGE_ROOT, 'lib'), path.join(PACKAGE_ROOT, 'react', 'dist')].flatMap(findMaps)
-
-if (maps.length === 0) {
-    console.warn('warn: no source maps found in dist/, lib/ or react/dist/ — nothing to strip')
-    process.exit(0)
-}
-
-let stripped = 0
-let bytesBefore = 0
-let bytesAfter = 0
-
-for (const mapPath of maps) {
-    const raw = fs.readFileSync(mapPath, 'utf8')
-    const map = JSON.parse(raw)
-    bytesBefore += Buffer.byteLength(raw)
-
-    if (!map.sourcesContent) {
-        bytesAfter += Buffer.byteLength(raw)
-        continue
+function stripSourceMapSourcesContent(packageRoot) {
+    const distDir = path.join(packageRoot, 'dist')
+    if (!fs.existsSync(distDir)) {
+        throw new Error('dist/ is missing — run `pnpm build` before packing')
     }
 
-    delete map.sourcesContent
-    const output = JSON.stringify(map)
-    fs.writeFileSync(mapPath, output)
-    bytesAfter += Buffer.byteLength(output)
-    stripped++
+    // Every directory in `files` that carries maps. `react/dist` is npm-only (the S3 upload takes
+    // `dist/*.js{,.map}` and nothing else), so it's safe to strip here too.
+    const maps = [distDir, path.join(packageRoot, 'lib'), path.join(packageRoot, 'react', 'dist')].flatMap(findMaps)
+
+    if (maps.length === 0) {
+        throw new Error('no source maps found in dist/, lib/ or react/dist/')
+    }
+
+    let stripped = 0
+    let bytesBefore = 0
+    let bytesAfter = 0
+
+    for (const mapPath of maps) {
+        const raw = fs.readFileSync(mapPath, 'utf8')
+        const map = JSON.parse(raw)
+        bytesBefore += Buffer.byteLength(raw)
+
+        if (!map.sourcesContent) {
+            bytesAfter += Buffer.byteLength(raw)
+            continue
+        }
+
+        delete map.sourcesContent
+        const output = JSON.stringify(map)
+        fs.writeFileSync(mapPath, output)
+        bytesAfter += Buffer.byteLength(output)
+        stripped++
+    }
+
+    return { stripped, total: maps.length, bytesBefore, bytesAfter }
 }
 
 const asMb = (bytes) => `${(bytes / 1024 / 1024).toFixed(1)} MB`
 
-console.log(
-    `OK: stripped sourcesContent from ${stripped}/${maps.length} source map(s), ${asMb(bytesBefore)} -> ${asMb(bytesAfter)}`
-)
+function main() {
+    try {
+        const { stripped, total, bytesBefore, bytesAfter } = stripSourceMapSourcesContent(PACKAGE_ROOT)
+        console.log(
+            `OK: stripped sourcesContent from ${stripped}/${total} source map(s), ${asMb(bytesBefore)} -> ${asMb(bytesAfter)}`
+        )
+    } catch (error) {
+        console.error(`FAIL: ${error.message}`)
+        process.exitCode = 1
+    }
+}
+
+if (require.main === module) {
+    main()
+}
+
+module.exports = { stripSourceMapSourcesContent }
