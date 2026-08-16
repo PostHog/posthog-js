@@ -58,6 +58,11 @@ const PALE_MOON = 'Pale Moon'
 const WATERFOX = 'Waterfox'
 const BRAVE = 'Brave'
 const GOOGLE_SEARCH_APP = 'Google Search App'
+const LINKEDIN = 'LinkedIn'
+const TWITTER = 'Twitter'
+const TIKTOK = 'TikTok'
+const WECHAT = 'WeChat'
+const LINE = 'Line'
 
 const BROWSER_VERSION_REGEX_SUFFIX = '(\\d+(\\.\\d+)?)'
 const DEFAULT_BROWSER_VERSION_REGEX = new RegExp('Version/' + BROWSER_VERSION_REGEX_SUFFIX)
@@ -193,6 +198,20 @@ export const detectBrowser = function (
     return DUCKDUCKGO
   } else if (includes(user_agent, 'FBIOS')) {
     return FACEBOOK + ' ' + MOBILE
+  } else if (includes(user_agent, 'FBAN') || includes(user_agent, 'FB_IAB')) {
+    return FACEBOOK + ' ' + MOBILE
+  } else if (includes(user_agent, 'Instagram')) {
+    return 'Instagram'
+  } else if (includes(user_agent, 'LinkedInApp') || includes(user_agent, '[LinkedInApp]')) {
+    return LINKEDIN
+  } else if (includes(user_agent, 'Twitter for')) {
+    return TWITTER
+  } else if (includes(user_agent, 'musical_ly')) {
+    return TIKTOK
+  } else if (includes(user_agent, 'MicroMessenger/')) {
+    return WECHAT
+  } else if (includes(user_agent, 'Line/')) {
+    return LINE
   } else if (includes(user_agent, 'UCWEB') || includes(user_agent, 'UCBrowser')) {
     return 'UC Browser'
   } else if (includes(user_agent, 'CriOS')) {
