@@ -51,6 +51,7 @@ import {
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { getTimezone } from '@posthog/browser-common/utils/event-utils'
 import { window } from '@posthog/browser-common/utils/globals'
+import { continueWith } from '@posthog/browser-common/utils/promise-utils'
 import {
     isStatusZeroFailureCircuitBreakerTripped,
     updateStatusZeroFailureCount,
@@ -64,17 +65,6 @@ const FLAG_TIMEOUT_MSG = '" failed. Feature flags didn\'t load in time.'
 // deterministically blocked (ad blocker, CORS, extension). Stop periodic /flags
 // refreshes after this many consecutive failures until connectivity changes.
 const MAX_CONSECUTIVE_FLAGS_STATUS_ZERO_FAILURES = 3
-
-type MaybePromise<T> = T | Promise<T>
-
-/**
- * Preserve browser-v1's same-tick behavior when a host operation is synchronous while still chaining async hosts.
- * Use this only on paths that were historically synchronous, not after requests or other inherently async work.
- */
-const continueWith = <T, R>(result: MaybePromise<T>, callback: (value: T) => MaybePromise<R>): MaybePromise<R> => {
-    const promise = result as Promise<T>
-    return promise?.then ? promise.then(callback) : callback(result as T)
-}
 
 type FeatureFlagsState = {
     [PERSISTENCE_ACTIVE_FEATURE_FLAGS]?: string[]
