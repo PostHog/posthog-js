@@ -1,6 +1,7 @@
 /// <reference lib="dom" />
 
 import { expect, it, describe, beforeEach, afterEach, jest } from '@jest/globals'
+import { render } from 'preact'
 import { act } from 'preact/test-utils'
 import { SURVEYS, SURVEYS_REQUEST_TIMEOUT_MS } from '../constants'
 import { generateSurveys, getNextSurveyStep, SurveyManager } from '../extensions/surveys'
@@ -306,27 +307,34 @@ describe('surveys', () => {
         expect(document.querySelector(getSurveyContainerClass(survey, true))).toBeNull()
     })
 
-    it('unmounts surveys rendered through the public inline and popover helpers on dispose', () => {
+    it('does not retain caller-owned inline survey targets for disposal', () => {
         const survey = firstSurveys[0]
         const target = document.createElement('div')
         document.body.appendChild(target)
+        const surveyManager = new SurveyManager(instance)
+
+        act(() => surveyManager.renderSurvey(survey, target))
+
+        expect(target.childElementCount).toBeGreaterThan(0)
+        expect(surveyManager['_renderedTargets'].size).toBe(0)
+
+        act(() => render(null, target))
+        target.remove()
+    })
+
+    it('unmounts surveys rendered through the public popover helper on dispose', () => {
+        const survey = firstSurveys[0]
         const removeEventListener = jest.spyOn(window, 'removeEventListener')
         const surveyManager = new SurveyManager(instance)
 
-        act(() => {
-            surveyManager.renderSurvey(survey, target)
-            surveyManager.renderPopover(survey)
-        })
-        expect(target.childElementCount).toBeGreaterThan(0)
+        act(() => surveyManager.renderPopover(survey))
         expect(document.querySelector(getSurveyContainerClass(survey, true))).not.toBeNull()
 
         act(() => surveyManager.dispose())
 
-        expect(target.childElementCount).toBe(0)
         expect(document.querySelector(getSurveyContainerClass(survey, true))).toBeNull()
         expect(removeEventListener).toHaveBeenCalledWith('PHSurveyClosed', expect.any(Function))
         removeEventListener.mockRestore()
-        target.remove()
     })
 
     it('posthog.reset() removes surveys tracking properties from storage', () => {
