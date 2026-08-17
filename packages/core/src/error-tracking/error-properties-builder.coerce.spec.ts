@@ -285,5 +285,23 @@ describe('ErrorPropertiesBuilder', () => {
         type: 'Error',
       })
     })
+
+    it('should preserve a string type when name is a stateful accessor', () => {
+      let reads = 0
+      const candidate = { message: 'boom' }
+
+      Object.defineProperty(candidate, 'name', {
+        // Keep this non-enumerable so the object property scan does not read it first.
+        get() {
+          reads += 1
+          return reads === 1 ? 'TypeError' : 42
+        },
+      })
+
+      expect(coerceInput(candidate)).toMatchObject({
+        type: 'TypeError',
+        value: 'boom',
+      })
+    })
   })
 })

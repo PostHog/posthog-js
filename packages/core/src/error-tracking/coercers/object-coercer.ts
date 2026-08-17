@@ -32,7 +32,8 @@ export class ObjectCoercer implements ErrorTrackingCoercer<ObjectLike> {
     if (isEvent(err)) {
       return err.constructor.name
     }
-    return 'name' in err && isString(err.name) && !isEmptyString(err.name) ? err.name : 'Error'
+    const name = 'name' in err ? err.name : undefined
+    return isString(name) && !isEmptyString(name) ? name : 'Error'
   }
 
   getValue(err: object) {
