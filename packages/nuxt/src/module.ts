@@ -91,17 +91,15 @@ export default defineNuxtModule<ModuleOptions>({
     const normalizedPublicKey = normalizeApiKey(options.publicKey)
     const normalizedHost = normalizeHost(options.host)
     addPlugin({ src: resolver.resolve('./runtime/vue-plugin'), mode: 'client' })
-    // Nuxt >= 3.12 guarantees nitropack >= 2.9.6, which exports the bare 'nitropack/runtime'
+    // Nuxt >= 3.11.2 guarantees nitropack >= 2.9.6, which exports the bare 'nitropack/runtime'
     // subpath the v2 adapter needs; older Nuxt gets the legacy adapter (see its header).
-    const [nuxtMajor = 0, nuxtMinor = 0] = getNuxtVersion(nuxt)
+    const [nuxtMajor = 0, nuxtMinor = 0, nuxtPatch = 0] = getNuxtVersion(nuxt)
       .split('.')
       .map(part => Number.parseInt(part, 10))
+    const nuxtHasNitropackRuntimeExport =
+      nuxtMajor > 3 || (nuxtMajor === 3 && (nuxtMinor > 11 || (nuxtMinor === 11 && nuxtPatch >= 2)))
     const nitroPlugin =
-      nuxtMajor >= 5
-        ? 'nitro-plugin-v3'
-        : nuxtMajor === 4 || (nuxtMajor === 3 && nuxtMinor >= 12)
-          ? 'nitro-plugin-v2'
-          : 'nitro-plugin-v2-legacy'
+      nuxtMajor >= 5 ? 'nitro-plugin-v3' : nuxtHasNitropackRuntimeExport ? 'nitro-plugin-v2' : 'nitro-plugin-v2-legacy'
     addServerPlugin(resolver.resolve(`./runtime/${nitroPlugin}`))
     addImportsDir(resolver.resolve('./runtime/composables'))
 

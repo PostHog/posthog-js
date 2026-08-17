@@ -96,10 +96,11 @@ async function runRegistration({ nuxtVersion, compatibilityVersion }) {
 }
 
 for (const { nuxtVersion, compatibilityVersion, expectedServerPlugin } of [
-  // Nuxt < 3.12 can resolve nitropack < 2.9.5, which lacks the bare 'nitropack/runtime'
+  // Nuxt < 3.11.2 can resolve nitropack < 2.9.5, which lacks the bare 'nitropack/runtime'
   // subpath the v2 adapter imports — those versions must get the legacy adapter.
   { nuxtVersion: '3.7.0', expectedServerPlugin: './runtime/nitro-plugin-v2-legacy' },
-  { nuxtVersion: '3.11.2', expectedServerPlugin: './runtime/nitro-plugin-v2-legacy' },
+  { nuxtVersion: '3.11.1', expectedServerPlugin: './runtime/nitro-plugin-v2-legacy' },
+  { nuxtVersion: '3.11.2', expectedServerPlugin: './runtime/nitro-plugin-v2' },
   { nuxtVersion: '3.12.0', expectedServerPlugin: './runtime/nitro-plugin-v2' },
   { nuxtVersion: '4.1.2', expectedServerPlugin: './runtime/nitro-plugin-v2' },
   { nuxtVersion: '4.1.2', compatibilityVersion: 5, expectedServerPlugin: './runtime/nitro-plugin-v2' },
