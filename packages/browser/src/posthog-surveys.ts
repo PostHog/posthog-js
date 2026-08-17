@@ -388,7 +388,9 @@ export class PostHogSurveys implements Extension {
             (survey) =>
                 isSurveyRunning(survey) && (doesSurveyActivateByEvent(survey) || doesSurveyActivateByAction(survey))
         )
-        this._surveyEventReceiver?.replace(eventOrActionBasedSurveys)
+        if (eventOrActionBasedSurveys.length > 0) {
+            this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
+        }
 
         // Stamp when these definitions were fetched so the split-storage loader can tell a fresher
         // main-blob write-back from a stale `__surveys` entry.
