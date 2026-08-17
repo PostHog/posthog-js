@@ -1,0 +1,180 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`server wire snapshots snapshots a deterministic complete captureException wire event 1`] = `
+{
+  "body": {
+    "api_key": "<redacted>",
+    "batch": [
+      {
+        "distinct_id": "person-exception",
+        "event": "$exception",
+        "properties": {
+          "$exception_level": "error",
+          "$exception_list": [
+            {
+              "mechanism": {
+                "handled": true,
+                "synthetic": false,
+                "type": "generic",
+              },
+              "stacktrace": {
+                "frames": [
+                  {
+                    "colno": 5,
+                    "filename": "service/src/handler.ts",
+                    "function": "handler",
+                    "in_app": false,
+                    "lineno": 12,
+                    "module": "handler.ts",
+                    "platform": "node:javascript",
+                  },
+                  {
+                    "colno": 13,
+                    "filename": "service/src/db.ts",
+                    "function": "runQuery",
+                    "in_app": false,
+                    "lineno": 41,
+                    "module": "db.ts",
+                    "platform": "node:javascript",
+                  },
+                ],
+                "type": "raw",
+              },
+              "type": "TypeError",
+              "value": "database unavailable",
+            },
+          ],
+          "$geoip_disable": true,
+          "$is_server": true,
+          "$lib": "posthog-node",
+          "$lib_version": "1.2.3",
+          "endpoint": "/v1/orders",
+          "request": {
+            "method": "POST",
+            "tags": [
+              "checkout",
+              "priority",
+            ],
+          },
+          "status_code": 503,
+        },
+        "timestamp": "2025-02-03T04:05:06.789Z",
+        "uuid": "0194cc39-1f25-7000-8000-000000000001",
+      },
+    ],
+    "sent_at": "2025-02-03T04:05:06.789Z",
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "User-Agent": "posthog-node/1.2.3",
+  },
+  "method": "POST",
+  "url": "https://us.example.test/batch/",
+}
+`;
+
+exports[`server wire snapshots snapshots a maximal flags request body 1`] = `
+{
+  "body": {
+    "$device_id": "device-3",
+    "distinct_id": "person-flags",
+    "evaluation_contexts": [
+      "production",
+      "backend",
+    ],
+    "flag_keys_to_evaluate": [
+      "new-checkout",
+      "billing-v2",
+    ],
+    "geoip_disable": false,
+    "group_properties": {
+      "company": {
+        "$group_key": "company-7",
+        "name": "Acme",
+        "seats": 42,
+      },
+      "project": {
+        "$group_key": "project-9",
+        "region": "eu-west-1",
+        "tier": "critical",
+      },
+    },
+    "groups": {
+      "company": "company-7",
+      "project": "project-9",
+    },
+    "person_properties": {
+      "$device_id": "device-3",
+      "email": "person@example.test",
+      "plan": "enterprise",
+    },
+    "token": "<redacted>",
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "User-Agent": "posthog-node/1.2.3",
+  },
+  "method": "POST",
+  "url": "https://us.example.test/flags/?v=2",
+}
+`;
+
+exports[`server wire snapshots snapshots the canonical Capture V1 transform and request matrix 1`] = `
+{
+  "body": {
+    "batch": [
+      {
+        "distinct_id": "person-1",
+        "event": "all-valid-sentinels",
+        "options": {
+          "cookieless_mode": true,
+          "disable_skew_correction": false,
+          "process_person_profile": false,
+          "product_tour_id": "tour-7",
+        },
+        "properties": {
+          "$set": {
+            "plan": "pro",
+          },
+          "$set_once": {
+            "first_seen": "2025-02-03",
+          },
+          "nested": {
+            "a": [
+              "second",
+              "first",
+            ],
+            "z": 1,
+          },
+        },
+        "session_id": "session-7",
+        "timestamp": "2025-02-03T04:05:06.123456Z",
+        "uuid": "0194cc39-1f25-7000-8000-000000000001",
+        "window_id": "window-7",
+      },
+      {
+        "distinct_id": "person-2",
+        "event": "invalid-sentinels-are-omitted",
+        "options": {},
+        "properties": {
+          "ordinary": true,
+        },
+        "timestamp": "2025-02-03T04:05:07.000Z",
+        "uuid": "0194cc39-1f25-7000-8000-000000000003",
+      },
+    ],
+    "created_at": "2025-02-03T04:05:06.789Z",
+  },
+  "headers": {
+    "Authorization": "Bearer <redacted>",
+    "Content-Type": "application/json",
+    "PostHog-Attempt": "1",
+    "PostHog-Request-Id": "0194cc39-1f25-7000-8000-000000000002",
+    "PostHog-Request-Timestamp": "2025-02-03T04:05:06.789Z",
+    "PostHog-Sdk-Info": "posthog-node/1.2.3",
+    "User-Agent": "posthog-node/1.2.3",
+  },
+  "method": "POST",
+  "url": "https://us.example.test/i/v1/analytics/events",
+}
+`;
