@@ -268,5 +268,3 @@ export default class MetricsAutocapture {
     this._sampler = undefined
   }
 }
-
-export type { RuntimeMetricsSampler } from './types'
