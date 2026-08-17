@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.417.3
+
+### Patch Changes
+
+- [#4540](https://github.com/PostHog/posthog-js/pull/4540) [`ce8fc13`](https://github.com/PostHog/posthog-js/commit/ce8fc133346d373927a68e7e20073d947699358b) Thanks [@marandaneto](https://github.com/marandaneto)! - Restore exception autocapture compatibility for posthog-js clients through version 1.141.0.
+  (2026-08-17)
+
 ## 1.417.2
 
 ### Patch Changes
