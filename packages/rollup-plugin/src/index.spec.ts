@@ -3,6 +3,7 @@ import {
     createChunkIdComment,
     createChunkIdSnippet,
     determineChunkIdFromSource,
+    resolveReleaseId,
     runSourcemapCli,
 } from '@posthog/plugin-utils'
 import posthogRollupPlugin from './index.js'
@@ -13,6 +14,7 @@ import os from 'node:os'
 jest.mock('@posthog/plugin-utils', () => ({
     ...jest.requireActual('@posthog/plugin-utils'),
     runSourcemapCli: jest.fn().mockResolvedValue(undefined),
+    resolveReleaseId: jest.fn().mockResolvedValue('release-id-1'),
 }))
 
 const options = {
@@ -24,6 +26,7 @@ type RenderChunkResult = { code: string; map: unknown } | null
 
 type TestPlugin = {
     config: () => { build: { sourcemap: 'hidden' | true } } | undefined
+    buildStart: () => void
     outputOptions: {
         handler: (options: OutputOptions) => OutputOptions
     }
@@ -146,6 +149,71 @@ describe('posthogRollupPlugin', () => {
             })
 
             expect(result!.code.startsWith('"use client";\n"use strict";\n!function(){try{')).toBe(true)
+        })
+
+        describe('event release mode', () => {
+            const eventOptions = { ...options, sourcemaps: { releaseMode: 'event' as const } }
+
+            beforeEach(() => {
+                jest.mocked(resolveReleaseId).mockResolvedValue('release-id-1')
+            })
+
+            it('injects the resolved release id so exceptions carry it', async () => {
+                const plugin = testPlugin(eventOptions)
+
+                const result = await plugin.renderChunk.handler(code, { fileName: 'index.js' })
+
+                expect(result!.code).toContain('e._posthogReleaseId=e._posthogReleaseId||"release-id-1"')
+            })
+
+            it('derives the chunk id from content, so rebuilds reuse the symbol set', async () => {
+                const plugin = testPlugin(eventOptions)
+
+                const first = await plugin.renderChunk.handler(code, { fileName: 'index.js' })
+                const rebuilt = await testPlugin(eventOptions).renderChunk.handler(code, { fileName: 'index.js' })
+                const other = await plugin.renderChunk.handler(`${code}more();`, { fileName: 'other.js' })
+
+                expect(determineChunkIdFromSource(rebuilt!.code)).toBe(determineChunkIdFromSource(first!.code))
+                expect(determineChunkIdFromSource(other!.code)).not.toBe(determineChunkIdFromSource(first!.code))
+            })
+
+            it('resolves the release once per build, not once per chunk', async () => {
+                const plugin = testPlugin(eventOptions)
+
+                await plugin.renderChunk.handler(code, { fileName: 'a.js' })
+                await plugin.renderChunk.handler(`${code}more();`, { fileName: 'b.js' })
+
+                expect(resolveReleaseId).toHaveBeenCalledTimes(1)
+
+                // A watch-mode rebuild can land on a new commit, so the next build resolves again.
+                plugin.buildStart()
+                await plugin.renderChunk.handler(code, { fileName: 'a.js' })
+
+                expect(resolveReleaseId).toHaveBeenCalledTimes(2)
+            })
+
+            it('still injects chunk ids when no release can be resolved', async () => {
+                // Chunk ids alone still symbolicate, so a build with no identifiable release warns
+                // instead of failing, the way posthog-cli does.
+                jest.mocked(resolveReleaseId).mockResolvedValue(undefined)
+                const plugin = testPlugin(eventOptions)
+                const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+
+                const result = await plugin.renderChunk.handler(code, { fileName: 'index.js' })
+
+                expect(result!.code).not.toContain('_posthogReleaseId')
+                expect(determineChunkIdFromSource(result!.code)).toBeDefined()
+                expect(warn).toHaveBeenCalledWith(expect.stringContaining('no release could be resolved'))
+                warn.mockRestore()
+            })
+
+            it('does not resolve a release in symbol-set mode', async () => {
+                const plugin = testPlugin(options)
+
+                await plugin.renderChunk.handler(code, { fileName: 'index.js' })
+
+                expect(resolveReleaseId).not.toHaveBeenCalled()
+            })
         })
 
         it('skips non-js chunks and disabled sourcemaps', () => {

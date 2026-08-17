@@ -21,6 +21,23 @@ describe('buildSourcemapCliArgs', () => {
         expect(args).not.toContain('--delete-after')
     })
 
+    it.each([
+        { releaseMode: 'symbol-set' as const, expected: false },
+        { releaseMode: 'event' as const, expected: true },
+    ])('passes --release-mode only in event mode ($releaseMode)', ({ releaseMode, expected }) => {
+        // Symbol-set builds must stay compatible with a posthog-cli predating the flag, and an
+        // event build that loses it binds its symbol sets to a release after all.
+        const withMode = resolveConfig({
+            personalApiKey: 'phx_test',
+            projectId: '1',
+            sourcemaps: { releaseMode },
+        })
+
+        const args = buildSourcemapCliArgs(withMode, { directory: 'dist' }, 'upload')
+
+        expect(args.includes('--release-mode')).toBe(expected)
+    })
+
     it('keeps release args on upload', () => {
         const withRelease = resolveConfig({
             personalApiKey: 'phx_test',
