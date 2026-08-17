@@ -97,7 +97,9 @@ function loadAdapter(filename, defineName) {
   const adapterSource = readFileSync(new URL(`../src/runtime/${filename}`, import.meta.url), 'utf8')
   const executableAdapter = adapterSource
     .replace(/^import .*$/gm, '')
+    .replace(': NitroAppPlugin', '')
     .replace(`export default ${defineName}(`, `return ${defineName}(`)
+    .replace(/^export default (\w+)$/m, 'return $1')
   let bindings
   const plugin = new Function(defineName, 'useRuntimeConfig', 'setupPostHogNitroPlugin', executableAdapter)(
     value => value,
@@ -118,8 +120,11 @@ function loadAdapter(filename, defineName) {
 }
 
 const nitro2 = loadAdapter('nitro-plugin-v2.ts', 'defineNitroPlugin')
-assert.match(nitro2.adapterSource, /from 'nitropack\/runtime'/)
-assert.doesNotMatch(nitro2.adapterSource, /from '#imports'/)
+// Bare 'nitropack/runtime' only exists in nitropack >= 2.9.5, so a value import breaks
+// the declared Nuxt >= 3.7 floor at server startup (ERR_PACKAGE_PATH_NOT_EXPORTED);
+// the Nitro 2 adapter must use the version-agnostic `#imports` virtual module instead.
+assert.doesNotMatch(nitro2.adapterSource, /^import (?!type ).*'nitropack\/runtime'/m)
+assert.match(nitro2.adapterSource, /from '#imports'/)
 let nitro2Request
 const nitro2Promise = Promise.resolve()
 nitro2.bindings.onError((_error, request) => {
