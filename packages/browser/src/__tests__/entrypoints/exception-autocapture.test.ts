@@ -73,6 +73,24 @@ describe('exception-autocapture entrypoint', () => {
         )
     })
 
+    it('captures errors when a legacy exclusion rule is invalid', () => {
+        const capture = jest.fn()
+
+        expect(() =>
+            assignableWindow.extendPostHogWithExceptionAutocapture(
+                { capture },
+                {
+                    autocaptureExceptions: {
+                        errors_to_ignore: ['['],
+                    },
+                }
+            )
+        ).not.toThrow()
+        window?.onerror?.('reported error', 'source', 1, 2, new Error('reported error'))
+
+        expect(capture).toHaveBeenCalledTimes(1)
+    })
+
     it('captures unhandled rejections for legacy clients', () => {
         const capture = jest.fn()
 

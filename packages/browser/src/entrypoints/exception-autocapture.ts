@@ -137,7 +137,14 @@ const extendPostHogWithExceptionAutocapture = (instance?: LegacyPostHogInstance,
         !isNull(autocaptureExceptions) &&
         typeof autocaptureExceptions === 'object' &&
         isArray(autocaptureExceptions.errors_to_ignore)
-            ? autocaptureExceptions.errors_to_ignore.map((rule) => new RegExp(rule))
+            ? autocaptureExceptions.errors_to_ignore.reduce<RegExp[]>((rules, rule) => {
+                  try {
+                      rules.push(new RegExp(rule))
+                  } catch (error) {
+                      logger.error('Ignoring invalid legacy exception exclusion rule', rule, error)
+                  }
+                  return rules
+              }, [])
             : []
 
     const captureException = (properties: ErrorTracking.ErrorProperties) => {
