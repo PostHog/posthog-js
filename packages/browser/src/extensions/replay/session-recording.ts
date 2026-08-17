@@ -35,6 +35,7 @@ import {
     TriggerType,
 } from './external/triggerMatching'
 import type { Extension } from '../types'
+import { forcePreserveDrawingBuffer } from './preserve-drawing-buffer'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
@@ -102,7 +103,23 @@ export class SessionRecording implements Extension {
     }
 
     initialize() {
+        this._preserveCanvasDrawingBuffers()
         this.startIfEnabledOrStop()
+    }
+
+    /**
+     * A WebGL context can only be made capturable at the moment it is created, and the recorder that
+     * does that arrives a network round trip too late for a renderer that boots with the page. Do it
+     * here instead, synchronously during `posthog.init()`, whenever we already know canvas recording
+     * is on - either because it was asked for in config, or because a previous page load persisted a
+     * remote config that turns it on.
+     */
+    private _preserveCanvasDrawingBuffers() {
+        const clientSide = this._config.session_recording?.captureCanvas?.recordCanvas
+        const serverSide = this._instance.get_property(SESSION_RECORDING_REMOTE_CONFIG)?.canvasRecording?.enabled
+        if (this._isRecordingEnabled && (clientSide ?? serverSide)) {
+            forcePreserveDrawingBuffer()
+        }
     }
 
     dispose(): void {
@@ -292,6 +309,10 @@ export class SessionRecording implements Extension {
         }
 
         this._persistRemoteConfig(response)
+        // now that canvas recording may have just been turned on, catch any canvas created from here
+        // on - the ones built during page load are already past saving on this load, but will be
+        // covered on the next one from the config we just persisted
+        this._preserveCanvasDrawingBuffers()
         this.startIfEnabledOrStop()
     }
 
