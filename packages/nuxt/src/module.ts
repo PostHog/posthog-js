@@ -4,7 +4,8 @@ import type { PostHogOptions } from 'posthog-node'
 import type {} from 'nuxt/app'
 import { resolveBinaryPath, spawnLocal } from '@posthog/plugin-utils'
 import { fileURLToPath } from 'node:url'
-import { dirname } from 'node:path'
+import { dirname, join } from 'node:path'
+import { createRequire } from 'node:module'
 
 const filename = fileURLToPath(import.meta.url)
 const resolvedDirname = dirname(filename)
@@ -21,6 +22,22 @@ function normalizePersonalApiKey(value?: unknown): string {
 function normalizeHost(value?: unknown): string {
   const normalizedValue = typeof value === 'string' ? value.trim() : ''
   return normalizedValue || DEFAULT_NUXT_HOST
+}
+
+// The v2 nitro adapter imports the bare 'nitropack/runtime' subpath, which only exists
+// in nitropack >= 2.9.5 (Nuxt < 3.11.2 can resolve older). Probe the export map of the
+// nitropack copy Nuxt itself resolves instead of keying off Nuxt versions, so lockfiles
+// that float or pin nitropack still get the right adapter.
+function nitropackHasBareRuntimeExport(appDir: string): boolean {
+  try {
+    const requireFromNuxt = createRequire(join(appDir, 'index.mjs'))
+    const manifest = requireFromNuxt('nitropack/package.json')
+    return Boolean(manifest.exports?.['./runtime'])
+  } catch {
+    // No resolvable nitropack manifest: fall back to the legacy adapter, which matches
+    // the behavior this module shipped with before the adapter split.
+    return false
+  }
 }
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error'
@@ -91,15 +108,12 @@ export default defineNuxtModule<ModuleOptions>({
     const normalizedPublicKey = normalizeApiKey(options.publicKey)
     const normalizedHost = normalizeHost(options.host)
     addPlugin({ src: resolver.resolve('./runtime/vue-plugin'), mode: 'client' })
-    // Nuxt >= 3.11.2 guarantees nitropack >= 2.9.6, which exports the bare 'nitropack/runtime'
-    // subpath the v2 adapter needs; older Nuxt gets the legacy adapter (see its header).
-    const [nuxtMajor = 0, nuxtMinor = 0, nuxtPatch = 0] = getNuxtVersion(nuxt)
-      .split('.')
-      .map(part => Number.parseInt(part, 10))
-    const nuxtHasNitropackRuntimeExport =
-      nuxtMajor > 3 || (nuxtMajor === 3 && (nuxtMinor > 11 || (nuxtMinor === 11 && nuxtPatch >= 2)))
     const nitroPlugin =
-      nuxtMajor >= 5 ? 'nitro-plugin-v3' : nuxtHasNitropackRuntimeExport ? 'nitro-plugin-v2' : 'nitro-plugin-v2-legacy'
+      Number.parseInt(getNuxtVersion(nuxt), 10) >= 5
+        ? 'nitro-plugin-v3'
+        : nitropackHasBareRuntimeExport(nuxt.options.appDir)
+          ? 'nitro-plugin-v2'
+          : 'nitro-plugin-v2-legacy'
     addServerPlugin(resolver.resolve(`./runtime/${nitroPlugin}`))
     addImportsDir(resolver.resolve('./runtime/composables'))
 

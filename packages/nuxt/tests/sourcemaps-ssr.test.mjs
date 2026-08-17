@@ -33,6 +33,7 @@ const executableSource = source
   .replace(/value\?: unknown/g, 'value')
   .replace(/\(directory: string, sourcemapsConfig: SourcemapsConfig\)/g, '(directory, sourcemapsConfig)')
   .replace(/\(args: string\[\]\)/g, '(args)')
+  .replace(/\(appDir: string\)/g, '(appDir)')
   .replace(/\): string \{/g, ') {')
   .replace(/\): boolean \{/g, ') {')
   .replace(/let (outputDir|publicDir|serverDir): string \| undefined/g, 'let $1')
@@ -43,7 +44,7 @@ const executableSource = source
   // Turn the module's `export default` into a value the wrapper returns.
   .replace('export default defineNuxtModule(', 'return defineNuxtModule(')
 
-function loadModule({ failPublicUpload = false, nuxtVersion = '4.1.2' } = {}) {
+function loadModule({ failPublicUpload = false, nuxtVersion = '4.1.2', nitropackExports = { './runtime': {} } } = {}) {
   const spawnCalls = []
   const pluginCalls = []
   const serverPluginCalls = []
@@ -54,6 +55,11 @@ function loadModule({ failPublicUpload = false, nuxtVersion = '4.1.2' } = {}) {
     addImportsDir: () => {},
     createResolver: () => ({ resolve: p => p }),
     getNuxtVersion: () => nuxtVersion,
+    createRequire: () => () => {
+      if (nitropackExports === null) throw new Error('nitropack not resolvable')
+      return { exports: nitropackExports }
+    },
+    join: (...parts) => parts.join('/'),
     resolveBinaryPath: () => '/fake/posthog-cli',
     spawnLocal: async (bin, args) => {
       spawnCalls.push({ bin, args: [...args] })
@@ -71,13 +77,14 @@ function loadModule({ failPublicUpload = false, nuxtVersion = '4.1.2' } = {}) {
   return { mod, spawnCalls, pluginCalls, serverPluginCalls }
 }
 
-async function runRegistration({ nuxtVersion, compatibilityVersion }) {
-  const { mod, pluginCalls, serverPluginCalls } = loadModule({ nuxtVersion })
+async function runRegistration({ nuxtVersion, compatibilityVersion, nitropackExports }) {
+  const { mod, pluginCalls, serverPluginCalls } = loadModule({ nuxtVersion, nitropackExports })
   const nuxt = {
     options: {
       dev: true,
       future: { compatibilityVersion },
       runtimeConfig: { public: {} },
+      appDir: '/fake/nuxt/app',
     },
     hook() {},
   }
@@ -95,19 +102,26 @@ async function runRegistration({ nuxtVersion, compatibilityVersion }) {
   return { pluginCalls, serverPluginCalls }
 }
 
-for (const { nuxtVersion, compatibilityVersion, expectedServerPlugin } of [
-  // Nuxt < 3.11.2 can resolve nitropack < 2.9.5, which lacks the bare 'nitropack/runtime'
-  // subpath the v2 adapter imports — those versions must get the legacy adapter.
-  { nuxtVersion: '3.7.0', expectedServerPlugin: './runtime/nitro-plugin-v2-legacy' },
-  { nuxtVersion: '3.11.1', expectedServerPlugin: './runtime/nitro-plugin-v2-legacy' },
-  { nuxtVersion: '3.11.2', expectedServerPlugin: './runtime/nitro-plugin-v2' },
-  { nuxtVersion: '3.12.0', expectedServerPlugin: './runtime/nitro-plugin-v2' },
-  { nuxtVersion: '4.1.2', expectedServerPlugin: './runtime/nitro-plugin-v2' },
-  { nuxtVersion: '4.1.2', compatibilityVersion: 5, expectedServerPlugin: './runtime/nitro-plugin-v2' },
-  { nuxtVersion: '5.0.0-0', expectedServerPlugin: './runtime/nitro-plugin-v3' },
-  { nuxtVersion: '5.0.0-29762631.396a4ae3', expectedServerPlugin: './runtime/nitro-plugin-v3' },
+const NITROPACK_OLD_EXPORTS = { './runtime/*': {} } // nitropack < 2.9.5: no bare './runtime'
+const NITROPACK_NEW_EXPORTS = { './runtime': {}, './runtime/*': {} }
+
+for (const { nuxtVersion, compatibilityVersion, nitropackExports, expectedServerPlugin } of [
+  // Adapter choice follows the resolved nitropack's export map, not the Nuxt version:
+  // nitropack < 2.9.5 lacks the bare 'nitropack/runtime' subpath the v2 adapter imports
+  // and must get the legacy adapter, while old Nuxt whose lockfile floated to a newer
+  // nitropack keeps the explicit v2 adapter (it works with `nitro: { imports: false }`).
+  { nuxtVersion: '3.7.0', nitropackExports: NITROPACK_OLD_EXPORTS, expectedServerPlugin: './runtime/nitro-plugin-v2-legacy' },
+  { nuxtVersion: '3.7.0', nitropackExports: NITROPACK_NEW_EXPORTS, expectedServerPlugin: './runtime/nitro-plugin-v2' },
+  { nuxtVersion: '3.11.1', nitropackExports: NITROPACK_OLD_EXPORTS, expectedServerPlugin: './runtime/nitro-plugin-v2-legacy' },
+  { nuxtVersion: '3.11.1', nitropackExports: NITROPACK_NEW_EXPORTS, expectedServerPlugin: './runtime/nitro-plugin-v2' },
+  // Unresolvable nitropack manifest falls back to the legacy adapter.
+  { nuxtVersion: '3.7.0', nitropackExports: null, expectedServerPlugin: './runtime/nitro-plugin-v2-legacy' },
+  { nuxtVersion: '4.1.2', nitropackExports: NITROPACK_NEW_EXPORTS, expectedServerPlugin: './runtime/nitro-plugin-v2' },
+  { nuxtVersion: '4.1.2', compatibilityVersion: 5, nitropackExports: NITROPACK_NEW_EXPORTS, expectedServerPlugin: './runtime/nitro-plugin-v2' },
+  { nuxtVersion: '5.0.0-0', nitropackExports: null, expectedServerPlugin: './runtime/nitro-plugin-v3' },
+  { nuxtVersion: '5.0.0-29762631.396a4ae3', nitropackExports: null, expectedServerPlugin: './runtime/nitro-plugin-v3' },
 ]) {
-  const { pluginCalls, serverPluginCalls } = await runRegistration({ nuxtVersion, compatibilityVersion })
+  const { pluginCalls, serverPluginCalls } = await runRegistration({ nuxtVersion, compatibilityVersion, nitropackExports })
   assert.deepEqual(pluginCalls, [{ src: './runtime/vue-plugin', mode: 'client' }])
   assert.deepEqual(serverPluginCalls, [expectedServerPlugin])
 }

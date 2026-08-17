@@ -1,6 +1,7 @@
-// Nitro 2 adapter for Nuxt < 3.12, where nitropack can resolve below 2.9.5 and the bare
-// 'nitropack/runtime' subpath used by nitro-plugin-v2 does not exist (unresolved at build
-// time, ERR_PACKAGE_PATH_NOT_EXPORTED at server startup). Deep subpaths like
+// Nitro 2 adapter for installs whose nitropack lacks the bare 'nitropack/runtime' subpath
+// (nitropack < 2.9.5, possible on Nuxt < 3.11.2), where the import used by nitro-plugin-v2
+// does not resolve (unresolved at build time, ERR_PACKAGE_PATH_NOT_EXPORTED at server
+// startup). Deep subpaths like
 // 'nitropack/runtime/config' resolve but old Nitro externalizes them, so they crash at
 // runtime on nitro's build-time-only '#internal/nitro/virtual/*' specifiers. The
 // `#imports` virtual module is the one mechanism that works on every old Nitro 2 version
