@@ -27,16 +27,17 @@ function normalizeHost(value?: unknown): string {
 // The v2 nitro adapter imports the bare 'nitropack/runtime' subpath, which only exists
 // in nitropack >= 2.9.5 (Nuxt < 3.11.2 can resolve older). Probe the export map of the
 // nitropack copy Nuxt itself resolves instead of keying off Nuxt versions, so lockfiles
-// that float or pin nitropack still get the right adapter.
-function nitropackHasBareRuntimeExport(appDir: string): boolean {
+// that float or pin nitropack still get the right adapter. Returns null when no manifest
+// is resolvable — e.g. Nuxt >= 4.5 depends on nitropack via @nuxt/nitro-server, so under
+// isolated installs it is not reachable from the nuxt package; the caller falls back to
+// a Nuxt-version gate there.
+function nitropackHasBareRuntimeExport(appDir: string): boolean | null {
   try {
     const requireFromNuxt = createRequire(join(appDir, 'index.mjs'))
     const manifest = requireFromNuxt('nitropack/package.json')
     return Boolean(manifest.exports?.['./runtime'])
   } catch {
-    // No resolvable nitropack manifest: fall back to the legacy adapter, which matches
-    // the behavior this module shipped with before the adapter split.
-    return false
+    return null
   }
 }
 
@@ -108,12 +109,15 @@ export default defineNuxtModule<ModuleOptions>({
     const normalizedPublicKey = normalizeApiKey(options.publicKey)
     const normalizedHost = normalizeHost(options.host)
     addPlugin({ src: resolver.resolve('./runtime/vue-plugin'), mode: 'client' })
+    const [nuxtMajor = 0, nuxtMinor = 0, nuxtPatch = 0] = getNuxtVersion(nuxt)
+      .split('.')
+      .map(part => Number.parseInt(part, 10))
+    // When the export-map probe is inconclusive, gate on the Nuxt version instead:
+    // Nuxt >= 3.11.2 is the first release whose nitropack range guarantees >= 2.9.6.
+    const modernNuxt = nuxtMajor > 3 || (nuxtMajor === 3 && (nuxtMinor > 11 || (nuxtMinor === 11 && nuxtPatch >= 2)))
+    const hasBareRuntimeExport = nitropackHasBareRuntimeExport(nuxt.options.appDir) ?? modernNuxt
     const nitroPlugin =
-      Number.parseInt(getNuxtVersion(nuxt), 10) >= 5
-        ? 'nitro-plugin-v3'
-        : nitropackHasBareRuntimeExport(nuxt.options.appDir)
-          ? 'nitro-plugin-v2'
-          : 'nitro-plugin-v2-legacy'
+      nuxtMajor >= 5 ? 'nitro-plugin-v3' : hasBareRuntimeExport ? 'nitro-plugin-v2' : 'nitro-plugin-v2-legacy'
     addServerPlugin(resolver.resolve(`./runtime/${nitroPlugin}`))
     addImportsDir(resolver.resolve('./runtime/composables'))
 

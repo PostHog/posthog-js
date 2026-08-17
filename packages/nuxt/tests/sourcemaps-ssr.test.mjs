@@ -36,6 +36,7 @@ const executableSource = source
   .replace(/\(appDir: string\)/g, '(appDir)')
   .replace(/\): string \{/g, ') {')
   .replace(/\): boolean \{/g, ') {')
+  .replace(/\): boolean \| null \{/g, ') {')
   .replace(/let (outputDir|publicDir|serverDir): string \| undefined/g, 'let $1')
   .replace(/const processOptions: string\[\] = /g, 'const processOptions = ')
   // `import.meta.url` is not available inside `new Function`; the value is
@@ -114,8 +115,13 @@ for (const { nuxtVersion, compatibilityVersion, nitropackExports, expectedServer
   { nuxtVersion: '3.7.0', nitropackExports: NITROPACK_NEW_EXPORTS, expectedServerPlugin: './runtime/nitro-plugin-v2' },
   { nuxtVersion: '3.11.1', nitropackExports: NITROPACK_OLD_EXPORTS, expectedServerPlugin: './runtime/nitro-plugin-v2-legacy' },
   { nuxtVersion: '3.11.1', nitropackExports: NITROPACK_NEW_EXPORTS, expectedServerPlugin: './runtime/nitro-plugin-v2' },
-  // Unresolvable nitropack manifest falls back to the legacy adapter.
+  // Unresolvable nitropack manifest (e.g. Nuxt >= 4.5 isolated installs, where nitropack
+  // lives under @nuxt/nitro-server) falls back to the Nuxt-version gate: >= 3.11.2 is the
+  // first release whose nitropack range guarantees the bare './runtime' export.
   { nuxtVersion: '3.7.0', nitropackExports: null, expectedServerPlugin: './runtime/nitro-plugin-v2-legacy' },
+  { nuxtVersion: '3.11.1', nitropackExports: null, expectedServerPlugin: './runtime/nitro-plugin-v2-legacy' },
+  { nuxtVersion: '3.11.2', nitropackExports: null, expectedServerPlugin: './runtime/nitro-plugin-v2' },
+  { nuxtVersion: '4.5.1', nitropackExports: null, expectedServerPlugin: './runtime/nitro-plugin-v2' },
   { nuxtVersion: '4.1.2', nitropackExports: NITROPACK_NEW_EXPORTS, expectedServerPlugin: './runtime/nitro-plugin-v2' },
   { nuxtVersion: '4.1.2', compatibilityVersion: 5, nitropackExports: NITROPACK_NEW_EXPORTS, expectedServerPlugin: './runtime/nitro-plugin-v2' },
   { nuxtVersion: '5.0.0-0', nitropackExports: null, expectedServerPlugin: './runtime/nitro-plugin-v3' },
