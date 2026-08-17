@@ -524,7 +524,6 @@ describe('BrowserClientAdapter', () => {
 
     it('publishes remote config after DOM readiness and replays it to late subscribers', async () => {
         const posthog = await createPosthogInstance(undefined)
-        const legacyConsumer = jest.spyOn(posthog.autocapture!, 'onRemoteConfig')
         const initialEndpoint = posthog.analyticsDefaultEndpoint
         const initialCompression = posthog.compression
         const body = document.body
@@ -550,7 +549,7 @@ describe('BrowserClientAdapter', () => {
             expect(posthog.analyticsDefaultEndpoint).toBe(initialEndpoint)
             expect(posthog.compression).toBe(initialCompression)
             expect(earlySubscriber).not.toHaveBeenCalledWith(result)
-            expect(legacyConsumer).not.toHaveBeenCalledWith(result)
+            expect(posthog.autocapture!['_isDisabledServerSide']).not.toBe(true)
 
             document.documentElement.appendChild(body)
             jest.advanceTimersByTime(500)
@@ -559,7 +558,7 @@ describe('BrowserClientAdapter', () => {
             expect(posthog.compression).toBe('base64')
             expect(earlySubscriber).toHaveBeenCalledTimes(initialCallCount + 1)
             expect(earlySubscriber).toHaveBeenLastCalledWith(result)
-            expect(legacyConsumer).toHaveBeenCalledWith(result)
+            expect(posthog.autocapture!['_isDisabledServerSide']).toBe(true)
 
             const lateSubscriber = jest.fn()
             client?.onRemoteConfig(lateSubscriber)
@@ -587,7 +586,6 @@ describe('BrowserClientAdapter', () => {
         const enqueue = jest.spyOn(posthog._requestQueue!, 'enqueue')
         const eventSibling = jest.fn()
         const configSibling = jest.fn()
-        const legacyConfig = jest.spyOn(posthog.autocapture!, 'onRemoteConfig')
 
         client?.onEvent(() => {
             throw new Error('event failed')
@@ -608,7 +606,6 @@ describe('BrowserClientAdapter', () => {
         expect(() => posthog._onRemoteConfig(result)).not.toThrow()
         expect(posthog.analyticsDefaultEndpoint).toBe('/continued/')
         expect(configSibling).toHaveBeenCalled()
-        expect(legacyConfig).toHaveBeenCalledWith(result)
 
         posthog.reset()
         expect(() => posthog.capture('after-reset')).not.toThrow()

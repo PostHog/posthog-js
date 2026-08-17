@@ -22,7 +22,7 @@
  * @module
  */
 
-import { Autocapture } from '../autocapture'
+import { BrowserAutocapture } from '../browser-autocapture'
 import { DeadClicksAutocapture } from './dead-clicks-autocapture'
 import { ExceptionObserver } from './exception-autocapture'
 import { HistoryAutocapture } from './history-autocapture'
@@ -56,7 +56,7 @@ export const SessionReplayExtensions = {
 
 /** Autocapture, click tracking, heatmaps, and web vitals. */
 export const AnalyticsExtensions = {
-    autocapture: Autocapture,
+    autocapture: BrowserAutocapture,
     historyAutocapture: HistoryAutocapture,
     heatmaps: Heatmaps,
     deadClicksAutocapture: DeadClicksAutocapture,
