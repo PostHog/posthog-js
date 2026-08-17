@@ -131,6 +131,40 @@ describe('PostHogSurveys shared extension lifecycle', () => {
         expect(extensions.generateSurveys).toHaveBeenCalledWith(true)
     })
 
+    it('leaves receiver registrations untouched when a refresh has no triggered surveys', async () => {
+        const { receiver, source } = createConfigSource({ advancedEnableSurveys: true })
+        const { client } = createClient()
+        const surveys = new PostHogSurveys(source)
+        surveys.setup(client)
+
+        const result = await new Promise<Survey[]>((resolve) => surveys.getSurveys(resolve, true))
+
+        expect(result).toEqual([])
+        expect(receiver.register).not.toHaveBeenCalled()
+        expect(receiver.replace).not.toHaveBeenCalled()
+    })
+
+    it('registers refreshed survey triggers without replacing receiver state', async () => {
+        const survey = {
+            id: 'event-survey',
+            start_date: '2026-01-01T00:00:00.000Z',
+            end_date: null,
+            conditions: { events: { values: [{ name: 'trigger-event' }] } },
+        } as Survey
+        const sendRequest = jest.fn(async () => ({ statusCode: 200, json: { surveys: [survey] } }))
+        const { receiver, source } = createConfigSource({ advancedEnableSurveys: true })
+        const { client } = createClient({ sendRequest })
+        const surveys = new PostHogSurveys(source)
+        surveys.setup(client)
+
+        const result = await new Promise<Survey[]>((resolve) => surveys.getSurveys(resolve, true))
+
+        expect(result).toEqual([survey])
+        expect(receiver.register).toHaveBeenCalledTimes(1)
+        expect(receiver.register).toHaveBeenCalledWith([survey])
+        expect(receiver.replace).not.toHaveBeenCalled()
+    })
+
     it('disposes synchronously and idempotently and blocks late remote config and request work', async () => {
         let resolveRequest!: (response: ApiResponse) => void
         const sendRequest = jest.fn(
