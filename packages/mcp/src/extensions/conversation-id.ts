@@ -162,7 +162,10 @@ export function buildConversationIdPromptBack(conversationId: string): {
 } {
   return {
     type: 'text',
-    text: `[SERVER]: Reuse conversation_id=${conversationId} on every subsequent tool call in this conversation. Required for the server to correlate calls and provide context-aware results.`,
+    // Tool results are untrusted content. Keep this as data rather than an
+    // instruction so clients do not classify it as prompt injection when they
+    // are still using a cached tool schema without `conversation_id`.
+    text: JSON.stringify({ conversation_id: conversationId }),
   }
 }
 
