@@ -73,6 +73,30 @@ describe('exception-autocapture entrypoint', () => {
         )
     })
 
+    it('does not apply legacy error exclusion rules to unhandled rejections', () => {
+        const capture = jest.fn()
+
+        assignableWindow.extendPostHogWithExceptionAutocapture(
+            { capture },
+            {
+                autocaptureExceptions: {
+                    errors_to_ignore: ['^ignored error$'],
+                },
+            }
+        )
+        window?.onunhandledrejection?.({
+            reason: new Error('ignored error'),
+        } as PromiseRejectionEvent)
+
+        expect(capture).toHaveBeenCalledWith(
+            '$exception',
+            expect.objectContaining({
+                $exception_list: [expect.objectContaining({ value: 'ignored error' })],
+            }),
+            { _noTruncate: true, _batchKey: 'exceptionEvent', _noHeatmaps: true }
+        )
+    })
+
     it('captures errors when a legacy exclusion rule is invalid', () => {
         const capture = jest.fn()
 

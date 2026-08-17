@@ -152,15 +152,7 @@ const extendPostHogWithExceptionAutocapture = (instance?: LegacyPostHogInstance,
               }, [])
             : []
 
-    const captureException = (properties: ErrorTracking.ErrorProperties) => {
-        if (
-            errorsToIgnore.some((regex) =>
-                properties.$exception_list.some((exception) => regex.test(exception.value || ''))
-            )
-        ) {
-            return
-        }
-
+    const sendExceptionEvent = (properties: ErrorTracking.ErrorProperties) => {
         try {
             instance.capture?.('$exception', properties as Record<string, any>, {
                 _noTruncate: true,
@@ -172,8 +164,20 @@ const extendPostHogWithExceptionAutocapture = (instance?: LegacyPostHogInstance,
         }
     }
 
+    const captureException = (properties: ErrorTracking.ErrorProperties) => {
+        if (
+            errorsToIgnore.some((regex) =>
+                properties.$exception_list.some((exception) => regex.test(exception.value || ''))
+            )
+        ) {
+            return
+        }
+
+        sendExceptionEvent(properties)
+    }
+
     wrapOnError(captureException)
-    wrapUnhandledRejection(captureException, true)
+    wrapUnhandledRejection(sendExceptionEvent, true)
 }
 
 assignableWindow.extendPostHogWithExceptionAutoCapture = extendPostHogWithExceptionAutocapture
