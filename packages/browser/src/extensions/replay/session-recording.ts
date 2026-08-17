@@ -111,13 +111,22 @@ export class SessionRecording implements Extension {
      * A WebGL context can only be made capturable at the moment it is created, and the recorder that
      * does that arrives a network round trip too late for a renderer that boots with the page. Do it
      * here instead, synchronously during `posthog.init()`, whenever we already know canvas recording
-     * is on - either because it was asked for in config, or because a previous page load persisted a
-     * remote config that turns it on.
+     * is on.
+     *
+     * Deliberately not gated on `_isRecordingEnabled`: that waits on a persisted remote config, which
+     * a first-ever page load does not have yet, and someone who asked for canvas recording in their
+     * own config should not have to wait a page load to get it. Turning canvas recording on purely in
+     * project settings still works, just from the second page load onwards - the first load persists
+     * the remote config, and `onRemoteConfig` covers any canvas created after it arrives.
      */
     private _preserveCanvasDrawingBuffers() {
+        if (!window || this._config.disable_session_recording || this._instance.consent.isOptedOut()) {
+            return
+        }
+
         const clientSide = this._config.session_recording?.captureCanvas?.recordCanvas
         const serverSide = this._instance.get_property(SESSION_RECORDING_REMOTE_CONFIG)?.canvasRecording?.enabled
-        if (this._isRecordingEnabled && (clientSide ?? serverSide)) {
+        if (clientSide ?? serverSide) {
             forcePreserveDrawingBuffer()
         }
     }
