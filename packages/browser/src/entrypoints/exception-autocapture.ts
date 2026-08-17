@@ -2,7 +2,7 @@ import { window } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from '../utils/globals'
 import { ErrorEventArgs } from '../types'
 import { createLogger } from '@posthog/browser-common/utils/logger'
-import { isFunction, isString, type ErrorTracking } from '@posthog/core'
+import { isArray, isFunction, isNull, isString, type ErrorTracking } from '@posthog/core'
 import { buildErrorPropertiesBuilder } from '../posthog-exceptions'
 
 const logger = createLogger('[ExceptionAutocapture]')
@@ -124,16 +124,40 @@ assignableWindow.posthogErrorWrappingFunctions = posthogErrorWrappingFunctions
 type LegacyPostHogInstance = {
     capture?: (event: string, properties: Record<string, any>, options?: Record<string, any>) => unknown
 }
-const extendPostHogWithExceptionAutocapture = (instance?: LegacyPostHogInstance) => {
+type LegacyDecideResponse = {
+    autocaptureExceptions?: boolean | { errors_to_ignore?: string[] }
+}
+const extendPostHogWithExceptionAutocapture = (instance?: LegacyPostHogInstance, response?: LegacyDecideResponse) => {
     if (!isFunction(instance?.capture)) {
         return
     }
 
+    const autocaptureExceptions = response?.autocaptureExceptions
+    const errorsToIgnore =
+        !isNull(autocaptureExceptions) &&
+        typeof autocaptureExceptions === 'object' &&
+        isArray(autocaptureExceptions.errors_to_ignore)
+            ? autocaptureExceptions.errors_to_ignore.map((rule) => new RegExp(rule))
+            : []
+
     const captureException = (properties: ErrorTracking.ErrorProperties) => {
-        instance.capture?.('$exception', properties as Record<string, any>, {
-            _noTruncate: true,
-            _batchKey: 'exceptionEvent',
-        })
+        if (
+            errorsToIgnore.some((regex) =>
+                properties.$exception_list.some((exception) => regex.test(exception.value || ''))
+            )
+        ) {
+            return
+        }
+
+        try {
+            instance.capture?.('$exception', properties as Record<string, any>, {
+                _noTruncate: true,
+                _batchKey: 'exceptionEvent',
+                _noHeatmaps: true,
+            })
+        } catch (error) {
+            logger.error('Failed to capture exception for a legacy client', error)
+        }
     }
 
     wrapOnError(captureException)
