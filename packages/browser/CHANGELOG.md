@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.417.4
+
+### Patch Changes
+
+- [#4509](https://github.com/PostHog/posthog-js/pull/4509) [`8d74821`](https://github.com/PostHog/posthog-js/commit/8d74821112fae5e23fb86e4f457cfda03aac10df) Thanks [@ksvat](https://github.com/ksvat)! - Take a full snapshot when session recording wakes from idle if DOM mutations were dropped while idle, so replay no longer shows duplicated or overlapping DOM after an idle period.
+  (2026-08-17)
+
 ## 1.417.3
 
 ### Patch Changes
