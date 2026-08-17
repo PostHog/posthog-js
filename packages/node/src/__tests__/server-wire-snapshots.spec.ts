@@ -1,10 +1,10 @@
+/** @jest-environment node */
+
 import type { PostHogFetchOptions } from '@posthog/core'
 
 import { V1CaptureSender } from '@/capture-v1/sender'
 import { PostHog } from '@/entrypoints/index.node'
 import { v0Response, v1Response } from './utils/v1-wiring'
-
-jest.mock('../version', () => ({ version: '1.2.3' }), { virtual: true })
 
 type FetchCall = [string, PostHogFetchOptions]
 
@@ -28,8 +28,15 @@ function normalizeSnapshot(value: unknown, key?: string): unknown {
       const separatorIndex = value.indexOf(' ')
       return separatorIndex === -1 ? '<redacted>' : `${value.slice(0, separatorIndex)} <redacted>`
     }
-    if (key && ['api_key', 'token'].includes(key.toLowerCase())) {
+    const normalizedKey = key?.toLowerCase()
+    if (normalizedKey && ['api_key', 'token'].includes(normalizedKey)) {
       return '<redacted>'
+    }
+    if (normalizedKey === '$lib_version') {
+      return '<sdk-version>'
+    }
+    if (normalizedKey && ['posthog-sdk-info', 'user-agent'].includes(normalizedKey)) {
+      return value.replace(/^(posthog-node)\/.+$/, '$1/<sdk-version>')
     }
     return value.replaceAll(process.cwd(), '<project-root>')
   }

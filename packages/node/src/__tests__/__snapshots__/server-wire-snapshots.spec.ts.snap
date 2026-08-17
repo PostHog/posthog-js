@@ -47,7 +47,7 @@ exports[`server wire snapshots snapshots a deterministic complete captureExcepti
           "$geoip_disable": true,
           "$is_server": true,
           "$lib": "posthog-node",
-          "$lib_version": "1.2.3",
+          "$lib_version": "<sdk-version>",
           "endpoint": "/v1/orders",
           "request": {
             "method": "POST",
@@ -66,7 +66,7 @@ exports[`server wire snapshots snapshots a deterministic complete captureExcepti
   },
   "headers": {
     "Content-Type": "application/json",
-    "User-Agent": "posthog-node/1.2.3",
+    "User-Agent": "posthog-node/<sdk-version>",
   },
   "method": "POST",
   "url": "https://us.example.test/batch/",
@@ -112,7 +112,7 @@ exports[`server wire snapshots snapshots a maximal flags request body 1`] = `
   },
   "headers": {
     "Content-Type": "application/json",
-    "User-Agent": "posthog-node/1.2.3",
+    "User-Agent": "posthog-node/<sdk-version>",
   },
   "method": "POST",
   "url": "https://us.example.test/flags/?v=2",
@@ -171,8 +171,8 @@ exports[`server wire snapshots snapshots the canonical Capture V1 transform and 
     "PostHog-Attempt": "1",
     "PostHog-Request-Id": "0194cc39-1f25-7000-8000-000000000002",
     "PostHog-Request-Timestamp": "2025-02-03T04:05:06.789Z",
-    "PostHog-Sdk-Info": "posthog-node/1.2.3",
-    "User-Agent": "posthog-node/1.2.3",
+    "PostHog-Sdk-Info": "posthog-node/<sdk-version>",
+    "User-Agent": "posthog-node/<sdk-version>",
   },
   "method": "POST",
   "url": "https://us.example.test/i/v1/analytics/events",
