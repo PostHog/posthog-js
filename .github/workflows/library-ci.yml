@@ -270,6 +270,15 @@ jobs:
               comment_id: process.env.COMMENT_ID
             })
 
+      - name: Test legacy exception autocapture compatibility
+        run: |
+          COMPAT_VERSION=1.140.1 pnpm exec playwright test \
+            playwright/mocked/error-tracking/legacy-autocapture.spec.ts \
+            --config playwright.config.compat.ts \
+            --project chromium-compat \
+            --reporter=line
+        working-directory: packages/browser
+
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:

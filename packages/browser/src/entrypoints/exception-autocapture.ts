@@ -118,4 +118,29 @@ assignableWindow.__PosthogExtensions__.errorWrappingFunctions = posthogErrorWrap
 // when 1.161.1 is the oldest version seen in production we can remove this
 assignableWindow.posthogErrorWrappingFunctions = posthogErrorWrappingFunctions
 
+// posthog-js <= 1.141.0 checked the first spelling after loading this bundle,
+// but called the second spelling. Keep both aliases because the unversioned
+// extension bundle can be loaded by those pinned clients.
+type LegacyPostHogInstance = {
+    capture?: (event: string, properties: Record<string, any>, options?: Record<string, any>) => unknown
+}
+const extendPostHogWithExceptionAutocapture = (instance?: LegacyPostHogInstance) => {
+    if (!isFunction(instance?.capture)) {
+        return
+    }
+
+    const captureException = (properties: ErrorTracking.ErrorProperties) => {
+        instance.capture?.('$exception', properties as Record<string, any>, {
+            _noTruncate: true,
+            _batchKey: 'exceptionEvent',
+        })
+    }
+
+    wrapOnError(captureException)
+    wrapUnhandledRejection(captureException)
+}
+
+assignableWindow.extendPostHogWithExceptionAutoCapture = extendPostHogWithExceptionAutocapture
+assignableWindow.extendPostHogWithExceptionAutocapture = extendPostHogWithExceptionAutocapture
+
 export default posthogErrorWrappingFunctions
