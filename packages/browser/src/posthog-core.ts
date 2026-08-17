@@ -925,7 +925,13 @@ export class PostHog implements PostHogInterface {
 
     private _enrollExtension(extension: Extension | BrowserCommonExtension, initTasks: Array<() => void>): void {
         if (this._isSharedExtension(extension)) {
-            initTasks.push(() => void this._getBrowserClientAdapter().add(extension).catch(__NOOP))
+            initTasks.push(
+                () =>
+                    void this._getBrowserClientAdapter()
+                        .add(extension)
+                        .catch(() => extension.dispose?.())
+                        .catch(__NOOP)
+            )
         } else {
             this._extensions.push(extension)
         }
@@ -990,7 +996,7 @@ export class PostHog implements PostHogInterface {
             this._enrollExtension((this.surveys = this.surveys ?? new ext.surveys(this)), initTasks)
         }
         if (ext.logs) {
-            this._extensions.push((this.logs = this.logs ?? new ext.logs(this)))
+            this._enrollExtension((this.logs = this.logs ?? new ext.logs(this)), initTasks)
         }
         if (ext.metrics) {
             this._extensions.push((this.metrics = this.metrics ?? new ext.metrics(this)))

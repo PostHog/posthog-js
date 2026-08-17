@@ -283,7 +283,7 @@ interface PostHogExtensions {
     generateSurveys?: (posthog: PostHog, isSurveysEnabled: boolean) => any | undefined
     generateProductTours?: (posthog: PostHog, isEnabled: boolean) => any | undefined
     logs?: {
-        initializeLogs?: (posthog: PostHog) => any | undefined
+        initializeLogs?: (posthog: PostHog) => (() => void) | undefined
     }
     /** @deprecated Use `postHogWebVitalsCallbacksByFlavor` to select callbacks explicitly. */
     postHogWebVitalsCallbacks?: WebVitalsCallbacks
