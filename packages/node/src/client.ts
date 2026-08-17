@@ -55,6 +55,8 @@ import {
   RequiresServerEvaluation,
 } from './extensions/feature-flags/feature-flags'
 import ErrorTracking from './extensions/error-tracking'
+import MetricsAutocapture from './extensions/metrics-autocapture'
+import type { RuntimeMetricsSampler } from './extensions/metrics-autocapture/types'
 import { PostHogMemoryStorage } from './storage-memory'
 import { ContextData, ContextOptions, IPostHogContext } from './extensions/context/types'
 import { type CaptureMode, resolveCaptureMode } from './capture-v1/config'
@@ -140,6 +142,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
   private featureFlagsPoller?: FeatureFlagsPoller
   protected errorTracking: ErrorTracking
+  protected metricsAutocapture: MetricsAutocapture
   private maxCacheSize: number
   public readonly options: PostHogOptions
   protected readonly context?: IPostHogContext
@@ -266,8 +269,26 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
 
     this.errorTracking = new ErrorTracking(this, normalizedOptions, this._logger)
+    this.metricsAutocapture = new MetricsAutocapture(
+      this,
+      normalizedOptions,
+      this._logger,
+      // Its gate flag is evaluated locally only, so it can't resolve without the poller.
+      this.featureFlagsPoller !== undefined,
+      () => this.createRuntimeMetricsSampler()
+    )
+    this.metricsAutocapture.start()
     this.distinctIdHasSentFlagCalls = {}
     this.maxCacheSize = normalizedOptions.maxCacheSize || MAX_CACHE_SIZE
+  }
+
+  /**
+   * The runtime metrics sampler used by metrics autocapture, or `undefined` when
+   * the runtime has no low-level metrics to offer. Overridden by the Node
+   * entrypoint; the base (and the edge build) opts out.
+   */
+  protected createRuntimeMetricsSampler(): RuntimeMetricsSampler | undefined {
+    return undefined
   }
 
   protected override enqueue(
@@ -2573,6 +2594,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     await this.featureFlagsPoller?.stopPoller(shutdownTimeoutMs)
     this.errorTracking.shutdown()
+    // Stopped before the metrics flush below so no sample can land in a window
+    // that has already been drained, and so the event loop monitor and GC
+    // observer are torn down even if the flush times out.
+    this.metricsAutocapture.shutdown()
     if (this._metrics) {
       // Send whatever is aggregated in the current window, then clear the flush
       // timer so it can't fire after teardown. Raced against the shutdown budget:
