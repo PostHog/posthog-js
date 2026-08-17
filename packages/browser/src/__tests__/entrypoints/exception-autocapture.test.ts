@@ -95,8 +95,11 @@ describe('exception-autocapture entrypoint', () => {
         const capture = jest.fn()
 
         assignableWindow.extendPostHogWithExceptionAutocapture({ capture })
-        window?.onunhandledrejection?.({ reason: new Error('legacy rejection') } as PromiseRejectionEvent)
+        const handled = window?.onunhandledrejection?.({
+            reason: new Error('legacy rejection'),
+        } as PromiseRejectionEvent)
 
+        expect(handled).toBe(true)
         expect(capture).toHaveBeenCalledWith(
             '$exception',
             expect.objectContaining({

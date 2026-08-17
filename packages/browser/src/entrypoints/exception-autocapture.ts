@@ -45,7 +45,10 @@ const wrapOnError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) 
     }
 }
 
-const wrapUnhandledRejection = (captureFn: (props: ErrorTracking.ErrorProperties) => void) => {
+const wrapUnhandledRejection = (
+    captureFn: (props: ErrorTracking.ErrorProperties) => void,
+    defaultReturnValue = false
+) => {
     const win = window as any
     if (!win) {
         logger.info('window not available, cannot wrap onUnhandledRejection')
@@ -58,7 +61,9 @@ const wrapUnhandledRejection = (captureFn: (props: ErrorTracking.ErrorProperties
             mechanism: { handled: false },
         })
         captureFn(errorProperties)
-        return isFunction(originalOnUnhandledRejection) ? (originalOnUnhandledRejection(ev) ?? false) : false
+        return isFunction(originalOnUnhandledRejection)
+            ? (originalOnUnhandledRejection(ev) ?? false)
+            : defaultReturnValue
     }
     win.onunhandledrejection.__POSTHOG_INSTRUMENTED__ = true
 
@@ -168,7 +173,7 @@ const extendPostHogWithExceptionAutocapture = (instance?: LegacyPostHogInstance,
     }
 
     wrapOnError(captureException)
-    wrapUnhandledRejection(captureException)
+    wrapUnhandledRejection(captureException, true)
 }
 
 assignableWindow.extendPostHogWithExceptionAutoCapture = extendPostHogWithExceptionAutocapture
