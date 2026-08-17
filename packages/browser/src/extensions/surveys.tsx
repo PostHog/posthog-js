@@ -140,7 +140,7 @@ export class SurveyManager {
     private _surveyTimeouts: Map<string, ReturnType<Window['setTimeout']>> = new Map()
     private _widgetSelectorListeners: Map<string, { element: Element; listener: EventListener; survey: Survey }> =
         new Map()
-    private _renderedTargets: Map<Element | ShadowRoot, Element | undefined> = new Map()
+    private _renderedTargets: Map<ShadowRoot, Element> = new Map()
     private _prefillHandledSurveys: Set<string> = new Set()
     private _automaticDisplayDispose?: () => void
 
@@ -505,7 +505,6 @@ export class SurveyManager {
             isSurveyCompleted = this._handleUrlPrefill(translatedSurvey, surveyLanguage, properties)
         }
 
-        this._renderedTargets.set(selector, undefined)
         render(
             <SurveyPopup
                 posthog={this._posthog}
