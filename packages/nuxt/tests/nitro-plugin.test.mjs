@@ -120,11 +120,8 @@ function loadAdapter(filename, defineName) {
 }
 
 const nitro2 = loadAdapter('nitro-plugin-v2.ts', 'defineNitroPlugin')
-// Bare 'nitropack/runtime' only exists in nitropack >= 2.9.5, so a value import breaks
-// the declared Nuxt >= 3.7 floor at server startup (ERR_PACKAGE_PATH_NOT_EXPORTED);
-// the Nitro 2 adapter must use the version-agnostic `#imports` virtual module instead.
-assert.doesNotMatch(nitro2.adapterSource, /^import (?!type ).*'nitropack\/runtime'/m)
-assert.match(nitro2.adapterSource, /from '#imports'/)
+assert.match(nitro2.adapterSource, /from 'nitropack\/runtime'/)
+assert.doesNotMatch(nitro2.adapterSource, /from '#imports'/)
 let nitro2Request
 const nitro2Promise = Promise.resolve()
 nitro2.bindings.onError((_error, request) => {
@@ -133,6 +130,25 @@ nitro2.bindings.onError((_error, request) => {
 })
 assert.equal(nitro2.adapterHandlers.error(error, { event: { path: '/v2', method: 'GET' } }), nitro2Promise)
 assert.deepEqual(nitro2Request, { path: '/v2', method: 'GET' })
+
+// The legacy adapter serves Nuxt < 3.12, where nitropack can resolve below 2.9.5 and the
+// bare 'nitropack/runtime' subpath does not exist (ERR_PACKAGE_PATH_NOT_EXPORTED at server
+// startup); it must stay on the `#imports` virtual module, which every Nitro 2 provides.
+const nitro2Legacy = loadAdapter('nitro-plugin-v2-legacy.ts', 'defineNitroPlugin')
+assert.doesNotMatch(nitro2Legacy.adapterSource, /from 'nitropack\/runtime/)
+assert.match(nitro2Legacy.adapterSource, /from '#imports'/)
+let legacyRequest
+const legacyPromise = Promise.resolve()
+nitro2Legacy.bindings.onError((_error, request) => {
+  legacyRequest = request
+  return legacyPromise
+})
+assert.equal(nitro2Legacy.adapterHandlers.error(error, { event: { path: '/legacy', method: 'GET' } }), legacyPromise)
+assert.deepEqual(legacyRequest, { path: '/legacy', method: 'GET' })
+
+// module.ts must route old Nuxt to the legacy adapter.
+const moduleSource = readFileSync(new URL('../src/module.ts', import.meta.url), 'utf8')
+assert.match(moduleSource, /nitro-plugin-v2-legacy/)
 
 const nitro3 = loadAdapter('nitro-plugin-v3.ts', 'definePlugin')
 assert.match(nitro3.adapterSource, /from 'nitro'/)
