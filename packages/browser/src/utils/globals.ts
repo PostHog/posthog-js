@@ -83,6 +83,17 @@ export type AssignableWindow = Window &
         posthogErrorWrappingFunctions: any
 
         /**
+         * Legacy exception autocapture entrypoint names used by posthog-js <= 1.141.0.
+         * Both spellings are required because those clients checked one and called the other.
+         *
+         * See entrypoints/exception-autocapture.ts
+         *
+         * @deprecated use `__PosthogExtensions__.errorWrappingFunctions` instead
+         */
+        extendPostHogWithExceptionAutoCapture: any
+        extendPostHogWithExceptionAutocapture: any
+
+        /**
          * This is a legacy way to expose these functions, but we still need to support it for backwards compatibility
          * Can be removed once we drop support for 1.161.1
          *
