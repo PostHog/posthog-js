@@ -1,4 +1,19 @@
 {
   "version": 1,
-  "items": []
+  "items": [
+    {
+      "id": "issue-4546-auto-none-no-comment-no-close-1787034762867",
+      "kind": "issue",
+      "number": 4546,
+      "mode": "auto",
+      "commandMention": "@posthog-watcher",
+      "enqueuedAt": "2026-08-18T06:32:42.866Z",
+      "source": {
+        "eventName": "issues",
+        "runId": 32107367358,
+        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/32107367358"
+      },
+      "attempts": 0
+    }
+  ]
 }
