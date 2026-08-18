@@ -1,4 +1,18 @@
 {
+  "PostHog/posthog-js/issue/4546": {
+    "key": "PostHog/posthog-js/issue/4546",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4546",
+    "url": "https://github.com/PostHog/posthog-js/issues/4546",
+    "conclusion": "Confirmed scope gap in the Turbopack sourcemap-comment cleanup: it only processes JavaScript files, so dangling CSS source map references remain after deletion.",
+    "labels": [
+      "feature/error-tracking",
+      "team/error-tracking"
+    ],
+    "prUrl": "https://github.com/PostHog/posthog-js/pull/4547",
+    "closed": false,
+    "updatedAt": "2026-08-18T07:33:23.743Z"
+  },
   "PostHog/posthog-js/issue/3571": {
     "key": "PostHog/posthog-js/issue/3571",
     "repo": "PostHog/posthog-js",
