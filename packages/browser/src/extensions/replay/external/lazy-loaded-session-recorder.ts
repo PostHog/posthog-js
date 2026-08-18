@@ -458,6 +458,15 @@ function isAllowedWhenIdle(e: eventWithTime): boolean {
     return isSessionIdleEvent(e) || isSessionEndingEvent(e) || isSessionStartingEvent(e)
 }
 
+// dropping these desyncs the player's mirror, styles, or viewport in ways only a
+// fresh full snapshot repairs; canvas is excluded because a snapshot cannot restore it
+function isMirrorDesyncingWhenDropped(e: eventWithTime): boolean {
+    if (e.type === EventType.FullSnapshot || e.type === EventType.Meta) {
+        return true
+    }
+    return e.type === EventType.IncrementalSnapshot && e.data.source !== IncrementalSource.CanvasMutation
+}
+
 /** When we put the recording into a paused state, we add a custom event.
  *  However, in the paused state, events are dropped and never make it to the buffer,
  *  so we need to manually let this one through */
@@ -485,6 +494,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
      */
     private _queuedRRWebEvents: QueuedRRWebEvent[] = []
     private _isIdle: boolean | 'unknown' = 'unknown'
+    // events rrweb observed while confirmed idle are dropped, not buffered, so the
+    // player's mirror no longer matches the live DOM; when > 0 only a fresh full
+    // snapshot stops later incrementals referencing state the player never saw.
+    // Cleared only when a full snapshot actually passes the idle gate, so a failed
+    // wake heal retries on the next wake instead of losing the signal
+    private _eventsDroppedWhileIdle = 0
     // true while the current epoch has had no user interaction; a held epoch is
     // discarded (not shipped) by stop or a subsequent rotation
     private _holdFlushUntilInteraction = false
@@ -1763,6 +1778,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         const throttledEvent = this._mutationThrottler ? this._mutationThrottler.throttleMutations(rawEvent) : rawEvent
 
         if (!throttledEvent) {
+            // when awake, a throttled attribute's later updates get through once the bucket
+            // refills; while idle those are dropped too, so only the wake heal restores them
+            if (this._isIdle === true) {
+                this._eventsDroppedWhileIdle++
+            }
             return
         }
 
@@ -1808,7 +1828,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // When in an idle state we keep recording but don't capture the events,
         // we don't want to return early if idle is 'unknown'
         if (this._isIdle === true && !isAllowedWhenIdle(event)) {
+            if (isMirrorDesyncingWhenDropped(event)) {
+                this._eventsDroppedWhileIdle++
+            }
             return
+        }
+
+        if (event.type === EventType.FullSnapshot) {
+            // this snapshot re-syncs the player's mirror, so idle-era drops are healed
+            this._eventsDroppedWhileIdle = 0
         }
 
         if (isSessionIdleEvent(event)) {
@@ -2344,6 +2372,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 this._releaseHoldAndFlush()
             }
             if (returningFromIdle) {
+                // a trigger-pending buffer ships on activation, so it needs the heal as
+                // much as a live recording; only sampled-out and disabled states skip it
+                const bufferCanShip =
+                    ['sampled', 'active'].includes(this.status) || this._strategy?.hasPendingTriggers(this.sessionId)
+                // a snapshot from _releaseHoldAndFlush above has already cleared the
+                // counter by the time this check runs, so we never take two in one tick
+                if (this._eventsDroppedWhileIdle > 0 && bufferCanShip) {
+                    this._tryTakeFullSnapshot()
+                }
                 this._scheduleFullSnapshot()
             }
         }

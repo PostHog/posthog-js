@@ -91,6 +91,7 @@ describe('config', () => {
             ['2026-01-30', '2026-01-30' as const, 0],
             ['2026-05-30', '2026-05-30' as const, 250],
             ['2026-06-25', '2026-06-25' as const, 250],
+            ['2026-08-29', '2026-08-29' as const, 250],
         ])('persistence_save_debounce_ms with defaults %s', (_label, defaults, expected) => {
             const posthog = new PostHog()
             posthog._init('test-token', defaults ? { defaults } : undefined)
@@ -104,6 +105,7 @@ describe('config', () => {
             ['2026-01-30', '2026-01-30' as const, false],
             ['2026-05-30', '2026-05-30' as const, true],
             ['2026-06-25', '2026-06-25' as const, true],
+            ['2026-08-29', '2026-08-29' as const, true],
         ])('split_storage with defaults %s', (_label, defaults, expected) => {
             const posthog = new PostHog()
             posthog._init('test-token', defaults ? { defaults } : undefined)
@@ -117,6 +119,7 @@ describe('config', () => {
             ['2026-01-30', '2026-01-30' as const, false],
             ['2026-05-30', '2026-05-30' as const, true],
             ['2026-06-25', '2026-06-25' as const, true],
+            ['2026-08-29', '2026-08-29' as const, true],
         ])('detect_google_search_app with defaults %s', (_label, defaults, expected) => {
             const posthog = new PostHog()
             posthog._init('test-token', defaults ? { defaults } : undefined)
@@ -130,6 +133,7 @@ describe('config', () => {
             ['2026-01-30', '2026-01-30' as const, false],
             ['2026-05-30', '2026-05-30' as const, false],
             ['2026-06-25', '2026-06-25' as const, true],
+            ['2026-08-29', '2026-08-29' as const, true],
         ])('disable_capture_url_hashes with defaults %s', (_label, defaults, expected) => {
             const posthog = new PostHog()
             posthog._init('test-token', defaults ? { defaults } : undefined)
@@ -143,10 +147,41 @@ describe('config', () => {
             ['2026-01-30', '2026-01-30' as const, undefined],
             ['2026-05-30', '2026-05-30' as const, undefined],
             ['2026-06-25', '2026-06-25' as const, true],
+            ['2026-08-29', '2026-08-29' as const, true],
         ])('session_recording.streamNetworkBody with defaults %s', (_label, defaults, expected) => {
             const posthog = new PostHog()
             posthog._init('test-token', defaults ? { defaults } : undefined)
             expect(posthog.config.session_recording.streamNetworkBody).toBe(expected)
+        })
+
+        it.each([
+            ['unset', undefined, false],
+            ['explicit unset', 'unset' as const, false],
+            ['2025-05-24', '2025-05-24' as const, false],
+            ['2025-11-30', '2025-11-30' as const, false],
+            ['2026-01-30', '2026-01-30' as const, false],
+            ['2026-05-30', '2026-05-30' as const, false],
+            ['2026-06-25', '2026-06-25' as const, false],
+            ['2026-08-29', '2026-08-29' as const, true],
+        ])('cookieWinsOnConflict with defaults %s', (_label, defaults, expected) => {
+            const posthog = new PostHog()
+            posthog._init('test-token', defaults ? { defaults } : undefined)
+            expect(posthog.config.cookieWinsOnConflict).toBe(expected)
+        })
+
+        it('maps the deprecated preview option to cookieWinsOnConflict', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', { __preview_cookie_wins_on_conflict: true })
+            expect(posthog.config.cookieWinsOnConflict).toBe(true)
+        })
+
+        it('prefers cookieWinsOnConflict when both options are provided', () => {
+            const posthog = new PostHog()
+            posthog._init('test-token', {
+                cookieWinsOnConflict: false,
+                __preview_cookie_wins_on_conflict: true,
+            })
+            expect(posthog.config.cookieWinsOnConflict).toBe(false)
         })
 
         it('should preserve other default config values when setting defaults', () => {

@@ -212,6 +212,7 @@ const defaultsThatVaryByConfig = (
     | 'split_storage'
     | 'detect_google_search_app'
     | 'disable_capture_url_hashes'
+    | 'cookieWinsOnConflict'
 > => ({
     rageclick:
         defaults && defaults >= '2026-05-30'
@@ -234,6 +235,7 @@ const defaultsThatVaryByConfig = (
     split_storage: !!(defaults && defaults >= '2026-05-30'),
     detect_google_search_app: !!(defaults && defaults >= '2026-05-30'),
     disable_capture_url_hashes: !!(defaults && defaults >= '2026-06-25'),
+    cookieWinsOnConflict: !!(defaults && defaults !== 'unset' && defaults >= '2026-08-29'),
 })
 
 // NOTE: Remember to update `types.ts` when changing a default value
@@ -333,6 +335,7 @@ const CONFIG_RENAMES: [keyof PostHogConfig, keyof PostHogConfig][] = [
     ['__preview_disable_beacon', 'disable_beacon'],
     ['store_google', 'save_campaign_params'],
     ['verbose', 'debug'],
+    ['__preview_cookie_wins_on_conflict', 'cookieWinsOnConflict'],
 ]
 
 export const configRenames = (origConfig: Partial<PostHogConfig>): Partial<PostHogConfig> => {
@@ -1621,6 +1624,27 @@ export class PostHog implements PostHogInterface {
         }
     }
 
+    private _processCookieIdentityChange(reloadFeatureFlags: boolean = true): boolean {
+        if (!this.persistence?.consumeCookieIdentityChange()) {
+            return false
+        }
+
+        this._cachedPersonProperties = null
+        if (this.persistence.get_property(USER_STATE) === USER_STATE_ANONYMOUS) {
+            // Persistent event properties, including groups, are cleared while
+            // reconciling the reset snapshot. Clear the separate session store
+            // here before assembling an event under the anonymous identity.
+            this.sessionPersistence?.clear()
+            this._sessionRegisteredPropKeys.clear()
+            this._persistSessionRegisteredPropKeys()
+        }
+        this.featureFlags?.reset()
+        if (reloadFeatureFlags) {
+            this.reloadFeatureFlags()
+        }
+        return true
+    }
+
     /**
      * This method is used internally to calculate the event properties before sending it to PostHog. It can also be
      * used by integrations (e.g. Segment) to enrich events with PostHog properties before sending them to Segment,
@@ -1645,6 +1669,12 @@ export class PostHog implements PostHogInterface {
         if (!this.persistence || !this.sessionPersistence) {
             return eventProperties
         }
+
+        // Cookies do not emit cross-origin storage events. Reconcile before
+        // reading any event properties so already-open sibling subdomains pick
+        // up identify/reset changes, including for replay snapshot events.
+        this.persistence.syncCookieProperties()
+        this._processCookieIdentityChange()
 
         // set defaults
         const startTimestamp = readOnly ? undefined : this.persistence.remove_event_timer(eventName)
@@ -1680,7 +1710,8 @@ export class PostHog implements PostHogInterface {
         if (this.sessionManager) {
             const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId(
                 readOnly,
-                timestamp.getTime()
+                timestamp.getTime(),
+                true
             )
             properties['$session_id'] = sessionId
             properties['$window_id'] = windowId
@@ -1951,6 +1982,8 @@ export class PostHog implements PostHogInterface {
      * @param {Object} properties An associative array of properties to store about the user
      */
     register_for_session(properties: Properties): void {
+        this.persistence?.syncCookieProperties()
+        this._processCookieIdentityChange()
         this.sessionPersistence?.register(properties)
         Object.keys(properties).forEach((key) => this._sessionRegisteredPropKeys.add(key))
         this._persistSessionRegisteredPropKeys()
@@ -2724,97 +2757,128 @@ export class PostHog implements PostHogInterface {
             return
         }
 
-        const previous_distinct_id = this.get_distinct_id()
-        this.register({ $user_id: new_distinct_id })
+        // Adopt any sibling identity first, then make this explicit identify
+        // authoritative until its complete replacement cookie is published. Keep
+        // the pre-sync identity so adopting the requested ID still performs the
+        // normal feature-flag identity-change side effects in this tab.
+        const preSyncDistinctId = this.get_distinct_id()
+        const identityChangedDuringSync =
+            this.persistence.syncCookieProperties() && this.get_distinct_id() !== preSyncDistinctId
+        // Clean up the adopted identity before applying this call's explicit
+        // person properties. Consuming it during the $identify/$set capture would
+        // otherwise remove the properties that were just supplied by the caller.
+        const processedCookieIdentityChange = this._processCookieIdentityChange(false)
+        const cookieSyncSuppressionStarted = this.persistence._beginCookieSyncSuppression()
+        let identifyCompleted = false
+        try {
+            const previous_distinct_id = this.get_distinct_id()
+            this.register({ $user_id: new_distinct_id })
 
-        if (!this.get_property(DEVICE_ID)) {
-            // The persisted distinct id might not actually be a device id at all
-            // it might be a distinct id of the user from before
-            const device_id = previous_distinct_id
-            this.register_once(
-                {
-                    $had_persisted_distinct_id: true,
-                    $device_id: device_id,
-                },
-                ''
-            )
-        }
-
-        // if the previous distinct id had an alias stored, then we clear it
-        if (new_distinct_id !== previous_distinct_id && new_distinct_id !== this.get_property(ALIAS_ID_KEY)) {
-            this.unregister(ALIAS_ID_KEY)
-            this.register({ distinct_id: new_distinct_id })
-        }
-
-        const isKnownAnonymous =
-            (this.persistence.get_property(USER_STATE) || USER_STATE_ANONYMOUS) === USER_STATE_ANONYMOUS
-
-        const identityDidChange = new_distinct_id !== previous_distinct_id
-        const shouldTransitionToIdentified = !identityDidChange && isKnownAnonymous
-
-        // send an $identify event any time the distinct_id is changing and the old ID is an anonymous ID
-        // - logic on the server will determine whether or not to do anything with it.
-        if (identityDidChange && isKnownAnonymous) {
-            this.persistence.set_property(USER_STATE, USER_STATE_IDENTIFIED)
-
-            // Update current user properties
-            this.setPersonPropertiesForFlags(
-                { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} },
-                false
-            )
-
-            this.capture(
-                EVENT_IDENTIFY,
-                {
-                    distinct_id: new_distinct_id,
-                    $anon_distinct_id: previous_distinct_id,
-                },
-                { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} }
-            )
-
-            this._cachedPersonProperties = getPersonPropertiesHash(
-                new_distinct_id,
-                userPropertiesToSet,
-                userPropertiesToSetOnce
-            )
-
-            // let the reload feature flag request know to send this previous distinct id
-            // for flag consistency
-            this.featureFlags?.setAnonymousDistinctId(previous_distinct_id)
-        } else if (shouldTransitionToIdentified) {
-            this.persistence.set_property(USER_STATE, USER_STATE_IDENTIFIED)
-
-            const setProperties = userPropertiesToSet || {}
-            const setOnceProperties = userPropertiesToSetOnce || {}
-            this.setPersonPropertiesForFlags({ $set: setProperties, $set_once: setOnceProperties }, false)
-            this.capture('$set', { $set: setProperties, $set_once: setOnceProperties })
-
-            // This transition must create/update the person even when an identical property call was cached earlier.
-            // Cache only after capture so deduplication cannot suppress the transition event.
-            this._cachedPersonProperties = getPersonPropertiesHash(
-                new_distinct_id,
-                userPropertiesToSet,
-                userPropertiesToSetOnce
-            )
-        } else if (userPropertiesToSet || userPropertiesToSetOnce) {
-            // If the distinct_id is not changing, but we have user properties to set, we can check if they have changed
-            // and if so, send a $set event
-
-            this.setPersonProperties(userPropertiesToSet, userPropertiesToSetOnce)
-        }
-
-        // Reload active feature flags if the distinct ID changes. Clear stored flag calls because they belong to the
-        // previous identity. A same-ID transition only needs a reload when the caller supplied properties that can
-        // affect flag evaluation; the anonymous/identified state itself is not part of the /flags request.
-        if (identityDidChange) {
-            this.reloadFeatureFlags()
-            if (this.featureFlags) {
-                this.featureFlags.resetFlagCallReported()
-            } else {
-                this.unregister(FLAG_CALL_REPORTED)
+            if (!this.get_property(DEVICE_ID)) {
+                // The persisted distinct id might not actually be a device id at all
+                // it might be a distinct id of the user from before
+                const device_id = previous_distinct_id
+                this.register_once(
+                    {
+                        $had_persisted_distinct_id: true,
+                        $device_id: device_id,
+                    },
+                    ''
+                )
             }
-        } else if (shouldTransitionToIdentified && (userPropertiesToSet || userPropertiesToSetOnce)) {
-            this.reloadFeatureFlags()
+
+            // if the previous distinct id had an alias stored, then we clear it
+            if (new_distinct_id !== previous_distinct_id && new_distinct_id !== this.get_property(ALIAS_ID_KEY)) {
+                this.unregister(ALIAS_ID_KEY)
+                this.register({ distinct_id: new_distinct_id })
+            }
+
+            const isKnownAnonymous =
+                (this.persistence.get_property(USER_STATE) || USER_STATE_ANONYMOUS) === USER_STATE_ANONYMOUS
+
+            const identityDidChange = new_distinct_id !== previous_distinct_id
+            const shouldTransitionToIdentified = !identityDidChange && isKnownAnonymous
+
+            // send an $identify event any time the distinct_id is changing and the old ID is an anonymous ID
+            // - logic on the server will determine whether or not to do anything with it.
+            if (identityDidChange && isKnownAnonymous) {
+                this.persistence.set_property(USER_STATE, USER_STATE_IDENTIFIED)
+
+                // Update current user properties
+                this.setPersonPropertiesForFlags(
+                    { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} },
+                    false
+                )
+
+                if (this.config.cookieWinsOnConflict) {
+                    // Publish the identity transition before capture so sibling
+                    // subdomains never observe the old cookie during the debounce window.
+                    this.persistence._publishSuppressedCookieSnapshot()
+                }
+
+                this.capture(
+                    EVENT_IDENTIFY,
+                    {
+                        distinct_id: new_distinct_id,
+                        $anon_distinct_id: previous_distinct_id,
+                    },
+                    { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} }
+                )
+
+                this._cachedPersonProperties = getPersonPropertiesHash(
+                    new_distinct_id,
+                    userPropertiesToSet,
+                    userPropertiesToSetOnce
+                )
+
+                // let the reload feature flag request know to send this previous distinct id
+                // for flag consistency
+                this.featureFlags?.setAnonymousDistinctId(previous_distinct_id)
+            } else if (shouldTransitionToIdentified) {
+                this.persistence.set_property(USER_STATE, USER_STATE_IDENTIFIED)
+
+                const setProperties = userPropertiesToSet || {}
+                const setOnceProperties = userPropertiesToSetOnce || {}
+                this.setPersonPropertiesForFlags({ $set: setProperties, $set_once: setOnceProperties }, false)
+                if (this.config.cookieWinsOnConflict) {
+                    this.persistence._publishSuppressedCookieSnapshot()
+                }
+                this.capture('$set', { $set: setProperties, $set_once: setOnceProperties })
+
+                // This transition must create/update the person even when an identical property call was cached earlier.
+                // Cache only after capture so deduplication cannot suppress the transition event.
+                this._cachedPersonProperties = getPersonPropertiesHash(
+                    new_distinct_id,
+                    userPropertiesToSet,
+                    userPropertiesToSetOnce
+                )
+            } else if (userPropertiesToSet || userPropertiesToSetOnce) {
+                // If the distinct_id is not changing, but we have user properties to set, we can check if they have changed
+                // and if so, send a $set event
+
+                this.setPersonProperties(userPropertiesToSet, userPropertiesToSetOnce)
+            }
+
+            // Reload active feature flags if the distinct ID changes. Clear stored flag calls because they belong to the
+            // previous identity. A same-ID transition only needs a reload when the caller supplied properties that can
+            // affect flag evaluation; the anonymous/identified state itself is not part of the /flags request.
+            if (identityDidChange || identityChangedDuringSync || processedCookieIdentityChange) {
+                this.reloadFeatureFlags()
+                if (this.featureFlags) {
+                    this.featureFlags.resetFlagCallReported()
+                } else {
+                    this.unregister(FLAG_CALL_REPORTED)
+                }
+            } else if (shouldTransitionToIdentified && (userPropertiesToSet || userPropertiesToSetOnce)) {
+                this.reloadFeatureFlags()
+            }
+            identifyCompleted = true
+        } finally {
+            if (cookieSyncSuppressionStarted) {
+                // Do not publish a partially assembled identity when a customer
+                // callback or capture hook throws during identify().
+                this.persistence._endCookieSyncSuppression(identifyCompleted)
+            }
         }
     }
 
@@ -2969,6 +3033,10 @@ export class PostHog implements PostHogInterface {
             return
         }
 
+        // Apply a sibling reset before reading or writing groups so this explicit
+        // mutation is newer than the adopted cookie snapshot.
+        this.persistence?.syncCookieProperties()
+        this._processCookieIdentityChange()
         const existingGroups = this.getGroups()
         const isNewGroup = existingGroups[groupType] !== groupKey
 
@@ -3224,80 +3292,92 @@ export class PostHog implements PostHogInterface {
             console.warn('[PostHog.js]', RESET_CONSENT_WARN)
         }
 
-        this.persistence?.clear()
-        this.sessionPersistence?.clear()
-        this._sessionRegisteredPropKeys.clear()
-        this._persistSessionRegisteredPropKeys()
+        const cookieSyncSuppressionStarted = this.persistence?._beginCookieSyncSuppression?.()
+        let resetCompleted = false
+        try {
+            this.persistence?.clear()
+            this.sessionPersistence?.clear()
+            this._sessionRegisteredPropKeys.clear()
+            this._persistSessionRegisteredPropKeys()
 
-        if (!isUndefined(recordingRemoteConfig)) {
-            this.persistence?.register({ [SESSION_RECORDING_REMOTE_CONFIG]: recordingRemoteConfig })
-        }
-        this.surveys?.reset()
-        // Stop the refresh interval before resetting flags — featureFlags.reset() clears
-        // the debouncer, so if the order were reversed a pending refresh could fire after reset.
-        this._remoteConfigLoader?.stop()
-        this.featureFlags?.reset()
-        this.conversations?.reset()
-        this.logs?.reset()
-        this.metrics?.reset()
-        this.persistence?.set_property(USER_STATE, USER_STATE_ANONYMOUS)
-        this.sessionManager?.resetSessionId()
-        this._cachedPersonProperties = null
-        if (this.config.cookieless_mode === COOKIELESS_ALWAYS) {
-            this.register_once(
-                {
-                    distinct_id: COOKIELESS_SENTINEL_VALUE,
-                    $device_id: null,
-                },
-                ''
-            )
-        } else {
-            const uuid = this.config.get_device_id(uuidv7())
-            this.register_once(
-                {
-                    distinct_id: uuid,
-                    $device_id: reset_device_id ? uuid : device_id,
-                },
-                ''
-            )
-            if (!reset_device_id && !isUndefined(device_model)) {
-                this.register({ [DEVICE_MODEL]: device_model })
+            if (!isUndefined(recordingRemoteConfig)) {
+                this.persistence?.register({ [SESSION_RECORDING_REMOTE_CONFIG]: recordingRemoteConfig })
             }
-        }
-
-        this.register(
-            {
-                $last_posthog_reset: new Date().toISOString(),
-            },
-            1
-        )
-
-        if (bootstrap) {
-            // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
-            // eslint-disable-next-line posthog-js/no-direct-undefined-check
-            if (bootstrap.distinctID !== undefined && !this._inCookielessMode()) {
-                this.persistence?.set_property(
-                    USER_STATE,
-                    bootstrap.isIdentifiedID ? USER_STATE_IDENTIFIED : USER_STATE_ANONYMOUS
+            this.surveys?.reset()
+            // Stop the refresh interval before resetting flags — featureFlags.reset() clears
+            // the debouncer, so if the order were reversed a pending refresh could fire after reset.
+            this._remoteConfigLoader?.stop()
+            this.featureFlags?.reset()
+            this.conversations?.reset()
+            this.logs?.reset()
+            this.metrics?.reset()
+            this.persistence?.set_property(USER_STATE, USER_STATE_ANONYMOUS)
+            this.sessionManager?.resetSessionId()
+            this._cachedPersonProperties = null
+            if (this.config.cookieless_mode === COOKIELESS_ALWAYS) {
+                this.register_once(
+                    {
+                        distinct_id: COOKIELESS_SENTINEL_VALUE,
+                        $device_id: null,
+                    },
+                    ''
                 )
-                this.register({ distinct_id: bootstrap.distinctID })
+            } else {
+                const uuid = this.config.get_device_id(uuidv7())
+                this.register_once(
+                    {
+                        distinct_id: uuid,
+                        $device_id: reset_device_id ? uuid : device_id,
+                    },
+                    ''
+                )
+                if (!reset_device_id && !isUndefined(device_model)) {
+                    this.register({ [DEVICE_MODEL]: device_model })
+                }
             }
 
-            this.featureFlags?.initialize()
+            this.register(
+                {
+                    $last_posthog_reset: new Date().toISOString(),
+                },
+                1
+            )
 
-            if (
-                !isUndefined(bootstrapSessionID) &&
-                !this.sessionManager?.setBootstrapSessionId(bootstrapSessionID, true)
-            ) {
-                const bootstrapWithoutSessionID = { ...bootstrap }
-                delete bootstrapWithoutSessionID.sessionID
-                this.config.bootstrap = bootstrapWithoutSessionID
+            if (bootstrap) {
+                // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
+                // eslint-disable-next-line posthog-js/no-direct-undefined-check
+                if (bootstrap.distinctID !== undefined && !this._inCookielessMode()) {
+                    this.persistence?.set_property(
+                        USER_STATE,
+                        bootstrap.isIdentifiedID ? USER_STATE_IDENTIFIED : USER_STATE_ANONYMOUS
+                    )
+                    this.register({ distinct_id: bootstrap.distinctID })
+                }
+
+                this.featureFlags?.initialize()
+
+                if (
+                    !isUndefined(bootstrapSessionID) &&
+                    !this.sessionManager?.setBootstrapSessionId(bootstrapSessionID, true)
+                ) {
+                    const bootstrapWithoutSessionID = { ...bootstrap }
+                    delete bootstrapWithoutSessionID.sessionID
+                    this.config.bootstrap = bootstrapWithoutSessionID
+                }
+            }
+
+            // Clear HMAC identity verification fields
+            delete this.config.identity_distinct_id
+            delete this.config.identity_hash
+            resetCompleted = true
+        } finally {
+            if (cookieSyncSuppressionStarted) {
+                // Publish the reset identity as one complete cookie before another
+                // sibling tab can resurrect the pre-reset state. Always release
+                // suppression, including when a customer callback throws.
+                this.persistence?._endCookieSyncSuppression?.(resetCompleted)
             }
         }
-
-        // Clear HMAC identity verification fields
-        delete this.config.identity_distinct_id
-        delete this.config.identity_hash
 
         // Reload feature flags for the reset user, just like identify()
         // does when the distinct_id changes.

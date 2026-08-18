@@ -1,5 +1,14 @@
 # @posthog/nuxt
 
+## 1.7.83
+
+### Patch Changes
+
+- [#4445](https://github.com/PostHog/posthog-js/pull/4445) [`b2a445a`](https://github.com/PostHog/posthog-js/commit/b2a445a32e685ec810edc0abb2eb05edbdaabdef) Thanks [@onmax](https://github.com/onmax)! - Load the browser SDK only on the client and select explicit Nitro 2 or Nitro 3 runtime imports for Nuxt 3, 4, and 5 compatibility.
+  (2026-08-17)
+- Updated dependencies [[`8d74821`](https://github.com/PostHog/posthog-js/commit/8d74821112fae5e23fb86e4f457cfda03aac10df)]:
+  - posthog-js@1.417.4
+
 ## 1.7.82
 
 ### Patch Changes
