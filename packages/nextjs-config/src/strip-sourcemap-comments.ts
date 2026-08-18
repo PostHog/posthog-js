@@ -1,20 +1,21 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
-const SOURCE_MAPPING_URL_COMMENT = /^[ \t]*\/\/# sourceMappingURL=([^\r\n]*)[ \t]*$/gm
+const SOURCE_MAPPING_URL_COMMENT =
+  /^[ \t]*\/\/# sourceMappingURL=([^\r\n]*)[ \t]*$|\/\*# sourceMappingURL=([^*]*)\*\//gm
 
-// Turbopack's `productionBrowserSourceMaps` always appends a `//# sourceMappingURL=`
+// Turbopack's `productionBrowserSourceMaps` always appends a sourceMappingURL
 // comment and has no "hidden" mode like the webpack (`append: false`) and rollup
 // (`sourcemap: 'hidden'`) plugins. Once the CLI has uploaded and deleted the browser
 // maps, the comment is left pointing at a missing file, so we strip it here.
 export async function stripDanglingSourceMapComments(distDir: string): Promise<void> {
-  let jsFiles: string[]
+  let files: string[]
   try {
-    jsFiles = await listJsFiles(path.join(distDir, 'static'))
+    files = await listSourceMappedFiles(path.join(distDir, 'static'))
   } catch {
     return
   }
-  for (const file of jsFiles) {
+  for (const file of files) {
     try {
       await stripDanglingComment(file)
     } catch {
@@ -24,13 +25,13 @@ export async function stripDanglingSourceMapComments(distDir: string): Promise<v
   }
 }
 
-async function listJsFiles(dir: string): Promise<string[]> {
+async function listSourceMappedFiles(dir: string): Promise<string[]> {
   const files: string[] = []
   for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
     const fullPath = path.join(dir, entry.name)
     if (entry.isDirectory()) {
-      files.push(...(await listJsFiles(fullPath)))
-    } else if (entry.isFile() && /\.[mc]?js$/.test(fullPath)) {
+      files.push(...(await listSourceMappedFiles(fullPath)))
+    } else if (entry.isFile() && /\.(?:[mc]?js|css)$/.test(fullPath)) {
       files.push(fullPath)
     }
   }
@@ -43,7 +44,7 @@ async function stripDanglingComment(file: string): Promise<void> {
   if (!match) {
     return
   }
-  const url = (match[1] ?? '').trim()
+  const url = (match[1] ?? match[2] ?? '').trim()
   if (
     url === '' ||
     url.startsWith('data:') ||

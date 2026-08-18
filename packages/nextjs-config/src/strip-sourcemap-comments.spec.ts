@@ -30,6 +30,27 @@ describe('stripDanglingSourceMapComments', () => {
     expect(await fs.readFile(chunk, 'utf8')).toBe('console.log(1)\n')
   })
 
+  it('removes a dangling CSS source map comment', async () => {
+    const chunk = await writeFile(
+      'static/chunks/2ip8du-oq3xns.css',
+      'body {}\n/*# sourceMappingURL=3b32phx49w94n.css.map*/'
+    )
+
+    await stripDanglingSourceMapComments(distDir)
+
+    expect(await fs.readFile(chunk, 'utf8')).toBe('body {}\n')
+  })
+
+  it('keeps a CSS source map comment with whitespace before the closing delimiter when the map exists', async () => {
+    const original = 'body {}\n/*# sourceMappingURL=page.css.map */\n'
+    const chunk = await writeFile('static/chunks/page.css', original)
+    await writeFile('static/chunks/page.css.map', '{"version":3}')
+
+    await stripDanglingSourceMapComments(distDir)
+
+    expect(await fs.readFile(chunk, 'utf8')).toBe(original)
+  })
+
   it('keeps the comment when the referenced map still exists', async () => {
     const original = 'console.log(2)\n//# sourceMappingURL=page.js.map\n'
     const chunk = await writeFile('static/chunks/page.js', original)
