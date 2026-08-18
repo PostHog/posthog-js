@@ -164,13 +164,18 @@ jobs:
                       --notes "$last_changelog_entry"
 
             - name: Write resume summary
+              env:
+                  RECOVERY_REGION: ${{ inputs.recovery_region }}
+                  RELEASE_SHA: ${{ needs.recover-posthog-js-s3.outputs.release-sha }}
+                  SHOULD_PUBLISH: ${{ steps.npm.outputs.should-publish }}
+                  VERSION: ${{ inputs.recovery_version }}
               run: |
                   {
-                      echo "### Resumed posthog-js@${{ inputs.recovery_version }}"
+                      echo "### Resumed posthog-js@$VERSION"
                       echo
-                      echo "- Release commit: \`${{ needs.recover-posthog-js-s3.outputs.release-sha }}\`"
-                      echo "- npm publish required: \`${{ steps.npm.outputs.should-publish }}\`"
-                      echo "- S3 recovery region: \`${{ inputs.recovery_region }}\`"
+                      echo "- Release commit: \`$RELEASE_SHA\`"
+                      echo "- npm publish required: \`$SHOULD_PUBLISH\`"
+                      echo "- S3 recovery region: \`$RECOVERY_REGION\`"
                   } >> "$GITHUB_STEP_SUMMARY"
 
     check-changesets:

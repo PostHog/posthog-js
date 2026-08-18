@@ -447,12 +447,19 @@ jobs:
                   node tooling/release/src/cli.ts upload-s3 "$BUCKET" "$VERSION" "${options[@]}"
 
             - name: Write recovery summary
+              env:
+                  FORCE_OVERWRITE: ${{ inputs.force_overwrite }}
+                  PUBLISH_ALIASES: ${{ inputs.publish_aliases }}
+                  REGION: ${{ matrix.region.name }}
+                  RELEASE_SHA: ${{ needs.validate.outputs.release-sha }}
+                  TOOLBAR_SHA: ${{ needs.validate.outputs.toolbar-sha }}
+                  VERSION: ${{ inputs.version }}
               run: |
                   {
-                      echo "### Recovered posthog-js@${{ inputs.version }} in ${{ matrix.region.name }}"
+                      echo "### Recovered posthog-js@$VERSION in $REGION"
                       echo
-                      echo "- SDK source: \`${{ needs.validate.outputs.release-sha }}\`"
-                      echo "- Toolbar source: \`${{ needs.validate.outputs.toolbar-sha }}\`"
-                      echo "- Mutable aliases updated: \`${{ inputs.publish_aliases }}\`"
-                      echo "- Existing immutable assets may be overwritten: \`${{ inputs.force_overwrite }}\`"
+                      echo "- SDK source: \`$RELEASE_SHA\`"
+                      echo "- Toolbar source: \`$TOOLBAR_SHA\`"
+                      echo "- Mutable aliases updated: \`$PUBLISH_ALIASES\`"
+                      echo "- Existing immutable assets may be overwritten: \`$FORCE_OVERWRITE\`"
                   } >> "$GITHUB_STEP_SUMMARY"
