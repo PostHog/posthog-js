@@ -6,8 +6,8 @@ permissions:
 on:
     workflow_call:
         inputs:
-            version:
-                description: 'posthog-js version to recover'
+            publish_version:
+                description: 'Exact posthog-js version to publish or repair'
                 required: true
                 type: string
             release_sha:
@@ -15,12 +15,17 @@ on:
                 required: false
                 default: ''
                 type: string
+            toolbar_sha:
+                description: 'PostHog/posthog toolbar commit SHA; uses current master when empty'
+                required: false
+                default: ''
+                type: string
             region:
                 description: 'CDN region to recover'
                 required: true
                 type: string
-            publish_aliases:
-                description: 'Whether to update mutable /static and /static/1 aliases'
+            update_latest_aliases:
+                description: 'Whether to update latest stable CDN paths /static and /static/1'
                 required: true
                 type: boolean
             force_overwrite:
@@ -55,9 +60,9 @@ jobs:
               id: release
               env:
                   INPUT_RELEASE_SHA: ${{ inputs.release_sha }}
-                  PUBLISH_ALIASES: ${{ inputs.publish_aliases }}
                   REGION: ${{ inputs.region }}
-                  VERSION: ${{ inputs.version }}
+                  UPDATE_LATEST_ALIASES: ${{ inputs.update_latest_aliases }}
+                  VERSION: ${{ inputs.publish_version }}
               run: |
                   set -euo pipefail
 
@@ -116,8 +121,8 @@ jobs:
                   fi
 
                   current_version=$(git show 'origin/main:packages/browser/package.json' | jq -r '.version')
-                  if [ "$PUBLISH_ALIASES" = 'true' ] && [ "$VERSION" != "$current_version" ]; then
-                      echo "::error::Mutable aliases can only be updated for the current posthog-js version on main ($current_version). Re-run with publish_aliases disabled to restore only /static/$VERSION/."
+                  if [ "$UPDATE_LATEST_ALIASES" = 'true' ] && [ "$VERSION" != "$current_version" ]; then
+                      echo "::error::Latest CDN aliases can only be updated for the current posthog-js version on main ($current_version). Re-run with update_latest_aliases disabled to restore only /static/$VERSION/."
                       exit 1
                   fi
 
@@ -158,8 +163,8 @@ jobs:
                   } >> "$GITHUB_OUTPUT"
                   echo "✓ resolved posthog-js@$VERSION to $release_sha"
                   echo "✓ npm version already published: $npm_published"
-                  if [ "$PUBLISH_ALIASES" = 'true' ]; then
-                      echo "✓ mutable aliases may be updated to $VERSION"
+                  if [ "$UPDATE_LATEST_ALIASES" = 'true' ]; then
+                      echo "✓ latest CDN aliases may be updated to $VERSION"
                   else
                       echo "✓ recovery is limited to immutable /static/$VERSION/ assets"
                   fi
@@ -191,21 +196,43 @@ jobs:
                   echo "toolbar-matrix=$toolbar_matrix" >> "$GITHUB_OUTPUT"
                   echo "upload-matrix=$upload_matrix" >> "$GITHUB_OUTPUT"
 
+            - name: Select toolbar source
+              id: toolbar-source
+              env:
+                  INPUT_TOOLBAR_SHA: ${{ inputs.toolbar_sha }}
+              run: |
+                  set -euo pipefail
+                  toolbar_ref='master'
+                  if [ -n "$INPUT_TOOLBAR_SHA" ]; then
+                      if [[ ! "$INPUT_TOOLBAR_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+                          echo '::error::toolbar_sha must be a full 40-character commit SHA.'
+                          exit 1
+                      fi
+                      toolbar_ref=$(printf '%s' "$INPUT_TOOLBAR_SHA" | tr '[:upper:]' '[:lower:]')
+                  fi
+                  echo "ref=$toolbar_ref" >> "$GITHUB_OUTPUT"
+
             - name: Checkout toolbar source
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   repository: PostHog/posthog
-                  ref: master
+                  ref: ${{ steps.toolbar-source.outputs.ref }}
                   fetch-depth: 1
                   path: posthog-source
 
             - name: Resolve toolbar source commit
               id: toolbar
+              env:
+                  REQUESTED_TOOLBAR_REF: ${{ steps.toolbar-source.outputs.ref }}
               run: |
                   set -euo pipefail
                   toolbar_sha=$(git -C posthog-source rev-parse HEAD)
+                  if [ "$REQUESTED_TOOLBAR_REF" != 'master' ] && [ "$toolbar_sha" != "$REQUESTED_TOOLBAR_REF" ]; then
+                      echo "::error::PostHog/posthog resolved to $toolbar_sha, not requested toolbar_sha $REQUESTED_TOOLBAR_REF."
+                      exit 1
+                  fi
                   echo "toolbar-sha=$toolbar_sha" >> "$GITHUB_OUTPUT"
-                  echo "✓ resolved PostHog/posthog@master to $toolbar_sha"
+                  echo "✓ resolved PostHog/posthog@$REQUESTED_TOOLBAR_REF to $toolbar_sha"
 
     build-s3-artifacts:
         name: Rebuild posthog-js dist
@@ -222,7 +249,7 @@ jobs:
 
             - name: Verify released package version
               env:
-                  VERSION: ${{ inputs.version }}
+                  VERSION: ${{ inputs.publish_version }}
               run: test "$(jq -r '.version' packages/browser/package.json)" = "$VERSION"
 
             - name: Setup Node.js
@@ -266,7 +293,7 @@ jobs:
             matrix:
                 region: ${{ fromJSON(needs.validate.outputs.toolbar-matrix) }}
         env:
-            TOOLBAR_PUBLIC_PATH: https://${{ matrix.region.host }}/static/${{ inputs.version }}/
+            TOOLBAR_PUBLIC_PATH: https://${{ matrix.region.host }}/static/${{ inputs.publish_version }}/
         steps:
             - name: Checkout toolbar source
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -433,12 +460,12 @@ jobs:
               env:
                   BUCKET: ${{ matrix.region.bucket }}
                   FORCE_OVERWRITE: ${{ inputs.force_overwrite }}
-                  PUBLISH_ALIASES: ${{ inputs.publish_aliases }}
-                  VERSION: ${{ inputs.version }}
+                  UPDATE_LATEST_ALIASES: ${{ inputs.update_latest_aliases }}
+                  VERSION: ${{ inputs.publish_version }}
               run: |
                   set -euo pipefail
                   options=()
-                  if [ "$PUBLISH_ALIASES" != 'true' ]; then
+                  if [ "$UPDATE_LATEST_ALIASES" != 'true' ]; then
                       options+=(--immutable-only)
                   fi
                   if [ "$FORCE_OVERWRITE" = 'true' ]; then
@@ -449,17 +476,17 @@ jobs:
             - name: Write recovery summary
               env:
                   FORCE_OVERWRITE: ${{ inputs.force_overwrite }}
-                  PUBLISH_ALIASES: ${{ inputs.publish_aliases }}
                   REGION: ${{ matrix.region.name }}
                   RELEASE_SHA: ${{ needs.validate.outputs.release-sha }}
                   TOOLBAR_SHA: ${{ needs.validate.outputs.toolbar-sha }}
-                  VERSION: ${{ inputs.version }}
+                  UPDATE_LATEST_ALIASES: ${{ inputs.update_latest_aliases }}
+                  VERSION: ${{ inputs.publish_version }}
               run: |
                   {
                       echo "### Recovered posthog-js@$VERSION in $REGION"
                       echo
                       echo "- SDK source: \`$RELEASE_SHA\`"
                       echo "- Toolbar source: \`$TOOLBAR_SHA\`"
-                      echo "- Mutable aliases updated: \`$PUBLISH_ALIASES\`"
+                      echo "- Latest CDN aliases updated: \`$UPDATE_LATEST_ALIASES\`"
                       echo "- Existing immutable assets may be overwritten: \`$FORCE_OVERWRITE\`"
                   } >> "$GITHUB_STEP_SUMMARY"

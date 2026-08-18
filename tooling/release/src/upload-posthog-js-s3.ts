@@ -229,7 +229,7 @@ export async function assertCanUploadImmutableAssets(
         const remaining = existingKeys.length - examples.length
         const suffix = remaining > 0 ? ` (and ${remaining} more)` : ''
         throw new Error(
-            `Refusing to overwrite existing immutable release assets: ${examples.join(', ')}${suffix}. Re-run with --force-overwrite to replace this S3 release.`
+            `Refusing to overwrite existing immutable release assets: ${examples.join(', ')}${suffix}. Retry with force overwrite enabled (CLI: --force-overwrite) to replace this S3 release.`
         )
     }
 }
