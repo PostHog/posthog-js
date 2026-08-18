@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.48.3
+
+### Patch Changes
+
+- [#4549](https://github.com/PostHog/posthog-js/pull/4549) [`0599fe0`](https://github.com/PostHog/posthog-js/commit/0599fe051e86a1df76f34952a650fb004ade0479) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Recognise Firefox and Safari extension frames when filtering extension exceptions, and stop counting Safari's masked `webkit-masked-url://` frames as in-app code.
+  (2026-08-18)
+
 ## 1.48.2
 
 ### Patch Changes
