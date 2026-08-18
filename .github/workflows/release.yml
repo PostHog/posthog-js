@@ -645,16 +645,26 @@ jobs:
         runs-on: ubuntu-latest
         if: >-
             always() &&
-            (
-                (
-                    needs.version-bump.outputs.commit-hash != '' &&
-                    needs.gate-posthog-js-publish.result == 'success'
-                ) ||
-                (
-                    needs.recover-posthog-js-s3.result == 'success' &&
-                    inputs.publish_to_npm == true
-                )
-            )
+            needs.version-bump.outputs.commit-hash != '' &&
+            needs.gate-posthog-js-publish.result == 'success'
+        permissions:
+            contents: write
+            id-token: write
+        strategy:
+            matrix:
+                package:
+                    - name: posthog-js
+        steps: *publish-package-steps
+
+    publish-recovered-posthog-js:
+        name: Publish recovered posthog-js
+        needs: [version-bump, notify-approval-needed, recover-posthog-js-s3]
+        runs-on: ubuntu-latest
+        if: >-
+            always() &&
+            needs.recover-posthog-js-s3.result == 'success' &&
+            inputs.publish_to_npm == true
+        environment: 'NPM Release'
         permissions:
             contents: write
             id-token: write
@@ -666,11 +676,11 @@ jobs:
                     - name: posthog-js
         steps: *publish-package-steps
 
-    # Wait for both publish jobs so newly bumped workspace dependencies are available on npm.
+    # Wait for all publish jobs so newly bumped workspace dependencies are available on npm.
     # A package tag points at this release commit only when this run published that package.
     dispatch-posthog-upgrade:
         name: Dispatch ${{ matrix.package.name }} upgrade
-        needs: [version-bump, recover-posthog-js-s3, publish, publish-posthog-js]
+        needs: [version-bump, recover-posthog-js-s3, publish, publish-posthog-js, publish-recovered-posthog-js]
         runs-on: ubuntu-latest
         if: >-
             always() &&
@@ -678,7 +688,7 @@ jobs:
                 needs.version-bump.outputs.commit-hash != '' ||
                 (
                     needs.recover-posthog-js-s3.result == 'success' &&
-                    needs.publish-posthog-js.outputs.published-now == 'true'
+                    needs.publish-recovered-posthog-js.outputs.published-now == 'true'
                 )
             )
         permissions:
@@ -1315,7 +1325,7 @@ jobs:
 
     notify-recovery-result:
         name: Notify posthog-js recovery result
-        needs: [recover-posthog-js-s3, publish-posthog-js, dispatch-posthog-upgrade]
+        needs: [recover-posthog-js-s3, publish-recovered-posthog-js, dispatch-posthog-upgrade]
         runs-on: ubuntu-latest
         if: >-
             always() &&
@@ -1325,8 +1335,8 @@ jobs:
               id: result
               env:
                   DISPATCH_RESULT: ${{ needs.dispatch-posthog-upgrade.result }}
-                  PUBLISHED_NOW: ${{ needs.publish-posthog-js.outputs.published-now }}
-                  PUBLISH_RESULT: ${{ needs.publish-posthog-js.result }}
+                  PUBLISHED_NOW: ${{ needs.publish-recovered-posthog-js.outputs.published-now }}
+                  PUBLISH_RESULT: ${{ needs.publish-recovered-posthog-js.result }}
                   PUBLISH_TO_NPM: ${{ inputs.publish_to_npm }}
                   RECOVERY_RESULT: ${{ needs.recover-posthog-js-s3.result }}
                   TARGET_VERSION: ${{ inputs.target_version }}

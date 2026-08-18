@@ -184,7 +184,7 @@ jobs:
                   echo "✓ S3 target: /static/$TARGET_VERSION/"
                   echo "✓ publish to npm: $PUBLISH_TO_NPM"
                   if [ "$UPDATE_LATEST_ALIASES" = 'true' ]; then
-                      echo "✓ latest CDN aliases will be updated"
+                      echo "✓ latest CDN alias updates requested"
                   else
                       echo "✓ latest CDN aliases will not be updated"
                   fi
@@ -508,6 +508,6 @@ jobs:
                       echo
                       echo "- SDK source: \`$SOURCE_SHA\`"
                       echo "- Toolbar source: \`$TOOLBAR_SHA\`"
-                      echo "- Latest CDN aliases updated: \`$UPDATE_LATEST_ALIASES\`"
+                      echo "- Latest CDN alias updates requested: \`$UPDATE_LATEST_ALIASES\`"
                       echo "- Existing immutable assets may be overwritten: \`$FORCE_OVERWRITE\`"
                   } >> "$GITHUB_STEP_SUMMARY"
