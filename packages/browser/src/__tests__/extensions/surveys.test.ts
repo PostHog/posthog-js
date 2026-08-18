@@ -397,6 +397,32 @@ describe('usePopupVisibility close animation path', () => {
 
         expect(removeSurvey).toHaveBeenCalledTimes(1)
     })
+
+    test('a no-container close does not leave the close guard stuck for a later close', () => {
+        // The no-container path tears down synchronously with no settle timer, so it
+        // must not raise the in-flight guard — otherwise a popup that is shown again
+        // (e.g. a tab widget re-shown on a URL match) can never be closed a second time.
+        const { result } = renderWithContainer()
+
+        act(() => {
+            result.current.hidePopupWithAnimation()
+        })
+        expect(result.current.isPopupVisible).toBe(false)
+        expect(removeSurvey).toHaveBeenCalledTimes(1)
+
+        // The same hook instance shows the popup again.
+        act(() => {
+            result.current.setIsPopupVisible(true)
+        })
+        expect(result.current.isPopupVisible).toBe(true)
+
+        // The second close must still tear down — the guard was not left stuck.
+        act(() => {
+            result.current.hidePopupWithAnimation()
+        })
+        expect(result.current.isPopupVisible).toBe(false)
+        expect(removeSurvey).toHaveBeenCalledTimes(2)
+    })
 })
 
 describe('SurveyManager', () => {

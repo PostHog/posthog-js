@@ -1166,14 +1166,20 @@ export function usePopupVisibility(
         if (isClosingRef.current) {
             return
         }
-        isClosingRef.current = true
 
         // No element to animate (jsdom, or the ref never attached): tear down now.
+        // Do this before raising isClosingRef so the guard is only ever set for a real
+        // in-flight animation — this early return has no timer to clear it, so setting
+        // the flag here would leave it stuck and block every later close.
         const container = surveyContainerRef?.current
         if (!container) {
             removeDOMAndHidePopup()
             return
         }
+
+        // Committing to the fade now — raise the guard so a second close can't start
+        // another animation; the settle timer below clears it.
+        isClosingRef.current = true
 
         // Fade the popup out with a plain CSS opacity transition scoped to the
         // survey's own container, which lives in an isolated shadow root. We
