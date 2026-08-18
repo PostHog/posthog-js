@@ -385,7 +385,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     return this.traceId ? String(this.traceId) : this._findRootRun(runId)
   }
 
-  private _getParentRunId(traceId: string, _runId: string, parentRunId?: string): string | undefined {
+  protected _getParentRunId(traceId: string, _runId: string, parentRunId?: string): string | undefined {
     // Replace the parent-run if not found in our stored parent tree.
     if (parentRunId && !this.parentTree[parentRunId]) {
       return traceId

@@ -15,6 +15,12 @@ const postHogStateSchema = z.object({
 
 type PostHogState = z.infer<typeof postHogStateSchema>
 
+class LangChainMiddlewareCallbackHandler extends LangChainCallbackHandler {
+  protected override _getParentRunId(_traceId: string, _runId: string, parentRunId?: string): string | undefined {
+    return parentRunId
+  }
+}
+
 const withoutPostHogState = <T extends Record<string, unknown>>(state: T): Omit<T, keyof PostHogState> => {
   const { _posthogRunId: _, _posthogStartTime: __, _posthogInput: ___, ...rest } = state
   return rest
@@ -92,7 +98,7 @@ export type PostHogLangChainMiddlewareOptions = LangChainCallbackHandlerOptions
  * failure still captures the failed model or tool call, but not a root trace.
  */
 export const createPostHogMiddleware = (options: PostHogLangChainMiddlewareOptions) => {
-  const callback = new LangChainCallbackHandler(options)
+  const callback = new LangChainMiddlewareCallbackHandler(options)
 
   return createMiddleware({
     name: 'PostHogMiddleware',

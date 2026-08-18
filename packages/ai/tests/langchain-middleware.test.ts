@@ -209,7 +209,9 @@ describe('createPostHogMiddleware', () => {
     expect(traces).toHaveLength(2)
     expect(new Set(traces.map(({ properties }) => properties.$ai_span_id)).size).toBe(2)
     expect(events.every(({ properties }) => properties.$ai_trace_id === 'shared-trace')).toBe(true)
-    expect(generations.every(({ properties }) => properties.$ai_parent_id === 'shared-trace')).toBe(true)
+    expect(new Set(generations.map(({ properties }) => properties.$ai_parent_id))).toEqual(
+      new Set(traces.map(({ properties }) => properties.$ai_span_id))
+    )
   })
 
   it('applies privacy mode to agent and model content', async () => {
