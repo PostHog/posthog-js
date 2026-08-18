@@ -242,7 +242,7 @@ jobs:
 
     publish:
         name: Publish packages
-        needs: [version-bump, notify-approval-needed, check-browser-version, build-s3-artifacts, upload-s3]
+        needs: [version-bump, notify-approval-needed]
         runs-on: ubuntu-latest
         # Use `always()` to ensure the job runs even if the check-release-label job fails
         # but still depend on it to be able to use `needs.notify-approval-needed.outputs.slack_ts`
@@ -258,7 +258,6 @@ jobs:
                     - name: '@posthog/react-native-plugin'
                     - name: posthog-node
                     - name: posthog-js-lite
-                    - name: posthog-js
                     - name: '@posthog/browser-common'
                     - name: '@posthog/core'
                     - name: '@posthog/react'
@@ -281,46 +280,9 @@ jobs:
                     # We deliberately do NOT publish them to npm — they are
                     # omitted from this matrix on purpose.
 
-        steps:
-            # Only the browser package is gated on its CDN release. Other
-            # package matrix cells still run after an S3 failure because the
-            # job-level condition uses `always()`.
-            - name: Require successful S3 release for posthog-js
-              if: matrix.package.name == 'posthog-js'
-              env:
-                  BUILD_RESULT: ${{ needs.build-s3-artifacts.result }}
-                  CHECK_RESULT: ${{ needs.check-browser-version.result }}
-                  IS_NEW_VERSION: ${{ needs.check-browser-version.outputs.is-new-version }}
-                  UPLOAD_RESULT: ${{ needs.upload-s3.result }}
-              run: |
-                  set -euo pipefail
-
-                  if [ "$CHECK_RESULT" != 'success' ]; then
-                      echo "::error::Cannot publish posthog-js because its version check finished with '$CHECK_RESULT'."
-                      exit 1
-                  fi
-
-                  case "$IS_NEW_VERSION" in
-                      true)
-                          if [ "$BUILD_RESULT" != 'success' ]; then
-                              echo "::error::Cannot publish posthog-js because its S3 artifact build finished with '$BUILD_RESULT'."
-                              exit 1
-                          fi
-                          if [ "$UPLOAD_RESULT" != 'success' ]; then
-                              echo "::error::Cannot publish posthog-js because its S3 upload finished with '$UPLOAD_RESULT'."
-                              exit 1
-                          fi
-                          echo '✓ posthog-js S3 release succeeded; npm publishing may proceed'
-                          ;;
-                      false)
-                          echo '✓ posthog-js has no new version; no S3 release gate is required'
-                          ;;
-                      *)
-                          echo "::error::Cannot determine whether posthog-js needs an S3 release (is-new-version='$IS_NEW_VERSION')."
-                          exit 1
-                          ;;
-                  esac
-
+        # Keep npm trusted publishing in this workflow. Reuse these steps for
+        # the separately gated posthog-js job below.
+        steps: &publish-package-steps
             - name: Checkout repository
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
@@ -451,11 +413,122 @@ jobs:
                   message: '❌ Failed to release `${{ steps.release-failure-metadata.outputs.package_ref }}`! <${{ steps.release-failure-metadata.outputs.action_url }}|View workflow run>'
                   emoji_reaction: 'x'
 
-    # Wait for the full publish matrix so newly bumped workspace dependencies are available on npm.
+    gate-posthog-js-publish:
+        name: Gate posthog-js npm publish on S3
+        needs: [version-bump, notify-approval-needed, check-browser-version, build-s3-artifacts, upload-s3]
+        runs-on: ubuntu-latest
+        if: always() && needs.version-bump.outputs.commit-hash != ''
+        steps:
+            - name: Require successful S3 release for posthog-js
+              env:
+                  BUILD_RESULT: ${{ needs.build-s3-artifacts.result }}
+                  CHECK_RESULT: ${{ needs.check-browser-version.result }}
+                  IS_NEW_VERSION: ${{ needs.check-browser-version.outputs.is-new-version }}
+                  UPLOAD_RESULT: ${{ needs.upload-s3.result }}
+              run: |
+                  set -euo pipefail
+
+                  if [ "$CHECK_RESULT" != 'success' ]; then
+                      echo "::error::Cannot publish posthog-js because its version check finished with '$CHECK_RESULT'."
+                      exit 1
+                  fi
+
+                  case "$IS_NEW_VERSION" in
+                      true)
+                          if [ "$BUILD_RESULT" != 'success' ]; then
+                              echo "::error::Cannot publish posthog-js because its S3 artifact build finished with '$BUILD_RESULT'."
+                              exit 1
+                          fi
+                          if [ "$UPLOAD_RESULT" != 'success' ]; then
+                              echo "::error::Cannot publish posthog-js because its S3 upload finished with '$UPLOAD_RESULT'."
+                              exit 1
+                          fi
+                          echo '✓ posthog-js S3 release succeeded; npm publishing may proceed'
+                          ;;
+                      false)
+                          echo '✓ posthog-js has no new version; no S3 release gate is required'
+                          ;;
+                      *)
+                          echo "::error::Cannot determine whether posthog-js needs an S3 release (is-new-version='$IS_NEW_VERSION')."
+                          exit 1
+                          ;;
+                  esac
+
+            - name: Resolve release failure metadata
+              id: release-failure-metadata
+              if: ${{ failure() }}
+              env:
+                  PACKAGE_VERSION: ${{ needs.check-browser-version.outputs.committed-version }}
+              run: |
+                  set -euo pipefail
+
+                  action_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  package_ref="posthog-js"
+                  if [ -n "$PACKAGE_VERSION" ]; then
+                      package_ref="posthog-js@v$PACKAGE_VERSION"
+                  fi
+
+                  {
+                      echo "action_url=$action_url"
+                      echo "package_version=$PACKAGE_VERSION"
+                      echo "package_ref=$package_ref"
+                  } >> "$GITHUB_OUTPUT"
+
+            - name: Send failure event to PostHog
+              if: ${{ failure() }}
+              continue-on-error: true
+              uses: PostHog/posthog-github-action@9a6a19d360820ab4d95ecc4a5a7564062c895f84 # v1.3.0
+              with:
+                  posthog-token: '${{ secrets.POSTHOG_PROJECT_API_KEY }}'
+                  event: 'posthog-sdk-github-release-workflow-failure'
+                  properties: >-
+                      {
+                        "commitSha": "${{ github.sha }}",
+                        "jobStatus": "${{ job.status }}",
+                        "ref": "${{ github.ref }}",
+                        "repository": "${{ github.repository }}",
+                        "sdk": "posthog-js",
+                        "jobName": "gate-posthog-js-publish",
+                        "packageName": "posthog-js",
+                        "packageVersion": "${{ steps.release-failure-metadata.outputs.package_version || 'unknown' }}",
+                        "actionUrl": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+                        "alertText": ":rotating_light: Blocked npm publishing for ${{ steps.release-failure-metadata.outputs.package_ref }} :rotating_light:",
+                        "alertContext": "The browser version check, S3 artifact build, or regional S3 upload did not succeed."
+                      }
+
+            - name: Notify Slack - Failed
+              if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
+              continue-on-error: true
+              uses: PostHog/.github/.github/actions/slack-thread-reply@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1 # main
+              with:
+                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
+                  message: '❌ Blocked npm publishing for `${{ steps.release-failure-metadata.outputs.package_ref }}` because its S3/CDN release did not succeed. <${{ steps.release-failure-metadata.outputs.action_url }}|View workflow run>'
+                  emoji_reaction: 'x'
+
+    publish-posthog-js:
+        name: Publish posthog-js
+        needs: [version-bump, notify-approval-needed, gate-posthog-js-publish]
+        runs-on: ubuntu-latest
+        if: >-
+            always() &&
+            needs.version-bump.outputs.commit-hash != '' &&
+            needs.gate-posthog-js-publish.result == 'success'
+        permissions:
+            contents: write
+            id-token: write
+        strategy:
+            matrix:
+                package:
+                    - name: posthog-js
+        steps: *publish-package-steps
+
+    # Wait for both publish jobs so newly bumped workspace dependencies are available on npm.
     # A package tag points at this release commit only when this run published that package.
     dispatch-posthog-upgrade:
         name: Dispatch ${{ matrix.package.name }} upgrade
-        needs: [version-bump, publish]
+        needs: [version-bump, publish, publish-posthog-js]
         runs-on: ubuntu-latest
         if: always() && needs.version-bump.outputs.commit-hash != ''
         permissions:
@@ -1052,11 +1125,12 @@ jobs:
 
     notify-released:
         name: Notify Slack - Released
-        needs: [notify-approval-needed, publish, dispatch-posthog-upgrade, upload-s3]
+        needs: [notify-approval-needed, publish, publish-posthog-js, dispatch-posthog-upgrade, upload-s3]
         runs-on: ubuntu-latest
         if: >-
             always() &&
             needs.publish.result == 'success' &&
+            needs.publish-posthog-js.result == 'success' &&
             needs.dispatch-posthog-upgrade.result == 'success' &&
             (needs.upload-s3.result == 'success' || needs.upload-s3.result == 'skipped') &&
             needs.notify-approval-needed.outputs.slack_ts != ''
