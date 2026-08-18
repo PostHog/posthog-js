@@ -1128,6 +1128,10 @@ export function useHideSurveyOnURLChange({
     }, [isPreviewMode, survey, removeSurveyFromFocus, setSurveyVisible, posthog])
 }
 
+// Duration of the survey close fade-out, in milliseconds. Kept short so the popup
+// disappears promptly; also the window the fallback settle timer waits on.
+const CLOSE_ANIMATION_DURATION_MS = 200
+
 export function usePopupVisibility(
     survey: Survey,
     posthog: PostHog | undefined,
@@ -1144,13 +1148,12 @@ export function usePopupVisibility(
     )
     const [isSurveySent, setIsSurveySent] = useState(false)
 
-    // Tracks whether a view transition is already in flight so a second close
-    // (e.g. Enter + button click, or a dismiss fired while the thank-you screen
-    // is animating out) doesn't start an overlapping transition. Overlapping
-    // transitions on the same document are a known source of renderer crashes.
-    const isTransitionInFlightRef = useRef(false)
+    // Tracks whether a close is already animating so a second close (e.g. Enter +
+    // button click, or a dismiss fired while the thank-you screen is animating out)
+    // doesn't start a second animation or tear the popup down twice.
+    const isClosingRef = useRef(false)
 
-    const hidePopupWithViewTransition = () => {
+    const hidePopupWithAnimation = () => {
         const removeDOMAndHidePopup = () => {
             if (isPopup) {
                 removeSurveyFromFocus(survey)
@@ -1158,58 +1161,45 @@ export function usePopupVisibility(
             setIsPopupVisible(false)
         }
 
-        // No View Transitions API (jsdom, older browsers): tear down synchronously.
-        if (typeof document === 'undefined' || !document.startViewTransition) {
+        // A close is already animating. Don't start a second one — the in-flight
+        // close settles the popup when it finishes.
+        if (isClosingRef.current) {
+            return
+        }
+        isClosingRef.current = true
+
+        // No element to animate (jsdom, or the ref never attached): tear down now.
+        const container = surveyContainerRef?.current
+        if (!container) {
             removeDOMAndHidePopup()
             return
         }
 
-        // A transition is already animating the close. Don't start a second one —
-        // overlapping transitions on the same document are themselves a renderer
-        // crash risk. The in-flight transition's `finish` will hide the popup.
-        if (isTransitionInFlightRef.current) {
-            return
-        }
+        // Fade the popup out with a plain CSS opacity transition scoped to the
+        // survey's own container, which lives in an isolated shadow root. We
+        // deliberately do NOT use document.startViewTransition: that API snapshots
+        // the ENTIRE page viewport, and on a heavy host page (e.g. a large dashboard)
+        // capturing that snapshot can exhaust renderer memory and crash the tab (grey
+        // "Aw, Snap"). A scoped opacity transition costs nothing on the rest of the page.
+        container.style.transition = `opacity ${CLOSE_ANIMATION_DURATION_MS}ms ease-out`
+        container.style.opacity = '0'
 
-        isTransitionInFlightRef.current = true
-
-        const finish = () => {
-            isTransitionInFlightRef.current = false
+        // Unmount once the fade has had time to run. This uses a timer rather than a
+        // `transitionend` listener because transitionend never fires for a cancelled or
+        // zero-duration transition (backgrounded tab, reduced motion), so a timer would
+        // have to back it up regardless — and settling a few ms later than strictly
+        // necessary is imperceptible for an element that is already fully transparent.
+        setTimeout(() => {
+            isClosingRef.current = false
             removeDOMAndHidePopup()
-        }
-
-        try {
-            // The transition callback only animates the fade-out of the survey
-            // container. It must NOT own the DOM teardown — removing the element
-            // inside the callback (the previous behaviour) is what triggered a
-            // Chromium renderer crash (grey "Aw, Snap" tab) on heavy SPAs, because
-            // the transition's captured snapshot ended up pointing at a removed
-            // node. React unmounts the container via setIsPopupVisible(false) +
-            // removeSurveyFromFocus once the transition settles.
-            const transition = document.startViewTransition(() => {
-                if (surveyContainerRef?.current) {
-                    surveyContainerRef.current.style.opacity = '0'
-                }
-            })
-
-            // `transition.finished` rejects if the transition is skipped or
-            // interrupted (e.g. tab backgrounded, reduced motion, another transition
-            // supersedes it). Always settle the state so the popup is never left
-            // visible with a stale ref.
-            transition.finished.then(finish, finish)
-        } catch (error) {
-            // startViewTransition can throw if the document is not in a state that
-            // allows a transition (e.g. during unload). Fall back to a plain remove.
-            logger.warn('View transition failed, removing survey without animation:', error)
-            finish()
-        }
+        }, CLOSE_ANIMATION_DURATION_MS + 50)
     }
 
     const handleSurveyClosed = (event: CustomEvent) => {
         if (event.detail.surveyId !== survey.id) {
             return
         }
-        hidePopupWithViewTransition()
+        hidePopupWithAnimation()
     }
 
     useEffect(() => {
@@ -1226,12 +1216,12 @@ export function usePopupVisibility(
                 return
             }
             if (!survey.appearance?.displayThankYouMessage) {
-                return hidePopupWithViewTransition()
+                return hidePopupWithAnimation()
             }
             setIsSurveySent(true)
             if (survey.appearance?.autoDisappear) {
                 setTimeout(() => {
-                    hidePopupWithViewTransition()
+                    hidePopupWithAnimation()
                 }, 5000)
             }
         }
@@ -1290,7 +1280,7 @@ export function usePopupVisibility(
         posthog,
     })
 
-    return { isPopupVisible, isSurveySent, setIsPopupVisible, hidePopupWithViewTransition }
+    return { isPopupVisible, isSurveySent, setIsPopupVisible, hidePopupWithAnimation }
 }
 
 interface SurveyPopupProps {
@@ -1358,7 +1348,7 @@ export function SurveyPopup({
     const surveyPopupDelayMilliseconds = survey.appearance?.surveyPopupDelaySeconds
         ? survey.appearance.surveyPopupDelaySeconds * 1000
         : 0
-    const { isPopupVisible, isSurveySent, hidePopupWithViewTransition } = usePopupVisibility(
+    const { isPopupVisible, isSurveySent, hidePopupWithAnimation } = usePopupVisibility(
         survey,
         posthog,
         surveyPopupDelayMilliseconds,
@@ -1452,7 +1442,7 @@ export function SurveyPopup({
                         contentType={survey.appearance?.thankYouMessageDescriptionContentType}
                         appearance={survey.appearance || defaultSurveyAppearance}
                         onClose={() => {
-                            hidePopupWithViewTransition()
+                            hidePopupWithAnimation()
                             onCloseConfirmationMessage()
                         }}
                     />
