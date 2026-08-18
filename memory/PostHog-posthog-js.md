@@ -2,12 +2,7 @@
 
 ...<older entries truncated>
 
-`PostHogFetchOptions` and `PostHogFetchResponse` define a fetch-like promise interface, so a WeChat implementation would need a small `wx.request` adapter that translates its callback response into `status`, `text()`, and `json()`.; `posthog-js-lite` is browser-specific: `packages/web/src/posthog-web.ts` uses browser storage, `window`, history APIs, and the Fetch API, so it is not a suitable Mini Program runtime target.; `posthog-react-native` demonstrates the existing supported pattern of extending `PostHogCore`, supplying storage and transport implementations, delaying initialization until asynchronous storage preload completes, and flushing/persisting on application lifecycle transitions.; `packages/react-native/src/storage.ts` provides React-Native-specific storage wrappers and cannot be reused directly for WeChat storage APIs.; No WeChat/Mini Program package or runnable example was found under the workspace packages or examples.
-- Fix assessment: Although @posthog/core supplies the core analytics behavior, this request requires a new supported and published runtime package plus native transport, persistence durability, lifecycle semantics, test infrastructure, documentation, and a Mini Program example. Incorrect lifecycle or storage handling could lose or duplicate queued events.
-
-## 2026-08-11T12:51:53.818Z
-- Item: issue #4492 — Add official Uni-App integration
-- Conclusion: Valid cross-platform integration feature request, but it is not a small SDK change and is blocked in part by the separate official WeChat Mini Program SDK work in #4491.
+eparate official WeChat Mini Program SDK work in #4491.
 - Labels: enhancement, web, team/client-libraries
 - URL: https://github.com/PostHog/posthog-js/issues/4492
 - Relevant files: `packages/browser/package.json`, `packages/browser/src/posthog-core.ts`, `packages/browser/README.md`, `packages/web/package.json`, `packages/web/README.md`, `examples/`
@@ -78,3 +73,12 @@
 - Findings: `withCompilerConfig` calls `stripDanglingSourceMapComments` after sourcemap upload only when Turbopack is enabled and `deleteAfterUpload` is true.; `stripDanglingSourceMapComments` currently calls `listJsFiles`, whose extension filter is limited to `.js`, `.mjs`, and `.cjs`; no `.css` assets are inspected.; The current matcher only recognizes JavaScript line comments (`//# sourceMappingURL=...`), not CSS block comments (`/*# sourceMappingURL=... */`).; The existing tests cover JavaScript cleanup, retained existing maps, inline maps, remote maps, CRLF, and module extensions, but contain no CSS fixture.; `packages/nextjs-config/CHANGELOG.md` confirms #3764 shipped in 1.9.68 specifically as a Turbopack dangling-comment cleanup.; The webpack plugin already suppresses SourceMapDevToolPlugin comment emission with `append: false` when `deleteAfterUpload` is enabled, but it separately deletes emitted CSS map files after upload.
 - Fix assessment: The omission is localized to the Next.js Turbopack cleanup helper. A small extension to inspect CSS files and remove only dangling local CSS mapping comments, backed by focused tests, addresses the reported behavior without changing upload or deletion semantics.
 - PR: https://github.com/PostHog/posthog-js/pull/4547
+
+## 2026-08-18T08:31:39.416Z
+- Item: issue #3205 — Remove source maps from distribution
+- Conclusion: Valid distribution-size enhancement: posthog-js currently publishes generated source maps, which can substantially inflate node_modules and production container images even if they are not included in the client bundle.
+- Labels: enhancement, web, feature, team/client-libraries
+- URL: https://github.com/PostHog/posthog-js/issues/3205
+- Relevant files: `packages/browser/package.json`, `packages/browser/rollup.config.mjs`, `packages/browser/scripts/check-sourcemap-ignore-list.js`, `packages/browser/scripts/check-mangled-property-consistency.js`
+- Findings: `packages/browser/rollup.config.mjs` sets `sourcemap: true` for every generated browser entrypoint, so the build emits source-map artifacts into `dist/`.; `packages/browser/package.json` publishes `dist/*`, which includes `.js.map` files alongside JavaScript and declaration outputs.; The browser package's post-build checks deliberately consume generated maps: `check-sourcemap-ignore-list.js` requires source maps to exist, and `check-mangled-property-consistency.js` reads maps to validate cross-bundle property mangling.; Therefore, source maps should be retained through build and validation, then excluded only from the npm tarball rather than disabled globally.
+- Fix assessment: The requested behavior is isolated to npm package contents. It does not require changing runtime code or disabling source-map generation used by existing build checks.
