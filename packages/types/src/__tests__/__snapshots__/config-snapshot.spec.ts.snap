@@ -402,6 +402,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
   ],
   "properties_string_max_length": "number",
   "defaults": [
+    "\\"2026-08-29\\"",
     "\\"2026-06-25\\"",
     "\\"2026-05-30\\"",
     "\\"2026-01-30\\"",
@@ -410,6 +411,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     "\\"unset\\""
   ],
   "__preview_deferred_init_extensions": [
+    "false",
+    "true"
+  ],
+  "cookieWinsOnConflict": [
     "false",
     "true"
   ],

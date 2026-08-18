@@ -8,12 +8,13 @@ import { isUndefined } from '@posthog/core'
 import {
     AUTOCAPTURE_DISABLED_SERVER_SIDE,
     ENABLE_PERSON_PROCESSING,
+    GROUPS,
     HEATMAPS_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_REMOTE_CONFIG,
     USER_STATE,
 } from '../constants'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
-import { PostHogConfig, RemoteConfig } from '../types'
+import { PostHogConfig, Properties, RemoteConfig } from '../types'
 import { configRenames, PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { SessionIdManager } from '../sessionid'
@@ -567,6 +568,8 @@ describe('posthog core', () => {
                 get_property: () => 'anonymous',
                 props: {},
                 register: jest.fn(),
+                syncCookieProperties: jest.fn(),
+                consumeCookieIdentityChange: jest.fn(),
             } as unknown as PostHogPersistence,
             sessionPersistence: {
                 properties: () => ({ distinct_id: 'abc', persistent: 'prop' }),
@@ -616,6 +619,129 @@ describe('posthog core', () => {
                 $sdk_debug_retry_queue_size: 0,
                 $config_defaults: 'unset',
             })
+        })
+
+        it('uses a sibling subdomain identity change for the next event and reloads flags', () => {
+            const props = { distinct_id: 'anonymous', $user_state: 'anonymous' }
+            const persistence = {
+                props,
+                properties: () => ({ ...props }),
+                remove_event_timer: jest.fn(),
+                get_property: (key: string) => props[key as keyof typeof props],
+                register: jest.fn(),
+                unregister: jest.fn(),
+                syncCookieProperties: jest.fn().mockImplementation(() => {
+                    props.distinct_id = 'identified-user'
+                    props.$user_state = 'identified'
+                    return true
+                }),
+                consumeCookieIdentityChange: jest.fn().mockReturnValue(true),
+            } as unknown as PostHogPersistence
+            const sessionPersistence = {
+                properties: () => ({}),
+                get_property: () => undefined,
+            } as unknown as PostHogPersistence
+            posthog = posthogWith({}, { ...overrides, persistence, sessionPersistence })
+            posthog._cachedPersonProperties = 'previous-identity'
+            const reloadFeatureFlags = jest.spyOn(posthog, 'reloadFeatureFlags').mockImplementation(() => {})
+
+            const properties = posthog.calculateEventProperties('custom_event', {}, new Date(), uuid)
+
+            expect(properties.distinct_id).toBe('identified-user')
+            expect(properties.$is_identified).toBe(true)
+            expect(posthog._cachedPersonProperties).toBeNull()
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+        })
+
+        it('reloads flags for a same-ID sibling identity-state transition', () => {
+            const props = { distinct_id: 'shared-id', $user_state: 'identified' }
+            const persistence = {
+                props,
+                properties: () => ({ ...props }),
+                remove_event_timer: jest.fn(),
+                get_property: (key: string) => props[key as keyof typeof props],
+                register: jest.fn(),
+                unregister: jest.fn(),
+                syncCookieProperties: jest.fn().mockImplementation(() => {
+                    props.$user_state = 'anonymous'
+                    return true
+                }),
+                consumeCookieIdentityChange: jest.fn().mockReturnValue(true),
+            } as unknown as PostHogPersistence
+            const sessionProps: Record<string, unknown> = { sensitive_session_property: 'previous-user' }
+            const sessionPersistence = {
+                properties: () => ({ ...sessionProps }),
+                get_property: () => undefined,
+                clear: jest.fn(() => {
+                    delete sessionProps.sensitive_session_property
+                }),
+            } as unknown as PostHogPersistence
+            posthog = posthogWith({}, { ...overrides, persistence, sessionPersistence })
+            posthog._cachedPersonProperties = 'previous-identity'
+            const reloadFeatureFlags = jest.spyOn(posthog, 'reloadFeatureFlags').mockImplementation(() => {})
+
+            const properties = posthog.calculateEventProperties('custom_event', {}, new Date(), uuid)
+
+            expect(properties.sensitive_session_property).toBeUndefined()
+            expect(posthog._cachedPersonProperties).toBeNull()
+            expect(reloadFeatureFlags).toHaveBeenCalledTimes(1)
+            expect(persistence.unregister).not.toHaveBeenCalledWith(GROUPS)
+            expect(sessionPersistence.clear).toHaveBeenCalledTimes(1)
+        })
+
+        it('preserves groups registered after a sibling reset was reconciled', () => {
+            const props: Properties = {
+                distinct_id: 'new-anonymous',
+                $user_state: 'anonymous',
+                [GROUPS]: { organization: 'new-organization' },
+            }
+            const persistence = {
+                props,
+                properties: () => ({ ...props }),
+                remove_event_timer: jest.fn(),
+                get_property: (key: string) => props[key],
+                register: jest.fn(),
+                unregister: jest.fn(),
+                syncCookieProperties: jest.fn(),
+                consumeCookieIdentityChange: jest.fn().mockReturnValueOnce(true).mockReturnValue(false),
+            } as unknown as PostHogPersistence
+            const sessionPersistence = {
+                properties: () => ({}),
+                get_property: () => undefined,
+                clear: jest.fn(),
+            } as unknown as PostHogPersistence
+            posthog = posthogWith({}, { ...overrides, persistence, sessionPersistence })
+            jest.spyOn(posthog, 'reloadFeatureFlags').mockImplementation(() => {})
+
+            const properties = posthog.calculateEventProperties('custom_event', {}, new Date(), uuid)
+
+            expect(properties[GROUPS]).toEqual({ organization: 'new-organization' })
+            expect(persistence.unregister).not.toHaveBeenCalledWith(GROUPS)
+        })
+
+        it('clears a sibling reset before registering new session properties', () => {
+            const props = { distinct_id: 'new-anonymous', $user_state: 'anonymous' }
+            const persistence = {
+                props,
+                get_property: (key: string) => props[key as keyof typeof props],
+                unregister: jest.fn(),
+                syncCookieProperties: jest.fn(),
+                consumeCookieIdentityChange: jest.fn().mockReturnValueOnce(true),
+            } as unknown as PostHogPersistence
+            const sessionProps: Record<string, unknown> = { previous_user_property: 'private-value' }
+            const sessionPersistence = {
+                clear: jest.fn(() => {
+                    Object.keys(sessionProps).forEach((key) => delete sessionProps[key])
+                }),
+                register: jest.fn((properties: Record<string, unknown>) => Object.assign(sessionProps, properties)),
+            } as unknown as PostHogPersistence
+            posthog = posthogWith({}, { ...overrides, persistence, sessionPersistence })
+            jest.spyOn(posthog, 'reloadFeatureFlags').mockImplementation(() => {})
+
+            posthog.register_for_session({ current_user_property: 'current-value' })
+
+            expect(sessionProps).toEqual({ current_user_property: 'current-value' })
+            expect(sessionPersistence.clear).toHaveBeenCalledTimes(1)
         })
 
         it('sets $lib_custom_api_host if api_host is not the default', () => {
@@ -675,6 +801,7 @@ describe('posthog core', () => {
                 distinct_id: 'abc',
                 $config_defaults: 'unset',
             })
+            expect(posthog.persistence.syncCookieProperties).toHaveBeenCalled()
             expect(posthog.sessionManager.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
         })
 
@@ -1669,6 +1796,24 @@ describe('posthog core', () => {
 
             // User state is still cleared.
             expect(posthog.persistence!.props['some_user_prop']).toBeUndefined()
+        })
+
+        it('releases cookie synchronization suppression when device ID generation throws', async () => {
+            const error = new Error('device id failed')
+            const posthog = await createPosthogInstance(uuidv7(), {
+                persistence: 'localStorage+cookie',
+                cookieWinsOnConflict: true,
+            })
+            const endSuppression = jest.spyOn(posthog.persistence!, '_endCookieSyncSuppression')
+            const publish = jest.spyOn(posthog.persistence!, '_publishSuppressedCookieSnapshot')
+            posthog.config.get_device_id = () => {
+                throw error
+            }
+
+            expect(() => posthog.reset()).toThrow(error)
+            expect(endSuppression).toHaveBeenCalledWith(false)
+            expect(publish).not.toHaveBeenCalled()
+            expect((posthog.persistence! as any)._cookieSyncSuppressed).toBe(false)
         })
 
         it('does not crash when no recording remote config has been stored', async () => {
