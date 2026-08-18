@@ -10,13 +10,13 @@ on:
             - '.changeset/**'
     workflow_dispatch:
         inputs:
-            publish_version:
-                description: 'Exact posthog-js version to publish or repair, for example 1.418.1; leave empty for a normal release'
+            target_version:
+                description: 'S3 destination version, for example 1.418.1; leave empty for a normal release'
                 required: false
                 default: ''
                 type: string
-            release_sha:
-                description: 'Version-bump commit; optional only when the release tag already exists'
+            source_sha:
+                description: 'posthog-js source commit; optional when the target release tag exists'
                 required: false
                 default: ''
                 type: string
@@ -35,9 +35,14 @@ on:
                     - us
                     - eu
             update_latest_aliases:
-                description: 'Update latest stable CDN paths /static and /static/1'
+                description: 'Update latest stable CDN paths /static and /static/<major>'
                 required: true
-                default: true
+                default: false
+                type: boolean
+            publish_to_npm:
+                description: 'Publish target_version to npm after S3 succeeds'
+                required: true
+                default: false
                 type: boolean
             force_overwrite:
                 description: 'Force overwrite immutable S3 assets; CDN caches are not purged'
@@ -56,22 +61,23 @@ jobs:
         name: Recover posthog-js S3 release
         if: >-
             github.event_name == 'workflow_dispatch' &&
-            (inputs.publish_version != '' || inputs.release_sha != '' || inputs.toolbar_sha != '')
+            (inputs.target_version != '' || inputs.source_sha != '' || inputs.toolbar_sha != '')
         permissions:
             contents: read
             id-token: write
         uses: ./.github/workflows/recover-s3-release.yml
         with:
-            publish_version: ${{ inputs.publish_version }}
-            release_sha: ${{ inputs.release_sha }}
+            target_version: ${{ inputs.target_version }}
+            source_sha: ${{ inputs.source_sha }}
             toolbar_sha: ${{ inputs.toolbar_sha }}
             region: ${{ inputs.region }}
             update_latest_aliases: ${{ inputs.update_latest_aliases }}
+            publish_to_npm: ${{ inputs.publish_to_npm }}
             force_overwrite: ${{ inputs.force_overwrite }}
 
     check-changesets:
         name: Check for changesets
-        if: inputs.publish_version == '' && inputs.release_sha == '' && inputs.toolbar_sha == ''
+        if: inputs.target_version == '' && inputs.source_sha == '' && inputs.toolbar_sha == ''
         runs-on: ubuntu-latest
         outputs:
             has-changesets: ${{ steps.check.outputs.has-changesets }}
@@ -341,7 +347,7 @@ jobs:
             - name: Checkout repository
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
-                  ref: ${{ needs.recover-posthog-js-s3.outputs.release-sha || needs.version-bump.outputs.commit-hash }}
+                  ref: ${{ needs.recover-posthog-js-s3.outputs.source-sha || needs.version-bump.outputs.commit-hash }}
                   fetch-depth: 0
 
             - name: Setup environment
@@ -361,6 +367,18 @@ jobs:
               uses: PostHog/check-package-version@f540540cb12d45ec3c58d42dbf1d60070ed2d268 # v2.1.1
               with:
                   path: ${{ steps.get-package-path.outputs.path }}
+
+            - name: Require unpublished npm target
+              if: needs.recover-posthog-js-s3.result == 'success'
+              env:
+                  IS_NEW_VERSION: ${{ steps.check-package-version.outputs.is-new-version }}
+                  PACKAGE_NAME: ${{ matrix.package.name }}
+                  PACKAGE_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
+              run: |
+                  if [ "$IS_NEW_VERSION" != 'true' ]; then
+                      echo "::error::$PACKAGE_NAME@$PACKAGE_VERSION already exists on npm. Set publish_to_npm=false for S3-only recovery."
+                      exit 1
+                  fi
 
             - name: Ensure modern npm (OIDC support)
               if: steps.check-package-version.outputs.is-new-version == 'true'
@@ -414,17 +432,24 @@ jobs:
                   set -euo pipefail
                   release_sha=$(git rev-parse HEAD)
                   tag="$PACKAGE_NAME@$PACKAGE_VERSION"
-                  if tag_sha=$(gh api "repos/${{ github.repository }}/git/ref/tags/$tag" --jq '.object.sha' 2>/dev/null); then
-                      if [ "$tag_sha" != "$release_sha" ]; then
-                          echo "::error::$tag points to $tag_sha, not $release_sha."
-                          exit 1
-                      fi
-                      echo "✓ $tag already points to $release_sha"
-                  else
+                  create_error=$(mktemp)
+                  if ! gh api "repos/${{ github.repository }}/git/ref/tags/$tag" >/dev/null 2>&1; then
                       gh api "repos/${{ github.repository }}/git/refs" \
                           -f "ref=refs/tags/$tag" \
-                          -f "sha=$release_sha"
+                          -f "sha=$release_sha" 2>"$create_error" || true
                   fi
+                  if ! tag_sha=$(gh api "repos/${{ github.repository }}/git/ref/tags/$tag" --jq '.object.sha'); then
+                      cat "$create_error" >&2
+                      rm -f "$create_error"
+                      echo "::error::Could not create or verify $tag."
+                      exit 1
+                  fi
+                  rm -f "$create_error"
+                  if [ "$tag_sha" != "$release_sha" ]; then
+                      echo "::error::$tag points to $tag_sha, not $release_sha."
+                      exit 1
+                  fi
+                  echo "✓ $tag points to $release_sha"
 
             - name: Create GitHub release if missing
               if: >-
@@ -439,17 +464,23 @@ jobs:
                   set -euo pipefail
                   release_sha=$(git rev-parse HEAD)
                   tag="$PACKAGE_NAME@$PACKAGE_VERSION"
-                  if gh release view "$tag" >/dev/null 2>&1; then
-                      echo "✓ GitHub release $tag already exists"
-                      exit 0
+                  if ! gh release view "$tag" >/dev/null 2>&1; then
+                      # Read from the first until the second header in the changelog file.
+                      last_changelog_entry=$(awk -v defText="see CHANGELOG.md" '/^## /{if (flag) exit; flag=1} flag && /^##$/{exit} flag; END{if (!flag) print defText}' CHANGELOG.md)
+                      create_error=$(mktemp)
+                      gh release create "$tag" \
+                          --target "$release_sha" \
+                          --title "$tag" \
+                          --notes "$last_changelog_entry" 2>"$create_error" || true
+                      if ! gh release view "$tag" >/dev/null 2>&1; then
+                          cat "$create_error" >&2
+                          rm -f "$create_error"
+                          echo "::error::Could not create or verify GitHub release $tag."
+                          exit 1
+                      fi
+                      rm -f "$create_error"
                   fi
-
-                  # Read from the first until the second header in the changelog file.
-                  last_changelog_entry=$(awk -v defText="see CHANGELOG.md" '/^## /{if (flag) exit; flag=1} flag && /^##$/{exit} flag; END{if (!flag) print defText}' CHANGELOG.md)
-                  gh release create "$tag" \
-                      --target "$release_sha" \
-                      --title "$tag" \
-                      --notes "$last_changelog_entry"
+                  echo "✓ GitHub release $tag exists"
 
             ####################################################
             # Notify ourselves in case of a failure here
@@ -619,7 +650,10 @@ jobs:
                     needs.version-bump.outputs.commit-hash != '' &&
                     needs.gate-posthog-js-publish.result == 'success'
                 ) ||
-                needs.recover-posthog-js-s3.result == 'success'
+                (
+                    needs.recover-posthog-js-s3.result == 'success' &&
+                    inputs.publish_to_npm == true
+                )
             )
         permissions:
             contents: write
@@ -677,7 +711,7 @@ jobs:
                   matrix.package.name == 'posthog-js'
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
-                  ref: ${{ needs.recover-posthog-js-s3.outputs.release-sha || needs.version-bump.outputs.commit-hash }}
+                  ref: ${{ needs.recover-posthog-js-s3.outputs.source-sha || needs.version-bump.outputs.commit-hash }}
                   fetch-depth: 1
 
             - name: Check whether ${{ matrix.package.name }} was published by this release
@@ -688,7 +722,7 @@ jobs:
               env:
                   PACKAGE_NAME: ${{ matrix.package.name }}
                   PACKAGE_PATH: ${{ matrix.package.path }}
-                  RELEASE_SHA: ${{ needs.recover-posthog-js-s3.outputs.release-sha || needs.version-bump.outputs.commit-hash }}
+                  RELEASE_SHA: ${{ needs.recover-posthog-js-s3.outputs.source-sha || needs.version-bump.outputs.commit-hash }}
               run: |
                   set -euo pipefail
 
@@ -1285,7 +1319,7 @@ jobs:
         runs-on: ubuntu-latest
         if: >-
             always() &&
-            (inputs.publish_version != '' || inputs.release_sha != '' || inputs.toolbar_sha != '')
+            (inputs.target_version != '' || inputs.source_sha != '' || inputs.toolbar_sha != '')
         steps:
             - name: Resolve recovery result
               id: result
@@ -1293,26 +1327,29 @@ jobs:
                   DISPATCH_RESULT: ${{ needs.dispatch-posthog-upgrade.result }}
                   PUBLISHED_NOW: ${{ needs.publish-posthog-js.outputs.published-now }}
                   PUBLISH_RESULT: ${{ needs.publish-posthog-js.result }}
-                  PUBLISH_VERSION: ${{ inputs.publish_version }}
+                  PUBLISH_TO_NPM: ${{ inputs.publish_to_npm }}
                   RECOVERY_RESULT: ${{ needs.recover-posthog-js-s3.result }}
+                  TARGET_VERSION: ${{ inputs.target_version }}
               run: |
                   set -euo pipefail
                   status='success'
-                  detail='S3/CDN recovery and release finalization succeeded.'
+                  detail='S3/CDN recovery succeeded. npm publishing was skipped by request.'
                   if [ "$RECOVERY_RESULT" != 'success' ]; then
                       status='failure'
                       detail="S3/CDN recovery finished with '$RECOVERY_RESULT'."
-                  elif [ "$PUBLISH_RESULT" != 'success' ]; then
+                  elif [ "$PUBLISH_TO_NPM" = 'true' ] && [ "$PUBLISH_RESULT" != 'success' ]; then
                       status='failure'
                       detail="npm, tag, or GitHub release finalization finished with '$PUBLISH_RESULT'."
                   elif [ "$PUBLISHED_NOW" = 'true' ] && [ "$DISPATCH_RESULT" != 'success' ]; then
                       status='failure'
                       detail="The downstream PostHog upgrade dispatch finished with '$DISPATCH_RESULT'."
+                  elif [ "$PUBLISH_TO_NPM" = 'true' ]; then
+                      detail='S3/CDN recovery and npm release finalization succeeded.'
                   fi
 
                   package_version='unknown'
-                  if [[ "$PUBLISH_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
-                      package_version="$PUBLISH_VERSION"
+                  if [[ "$TARGET_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+                      package_version="$TARGET_VERSION"
                   fi
 
                   {

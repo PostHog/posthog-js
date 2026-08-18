@@ -6,12 +6,12 @@ permissions:
 on:
     workflow_call:
         inputs:
-            publish_version:
-                description: 'Exact posthog-js version to publish or repair'
+            target_version:
+                description: 'S3 destination version'
                 required: true
                 type: string
-            release_sha:
-                description: 'Version-bump commit SHA (optional only when the release tag already exists)'
+            source_sha:
+                description: 'posthog-js source commit SHA (optional when the target release tag exists)'
                 required: false
                 default: ''
                 type: string
@@ -25,7 +25,11 @@ on:
                 required: true
                 type: string
             update_latest_aliases:
-                description: 'Whether to update latest stable CDN paths /static and /static/1'
+                description: 'Whether to update latest stable CDN paths /static and /static/<major>'
+                required: true
+                type: boolean
+            publish_to_npm:
+                description: 'Whether to publish the target version to npm after S3 succeeds'
                 required: true
                 type: boolean
             force_overwrite:
@@ -33,20 +37,16 @@ on:
                 required: true
                 type: boolean
         outputs:
-            npm-published:
-                description: 'Whether the npm version existed before S3 recovery'
-                value: ${{ jobs.validate.outputs.npm-published }}
-            release-sha:
-                description: 'Validated release commit'
-                value: ${{ jobs.validate.outputs.release-sha }}
+            source-sha:
+                description: 'Validated posthog-js source commit'
+                value: ${{ jobs.validate.outputs.source-sha }}
 
 jobs:
     validate:
         name: Validate recovery inputs
         runs-on: ubuntu-latest
         outputs:
-            npm-published: ${{ steps.release.outputs.npm-published }}
-            release-sha: ${{ steps.release.outputs.release-sha }}
+            source-sha: ${{ steps.source.outputs.source-sha }}
             toolbar-sha: ${{ steps.toolbar.outputs.toolbar-sha }}
             toolbar-matrix: ${{ steps.regions.outputs.toolbar-matrix }}
             upload-matrix: ${{ steps.regions.outputs.upload-matrix }}
@@ -56,13 +56,14 @@ jobs:
               with:
                   fetch-depth: 0
 
-            - name: Resolve posthog-js release commit
-              id: release
+            - name: Resolve posthog-js source commit
+              id: source
               env:
-                  INPUT_RELEASE_SHA: ${{ inputs.release_sha }}
+                  INPUT_SOURCE_SHA: ${{ inputs.source_sha }}
+                  PUBLISH_TO_NPM: ${{ inputs.publish_to_npm }}
                   REGION: ${{ inputs.region }}
+                  TARGET_VERSION: ${{ inputs.target_version }}
                   UPDATE_LATEST_ALIASES: ${{ inputs.update_latest_aliases }}
-                  VERSION: ${{ inputs.publish_version }}
               run: |
                   set -euo pipefail
 
@@ -70,103 +71,122 @@ jobs:
                       echo '::error::Run S3 recovery from the main branch so the workflow and upload tooling are trusted.'
                       exit 1
                   fi
-                  if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
-                      echo "::error::Invalid posthog-js version '$VERSION'."
+                  if [[ ! "$TARGET_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+                      echo "::error::Invalid target_version '$TARGET_VERSION'."
                       exit 1
                   fi
+                  if [ "$UPDATE_LATEST_ALIASES" = 'true' ] && [ "$REGION" != 'all' ]; then
+                      echo '::error::Updating latest CDN aliases requires region=all.'
+                      exit 1
+                  fi
+                  if [ "$PUBLISH_TO_NPM" = 'true' ]; then
+                      if [ "$REGION" != 'all' ]; then
+                          echo '::error::Publishing to npm requires region=all.'
+                          exit 1
+                      fi
+                      if [ "$UPDATE_LATEST_ALIASES" != 'true' ]; then
+                          echo '::error::Publishing to npm requires update_latest_aliases=true.'
+                          exit 1
+                      fi
+                  fi
 
-                  tag="posthog-js@$VERSION"
-                  git fetch --force --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+                  tag="posthog-js@$TARGET_VERSION"
+                  git fetch --force --prune origin \
+                      '+refs/heads/*:refs/remotes/origin/*' \
+                      '+refs/tags/*:refs/tags/*'
 
                   tag_sha=''
-                  if git fetch --force --no-tags origin "refs/tags/$tag:refs/tags/$tag" 2>/dev/null; then
-                      tag_sha=$(git rev-parse "refs/tags/$tag^{commit}")
+                  if tag_sha=$(git rev-parse "refs/tags/$tag^{commit}" 2>/dev/null); then
+                      echo "✓ found $tag at $tag_sha"
                   fi
 
-                  release_sha="$INPUT_RELEASE_SHA"
-                  if [ -z "$release_sha" ]; then
+                  source_sha="$INPUT_SOURCE_SHA"
+                  if [ -z "$source_sha" ]; then
                       if [ -z "$tag_sha" ]; then
-                          echo "::error::$tag does not exist yet. Supply the version-bump commit through release_sha."
+                          echo "::error::$tag does not exist. Supply source_sha."
                           exit 1
                       fi
-                      release_sha="$tag_sha"
+                      source_sha="$tag_sha"
                   fi
-                  if [[ ! "$release_sha" =~ ^[0-9a-fA-F]{40}$ ]]; then
-                      echo "::error::release_sha must be a full 40-character commit SHA."
+                  if [[ ! "$source_sha" =~ ^[0-9a-fA-F]{40}$ ]]; then
+                      echo "::error::source_sha must be a full 40-character commit SHA."
                       exit 1
                   fi
-                  release_sha=$(printf '%s' "$release_sha" | tr '[:upper:]' '[:lower:]')
+                  source_sha=$(printf '%s' "$source_sha" | tr '[:upper:]' '[:lower:]')
 
-                  if ! git cat-file -e "${release_sha}^{commit}" 2>/dev/null; then
-                      echo "::error::release_sha '$release_sha' is not available in the repository."
-                      exit 1
-                  fi
-                  if ! git merge-base --is-ancestor "$release_sha" origin/main; then
-                      echo "::error::release_sha '$release_sha' is not reachable from main."
+                  if ! git cat-file -e "${source_sha}^{commit}" 2>/dev/null; then
+                      echo "::error::source_sha '$source_sha' is not available in the repository."
                       exit 1
                   fi
 
-                  committed_version=$(git show "${release_sha}:packages/browser/package.json" | jq -r '.version')
-                  if [ "$committed_version" != "$VERSION" ]; then
-                      echo "::error::release_sha contains posthog-js@$committed_version, not posthog-js@$VERSION."
-                      exit 1
-                  fi
-                  if [ -n "$tag_sha" ] && [ "$tag_sha" != "$release_sha" ]; then
-                      echo "::error::$tag points to $tag_sha, not release_sha $release_sha."
-                      exit 1
-                  fi
-                  if [ -z "$tag_sha" ] && [ "$(git show -s --format=%s "$release_sha")" != 'chore: update versions and lockfile [version bump]' ]; then
-                      echo "::error::An untagged recovery must use a version-bump commit."
+                  source_ref=''
+                  while IFS= read -r candidate_ref; do
+                      if git merge-base --is-ancestor "$source_sha" "$candidate_ref"; then
+                          source_ref="$candidate_ref"
+                          break
+                      fi
+                  done < <(git for-each-ref --format='%(refname)' refs/remotes/origin refs/tags)
+                  if [ -z "$source_ref" ]; then
+                      echo "::error::source_sha '$source_sha' is not reachable from a branch or tag in PostHog/posthog-js."
                       exit 1
                   fi
 
+                  source_version=$(git show "${source_sha}:packages/browser/package.json" | jq -r '.version')
                   current_version=$(git show 'origin/main:packages/browser/package.json' | jq -r '.version')
-                  if [ "$UPDATE_LATEST_ALIASES" = 'true' ] && [ "$VERSION" != "$current_version" ]; then
-                      echo "::error::Latest CDN aliases can only be updated for the current posthog-js version on main ($current_version). Re-run with update_latest_aliases disabled to restore only /static/$VERSION/."
-                      exit 1
-                  fi
+                  echo "✓ source_sha is reachable from $source_ref"
 
-                  npm_published=false
-                  npm_error=$(mktemp)
-                  if npm_version=$(npm view "posthog-js@$VERSION" version --json 2>"$npm_error"); then
-                      npm_version=$(printf '%s' "$npm_version" | jq -r '.')
-                      if [ "$npm_version" != "$VERSION" ]; then
-                          echo "::error::npm returned posthog-js@$npm_version while validating $VERSION."
+                  if [ "$PUBLISH_TO_NPM" = 'true' ]; then
+                      if ! git merge-base --is-ancestor "$source_sha" origin/main; then
+                          echo "::error::source_sha '$source_sha' must be reachable from main for npm publishing."
                           exit 1
                       fi
-                      npm_published=true
-                  elif grep -q 'E404' "$npm_error"; then
-                      npm_published=false
+                      if [ "$source_version" != "$TARGET_VERSION" ]; then
+                          echo "::error::source_sha contains posthog-js@$source_version, not posthog-js@$TARGET_VERSION."
+                          exit 1
+                      fi
+                      if [ "$(git show -s --format=%s "$source_sha")" != 'chore: update versions and lockfile [version bump]' ]; then
+                          echo '::error::Publishing to npm requires a version-bump commit.'
+                          exit 1
+                      fi
+                      if [ "$TARGET_VERSION" != "$current_version" ]; then
+                          echo "::error::Only the current posthog-js version on main ($current_version) may be published to npm."
+                          exit 1
+                      fi
+                      if [ -n "$tag_sha" ]; then
+                          echo "::error::$tag already exists. Set publish_to_npm=false for S3-only recovery."
+                          exit 1
+                      fi
+
+                      npm_error=$(mktemp)
+                      if npm_version=$(npm view "posthog-js@$TARGET_VERSION" version --json 2>"$npm_error"); then
+                          npm_version=$(printf '%s' "$npm_version" | jq -r '.')
+                          rm -f "$npm_error"
+                          echo "::error::posthog-js@$npm_version already exists on npm. Set publish_to_npm=false for S3-only recovery."
+                          exit 1
+                      elif ! grep -q 'E404' "$npm_error"; then
+                          cat "$npm_error" >&2
+                          rm -f "$npm_error"
+                          echo '::error::Unable to determine whether the npm version already exists.'
+                          exit 1
+                      fi
+                      rm -f "$npm_error"
                   else
-                      cat "$npm_error" >&2
-                      echo '::error::Unable to determine whether the npm version already exists.'
-                      exit 1
-                  fi
-                  rm -f "$npm_error"
-
-                  if [ "$npm_published" = 'false' ] && [ -n "$tag_sha" ]; then
-                      echo "::error::$tag exists but posthog-js@$VERSION is missing from npm. Refusing to move or reuse the tag."
-                      exit 1
-                  fi
-                  if [ "$npm_published" = 'false' ] && [ "$VERSION" != "$current_version" ]; then
-                      echo "::error::Only the current posthog-js version on main ($current_version) may be resumed to npm."
-                      exit 1
-                  fi
-                  if [ "$npm_published" = 'false' ] && [ "$REGION" != 'all' ]; then
-                      echo '::error::An unpublished npm version requires successful recovery in both S3 regions. Select region=all.'
-                      exit 1
+                      if [ "$source_version" != "$TARGET_VERSION" ]; then
+                          echo "::warning::Building posthog-js@$source_version and uploading it to /static/$TARGET_VERSION/."
+                      fi
+                      if [ -n "$tag_sha" ] && [ "$tag_sha" != "$source_sha" ]; then
+                          echo "::warning::$tag points to $tag_sha, but S3 assets will be built from $source_sha."
+                      fi
                   fi
 
-                  {
-                      echo "npm-published=$npm_published"
-                      echo "release-sha=$release_sha"
-                  } >> "$GITHUB_OUTPUT"
-                  echo "✓ resolved posthog-js@$VERSION to $release_sha"
-                  echo "✓ npm version already published: $npm_published"
+                  echo "source-sha=$source_sha" >> "$GITHUB_OUTPUT"
+                  echo "✓ source: posthog-js@$source_version from $source_sha"
+                  echo "✓ S3 target: /static/$TARGET_VERSION/"
+                  echo "✓ publish to npm: $PUBLISH_TO_NPM"
                   if [ "$UPDATE_LATEST_ALIASES" = 'true' ]; then
-                      echo "✓ latest CDN aliases may be updated to $VERSION"
+                      echo "✓ latest CDN aliases will be updated"
                   else
-                      echo "✓ recovery is limited to immutable /static/$VERSION/ assets"
+                      echo "✓ latest CDN aliases will not be updated"
                   fi
 
             - name: Select recovery regions
@@ -241,16 +261,17 @@ jobs:
         permissions:
             contents: read
         steps:
-            - name: Checkout released posthog-js source
+            - name: Checkout selected posthog-js source
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
-                  ref: ${{ needs.validate.outputs.release-sha }}
+                  ref: ${{ needs.validate.outputs.source-sha }}
                   fetch-depth: 1
 
-            - name: Verify released package version
+            - name: Verify npm publish version
+              if: inputs.publish_to_npm
               env:
-                  VERSION: ${{ inputs.publish_version }}
-              run: test "$(jq -r '.version' packages/browser/package.json)" = "$VERSION"
+                  TARGET_VERSION: ${{ inputs.target_version }}
+              run: test "$(jq -r '.version' packages/browser/package.json)" = "$TARGET_VERSION"
 
             - name: Setup Node.js
               uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -293,7 +314,7 @@ jobs:
             matrix:
                 region: ${{ fromJSON(needs.validate.outputs.toolbar-matrix) }}
         env:
-            TOOLBAR_PUBLIC_PATH: https://${{ matrix.region.host }}/static/${{ inputs.publish_version }}/
+            TOOLBAR_PUBLIC_PATH: https://${{ matrix.region.host }}/static/${{ inputs.target_version }}/
         steps:
             - name: Checkout toolbar source
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -461,7 +482,7 @@ jobs:
                   BUCKET: ${{ matrix.region.bucket }}
                   FORCE_OVERWRITE: ${{ inputs.force_overwrite }}
                   UPDATE_LATEST_ALIASES: ${{ inputs.update_latest_aliases }}
-                  VERSION: ${{ inputs.publish_version }}
+                  VERSION: ${{ inputs.target_version }}
               run: |
                   set -euo pipefail
                   options=()
@@ -477,15 +498,15 @@ jobs:
               env:
                   FORCE_OVERWRITE: ${{ inputs.force_overwrite }}
                   REGION: ${{ matrix.region.name }}
-                  RELEASE_SHA: ${{ needs.validate.outputs.release-sha }}
+                  SOURCE_SHA: ${{ needs.validate.outputs.source-sha }}
                   TOOLBAR_SHA: ${{ needs.validate.outputs.toolbar-sha }}
                   UPDATE_LATEST_ALIASES: ${{ inputs.update_latest_aliases }}
-                  VERSION: ${{ inputs.publish_version }}
+                  VERSION: ${{ inputs.target_version }}
               run: |
                   {
                       echo "### Recovered posthog-js@$VERSION in $REGION"
                       echo
-                      echo "- SDK source: \`$RELEASE_SHA\`"
+                      echo "- SDK source: \`$SOURCE_SHA\`"
                       echo "- Toolbar source: \`$TOOLBAR_SHA\`"
                       echo "- Latest CDN aliases updated: \`$UPDATE_LATEST_ALIASES\`"
                       echo "- Existing immutable assets may be overwritten: \`$FORCE_OVERWRITE\`"
