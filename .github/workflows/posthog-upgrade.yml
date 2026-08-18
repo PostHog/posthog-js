@@ -49,7 +49,7 @@ jobs:
                   node-version: 24
 
             - name: Setup pnpm
-              uses: pnpm/setup@5d160c5bc68a09337ad0d5654e237e03253b5879 # v1
+              uses: pnpm/setup@84cb39b217b10273981911c288cd62326dc7c6d2 # v2.0.2
               with:
                   cache: false
                   install: false
