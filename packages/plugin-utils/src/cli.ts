@@ -80,6 +80,9 @@ export function buildCliEnv(config: ResolvedPluginConfig): NodeJS.ProcessEnv {
         POSTHOG_CLI_HOST: config.host,
         POSTHOG_CLI_API_KEY: config.personalApiKey,
         POSTHOG_CLI_PROJECT_ID: config.projectId,
+        // The CLI reads this variable itself, so an inherited value would decide the release mode
+        // of the spawned command while the plugin injected chunks for the mode it resolved.
+        POSTHOG_RELEASE_MODE: config.sourcemaps.releaseMode,
     }
 }
 
