@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/3205": {
+    "key": "PostHog/posthog-js/issue/3205",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3205",
+    "url": "https://github.com/PostHog/posthog-js/issues/3205",
+    "conclusion": "Valid distribution-size enhancement: posthog-js currently publishes generated source maps, which can substantially inflate node_modules and production container images even if they are not included in the client bundle.",
+    "labels": [
+      "enhancement",
+      "web",
+      "feature",
+      "team/client-libraries"
+    ],
+    "closed": false,
+    "updatedAt": "2026-08-18T08:31:35.824Z"
+  },
   "PostHog/posthog-js/issue/4546": {
     "key": "PostHog/posthog-js/issue/4546",
     "repo": "PostHog/posthog-js",
