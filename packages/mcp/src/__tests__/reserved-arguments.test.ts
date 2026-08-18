@@ -176,7 +176,7 @@ describe('high-level reserved analytics arguments', () => {
           CallToolResultSchema
         )
         expect(result.content).not.toEqual(
-          expect.arrayContaining([expect.objectContaining({ text: expect.stringContaining('conversation_id=') })])
+          expect.arrayContaining([expect.objectContaining({ text: expect.stringContaining('"conversation_id"') })])
         )
 
         expect(receivedArgs).toEqual(suppliedArguments)
