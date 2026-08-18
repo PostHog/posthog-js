@@ -14,7 +14,7 @@
   "scripts": {
     "clean": "rimraf dist",
     "test:unit": "jest && pnpm test:module-load",
-    "test:module-load": "node tests/otel-module-load.cjs",
+    "test:module-load": "node tests/otel-module-load.cjs && node tests/langchain-module-load.cjs",
     "lint": "eslint src tests",
     "lint:fix": "eslint src tests --fix",
     "build": "rollup -c",
@@ -25,22 +25,23 @@
   "devDependencies": {
     "@ai-sdk/provider": "^3.0.14",
     "@anthropic-ai/sdk": "^0.116.0",
+    "@babel/preset-env": "catalog:",
+    "@babel/preset-typescript": "catalog:",
     "@google/genai": "^1.52.0",
     "@langchain/core": "^1.2.5",
-    "openai": "^6.49.0",
     "@openai/agents": "^0.8.0",
     "@openai/agents-core": "^0.8.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.200.0",
     "@opentelemetry/otlp-exporter-base": "^0.200.0",
     "@opentelemetry/sdk-trace-base": "^2.0.0",
-    "@babel/preset-env": "catalog:",
-    "@babel/preset-typescript": "catalog:",
     "@posthog-tooling/rollup-utils": "workspace:*",
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@types/jest": "catalog:",
     "jest": "catalog:",
+    "langchain": "^1.5.5",
     "node-fetch": "^3.3.2",
+    "openai": "^6.49.0",
     "posthog-node": "workspace:^"
   },
   "keywords": [
@@ -62,15 +63,16 @@
     "zod": "^4.1.13"
   },
   "peerDependencies": {
+    "@ai-sdk/provider": "^2.0.0 || ^3.0.0 || ^4.0.0",
     "@anthropic-ai/sdk": "^0.112.3",
     "@google/genai": "^1.52.0",
     "@langchain/core": "^1.2.3",
-    "openai": "^6.48.0",
+    "@openai/agents": "^0.8.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/exporter-trace-otlp-http": ">=0.200.0 <1.0.0",
     "@opentelemetry/sdk-trace-base": "^2.0.0",
-    "@ai-sdk/provider": "^2.0.0 || ^3.0.0 || ^4.0.0",
-    "@openai/agents": "^0.8.0",
+    "langchain": ">=1.5.5 <2.0.0",
+    "openai": "^6.48.0",
     "posthog-node": "^5.0.0"
   },
   "peerDependenciesMeta": {
@@ -81,6 +83,9 @@
       "optional": true
     },
     "@langchain/core": {
+      "optional": true
+    },
+    "langchain": {
       "optional": true
     },
     "openai": {
@@ -140,6 +145,11 @@
       "require": "./dist/langchain/index.cjs",
       "import": "./dist/langchain/index.mjs",
       "types": "./dist/langchain/index.d.ts"
+    },
+    "./langchain/middleware": {
+      "require": "./dist/langchain/middleware/index.cjs",
+      "import": "./dist/langchain/middleware/index.mjs",
+      "types": "./dist/langchain/middleware/index.d.ts"
     },
     "./openai-agents": {
       "require": "./dist/openai-agents/index.cjs",

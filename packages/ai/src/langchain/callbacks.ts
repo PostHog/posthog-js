@@ -53,6 +53,16 @@ type RunMetadata = SpanMetadata | GenerationMetadata
 /** Storage for run metadata */
 type RunMetadataStorage = { [runId: string]: RunMetadata }
 
+export interface LangChainCallbackHandlerOptions {
+  client: PostHog
+  distinctId?: string | number
+  traceId?: string | number
+  properties?: Record<string, any>
+  privacyMode?: boolean
+  groups?: Record<string, any>
+  debug?: boolean
+}
+
 export class LangChainCallbackHandler extends BaseCallbackHandler {
   public name = 'PosthogCallbackHandler'
   private client: PostHog
@@ -66,15 +76,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
   private runs: RunMetadataStorage = {}
   private parentTree: { [runId: string]: string } = {}
 
-  constructor(options: {
-    client: PostHog
-    distinctId?: string | number
-    traceId?: string | number
-    properties?: Record<string, any>
-    privacyMode?: boolean
-    groups?: Record<string, any>
-    debug?: boolean
-  }) {
+  constructor(options: LangChainCallbackHandlerOptions) {
     if (!options.client) {
       throw new Error('PostHog client is required')
     }
@@ -98,11 +100,15 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     tags?: string[],
     metadata?: Record<string, unknown>,
     _runType?: string,
-    runName?: string
+    runName?: string,
+    extra?: Record<string, unknown>
   ): void {
     this._logDebugEvent('on_chain_start', runId, parentRunId, { inputs, tags })
     this._setParentOfRun(runId, parentRunId)
     this._setTraceOrSpanMetadata(chain, inputs, runId, parentRunId, metadata, tags, runName)
+    if (typeof extra?.posthogStartTime === 'number' && Number.isFinite(extra.posthogStartTime)) {
+      this.runs[runId].startTime = extra.posthogStartTime
+    }
   }
 
   public handleChainEnd(
