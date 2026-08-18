@@ -9,6 +9,36 @@ on:
         paths:
             - '.changeset/**'
     workflow_dispatch:
+        inputs:
+            recovery_version:
+                description: 'posthog-js version to recover; leave empty for a normal release'
+                required: false
+                default: ''
+                type: string
+            recovery_sha:
+                description: 'Version-bump commit; optional only when the release tag already exists'
+                required: false
+                default: ''
+                type: string
+            recovery_region:
+                description: 'CDN region to recover'
+                required: true
+                default: all
+                type: choice
+                options:
+                    - all
+                    - us
+                    - eu
+            recovery_publish_aliases:
+                description: 'Also update mutable /static and /static/1 aliases'
+                required: true
+                default: true
+                type: boolean
+            recovery_force_overwrite:
+                description: 'Force overwrite immutable S3 assets; CDN caches are not purged'
+                required: true
+                default: false
+                type: boolean
 
 # Concurrency control: only one release process can run at a time
 # This prevents race conditions if multiple releasable PRs merge simultaneously
@@ -17,8 +47,135 @@ concurrency:
     cancel-in-progress: false
 
 jobs:
+    recover-posthog-js-s3:
+        name: Recover posthog-js S3 release
+        if: >-
+            github.event_name == 'workflow_dispatch' &&
+            (inputs.recovery_version != '' || inputs.recovery_sha != '')
+        permissions:
+            contents: read
+            id-token: write
+        uses: ./.github/workflows/recover-s3-release.yml
+        with:
+            version: ${{ inputs.recovery_version }}
+            release_sha: ${{ inputs.recovery_sha }}
+            region: ${{ inputs.recovery_region }}
+            publish_aliases: ${{ inputs.recovery_publish_aliases }}
+            force_overwrite: ${{ inputs.recovery_force_overwrite }}
+
+    resume-posthog-js-release:
+        name: Resume posthog-js release after S3 recovery
+        needs: recover-posthog-js-s3
+        if: always() && needs.recover-posthog-js-s3.result == 'success'
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+            id-token: write
+        steps:
+            - name: Check npm version
+              id: npm
+              env:
+                  VERSION: ${{ inputs.recovery_version }}
+              run: |
+                  set -euo pipefail
+                  npm_error=$(mktemp)
+                  if npm view "posthog-js@$VERSION" version --json >/dev/null 2>"$npm_error"; then
+                      echo 'should-publish=false' >> "$GITHUB_OUTPUT"
+                      echo "✓ posthog-js@$VERSION is already on npm"
+                  elif grep -q 'E404' "$npm_error"; then
+                      echo 'should-publish=true' >> "$GITHUB_OUTPUT"
+                  else
+                      cat "$npm_error" >&2
+                      echo '::error::Unable to determine whether the npm version already exists.'
+                      exit 1
+                  fi
+                  rm -f "$npm_error"
+
+            - name: Checkout released posthog-js source
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ needs.recover-posthog-js-s3.outputs.release-sha }}
+                  fetch-depth: 0
+
+            - name: Setup environment
+              if: steps.npm.outputs.should-publish == 'true'
+              uses: ./.github/actions/setup
+              with:
+                  install: false
+                  build: false
+
+            - name: Ensure modern npm (OIDC support)
+              if: steps.npm.outputs.should-publish == 'true'
+              run: npm install -g npm@11.6.4
+
+            - name: Install and build dependencies
+              if: steps.npm.outputs.should-publish == 'true'
+              run: pnpm install --frozen-lockfile && pnpm build
+
+            - name: Publish posthog-js to npm
+              if: steps.npm.outputs.should-publish == 'true'
+              env:
+                  NPM_CONFIG_PROVENANCE: true
+              run: pnpm publish --filter=posthog-js --access public --no-git-checks
+
+            - name: Verify npm publication
+              env:
+                  VERSION: ${{ inputs.recovery_version }}
+              run: test "$(npm view "posthog-js@$VERSION" version --json | jq -r '.')" = "$VERSION"
+
+            - name: Create or verify release tag
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  RELEASE_SHA: ${{ needs.recover-posthog-js-s3.outputs.release-sha }}
+                  VERSION: ${{ inputs.recovery_version }}
+              run: |
+                  set -euo pipefail
+                  tag="posthog-js@$VERSION"
+                  if tag_sha=$(gh api "repos/${{ github.repository }}/git/ref/tags/$tag" --jq '.object.sha' 2>/dev/null); then
+                      if [ "$tag_sha" != "$RELEASE_SHA" ]; then
+                          echo "::error::$tag points to $tag_sha, not $RELEASE_SHA."
+                          exit 1
+                      fi
+                      echo "✓ $tag already points to $RELEASE_SHA"
+                  else
+                      gh api "repos/${{ github.repository }}/git/refs" \
+                          -f "ref=refs/tags/$tag" \
+                          -f "sha=$RELEASE_SHA"
+                  fi
+
+            - name: Create GitHub release if missing
+              working-directory: packages/browser
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  RELEASE_SHA: ${{ needs.recover-posthog-js-s3.outputs.release-sha }}
+                  VERSION: ${{ inputs.recovery_version }}
+              run: |
+                  set -euo pipefail
+                  tag="posthog-js@$VERSION"
+                  if gh release view "$tag" >/dev/null 2>&1; then
+                      echo "✓ GitHub release $tag already exists"
+                      exit 0
+                  fi
+
+                  last_changelog_entry=$(awk -v defText='see CHANGELOG.md' '/^## /{if (flag) exit; flag=1} flag && /^##$/{exit} flag; END{if (!flag) print defText}' CHANGELOG.md)
+                  gh release create "$tag" \
+                      --target "$RELEASE_SHA" \
+                      --title "$tag" \
+                      --notes "$last_changelog_entry"
+
+            - name: Write resume summary
+              run: |
+                  {
+                      echo "### Resumed posthog-js@${{ inputs.recovery_version }}"
+                      echo
+                      echo "- Release commit: \`${{ needs.recover-posthog-js-s3.outputs.release-sha }}\`"
+                      echo "- npm publish required: \`${{ steps.npm.outputs.should-publish }}\`"
+                      echo "- S3 recovery region: \`${{ inputs.recovery_region }}\`"
+                  } >> "$GITHUB_STEP_SUMMARY"
+
     check-changesets:
         name: Check for changesets
+        if: inputs.recovery_version == '' && inputs.recovery_sha == ''
         runs-on: ubuntu-latest
         outputs:
             has-changesets: ${{ steps.check.outputs.has-changesets }}

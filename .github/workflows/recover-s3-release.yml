@@ -1,0 +1,458 @@
+name: 'Recover posthog-js S3 release'
+
+permissions:
+    contents: read
+
+on:
+    workflow_call:
+        inputs:
+            version:
+                description: 'posthog-js version to recover'
+                required: true
+                type: string
+            release_sha:
+                description: 'Version-bump commit SHA (optional only when the release tag already exists)'
+                required: false
+                default: ''
+                type: string
+            region:
+                description: 'CDN region to recover'
+                required: true
+                type: string
+            publish_aliases:
+                description: 'Whether to update mutable /static and /static/1 aliases'
+                required: true
+                type: boolean
+            force_overwrite:
+                description: 'Whether to replace existing immutable S3 assets without purging CDN caches'
+                required: true
+                type: boolean
+        outputs:
+            npm-published:
+                description: 'Whether the npm version existed before S3 recovery'
+                value: ${{ jobs.validate.outputs.npm-published }}
+            release-sha:
+                description: 'Validated release commit'
+                value: ${{ jobs.validate.outputs.release-sha }}
+
+jobs:
+    validate:
+        name: Validate recovery inputs
+        runs-on: ubuntu-latest
+        outputs:
+            npm-published: ${{ steps.release.outputs.npm-published }}
+            release-sha: ${{ steps.release.outputs.release-sha }}
+            toolbar-sha: ${{ steps.toolbar.outputs.toolbar-sha }}
+            toolbar-matrix: ${{ steps.regions.outputs.toolbar-matrix }}
+            upload-matrix: ${{ steps.regions.outputs.upload-matrix }}
+        steps:
+            - name: Checkout recovery tooling
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  fetch-depth: 0
+
+            - name: Resolve posthog-js release commit
+              id: release
+              env:
+                  INPUT_RELEASE_SHA: ${{ inputs.release_sha }}
+                  PUBLISH_ALIASES: ${{ inputs.publish_aliases }}
+                  REGION: ${{ inputs.region }}
+                  VERSION: ${{ inputs.version }}
+              run: |
+                  set -euo pipefail
+
+                  if [ "$GITHUB_REF" != 'refs/heads/main' ]; then
+                      echo '::error::Run S3 recovery from the main branch so the workflow and upload tooling are trusted.'
+                      exit 1
+                  fi
+                  if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+                      echo "::error::Invalid posthog-js version '$VERSION'."
+                      exit 1
+                  fi
+
+                  tag="posthog-js@$VERSION"
+                  git fetch --force --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+
+                  tag_sha=''
+                  if git fetch --force --no-tags origin "refs/tags/$tag:refs/tags/$tag" 2>/dev/null; then
+                      tag_sha=$(git rev-parse "refs/tags/$tag^{commit}")
+                  fi
+
+                  release_sha="$INPUT_RELEASE_SHA"
+                  if [ -z "$release_sha" ]; then
+                      if [ -z "$tag_sha" ]; then
+                          echo "::error::$tag does not exist yet. Supply the version-bump commit through release_sha."
+                          exit 1
+                      fi
+                      release_sha="$tag_sha"
+                  fi
+                  if [[ ! "$release_sha" =~ ^[0-9a-fA-F]{40}$ ]]; then
+                      echo "::error::release_sha must be a full 40-character commit SHA."
+                      exit 1
+                  fi
+                  release_sha=$(printf '%s' "$release_sha" | tr '[:upper:]' '[:lower:]')
+
+                  if ! git cat-file -e "${release_sha}^{commit}" 2>/dev/null; then
+                      echo "::error::release_sha '$release_sha' is not available in the repository."
+                      exit 1
+                  fi
+                  if ! git merge-base --is-ancestor "$release_sha" origin/main; then
+                      echo "::error::release_sha '$release_sha' is not reachable from main."
+                      exit 1
+                  fi
+
+                  committed_version=$(git show "${release_sha}:packages/browser/package.json" | jq -r '.version')
+                  if [ "$committed_version" != "$VERSION" ]; then
+                      echo "::error::release_sha contains posthog-js@$committed_version, not posthog-js@$VERSION."
+                      exit 1
+                  fi
+                  if [ -n "$tag_sha" ] && [ "$tag_sha" != "$release_sha" ]; then
+                      echo "::error::$tag points to $tag_sha, not release_sha $release_sha."
+                      exit 1
+                  fi
+                  if [ -z "$tag_sha" ] && [ "$(git show -s --format=%s "$release_sha")" != 'chore: update versions and lockfile [version bump]' ]; then
+                      echo "::error::An untagged recovery must use a version-bump commit."
+                      exit 1
+                  fi
+
+                  current_version=$(git show 'origin/main:packages/browser/package.json' | jq -r '.version')
+                  if [ "$PUBLISH_ALIASES" = 'true' ] && [ "$VERSION" != "$current_version" ]; then
+                      echo "::error::Mutable aliases can only be updated for the current posthog-js version on main ($current_version). Re-run with publish_aliases disabled to restore only /static/$VERSION/."
+                      exit 1
+                  fi
+
+                  npm_published=false
+                  npm_error=$(mktemp)
+                  if npm_version=$(npm view "posthog-js@$VERSION" version --json 2>"$npm_error"); then
+                      npm_version=$(printf '%s' "$npm_version" | jq -r '.')
+                      if [ "$npm_version" != "$VERSION" ]; then
+                          echo "::error::npm returned posthog-js@$npm_version while validating $VERSION."
+                          exit 1
+                      fi
+                      npm_published=true
+                  elif grep -q 'E404' "$npm_error"; then
+                      npm_published=false
+                  else
+                      cat "$npm_error" >&2
+                      echo '::error::Unable to determine whether the npm version already exists.'
+                      exit 1
+                  fi
+                  rm -f "$npm_error"
+
+                  if [ "$npm_published" = 'false' ] && [ -n "$tag_sha" ]; then
+                      echo "::error::$tag exists but posthog-js@$VERSION is missing from npm. Refusing to move or reuse the tag."
+                      exit 1
+                  fi
+                  if [ "$npm_published" = 'false' ] && [ "$VERSION" != "$current_version" ]; then
+                      echo "::error::Only the current posthog-js version on main ($current_version) may be resumed to npm."
+                      exit 1
+                  fi
+                  if [ "$npm_published" = 'false' ] && [ "$REGION" != 'all' ]; then
+                      echo '::error::An unpublished npm version requires successful recovery in both S3 regions. Select region=all.'
+                      exit 1
+                  fi
+
+                  {
+                      echo "npm-published=$npm_published"
+                      echo "release-sha=$release_sha"
+                  } >> "$GITHUB_OUTPUT"
+                  echo "✓ resolved posthog-js@$VERSION to $release_sha"
+                  echo "✓ npm version already published: $npm_published"
+                  if [ "$PUBLISH_ALIASES" = 'true' ]; then
+                      echo "✓ mutable aliases may be updated to $VERSION"
+                  else
+                      echo "✓ recovery is limited to immutable /static/$VERSION/ assets"
+                  fi
+
+            - name: Select recovery regions
+              id: regions
+              env:
+                  REGION: ${{ inputs.region }}
+              run: |
+                  set -euo pipefail
+                  case "$REGION" in
+                      all)
+                          toolbar_matrix='[{"name":"us","host":"us-assets.i.posthog.com"},{"name":"eu","host":"eu-assets.i.posthog.com"}]'
+                          upload_matrix='[{"name":"us","bucket":"us-assets.i.posthog.com","aws_region":"us-east-1"},{"name":"eu","bucket":"eu-assets.i.posthog.com","aws_region":"eu-central-1"}]'
+                          ;;
+                      us)
+                          toolbar_matrix='[{"name":"us","host":"us-assets.i.posthog.com"}]'
+                          upload_matrix='[{"name":"us","bucket":"us-assets.i.posthog.com","aws_region":"us-east-1"}]'
+                          ;;
+                      eu)
+                          toolbar_matrix='[{"name":"eu","host":"eu-assets.i.posthog.com"}]'
+                          upload_matrix='[{"name":"eu","bucket":"eu-assets.i.posthog.com","aws_region":"eu-central-1"}]'
+                          ;;
+                      *)
+                          echo "::error::Unsupported recovery region '$REGION'."
+                          exit 1
+                          ;;
+                  esac
+                  echo "toolbar-matrix=$toolbar_matrix" >> "$GITHUB_OUTPUT"
+                  echo "upload-matrix=$upload_matrix" >> "$GITHUB_OUTPUT"
+
+            - name: Checkout toolbar source
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  repository: PostHog/posthog
+                  ref: master
+                  fetch-depth: 1
+                  path: posthog-source
+
+            - name: Resolve toolbar source commit
+              id: toolbar
+              run: |
+                  set -euo pipefail
+                  toolbar_sha=$(git -C posthog-source rev-parse HEAD)
+                  echo "toolbar-sha=$toolbar_sha" >> "$GITHUB_OUTPUT"
+                  echo "✓ resolved PostHog/posthog@master to $toolbar_sha"
+
+    build-s3-artifacts:
+        name: Rebuild posthog-js dist
+        needs: validate
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout released posthog-js source
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ needs.validate.outputs.release-sha }}
+                  fetch-depth: 1
+
+            - name: Verify released package version
+              env:
+                  VERSION: ${{ inputs.version }}
+              run: test "$(jq -r '.version' packages/browser/package.json)" = "$VERSION"
+
+            - name: Setup Node.js
+              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+              with:
+                  node-version: 24
+                  package-manager-cache: false
+
+            - name: Setup pnpm
+              uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+              with:
+                  cache: false
+                  run_install: false
+
+            - name: Install dependencies
+              env:
+                  PUPPETEER_SKIP_DOWNLOAD: 'true'
+              run: pnpm install --frozen-lockfile
+
+            - name: Build posthog-js dist
+              run: pnpm build
+
+            - name: Upload dist artifact
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: s3-recovery-posthog-js-dist
+                  path: |
+                      packages/browser/dist/*.js
+                      packages/browser/dist/*.js.map
+                  retention-days: 1
+                  if-no-files-found: error
+
+    build-toolbar:
+        name: Rebuild toolbar (${{ matrix.region.name }})
+        needs: validate
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+        strategy:
+            fail-fast: false
+            matrix:
+                region: ${{ fromJSON(needs.validate.outputs.toolbar-matrix) }}
+        env:
+            TOOLBAR_PUBLIC_PATH: https://${{ matrix.region.host }}/static/${{ inputs.version }}/
+        steps:
+            - name: Checkout toolbar source
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  repository: PostHog/posthog
+                  ref: ${{ needs.validate.outputs.toolbar-sha }}
+                  fetch-depth: 1
+
+            - name: Setup Node.js
+              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+              with:
+                  node-version: 24
+
+            - name: Setup pnpm
+              uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+              with:
+                  cache: false
+                  run_install: false
+
+            - name: Install frontend dependencies
+              run: pnpm --filter=@posthog/frontend... install --frozen-lockfile
+
+            - name: Build toolbar workspace dependencies
+              run: pnpm --filter='@posthog/frontend^...' run build
+
+            - name: Build toolbar
+              working-directory: frontend
+              run: node bin/build-toolbar.mjs
+
+            - name: Normalize toolbar output filenames
+              run: |
+                  set -euo pipefail
+                  shopt -s inherit_errexit
+                  shopt -s nullglob
+                  for ext in js css; do
+                      if [ -f "frontend/dist/toolbar.$ext" ]; then
+                          echo "✓ toolbar.$ext already canonical, no rename needed"
+                          continue
+                      fi
+                      hashed=(frontend/dist/toolbar-*."$ext")
+                      if [ ${#hashed[@]} -ne 1 ]; then
+                          echo "❌ expected exactly one frontend/dist/toolbar-*.$ext, got ${#hashed[@]}: ${hashed[*]:-}"
+                          ls -la frontend/dist/ || true
+                          exit 1
+                      fi
+                      mv "${hashed[0]}" "frontend/dist/toolbar.$ext"
+                  done
+                  rm -f frontend/dist/*.map
+                  if [ -d frontend/dist/toolbar ]; then
+                      find frontend/dist/toolbar -type f -name '*.map' -delete
+                  fi
+                  echo '✓ normalized toolbar outputs:'
+                  ls -la frontend/dist/toolbar.js frontend/dist/toolbar.css
+
+            - name: Verify TOOLBAR_PUBLIC_PATH was baked into the bundle
+              run: |
+                  set -euo pipefail
+                  shopt -s inherit_errexit
+                  targets=(frontend/dist/toolbar.js)
+                  if [ -d frontend/dist/toolbar ]; then
+                      targets+=(frontend/dist/toolbar)
+                  fi
+                  if ! grep -arq "$TOOLBAR_PUBLIC_PATH" "${targets[@]}"; then
+                      echo "❌ toolbar bundle does not contain TOOLBAR_PUBLIC_PATH='$TOOLBAR_PUBLIC_PATH'"
+                      echo "   searched: ${targets[*]}"
+                      echo "   PostHog/posthog@$(git rev-parse HEAD) may not honour the env var yet."
+                      exit 1
+                  fi
+                  count_files() { if [ -d "$1" ]; then find "$1" -type f | wc -l | tr -d ' '; else echo 0; fi; }
+                  echo '✓ TOOLBAR_PUBLIC_PATH baked into bundle'
+                  echo "  region:              ${{ matrix.region.name }}"
+                  echo "  TOOLBAR_PUBLIC_PATH: $TOOLBAR_PUBLIC_PATH"
+                  echo "  toolbar.js:          $(wc -c < frontend/dist/toolbar.js) bytes"
+                  echo "  toolbar.css:         $(wc -c < frontend/dist/toolbar.css) bytes"
+                  echo "  assets/:             $(count_files frontend/dist/assets) files"
+                  echo "  toolbar/:            $(count_files frontend/dist/toolbar) files"
+                  echo "  built from:          PostHog/posthog@$(git rev-parse HEAD)"
+
+            - name: Upload toolbar artifact
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: s3-recovery-toolbar-dist-${{ matrix.region.name }}
+                  path: |
+                      frontend/dist/toolbar.js
+                      frontend/dist/toolbar.css
+                      frontend/dist/assets
+                      frontend/dist/toolbar
+                  retention-days: 1
+                  if-no-files-found: error
+
+    upload-s3:
+        name: Recover posthog-js S3 (${{ matrix.region.name }})
+        needs: [validate, build-s3-artifacts, build-toolbar]
+        if: >-
+            always() &&
+            needs.validate.result == 'success' &&
+            needs.build-s3-artifacts.result == 'success'
+        runs-on: ubuntu-latest
+        environment: 'S3 Upload'
+        permissions:
+            contents: read
+            id-token: write
+        strategy:
+            fail-fast: false
+            matrix:
+                region: ${{ fromJSON(needs.validate.outputs.upload-matrix) }}
+        steps:
+            - name: Checkout current release tooling
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ github.sha }}
+                  sparse-checkout: |
+                      .npmrc
+                      package.json
+                      patches
+                      pnpm-lock.yaml
+                      pnpm-workspace.yaml
+                      tooling/release
+                  sparse-checkout-cone-mode: false
+                  fetch-depth: 1
+
+            - name: Setup Node.js
+              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+              with:
+                  node-version: 24
+                  package-manager-cache: false
+
+            - name: Setup pnpm
+              uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+              with:
+                  cache: false
+                  run_install: false
+
+            - name: Install release tooling dependencies
+              run: pnpm install --filter @posthog-tooling/release... --frozen-lockfile
+
+            - name: Download dist artifact
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              with:
+                  name: s3-recovery-posthog-js-dist
+                  path: packages/browser/dist
+
+            - name: Download toolbar artifact
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              with:
+                  name: s3-recovery-toolbar-dist-${{ matrix.region.name }}
+                  path: packages/browser/dist
+
+            - name: Configure AWS credentials (US)
+              if: matrix.region.name == 'us'
+              uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+              with:
+                  role-to-assume: ${{ vars.AWS_S3_UPLOAD_ROLE_ARN_US }}
+                  aws-region: ${{ matrix.region.aws_region }}
+
+            - name: Configure AWS credentials (EU)
+              if: matrix.region.name == 'eu'
+              uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+              with:
+                  role-to-assume: ${{ vars.AWS_S3_UPLOAD_ROLE_ARN_EU }}
+                  aws-region: ${{ matrix.region.aws_region }}
+
+            - name: Upload recovered assets
+              env:
+                  BUCKET: ${{ matrix.region.bucket }}
+                  FORCE_OVERWRITE: ${{ inputs.force_overwrite }}
+                  PUBLISH_ALIASES: ${{ inputs.publish_aliases }}
+                  VERSION: ${{ inputs.version }}
+              run: |
+                  set -euo pipefail
+                  options=()
+                  if [ "$PUBLISH_ALIASES" != 'true' ]; then
+                      options+=(--immutable-only)
+                  fi
+                  if [ "$FORCE_OVERWRITE" = 'true' ]; then
+                      options+=(--force-overwrite)
+                  fi
+                  node tooling/release/src/cli.ts upload-s3 "$BUCKET" "$VERSION" "${options[@]}"
+
+            - name: Write recovery summary
+              run: |
+                  {
+                      echo "### Recovered posthog-js@${{ inputs.version }} in ${{ matrix.region.name }}"
+                      echo
+                      echo "- SDK source: \`${{ needs.validate.outputs.release-sha }}\`"
+                      echo "- Toolbar source: \`${{ needs.validate.outputs.toolbar-sha }}\`"
+                      echo "- Mutable aliases updated: \`${{ inputs.publish_aliases }}\`"
+                      echo "- Existing immutable assets may be overwritten: \`${{ inputs.force_overwrite }}\`"
+                  } >> "$GITHUB_STEP_SUMMARY"
