@@ -223,8 +223,13 @@ describe('PostHogExceptions', () => {
         })
 
         describe('Extension exceptions', () => {
-            it('does not capture exceptions with frames from extensions by default', () => {
-                const frame = { filename: 'chrome-extension://', platform: 'javascript:web' }
+            it.each([
+                ['chrome', 'chrome-extension://abc/content.js'],
+                ['firefox', 'moz-extension://abc/content.js'],
+                ['safari', 'safari-extension:abc/content.js'],
+                ['safari web', 'safari-web-extension:abc/content.js'],
+            ])('does not capture exceptions with frames from %s extensions by default', (_browser, filename) => {
+                const frame = { filename, platform: 'javascript:web' }
                 const exception = { stacktrace: { frames: [frame], type: 'raw' } }
                 exceptions.sendExceptionEvent({ $exception_list: [exception] })
                 expect(captureMock).not.toBeCalledWith(
@@ -232,6 +237,16 @@ describe('PostHogExceptions', () => {
                     { $exception_list: [exception] },
                     expect.anything()
                 )
+            })
+
+            it('captures exceptions from the page even when a filename merely mentions an extension', () => {
+                const frame = {
+                    filename: 'https://example.com/moz-extension://not-really.js',
+                    platform: 'javascript:web',
+                }
+                const exception = { stacktrace: { frames: [frame], type: 'raw' } }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
             })
 
             it('captures extension exceptions when enabled', () => {
