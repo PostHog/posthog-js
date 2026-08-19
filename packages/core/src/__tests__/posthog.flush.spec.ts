@@ -454,6 +454,24 @@ describe('PostHog Core', () => {
       expect(Date.now() - time).toBeLessThan(1000)
     })
 
+    it.each([408, 429, 500])('keeps logs batches retryable after exhausted retries with %s error', async (status) => {
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+        fetchRetryCount: 0,
+        preloadFeatureFlags: false,
+      })
+      mocks.fetch.mockResolvedValue({
+        status,
+        text: async () => 'err',
+        json: async () => ({ status: 'err' }),
+      })
+
+      await expect(posthog._sendLogsBatch({ resourceLogs: [] })).resolves.toMatchObject({
+        kind: 'retry-later',
+        error: { name: 'PostHogFetchHttpError', status },
+      })
+      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+    })
+
     it('responds with an error after retries with network error ', async () => {
       mocks.fetch.mockImplementation(() => {
         return Promise.reject(new Error('network problems'))

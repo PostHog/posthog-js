@@ -222,13 +222,12 @@ function isPostHogEventProperties(value: JsonType | undefined): value is PostHog
 }
 
 /**
- * Outcome of a logs batch send. Keeps HTTP error classification inside core
- * (single source of truth — same policy events already use in `_flush()`) so
+ * Outcome of a logs batch send. Keeps HTTP error classification inside core so
  * PostHogLogs doesn't need to know about specific error types.
  *
  *   - ok            → records are accepted; drop them from the queue
  *   - too-large     → 413; caller should halve batch size and retry same records
- *   - retry-later   → network error; caller keeps records and retries next cycle
+ *   - retry-later   → retryable network or HTTP error; caller keeps records and retries next cycle
  *   - fatal         → anything else (auth, malformed, etc.); caller drops the
  *                     batch and surfaces the error
  */
@@ -1635,9 +1634,7 @@ export abstract class PostHogCoreStateless {
   /**
    * Sends a pre-built OTLP logs payload to `/i/v1/logs`. Returns a tagged
    * outcome instead of throwing so PostHogLogs doesn't have to know about the
-   * core's error class hierarchy. Error classification lives here (single
-   * source of truth, same policy the events `_flush()` uses for its own
-   * 413 / network / fatal handling).
+   * core's error class hierarchy. Error classification lives here.
    *
    * 413 is passed through as `too-large` (not auto-retried) so the caller can
    * shrink `maxBatchRecordsPerPost` and retry the same records.
@@ -1680,7 +1677,7 @@ export abstract class PostHogCoreStateless {
       if (isPostHogFetchContentTooLargeError(err)) {
         return { kind: 'too-large' }
       }
-      if (err instanceof PostHogFetchNetworkError) {
+      if (isPostHogFetchRetryableError(err)) {
         return { kind: 'retry-later', error: err }
       }
       return { kind: 'fatal', error: err }
