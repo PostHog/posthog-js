@@ -1,6 +1,6 @@
 {
   "name": "@posthog/nextjs-config",
-  "version": "1.9.69",
+  "version": "1.9.70",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },

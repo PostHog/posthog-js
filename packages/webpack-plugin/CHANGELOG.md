@@ -1,5 +1,14 @@
 # @posthog/webpack-plugin
 
+## 1.5.28
+
+### Patch Changes
+
+- [#4541](https://github.com/PostHog/posthog-js/pull/4541) [`74d8f5a`](https://github.com/PostHog/posthog-js/commit/74d8f5abd567fa3ec4a746b1c9c3f7c0a64d726c) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Bump `@posthog/cli` to `~0.13.0`, which ships the `release resolve` command the rollup plugin's event release mode spawns.
+  (2026-08-19)
+- Updated dependencies [[`74d8f5a`](https://github.com/PostHog/posthog-js/commit/74d8f5abd567fa3ec4a746b1c9c3f7c0a64d726c)]:
+    - @posthog/plugin-utils@1.2.0
+
 ## 1.5.27
 
 ### Patch Changes
