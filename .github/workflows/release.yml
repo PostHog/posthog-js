@@ -242,11 +242,13 @@ jobs:
 
     publish:
         name: Publish packages
-        needs: [version-bump, notify-approval-needed]
+        needs: [version-bump, notify-approval-needed, gate-posthog-js-publish]
         runs-on: ubuntu-latest
-        # Use `always()` to ensure the job runs even if the check-release-label job fails
-        # but still depend on it to be able to use `needs.notify-approval-needed.outputs.slack_ts`
-        if: always() && needs.version-bump.outputs.commit-hash != ''
+        # Use `always()` to evaluate the S3 gate even if an earlier dependency failed.
+        if: >-
+            always() &&
+            needs.version-bump.outputs.commit-hash != '' &&
+            needs.gate-posthog-js-publish.result == 'success'
         permissions:
             contents: write
             id-token: write
@@ -258,7 +260,6 @@ jobs:
                     - name: '@posthog/react-native-plugin'
                     - name: posthog-node
                     - name: posthog-js-lite
-                    - name: posthog-js
                     - name: '@posthog/browser-common'
                     - name: '@posthog/core'
                     - name: '@posthog/react'
@@ -281,7 +282,9 @@ jobs:
                     # We deliberately do NOT publish them to npm — they are
                     # omitted from this matrix on purpose.
 
-        steps:
+        # Keep npm trusted publishing in this workflow. Reuse these steps for
+        # the separately gated posthog-js job below.
+        steps: &publish-package-steps
             - name: Checkout repository
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
@@ -412,12 +415,124 @@ jobs:
                   message: '❌ Failed to release `${{ steps.release-failure-metadata.outputs.package_ref }}`! <${{ steps.release-failure-metadata.outputs.action_url }}|View workflow run>'
                   emoji_reaction: 'x'
 
-    # Wait for the full publish matrix so newly bumped workspace dependencies are available on npm.
+    gate-posthog-js-publish:
+        name: Gate npm publishing on posthog-js S3
+        needs: [version-bump, notify-approval-needed, check-browser-version, build-s3-artifacts, upload-s3]
+        runs-on: ubuntu-latest
+        if: always() && needs.version-bump.outputs.commit-hash != ''
+        steps:
+            - name: Require successful posthog-js S3 release before npm publishing
+              env:
+                  BUILD_RESULT: ${{ needs.build-s3-artifacts.result }}
+                  CHECK_RESULT: ${{ needs.check-browser-version.result }}
+                  IS_NEW_VERSION: ${{ needs.check-browser-version.outputs.is-new-version }}
+                  UPLOAD_RESULT: ${{ needs.upload-s3.result }}
+              run: |
+                  set -euo pipefail
+
+                  if [ "$CHECK_RESULT" != 'success' ]; then
+                      echo "::error::Cannot publish npm packages because the posthog-js version check finished with '$CHECK_RESULT'."
+                      exit 1
+                  fi
+
+                  case "$IS_NEW_VERSION" in
+                      true)
+                          if [ "$BUILD_RESULT" != 'success' ]; then
+                              echo "::error::Cannot publish npm packages because the posthog-js S3 artifact build finished with '$BUILD_RESULT'."
+                              exit 1
+                          fi
+                          if [ "$UPLOAD_RESULT" != 'success' ]; then
+                              echo "::error::Cannot publish npm packages because the posthog-js S3 upload finished with '$UPLOAD_RESULT'."
+                              exit 1
+                          fi
+                          echo '✓ posthog-js S3 release succeeded; all npm publishing may proceed'
+                          ;;
+                      false)
+                          echo '✓ posthog-js has no new version; all npm publishing may proceed without S3 work'
+                          ;;
+                      *)
+                          echo "::error::Cannot determine whether npm publishing must wait for a posthog-js S3 release (is-new-version='$IS_NEW_VERSION')."
+                          exit 1
+                          ;;
+                  esac
+
+            - name: Resolve release failure metadata
+              id: release-failure-metadata
+              if: ${{ failure() }}
+              env:
+                  PACKAGE_VERSION: ${{ needs.check-browser-version.outputs.committed-version }}
+              run: |
+                  set -euo pipefail
+
+                  action_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  package_ref="posthog-js"
+                  if [ -n "$PACKAGE_VERSION" ]; then
+                      package_ref="posthog-js@v$PACKAGE_VERSION"
+                  fi
+
+                  {
+                      echo "action_url=$action_url"
+                      echo "package_version=$PACKAGE_VERSION"
+                      echo "package_ref=$package_ref"
+                  } >> "$GITHUB_OUTPUT"
+
+            - name: Send failure event to PostHog
+              if: ${{ failure() }}
+              continue-on-error: true
+              uses: PostHog/posthog-github-action@9a6a19d360820ab4d95ecc4a5a7564062c895f84 # v1.3.0
+              with:
+                  posthog-token: '${{ secrets.POSTHOG_PROJECT_API_KEY }}'
+                  event: 'posthog-sdk-github-release-workflow-failure'
+                  properties: >-
+                      {
+                        "commitSha": "${{ github.sha }}",
+                        "jobStatus": "${{ job.status }}",
+                        "ref": "${{ github.ref }}",
+                        "repository": "${{ github.repository }}",
+                        "sdk": "posthog-js",
+                        "jobName": "gate-posthog-js-publish",
+                        "packageName": "posthog-js",
+                        "packageVersion": "${{ steps.release-failure-metadata.outputs.package_version || 'unknown' }}",
+                        "actionUrl": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+                        "alertText": ":rotating_light: Blocked npm publishing for ${{ steps.release-failure-metadata.outputs.package_ref }} :rotating_light:",
+                        "alertContext": "The browser version check, S3 artifact build, or regional S3 upload did not succeed."
+                      }
+
+            - name: Notify Slack - Failed
+              if: ${{ failure() && needs.notify-approval-needed.outputs.slack_ts != '' }}
+              continue-on-error: true
+              uses: PostHog/.github/.github/actions/slack-thread-reply@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1 # main
+              with:
+                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
+                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
+                  message: '❌ Blocked npm publishing for this release because the `${{ steps.release-failure-metadata.outputs.package_ref }}` S3/CDN release did not succeed. <${{ steps.release-failure-metadata.outputs.action_url }}|View workflow run>'
+                  emoji_reaction: 'x'
+
+    publish-posthog-js:
+        name: Publish posthog-js
+        needs: [version-bump, notify-approval-needed, gate-posthog-js-publish]
+        runs-on: ubuntu-latest
+        if: >-
+            always() &&
+            needs.version-bump.outputs.commit-hash != '' &&
+            needs.gate-posthog-js-publish.result == 'success'
+        permissions:
+            contents: write
+            id-token: write
+        strategy:
+            matrix:
+                package:
+                    - name: posthog-js
+        steps: *publish-package-steps
+
+    # Wait for both publish jobs so newly bumped workspace dependencies are available on npm.
     # A package tag points at this release commit only when this run published that package.
     dispatch-posthog-upgrade:
         name: Dispatch ${{ matrix.package.name }} upgrade
-        needs: [version-bump, publish]
+        needs: [version-bump, publish, publish-posthog-js]
         runs-on: ubuntu-latest
+        if: always() && needs.version-bump.outputs.commit-hash != ''
         permissions:
             contents: read
             actions: write
@@ -523,13 +638,13 @@ jobs:
               if: ${{ steps.dispatch-posthog-upgrade.outcome == 'failure' }}
               run: exit 1
 
-    build-s3-artifacts:
-        name: Build posthog-js dist for S3
+    check-browser-version:
+        name: Check posthog-js version for S3
         needs: [version-bump, notify-approval-needed]
         runs-on: ubuntu-latest
-        # Run in parallel with publish — must NOT wait for publish because
-        # check-package-version compares against npm. If publish finishes first,
-        # the version is already on the registry and is-new-version returns false.
+        # Resolve this before any npm publishing. Both S3 build lanes use the
+        # output, so a release with no new browser version avoids speculative
+        # toolbar work without adding the full SDK build to the critical path.
         if: always() && needs.version-bump.outputs.commit-hash != ''
         permissions:
             contents: read
@@ -549,12 +664,27 @@ jobs:
               with:
                   path: packages/browser
 
+    build-s3-artifacts:
+        name: Build posthog-js dist for S3
+        needs: [version-bump, notify-approval-needed, check-browser-version]
+        runs-on: ubuntu-latest
+        if: >-
+            always() &&
+            needs.check-browser-version.result == 'success' &&
+            needs.check-browser-version.outputs.is-new-version == 'true'
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ needs.version-bump.outputs.commit-hash }}
+                  fetch-depth: 1
+
             - name: Setup environment
-              if: steps.check-version.outputs.is-new-version == 'true'
               uses: ./.github/actions/setup
 
             - name: Upload dist artifact
-              if: steps.check-version.outputs.is-new-version == 'true'
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
                   name: posthog-js-dist
@@ -568,7 +698,7 @@ jobs:
               id: release-failure-metadata
               if: ${{ failure() }}
               env:
-                  PACKAGE_VERSION: ${{ steps.check-version.outputs.committed-version }}
+                  PACKAGE_VERSION: ${{ needs.check-browser-version.outputs.committed-version }}
               run: |
                   set -euo pipefail
 
@@ -606,23 +736,48 @@ jobs:
                         "alertContext": "The browser SDK dist artifact build/upload step failed before S3 upload."
                       }
 
+    resolve-toolbar-source:
+        name: Resolve toolbar source
+        needs: [version-bump, notify-approval-needed, check-browser-version]
+        runs-on: ubuntu-latest
+        if: >-
+            always() &&
+            needs.check-browser-version.result == 'success' &&
+            needs.check-browser-version.outputs.is-new-version == 'true'
+        permissions:
+            contents: read
+        outputs:
+            commit-sha: ${{ steps.source.outputs.commit-sha }}
+        steps:
+            # Resolve mutable master once so both regional bundles use exactly
+            # the same reviewed PostHog/posthog source commit.
+            - name: Checkout posthog/posthog
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  repository: PostHog/posthog
+                  ref: master
+                  fetch-depth: 1
+
+            - name: Record toolbar source commit
+              id: source
+              run: echo "commit-sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
     build-toolbar:
-        # Build the toolbar bundle from posthog/posthog@master once per region.
+        # Build the toolbar bundle from one resolved posthog/posthog@master commit per region.
         # Each region gets its own `TOOLBAR_PUBLIC_PATH`, so asset URLs baked
         # into the JS and CSS (and the runtime CSS loader in ToolbarApp.tsx)
         # point at the region-local CDN for the SDK version being released.
         # See the matching posthog/posthog PR that wires up TOOLBAR_PUBLIC_PATH.
         #
-        # Runs in parallel with `build-s3-artifacts`. If the release turns out
-        # not to include a new posthog-js version, the artifacts produced here
-        # are simply never downloaded by `upload-s3` (which is gated on
-        # `is-new-version`). We prefer parallelism over gating because
-        # `build-s3-artifacts` does a full `pnpm install + build` that would
-        # add minutes to the critical path if it blocked the toolbar build.
+        # Runs in parallel with `build-s3-artifacts` after the quick browser
+        # version check confirms that this release needs CDN assets.
         name: Build toolbar (${{ matrix.region.name }})
-        needs: [version-bump, notify-approval-needed]
+        needs: [version-bump, notify-approval-needed, check-browser-version, resolve-toolbar-source]
         runs-on: ubuntu-latest
-        if: always() && needs.version-bump.outputs.commit-hash != ''
+        if: >-
+            always() &&
+            needs.version-bump.outputs.commit-hash != '' &&
+            needs.resolve-toolbar-source.outputs.commit-sha != ''
         permissions:
             contents: read
         strategy:
@@ -641,7 +796,7 @@ jobs:
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   repository: PostHog/posthog
-                  ref: master
+                  ref: ${{ needs.resolve-toolbar-source.outputs.commit-sha }}
                   fetch-depth: 1
 
             - name: Setup Node.js
@@ -829,9 +984,12 @@ jobs:
         # that was built with the matching `TOOLBAR_PUBLIC_PATH`. posthog-js's
         # own dist is region-agnostic and downloaded identically in both cells.
         name: Upload posthog-js dist to S3 (${{ matrix.region.name }})
-        needs: [build-s3-artifacts, build-toolbar, version-bump, notify-approval-needed]
+        needs: [check-browser-version, build-s3-artifacts, build-toolbar, version-bump, notify-approval-needed]
         runs-on: ubuntu-latest
-        if: always() && needs.build-s3-artifacts.outputs.is-new-version == 'true'
+        if: >-
+            always() &&
+            needs.check-browser-version.result == 'success' &&
+            needs.check-browser-version.outputs.is-new-version == 'true'
         environment: 'S3 Upload' # For OIDC credential scoping only — no required reviewers (single approval at NPM Release)
         permissions:
             contents: read
@@ -892,27 +1050,34 @@ jobs:
                   name: toolbar-dist-${{ matrix.region.name }}
                   path: packages/browser/dist
 
-            # GitHub Actions expression contexts don't uniformly support
-            # bracket lookups like `vars[matrix.region.role_var]`, so pick the
-            # right role ARN with a ternary on the region name. If you add a
-            # region here, also add it below.
-            - name: Configure AWS credentials
+            # Keep the regional roles in separate steps. A ternary-like
+            # `condition && us_role || eu_role` expression would silently fall
+            # back to the EU role if the US variable were empty.
+            - name: Configure AWS credentials (US)
+              if: matrix.region.name == 'us'
               uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
               with:
-                  role-to-assume: ${{ matrix.region.name == 'us' && vars.AWS_S3_UPLOAD_ROLE_ARN_US || vars.AWS_S3_UPLOAD_ROLE_ARN_EU }}
+                  role-to-assume: ${{ vars.AWS_S3_UPLOAD_ROLE_ARN_US }}
+                  aws-region: ${{ matrix.region.aws_region }}
+
+            - name: Configure AWS credentials (EU)
+              if: matrix.region.name == 'eu'
+              uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+              with:
+                  role-to-assume: ${{ vars.AWS_S3_UPLOAD_ROLE_ARN_EU }}
                   aws-region: ${{ matrix.region.aws_region }}
 
             - name: Upload immutable dist plus major and compatibility aliases
               env:
                   BUCKET: ${{ matrix.region.bucket }}
-                  VERSION: ${{ needs.build-s3-artifacts.outputs.committed-version }}
+                  VERSION: ${{ needs.check-browser-version.outputs.committed-version }}
               run: node tooling/release/src/cli.ts upload-s3 "$BUCKET" "$VERSION"
 
             - name: Resolve release failure metadata
               id: release-failure-metadata
               if: ${{ failure() }}
               env:
-                  PACKAGE_VERSION: ${{ needs.build-s3-artifacts.outputs.committed-version }}
+                  PACKAGE_VERSION: ${{ needs.check-browser-version.outputs.committed-version }}
               run: |
                   set -euo pipefail
 
@@ -949,7 +1114,7 @@ jobs:
                         "region": "${{ matrix.region.name }}",
                         "bucket": "${{ matrix.region.bucket }}",
                         "alertText": ":rotating_light: Failed to upload ${{ steps.release-failure-metadata.outputs.package_ref }} dist to ${{ matrix.region.bucket }} :rotating_light:",
-                        "alertContext": "The S3/CDN artifact upload failed; npm packages may already be published."
+                        "alertContext": "The S3/CDN artifact upload failed, so npm publishing is blocked for this release."
                       }
 
             - name: Notify Slack - S3 Upload Failed
@@ -965,11 +1130,12 @@ jobs:
 
     notify-released:
         name: Notify Slack - Released
-        needs: [notify-approval-needed, publish, dispatch-posthog-upgrade, upload-s3]
+        needs: [notify-approval-needed, publish, publish-posthog-js, dispatch-posthog-upgrade, upload-s3]
         runs-on: ubuntu-latest
         if: >-
             always() &&
             needs.publish.result == 'success' &&
+            needs.publish-posthog-js.result == 'success' &&
             needs.dispatch-posthog-upgrade.result == 'success' &&
             (needs.upload-s3.result == 'success' || needs.upload-s3.result == 'skipped') &&
             needs.notify-approval-needed.outputs.slack_ts != ''
@@ -987,48 +1153,3 @@ jobs:
                   message: '🚀 All packages released successfully!'
                   emoji_reaction: 'rocket'
                   remove_emoji_reaction: 'x'
-
-    # Fires when npm publish fully succeeded but the S3 publish of immutable,
-    # major-version alias, and/or top-level compatibility assets failed.
-    # Packages are already on npm at this point — the release isn't reversible
-    # — but the browser CDN artifacts may be stale or incomplete until the
-    # failed step is retried.
-    notify-partial-release:
-        name: Notify Slack - Partial Release (npm only)
-        needs: [notify-approval-needed, build-s3-artifacts, publish, dispatch-posthog-upgrade, upload-s3]
-        runs-on: ubuntu-latest
-        if: >-
-            always() &&
-            needs.publish.result == 'success' &&
-            needs.dispatch-posthog-upgrade.result == 'success' &&
-            needs.build-s3-artifacts.outputs.is-new-version == 'true' &&
-            needs.upload-s3.result == 'failure' &&
-            needs.notify-approval-needed.outputs.slack_ts != ''
-        steps:
-            - name: Resolve partial release metadata
-              id: partial-release-metadata
-              env:
-                  PACKAGE_VERSION: ${{ needs.build-s3-artifacts.outputs.committed-version }}
-              run: |
-                  set -euo pipefail
-
-                  action_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-                  package_ref="posthog-js"
-                  if [ -n "$PACKAGE_VERSION" ]; then
-                      package_ref="posthog-js@v$PACKAGE_VERSION"
-                  fi
-
-                  {
-                      echo "action_url=$action_url"
-                      echo "package_ref=$package_ref"
-                  } >> "$GITHUB_OUTPUT"
-
-            - name: Notify Slack - Partial Release
-              continue-on-error: true # Slack failure shouldn't mark release as failed
-              uses: PostHog/.github/.github/actions/slack-thread-reply@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1 # main
-              with:
-                  slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
-                  slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
-                  thread_ts: ${{ needs.notify-approval-needed.outputs.slack_ts }}
-                  message: '⚠️ npm packages released, but S3 publish failed — ${{ steps.partial-release-metadata.outputs.package_ref }} immutable assets and/or major-version or top-level aliases need attention. <${{ steps.partial-release-metadata.outputs.action_url }}|View workflow run>'
-                  emoji_reaction: 'warning'
