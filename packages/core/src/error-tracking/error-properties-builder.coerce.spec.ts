@@ -112,6 +112,21 @@ describe('ErrorPropertiesBuilder', () => {
       })
     })
 
+    it('should fall back to the synthetic stack when the error has no stack', () => {
+      // Firefox rejects a network `fetch` with a `TypeError` that carries no
+      // stack, so the frames must come from the synthetic exception instead.
+      const errorObject = new CustomTestError('My special error')
+      errorObject.stack = ''
+      const syntheticError = new Error()
+      const exception = coerceInput(errorObject, syntheticError)
+      expect(exception).toMatchObject({
+        type: 'CustomTestError',
+        value: 'My special error',
+        stack: syntheticError.stack,
+        synthetic: true,
+      })
+    })
+
     it('should preserve a cross-realm error', () => {
       const crossRealmError = runInNewContext(
         `new TypeError('cross-realm error', {
