@@ -120,13 +120,13 @@ export class FeatureFlagEvaluations {
    * existing cache.
    *
    * Flags that were not returned from the underlying evaluation resolve to
-   * `defaultValue` (`false` unless overridden). A flag that has a value —
-   * including `false` and variant strings — always wins over `defaultValue`.
+   * `options.defaultValue` (`false` unless overridden). A flag that has a value —
+   * including `false` and variant strings — always wins over `options.defaultValue`.
    */
-  isEnabled(key: string, defaultValue: boolean = false): boolean {
+  isEnabled(key: string, options: { defaultValue?: boolean } = {}): boolean {
     const flag = this._flags[key]
     this._recordAccess(key)
-    return flag?.enabled ?? defaultValue
+    return flag?.enabled ?? options.defaultValue ?? false
   }
 
   /**
