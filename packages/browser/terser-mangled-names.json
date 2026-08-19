@@ -542,6 +542,7 @@
         "_prepareElementForSiteApp",
         "_prepareEndpoint",
         "_prepareFeatureFlagsForCallbacks",
+        "_preserveCanvasDrawingBuffers",
         "_previousPageViewProperties",
         "_primary_window_exists_storage_key",
         "_processCookieIdentityChange",

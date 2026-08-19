@@ -24,6 +24,15 @@ export const compatSkips: { range: string; test: string; reason: string }[] = [
         test: 'web_vitals_attribution: true includes attribution data',
         reason: 'web_vitals_attribution option added in #2953',
     },
+    {
+        range: '<1.417.5',
+        test: 'keeps the drawn pixels instead of capturing a blank frame',
+        reason:
+            'forcing preserveDrawingBuffer during posthog.init() added in #4543. It has to live in ' +
+            'array.js rather than the recorder extension, because the whole point is to patch ' +
+            'getContext before the extension has loaded - so an older array.js cannot have it, and ' +
+            'the canvas it captures is blank. New behaviour gated on the core bundle, not a break.',
+    },
 ]
 
 export function shouldSkipForVersion(testTitle: string, npmVersion: string | undefined): string | null {
