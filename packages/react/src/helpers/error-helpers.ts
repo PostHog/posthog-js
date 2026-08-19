@@ -7,7 +7,7 @@ export const setupReactErrorHandler = (
     callback?: (event: CaptureResult | undefined, error: any, errorInfo: ErrorInfo) => void
 ) => {
     return (error: any, errorInfo: ErrorInfo): void => {
-        const event = client.captureException(error)
+        const event = client.captureException(error, { $exception_component_stack: errorInfo.componentStack })
         if (callback) {
             callback(event, error, errorInfo)
         }

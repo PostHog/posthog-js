@@ -13,7 +13,7 @@ export type PostHogErrorBoundaryFallbackProps = {
 export type PostHogErrorBoundaryProps = {
     children?: React.ReactNode | (() => React.ReactNode)
     fallback?: React.ReactNode | FunctionComponent<PostHogErrorBoundaryFallbackProps>
-    additionalProperties?: Properties | ((error: unknown) => Properties)
+    additionalProperties?: Properties | ((error: unknown, errorInfo: React.ErrorInfo) => Properties)
 }
 
 type PostHogErrorBoundaryState = {
@@ -46,14 +46,16 @@ export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryPr
         const { additionalProperties } = this.props
         let currentProperties
         if (isFunction(additionalProperties)) {
-            currentProperties = additionalProperties(error)
+            currentProperties = additionalProperties(error, errorInfo)
         } else if (typeof additionalProperties === 'object') {
             currentProperties = additionalProperties
         }
         const { client } = this.context
-        const exceptionEvent = client.captureException(error, currentProperties)
-
         const { componentStack } = errorInfo
+        const exceptionEvent = client.captureException(error, {
+            ...currentProperties,
+            $exception_component_stack: componentStack,
+        })
         this.setState({
             error,
             componentStack: componentStack ?? null,
