@@ -722,6 +722,21 @@ export interface SessionRecordingOptions {
     recordCrossOriginIframes?: boolean
 
     /**
+     * Called with the `src` of each `<iframe>` PostHog cannot record into (for example a
+     * cross-origin embed such as a HubSpot Meetings calendar). Return `true` to keep the
+     * `src`, so the live third-party widget loads during playback instead of a blank box.
+     * Return `false` to strip the `src`, which is the default behavior.
+     *
+     * NB the widget renders live at replay time; it is not a captured snapshot, so playback
+     * shows the current widget, not the state at record time, and interactions inside the
+     * iframe are still not recorded.
+     *
+     * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     * @default () => false
+     */
+    keepIframeSrcFn?: (src: string) => boolean
+
+    /**
      * ADVANCED: limit which DOM attributes are observed for mutations, by passing
      * the list to the native `MutationObserver` `attributeFilter`. Mutations to
      * unlisted attributes never reach the recorder at all, so they cost no

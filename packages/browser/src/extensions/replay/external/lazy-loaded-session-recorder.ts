@@ -2475,6 +2475,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             recordCrossOriginIframes: false,
             sampling: undefined,
             attributeFilter: undefined,
+            // strips the iframe src by default; a user can opt in per URL to keep the src
+            // so a same-origin-unreachable embed still renders at replay time
+            keepIframeSrcFn: undefined,
         }
 
         // only allows user to set our allowlisted options

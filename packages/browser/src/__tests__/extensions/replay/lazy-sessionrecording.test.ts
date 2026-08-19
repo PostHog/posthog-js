@@ -3464,6 +3464,23 @@ describe('Lazy SessionRecording', () => {
             )
         })
 
+        it('passes a configured keepIframeSrcFn through to rrweb.record', () => {
+            const keepIframeSrcFn = (src: string) => src.startsWith('https://meetings.hubspot.com')
+            posthog.config.session_recording.keepIframeSrcFn = keepIframeSrcFn
+
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                expect.objectContaining({ keepIframeSrcFn })
+            )
+        })
+
         it('still starts when the bundled core has no SessionIdManager.on (version skew with CDN recorder)', () => {
             // The recorder chunk is loaded from the CDN and can run against an older bundled core.
             // SessionIdManager.on was only added in posthog-js 1.268.6, so simulate an older core that
