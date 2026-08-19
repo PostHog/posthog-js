@@ -1,5 +1,6 @@
-import type { OtlpLogsPayload, OtlpMetricsPayload } from '@posthog/types'
+import type { OtlpLogsPayload, OtlpMetricsPayload, OtlpTracesPayload } from '@posthog/types'
 import type { SendMetricsBatchOutcome } from './metrics/types'
+import type { SendTracesBatchOutcome } from './traces/types'
 import { SimpleEventEmitter } from './eventemitter'
 import { getFeatureFlagValue, minimizeFlagCalledEventProperties, normalizeFlagsResponse } from './featureFlagUtils'
 import { gzipCompress, isGzipSupported } from './gzip'
@@ -1733,6 +1734,62 @@ export abstract class PostHogCoreStateless {
       // Exhausted retries on a retryable failure (network error, 408/429/5xx)
       // still classify as retry-later so the window rides the next flush; only
       // non-retryable HTTP errors (and 413 above) drop the batch.
+      if (isPostHogFetchRetryableError(err)) {
+        return { kind: 'retry-later', error: err }
+      }
+      return { kind: 'fatal', error: err }
+    }
+  }
+
+  /**
+   * Sends a pre-built OTLP span payload to `/i/v1/traces`. Same tagged outcome
+   * contract and error classification as `_sendLogsBatch` — this is the
+   * `TracesHost._sendTracesBatch` implementation, so `PostHogTraces` can use any
+   * core-based SDK as its host.
+   *
+   * Uses `Authorization: Bearer` rather than the `?token=` query parameter the
+   * logs and metrics senders use: it's the service's primary auth path, and
+   * server runtimes have no CORS preflight to avoid.
+   */
+  async _sendTracesBatch(payload: OtlpTracesPayload): Promise<SendTracesBatchOutcome> {
+    if (this.disabled) {
+      return { kind: 'fatal', error: new Error('The client is disabled') }
+    }
+
+    const serialized = JSON.stringify(payload)
+    const url = `${this.host}/i/v1/traces`
+
+    const gzippedPayload = !this.disableCompression ? await this.compressPayload(serialized) : null
+    const fetchOptions: PostHogFetchOptions = {
+      method: 'POST',
+      headers: {
+        ...this.getCustomHeaders(),
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.apiKey}`,
+        ...(gzippedPayload !== null && { 'Content-Encoding': 'gzip' }),
+      },
+      body: gzippedPayload || serialized,
+    }
+
+    try {
+      await this.fetchWithRetry(
+        url,
+        fetchOptions,
+        { type: 'successful-write' },
+        {
+          retryCheck: (err) => {
+            if (isPostHogFetchContentTooLargeError(err)) {
+              return false
+            }
+            return isPostHogFetchRetryableError(err)
+          },
+        }
+      )
+      return { kind: 'ok' }
+    } catch (err) {
+      if (isPostHogFetchContentTooLargeError(err)) {
+        return { kind: 'too-large' }
+      }
       if (isPostHogFetchRetryableError(err)) {
         return { kind: 'retry-later', error: err }
       }
