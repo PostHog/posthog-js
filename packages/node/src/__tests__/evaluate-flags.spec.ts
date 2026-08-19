@@ -683,6 +683,56 @@ describe('evaluateFlags', () => {
       expect(remoteFlagCalls).toHaveLength(0)
     })
 
+    it('falls back once when a requested flag is missing from local definitions', async () => {
+      await posthog.shutdown()
+      mockedFetch.mockClear()
+
+      const remoteResponse = flagsResponseFixture()
+      remoteResponse.flags = {
+        ...remoteResponse.flags,
+        'local-flag': {
+          ...remoteResponse.flags['disabled-flag'],
+          key: 'local-flag',
+        },
+        'remote-only': {
+          ...remoteResponse.flags['boolean-flag'],
+          key: 'remote-only',
+        },
+      }
+      const localApi = apiImplementation({ localFlags: localFlagsFixture() })
+      const remoteApi = apiImplementationV4(remoteResponse)
+      mockedFetch.mockImplementation((url) =>
+        String(url).includes('flags/definitions') ? localApi(url) : remoteApi(url)
+      )
+      setup({ personalApiKey: 'TEST_PERSONAL_API_KEY' })
+
+      const flags = await posthog.evaluateFlags('user-1', {
+        flagKeys: ['local-flag', 'remote-only'],
+      })
+
+      expect(flags.keys.sort()).toEqual(['local-flag', 'remote-only'])
+      expect(flags.getFlag('local-flag')).toBe(true)
+      expect(flags.getFlag('remote-only')).toBe(true)
+
+      const remoteFlagCalls = mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/flags/?v=2'))
+      expect(remoteFlagCalls).toHaveLength(1)
+      const [, init] = remoteFlagCalls[0]
+      expect(JSON.parse((init as any).body as string).flag_keys_to_evaluate).toEqual(['local-flag', 'remote-only'])
+    })
+
+    it('does not fall back for a missing requested flag in local-only mode', async () => {
+      const flags = await posthog.evaluateFlags('user-1', {
+        flagKeys: ['local-flag', 'remote-only'],
+        onlyEvaluateLocally: true,
+      })
+
+      expect(flags.keys).toEqual(['local-flag'])
+      expect(flags.getFlag('local-flag')).toBe(true)
+      expect(flags.getFlag('remote-only')).toBeUndefined()
+      const remoteFlagCalls = mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/flags/?v=2'))
+      expect(remoteFlagCalls).toHaveLength(0)
+    })
+
     it('attaches $feature_flag_definitions_loaded_at on locally-evaluated $feature_flag_called events', async () => {
       const flags = await posthog.evaluateFlags('user-1')
       flags.isEnabled('local-flag')

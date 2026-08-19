@@ -2047,6 +2047,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       onlyEvaluateLocally = this.options.strictLocalEvaluation ?? false
     }
 
+    const requestedFlagKeys = flagKeys ? new Set(flagKeys) : undefined
     const records: Record<string, EvaluatedFlagRecord> = {}
     let requestId: string | undefined = undefined
     let evaluatedAt: number | undefined = undefined
@@ -2080,7 +2081,10 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // Fall back to remote evaluation for any flags the poller couldn't resolve locally.
     // We use the detail-shaped endpoint so the resulting records carry id/version/reason
     // and fired $feature_flag_called events match what isFeatureEnabled()/getFeatureFlag() emit.
-    const fallbackToFlags = localResult ? localResult.fallbackToFlags : true
+    const requestedFlagMissingLocally =
+      requestedFlagKeys !== undefined &&
+      Array.from(requestedFlagKeys).some((key) => this.featureFlagsPoller?.featureFlagsByKey[key] === undefined)
+    const fallbackToFlags = localResult ? localResult.fallbackToFlags || requestedFlagMissingLocally : true
     if (fallbackToFlags && !onlyEvaluateLocally) {
       const details = await super.getFeatureFlagDetailsStateless(
         evaluationContext.distinctId,
@@ -2149,6 +2153,14 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         const existing = records[key]
         if (existing) {
           records[key] = { ...existing, payload }
+        }
+      }
+    }
+
+    if (requestedFlagKeys !== undefined) {
+      for (const key of Object.keys(records)) {
+        if (!requestedFlagKeys.has(key)) {
+          delete records[key]
         }
       }
     }
