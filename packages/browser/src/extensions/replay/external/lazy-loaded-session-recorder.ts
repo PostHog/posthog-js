@@ -1948,8 +1948,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         const isBelowMinimumDuration = this._isBelowMinimumDuration()
 
+        // run on every flush, not just the buffering branch: when the session goes active this
+        // clears the saved reason, so a later session that buffers for the same condition still logs
+        this._maybeLogBufferingReason()
+
         if (this.status === BUFFERING || this.status === PAUSED || this.status === DISABLED || isBelowMinimumDuration) {
-            this._maybeLogBufferingReason()
             this._scheduleFlushBuffer()
             return this._buffer
         }
