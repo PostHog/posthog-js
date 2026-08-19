@@ -1,14 +1,33 @@
 import { isArray, isNumber, isObject, isString, safeJsonStringify } from '@/utils'
 
 export const EXCEPTION_STEP_INTERNAL_FIELDS = {
+  TYPE: '$type',
   MESSAGE: '$message',
+  LEVEL: '$level',
   TIMESTAMP: '$timestamp',
 } as const
 
+/**
+ * Only `$message` and `$timestamp` are reserved: the SDK owns their canonical values, so a caller
+ * cannot spoof them. `$type` and `$level` stay writable by callers who want to categorise their own
+ * steps, and the SDK sets `$type` itself only on automatic steps.
+ */
 const RESERVED_EXCEPTION_STEP_KEYS = new Set<string>([
   EXCEPTION_STEP_INTERNAL_FIELDS.MESSAGE,
   EXCEPTION_STEP_INTERNAL_FIELDS.TIMESTAMP,
 ])
+
+/**
+ * `$type` values the SDK sets on automatic steps. Every SDK uses these exact strings, so the error
+ * tracking timeline labels an automatic step the same way on web and on mobile.
+ */
+export const EXCEPTION_STEP_TYPES = {
+  NAVIGATION: 'navigation',
+  TAP: 'tap',
+  LIFECYCLE: 'lifecycle',
+} as const
+
+export type ExceptionStepType = (typeof EXCEPTION_STEP_TYPES)[keyof typeof EXCEPTION_STEP_TYPES]
 
 export type ExceptionStep = {
   [EXCEPTION_STEP_INTERNAL_FIELDS.MESSAGE]: string
@@ -30,6 +49,62 @@ export type ResolvedExceptionStepsConfig = {
 export const DEFAULT_EXCEPTION_STEPS_CONFIG: ResolvedExceptionStepsConfig = {
   enabled: true,
   max_bytes: 32768, // ~32KB
+}
+
+/**
+ * Which app signals the SDK turns into automatic steps. Every signal is opt-in, because a step adds
+ * bytes to each captured exception and the buffer already carries whatever the caller added by hand.
+ *
+ * NOTE: The SDK reads these signals from its own platform. A platform that cannot observe a signal
+ * ignores the flag rather than failing.
+ */
+export type AutomaticExceptionStepsConfig = {
+  /** Screen or route changes. @default false */
+  navigation?: boolean
+  /** Taps and clicks the SDK already autocaptures. @default false */
+  taps?: boolean
+  /** App lifecycle transitions such as open, foreground and background. @default false */
+  lifecycle?: boolean
+}
+
+export type ResolvedAutomaticExceptionStepsConfig = {
+  navigation: boolean
+  taps: boolean
+  lifecycle: boolean
+}
+
+export const DEFAULT_AUTOMATIC_EXCEPTION_STEPS_CONFIG: ResolvedAutomaticExceptionStepsConfig = {
+  navigation: false,
+  taps: false,
+  lifecycle: false,
+}
+
+const ALL_AUTOMATIC_EXCEPTION_STEPS_CONFIG: ResolvedAutomaticExceptionStepsConfig = {
+  navigation: true,
+  taps: true,
+  lifecycle: true,
+}
+
+/**
+ * Resolves the automatic-steps config. `true` enables every signal, `false` and `undefined` disable
+ * every signal, and an object enables only the signals it sets.
+ */
+export function resolveAutomaticExceptionStepsConfig(
+  config?: boolean | AutomaticExceptionStepsConfig | null
+): ResolvedAutomaticExceptionStepsConfig {
+  if (config === true) {
+    return { ...ALL_AUTOMATIC_EXCEPTION_STEPS_CONFIG }
+  }
+
+  if (!config || !isObject(config)) {
+    return { ...DEFAULT_AUTOMATIC_EXCEPTION_STEPS_CONFIG }
+  }
+
+  return {
+    navigation: config.navigation ?? DEFAULT_AUTOMATIC_EXCEPTION_STEPS_CONFIG.navigation,
+    taps: config.taps ?? DEFAULT_AUTOMATIC_EXCEPTION_STEPS_CONFIG.taps,
+    lifecycle: config.lifecycle ?? DEFAULT_AUTOMATIC_EXCEPTION_STEPS_CONFIG.lifecycle,
+  }
 }
 
 export function resolveExceptionStepsConfig(config?: ExceptionStepsConfig | null): ResolvedExceptionStepsConfig {

@@ -2791,6 +2791,16 @@ export class PostHog extends PostHogCore {
     } catch (e) {
       this._logger.error(`Session replay event trigger check failed: ${e}.`)
     }
+    // Only a surviving event leaves an automatic step. An event that `before_send` dropped must not
+    // reappear inside an exception payload, because a caller drops events to keep data out of PostHog.
+    // The guard also covers an event enqueued by the base constructor, before `_errorTracking` exists.
+    try {
+      if (processed) {
+        this._errorTracking?.onEnqueuedEvent(processed['event'], processed['properties'])
+      }
+    } catch (e) {
+      this._logger.error(`Automatic exception step failed: ${e}.`)
+    }
     return processed
   }
 
