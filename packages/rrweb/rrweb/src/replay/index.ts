@@ -2466,11 +2466,10 @@ export class Replayer {
       this.drawMouseTail({ x: _x, y: _y });
     }
     // A mouse event can resolve to a non-element node (e.g. a text or comment
-    // node), which has no classList/querySelectorAll. Only element nodes can be
-    // hovered, so skip anything else instead of casting and crashing later.
-    if (target.nodeType === Node.ELEMENT_NODE) {
-      this.hoverElements(target as Element);
-    }
+    // node). hoverElements resolves the nearest ancestor element to hover and
+    // clears the previous :hover state, and is safe for any node kind, so pass
+    // the target straight through.
+    this.hoverElements(target);
   }
 
   private drawMouseTail(position: { x: number; y: number }) {
@@ -2509,7 +2508,7 @@ export class Replayer {
     }, duration / this.speedService.state.context.timer.speed);
   }
 
-  private hoverElements(el: Element) {
+  private hoverElements(el: Node) {
     (this.lastHoveredRootNode || this.iframe.contentDocument)
       ?.querySelectorAll('.\\:hover')
       .forEach((hoveredEl) => {
@@ -2529,11 +2528,12 @@ export class Replayer {
     } else {
       this.lastHoveredRootNode = undefined;
     }
-    let currentEl: Element | null = el;
+    // Non-element nodes (text/comment) cannot hold a :hover class, so start from
+    // the nearest ancestor element and climb the parent chain from there.
+    let currentEl: Element | null =
+      el.nodeType === Node.ELEMENT_NODE ? (el as Element) : el.parentElement;
     while (currentEl) {
-      if (currentEl.classList) {
-        currentEl.classList.add(':hover');
-      }
+      currentEl.classList.add(':hover');
       currentEl = currentEl.parentElement;
     }
   }
