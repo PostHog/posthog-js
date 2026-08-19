@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4566](https://github.com/PostHog/posthog-js/issues/4566) | Confirmed @posthog/react bug: React's component stack is available at both React error-capture call sites but is not included in the captured exception properties. | feature/error-tracking, team/client-libraries | https://github.com/PostHog/posthog-js/pull/4567 | no | 2026-08-19T13:55:09.066Z |
 | PostHog/posthog-js | [issue 3205](https://github.com/PostHog/posthog-js/issues/3205) | Valid distribution-size enhancement: posthog-js currently publishes generated source maps, which can substantially inflate node_modules and production container images even if they are not included in the client bundle. | enhancement, web, feature, team/client-libraries |  | no | 2026-08-18T08:31:35.824Z |
 | PostHog/posthog-js | [issue 4546](https://github.com/PostHog/posthog-js/issues/4546) | Confirmed scope gap in the Turbopack sourcemap-comment cleanup: it only processes JavaScript files, so dangling CSS source map references remain after deletion. | feature/error-tracking, team/error-tracking | https://github.com/PostHog/posthog-js/pull/4547 | no | 2026-08-18T07:33:23.743Z |
 | PostHog/posthog-js | [issue 3571](https://github.com/PostHog/posthog-js/issues/3571) | Already fixed in posthog-js 1.410.1. | feature/replay, web |  | no | 2026-08-17T08:32:39.857Z |
