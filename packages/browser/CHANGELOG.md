@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.418.4
+
+### Patch Changes
+
+- [#4309](https://github.com/PostHog/posthog-js/pull/4309) [`b564d61`](https://github.com/PostHog/posthog-js/commit/b564d619fe97682413edfded287c2c2ffe446dbd) Thanks [@posthog](https://github.com/apps/posthog)! - Fix session recording in the full browser bundles. `array.full.js` and `module.full.es.js` only inlined rrweb, so they still fetched the recorder script at runtime - the request the full bundles exist to avoid. They now inline the whole recorder. Also flags the session with `$sdk_debug_recording_script_not_loaded` when the recorder script fails to load, so a blocked recorder is visible in analytics rather than only in the console.
+  (2026-08-19)
+
 ## 1.418.3
 
 ### Patch Changes
