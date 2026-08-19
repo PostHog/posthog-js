@@ -1,6 +1,6 @@
 {
   "name": "@posthog/nuxt",
-  "version": "1.7.81",
+  "version": "1.7.84",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -30,7 +30,7 @@
     "build": "nuxt-module-build build",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
     "lint": "eslint .",
-    "test:unit": "node tests/vue-plugin.test.mjs && node tests/sourcemaps-ssr.test.mjs"
+    "test:unit": "node tests/vue-plugin.test.mjs && node tests/nitro-plugin.test.mjs && node tests/sourcemaps-ssr.test.mjs && node tests/nuxt5-consumer.test.mjs"
   },
   "dependencies": {
     "@posthog/cli": "catalog:",
@@ -42,8 +42,8 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "nuxt": "^4.1.2",
-    "@nuxt/devtools": "^2.6.5",
+    "nuxt": "^4.5.1",
+    "@nuxt/devtools": "^3.3.1",
     "@nuxt/module-builder": "^1.0.2",
     "@nuxt/schema": "^4.1.2",
     "@nuxt/eslint-config": "^1.9.0",

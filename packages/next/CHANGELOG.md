@@ -1,5 +1,14 @@
 # @posthog/next
 
+## 0.8.5
+
+### Patch Changes
+
+- [#4568](https://github.com/PostHog/posthog-js/pull/4568) [`de7de16`](https://github.com/PostHog/posthog-js/commit/de7de16eb992ca03b07de627dbc4fb06901164b1) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Fix request routing in the Next.js middleware proxy.
+  (2026-08-19)
+- Updated dependencies [[`3e0edff`](https://github.com/PostHog/posthog-js/commit/3e0edff32a6a6285876026fae35a402d7faef004)]:
+    - posthog-js@1.418.2
+
 ## 0.8.4
 
 ### Patch Changes

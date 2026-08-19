@@ -1,0 +1,159 @@
+{
+  "$comment": "Maps changed paths and diff content to past incident classes in INCIDENTS.md. Used by check.mjs locally and by the replay-incident-risk CI workflow. Patterns are JS regexes (no flags; paths are matched case-sensitively, content patterns against added lines only).",
+  "classes": [
+    {
+      "id": "lazy-load-boundary",
+      "title": "Version skew across the lazy-load boundary",
+      "anchor": "class-1-version-skew-across-the-lazy-load-boundary",
+      "paths": [
+        "^packages/browser/src/entrypoints/",
+        "^packages/browser/src/extensions/replay/external/",
+        "^packages/browser/src/remote-config\\.ts$",
+        "^packages/browser/src/posthog-persistence\\.ts$",
+        "^packages/browser/src/constants\\.ts$",
+        "^packages/browser/src/extensions/extension-bundles\\.ts$"
+      ],
+      "contentPatterns": [],
+      "why": "Lazy-loaded bundles (recorder, surveys, web vitals, tracing headers) are served unversioned from the CDN: this change deploys instantly to every SDK version, including npm-pinned ones. Cross-boundary signature changes and persisted-state shape changes have caused fleet-wide recording loss (Mar 2026), broken surveys (Jul 2025, Oct 2025), and a six-day web-vitals gap (Jan 2026)."
+    },
+    {
+      "id": "rotation-idle-flush",
+      "title": "Session rotation, idle handling, and flush semantics",
+      "anchor": "class-2-session-rotation-idle-handling-and-flush-semantics",
+      "paths": [
+        "^packages/browser/src/sessionid\\.ts$",
+        "^packages/browser/src/extensions/replay/session-recording\\.ts$",
+        "^packages/browser/src/extensions/replay/external/lazy-loaded-session-recorder\\.ts$",
+        "^packages/browser/src/extensions/replay/external/recording-strategies\\.ts$",
+        "^packages/browser/src/extensions/replay/external/flushed-size-tracker\\.ts$",
+        "^packages/browser/src/extensions/replay/external/mutation-throttler\\.ts$"
+      ],
+      "contentPatterns": [
+        "isIdle",
+        "sessionIdChanged|rotateSession|session.?rotation",
+        "onSessionId|resetSessionId",
+        "flushBuffer|_flushBuffer|clearBuffer"
+      ],
+      "why": "Changes to rotation, idle state, or flushing change how many recordings ship, and every shipped recording bills. In Jul 2026 an idle-state fix made parked tabs ship an unbounded chain of billed zero-interaction recordings for 11 days before a customer bill surfaced it."
+    },
+    {
+      "id": "network-wrappers",
+      "title": "Network primitive wrappers (fetch and XHR patching)",
+      "anchor": "class-3-network-primitive-wrappers-fetch-and-xhr-patching",
+      "paths": [
+        "^packages/browser/src/extensions/replay/external/network-plugin\\.ts$",
+        "^packages/browser/src/entrypoints/tracing-headers\\.ts$",
+        "^packages/browser/src/extensions/tracing-headers"
+      ],
+      "contentPatterns": [
+        "new Request\\(",
+        "(request|input|init|req)\\.body",
+        "window\\.fetch|globalThis\\.fetch|originalFetch",
+        "XMLHttpRequest",
+        "RequestInit"
+      ],
+      "why": "The fetch wrappers have caused three incidents, including breaking customer checkouts and uploads (Jan 2026) and Safari POST failures (May 2026). Standing policy: no AI-generated PRs here, and land a failing real-browser (WebKit included) test first, exercising all body types with another fetch wrapper on the page."
+    },
+    {
+      "id": "rrweb-serialization",
+      "title": "rrweb serialization and snapshot correctness",
+      "anchor": "class-4-rrweb-serialization-and-snapshot-correctness",
+      "paths": [
+        "^packages/rrweb/.*(record|snapshot)",
+        "^packages/rrweb/rrdom"
+      ],
+      "contentPatterns": [
+        "cssText",
+        "adoptedStyleSheets",
+        "insertRule",
+        "getComputedStyle"
+      ],
+      "why": "Serializer bugs corrupt replays silently: no exception, no volume change. In May 2026 a cssText spec quirk silently dropped layout styles for sites using CSS custom properties. Test against framework-generated CSS (Chakra/Panda, Emotion speedy, Tailwind) in a real browser.",
+      "contentScope": "^packages/rrweb/.*\\.(ts|tsx|js|mjs)$"
+    },
+    {
+      "id": "replay-reconstruction",
+      "title": "Replay reconstruction and player security",
+      "anchor": "class-5-replay-reconstruction-and-player-security",
+      "paths": [
+        "^packages/rrweb/.*replay"
+      ],
+      "contentScope": "^packages/rrweb/.*replay.*\\.(ts|tsx|js|mjs)$",
+      "contentPatterns": [
+        "setAttribute\\(",
+        "allow-scripts",
+        "UNSAFE_replayCanvas",
+        "srcdoc",
+        "innerHTML"
+      ],
+      "why": "Recorded page content is untrusted input. Anything the replayer places in the top-level document sits outside the sandbox iframe: copying recorded attributes without an allowlist caused a stored XSS via canvas onerror (Jul 2026). Never copy on* handlers or src/srcset/href you did not construct."
+    },
+    {
+      "id": "start-conditions-config",
+      "title": "Recording start conditions and remote config semantics",
+      "anchor": "class-6-recording-start-conditions-and-remote-config-semantics",
+      "paths": [
+        "^packages/browser/src/extensions/replay/external/triggerMatching\\.ts$",
+        "^packages/browser/src/extensions/replay/external/config\\.ts$",
+        "^packages/browser/src/extensions/replay/external/denylist\\.ts$",
+        "^packages/browser/src/extensions/sampling\\.ts$",
+        "^packages/browser/src/posthog-featureflags\\.ts$"
+      ],
+      "contentPatterns": [
+        "sessionRecording\\b.*(false|disabled)",
+        "authorized.?domains",
+        "config=true"
+      ],
+      "why": "Changes to when recording may start fail silently in the suppress direction. Endpoint migrations and config-shape changes have silently stopped recording for large fleets (Jun 2025, Aug 2025). When a check cannot be evaluated (stripped header, missing field, proxy dropping query params), decide deliberately whether to fail open or closed."
+    },
+    {
+      "id": "masking-privacy-consent",
+      "title": "Masking, privacy, and consent",
+      "anchor": "class-8-masking-privacy-and-consent-proactive-no-incident-yet",
+      "paths": [
+        "^packages/browser/src/consent\\.ts$",
+        "^packages/browser/src/extensions/replay/external/sessionrecording-utils\\.ts$",
+        "^packages/rrweb/rrweb/src/record/observers/canvas/canvas-mask\\.ts$",
+        "^packages/rrweb/rrweb-snapshot/"
+      ],
+      "contentPatterns": [
+        "maskAllInputs|maskInputOptions|maskTextSelector|maskInputFn|maskTextFn",
+        "type=[\"']password",
+        "opt_out|optedOut|has_opted_out",
+        "disable_session_recording"
+      ],
+      "why": "A masking or consent regression records data customers promised their users we would not store: passwords, PII, opted-out sessions. Nothing throws and no volume moves, so no alert can fire, and recorded data cannot be un-stored. Add a real-browser test asserting the sensitive value is absent from the emitted snapshot bytes."
+    },
+    {
+      "id": "capture-transport-retry",
+      "title": "Capture transport and retry behavior",
+      "anchor": "class-9-capture-transport-and-retry-behavior-proactive-no-incident-yet",
+      "paths": [
+        "^packages/browser/src/retry-queue\\.ts$",
+        "^packages/browser/src/rate-limiter\\.ts$",
+        "^packages/browser/src/request-queue\\.ts$",
+        "^packages/browser/src/request\\.ts$"
+      ],
+      "contentPatterns": [
+        "retriesPerformedSoFar|RetryQueue|retry.?queue",
+        "backoff|jitter"
+      ],
+      "why": "This code runs on every customer page. Retries without backoff and jitter become a coordinated fleet-wide flood against capture during any ingestion blip; queue bugs become silent event loss or duplicates. Walk a page through a 30-minute capture outage and count the requests."
+    },
+    {
+      "id": "delivery-channel",
+      "title": "Release and delivery channel integrity",
+      "anchor": "class-7-release-and-delivery-channel-integrity",
+      "paths": [
+        "^\\.github/workflows/"
+      ],
+      "contentScope": "(^\\.github/|package\\.json$)",
+      "contentPatterns": [
+        "pull_request_target",
+        "\"preinstall\"|\"postinstall\"|\"prepublish\"",
+        "NODE_AUTH_TOKEN|NPM_TOKEN"
+      ],
+      "why": "The Nov 2025 supply-chain compromise started with a pull_request_target workflow checking out PR-author code. Never reintroduce that pattern, don't add package lifecycle scripts, and keep publish credentials on OIDC trusted publishing."
+    }
+  ]
+}

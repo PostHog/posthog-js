@@ -17,6 +17,7 @@ import {
     EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE,
     FLAG_CALL_REPORTED,
     FLAG_CALL_REPORTED_SESSION_ID,
+    GROUPS,
     HEATMAPS_ENABLED_SERVER_SIDE,
     INITIAL_CAMPAIGN_PARAMS,
     INITIAL_PERSON_INFO,
@@ -74,18 +75,14 @@ import {
     WEB_VITALS_ALLOWED_METRICS,
     WEB_VITALS_ENABLED_SERVER_SIDE,
 } from './constants'
-import { transformEnabledFeatureFlagsToEventProperties } from './persistence-key-transforms'
-import type { Properties, Property } from './types'
+import type { Property } from './types'
 import { isNull } from '@posthog/core'
 
 /**
  * - `event`: include the stored key/value on captured events as-is.
  * - `hidden`: keep the key in persistence only; never expose it on captured events.
- * - `derived`: do not expose the stored key directly, but derive one or more event properties from its value.
- *   For example, `ENABLED_FEATURE_FLAGS` is stored as `$enabled_feature_flags`, but exposed on events as
- *   `$feature/<flag-key>` properties via `transformToEventProperties`.
  */
-export type PersistenceKeyExposure = 'event' | 'hidden' | 'derived'
+export type PersistenceKeyExposure = 'event' | 'hidden'
 
 /**
  * Keys sharing a `storageGroup` are persisted together in their own storage
@@ -110,8 +107,7 @@ interface PersistenceKeyPolicyEntry {
      * write; the on-disk copy may lag in-memory until then.
      */
     volatile?: boolean
-    shouldSkipFromEventProperties?: (value: Property, shouldSkip: () => boolean) => boolean
-    transformToEventProperties?: (value: Property) => Properties
+    shouldSkipFromEventProperties?: (value: Property) => boolean
 }
 
 export const PERSISTENCE_KEY_POLICY: Record<string, PersistenceKeyPolicyEntry> = {
@@ -141,21 +137,16 @@ export const PERSISTENCE_KEY_POLICY: Record<string, PersistenceKeyPolicyEntry> =
     [SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION]: { exposure: 'event' },
     [SESSION_RECORDING_FIRST_FULL_SNAPSHOT_TIMESTAMP]: { exposure: 'event' },
     [SESSION_RECORDING_FLUSHED_SIZE]: { exposure: 'hidden' },
-    [ENABLED_FEATURE_FLAGS]: {
-        exposure: 'derived',
-        storageGroup: 'flags',
-        shouldSkipFromEventProperties: (_, shouldSkip) => shouldSkip(),
-        transformToEventProperties: transformEnabledFeatureFlagsToEventProperties,
-    },
-    [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: { exposure: 'event', storageGroup: 'flags' },
+    [ENABLED_FEATURE_FLAGS]: { exposure: 'hidden', storageGroup: 'flags' },
+    [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: { exposure: 'hidden', storageGroup: 'flags' },
     [PERSISTENCE_EARLY_ACCESS_FEATURES]: { exposure: 'hidden' },
     [PERSISTENCE_FEATURE_FLAG_DETAILS]: { exposure: 'hidden', storageGroup: 'flags' },
-    [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: { exposure: 'event', storageGroup: 'flags' },
-    [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: { exposure: 'event', storageGroup: 'flags', volatile: true },
+    [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: { exposure: 'hidden', storageGroup: 'flags' },
+    [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: { exposure: 'hidden', storageGroup: 'flags', volatile: true },
     // Server gate for minimal $feature_flag_called events — internal state that must never
     // leak into event properties.
     [PERSISTENCE_MINIMAL_FLAG_CALLED_EVENTS]: { exposure: 'hidden', storageGroup: 'flags' },
-    [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: { exposure: 'event' },
+    [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: { exposure: 'hidden' },
     [PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS]: { exposure: 'hidden' },
     [STORED_PERSON_PROPERTIES_KEY]: { exposure: 'hidden' },
     [STORED_GROUP_PROPERTIES_KEY]: { exposure: 'hidden' },
@@ -173,6 +164,7 @@ export const PERSISTENCE_KEY_POLICY: Record<string, PersistenceKeyPolicyEntry> =
     [CONVERSATIONS_LEGACY_USER_TRAITS]: { exposure: 'event' },
     [FLAG_CALL_REPORTED]: { exposure: 'hidden' },
     [FLAG_CALL_REPORTED_SESSION_ID]: { exposure: 'hidden' },
+    [GROUPS]: { exposure: 'event' },
     [PERSISTENCE_FEATURE_FLAG_ERRORS]: { exposure: 'hidden' },
     [PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]: { exposure: 'hidden', storageGroup: 'flags', volatile: true },
     [USER_STATE]: { exposure: 'hidden' },

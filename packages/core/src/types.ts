@@ -272,6 +272,7 @@ export enum PostHogPersistedProperty {
   // legacy (v0) transport while other events move to Capture V1 — segregated so a
   // failure on one route can't re-send events already accepted on the other.
   AiQueue = 'ai_queue',
+  AiCaptureQueue = 'ai_capture_queue',
   // Logs queue. Individual SDKs may route this key to an isolated storage
   // instance if they want to separate logs write volume from main state.
   LogsQueue = 'logs_queue',
@@ -284,6 +285,10 @@ export enum PostHogPersistedProperty {
   InstalledAppBuild = 'installed_app_build', // only used by posthog-react-native
   InstalledAppVersion = 'installed_app_version', // only used by posthog-react-native
   SessionReplay = 'session_replay', // only used by posthog-react-native
+  // Set by a manual registerPushNotificationToken(): the native SDK persists the
+  // subscription across launches, so cleanup (unregister/reset) must boot native even in a
+  // process where nothing else initialized it. Only used by posthog-react-native.
+  PushRegistered = 'push_registered',
   // Session id for which an event trigger has activated session replay. only used by posthog-react-native
   SessionReplayEventTriggerActivatedSession = 'session_replay_event_trigger_activated_session',
   SurveyLastSeenDate = 'survey_last_seen_date', // only used by posthog-react-native
@@ -307,7 +312,7 @@ export type PostHogFetchOptions = {
 export type PostHogCaptureOptions = {
   /** If provided overrides the auto-generated event UUID. Must be a valid UUID. */
   uuid?: string
-  /** If provided overrides the auto-generated timestamp */
+  /** If provided, overrides the auto-generated timestamp. UTC is preferred; non-UTC input is converted to UTC. */
   timestamp?: Date
   disableGeoip?: boolean
   /**
@@ -629,6 +634,14 @@ export type SurveyAppearance = {
   thankYouMessageDescription?: string
   thankYouMessageDescriptionContentType?: SurveyQuestionDescriptionContentType
   thankYouMessageCloseButtonText?: string
+  // Optional intro screen shown before the first question — the leading mirror of the
+  // confirmation message. Dismissed with a button; records no response and does not count
+  // toward completion or partial-response metrics.
+  displayIntroScreen?: boolean
+  introScreenHeader?: string
+  introScreenDescription?: string
+  introScreenDescriptionContentType?: SurveyQuestionDescriptionContentType
+  introScreenButtonText?: string
   borderColor?: string
   position?: SurveyPosition
   placeholder?: string
@@ -700,6 +713,9 @@ export interface SurveyTranslation {
   thankYouMessageHeader?: string
   thankYouMessageDescription?: string
   thankYouMessageCloseButtonText?: string
+  introScreenHeader?: string
+  introScreenDescription?: string
+  introScreenButtonText?: string
   submitButtonText?: string
   backButtonText?: string
 }

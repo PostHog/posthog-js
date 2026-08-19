@@ -11,7 +11,6 @@ export class BinaryContentRedactor {
 
   redact<T>(value: T, mediaType?: string): T
   redact(value: unknown, mediaType?: string): unknown {
-    if (this.isMultimodalEnabled()) return value
     this.visited = new WeakSet()
     return this.walk(value, mediaType ? new MediaTypeContext(undefined, undefined, mediaType) : MediaTypeContext.EMPTY)
   }
@@ -64,10 +63,5 @@ export class BinaryContentRedactor {
     if (!mediaType) return '[base64 redacted]'
     if (mediaType === 'application/octet-stream') return '[base64 file redacted]'
     return `[base64 ${mediaType} redacted]`
-  }
-
-  private isMultimodalEnabled(): boolean {
-    const val = process.env._INTERNAL_LLMA_MULTIMODAL || ''
-    return val.toLowerCase() === 'true' || val === '1' || val.toLowerCase() === 'yes'
   }
 }

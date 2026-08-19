@@ -415,7 +415,7 @@ describe('attribute masking', () => {
     },
   );
 
-  it('maskAttributeFn takes precedence over maskAllElementAttributes', () => {
+  it('ignores maskAttributeFn when maskAllElementAttributes is set', () => {
     const maskAttributeFn = vi.fn((name: string, value: string) =>
       name === 'aria-label' ? 'REDACTED' : value,
     );
@@ -424,13 +424,11 @@ describe('attribute masking', () => {
       'div',
       { maskAllElementAttributes: true, maskAttributeFn },
     );
-    expect(sn.attributes['aria-label']).toBe('REDACTED');
-    expect(sn.attributes.title).toBe('visible');
-    expect(maskAttributeFn).toHaveBeenCalledWith(
-      'title',
-      'visible',
-      expect.any(Element),
-    );
+    // the options are mutually exclusive and the coarse one fails closed, so
+    // the callback cannot unmask what maskAllElementAttributes hides
+    expect(sn.attributes['aria-label']).toMatch(/^\*+$/);
+    expect(sn.attributes.title).toMatch(/^\*+$/);
+    expect(maskAttributeFn).not.toHaveBeenCalled();
   });
 
   it('passes SVG and namespaced attributes with an Element to the callback', () => {

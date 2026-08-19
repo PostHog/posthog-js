@@ -1,4 +1,5 @@
 import PostHog
+import React
 
 /// Meant for internally logging PostHog related things
 private func hedgeLog(_ message: String) {
@@ -46,9 +47,39 @@ private func isReactNativeFatalJsError(_ event: PostHogEvent) -> Bool {
     }
 }
 
+// A nil identity token sends the request unauthenticated, which a project requiring
+// identity verification rejects server-side. Log the reason so that failure is greppable
+// and distinct from a host that deliberately returned nil.
+private func declinePushIdentity(_ completion: (String?) -> Void, _ reason: String) {
+    hedgeLog("Push subscription will be sent unauthenticated: \(reason)")
+    completion(nil)
+}
+
 @objc(PosthogReactNativePlugin)
-class PosthogReactNativePlugin: NSObject {
+public class PosthogReactNativePlugin: RCTEventEmitter {
     private var config: PostHogConfig?
+
+    private static let pushIdentityEvent = "PostHogPushIdentityRequest"
+
+    // This module dies on every bridge reload, so the provider closure resolves the live
+    // module through this static weak reference at call time, not a captured setup-time one.
+    private static weak var pushInstance: PosthogReactNativePlugin?
+
+    // Main-thread confined, like the rest of the identity-request bookkeeping below.
+    private var hasPushListeners = false
+    private var pushIdentityCompletions: [String: (String?) -> Void] = [:]
+
+    public override func supportedEvents() -> [String]! {
+        [PosthogReactNativePlugin.pushIdentityEvent]
+    }
+
+    public override func startObserving() {
+        DispatchQueue.main.async { self.hasPushListeners = true }
+    }
+
+    public override func stopObserving() {
+        DispatchQueue.main.async { self.hasPushListeners = false }
+    }
 
     @objc(setup:withSdkOptions:withPluginConfig:withResolver:withRejecter:)
     func setup(
@@ -68,6 +99,7 @@ class PosthogReactNativePlugin: NSObject {
             decideReplayConfig: sessionReplayConfig["decideReplayConfig"] as? [String: Any] ?? [:],
             nativeErrorTrackingAutocapture: errorTrackingConfig["nativeAutocapture"] as? Bool ?? false,
             exceptionStepsConfig: exceptionStepsConfig,
+            pushConfig: pluginConfig["push"] as? [String: Any] ?? [:],
             resolve: resolve
         )
     }
@@ -87,6 +119,7 @@ class PosthogReactNativePlugin: NSObject {
             decideReplayConfig: decideReplayConfig,
             nativeErrorTrackingAutocapture: false,
             exceptionStepsConfig: [:],
+            pushConfig: [:],
             resolve: resolve
         )
     }
@@ -100,6 +133,7 @@ class PosthogReactNativePlugin: NSObject {
         decideReplayConfig: [String: Any],
         nativeErrorTrackingAutocapture: Bool,
         exceptionStepsConfig: [String: Any],
+        pushConfig: [String: Any],
         resolve: RCTPromiseResolveBlock
     ) {
         if sessionId.isEmpty {
@@ -193,6 +227,11 @@ class PosthogReactNativePlugin: NSObject {
         let flushAt = sdkOptions["flushAt"] as? Int ?? 20
         config.flushAt = flushAt
 
+        config.optOut = sdkOptions["optOut"] as? Bool ?? false
+        // JS owns flags; it tells us when the native preload would be a duplicate. posthog-ios
+        // has no remoteConfig switch to mirror — it deprecated the option and always loads.
+        config.preloadFeatureFlags = sdkOptions["preloadFeatureFlags"] as? Bool ?? true
+
         // Forward custom headers (e.g. Authorization for a reverse proxy) so the native SDK
         // attaches them to the requests it sends directly (session replay, crash uploads).
         // Keep only string values so a stray non-string doesn't drop every header (matches Android).
@@ -203,6 +242,40 @@ class PosthogReactNativePlugin: NSObject {
         if !sdkVersion.isEmpty {
             postHogSdkName = "posthog-react-native"
             postHogVersion = sdkVersion
+        }
+
+        // Only set when present: the legacy start() path predates push, and there the
+        // native defaults (both true) must win, matching posthog-ios on its own.
+        if let capturePushSubscriptions = pushConfig["capturePushNotificationSubscriptions"] as? Bool {
+            config.capturePushNotificationSubscriptions = capturePushSubscriptions
+        }
+        if let capturePushOpened = pushConfig["capturePushNotificationOpened"] as? Bool {
+            config.capturePushNotificationOpened = capturePushOpened
+        }
+
+        // Installed only when JS asked for it: an uninvited bridging provider would change
+        // how the native SDK handles a 401 on the subscription call.
+        if pushConfig["pushIdentityProviderEnabled"] as? Bool == true {
+            PosthogReactNativePlugin.pushInstance = self
+            config.pushIdentityProvider = { distinctId, appId, completion in
+                DispatchQueue.main.async {
+                    guard let instance = PosthogReactNativePlugin.pushInstance, instance.hasPushListeners else {
+                        declinePushIdentity(completion, "no JS listener attached")
+                        return
+                    }
+                    let requestId = UUID().uuidString
+                    instance.pushIdentityCompletions[requestId] = completion
+                    instance.sendEvent(
+                        withName: PosthogReactNativePlugin.pushIdentityEvent,
+                        body: ["requestId": requestId, "distinctId": distinctId, "appId": appId]
+                    )
+                    // The native SDK's own 10s mint watchdog handles the fallback; this only
+                    // drops the entry so a late JS reply is ignored and the closure doesn't leak.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak instance] in
+                        instance?.pushIdentityCompletions.removeValue(forKey: requestId)
+                    }
+                }
+            }
         }
 
         PostHogSDK.shared.setup(config)
@@ -265,6 +338,23 @@ class PosthogReactNativePlugin: NSObject {
         resolve(nil)
     }
 
+    // Calls the native SDK rather than writing storage like identify() does: reset() is what
+    // unregisters the logged-out user's push subscription and re-registers under the new identity.
+    @objc(reset:withAnonymousId:withResolver:withRejecter:)
+    func reset(
+        distinctId: String, anonymousId: String, resolve: RCTPromiseResolveBlock,
+        reject _: RCTPromiseRejectBlock
+    ) {
+        PostHogSDK.shared.reset()
+        // Native reset() mints its own anonymous id; overwrite it with the JS one so the two SDKs
+        // stay on the same identity. Must run after reset(), which needs the pre-reset distinctId
+        // to know which subscription to unregister.
+        if let storageManager = config?.storageManager {
+            setIdentify(storageManager, distinctId: distinctId, anonymousId: anonymousId)
+        }
+        resolve(nil)
+    }
+
     private func setIdentify(
         _ storageManager: PostHogStorageManager, distinctId: String, anonymousId: String
     ) {
@@ -274,6 +364,21 @@ class PosthogReactNativePlugin: NSObject {
         if !distinctId.isEmpty {
             storageManager.setDistinctId(distinctId)
         }
+    }
+
+    // Runtime consent changes must reach native: it persists its own opt-out flag and only
+    // reads the JS value at setup(), so a refreshed APNs token could otherwise auto-register
+    // after the user opted out. optIn() also reinstalls the integrations opt-out removed.
+    @objc(setOptOut:withResolver:withRejecter:)
+    func setOptOut(
+        optOut: Bool, resolve: RCTPromiseResolveBlock, reject _: RCTPromiseRejectBlock
+    ) {
+        if optOut {
+            PostHogSDK.shared.optOut()
+        } else {
+            PostHogSDK.shared.optIn()
+        }
+        resolve(nil)
     }
 
     @objc(startRecording:withResolver:withRejecter:)
@@ -304,6 +409,66 @@ class PosthogReactNativePlugin: NSObject {
         reject _: RCTPromiseRejectBlock
     ) {
         PostHogSDK.shared.addExceptionStep(message, properties: properties)
+        resolve(nil)
+    }
+
+    @objc(registerPushNotificationToken:withAppId:withResolver:withRejecter:)
+    func registerPushNotificationToken(
+        deviceToken: String, appId: String?, resolve: RCTPromiseResolveBlock,
+        reject: RCTPromiseRejectBlock
+    ) {
+        #if os(iOS)
+            // A blank token is dropped silently by the native SDK, so surface it here
+            // instead of reporting false success.
+            if deviceToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                reject("PosthogReactNativePluginError", "registerPushNotificationToken: deviceToken is blank; token not registered.", nil)
+                return
+            }
+            PostHogSDK.shared.registerPushNotificationToken(deviceToken, appId: appId)
+            resolve(nil)
+        #else
+            // posthog-ios push registration is iOS-only (the backend rejects the macos platform).
+            _ = reject
+            hedgeLog("registerPushNotificationToken is not supported on macOS; token not registered.")
+            resolve(nil)
+        #endif
+    }
+
+    @objc(unregisterPushNotificationToken:withRejecter:)
+    func unregisterPushNotificationToken(resolve: RCTPromiseResolveBlock, reject _: RCTPromiseRejectBlock) {
+        #if os(iOS)
+            PostHogSDK.shared.unregisterPushNotificationToken()
+        #else
+            hedgeLog("unregisterPushNotificationToken is not supported on macOS; nothing to unregister.")
+        #endif
+        resolve(nil)
+    }
+
+    @objc(capturePushNotificationOpened:withResolver:withRejecter:)
+    func capturePushNotificationOpened(
+        properties: [String: Any], resolve: RCTPromiseResolveBlock, reject _: RCTPromiseRejectBlock
+    ) {
+        PostHogSDK.shared.capturePushNotificationOpened(
+            title: properties["title"] as? String,
+            subtitle: properties["subtitle"] as? String,
+            body: properties["body"] as? String,
+            payload: properties["payload"] as? [String: Any],
+            action: properties["action"] as? String
+        )
+        resolve(nil)
+    }
+
+    @objc(providePushIdentityToken:withToken:withResolver:withRejecter:)
+    func providePushIdentityToken(
+        requestId: String, token: String?, resolve: RCTPromiseResolveBlock,
+        reject _: RCTPromiseRejectBlock
+    ) {
+        DispatchQueue.main.async { [weak self] in
+            guard let completion = self?.pushIdentityCompletions.removeValue(forKey: requestId) else {
+                return
+            }
+            completion(token)
+        }
         resolve(nil)
     }
 }

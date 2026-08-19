@@ -12,6 +12,7 @@ import {
   getInputType,
   toLowerCase,
   nowMs,
+  getSuspensionGeneration,
   recordMutationCost,
 } from '@posthog/rrweb-snapshot';
 import type { observerParam, MutationBufferParam } from '../types';
@@ -329,10 +330,11 @@ export default class MutationBuffer {
     // pages (virtualized lists, calendars) is where the recorder's main-thread time
     // goes. Measure it so that cost is visible without a Chrome trace.
     const startedAt = nowMs();
+    const startGeneration = getSuspensionGeneration();
     try {
       this.processBufferedMutations();
     } finally {
-      recordMutationCost(nowMs() - startedAt);
+      recordMutationCost(nowMs() - startedAt, startGeneration);
     }
   };
 

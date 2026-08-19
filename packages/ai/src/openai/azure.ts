@@ -26,6 +26,7 @@ import {
   isResponseTokenChunk,
   extractRequestId,
   buildProviderMetadata,
+  extractCacheWriteTokens,
   isTerminalResponse,
   getResponseFailure,
 } from './utils'
@@ -148,6 +149,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 outputTokens?: number
                 reasoningTokens?: number
                 cacheReadInputTokens?: number
+                cacheCreationInputTokens?: number
               } = {
                 inputTokens: 0,
                 outputTokens: 0,
@@ -232,6 +234,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                     outputTokens: chunk.usage.completion_tokens ?? 0,
                     reasoningTokens: chunk.usage.completion_tokens_details?.reasoning_tokens ?? 0,
                     cacheReadInputTokens: chunk.usage.prompt_tokens_details?.cached_tokens ?? 0,
+                    cacheCreationInputTokens: extractCacheWriteTokens(chunk.usage.prompt_tokens_details),
                   }
                 }
               }
@@ -277,8 +280,8 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 ...posthogParams,
                 model: openAIParams.model ?? modelFromResponse,
                 provider: 'azure',
-                input: sanitizeOpenAI(openAIParams.messages),
-                output: sanitizeOpenAIResponse(formattedOutput),
+                input: sanitizeOpenAI(openAIParams.messages, this.phClient),
+                output: sanitizeOpenAIResponse(formattedOutput, this.phClient),
                 latency,
                 timeToFirstToken,
                 baseURL: this.baseURL,
@@ -293,7 +296,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 ...posthogParams,
                 model: openAIParams.model,
                 provider: 'azure',
-                input: sanitizeOpenAI(openAIParams.messages),
+                input: sanitizeOpenAI(openAIParams.messages, this.phClient),
                 output: [],
                 latency: 0,
                 baseURL: this.baseURL,
@@ -329,8 +332,8 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
               ...posthogParams,
               model: openAIParams.model ?? result.model,
               provider: 'azure',
-              input: sanitizeOpenAI(openAIParams.messages),
-              output: sanitizeOpenAIResponse(formatResponseOpenAI(result)),
+              input: sanitizeOpenAI(openAIParams.messages, this.phClient),
+              output: sanitizeOpenAIResponse(formatResponseOpenAI(result), this.phClient),
               latency,
               baseURL: this.baseURL,
               modelParameters: getModelParams(body, result.service_tier),
@@ -340,6 +343,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 outputTokens: result.usage?.completion_tokens ?? 0,
                 reasoningTokens: result.usage?.completion_tokens_details?.reasoning_tokens ?? 0,
                 cacheReadInputTokens: result.usage?.prompt_tokens_details?.cached_tokens ?? 0,
+                cacheCreationInputTokens: extractCacheWriteTokens(result.usage?.prompt_tokens_details),
               },
               completionId: result.id,
               providerMetadata: buildProviderMetadata({
@@ -360,7 +364,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
             ...posthogParams,
             model: openAIParams.model,
             provider: 'azure',
-            input: sanitizeOpenAI(openAIParams.messages),
+            input: sanitizeOpenAI(openAIParams.messages, this.phClient),
             output: [],
             latency: 0,
             baseURL: this.baseURL,
@@ -412,6 +416,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
         outputTokens: result.usage?.output_tokens ?? 0,
         reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
         cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
+        cacheCreationInputTokens: extractCacheWriteTokens(result.usage?.input_tokens_details),
         rawUsage: result.usage,
       },
       stopReason: result.status ?? undefined,
@@ -476,6 +481,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 outputTokens?: number
                 reasoningTokens?: number
                 cacheReadInputTokens?: number
+                cacheCreationInputTokens?: number
               } = {
                 inputTokens: 0,
                 outputTokens: 0,
@@ -513,6 +519,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                     outputTokens: chunk.response.usage.output_tokens ?? 0,
                     reasoningTokens: chunk.response.usage.output_tokens_details?.reasoning_tokens ?? 0,
                     cacheReadInputTokens: chunk.response.usage.input_tokens_details?.cached_tokens ?? 0,
+                    cacheCreationInputTokens: extractCacheWriteTokens(chunk.response.usage.input_tokens_details),
                   }
                 }
               }
@@ -534,10 +541,10 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 model: openAIParams.model ?? modelFromResponse,
                 provider: 'azure',
                 input: formatOpenAIResponsesInput(
-                  sanitizeOpenAIResponse(openAIParams.input),
+                  sanitizeOpenAIResponse(openAIParams.input, this.phClient),
                   openAIParams.instructions
                 ),
-                output: sanitizeOpenAIResponse(finalContent),
+                output: sanitizeOpenAIResponse(finalContent, this.phClient),
                 latency,
                 timeToFirstToken,
                 baseURL: this.baseURL,
@@ -565,7 +572,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 model: openAIParams.model,
                 provider: 'azure',
                 input: formatOpenAIResponsesInput(
-                  sanitizeOpenAIResponse(openAIParams.input),
+                  sanitizeOpenAIResponse(openAIParams.input, this.phClient),
                   openAIParams.instructions
                 ),
                 output: [],
@@ -605,8 +612,11 @@ export class WrappedResponses extends AzureOpenAI.Responses {
               ...posthogParams,
               model: openAIParams.model ?? result.model,
               provider: 'azure',
-              input: formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions),
-              output: sanitizeOpenAIResponse(result.output),
+              input: formatOpenAIResponsesInput(
+                sanitizeOpenAIResponse(openAIParams.input, this.phClient),
+                openAIParams.instructions
+              ),
+              output: sanitizeOpenAIResponse(result.output, this.phClient),
               latency,
               baseURL: this.baseURL,
               modelParameters: getModelParams(body, result.service_tier),
@@ -616,6 +626,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 outputTokens: result.usage?.output_tokens ?? 0,
                 reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
                 cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
+                cacheCreationInputTokens: extractCacheWriteTokens(result.usage?.input_tokens_details),
                 rawUsage: result.usage,
               },
               stopReason: result.status ?? undefined,
@@ -639,7 +650,10 @@ export class WrappedResponses extends AzureOpenAI.Responses {
             ...posthogParams,
             model: openAIParams.model,
             provider: 'azure',
-            input: formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions),
+            input: formatOpenAIResponsesInput(
+              sanitizeOpenAIResponse(openAIParams.input, this.phClient),
+              openAIParams.instructions
+            ),
             output: [],
             latency: 0,
             baseURL: this.baseURL,
@@ -761,8 +775,11 @@ export class WrappedResponses extends AzureOpenAI.Responses {
           ...posthogParams,
           model: openAIParams.model ?? result.model,
           provider: 'azure',
-          input: formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions),
-          output: sanitizeOpenAIResponse(result.output),
+          input: formatOpenAIResponsesInput(
+            sanitizeOpenAIResponse(openAIParams.input, this.phClient),
+            openAIParams.instructions
+          ),
+          output: sanitizeOpenAIResponse(result.output, this.phClient),
           latency,
           baseURL: this.baseURL,
           modelParameters: getModelParams(body, result.service_tier),
@@ -772,6 +789,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
             outputTokens: result.usage?.output_tokens ?? 0,
             reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
             cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
+            cacheCreationInputTokens: extractCacheWriteTokens(result.usage?.input_tokens_details),
             rawUsage: result.usage,
           },
           stopReason: result.status ?? undefined,
@@ -789,7 +807,10 @@ export class WrappedResponses extends AzureOpenAI.Responses {
           ...posthogParams,
           model: openAIParams.model,
           provider: 'azure',
-          input: formatOpenAIResponsesInput(sanitizeOpenAIResponse(openAIParams.input), openAIParams.instructions),
+          input: formatOpenAIResponsesInput(
+            sanitizeOpenAIResponse(openAIParams.input, this.phClient),
+            openAIParams.instructions
+          ),
           output: [],
           latency: 0,
           baseURL: this.baseURL,

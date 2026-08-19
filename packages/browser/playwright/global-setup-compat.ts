@@ -5,6 +5,12 @@ import path from 'path'
 const DIST_DIR = path.join(__dirname, '../dist')
 const NPM_ARRAY_FILE = path.join(DIST_DIR, 'array.npm-latest.js')
 const NPM_ARRAY_FULL_FILE = path.join(DIST_DIR, 'array.full.npm-latest.js')
+const LEGACY_EXCEPTION_AUTOCAPTURE_VERSION = '1.140.1'
+const LEGACY_EXCEPTION_AUTOCAPTURE_ARRAY_FILE = path.join(DIST_DIR, 'array.npm-legacy-exception-autocapture.js')
+const LEGACY_EXCEPTION_AUTOCAPTURE_ARRAY_FULL_FILE = path.join(
+    DIST_DIR,
+    'array.full.npm-legacy-exception-autocapture.js'
+)
 
 async function downloadFile(url: string, dest: string): Promise<void> {
     const response = await fetch(url, { redirect: 'follow' })
@@ -30,11 +36,21 @@ async function downloadNpmVersion(): Promise<void> {
     process.env.COMPAT_VERSION = version
 
     // eslint-disable-next-line no-console
-    console.log(`Compat tests using posthog-js@${version} from NPM`)
+    console.log(
+        `Compat tests using posthog-js@${version} and posthog-js@${LEGACY_EXCEPTION_AUTOCAPTURE_VERSION} from NPM`
+    )
 
     await Promise.all([
         downloadFile(`https://unpkg.com/posthog-js@${version}/dist/array.js`, NPM_ARRAY_FILE),
         downloadFile(`https://unpkg.com/posthog-js@${version}/dist/array.full.js`, NPM_ARRAY_FULL_FILE),
+        downloadFile(
+            `https://unpkg.com/posthog-js@${LEGACY_EXCEPTION_AUTOCAPTURE_VERSION}/dist/array.js`,
+            LEGACY_EXCEPTION_AUTOCAPTURE_ARRAY_FILE
+        ),
+        downloadFile(
+            `https://unpkg.com/posthog-js@${LEGACY_EXCEPTION_AUTOCAPTURE_VERSION}/dist/array.full.js`,
+            LEGACY_EXCEPTION_AUTOCAPTURE_ARRAY_FULL_FILE
+        ),
     ])
 }
 

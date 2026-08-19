@@ -19,6 +19,7 @@ import {
 } from './context-parameters'
 import { MCPAnalyticsEventType } from './event-types'
 import { captureException } from './exceptions'
+import { normalizeHeaderString } from './headers'
 import { applyMcpLibIdentity } from './lib-identity'
 import { log } from './logger'
 import { McpEventSink } from './sink'
@@ -72,10 +73,6 @@ export interface PostHogMCPOptions extends PostHogOptions {
  * ```
  */
 export class PostHogMCP extends PostHog {
-  // Reuses the shared sink so MCP events flow through the identical
-  // sanitize/truncate/fan-out pipeline as the `instrument()` path; the sink
-  // publishes via `this` (the inherited `capture()`), so the client's own
-  // `beforeSend` and batching apply.
   readonly #sink = new McpEventSink(this)
 
   // The get_more_tools name lives here (not on the per-call options) so that
@@ -85,7 +82,6 @@ export class PostHogMCP extends PostHog {
   constructor(apiKey: string, options: PostHogMCPOptions = {}) {
     super(apiKey, options)
     this.#missingCapabilityToolName = options.missingCapabilityToolName ?? GET_MORE_TOOLS_NAME
-    // Report `$lib: 'posthog-node-mcp'` instead of the inherited `posthog-node`.
     applyMcpLibIdentity(this)
   }
 
@@ -244,6 +240,12 @@ function baseEvent(eventType: MCPAnalyticsEventType, common: McpCaptureCommon): 
     eventType,
     sessionId: common.sessionId,
     protocolVersion: common.protocolVersion,
+    // There is no `extra` on this path, so the host reads the request headers and
+    // passes them per capture — the SDK has no transport to read them from. Normalized
+    // with the same rules `instrument()` applies, so one request yields one set of
+    // properties whichever path captured it.
+    clientUserAgent: normalizeHeaderString(common.clientUserAgent),
+    vendorClient: normalizeHeaderString(common.vendorClient),
     timestamp: common.timestamp ?? new Date(),
     properties: common.properties,
     groups: common.groups,

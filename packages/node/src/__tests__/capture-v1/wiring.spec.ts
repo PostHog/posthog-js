@@ -1,3 +1,5 @@
+import { gunzipSync } from 'node:zlib'
+
 import { PostHog, PostHogOptions } from '@/entrypoints/index.node'
 import { CaptureV1Error } from '@/capture-v1/errors'
 import { V1_URL, V1WiringHarness, v0Response, v1Response, waitForFlushTimer } from '../utils/v1-wiring'
@@ -37,6 +39,77 @@ describe('capture v1 wiring (Node SDK)', () => {
       const events = eventsIn('/batch/')
       expect(events).toContain('custom')
       expect(events).toContain('$ai_generation')
+    })
+  })
+
+  describe('Node gzip compression', () => {
+    let originalCompressionStream: PropertyDescriptor | undefined
+    let compressionStreamSpy: jest.Mock
+
+    const readCompressedBody = async (body: Blob): Promise<any> => {
+      return JSON.parse(gunzipSync(Buffer.from(await body.arrayBuffer())).toString())
+    }
+
+    beforeEach(() => {
+      originalCompressionStream = Object.getOwnPropertyDescriptor(globalThis, 'CompressionStream')
+      compressionStreamSpy = jest.fn(() => {
+        throw new Error('The Node SDK should not use CompressionStream')
+      })
+      Object.defineProperty(globalThis, 'CompressionStream', {
+        configurable: true,
+        writable: true,
+        value: compressionStreamSpy,
+      })
+    })
+
+    afterEach(() => {
+      if (originalCompressionStream) {
+        Object.defineProperty(globalThis, 'CompressionStream', originalCompressionStream)
+      } else {
+        delete (globalThis as any).CompressionStream
+      }
+    })
+
+    it('uses Node gzip for the legacy batch endpoint', async () => {
+      const posthog = makeClient({ disableCompression: false })
+      posthog.capture({ distinctId: 'u', event: 'custom', properties: { x: 1 } })
+      await posthog.flush()
+
+      const [, options] = callsTo('/batch/')[0]
+      expect(options.headers['Content-Encoding']).toBe('gzip')
+      expect(options.body).toBeInstanceOf(Blob)
+      expect((await readCompressedBody(options.body)).batch[0].event).toBe('custom')
+      expect(compressionStreamSpy).not.toHaveBeenCalled()
+    })
+
+    it('uses Node gzip for the Capture V1 endpoint', async () => {
+      const posthog = makeV1Client({ disableCompression: false })
+      posthog.capture({ distinctId: 'u', event: 'custom', properties: { x: 1 } })
+      await posthog.flush()
+
+      const [, options] = callsTo('/i/v1/analytics/events')[0]
+      expect(options.headers['Content-Encoding']).toBe('gzip')
+      expect(options.body).toBeInstanceOf(Blob)
+      expect((await readCompressedBody(options.body)).batch[0].event).toBe('custom')
+      expect(compressionStreamSpy).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['logs', '/i/v1/logs', 'resourceLogs'],
+      ['metrics', '/i/v1/metrics', 'resourceMetrics'],
+    ] as const)('uses Node gzip for the %s endpoint', async (kind, path, payloadKey) => {
+      const posthog = makeClient({ disableCompression: false })
+      const outcome =
+        kind === 'logs'
+          ? await posthog._sendLogsBatch({ resourceLogs: [] })
+          : await posthog._sendMetricsBatch({ resourceMetrics: [] })
+
+      expect(outcome).toEqual({ kind: 'ok' })
+      const [, options] = callsTo(path)[0]
+      expect(options.headers['Content-Encoding']).toBe('gzip')
+      expect(options.body).toBeInstanceOf(Blob)
+      expect((await readCompressedBody(options.body))[payloadKey]).toEqual([])
+      expect(compressionStreamSpy).not.toHaveBeenCalled()
     })
   })
 

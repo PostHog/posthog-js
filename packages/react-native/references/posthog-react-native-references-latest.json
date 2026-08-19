@@ -228,6 +228,35 @@
           "path": "dist/posthog-rn.d.ts"
         },
         {
+          "category": "",
+          "description": "Captures `$push_notification_opened` when a user opens a push notification. Requires `@posthog/react-native-plugin`.\nOnly for taps  cannot see itself — local notifications, plus warm-start and foreground taps on Android — or the tap is counted twice.\nKeys of `payload`'s `posthog` entry become `$notification_<key>` properties. Leave `action` unset for a plain tap; `subtitle` is iOS only. The native SDK builds and sends the event, so JS `before_send` never sees it — redact anything sensitive first.\nNot supported on web.",
+          "details": null,
+          "id": "capturePushNotificationOpened",
+          "showDocs": true,
+          "title": "capturePushNotificationOpened",
+          "examples": [
+            {
+              "id": "capturepushnotificationopened",
+              "name": "Generated example for capturePushNotificationOpened",
+              "code": "// Generated example for capturePushNotificationOpened\nposthog.capturePushNotificationOpened();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "{\n        title?: string;\n        subtitle?: string;\n        body?: string;\n        payload?: {\n            [key: string]: JsonType;\n        };\n        action?: string;\n    }",
+              "name": "options"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<void>",
+            "name": "Promise<void>"
+          },
+          "path": "dist/posthog-rn.d.ts"
+        },
+        {
           "category": "Identification",
           "description": "Creates a person profile for the current user, if they don't already have one.\nThis is useful when using `personProfiles: 'identified_only'` mode and you want to explicitly create a profile for an anonymous user before they identify.\nIf `personProfiles` is 'identified_only' and no profile exists, this will create one. If `personProfiles` is 'never', this will log an error and do nothing. If `personProfiles` is 'always' or a profile already exists, this is a no-op.",
           "details": null,
@@ -866,6 +895,41 @@
           "path": "dist/posthog-rn.d.ts"
         },
         {
+          "category": "",
+          "description": "Registers this device's push token so PostHog Workflows can target it. Requires `@posthog/react-native-plugin`.\nRegistration happens at startup on its own when  is on, so call this for token refreshes, which that startup fetch cannot see — on Android only, since a refresh listener yields an FCM token and iOS defaults to APNs. Safe to call before the native SDK is ready; the call queues rather than being dropped.\n`appId` says which provider delivers: the Firebase `project_id` for an FCM token, the APNs bundle id for an APNs token. Unset, iOS uses the bundle id and Android the default `FirebaseApp`'s project id, so pass it if you don't use Firebase or use a non-default project. Registration fails server-side if your PostHog project has no matching integration for `appId`.\nTo use FCM on iOS too, pass the Firebase `project_id` as `appId` and set  to `false` first — otherwise the device registers twice (APNs under the bundle id, FCM under the project id), a Workflow with both integrations delivers twice, and  clears only the most recent.\nNot supported on web or macOS.",
+          "details": null,
+          "id": "registerPushNotificationToken",
+          "showDocs": true,
+          "title": "registerPushNotificationToken",
+          "examples": [
+            {
+              "id": "registerpushnotificationtoken",
+              "name": "Generated example for registerPushNotificationToken",
+              "code": "// Generated example for registerPushNotificationToken\nposthog.registerPushNotificationToken();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "string",
+              "name": "deviceToken"
+            },
+            {
+              "description": "",
+              "isOptional": true,
+              "type": "{\n        appId?: string;\n    }",
+              "name": "options"
+            }
+          ],
+          "returnType": {
+            "id": "Promise<void>",
+            "name": "Promise<void>"
+          },
+          "path": "dist/posthog-rn.d.ts"
+        },
+        {
           "category": "Feature flags",
           "description": "Reloads feature flags from the server.\nPostHog loads feature flags when instantiated and refreshes whenever methods are called that affect the flag. If you want to manually trigger a refresh, you can call this method.",
           "details": "When the `disableRemoteFeatureFlags` option is set, this method is a no-op; supply flag values via `updateFlags()` instead.",
@@ -1302,6 +1366,28 @@
               "name": "property"
             }
           ],
+          "returnType": {
+            "id": "Promise<void>",
+            "name": "Promise<void>"
+          },
+          "path": "dist/posthog-rn.d.ts"
+        },
+        {
+          "category": "",
+          "description": "Unregisters this device's push token so Workflows stop targeting it — for example from your logout flow. Requires `@posthog/react-native-plugin`.\nDurable: a failed or offline request retries on the next flush or launch. `reset()` already moves a registered token to the new identity, so this is only needed if you manage subscriptions yourself.\nNot supported on web or macOS.",
+          "details": null,
+          "id": "unregisterPushNotificationToken",
+          "showDocs": true,
+          "title": "unregisterPushNotificationToken",
+          "examples": [
+            {
+              "id": "unregisterpushnotificationtoken",
+              "name": "Generated example for unregisterPushNotificationToken",
+              "code": "// Generated example for unregisterPushNotificationToken\nposthog.unregisterPushNotificationToken();"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [],
           "returnType": {
             "id": "Promise<void>",
             "name": "Promise<void>"
@@ -3018,7 +3104,7 @@
           "name": "uuid"
         },
         {
-          "description": "If provided overrides the auto-generated timestamp",
+          "description": "If provided, overrides the auto-generated timestamp. UTC is preferred; non-UTC input is converted to UTC.",
           "type": "Date",
           "name": "timestamp"
         },
@@ -3675,6 +3761,16 @@
           "name": "captureAppLifecycleEvents"
         },
         {
+          "description": "Whether to automatically capture `$push_notification_opened` on a notification tap. Requires `@posthog/react-native-plugin`.\nFires for pushes from any provider, not just PostHog's — but title and body are attached only for PostHog's own, so third-party notification text never reaches analytics. Android sees cold starts only; call  for the taps it misses.\nThe native SDK builds and sends this event, so JS `before_send` never sees it.\nNot supported on web.\ntrue",
+          "type": "boolean",
+          "name": "capturePushNotificationOpened"
+        },
+        {
+          "description": "Whether to automatically register this device's push token so PostHog Workflows can target it. Requires `@posthog/react-native-plugin`.\nYour app still owns permission — PostHog only observes the token the OS hands back, and never sees later refreshes. Forward those to  yourself.\nNot supported on web or macOS.\ntrue",
+          "type": "boolean",
+          "name": "capturePushNotificationSubscriptions"
+        },
+        {
           "description": "Allows you to provide your own implementation of the common information about your App or a function to modify the default App properties generated",
           "type": "PostHogCustomAppProperties | ((properties: PostHogCustomAppProperties) => PostHogCustomAppProperties)",
           "name": "customAppProperties"
@@ -3715,6 +3811,11 @@
           "name": "persistence"
         },
         {
+          "description": "Mints a signed identity-verification token for push subscription requests. Only needed when your PostHog project requires identity verification for push. Requires `@posthog/react-native-plugin`.\nCalled with the current `distinctId` and `appId`. Mint on your backend (HS256, `sub` = distinctId, an `app_id` claim, `aud` = `posthog:push_identity`), never in the app. Return `null` to send the request unauthenticated; a slow or throwing implementation does the same after 10 seconds.",
+          "type": "PostHogPushIdentityProvider",
+          "name": "pushIdentityProvider"
+        },
+        {
           "description": "A list of headers that should be sent with requests to the PostHog API.",
           "type": "{\n        [header_name: string]: string;\n    }",
           "name": "requestHeaders"
@@ -3736,6 +3837,10 @@
       "id": "PostHogPersistedProperty",
       "name": "PostHogPersistedProperty",
       "properties": [
+        {
+          "type": "\"ai_capture_queue\"",
+          "name": "AiCaptureQueue"
+        },
         {
           "type": "\"ai_queue\"",
           "name": "AiQueue"
@@ -3819,6 +3924,10 @@
         {
           "type": "\"props\"",
           "name": "Props"
+        },
+        {
+          "type": "\"push_registered\"",
+          "name": "PushRegistered"
         },
         {
           "type": "\"queue\"",
@@ -3906,6 +4015,13 @@
       "path": "dist/PostHogProvider.d.ts"
     },
     {
+      "id": "PostHogPushIdentityProvider",
+      "name": "PostHogPushIdentityProvider",
+      "properties": [],
+      "path": "dist/types.d.ts",
+      "example": "(distinctId: string, appId: string) => Promise<string | null>"
+    },
+    {
       "id": "PostHogReactNativePluginExtended",
       "name": "PostHogReactNativePluginExtended",
       "properties": [
@@ -3935,6 +4051,10 @@
           "name": "identify"
         },
         {
+          "type": "((distinctId: string, anonymousId: string) => Promise<void>) & ((distinctId: string, anonymousId: string) => Promise<void>)",
+          "name": "reset"
+        },
+        {
           "type": "((resumeCurrent: boolean) => Promise<void>) & ((resumeCurrent: boolean) => Promise<void>)",
           "name": "startRecording"
         },
@@ -3945,6 +4065,26 @@
         {
           "type": "((message: string, properties?: PostHogReactNativePluginMap) => Promise<void>) & ((message: string, properties?: { [key: string]: any; }) => Promise<void>)",
           "name": "addExceptionStep"
+        },
+        {
+          "type": "((deviceToken: string, appId: string | null) => Promise<void>) & ((deviceToken: string, appId: string | null) => Promise<void>)",
+          "name": "registerPushNotificationToken"
+        },
+        {
+          "type": "(() => Promise<void>) & (() => Promise<void>)",
+          "name": "unregisterPushNotificationToken"
+        },
+        {
+          "type": "((optOut: boolean) => Promise<void>) & ((optOut: boolean) => Promise<void>)",
+          "name": "setOptOut"
+        },
+        {
+          "type": "((properties: PostHogReactNativePluginMap) => Promise<void>) & ((properties: { [key: string]: any; }) => Promise<void>)",
+          "name": "capturePushNotificationOpened"
+        },
+        {
+          "type": "((provider: PostHogPushIdentityProvider) => void) & ((provider: PostHogPushIdentityProvider) => void)",
+          "name": "setPushIdentityProvider"
         }
       ],
       "path": "dist/optional/OptionalPlugin.d.ts"
@@ -4525,6 +4665,26 @@
           "name": "thankYouMessageCloseButtonText"
         },
         {
+          "type": "boolean",
+          "name": "displayIntroScreen"
+        },
+        {
+          "type": "string",
+          "name": "introScreenHeader"
+        },
+        {
+          "type": "string",
+          "name": "introScreenDescription"
+        },
+        {
+          "type": "SurveyQuestionDescriptionContentType",
+          "name": "introScreenDescriptionContentType"
+        },
+        {
+          "type": "string",
+          "name": "introScreenButtonText"
+        },
+        {
           "type": "string",
           "name": "borderColor"
         },
@@ -4626,6 +4786,26 @@
         {
           "type": "string",
           "name": "thankYouMessageCloseButtonText"
+        },
+        {
+          "type": "boolean",
+          "name": "displayIntroScreen"
+        },
+        {
+          "type": "string",
+          "name": "introScreenHeader"
+        },
+        {
+          "type": "string",
+          "name": "introScreenDescription"
+        },
+        {
+          "type": "SurveyQuestionDescriptionContentType",
+          "name": "introScreenDescriptionContentType"
+        },
+        {
+          "type": "string",
+          "name": "introScreenButtonText"
         },
         {
           "type": "string",
@@ -4863,6 +5043,18 @@
         {
           "type": "string",
           "name": "backButtonText"
+        },
+        {
+          "type": "string",
+          "name": "introScreenButtonText"
+        },
+        {
+          "type": "string",
+          "name": "introScreenDescription"
+        },
+        {
+          "type": "string",
+          "name": "introScreenHeader"
         },
         {
           "type": "string",

@@ -3935,6 +3935,10 @@
           "name": "identify"
         },
         {
+          "type": "(distinctId: string, anonymousId: string) => Promise<void>",
+          "name": "reset"
+        },
+        {
           "type": "((resumeCurrent: boolean) => Promise<void>) & ((resumeCurrent: boolean) => Promise<void>)",
           "name": "startRecording"
         },
@@ -3945,6 +3949,26 @@
         {
           "type": "((message: string, properties?: PostHogReactNativePluginMap) => Promise<void>) & ((message: string, properties?: { [key: string]: any; }) => Promise<void>)",
           "name": "addExceptionStep"
+        },
+        {
+          "type": "(deviceToken: string, appId: string | null) => Promise<void>",
+          "name": "registerPushNotificationToken"
+        },
+        {
+          "type": "() => Promise<void>",
+          "name": "unregisterPushNotificationToken"
+        },
+        {
+          "type": "(optOut: boolean) => Promise<void>",
+          "name": "setOptOut"
+        },
+        {
+          "type": "(properties: PostHogReactNativePluginMap) => Promise<void>",
+          "name": "capturePushNotificationOpened"
+        },
+        {
+          "type": "(provider: PostHogPushIdentityProvider) => void",
+          "name": "setPushIdentityProvider"
         }
       ],
       "path": "dist/optional/OptionalPlugin.d.ts"
