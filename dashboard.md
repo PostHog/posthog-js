@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4574](https://github.com/PostHog/posthog-js/issues/4574) | Confirmed Expo iOS symbol-upload integration bug affecting build ordering and release-version attribution with EAS remote versioning. | react-native, feature/error-tracking, team/client-libraries |  | no | 2026-08-19T21:32:57.755Z |
 | PostHog/posthog-js | [issue 4571](https://github.com/PostHog/posthog-js/issues/4571) | Confirmed OTLP/HTTP JSON encoding bug affecting log and metric attribute integers. | team/client-libraries |  | no | 2026-08-19T21:31:51.972Z |
 | PostHog/posthog-js | [issue 4570](https://github.com/PostHog/posthog-js/issues/4570) | Confirmed bug: logs drops batches after exhausted retryable HTTP failures, unlike metrics. | team/client-libraries | https://github.com/PostHog/posthog-js/pull/4575 | no | 2026-08-19T21:30:22.119Z |
 | PostHog/posthog-js | [issue 4566](https://github.com/PostHog/posthog-js/issues/4566) | Confirmed @posthog/react bug: React's component stack is available at both React error-capture call sites but is not included in the captured exception properties. | feature/error-tracking, team/client-libraries | https://github.com/PostHog/posthog-js/pull/4567 | no | 2026-08-19T13:55:09.066Z |
