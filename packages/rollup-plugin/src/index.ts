@@ -3,7 +3,9 @@ import {
     PluginConfig,
     resolveConfig,
     runSourcemapCli,
+    resolveReleaseId,
     createChunkId,
+    createStableChunkId,
     createChunkIdSnippet,
     createChunkIdComment,
     determineChunkIdFromSource,
@@ -37,8 +39,32 @@ const PROLOGUE_REGEX =
 
 export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOptions): Plugin {
     const posthogOptions = resolveConfig(userOptions)
+    const eventReleaseMode = posthogOptions.sourcemaps.releaseMode === 'event'
+
+    // Resolved once per build and shared by every output, so all chunks of one build carry the
+    // same release. Cleared in buildStart because a watch-mode rebuild can land on a new commit,
+    // which is a different release.
+    let releaseIdPromise: Promise<string | undefined> | undefined
+    let warnedAboutMissingRelease = false
+
+    function injectChunkId(code: string, chunkId: string, releaseId?: string) {
+        const magicString = new MagicString(code)
+        magicString.appendLeft(code.match(PROLOGUE_REGEX)?.[0].length ?? 0, createChunkIdSnippet(chunkId, releaseId))
+        magicString.append(createChunkIdComment(chunkId))
+
+        return {
+            code: magicString.toString(),
+            map: magicString.generateMap({ hires: 'boundary' }),
+        }
+    }
+
     const plugin: PostHogRollupPlugin = {
         name: 'posthog-rollup-plugin',
+
+        buildStart() {
+            releaseIdPromise = undefined
+            warnedAboutMissingRelease = false
+        },
 
         config() {
             if (!posthogOptions.sourcemaps.enabled) return
@@ -72,17 +98,36 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
                 if (!posthogOptions.sourcemaps.enabled) return null
                 if (!JS_CHUNK_REGEX.test(chunk.fileName)) return null
                 // Already carries an id (watch-mode re-render, another tool)
-                if (determineChunkIdFromSource(code)) return null
-
-                const chunkId = createChunkId()
-                const magicString = new MagicString(code)
-                magicString.appendLeft(code.match(PROLOGUE_REGEX)?.[0].length ?? 0, createChunkIdSnippet(chunkId))
-                magicString.append(createChunkIdComment(chunkId))
-
-                return {
-                    code: magicString.toString(),
-                    map: magicString.generateMap({ hires: 'boundary' }),
+                if (determineChunkIdFromSource(code)) {
+                    if (eventReleaseMode) {
+                        console.warn(
+                            `PostHog: ${chunk.fileName} already carries a chunk id, so no release id was injected — its exceptions will report no release`
+                        )
+                    }
+                    return null
                 }
+
+                if (!eventReleaseMode) {
+                    return injectChunkId(code, createChunkId())
+                }
+
+                // Event mode carries the release inside the chunk, which means resolving it before
+                // the snippet is built. The id is content-addressed so an unchanged chunk keeps its
+                // id (and its symbol set) across rebuilds.
+                releaseIdPromise ??= resolveReleaseId(posthogOptions)
+                const chunkId = createStableChunkId(code)
+                return releaseIdPromise.then((releaseId) => {
+                    // A build that identifies no release still symbolicates from its chunk ids, so
+                    // this warns rather than failing, matching what posthog-cli does in the same
+                    // situation.
+                    if (!releaseId && !warnedAboutMissingRelease) {
+                        warnedAboutMissingRelease = true
+                        console.warn(
+                            '[posthog-rollup-plugin] no release could be resolved, injecting chunk ids only, so exceptions from this build will report no release. Set sourcemaps.releaseName and sourcemaps.releaseVersion, or build from a git repository or a supported CI environment.'
+                        )
+                    }
+                    return injectChunkId(code, chunkId, releaseId)
+                })
             },
         },
 
