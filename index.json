@@ -1,4 +1,17 @@
 {
+  "PostHog/posthog-js/issue/4570": {
+    "key": "PostHog/posthog-js/issue/4570",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4570",
+    "url": "https://github.com/PostHog/posthog-js/issues/4570",
+    "conclusion": "Confirmed bug: logs drops batches after exhausted retryable HTTP failures, unlike metrics.",
+    "labels": [
+      "team/client-libraries"
+    ],
+    "prUrl": "https://github.com/PostHog/posthog-js/pull/4575",
+    "closed": false,
+    "updatedAt": "2026-08-19T21:30:22.119Z"
+  },
   "PostHog/posthog-js/issue/4566": {
     "key": "PostHog/posthog-js/issue/4566",
     "repo": "PostHog/posthog-js",
