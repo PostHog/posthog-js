@@ -4,25 +4,25 @@ import { window } from '@posthog/browser-common/utils/globals'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { logger } from '@posthog/browser-common/utils/logger'
 import { patch } from './replay/rrweb-plugins/patch'
+import { isObject } from '@posthog/core'
+import type { CapturePageviewOptions } from '../types'
 import type { Extension } from './types'
 
+type HistoryLocation = Pick<Location, 'pathname' | 'search' | 'hash'>
+
 /**
- * This class is used to capture pageview events when the user navigates using the history API (pushState, replaceState),
- * when the user navigates using the browser's back/forward buttons, and when only the URL fragment changes
- * (e.g. hash-based routing or in-page anchor links, which fire `hashchange` rather than `popstate`).
- *
- * The behavior is controlled by the `capture_pageview` configuration option:
- * - When set to `'history_change'`, this class will capture pageviews on history API changes
+ * Captures pageviews when selected URL components change through the history API, browser back/forward navigation,
+ * or hash navigation.
  */
 export class HistoryAutocapture implements Extension {
     private _instance: PostHog
     private _popstateListener: (() => void) | undefined
     private _hashchangeListener: (() => void) | undefined
-    private _lastLocation: string
+    private _lastLocation: HistoryLocation | undefined
 
     constructor(instance: PostHog) {
         this._instance = instance
-        this._lastLocation = this._getComparableLocation()
+        this._lastLocation = this._getCurrentLocation()
     }
 
     initialize() {
@@ -30,7 +30,8 @@ export class HistoryAutocapture implements Extension {
     }
 
     public get isEnabled(): boolean {
-        return this._instance.config.capture_pageview === 'history_change'
+        const capturePageview = this._instance.config.capture_pageview
+        return capturePageview === 'history_change' || isObject(capturePageview)
     }
 
     public startIfEnabled(): void {
@@ -38,6 +39,12 @@ export class HistoryAutocapture implements Extension {
             logger.info('History API monitoring enabled, starting...')
             this.monitorHistoryChanges()
         }
+    }
+
+    public startIfEnabledOrStop(): void {
+        this.stop()
+        this._lastLocation = this._getCurrentLocation()
+        this.startIfEnabled()
     }
 
     public stop(): void {
@@ -63,7 +70,9 @@ export class HistoryAutocapture implements Extension {
         this._patchHistoryMethod('replaceState')
 
         this._setupPopstateListener()
-        this._setupHashchangeListener()
+        if (this._shouldCaptureHashChanges()) {
+            this._setupHashchangeListener()
+        }
     }
 
     private _patchHistoryMethod(method: 'pushState' | 'replaceState'): void {
@@ -91,28 +100,55 @@ export class HistoryAutocapture implements Extension {
         })
     }
 
-    private _getComparableLocation(): string {
+    private _getCurrentLocation(): HistoryLocation | undefined {
         const location = window?.location
 
         if (!location?.pathname) {
-            return ''
+            return
         }
 
-        const hash = this._instance.config.disable_capture_url_hashes ? '' : location.hash
+        return {
+            pathname: location.pathname,
+            search: location.search,
+            hash: location.hash,
+        }
+    }
 
-        return location.pathname + location.search + hash
+    private _getCaptureOptions(): CapturePageviewOptions {
+        const capturePageview = this._instance.config.capture_pageview
+
+        if (capturePageview === 'history_change') {
+            return { path: true }
+        }
+
+        return isObject(capturePageview) ? capturePageview : {}
+    }
+
+    private _shouldCaptureHashChanges(): boolean {
+        return !!this._getCaptureOptions().hash && !this._instance.config.disable_capture_url_hashes
+    }
+
+    private _hasLocationChanged(currentLocation: HistoryLocation): boolean {
+        const options = this._getCaptureOptions()
+        const lastLocation = this._lastLocation
+
+        return !!(
+            lastLocation &&
+            ((options.path && currentLocation.pathname !== lastLocation.pathname) ||
+                (options.search && currentLocation.search !== lastLocation.search) ||
+                (this._shouldCaptureHashChanges() && currentLocation.hash !== lastLocation.hash))
+        )
     }
 
     private _capturePageview(navigationType: 'pushState' | 'replaceState' | 'popstate' | 'hashchange'): void {
         try {
-            const currentLocation = this._getComparableLocation()
+            const currentLocation = this._getCurrentLocation()
 
             if (!currentLocation) {
                 return
             }
 
-            // Only capture pageview if the URL (path, query, and hash) has changed and the feature is enabled
-            if (currentLocation !== this._lastLocation && this.isEnabled) {
+            if (this.isEnabled && this._hasLocationChanged(currentLocation)) {
                 this._instance.capture(EVENT_PAGEVIEW, { navigation_type: navigationType })
             }
 
@@ -144,12 +180,6 @@ export class HistoryAutocapture implements Extension {
             return
         }
 
-        // Direct `location.hash` changes and in-page anchor navigations fire `hashchange`, not
-        // `popstate` and not the patched `pushState`/`replaceState`. Without this listener, a
-        // hash-only navigation would neither emit a `$pageview` nor keep `_lastLocation` in sync,
-        // leaving it stale so a later same-URL history call would look like a change and capture a
-        // false pageview. (When `disable_capture_url_hashes` is set, `_getComparableLocation`
-        // strips the hash, so this handler correctly stays a no-op.)
         const handler = () => {
             this._capturePageview('hashchange')
         }

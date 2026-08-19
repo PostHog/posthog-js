@@ -818,6 +818,21 @@ describe('posthog core', () => {
             expect(posthog.capture).toHaveBeenCalledWith('$pageleave')
         })
 
+        it('captures $pageleave when capture_pageview uses granular options', () => {
+            const posthog = posthogWith(
+                {
+                    capture_pageview: { search: true },
+                    capture_pageleave: 'if_capture_pageview',
+                    request_batching: true,
+                },
+                { capture: jest.fn() }
+            )
+
+            posthog._handle_unload()
+
+            expect(posthog.capture).toHaveBeenCalledWith('$pageleave')
+        })
+
         it('does not capture $pageleave when capture_pageview=false and capture_pageleave=if_capture_pageview', () => {
             const posthog = posthogWith(
                 {

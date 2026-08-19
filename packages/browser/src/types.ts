@@ -100,6 +100,7 @@ export type {
     SessionRecordingSamplingConfig,
     SessionRecordingOptions,
     RequestQueueConfig,
+    CapturePageviewOptions,
 } from '@posthog/types'
 
 // Toolbar types

@@ -80,6 +80,7 @@ export type {
     RequestQueueConfig,
     LogCaptureOptions,
     MetricsConfig,
+    CapturePageviewOptions,
     PostHogConfig,
 } from './posthog-config'
 
