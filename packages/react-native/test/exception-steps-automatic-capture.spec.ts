@@ -109,6 +109,35 @@ describe('PostHog React Native automatic exception steps capture', () => {
     expect(exceptionSteps(spy)).toBeUndefined()
   })
 
+  it('drops buffered steps on reset, so one user never sees the previous user activity', async () => {
+    await newPostHog({ errorTracking: { exceptionSteps: { automatic: true } } })
+    const spy = captureSpy(posthog)
+
+    await posthog.screen('Cart')
+    posthog.addExceptionStep('Submitting payment')
+    await wait(20)
+
+    posthog.reset()
+
+    posthog.captureException(new Error('boom'))
+
+    expect(exceptionSteps(spy)).toBeUndefined()
+  })
+
+  it('records steps again after a reset', async () => {
+    await newPostHog({ errorTracking: { exceptionSteps: { automatic: true } } })
+    const spy = captureSpy(posthog)
+
+    await posthog.screen('Cart')
+    posthog.reset()
+    await posthog.screen('Login')
+    await wait(20)
+
+    posthog.captureException(new Error('boom'))
+
+    expect(messagesOf(spy)).toEqual(['Screen: Login'])
+  })
+
   it('leaves no automatic step for an event that before_send dropped', async () => {
     await newPostHog({
       errorTracking: { exceptionSteps: { automatic: true } },
