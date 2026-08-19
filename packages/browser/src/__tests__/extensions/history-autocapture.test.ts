@@ -98,6 +98,22 @@ describe('HistoryAutocapture', () => {
             expect(historyAutocaptureEnabled.isEnabled).toBe(true)
         })
 
+        it.each([{}, { path: false, search: false, hash: false }])(
+            'should be disabled when granular options %p select no URL components',
+            (capturePageview) => {
+                posthog.config.capture_pageview = capturePageview
+                const historyAutocaptureDisabled = new HistoryAutocapture(posthog)
+                expect(historyAutocaptureDisabled.isEnabled).toBe(false)
+            }
+        )
+
+        it('should be disabled when only hash is selected but URL hash capture is disabled', () => {
+            posthog.config.capture_pageview = { hash: true }
+            posthog.config.disable_capture_url_hashes = true
+            const historyAutocaptureDisabled = new HistoryAutocapture(posthog)
+            expect(historyAutocaptureDisabled.isEnabled).toBe(false)
+        })
+
         it('should not setup event listeners if feature is disabled', () => {
             window.history.pushState = originalPushState
             window.history.replaceState = originalReplaceState

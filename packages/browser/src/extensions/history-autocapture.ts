@@ -30,8 +30,8 @@ export class HistoryAutocapture implements Extension {
     }
 
     public get isEnabled(): boolean {
-        const capturePageview = this._instance.config.capture_pageview
-        return capturePageview === 'history_change' || isObject(capturePageview)
+        const options = this._getCaptureOptions()
+        return !!(options.path || options.search || this._shouldCaptureHashChanges(options))
     }
 
     public startIfEnabled(): void {
@@ -124,8 +124,8 @@ export class HistoryAutocapture implements Extension {
         return isObject(capturePageview) ? capturePageview : {}
     }
 
-    private _shouldCaptureHashChanges(): boolean {
-        return !!this._getCaptureOptions().hash && !this._instance.config.disable_capture_url_hashes
+    private _shouldCaptureHashChanges(options: CapturePageviewOptions = this._getCaptureOptions()): boolean {
+        return !!options.hash && !this._instance.config.disable_capture_url_hashes
     }
 
     private _hasLocationChanged(currentLocation: HistoryLocation): boolean {
@@ -136,7 +136,7 @@ export class HistoryAutocapture implements Extension {
             lastLocation &&
             ((options.path && currentLocation.pathname !== lastLocation.pathname) ||
                 (options.search && currentLocation.search !== lastLocation.search) ||
-                (this._shouldCaptureHashChanges() && currentLocation.hash !== lastLocation.hash))
+                (this._shouldCaptureHashChanges(options) && currentLocation.hash !== lastLocation.hash))
         )
     }
 
@@ -148,7 +148,7 @@ export class HistoryAutocapture implements Extension {
                 return
             }
 
-            if (this.isEnabled && this._hasLocationChanged(currentLocation)) {
+            if (this._hasLocationChanged(currentLocation)) {
                 this._instance.capture(EVENT_PAGEVIEW, { navigation_type: navigationType })
             }
 
