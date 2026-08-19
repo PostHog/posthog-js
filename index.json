@@ -1,4 +1,18 @@
 {
+  "PostHog/posthog-js/issue/4574": {
+    "key": "PostHog/posthog-js/issue/4574",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4574",
+    "url": "https://github.com/PostHog/posthog-js/issues/4574",
+    "conclusion": "Confirmed Expo iOS symbol-upload integration bug affecting build ordering and release-version attribution with EAS remote versioning.",
+    "labels": [
+      "react-native",
+      "feature/error-tracking",
+      "team/client-libraries"
+    ],
+    "closed": false,
+    "updatedAt": "2026-08-19T21:32:57.755Z"
+  },
   "PostHog/posthog-js/issue/4571": {
     "key": "PostHog/posthog-js/issue/4571",
     "repo": "PostHog/posthog-js",
