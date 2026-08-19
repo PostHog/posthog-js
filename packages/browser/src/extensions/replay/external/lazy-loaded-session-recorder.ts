@@ -1904,13 +1904,16 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
      * otherwise reads, from the outside, exactly like a session that is about to record.
      */
     private _describePendingTriggerConditions(): string[] {
-        const legs: { label: string; matcher: { triggerStatus(sessionId: string): string } }[] = [
+        // read each leg's status without side effects: triggerStatus() writes a debug session
+        // property via register_for_session, and this diagnostic polls all three legs on every
+        // buffering flush, so using the plain getter would add repeated persistence writes
+        const legs: { label: string; matcher: { triggerStatusNoSideEffects(sessionId: string): string } }[] = [
             { label: 'URL condition not matched', matcher: this._urlTriggerMatching },
             { label: 'event condition not matched', matcher: this._eventTriggerMatching },
             { label: 'linked flag condition not matched', matcher: this._linkedFlagMatching },
         ]
         return legs
-            .filter(({ matcher }) => matcher.triggerStatus(this.sessionId) === TRIGGER_PENDING)
+            .filter(({ matcher }) => matcher.triggerStatusNoSideEffects(this.sessionId) === TRIGGER_PENDING)
             .map(({ label }) => label)
     }
 

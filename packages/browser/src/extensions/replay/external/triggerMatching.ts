@@ -307,15 +307,20 @@ export class URLTriggerMatching implements TriggerStatusMatching {
     }
 
     triggerStatus(sessionId: string): TriggerStatus {
-        const urlTriggerStatus = this._urlTriggerStatus(sessionId)
-        const eitherIsActivated = urlTriggerStatus === TRIGGER_ACTIVATED
-        const eitherIsPending = urlTriggerStatus === TRIGGER_PENDING
-
-        const result = eitherIsActivated ? TRIGGER_ACTIVATED : eitherIsPending ? TRIGGER_PENDING : TRIGGER_DISABLED
+        const result = this.triggerStatusNoSideEffects(sessionId)
         this._instance.register_for_session({
             [SDK_DEBUG_REPLAY_URL_TRIGGER_STATUS]: result,
         })
         return result
+    }
+
+    /**
+     * Pure read of the trigger status. Unlike {@link triggerStatus} it does not write the debug
+     * session property, so a diagnostic that polls every leg (e.g. while buffering) can read it
+     * without adding a `register_for_session` persistence write per call.
+     */
+    triggerStatusNoSideEffects(sessionId: string): TriggerStatus {
+        return this._urlTriggerStatus(sessionId)
     }
 
     /**
@@ -402,6 +407,15 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
     constructor(private readonly _instance: PostHog) {}
 
     triggerStatus(): TriggerStatus {
+        const result = this.triggerStatusNoSideEffects()
+        this._instance.register_for_session({
+            [SDK_DEBUG_REPLAY_LINKED_FLAG_TRIGGER_STATUS]: result,
+        })
+        return result
+    }
+
+    // Pure read of the trigger status — see URLTriggerMatching.triggerStatusNoSideEffects.
+    triggerStatusNoSideEffects(): TriggerStatus {
         let result = TRIGGER_PENDING
         if (isNullish(this.linkedFlag)) {
             result = TRIGGER_DISABLED
@@ -409,9 +423,6 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
         if (this.linkedFlagSeen) {
             result = TRIGGER_ACTIVATED
         }
-        this._instance.register_for_session({
-            [SDK_DEBUG_REPLAY_LINKED_FLAG_TRIGGER_STATUS]: result,
-        })
         return result
     }
 
@@ -510,17 +521,16 @@ export class EventTriggerMatching implements TriggerStatusMatching {
     }
 
     triggerStatus(sessionId: string): TriggerStatus {
-        const eventTriggerStatus = this._eventTriggerStatus(sessionId)
-        const result =
-            eventTriggerStatus === TRIGGER_ACTIVATED
-                ? TRIGGER_ACTIVATED
-                : eventTriggerStatus === TRIGGER_PENDING
-                  ? TRIGGER_PENDING
-                  : TRIGGER_DISABLED
+        const result = this.triggerStatusNoSideEffects(sessionId)
         this._instance.register_for_session({
             [SDK_DEBUG_REPLAY_EVENT_TRIGGER_STATUS]: result,
         })
         return result
+    }
+
+    // Pure read of the trigger status — see URLTriggerMatching.triggerStatusNoSideEffects.
+    triggerStatusNoSideEffects(sessionId: string): TriggerStatus {
+        return this._eventTriggerStatus(sessionId)
     }
 
     checkEventTriggerConditions(
