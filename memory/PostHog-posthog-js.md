@@ -2,16 +2,7 @@
 
 ...<older entries truncated>
 
-eparate official WeChat Mini Program SDK work in #4491.
-- Labels: enhancement, web, team/client-libraries
-- URL: https://github.com/PostHog/posthog-js/issues/4492
-- Relevant files: `packages/browser/package.json`, `packages/browser/src/posthog-core.ts`, `packages/browser/README.md`, `packages/web/package.json`, `packages/web/README.md`, `examples/`
-- Findings: `packages/browser/package.json` identifies `posthog-js` as the primary browser SDK distribution, matching the requested H5 runtime choice.; `packages/browser/src/posthog-core.ts` imports browser globals and browser storage (`localStore` and `sessionStore`), so it should not be assumed to run unchanged in Mini Program or native Uni-App targets.; There is no Uni-App- or WeChat-specific package in `packages/`, and a repository-wide search found no existing Uni-App integration or documentation.; The existing examples include browser, Next.js, Nuxt, React Native, and other SDK examples, but no Uni-App example.; `posthog-js-lite` is documented as a reduced web package and does not provide a cross-runtime Uni-App adapter.; The issue explicitly identifies #4491 as the dependency for the WeChat Mini Program runtime; without that SDK and its transport, persistence, and lifecycle contract, the requested multi-target integration cannot be completed safely.
-- Fix assessment: Completing the acceptance criteria requires a new integration surface, target-specific runtime contracts, runnable projects, and behavior tests across runtimes with different storage, networking, and lifecycle APIs. The WeChat path also depends on the still-open #4491 SDK work. A browser-only wrapper or runtime-detection shim would imply unsupported compatibility and would not satisfy the requested target matrix.
-
-## 2026-08-12T13:55:35.238Z
-- Item: issue #4507 — Dead clicks: treat an in-flight network request as a liveness signal
-- Conclusion: Valid enhancement proposal, but the requested signal is not available through the existing recorder hook for all dead-click users and safely adding it needs a deliberate instrumentation design.
+rder hook for all dead-click users and safely adding it needs a deliberate instrumentation design.
 - Labels: enhancement, feature/dead-clicks, team/analytics-platform
 - URL: https://github.com/PostHog/posthog-js/issues/4507
 - Relevant files: `packages/browser/src/entrypoints/dead-clicks-autocapture.ts`, `packages/browser/src/__tests__/entrypoints/lazy-loaded-dead-clicks-autocapture.test.ts`, `packages/types/src/posthog-config.ts`, `packages/browser/src/extensions/replay/external/network-plugin.ts`, `packages/browser/src/extensions/replay/external/lazy-loaded-session-recorder.ts`, `packages/browser/src/extensions/replay/external/config.ts`, `packages/browser/src/utils/request-router.ts`, `packages/browser/src/extensions/replay/rrweb-plugins/patch.ts`
@@ -82,3 +73,13 @@ eparate official WeChat Mini Program SDK work in #4491.
 - Relevant files: `packages/browser/package.json`, `packages/browser/rollup.config.mjs`, `packages/browser/scripts/check-sourcemap-ignore-list.js`, `packages/browser/scripts/check-mangled-property-consistency.js`
 - Findings: `packages/browser/rollup.config.mjs` sets `sourcemap: true` for every generated browser entrypoint, so the build emits source-map artifacts into `dist/`.; `packages/browser/package.json` publishes `dist/*`, which includes `.js.map` files alongside JavaScript and declaration outputs.; The browser package's post-build checks deliberately consume generated maps: `check-sourcemap-ignore-list.js` requires source maps to exist, and `check-mangled-property-consistency.js` reads maps to validate cross-bundle property mangling.; Therefore, source maps should be retained through build and validation, then excluded only from the npm tarball rather than disabled globally.
 - Fix assessment: The requested behavior is isolated to npm package contents. It does not require changing runtime code or disabling source-map generation used by existing build checks.
+
+## 2026-08-19T13:55:13.093Z
+- Item: issue #4566 — PostHogErrorBoundary drops componentStack from the captured exception event
+- Conclusion: Confirmed @posthog/react bug: React's component stack is available at both React error-capture call sites but is not included in the captured exception properties.
+- Labels: feature/error-tracking, team/client-libraries
+- URL: https://github.com/PostHog/posthog-js/issues/4566
+- Relevant files: `packages/react/src/components/PostHogErrorBoundary.tsx`, `packages/react/src/components/__tests__/PostHogErrorBoundary.test.tsx`, `packages/react/src/helpers/error-helpers.ts`, `packages/browser/src/posthog-core.ts`, `packages/types/src/posthog.ts`, `packages/core/src/error-tracking/error-properties-builder.ts`
+- Findings: `PostHogErrorBoundary.componentDidCatch(error, errorInfo)` calls `additionalProperties(error)` and `client.captureException(error, currentProperties)`, then stores `errorInfo.componentStack` solely in component state for the fallback.; `setupReactErrorHandler` receives `(error, errorInfo)` but calls `client.captureException(error)` before passing `errorInfo` only to its optional callback.; The public `captureException(error, additionalProperties?)` API accepts arbitrary additional event properties, and the browser implementation merges those properties into the generated exception payload before sending it. This permits a React-specific component-stack property without modifying the core exception builder.; Current boundary tests cover capture invocation, caller-provided additional properties, and normal Error stacktrace generation, but do not assert that React `componentStack` is sent. No tests were found for `setupReactErrorHandler`.
+- Fix assessment: The missing data is explicitly available at both call sites, and captureException already supports additional properties. The change can remain confined to @posthog/react plus focused regression tests.
+- PR: https://github.com/PostHog/posthog-js/pull/4567
