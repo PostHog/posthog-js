@@ -649,11 +649,14 @@ jobs:
               with:
                   node-version: 24
 
+            # Unlike the rest of this repo, this step installs the pnpm that
+            # posthog/posthog pins (currently 10.x), because that is the
+            # checkout above. pnpm/setup only installs v11 and newer.
             - name: Setup pnpm
-              uses: pnpm/setup@84cb39b217b10273981911c288cd62326dc7c6d2 # v2.0.2
+              uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
               with:
                   cache: false
-                  install: false
+                  run_install: false
 
             - name: Install frontend dependencies
               run: pnpm --filter=@posthog/frontend... install --frozen-lockfile
