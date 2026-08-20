@@ -33,6 +33,7 @@ import { Properties } from '../types'
 import { SURVEYS } from '../constants'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
+import { IntroScreen } from './surveys/components/IntroScreen'
 import { Cancel } from './surveys/components/QuestionHeader'
 import {
     CommonQuestionProps,
@@ -75,6 +76,13 @@ import { applySurveyTranslationForUser } from '../utils/survey-translations'
 
 // Re-export for surveys-preview entrypoint
 export { getNextSurveyStep }
+
+/**
+ * `previewPageIndex` sentinel for the intro screen — the leading mirror of the confirmation
+ * page's `survey.questions.length` sentinel. Also serves as a capability marker for the main
+ * app: bundles without this export cannot render the intro screen preview.
+ */
+export const INTRO_SCREEN_PREVIEW_INDEX = -1
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
@@ -1120,6 +1128,10 @@ export function useHideSurveyOnURLChange({
     }, [isPreviewMode, survey, removeSurveyFromFocus, setSurveyVisible, posthog])
 }
 
+// Duration of the survey close fade-out, in milliseconds. Kept short so the popup
+// disappears promptly; also the window the fallback settle timer waits on.
+const CLOSE_ANIMATION_DURATION_MS = 200
+
 export function usePopupVisibility(
     survey: Survey,
     posthog: PostHog | undefined,
@@ -1136,7 +1148,12 @@ export function usePopupVisibility(
     )
     const [isSurveySent, setIsSurveySent] = useState(false)
 
-    const hidePopupWithViewTransition = () => {
+    // Tracks whether a close is already animating so a second close (e.g. Enter +
+    // button click, or a dismiss fired while the thank-you screen is animating out)
+    // doesn't start a second animation or tear the popup down twice.
+    const isClosingRef = useRef(false)
+
+    const hidePopupWithAnimation = () => {
         const removeDOMAndHidePopup = () => {
             if (isPopup) {
                 removeSurveyFromFocus(survey)
@@ -1144,27 +1161,51 @@ export function usePopupVisibility(
             setIsPopupVisible(false)
         }
 
-        if (!document.startViewTransition) {
+        // A close is already animating. Don't start a second one — the in-flight
+        // close settles the popup when it finishes.
+        if (isClosingRef.current) {
+            return
+        }
+
+        // No element to animate (jsdom, or the ref never attached): tear down now.
+        // Do this before raising isClosingRef so the guard is only ever set for a real
+        // in-flight animation — this early return has no timer to clear it, so setting
+        // the flag here would leave it stuck and block every later close.
+        const container = surveyContainerRef?.current
+        if (!container) {
             removeDOMAndHidePopup()
             return
         }
 
-        const transition = document.startViewTransition(() => {
-            surveyContainerRef?.current?.remove()
-        })
+        // Committing to the fade now — raise the guard so a second close can't start
+        // another animation; the settle timer below clears it.
+        isClosingRef.current = true
 
-        transition.finished.then(() => {
-            setTimeout(() => {
-                removeDOMAndHidePopup()
-            }, 100)
-        })
+        // Fade the popup out with a plain CSS opacity transition scoped to the
+        // survey's own container, which lives in an isolated shadow root. We
+        // deliberately do NOT use document.startViewTransition: that API snapshots
+        // the ENTIRE page viewport, and on a heavy host page (e.g. a large dashboard)
+        // capturing that snapshot can exhaust renderer memory and crash the tab (grey
+        // "Aw, Snap"). A scoped opacity transition costs nothing on the rest of the page.
+        container.style.transition = `opacity ${CLOSE_ANIMATION_DURATION_MS}ms ease-out`
+        container.style.opacity = '0'
+
+        // Unmount once the fade has had time to run. This uses a timer rather than a
+        // `transitionend` listener because transitionend never fires for a cancelled or
+        // zero-duration transition (backgrounded tab, reduced motion), so a timer would
+        // have to back it up regardless — and settling a few ms later than strictly
+        // necessary is imperceptible for an element that is already fully transparent.
+        setTimeout(() => {
+            isClosingRef.current = false
+            removeDOMAndHidePopup()
+        }, CLOSE_ANIMATION_DURATION_MS + 50)
     }
 
     const handleSurveyClosed = (event: CustomEvent) => {
         if (event.detail.surveyId !== survey.id) {
             return
         }
-        hidePopupWithViewTransition()
+        hidePopupWithAnimation()
     }
 
     useEffect(() => {
@@ -1181,12 +1222,12 @@ export function usePopupVisibility(
                 return
             }
             if (!survey.appearance?.displayThankYouMessage) {
-                return hidePopupWithViewTransition()
+                return hidePopupWithAnimation()
             }
             setIsSurveySent(true)
             if (survey.appearance?.autoDisappear) {
                 setTimeout(() => {
-                    hidePopupWithViewTransition()
+                    hidePopupWithAnimation()
                 }, 5000)
             }
         }
@@ -1245,7 +1286,7 @@ export function usePopupVisibility(
         posthog,
     })
 
-    return { isPopupVisible, isSurveySent, setIsPopupVisible, hidePopupWithViewTransition }
+    return { isPopupVisible, isSurveySent, setIsPopupVisible, hidePopupWithAnimation }
 }
 
 interface SurveyPopupProps {
@@ -1313,7 +1354,7 @@ export function SurveyPopup({
     const surveyPopupDelayMilliseconds = survey.appearance?.surveyPopupDelaySeconds
         ? survey.appearance.surveyPopupDelaySeconds * 1000
         : 0
-    const { isPopupVisible, isSurveySent, hidePopupWithViewTransition } = usePopupVisibility(
+    const { isPopupVisible, isSurveySent, hidePopupWithAnimation } = usePopupVisibility(
         survey,
         posthog,
         surveyPopupDelayMilliseconds,
@@ -1333,6 +1374,22 @@ export function SurveyPopup({
      */
     const shouldShowConfirmation =
         isSurveySent || previewPageIndex === survey.questions.length || isSurveyCompleted === true
+
+    const [introScreenDismissed, setIntroScreenDismissed] = useState(false)
+    const hasInProgressState = useMemo(() => !!getInProgressSurveyState(survey), [survey])
+    /**
+     * The intro screen is a leading page, the mirror of the trailing confirmation message. It is
+     * skipped whenever the survey already has answers in progress (resumed session or URL
+     * prefill), and dismissing it only flips local state — no event, no response, no effect on
+     * completion or partial-response accounting. The confirmation check above always wins so a
+     * completed survey never shows the intro. Unlike the confirmation message the intro has no
+     * default header, so a survey with no intro copy at all skips straight to question 1 rather
+     * than drawing an empty box with a button.
+     */
+    const hasIntroContent = !!(survey.appearance?.introScreenHeader || survey.appearance?.introScreenDescription)
+    const shouldShowIntroScreen = isPreviewMode
+        ? previewPageIndex === INTRO_SCREEN_PREVIEW_INDEX
+        : !!survey.appearance?.displayIntroScreen && hasIntroContent && !introScreenDismissed && !hasInProgressState
 
     const surveyContextValue = useMemo(() => {
         const getInProgressSurvey = getInProgressSurveyState(survey)
@@ -1383,9 +1440,7 @@ export function SurveyPopup({
                 }}
                 ref={surveyContainerRef}
             >
-                {!shouldShowConfirmation ? (
-                    <Questions survey={survey} forceDisableHtml={!!forceDisableHtml} posthog={posthog} />
-                ) : (
+                {shouldShowConfirmation ? (
                     <ConfirmationMessage
                         header={survey.appearance?.thankYouMessageHeader || 'Thank you!'}
                         description={survey.appearance?.thankYouMessageDescription || ''}
@@ -1393,10 +1448,21 @@ export function SurveyPopup({
                         contentType={survey.appearance?.thankYouMessageDescriptionContentType}
                         appearance={survey.appearance || defaultSurveyAppearance}
                         onClose={() => {
-                            hidePopupWithViewTransition()
+                            hidePopupWithAnimation()
                             onCloseConfirmationMessage()
                         }}
                     />
+                ) : shouldShowIntroScreen ? (
+                    <IntroScreen
+                        header={survey.appearance?.introScreenHeader || ''}
+                        description={survey.appearance?.introScreenDescription || ''}
+                        forceDisableHtml={!!forceDisableHtml}
+                        contentType={survey.appearance?.introScreenDescriptionContentType}
+                        appearance={survey.appearance || defaultSurveyAppearance}
+                        onStart={() => setIntroScreenDismissed(true)}
+                    />
+                ) : (
+                    <Questions survey={survey} forceDisableHtml={!!forceDisableHtml} posthog={posthog} />
                 )}
             </div>
         </SurveyContext.Provider>
@@ -1461,7 +1527,9 @@ export function Questions({
         const savedIndex = initialInProgressState?.lastQuestionIndex
         const validSavedIndex =
             isNumber(savedIndex) && savedIndex >= 0 && savedIndex < survey.questions.length ? savedIndex : 0
-        return previewPageIndex || validSavedIndex
+        // The intro screen preview sentinel (INTRO_SCREEN_PREVIEW_INDEX) is handled at the
+        // SurveyPopup level and must never become a question index.
+        return isNumber(previewPageIndex) && previewPageIndex >= 0 ? previewPageIndex : validSavedIndex
     })
     const [visitedIndices, setVisitedIndices] = useState<number[]>(() => {
         // Drop any out-of-range visited indices so the Back button can never navigate to a
@@ -1472,9 +1540,10 @@ export function Questions({
     })
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
 
-    // Sync preview state
+    // Sync preview state. Negative sentinels (the intro screen page) are rendered by SurveyPopup
+    // instead of Questions, so they must never reach currentQuestionIndex.
     useEffect(() => {
-        if (isPreviewMode && !isUndefined(previewPageIndex)) {
+        if (isPreviewMode && !isUndefined(previewPageIndex) && previewPageIndex >= 0) {
             setCurrentQuestionIndex(previewPageIndex)
         }
     }, [previewPageIndex, isPreviewMode])

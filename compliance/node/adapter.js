@@ -47,9 +47,10 @@ async function discardClient() {
     try {
         client.clearFlushTimer?.()
         client.setPersistedProperty?.('queue', [])
-        // v1 mode routes $ai_* events to a separate queue; clear it too so they can't
-        // leak into the next scenario.
+        // v1 mode routes $ai_* events to a separate queue, and captureAi() events to
+        // their own dedicated queue; clear both so they can't leak into the next scenario.
         client.setPersistedProperty?.('ai_queue', [])
+        client.setPersistedProperty?.('ai_capture_queue', [])
         await client.shutdown(1)
     } catch (error) {
         // Ignore reset-time shutdown errors; the next test starts with a fresh client.
@@ -61,7 +62,10 @@ app.get('/health', (req, res) => {
         sdk_name: 'posthog-node',
         sdk_version: require('../packages/node/package.json').version,
         adapter_version: '1.0.0',
-        capabilities: CAPTURE_MODE === 'v1' ? ['capture_v1', 'encoding_gzip'] : ['capture_v0', 'encoding_gzip'],
+        capabilities:
+            CAPTURE_MODE === 'v1'
+                ? ['capture_v1', 'capture_ai_v0', 'encoding_gzip']
+                : ['capture_v0', 'capture_ai_v0', 'encoding_gzip'],
     })
 })
 
@@ -179,6 +183,46 @@ app.post('/capture', (req, res) => {
 
         // TODO: Get actual UUID from SDK
         res.json({ success: true, uuid: 'generated-uuid' })
+    } catch (error) {
+        state.lastError = error.message
+        res.status(500).json({ error: error.message })
+    }
+})
+
+app.post('/capture_ai', (req, res) => {
+    if (!state.client) {
+        return res.status(400).json({ error: 'SDK not initialized' })
+    }
+
+    const { distinct_id, event, properties, timestamp, options, uuid } = req.body
+
+    if (!distinct_id || !event) {
+        return res.status(400).json({ error: 'distinct_id and event are required' })
+    }
+
+    try {
+        const mergedProperties = { ...(properties || {}) }
+        if (options && typeof options === 'object') {
+            for (const [optionKey, sentinel] of Object.entries(OPTION_SENTINELS)) {
+                if (Object.prototype.hasOwnProperty.call(options, optionKey)) {
+                    mergedProperties[sentinel] = options[optionKey]
+                }
+            }
+        }
+
+        // Unlike /capture, forward a supplied uuid so it's echoed back to the caller.
+        const returnedUuid = state.client.captureAi({
+            distinctId: distinct_id,
+            event,
+            properties: mergedProperties,
+            timestamp: timestamp ? new Date(timestamp) : undefined,
+            uuid,
+        })
+
+        state.totalEventsCaptured++
+        state.pendingEvents++
+
+        res.json({ success: true, uuid: returnedUuid })
     } catch (error) {
         state.lastError = error.message
         res.status(500).json({ error: error.message })

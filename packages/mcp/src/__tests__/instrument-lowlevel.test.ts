@@ -8,6 +8,7 @@ import {
   ListToolsResultSchema,
 } from '@modelcontextprotocol/sdk/types.js'
 import { instrument } from '../index'
+import type { MCPServerLike } from '../types'
 import { EventCapture, fakePostHog } from './test-utils'
 
 /**
@@ -504,7 +505,7 @@ describe('Low-level Server tracing (e2e)', () => {
 
         expect(receivedCalls.at(-1)).toEqual({ name: 'owned_reserved', arguments: suppliedArguments })
         expect(
-          (result.content as { text?: string }[]).some((content) => content.text?.includes('conversation_id='))
+          (result.content as { text?: string }[]).some((content) => content.text?.includes('"conversation_id"'))
         ).toBe(false)
 
         await new Promise((resolve) => setTimeout(resolve, 50))
@@ -546,7 +547,7 @@ describe('Low-level Server tracing (e2e)', () => {
     }
   })
 
-  it('preserves reserved arguments before low-level ownership is learned from tools/list', async () => {
+  it('captures intent, but strips nothing, before low-level ownership is learned from tools/list', async () => {
     const { server, client, receivedCalls, connect, cleanup } = await setupLowLevelServer()
     try {
       instrument(server, fakePostHog(), { context: true, enableConversationId: true })
@@ -568,11 +569,16 @@ describe('Low-level Server tracing (e2e)', () => {
         arguments: { context: 'unknown context', conversation_id: 'unknown conversation', text: 'hi' },
       })
       expect(
-        (result.content as { text?: string }[]).some((content) => content.text?.includes('conversation_id='))
+        (result.content as { text?: string }[]).some((content) => content.text?.includes('"conversation_id"'))
       ).toBe(false)
       await new Promise((resolve) => setTimeout(resolve, 50))
       const event = eventCapture.getEvents().find((candidate) => candidate.resourceName === 'echo')
-      expect(event?.userIntent).toBeUndefined()
+      // Ownership is unknown here — this instance never served a `tools/list`,
+      // which on a stateless server is every instance. Unknown no longer means
+      // "throw the intent away": the argument arrived because some advertised
+      // listing asked for it. Nothing is stripped and no handle is minted, since
+      // both of those can damage the customer's call and stay fail-closed.
+      expect(event?.userIntent).toBe('unknown context')
       expect(event?.conversationId).toBeUndefined()
     } finally {
       await cleanup()
@@ -787,6 +793,104 @@ describe('Low-level Server — late handler registration', () => {
       const listings = eventCapture.findCapturesByEvent('$mcp_tools_list')
       expect(listings).toHaveLength(1)
       expect(listings[0].properties.$mcp_listed_tool_names).toEqual(expect.arrayContaining(['echo']))
+    } finally {
+      await clientTransport.close?.()
+      await serverTransport.close?.()
+    }
+  })
+})
+
+/**
+ * The synthetic `tools/call` fallback — what answers a call for a tool no
+ * dispatcher claims — is written straight into `_requestHandlers` instead of
+ * being registered through `setRequestHandler`. See
+ * `registerFallbackRequestHandler` for why.
+ */
+describe('Low-level Server — synthetic tools/call fallback', () => {
+  let eventCapture: EventCapture
+
+  beforeEach(async () => {
+    eventCapture = new EventCapture()
+    await eventCapture.start()
+  })
+
+  afterEach(async () => {
+    await eventCapture.stop()
+  })
+
+  /** `_requestHandlers` is TS-private on the real `Server`. */
+  const handlersOf = (server: Server) => (server as unknown as MCPServerLike)._requestHandlers
+
+  it('instruments a server that never declared a tools capability', async () => {
+    // Registering through setRequestHandler asserted the capability first and
+    // threw `Server does not support tools (required for tools/call)`, which
+    // aborted instrumentLowLevelServer with setRequestHandler already patched —
+    // instrumentation half-applied, and only a warning to show for it.
+    const logger = jest.fn()
+    const server = new Server({ name: 'no tools capability', version: '1.0.0' }, { capabilities: {} })
+
+    instrument(server, fakePostHog(), { logger })
+
+    expect(logger).not.toHaveBeenCalledWith(expect.stringContaining('does not support tools'))
+    expect(logger).not.toHaveBeenCalledWith(expect.stringContaining('Failed to setup tool call instrumentation'))
+    expect(handlersOf(server).has('tools/call')).toBe(true)
+  })
+
+  it('captures a call for an unclaimed tool and still reports it as unknown', async () => {
+    const server = new Server({ name: 'no dispatcher', version: '1.0.0' }, { capabilities: { tools: {} } })
+    instrument(server, fakePostHog())
+
+    const fallback = handlersOf(server).get('tools/call')
+    await expect(fallback?.({ method: 'tools/call', params: { name: 'nope', arguments: {} } })).rejects.toThrow(
+      'Unknown tool: nope'
+    )
+
+    await new Promise((r) => setTimeout(r, 50))
+    const toolCalls = eventCapture.findCapturesByEvent('$mcp_tool_call')
+    expect(toolCalls).toHaveLength(1)
+    expect(toolCalls[0].properties.$mcp_resource_name).toBe('nope')
+    expect(toolCalls[0].properties.$mcp_is_error).toBe(true)
+    expect(eventCapture.findCapturesByEvent('$exception')).toHaveLength(1)
+  })
+
+  it('does not displace a tools/call handler that already exists', async () => {
+    const { server, client, receivedCalls, connect, cleanup } = await setupLowLevelServer()
+    try {
+      instrument(server, fakePostHog())
+      await connect()
+
+      const result = await client.request(
+        { method: 'tools/call', params: { name: 'echo', arguments: { text: 'kept' } } },
+        CallToolResultSchema
+      )
+
+      expect((result.content as { text: string }[])[0].text).toBe('echo: kept')
+      expect(receivedCalls).toHaveLength(1)
+    } finally {
+      await cleanup()
+    }
+  })
+
+  it('is replaced by a dispatcher registered after instrument()', async () => {
+    const server = new Server({ name: 'late dispatcher', version: '1.0.0' }, { capabilities: { tools: {} } })
+    instrument(server, fakePostHog())
+    server.setRequestHandler(CallToolRequestSchema, async (request) => ({
+      content: [{ type: 'text' as const, text: `real: ${request.params?.name}` }],
+    }))
+
+    const client = new Client({ name: 'test client', version: '1.0' }, { capabilities: {} })
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    try {
+      await Promise.all([client.connect(clientTransport), server.connect(serverTransport)])
+
+      const result = await client.request(
+        { method: 'tools/call', params: { name: 'echo', arguments: {} } },
+        CallToolResultSchema
+      )
+      expect((result.content as { text: string }[])[0].text).toBe('real: echo')
+
+      await new Promise((r) => setTimeout(r, 50))
+      expect(eventCapture.findCapturesByEvent('$mcp_tool_call')).toHaveLength(1)
     } finally {
       await clientTransport.close?.()
       await serverTransport.close?.()

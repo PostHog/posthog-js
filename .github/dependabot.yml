@@ -38,5 +38,16 @@ updates:
           - dependency-name: '*'
             update-types: ['version-update:semver-major']
       open-pull-requests-limit: 1
-      reviewers:
-          - 'PostHog/team-client-libraries'
+    - package-ecosystem: 'github-actions'
+      cooldown:
+          default-days: 7
+      directory: '/'
+      schedule:
+          interval: 'weekly'
+          day: 'monday'
+          time: '10:00'
+          timezone: 'UTC'
+      groups:
+          github-actions:
+              patterns:
+                  - '*'

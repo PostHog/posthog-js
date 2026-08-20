@@ -1,4 +1,4 @@
-import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'
+import { CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 import { instrument } from '../index'
 import { MCPAnalyticsEventType } from '../extensions/event-types'
@@ -236,6 +236,30 @@ describe('identify option', () => {
     expect(toolCall.distinct_id).toBe('session-user')
     // properties go straight to $set.
     expect(toolCall.properties.$set).toMatchObject({ name: 'Session Alice', role: 'admin' })
+
+    await capture.stop()
+  })
+
+  it('identifies tools/list', async () => {
+    const capture = new EventCapture()
+    await capture.start()
+    const identify = jest.fn(async () => ({
+      distinctId: 'list-user',
+      properties: { name: 'List Alice' },
+    }))
+    instrument(server, fakePostHog(), { identify })
+
+    // No tool call first: nothing has cached an identity on this instance, which
+    // is the state every request sees under per-request instance lifetime.
+    await client.request({ method: 'tools/list', params: {} }, ListToolsResultSchema)
+    await new Promise((r) => setTimeout(r, 50))
+
+    expect(identify).toHaveBeenCalledTimes(1)
+    const listing = capture.findCapturesByEvent('$mcp_tools_list')[0]
+    expect(listing).toBeDefined()
+    expect(listing.distinct_id).toBe('list-user')
+    expect(listing.properties.$process_person_profile).toBeUndefined()
+    expect(listing.properties.$set).toMatchObject({ name: 'List Alice' })
 
     await capture.stop()
   })

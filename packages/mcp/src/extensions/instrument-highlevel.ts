@@ -3,9 +3,9 @@
 // Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type {
   CompatibleRequestHandlerExtra,
+  CompatibleToolResultLike,
   HighLevelMCPServerLike,
   MCPServerLike,
   RegisteredTool,
@@ -173,7 +173,7 @@ function addTracingToToolCallbackInternal(
     return tool
   }
 
-  const wrappedCallback = async (...params: unknown[]): Promise<CallToolResult> => {
+  const wrappedCallback = async (...params: unknown[]): Promise<CompatibleToolResultLike> => {
     let args: unknown
     let extra: CompatibleRequestHandlerExtra
 
@@ -192,13 +192,13 @@ function addTracingToToolCallbackInternal(
     })
     try {
       if (cleanedArgs === undefined) {
-        const handler = originalCallback as (extra: CompatibleRequestHandlerExtra) => Promise<CallToolResult>
+        const handler = originalCallback as (extra: CompatibleRequestHandlerExtra) => Promise<CompatibleToolResultLike>
         return await handler(extra)
       }
       const handler = originalCallback as (
         args: unknown,
         extra: CompatibleRequestHandlerExtra
-      ) => Promise<CallToolResult>
+      ) => Promise<CompatibleToolResultLike>
       return await handler(cleanedArgs, extra)
     } catch (error) {
       if (error instanceof Error) {
@@ -280,7 +280,6 @@ export function instrumentHighLevelServer(server: HighLevelMCPServerLike, logger
     const lowLevelServer = server.server
     const mcpAnalyticsData = getServerTrackingData(lowLevelServer)
 
-    // Patch already existing handlers, and patch setRequestHandler to capture dynamically created handlers.
     const handlers: Record<string, HandlerPatch> = {
       initialize: (trackedServer, originalHandler, request, extra) =>
         handleInitializeRequest(trackedServer, originalHandler, request, extra, logger),

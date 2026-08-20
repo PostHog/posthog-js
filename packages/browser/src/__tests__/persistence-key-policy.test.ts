@@ -246,6 +246,11 @@ const resolvePolicyIdentifiers = (
             return
         }
 
+        if (ts.isArrayLiteralExpression(node)) {
+            node.elements.forEach((element) => visit(element, resolvesNamedConstant))
+            return
+        }
+
         if (ts.isNumericLiteral(node) || ts.isRegularExpressionLiteral(node) || ts.isTemplateExpression(node)) {
             result.rawLiterals.add(node.getText())
             return
@@ -434,8 +439,11 @@ const collectPersistenceKeyIdentifiers = (sources: SourceInput[] = productionSou
             context: string,
             enforceResolvedKey = false
         ) => {
-            // Policy is checked at each client.kv write; the KeyValueStore implementation only forwards that runtime key.
-            if (isForwardedKeyValueStoreKey(expression, node, checker)) {
+            // Policy is checked at each client.kv write; forwarding implementations are checked at their callers.
+            if (
+                isForwardedKeyValueStoreKey(expression, node, checker) ||
+                isForwardedFeatureFlagsStateKey(expression, node, checker)
+            ) {
                 return
             }
 
@@ -592,7 +600,19 @@ const collectPersistenceKeyIdentifiers = (sources: SourceInput[] = productionSou
                     KEY_VALUE_STORE_SINGLE_KEY_METHODS.has(methodName) &&
                     isKeyValueStoreReceiver(receiver, checker)
                 ) {
-                    recordResolution(node.arguments[0], node, `${methodName}() on KeyValueStore`, true)
+                    if (methodName === 'set' && node.arguments.length === 1) {
+                        recordObjectLike(node.arguments[0], node, `${methodName}() on KeyValueStore`)
+                    } else {
+                        recordResolution(node.arguments[0], node, `${methodName}() on KeyValueStore`, true)
+                    }
+                }
+
+                if (
+                    methodName === '_remove' &&
+                    ts.isThis(receiver) &&
+                    getEnclosingClassName(node) === 'PostHogFeatureFlags'
+                ) {
+                    recordResolution(node.arguments[0], node, '_remove() in PostHogFeatureFlags', true)
                 }
 
                 if (methodName && SESSION_OBJECT_METHODS.has(methodName) && isRegisterForSessionReceiver(receiver)) {
@@ -632,6 +652,19 @@ const getEnclosingClassMethodName = (node: ts.Node): string | undefined => {
             current.name &&
             ts.isIdentifier(current.name)
         ) {
+            return current.name.text
+        }
+        current = current.parent
+    }
+
+    return undefined
+}
+
+const getEnclosingClassName = (node: ts.Node): string | undefined => {
+    let current: ts.Node | undefined = node
+
+    while (current) {
+        if ((ts.isClassDeclaration(current) || ts.isClassExpression(current)) && current.name) {
             return current.name.text
         }
         current = current.parent
@@ -693,6 +726,36 @@ const isForwardedKeyValueStoreKey = (
     return false
 }
 
+const isForwardedFeatureFlagsStateKey = (
+    expression: ts.Expression | undefined,
+    node: ts.Node,
+    checker: ts.TypeChecker
+): boolean => {
+    if (
+        !expression ||
+        !ts.isIdentifier(expression) ||
+        getEnclosingClassName(node) !== 'PostHogFeatureFlags' ||
+        getEnclosingClassMethodName(node) !== '_remove'
+    ) {
+        return false
+    }
+
+    let current: ts.Node | undefined = node
+    while (current && !ts.isMethodDeclaration(current)) {
+        current = current.parent
+    }
+    if (!current) {
+        return false
+    }
+
+    const keyParameter = current.parameters[0]?.name
+    return (
+        !!keyParameter &&
+        ts.isIdentifier(keyParameter) &&
+        getResolvedSymbol(keyParameter, checker) === getResolvedSymbol(expression, checker)
+    )
+}
+
 const isThisPropsElementAccess = (expression: ts.Expression): boolean => {
     return (
         ts.isElementAccessExpression(expression) &&
@@ -711,6 +774,7 @@ const collectPostHogPersistenceMutationBoundaryIssues = (): string[] => {
     const allowedSinkCallerMethods = new Set([
         '_setProp',
         '_deleteProp',
+        '_syncCookieProperties',
         'register',
         'register_once',
         'unregister',
@@ -768,11 +832,18 @@ const collectPostHogPersistenceMutationBoundaryIssues = (): string[] => {
 
 describe('persistence key policy', () => {
     it('matches legacy exact-key event visibility from before the policy migration', () => {
+        const extensionOwnedFeatureFlagKeys = new Set([
+            constants.ENABLED_FEATURE_FLAGS,
+            constants.PERSISTENCE_ACTIVE_FEATURE_FLAGS,
+            constants.PERSISTENCE_FEATURE_FLAG_PAYLOADS,
+            constants.PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+            constants.PERSISTENCE_OVERRIDE_FEATURE_FLAGS,
+        ])
         const compatibilitySnapshot = Object.entries(PERSISTENCE_KEY_POLICY)
             .map(([key, policy]) => [
                 key,
-                key === constants.ENABLED_FEATURE_FLAGS
-                    ? 'derived'
+                extensionOwnedFeatureFlagKeys.has(key)
+                    ? 'hidden'
                     : LEGACY_RESERVED_PERSISTENCE_KEYS.has(key)
                       ? 'hidden'
                       : 'event',
@@ -845,6 +916,17 @@ describe('persistence key policy', () => {
 
         expect(knownKey.issues).toEqual([])
         expect([...knownKey.resolvedKeys]).toEqual([constants.AUTOCAPTURE_DISABLED_SERVER_SIDE])
+
+        const batchedKeys = analyze(`
+            const FIRST_KEY = '${constants.AUTOCAPTURE_DISABLED_SERVER_SIDE}'
+            const SECOND_KEY = '${constants.HEATMAPS_ENABLED_SERVER_SIDE}'
+            client.kv.set({ [FIRST_KEY]: true, [SECOND_KEY]: false })
+            client.kv.remove([FIRST_KEY, SECOND_KEY])
+        `)
+        expect(batchedKeys.issues).toEqual([])
+        expect([...batchedKeys.resolvedKeys]).toEqual(
+            expect.arrayContaining([constants.AUTOCAPTURE_DISABLED_SERVER_SIDE, constants.HEATMAPS_ENABLED_SERVER_SIDE])
+        )
 
         const unknownKey = analyze(`
             const EXTENSION_KEY = '$unclassified_extension_key'
@@ -934,6 +1016,44 @@ describe('persistence key policy', () => {
                 'set() on KeyValueStore must resolve to a persistence key constant or registered prefix in every branch'
             ),
         ])
+
+        const uncheckedRemoveWrapper = analyze(`
+            class Extension {
+                private _remove(key: string): void {
+                    client.kv.remove(key)
+                }
+            }
+        `)
+        expect(uncheckedRemoveWrapper.issues).toEqual([
+            expect.stringContaining(
+                'remove() on KeyValueStore must resolve to a persistence key constant or registered prefix in every branch'
+            ),
+        ])
+
+        const featureFlagsWrapper = analyze(`
+            class PostHogFeatureFlags {
+                private _remove(keys: string | readonly string[]): void {
+                    client.kv.remove(keys)
+                }
+                clearKnownKeys(): void {
+                    const FIRST_KEY = '${constants.AUTOCAPTURE_DISABLED_SERVER_SIDE}'
+                    const SECOND_KEY = '${constants.HEATMAPS_ENABLED_SERVER_SIDE}'
+                    this._remove([FIRST_KEY, SECOND_KEY])
+                }
+                clearUnknownKey(): void {
+                    const EXTENSION_KEY = '$unclassified_extension_key'
+                    this._remove(EXTENSION_KEY)
+                }
+            }
+        `)
+        expect(featureFlagsWrapper.issues).toEqual([
+            expect.stringContaining(
+                '_remove() in PostHogFeatureFlags uses "$unclassified_extension_key", which has no persistence key policy'
+            ),
+        ])
+        expect([...featureFlagsWrapper.resolvedKeys]).toEqual(
+            expect.arrayContaining([constants.AUTOCAPTURE_DISABLED_SERVER_SIDE, constants.HEATMAPS_ENABLED_SERVER_SIDE])
+        )
     })
 
     it('analyzes callers instead of a KeyValueStore implementation forwarding its runtime key', () => {

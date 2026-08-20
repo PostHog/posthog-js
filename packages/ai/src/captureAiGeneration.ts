@@ -4,8 +4,9 @@ import { uuidv7, ErrorTracking as CoreErrorTracking, toJsonSafeValue } from '@po
 import { version } from '../package.json'
 import type { TokenUsage } from './types'
 import { stringifyError } from './serializeError'
-import { AIEvent, CostOverride, getTokensSource, withPrivacyMode } from './utils'
+import { AIEvent, CostOverride, getTokensSource, hasTokenOverrides, withPrivacyMode } from './utils'
 import { warnIfPostHogAiGateway } from './gatewayWarning'
+import { captureAiEvent, captureAiEventImmediate } from './captureAiEvent'
 
 /**
  * Options for `captureAiGeneration`. Mirrors the `$ai_generation` event shape
@@ -161,10 +162,26 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
       }
     }
 
+    // The caller's own token counts override the SDK-derived ones further down, via the
+    // `options.properties` spread.
+    const tokensOverridden = hasTokenOverrides(options.properties)
+
     const additionalTokenValues = {
       ...(usage.reasoningTokens ? { $ai_reasoning_tokens: usage.reasoningTokens } : {}),
       ...(usage.cacheReadInputTokens ? { $ai_cache_read_input_tokens: usage.cacheReadInputTokens } : {}),
       ...(usage.cacheCreationInputTokens ? { $ai_cache_creation_input_tokens: usage.cacheCreationInputTokens } : {}),
+      // Checked against undefined rather than truthiness, because false is the meaningful
+      // value here and a truthiness guard would drop it.
+      //
+      // Dropped entirely when the caller overrides the token counts: the flag describes how
+      // the SDK-derived counts relate to each other, so against passthrough counts it can be
+      // wrong in the expensive direction. Declaring inclusive over counts that are actually
+      // exclusive makes ingestion subtract the cache pool that was never in the input. A
+      // caller who knows their own accounting model can still pass
+      // `$ai_cache_reporting_exclusive` themselves, and that value wins.
+      ...(usage.cacheReportingExclusive !== undefined && !tokensOverridden
+        ? { $ai_cache_reporting_exclusive: usage.cacheReportingExclusive }
+        : {}),
       ...(usage.webSearchCount ? { $ai_web_search_count: usage.webSearchCount } : {}),
       ...(usage.rawUsage ? { $ai_usage: usage.rawUsage } : {}),
     }
@@ -206,9 +223,9 @@ export const captureAiGeneration = async (client: PostHog, options: CaptureAiGen
     }
 
     if (options.captureImmediate) {
-      await client.captureImmediate(event)
+      await captureAiEventImmediate(client, event)
     } else {
-      client.capture(event)
+      captureAiEvent(client, event)
     }
   } catch (error) {
     // Telemetry failures must never affect the instrumented provider call.

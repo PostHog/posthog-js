@@ -7,15 +7,72 @@ import { version } from '../version'
 import type {
   CompatibleRequestHandlerExtra,
   MCPAnalyticsData,
+  MCPRequestLike,
   MCPServerLike,
   ServerClientInfoLike,
   SessionInfo,
 } from '../types'
 import { INACTIVITY_TIMEOUT_IN_MINUTES } from './constants'
 import { deterministicPrefixedId, newPrefixedId } from './ids'
+import { resolveClientIdentity } from './client-identity'
 import { getServerTrackingData, setServerTrackingData } from './internal'
+import { getRequestHeaders } from './request-headers'
 import { decodeSessionId, readMcpSessionHeader } from './session-token'
 import type { SessionTokenPayload } from './session-token'
+
+/**
+ * The revision that removed protocol-level sessions. A request declaring this or
+ * anything later must not be answered with an `Mcp-Session-Id`.
+ *
+ * Compared as a string, which is safe and stable because MCP revisions are
+ * ISO dates: any future revision sorts above this one and is treated as modern,
+ * which is the right default — sessions were removed, not re-added.
+ */
+export const MODERN_PROTOCOL_REVISION = '2026-07-28'
+
+/**
+ * Revisions are ISO dates, and only a date-shaped token may be compared as one.
+ * Without this the comparison is lexicographic over arbitrary input, so any
+ * string starting above `'2'` — every junk value beginning with a letter —
+ * sorts as modern and silently loses the session header. Unknown must mean
+ * legacy, so anything that is not a date is not compared at all.
+ */
+const REVISION_SHAPE = /^\d{4}-\d{2}-\d{2}$/
+
+/** The spec's rolling draft sits ahead of every dated revision, sessions included. */
+const DRAFT_REVISION = 'draft'
+
+/**
+ * Whether *this request* is governed by 2026-07-28 or later.
+ *
+ * Era is a property of the request, never of the installed SDK: one v2 server
+ * serves both, request by request, and v2's exported `LATEST_PROTOCOL_VERSION`
+ * still reads `2025-11-25`. So the version is resolved from the request itself —
+ * an `initialize` body declares the version it is asking for, and every other
+ * request carries it in the envelope, `_meta`, or the `MCP-Protocol-Version`
+ * header — and only then compared.
+ *
+ * Unknown means legacy. A request that declares nothing is a v1 client on a
+ * transport that has always had a session header, and taking it away from them
+ * would be the regression.
+ */
+export function isModernEraRequest(
+  request: MCPRequestLike,
+  extra?: CompatibleRequestHandlerExtra,
+  server?: MCPServerLike
+): boolean {
+  const requested = request.params?.protocolVersion
+  const version =
+    (typeof requested === 'string' && requested.length > 0 ? requested : undefined) ??
+    resolveClientIdentity({ request, extra, server })?.protocolVersion
+  if (!version) {
+    return false
+  }
+  if (version === DRAFT_REVISION) {
+    return true
+  }
+  return REVISION_SHAPE.test(version) && version >= MODERN_PROTOCOL_REVISION
+}
 
 export function newSessionId(): string {
   return newPrefixedId('ses')
@@ -30,9 +87,10 @@ export function deriveSessionIdFromMCPSession(mcpSessionId: string): string {
 }
 
 /**
- * Derives the SDK session id from the agent's conversation handle. Deterministic
- * and unsalted on purpose: two pods that never met must agree on the session, and
- * the 2026-07-28 revision leaves them no shared state to agree through.
+ * Derives the SDK session id from the agent's conversation handle (ADR-0004).
+ * Deterministic and unsalted on purpose: two pods that never met must agree on
+ * the session, and the 2026-07-28 revision leaves them no shared state to agree
+ * through.
  *
  * Hashed rather than used verbatim so an MCP session can never collide with a
  * Session Replay id — a bare uuidv7 would render a "View recording" button that
@@ -69,26 +127,16 @@ export function getSessionId(
     throw new Error('Server tracking data not found')
   }
 
-  // 1. The agent's conversation handle. It outranks both steps below because it
-  // is the only id that survives reconnects, restarts, and the per-request
-  // server instances the 2026-07-28 revision introduces. Hashed rather than used
-  // verbatim so it can never collide with Session Replay ids.
-  //
-  // This returns instead of falling through to the shared-state writes at the
-  // end: the handle belongs to this one request, and persisting it would leak
-  // one chat's session onto a concurrent chat's `tools/list`.
-  //
-  // `lastActivity` therefore does not advance either, so a conversation that
-  // always echoes lets the in-memory fallback age past the inactivity timeout —
-  // and a later call carrying no handle rotates it. That is the honest reading:
-  // the fallback session really has been idle for that whole time.
+  // 1. The agent's conversation handle — the only id that survives reconnects,
+  // restarts, and the per-request server instances of the 2026-07-28 revision
+  // (ADR-0004). Returns before the shared-state writes at the end: the handle
+  // belongs to this one request, and persisting it (or advancing lastActivity)
+  // would leak one chat's session onto a concurrent chat's `tools/list`.
   if (conversationId) {
-    // The handle decides the *session*, but the request may still carry our token,
-    // and on a stateless instance that never processed `initialize` its payload is
-    // the only place client identity exists. Restore that before returning: the
-    // early return is about not persisting a session, not about ignoring what the
-    // request told us about the client. Without this, tool calls and `$identify`
-    // go out unattributed on exactly the deployments this branch exists for.
+    // The session comes from the handle, but on an instance that never processed
+    // `initialize` the request's token is still the only source of client
+    // identity — without this, tool calls and `$identify` go out unattributed
+    // on exactly the deployments this branch exists for.
     applyTokenClientIdentity(data, extra)
     return deriveSessionIdFromConversation(conversationId)
   }
@@ -110,20 +158,16 @@ export function getSessionId(
 /**
  * Restores the client name/version and protocol version baked into our token at
  * mint time, and hands the decoded token back so the caller can also take the
- * session id from it.
- *
- * Split out from step 2 because the two halves of the token have different
- * scopes. The session id it carries is per-chat, so a conversation-anchored
- * request must not adopt it. The client identity is per-connection — the same
- * client for every request on it — so a conversation-anchored request should,
- * and on a stateless instance that never saw `initialize` this is the only
- * source of it.
+ * session id from it. Split from step 2 because the token's two halves have
+ * different scopes: its session id is per-chat (a conversation-anchored request
+ * must not adopt it), its client identity is per-connection (every request on
+ * the connection should).
  */
 function applyTokenClientIdentity(
   data: MCPAnalyticsData,
   extra?: CompatibleRequestHandlerExtra
 ): SessionTokenPayload | undefined {
-  const token = decodeSessionId(readMcpSessionHeader(extra?.requestInfo?.headers))
+  const token = decodeSessionId(readMcpSessionHeader(getRequestHeaders(extra)))
   if (!token) {
     return undefined
   }
@@ -139,9 +183,8 @@ function applyTokenClientIdentity(
  * issued. Returns undefined when the request carried neither, which is what
  * sends the caller on to 3.
  *
- * Both are 2025-11-25 mechanisms. The 2026-07-28 revision removed that header
- * outright — servers MUST NOT mint or echo it — so this entire step becomes
- * legacy-only once era detection lands.
+ * Both are 2025-11-25 mechanisms; the 2026-07-28 revision removed the header
+ * outright, so this step is legacy-only once era detection lands (ADR-0003).
  */
 function readSessionIdFromRequest(data: MCPAnalyticsData, extra?: CompatibleRequestHandlerExtra): string | undefined {
   // 2a. A token we minted at `initialize` and the client replayed. It rides the
@@ -203,8 +246,8 @@ export function getSessionInfo(
   const actorInfo = data?.identifiedSessions.get(sessionId ?? data.sessionId)
 
   const sessionInfo: SessionInfo = {
-    ipAddress: undefined, // grab from django
-    sdkLanguage: 'TypeScript', // hardcoded for now
+    ipAddress: undefined,
+    sdkLanguage: 'TypeScript',
     sdkVersion: version,
     serverName: server._serverInfo?.name,
     serverVersion: server._serverInfo?.version,

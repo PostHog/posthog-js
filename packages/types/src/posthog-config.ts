@@ -191,6 +191,19 @@ export interface BootstrapConfig {
     sessionID?: string
 }
 
+export interface ResetOptions {
+    /**
+     * Whether to generate a new device ID as well as a new distinct ID.
+     * @default false
+     */
+    resetDeviceID?: boolean
+
+    /**
+     * Identity, feature flag, and session values to apply after resetting.
+     */
+    bootstrap?: BootstrapConfig
+}
+
 export type SupportedWebVitalsMetrics = 'LCP' | 'CLS' | 'FCP' | 'INP'
 
 export interface PerformanceCaptureConfig {
@@ -285,8 +298,15 @@ export interface DeadClickCandidate {
     mutationDelayMs?: number
     // time between click and the most recent selection changed event
     selectionChangedDelayMs?: number
-    // time between click and the most recent visibility change event
+    // delay between the click and the nearest visibility change within the suppression window, on
+    // either side — a tab going to or from hidden near a click (opening a new tab, or waking the
+    // tab) is a liveness signal, so it only ever suppresses a dead click, never causes one. recorded
+    // as the event fires (not read from a shared timestamp at check time) so a later transition
+    // can't overwrite the click-correlated one
     visibilityChangedDelayMs?: number
+    // as above for window focus/blur — a click that opens a new window/popup may only surface as
+    // the current window losing focus, so this is the liveness signal for that case
+    focusChangedDelayMs?: number
     // if neither scroll nor mutation seen before threshold passed
     absoluteDelayMs?: number
 }
@@ -444,7 +464,14 @@ export interface HeatmapConfig {
  * Configuration defaults snapshot used by `PostHogConfig.defaults`.
  * Later dates include all earlier default changes.
  */
-export type ConfigDefaults = '2026-06-25' | '2026-05-30' | '2026-01-30' | '2025-11-30' | '2025-05-24' | 'unset'
+export type ConfigDefaults =
+    | '2026-08-29'
+    | '2026-06-25'
+    | '2026-05-30'
+    | '2026-01-30'
+    | '2025-11-30'
+    | '2025-05-24'
+    | 'unset'
 
 export type ExternalIntegrationKind = 'intercom' | 'crispChat'
 
@@ -673,8 +700,15 @@ export interface SessionRecordingOptions {
 
     /**
      * Max CSSRules inlined synchronously per full snapshot. Sheets past the
-     * budget keep their `rel`/`href` (so replay can load them remotely) and
-     * are inlined across idle callbacks instead of blocking the snapshot.
+     * budget keep their `rel`/`href` and are inlined across idle callbacks
+     * instead of blocking the snapshot; the queue is flushed synchronously
+     * (bounded) when recording stops and on `pagehide`. The residual risk:
+     * replay falls back to loading a sheet from its original href (which may
+     * be purged, auth-gated, or renamed by replay time) only if the tab dies
+     * without `pagehide` firing, the teardown flush hits its safety cap, or
+     * stringifying the sheet fails.
+     * The default is applied by posthog-js when it starts the recorder; the
+     * recorder itself is unbounded without it.
      * Set 0 to inline everything up front (the pre-budget behaviour).
      * @default 10000
      */
@@ -1084,6 +1118,35 @@ export interface PostHogConfig {
     flags_api_host?: string | null
 
     /**
+     * Rewrites the URL used for PostHog API, feature flag, and asset requests.
+     * This is intended for customers who use a reverse proxy and need custom paths.
+     * The proxy must map the rewritten paths back to the canonical PostHog paths.
+     *
+     * UI links are not rewritten.
+     *
+     * @example
+     * ```js
+     * posthog.init('phc_...', {
+     *     api_host: 'https://a.example.com',
+     *     rewriteRequestPath: (url) => {
+     *         if (url.pathname === '/e/') {
+     *             url.pathname = '/my-events/'
+     *         } else if (url.pathname === '/s/') {
+     *             url.pathname = '/my-replay/'
+     *         } else if (url.pathname === '/flags/') {
+     *             url.pathname = '/my-flags/'
+     *         }
+     *         return url
+     *     },
+     * })
+     * ```
+     *
+     * @param url - The fully resolved request URL. It may be mutated or replaced.
+     * @returns The URL that the SDK should request.
+     */
+    rewriteRequestPath?: (url: URL) => URL
+
+    /**
      * If using a reverse proxy for `api_host` then this should be the actual PostHog app URL (e.g. https://us.posthog.com).
      * This ensures that links to PostHog point to the correct host.
      *
@@ -1450,11 +1513,13 @@ export interface PostHogConfig {
     /**
      * Determines whether PostHog should load external dependency scripts from
      * semver-qualified asset paths such as /static/1.370.0/recorder.js instead
-     * of the legacy /static/recorder.js?v=1.370.0 form.
+     * of the legacy /static/recorder.js?v=1.370.0 form. Set to `true` to use only
+     * versioned paths, `false` to use only legacy paths, or `'fallback'` to try
+     * the versioned path first and retry with the legacy path if it fails.
      *
-     * @default false
+     * @default 'fallback'
      */
-    strict_script_versioning: boolean
+    strict_script_versioning: boolean | 'fallback'
 
     /**
      * Optional host override for static assets loaded by PostHog, such as
@@ -1629,6 +1694,7 @@ export interface PostHogConfig {
      * - `'2026-01-30'`: Defaults from '2025-11-30' plus external_scripts_inject_target defaults to 'head' (avoids SSR hydration errors)
      * - `'2026-05-30'`: Defaults from '2026-01-30' plus `persistence_save_debounce_ms` defaults to `250`, `split_storage` and `detect_google_search_app` default to `true`, and rageclick defaults also exclude stepper controls and text-selection surfaces
      * - `'2026-06-25'`: Defaults from '2026-05-30' plus `session_recording.streamNetworkBody` defaults to `true` (streams network bodies to enforce the payload size limit)
+     * - `'2026-08-29'`: Defaults from '2026-06-25' plus `cookieWinsOnConflict` defaults to `true` (the shared cross-subdomain cookie wins over stale per-origin localStorage)
      *
      * @default 'unset'
      */
@@ -1650,13 +1716,19 @@ export interface PostHogConfig {
     __preview_deferred_init_extensions: boolean
 
     /**
-     * In `'localStorage+cookie'` persistence mode, prefer cookie values over localStorage
-     * when both stores carry the same key. Fixes cross-subdomain identify and session
-     * disconnects caused by stale per-subdomain localStorage clobbering a fresh shared cookie.
-     * Read at SDK init; has no effect when toggled via `set_config` or for other persistence modes.
+     * In `'localStorage+cookie'` persistence mode, prefer shared cookie values over
+     * per-origin localStorage when both stores carry the same key. The SDK also checks
+     * for cookie changes before captures and persistence writes so already-open sibling
+     * subdomains adopt identity changes made by `identify()` or `reset()`.
+     *
+     * When `defaults` is `'2026-08-29'` or later, this defaults to `true`.
      *
      * @default false
-     * @experimental
+     */
+    cookieWinsOnConflict: boolean
+
+    /**
+     * @deprecated Use `cookieWinsOnConflict` instead.
      */
     __preview_cookie_wins_on_conflict: boolean
 

@@ -1,6 +1,6 @@
 {
   "name": "@posthog/react-native-plugin",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "PostHog React Native plugin for iOS and Android integrations",
   "source": "./src/index.tsx",
   "main": "./lib/commonjs/index.js",
@@ -41,7 +41,7 @@
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
     "lint:fix": "eslint \"**/*.{js,ts,tsx}\" --fix",
     "typecheck": "tsc",
-    "test:unit": "jest --passWithNoTests",
+    "test:unit": "jest --passWithNoTests && node scripts/check-spm-manifest.mjs",
     "test": "pnpm test:unit",
     "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
     "build": "bob build",

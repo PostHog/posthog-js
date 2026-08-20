@@ -275,19 +275,6 @@ describe('redactBinaryContent', () => {
     })
   })
 
-  describe('multimodal escape hatch', () => {
-    afterEach(() => {
-      delete process.env._INTERNAL_LLMA_MULTIMODAL
-    })
-
-    it('returns input unchanged when _INTERNAL_LLMA_MULTIMODAL is set', () => {
-      process.env._INTERNAL_LLMA_MULTIMODAL = 'true'
-      const input = { type: 'image', data: PURE_B64 }
-      const out = redactBinaryContent(input)
-      expect(out).toBe(input)
-    })
-  })
-
   describe('primitives and edge values', () => {
     it.each([null, undefined, 0, 1, true, false])('passes %p through unchanged', (v) => {
       expect(redactBinaryContent(v)).toBe(v)

@@ -38,6 +38,7 @@ export type PostHogMCPAnalyticsEvent = (typeof PostHogMCPAnalyticsEvent)[keyof t
 
 export const PostHogMCPAnalyticsProperty = {
   ClientName: '$mcp_client_name',
+  ClientUserAgent: '$mcp_client_user_agent',
   ClientVersion: '$mcp_client_version',
   ConversationId: '$mcp_conversation_id',
   DurationMs: '$mcp_duration_ms',
@@ -58,6 +59,7 @@ export const PostHogMCPAnalyticsProperty = {
   ToolCategory: '$mcp_tool_category',
   ToolDescription: '$mcp_tool_description',
   ToolName: '$mcp_tool_name',
+  VendorClient: '$mcp_vendor_client',
 } as const
 
 export type PostHogMCPAnalyticsProperty = (typeof PostHogMCPAnalyticsProperty)[keyof typeof PostHogMCPAnalyticsProperty]

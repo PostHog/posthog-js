@@ -88,6 +88,7 @@ describe('PostHogConversations', () => {
             conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
 
             expect(conversations.isAvailable()).toBe(false)
+            expect(conversations.getUnavailableReason()).toBe('disabled_in_project')
         })
 
         it('should not load when conversations is boolean true (no token)', () => {
@@ -140,6 +141,105 @@ describe('PostHogConversations', () => {
                 'conversations',
                 expect.any(Function)
             )
+        })
+    })
+
+    describe('getUnavailableReason', () => {
+        const validRemoteConfig: Partial<RemoteConfig> = {
+            conversations: { enabled: true, token: 'test-token' } as ConversationsRemoteConfig,
+        }
+
+        it('returns null once conversations are available', () => {
+            conversations.onRemoteConfig({ ok: true, config: validRemoteConfig as RemoteConfig })
+
+            expect(conversations.isAvailable()).toBe(true)
+            expect(conversations.getUnavailableReason()).toBeNull()
+        })
+
+        it('returns remote_config_pending before remote config arrives', () => {
+            expect(conversations.getUnavailableReason()).toBe('remote_config_pending')
+        })
+
+        it('returns remote_config_failed when remote config fails', () => {
+            conversations.onRemoteConfig({ ok: false })
+
+            expect(conversations.getUnavailableReason()).toBe('remote_config_failed')
+        })
+
+        it('returns disabled_in_project when successful remote config omits conversations', () => {
+            conversations.onRemoteConfig({ ok: true, config: {} as RemoteConfig })
+
+            expect(conversations.getUnavailableReason()).toBe('disabled_in_project')
+        })
+
+        it('returns disabled_by_config when disabled via config', () => {
+            mockPostHog.config.disable_conversations = true
+
+            expect(conversations.getUnavailableReason()).toBe('disabled_by_config')
+        })
+
+        it('returns disabled_in_project when disabled in remote config', () => {
+            const remoteConfig: Partial<RemoteConfig> = { conversations: false }
+            conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
+
+            expect(conversations.getUnavailableReason()).toBe('disabled_in_project')
+        })
+
+        it('returns missing_token when enabled without a token', () => {
+            const remoteConfig: Partial<RemoteConfig> = { conversations: true }
+            conversations.onRemoteConfig({ ok: true, config: remoteConfig as RemoteConfig })
+
+            expect(conversations.getUnavailableReason()).toBe('missing_token')
+        })
+
+        it('returns extensions_unavailable when the extensions global is absent', () => {
+            assignableWindow.__PosthogExtensions__ = undefined
+            conversations.onRemoteConfig({ ok: true, config: validRemoteConfig as RemoteConfig })
+
+            expect(conversations.getUnavailableReason()).toBe('extensions_unavailable')
+        })
+
+        // The toolbar's internal instance is deliberately never given the conversations manager, so
+        // reporting it as not_loaded would send someone hunting for a load failure that never happened.
+        it('returns disabled_for_toolbar for the toolbar internal instance', () => {
+            // Literal because TOOLBAR_INTERNAL_INSTANCE_NAME is private to general-utils. If it ever
+            // changes, isToolbarInstance stops matching and this test fails rather than going quiet.
+            mockPostHog.config.name = 'ph_toolbar_internal'
+            conversations.onRemoteConfig({ ok: true, config: validRemoteConfig as RemoteConfig })
+
+            expect(conversations.isAvailable()).toBe(false)
+            expect(conversations.getUnavailableReason()).toBe('disabled_for_toolbar')
+        })
+
+        it('returns load_failed when the lazy bundle fails to load', () => {
+            assignableWindow.__PosthogExtensions__!.loadExternalDependency = jest.fn((_instance, _path, callback) => {
+                callback(new Error('blocked'))
+            })
+            conversations.onRemoteConfig({ ok: true, config: validRemoteConfig as RemoteConfig })
+
+            expect(conversations.isAvailable()).toBe(false)
+            expect(conversations.getUnavailableReason()).toBe('load_failed')
+        })
+
+        it('returns initializing while retrying after a load failure', () => {
+            let attempt = 0
+            let finishRetry: (() => void) | undefined
+            assignableWindow.__PosthogExtensions__!.loadExternalDependency = jest.fn((_instance, _path, callback) => {
+                attempt++
+                if (attempt === 1) {
+                    callback(new Error('blocked'))
+                } else {
+                    finishRetry = () => callback(new Error('blocked again'))
+                }
+            })
+            conversations.onRemoteConfig({ ok: true, config: validRemoteConfig as RemoteConfig })
+            expect(conversations.getUnavailableReason()).toBe('load_failed')
+
+            conversations.loadIfEnabled()
+
+            expect(conversations.getUnavailableReason()).toBe('initializing')
+            finishRetry!()
+            expect(conversations.getUnavailableReason()).toBe('load_failed')
         })
     })
 

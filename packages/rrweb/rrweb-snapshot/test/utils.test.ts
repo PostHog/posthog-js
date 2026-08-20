@@ -13,6 +13,7 @@ import {
 } from 'vitest';
 import {
   createMirror,
+  createStylesheetTextCursor,
   escapeImportStatement,
   extractFileExtension,
   fixSafariColons,
@@ -366,6 +367,579 @@ describe('utils', () => {
       ).toEqual(
         "@font-face { font-family: 'MockFont'; src: url('https://example.com/fonts/mockfont.woff2') format('woff2'); font-weight: normal; font-style: normal; }",
       );
+    });
+  });
+
+  describe('createStylesheetTextCursor', () => {
+    const makeRules = (count: number, prefix = 'r') =>
+      Array.from({ length: count }, (_, i) => ({
+        cssText: `.${prefix}${i} { background: url("img/${prefix}${i}.png"); }`,
+      })) as unknown as CSSRule[];
+
+    const makeSheet = (
+      rules: unknown[],
+      href: string | null = 'https://example.com/main.css',
+    ) => ({ cssRules: rules, href }) as unknown as CSSStyleSheet;
+
+    it('stringifies a large sheet in bounded slices, byte-identical to the single pass', () => {
+      const sheet = makeSheet(makeRules(1000));
+      const singlePass = stringifyStylesheet(sheet);
+      expect(singlePass).toBeTruthy();
+
+      const cursor = createStylesheetTextCursor(sheet);
+      let boundedSlices = 0;
+      while (!cursor.advance(100)) {
+        boundedSlices += 1;
+        expect(cursor.text()).toBeNull();
+      }
+      // exactly 100 rules per slice: 10 bounded slices, then the final call
+      // that assembles the text
+      expect(boundedSlices).toBe(10);
+      expect(cursor.text()).toBe(singlePass);
+    });
+
+    it('slices across an @import chain and matches the single pass', () => {
+      const inner = makeSheet(makeRules(20, 'inner'), 'https://example.com/inner.css');
+      const innerImport = {
+        styleSheet: inner,
+        cssText: '@import url("inner.css");',
+        href: 'inner.css',
+        media: { length: 0 },
+        layerName: null,
+        supportsText: null,
+      } as unknown as CSSRule;
+      const imported = makeSheet(
+        [...makeRules(20, 'mid'), innerImport, ...makeRules(20, 'mid2')],
+        'https://example.com/imported.css',
+      );
+      const importRule = {
+        styleSheet: imported,
+        cssText: '@import url("imported.css");',
+        href: 'imported.css',
+        media: { length: 0 },
+        layerName: null,
+        supportsText: null,
+      } as unknown as CSSRule;
+      const sheet = makeSheet([
+        ...makeRules(5, 'top'),
+        importRule,
+        ...makeRules(5, 'tail'),
+      ]);
+
+      const singlePass = stringifyStylesheet(sheet);
+      expect(singlePass).toContain('inner0');
+
+      const cursor = createStylesheetTextCursor(sheet);
+      let boundedSlices = 0;
+      while (!cursor.advance(10)) {
+        boundedSlices += 1;
+        expect(cursor.text()).toBeNull();
+      }
+      // 72 rules in total (import rules included), so slice boundaries fall
+      // inside the imported sheets and the chain is resumed mid-descent
+      expect(boundedSlices).toBeGreaterThanOrEqual(7);
+      expect(cursor.text()).toBe(singlePass);
+    });
+
+    it('terminates on cyclic @import graphs, falling back to the import statement', () => {
+      const parentRules: unknown[] = [...makeRules(3, 'parent')];
+      const parent = makeSheet(parentRules, 'https://example.com/parent.css');
+      const child = makeSheet(
+        [
+          ...makeRules(3, 'child'),
+          {
+            styleSheet: parent,
+            cssText: '@import url(parent.css);',
+            href: 'parent.css',
+            media: { length: 0 },
+            layerName: null,
+            supportsText: null,
+          },
+        ],
+        'https://example.com/child.css',
+      );
+      parentRules.push({
+        styleSheet: child,
+        cssText: '@import url(child.css);',
+        href: 'child.css',
+        media: { length: 0 },
+        layerName: null,
+        supportsText: null,
+      });
+
+      const cursor = createStylesheetTextCursor(parent);
+      let calls = 0;
+      while (!cursor.advance(2) && calls < 100) {
+        calls += 1;
+      }
+      const text = cursor.text();
+      expect(text).toContain('child2');
+      // the cycle-closing import is emitted as a statement, not descended
+      expect(text).toContain('@import url(https://example.com/parent.css)');
+    });
+
+    it('is immune to live CSSRuleList mutation between slices', () => {
+      const rules = makeRules(300);
+      const singlePass = stringifyStylesheet(makeSheet([...rules]));
+      const cursor = createStylesheetTextCursor(makeSheet(rules));
+      expect(cursor.advance(100)).toBe(false);
+
+      // application code mutates the sheet mid-deferral, as
+      // insertRule()/deleteRule() would between idle slices
+      rules.splice(0, 50);
+      rules.push({
+        cssText: '.inserted { color: blue; }',
+      } as unknown as CSSRule);
+
+      while (!cursor.advance(100)) {
+        // drain
+      }
+      // the cursor snapshots the rule list when it opens the sheet, so the
+      // text matches the sheet as it was at defer time; the later CSSOM
+      // mutations are recorded by the StyleSheetRule observer instead
+      expect(cursor.text()).toBe(singlePass);
+    });
+
+    it('snapshots the whole @import chain at creation, not when traversal reaches it', () => {
+      const importedRules = makeRules(20, 'imported');
+      const imported = makeSheet(
+        importedRules,
+        'https://example.com/imported.css',
+      );
+      const importRule = {
+        styleSheet: imported,
+        cssText: '@import url("imported.css");',
+        href: 'imported.css',
+        media: { length: 0 },
+        layerName: null,
+        supportsText: null,
+      } as unknown as CSSRule;
+      const sheet = makeSheet([...makeRules(150, 'top'), importRule]);
+      const singlePass = stringifyStylesheet(sheet);
+
+      const cursor = createStylesheetTextCursor(sheet);
+      // application code mutates the imported sheet mid-deferral, before the
+      // traversal has reached the @import rule
+      importedRules.splice(0, 10);
+      importedRules.push({
+        cssText: '.late-insert { color: blue; }',
+      } as unknown as CSSRule);
+
+      while (!cursor.advance(100)) {
+        // drain
+      }
+      // defer-time semantics: the emitted text reflects the chain as it was
+      // when the cursor was created, exactly like a synchronous pass then
+      expect(cursor.text()).toBe(singlePass);
+      expect(cursor.text()).not.toContain('.late-insert');
+    });
+
+    it('descends grouping rules in bounded slices, byte-identical to the single pass', () => {
+      const ruleCount = 5000;
+      const styleEl = document.createElement('style');
+      styleEl.textContent = [
+        '@media (min-width: 500px) {',
+        ...Array.from(
+          { length: ruleCount },
+          (_, i) => `.m${i} { background: url("img/m${i}.png"); }`,
+        ),
+        '}',
+        '@supports (display: flex) { .flexy { display: flex; } }',
+        '.tail { color: red; }',
+      ].join('\n');
+      document.head.appendChild(styleEl);
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        const sheet = styleEl.sheet!;
+        const singlePass = stringifyStylesheet(sheet);
+        expect(singlePass).toContain('@media (min-width: 500px)');
+        expect(singlePass).toContain('@supports (display: flex)');
+
+        const cursor = createStylesheetTextCursor(sheet);
+        let boundedSlices = 0;
+        while (!cursor.advance(100)) {
+          boundedSlices += 1;
+        }
+        // the @media children are traversed rule-by-rule, not serialized as
+        // one synchronous cssText read charged as a single cursor step
+        expect(boundedSlices).toBeGreaterThanOrEqual(ruleCount / 100);
+        expect(cursor.text()).toBe(singlePass);
+      } finally {
+        styleEl.remove();
+      }
+    });
+
+    it('descends a real @keyframes rule resumably, whitespace-equivalent to the single pass', () => {
+      // jsdom's cssom joins keyframe children with its own whitespace, so the
+      // reassembled text is compared whitespace-normalized - the documented
+      // divergence class for grouping rules
+      const styleEl = document.createElement('style');
+      styleEl.textContent = [
+        '@keyframes spin {',
+        ...Array.from(
+          { length: 200 },
+          (_, i) => `${i / 2}% { opacity: ${i / 200}; }`,
+        ),
+        '}',
+        '.tail { color: red; }',
+      ].join('\n');
+      document.head.appendChild(styleEl);
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        const sheet = styleEl.sheet!;
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        const singlePass = stringifyStylesheet(sheet)!;
+        expect(singlePass).toContain('@keyframes spin');
+
+        const cursor = createStylesheetTextCursor(sheet);
+        let boundedSlices = 0;
+        while (!cursor.advance(50)) {
+          boundedSlices += 1;
+        }
+        // the keyframes were traversed child-by-child across several slices
+        expect(boundedSlices).toBeGreaterThanOrEqual(3);
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        const text = cursor.text()!;
+        expect(text).toContain('@keyframes spin {');
+        expect(text.replace(/\s+/g, '')).toBe(singlePass.replace(/\s+/g, ''));
+      } finally {
+        styleEl.remove();
+      }
+    });
+
+    it('descends @layer blocks resumably instead of serializing the subtree one-shot', () => {
+      let childReads = 0;
+      const children = Array.from({ length: 500 }, (_, i) => ({
+        get cssText() {
+          childReads += 1;
+          return `.layer-${i} { color: red; }`;
+        },
+      }));
+      const namedLayer = {
+        cssRules: children,
+        name: 'framework.utilities', // dotted layer names are valid
+        get cssText(): string {
+          // the pre-slicing failure mode: one synchronous whole-subtree read
+          throw new Error('whole-subtree serialization');
+        },
+      } as unknown as CSSRule;
+      const anonymousLayer = {
+        cssRules: [{ cssText: '.anon { color: blue; }' }],
+        name: '',
+        get cssText(): string {
+          throw new Error('whole-subtree serialization');
+        },
+      } as unknown as CSSRule;
+
+      const cursor = createStylesheetTextCursor(
+        makeSheet([namedLayer, anonymousLayer], null),
+      );
+      let maxReadsPerSlice = 0;
+      for (;;) {
+        const before = childReads;
+        const finished = cursor.advance(100);
+        maxReadsPerSlice = Math.max(maxReadsPerSlice, childReads - before);
+        if (finished) break;
+      }
+
+      expect(maxReadsPerSlice).toBeLessThanOrEqual(100);
+      expect(childReads).toBe(500);
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const text = cursor.text()!;
+      expect(text).toContain('@layer framework.utilities {');
+      expect(text).toContain('.layer-499');
+      expect(text).toContain('@layer {.anon { color: blue; }}');
+    });
+
+    it('descends @container rules resumably, reconstructing the name that conditionText drops', () => {
+      const named = {
+        cssRules: [{ cssText: '.c { color: red; }' }],
+        containerName: 'sidebar',
+        containerQuery: '(min-width: 400px)',
+        conditionText: '(min-width: 400px)',
+        get cssText(): string {
+          throw new Error('whole-subtree serialization');
+        },
+      } as unknown as CSSRule;
+      const unnamed = {
+        cssRules: [{ cssText: '.u { color: blue; }' }],
+        containerName: '',
+        containerQuery: '(max-width: 100px)',
+        conditionText: '(max-width: 100px)',
+        get cssText(): string {
+          throw new Error('whole-subtree serialization');
+        },
+      } as unknown as CSSRule;
+
+      const cursor = createStylesheetTextCursor(
+        makeSheet([named, unnamed], null),
+      );
+      while (!cursor.advance(100)) {
+        // drain
+      }
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const text = cursor.text()!;
+      expect(text).toContain(
+        '@container sidebar (min-width: 400px) {.c { color: red; }}',
+      );
+      expect(text).toContain(
+        '@container (max-width: 100px) {.u { color: blue; }}',
+      );
+    });
+
+    it('keeps the one-shot read for conditionText rules that are not @supports', () => {
+      // a mock rule whose constructor carries the given browser class name;
+      // plain objects pass the @supports gate, engine classes must match
+      const asRuleType = (typeName: string, props: object): CSSRule => {
+        const RuleClass = class {};
+        Object.defineProperty(RuleClass, 'name', { value: typeName });
+        const rule = new RuleClass();
+        Object.defineProperties(rule, Object.getOwnPropertyDescriptors(props));
+        return rule as unknown as CSSRule;
+      };
+
+      // CSSContainerRule on engines predating containerName/containerQuery
+      // (Chrome 105-110, Safari 16.0): only conditionText, which in Chrome's
+      // shape includes the name; an anonymous one wrapped as @supports would
+      // even parse, silently un-conditionalizing the styles at replay
+      const oldEngineContainer = asRuleType('CSSContainerRule', {
+        cssRules: [{ cssText: '.old { color: red; }' }],
+        conditionText: 'sidebar (min-width: 400px)',
+        cssText:
+          '@container sidebar (min-width: 400px) { .old { color: red; } }',
+      });
+      // Gecko keeps @-moz-document in author sheets for the Firefox CSS hack
+      const mozDocument = asRuleType('CSSMozDocumentRule', {
+        cssRules: [{ cssText: '.ff { color: red; }' }],
+        conditionText: 'url-prefix()',
+        cssText: '@-moz-document url-prefix() { .ff { color: red; } }',
+      });
+
+      const cursor = createStylesheetTextCursor(
+        makeSheet([oldEngineContainer, mozDocument], null),
+      );
+      while (!cursor.advance(100)) {
+        // drain
+      }
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const text = cursor.text()!;
+      expect(text).toContain(
+        '@container sidebar (min-width: 400px) { .old { color: red; } }',
+      );
+      expect(text).toContain(
+        '@-moz-document url-prefix() { .ff { color: red; } }',
+      );
+      expect(text).not.toContain('@supports');
+    });
+
+    it('keeps the one-shot read for @function, whose name never fits a layer name', () => {
+      // Chromium 139+: CSSFunctionRule has `name` and child cssRules; an
+      // @layer prelude would erase the function on replay and register a
+      // bogus cascade layer that can reorder the rest of the sheet
+      const fn = {
+        cssRules: [{ cssText: 'result: calc(-1 * var(--v));' }],
+        name: '--negate',
+        cssText: '@function --negate(--v) { result: calc(-1 * var(--v)); }',
+      } as unknown as CSSRule;
+
+      const cursor = createStylesheetTextCursor(makeSheet([fn], null));
+      while (!cursor.advance(100)) {
+        // drain
+      }
+      expect(cursor.text()).toContain(
+        '@function --negate(--v) { result: calc(-1 * var(--v)); }',
+      );
+      expect(cursor.text()).not.toContain('@layer');
+    });
+
+    it('keeps the one-shot read for @container when containerQuery is unsupported', () => {
+      let oneShotReads = 0;
+      const rule = {
+        cssRules: [{ cssText: '.c { color: red; }' }],
+        containerName: 'sidebar',
+        conditionText: '(min-width: 400px)', // the name is not part of this
+        get cssText(): string {
+          oneShotReads += 1;
+          return '@container sidebar (min-width: 400px) { .c { color: red; } }';
+        },
+      } as unknown as CSSRule;
+
+      const cursor = createStylesheetTextCursor(makeSheet([rule], null));
+      while (!cursor.advance(100)) {
+        // drain
+      }
+      expect(oneShotReads).toBe(1);
+      expect(cursor.text()).toBe(
+        '@container sidebar (min-width: 400px) { .c { color: red; } }',
+      );
+    });
+
+    it('descends @keyframes resumably, one keyframe child per step', () => {
+      let childReads = 0;
+      const keyframes = Array.from({ length: 300 }, (_, i) => ({
+        keyText: `${i}%`,
+        get cssText() {
+          childReads += 1;
+          return `${i}% { opacity: ${i / 300}; }`;
+        },
+      }));
+      const rule = {
+        cssRules: keyframes,
+        name: 'spin',
+        get cssText(): string {
+          throw new Error('whole-subtree serialization');
+        },
+      } as unknown as CSSRule;
+
+      const cursor = createStylesheetTextCursor(makeSheet([rule], null));
+      let maxReadsPerSlice = 0;
+      for (;;) {
+        const before = childReads;
+        const finished = cursor.advance(100);
+        maxReadsPerSlice = Math.max(maxReadsPerSlice, childReads - before);
+        if (finished) break;
+      }
+
+      expect(maxReadsPerSlice).toBeLessThanOrEqual(100);
+      expect(childReads).toBe(300);
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const text = cursor.text()!;
+      expect(text).toContain('@keyframes spin {');
+      expect(text).toContain('299% { opacity: ');
+    });
+
+    it('descends natively-nested style rules resumably, declarations riding in the prelude', () => {
+      let childReads = 0;
+      const children = Array.from({ length: 300 }, (_, i) => ({
+        get cssText() {
+          childReads += 1;
+          return `&.child-${i} { color: blue; }`;
+        },
+      }));
+      const nested = {
+        selectorText: '.card',
+        style: { cssText: 'color: red; background: url("img/bg.png");' },
+        cssRules: children,
+        get cssText(): string {
+          throw new Error('whole-subtree serialization');
+        },
+      } as unknown as CSSRule;
+
+      const cursor = createStylesheetTextCursor(makeSheet([nested]));
+      let maxReadsPerSlice = 0;
+      for (;;) {
+        const before = childReads;
+        const finished = cursor.advance(100);
+        maxReadsPerSlice = Math.max(maxReadsPerSlice, childReads - before);
+        if (finished) break;
+      }
+
+      expect(maxReadsPerSlice).toBeLessThanOrEqual(100);
+      expect(childReads).toBe(300);
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const text = cursor.text()!;
+      // the declaration block never appears among cssRules, so it must ride
+      // in the prelude exactly once, absolutified against the sheet href
+      expect(text).toContain(
+        '.card { color: red; background: url("https://example.com/img/bg.png");',
+      );
+      expect(text).toContain('&.child-299');
+      expect(text.endsWith('}')).toBe(true);
+    });
+
+    it('applies the Safari colon fix across a nested style rule subtree, like the single pass', () => {
+      const nested = {
+        selectorText: '[data:attr] .card',
+        style: { cssText: 'color: red;' },
+        cssRules: [{ cssText: '& [nested:attr] { color: blue; }' }],
+        get cssText(): string {
+          throw new Error('whole-subtree serialization');
+        },
+      } as unknown as CSSRule;
+
+      const cursor = createStylesheetTextCursor(makeSheet([nested], null));
+      while (!cursor.advance(100)) {
+        // drain
+      }
+      // the single pass runs fixSafariColons over the whole top-level rule
+      // text, nested children included; the reassembled frame must match
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const text = cursor.text()!;
+      expect(text).toContain('[data\\:attr]');
+      expect(text).toContain('[nested\\:attr]');
+    });
+
+    it('keeps the one-shot read for @page rules, which share selectorText with style rules', () => {
+      let oneShotReads = 0;
+      const pageRule = {
+        selectorText: ':first',
+        type: 6, // CSSRule.PAGE_RULE
+        style: { cssText: 'margin: 1cm;' },
+        cssRules: [{ cssText: '@top-center { content: "x"; }' }],
+        get cssText(): string {
+          oneShotReads += 1;
+          return '@page :first { margin: 1cm; @top-center { content: "x"; } }';
+        },
+      } as unknown as CSSRule;
+
+      const cursor = createStylesheetTextCursor(makeSheet([pageRule], null));
+      while (!cursor.advance(100)) {
+        // drain
+      }
+      expect(oneShotReads).toBe(1);
+      expect(cursor.text()).toContain('@page :first {');
+    });
+
+    it('never serializes a grouping rule in one shot, and bounds child reads per slice', () => {
+      let childReads = 0;
+      const children = Array.from({ length: 1000 }, (_, i) => ({
+        get cssText() {
+          childReads += 1;
+          return `.g${i} { color: red; }`;
+        },
+      }));
+      const mediaRule = {
+        cssRules: children,
+        media: { mediaText: '(min-width: 500px)' },
+        get cssText(): string {
+          // the pre-slicing failure mode: one synchronous whole-subtree read
+          throw new Error('whole-subtree serialization');
+        },
+      } as unknown as CSSRule;
+
+      const cursor = createStylesheetTextCursor(makeSheet([mediaRule]));
+      let maxReadsPerSlice = 0;
+      for (;;) {
+        const before = childReads;
+        const finished = cursor.advance(100);
+        maxReadsPerSlice = Math.max(maxReadsPerSlice, childReads - before);
+        if (finished) break;
+      }
+
+      expect(maxReadsPerSlice).toBeLessThanOrEqual(100);
+      expect(childReads).toBe(1000);
+      const text = cursor.text();
+      expect(text).toContain('@media (min-width: 500px) {');
+      expect(text).toContain('.g999');
+    });
+
+    it('always advances at least one rule, even with a zero budget', () => {
+      const cursor = createStylesheetTextCursor(makeSheet(makeRules(3)));
+      let calls = 0;
+      while (!cursor.advance(0) && calls < 10) {
+        calls += 1;
+      }
+      expect(calls).toBeLessThanOrEqual(4);
+      expect(cursor.text()).toBeTruthy();
+    });
+
+    it('is done immediately with null text for unreadable sheets', () => {
+      const cursor = createStylesheetTextCursor({
+        rules: null,
+        cssRules: null,
+      } as unknown as CSSStyleSheet);
+      expect(cursor.advance(100)).toBe(true);
+      expect(cursor.text()).toBeNull();
     });
   });
 

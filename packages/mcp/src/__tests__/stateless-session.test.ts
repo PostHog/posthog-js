@@ -163,6 +163,32 @@ describe('Stateless session minting', () => {
       expect(getServerTrackingData(lowLevel)?.sessionSource).toBe('generated')
     })
 
+    /**
+     * 2026-07-28 removed sessions from the protocol — a server MUST NOT mint or
+     * echo `Mcp-Session-Id` under it. That era has no `initialize` handshake, so
+     * today this branch is unreachable through a real v2 server; the gate exists
+     * so compliance does not depend on that routing detail staying true, and so
+     * a host that routes an initialize-shaped request on a modern connection is
+     * still answered correctly.
+     */
+    it.each([
+      ['2026-07-28', 'the revision that removed sessions'],
+      ['2027-03-01', 'any later revision — they were removed, not re-added'],
+    ])('does not mint for a request declaring %s (%s)', async (protocolVersion) => {
+      const { server, lowLevel } = createPod(`pod-${protocolVersion}`)
+      const transport: { sessionId?: string } = {}
+      setFakeTransport(server, transport)
+
+      await invokeHandler(
+        lowLevel,
+        'initialize',
+        { ...INITIALIZE_REQUEST, params: { ...INITIALIZE_REQUEST.params, protocolVersion } },
+        { requestInfo: { headers: {} } }
+      )
+
+      expect(transport.sessionId).toBeUndefined()
+    })
+
     it('leaves session state untouched when the transport write fails', async () => {
       const { server, lowLevel } = createPod('pod-frozen')
       setFakeTransport(server, Object.freeze({}))

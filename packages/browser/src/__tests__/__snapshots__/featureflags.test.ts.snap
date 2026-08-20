@@ -38,6 +38,7 @@ exports[`featureflags _callFlagsEndpoint via reloadFeatureFlags builds a represe
     "timezone": "<runtime-timezone>",
     "token": "random fake token",
   },
+  "fireCallbackOnDrop": true,
   "method": "POST",
   "timeout": undefined,
   "timestampMode": "body",

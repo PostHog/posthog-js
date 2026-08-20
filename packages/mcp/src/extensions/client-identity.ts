@@ -1,22 +1,94 @@
-import type { McpEvent, MCPRequestLike } from '../types'
+import type { CompatibleRequestHandlerExtra, McpEvent, MCPRequestLike, MCPServerLike } from '../types'
+import { hasClientVersionAccessor, hasNegotiatedProtocolVersionAccessor } from './detect'
+import { readHeaderValue } from './headers'
+import { getRequestHeaders } from './request-headers'
 
 /**
- * Client identity under the MCP 2026-07-28 (stateless) revision.
+ * Client identity — who is calling, and which spec revision they speak.
  *
- * That revision removes the `initialize` handshake and the `Mcp-Session-Id`
- * header (SEP-2575 / SEP-2567). Client name/version and the protocol version no
- * longer arrive once at `initialize` — they travel in every request's
- * `params._meta` under these reverse-DNS keys. We mirror the literal key strings
- * here rather than depend on the (still beta) v2 SDK, which is not a dependency
- * of this package.
+ * Where it lives depends on the revision the *request* declares, so this is a
+ * fallback chain and never a branch: one server serves both eras, request by
+ * request.
+ *
+ *   1. `ctx.mcpReq.envelope` — MCP SDK v2 lifts the reserved
+ *      `io.modelcontextprotocol/*` keys out of `_meta` before dispatch, so by
+ *      the time a handler runs they are here and `params._meta` is empty.
+ *   2. `request.params._meta` — where 2026-07-28 puts them on the wire, and
+ *      where they still are on any server that does not lift them.
+ *   3. the `MCP-Protocol-Version` request header, which 2025-11-25 requires a
+ *      client to send on every request after `initialize` — the only per-request
+ *      carrier a legacy-era request has, and therefore the only one that
+ *      survives a per-request server instance.
+ *   4. the server's own accessors — `getClientVersion()` from a legacy
+ *      `initialize` handshake, `getNegotiatedProtocolVersion()` on v2.
+ *
+ * The 2026-07-28 revision removed the `initialize` handshake and the
+ * `Mcp-Session-Id` header (SEP-2575 / SEP-2567), so client name/version and the
+ * protocol version no longer arrive once per connection — they travel with
+ * every request. The key strings are mirrored here rather than imported,
+ * because no `@modelcontextprotocol/*` package is a dependency of this one.
  */
 export const META_CLIENT_INFO_KEY = 'io.modelcontextprotocol/clientInfo'
 export const META_PROTOCOL_VERSION_KEY = 'io.modelcontextprotocol/protocolVersion'
+/** Required on every post-`initialize` request by 2025-11-25 (and sent by modern clients too). */
+export const PROTOCOL_VERSION_HEADER = 'mcp-protocol-version'
+/** A version string is a date-like token; anything longer is junk we should not record. */
+const MAX_PROTOCOL_VERSION_LENGTH = 64
 
 export interface MetaClientInfo {
   clientName?: string
   clientVersion?: string
   protocolVersion?: string
+}
+
+/** Everything a request can be asked about who is calling. */
+export interface ClientIdentitySources {
+  request: MCPRequestLike
+  extra?: CompatibleRequestHandlerExtra
+  /**
+   * Typed `unknown` on purpose: every accessor on it is reached through a
+   * structural probe, never a declared type, because the two SDK majors expose
+   * different ones. Call sites pass a real `MCPServerLike`; the shape checks
+   * here are what decide whether it can answer.
+   */
+  server?: unknown
+}
+
+type UnknownRecord = Record<string, unknown>
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+/** Pulls `{ name, version }` out of a reserved-key value, whatever carried it. */
+function readClientInfoValue(value: unknown): MetaClientInfo | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined
+  }
+  const { name, version } = value as UnknownRecord
+  const result: MetaClientInfo = {}
+  const clientName = nonEmptyString(name)
+  const clientVersion = nonEmptyString(version)
+  if (clientName) {
+    result.clientName = clientName
+  }
+  if (clientVersion) {
+    result.clientVersion = clientVersion
+  }
+  return result.clientName || result.clientVersion ? result : undefined
+}
+
+function readReservedKeys(bag: unknown): MetaClientInfo | undefined {
+  if (!bag || typeof bag !== 'object') {
+    return undefined
+  }
+  const record = bag as UnknownRecord
+  const result: MetaClientInfo = { ...readClientInfoValue(record[META_CLIENT_INFO_KEY]) }
+  const protocolVersion = nonEmptyString(record[META_PROTOCOL_VERSION_KEY])
+  if (protocolVersion) {
+    result.protocolVersion = protocolVersion
+  }
+  return result.clientName || result.clientVersion || result.protocolVersion ? result : undefined
 }
 
 /**
@@ -25,47 +97,127 @@ export interface MetaClientInfo {
  * legacy client, which sends this on `initialize` instead). Never throws.
  */
 export function readMetaClientInfo(request: MCPRequestLike): MetaClientInfo | undefined {
-  const meta = request.params?._meta
-  if (!meta || typeof meta !== 'object') {
+  return readReservedKeys(request.params?._meta)
+}
+
+/**
+ * Reads the same keys from MCP SDK v2's request envelope. v2 strips the reserved
+ * `io.modelcontextprotocol/*` keys from `_meta` while parsing, so on exactly the
+ * traffic this matters for, `readMetaClientInfo` finds nothing and this finds
+ * everything.
+ */
+export function readEnvelopeClientInfo(extra: CompatibleRequestHandlerExtra | undefined): MetaClientInfo | undefined {
+  return readReservedKeys((extra as { mcpReq?: { envelope?: unknown } } | undefined)?.mcpReq?.envelope)
+}
+
+/**
+ * Reads the protocol version off the request headers.
+ *
+ * This is what closes the gap on **2025-11-25 traffic served by a per-request
+ * server**: that era carries identity at the handshake, and the instance
+ * handling a later `tools/call` never saw it. The header rides every request, so
+ * it survives where the handshake does not. Carries no client name — that still
+ * depends on the replayed session token.
+ */
+export function readHeaderProtocolVersion(
+  extra: CompatibleRequestHandlerExtra | undefined
+): MetaClientInfo | undefined {
+  // `getRequestHeaders` answers *where* the headers are on either SDK major;
+  // `readHeaderValue` answers how to read one value out of the bag it returns —
+  // repeated values, mixed case, blank strings. Two questions, one place each.
+  const protocolVersion = readHeaderValue(getRequestHeaders(extra), PROTOCOL_VERSION_HEADER)
+  if (!protocolVersion || protocolVersion.length > MAX_PROTOCOL_VERSION_LENGTH) {
     return undefined
   }
-  const record = meta as Record<string, unknown>
+  return { protocolVersion }
+}
+
+/**
+ * Asks the server itself. `getClientVersion()` answers on any server that
+ * handled an `initialize` (and v2 hosts such as `createMcpHandler` backfill it
+ * from the envelope); `getNegotiatedProtocolVersion()` exists on v2 only, which
+ * is why it is a link in the chain rather than a branch. Never throws — a
+ * server that dislikes being asked must not fail the tool call.
+ */
+export function readServerClientIdentity(server: unknown): MetaClientInfo | undefined {
+  if (!server) {
+    return undefined
+  }
   const result: MetaClientInfo = {}
-
-  const clientInfo = record[META_CLIENT_INFO_KEY]
-  if (clientInfo && typeof clientInfo === 'object') {
-    const { name, version } = clientInfo as Record<string, unknown>
-    if (typeof name === 'string' && name.length > 0) {
-      result.clientName = name
+  try {
+    if (hasClientVersionAccessor(server)) {
+      Object.assign(result, readClientInfoValue((server as MCPServerLike).getClientVersion()))
     }
-    if (typeof version === 'string' && version.length > 0) {
-      result.clientVersion = version
+    if (hasNegotiatedProtocolVersionAccessor(server)) {
+      const negotiated = (
+        server as unknown as { getNegotiatedProtocolVersion(): unknown }
+      ).getNegotiatedProtocolVersion()
+      const protocolVersion = nonEmptyString(negotiated)
+      if (protocolVersion) {
+        result.protocolVersion = protocolVersion
+      }
     }
+  } catch {
+    // fall through to whatever was read before the accessor objected
   }
-
-  const protocolVersion = record[META_PROTOCOL_VERSION_KEY]
-  if (typeof protocolVersion === 'string' && protocolVersion.length > 0) {
-    result.protocolVersion = protocolVersion
-  }
-
   return result.clientName || result.clientVersion || result.protocolVersion ? result : undefined
 }
 
 /**
- * Stamps any client identity found in `params._meta` directly onto the event
- * being built for *this* request, so it carries `$mcp_client_name`,
- * `$mcp_client_version`, and `$mcp_protocol_version` even when there was no
- * `initialize` to learn them from (the modern stateless case).
+ * Resolves client identity through the whole chain, field by field: the first
+ * source that answers a field wins, and a source that answers nothing simply
+ * does not participate. Field-by-field rather than source-by-source because a
+ * request may carry its protocol version in the envelope while the client's
+ * name is only known to the server from a handshake.
+ *
+ * The first three links are **per request**, so they cannot describe anyone but
+ * the caller. Only the last — the server's own accessors — is connection-scoped,
+ * and on a server that multiplexes several clients through one connection it
+ * answers for whichever client completed the handshake. That is the best answer
+ * available on that connection, and it is the same scope `capture.ts` has always
+ * fallen back to (`eventInput.clientName ?? sessionInfo.clientName`), so the
+ * chain neither introduces that sharing nor widens it. Ordering it last is what
+ * keeps it a fallback: any request that identifies itself wins outright.
+ */
+export function resolveClientIdentity({ request, extra, server }: ClientIdentitySources): MetaClientInfo | undefined {
+  const chain = [
+    readEnvelopeClientInfo(extra),
+    readMetaClientInfo(request),
+    readHeaderProtocolVersion(extra),
+    readServerClientIdentity(server),
+  ]
+  const result: MetaClientInfo = {}
+  for (const source of chain) {
+    if (!source) {
+      continue
+    }
+    result.clientName ??= source.clientName
+    result.clientVersion ??= source.clientVersion
+    result.protocolVersion ??= source.protocolVersion
+  }
+  return result.clientName || result.clientVersion || result.protocolVersion ? result : undefined
+}
+
+/**
+ * Stamps whatever the chain resolved onto the event being built for *this*
+ * request, so it carries `$mcp_client_name`, `$mcp_client_version` and
+ * `$mcp_protocol_version` even when there was no `initialize` to learn them
+ * from (the modern stateless case).
  *
  * Writing to the event — a per-request object — rather than the server-wide
  * `sessionInfo` keeps identity correct when one instrumented server multiplexes
  * concurrent requests from different clients (which the stateless spec allows):
  * a sibling request can't clobber this event's attribution between now and when
- * it's captured. Only fields the request actually carries are set, so a request
- * without `_meta` leaves the event's existing values untouched.
+ * it's captured. Only fields actually resolved are set, so a request that
+ * carries nothing leaves the event's existing values untouched.
  */
-export function stampMetaClientInfo(event: McpEvent, request: MCPRequestLike): void {
-  const info = readMetaClientInfo(request)
+export function stampClientIdentity(
+  event: McpEvent,
+  request: MCPRequestLike,
+  extra?: CompatibleRequestHandlerExtra,
+  server?: MCPServerLike
+): void {
+  const info = resolveClientIdentity({ request, extra, server })
   if (!info) {
     return
   }

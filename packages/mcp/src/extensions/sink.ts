@@ -92,9 +92,8 @@ async function applyBeforeSend(
 }
 
 /**
- * Wraps a user-supplied `posthog-node` client. Runs every MCP event through the
- * sanitize → truncate pipeline, fans it out into the `$mcp_*` / `$exception`
- * events, applies `beforeSend`, and hands each to `posthog.capture()`.
+ * Wraps a user-supplied `posthog-node` client: runs every MCP event through
+ * {@link processMcpEvent} and hands each surviving payload to `posthog.capture()`.
  *
  * The SDK does not own the client lifecycle — the host application constructs
  * the `PostHog` instance and is responsible for `shutdown()` (matching
@@ -107,9 +106,8 @@ export class McpEventSink {
   ) {}
 
   /**
-   * Push an MCP event through the pipeline (sanitize → truncate → fan out →
-   * beforeSend → capture). Errors at any stage are logged and the event is
-   * dropped, never re-thrown into tool code.
+   * Errors at any stage are logged and the event is dropped, never re-thrown
+   * into tool code.
    */
   async capture(event: McpEvent, options: McpCaptureOptions): Promise<void> {
     const result = await processMcpEvent(event, options, this.logger)

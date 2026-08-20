@@ -18,12 +18,31 @@ export const DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS = 30 * 60 // 30 minutes
 export const MAX_SESSION_IDLE_TIMEOUT_SECONDS = 10 * 60 * 60 // 10 hours
 export const MIN_SESSION_IDLE_TIMEOUT_SECONDS = 60 // 1 minute
 const SESSION_LENGTH_LIMIT_MILLISECONDS = 24 * 3600 * 1000 // 24 hours
+const BOOTSTRAP_SESSION_CLOCK_SKEW_TOLERANCE_MILLISECONDS = 60 * 1000 // 1 minute
+
+const parseBootstrapSessionId = (sessionID: string, timestamp = new Date().getTime()): number | undefined => {
+    try {
+        const sessionStartTimestamp = uuid7ToTimestampMs(sessionID)
+        if (sessionStartTimestamp > timestamp + BOOTSTRAP_SESSION_CLOCK_SKEW_TOLERANCE_MILLISECONDS) {
+            logger.error('Bootstrap sessionID cannot be in the future')
+            return undefined
+        }
+        return sessionStartTimestamp
+    } catch (e) {
+        logger.error('Invalid sessionID in bootstrap', e)
+        return undefined
+    }
+}
 
 // Must stay well under MIN_SESSION_IDLE_TIMEOUT_SECONDS so idle detection on
 // other tabs cannot fire on stale persisted data (pinned by a unit test).
 // Tradeoff: sibling tabs only observe activity once it has been persisted —
 // in-memory ticks within this window are invisible across tabs.
 export const ACTIVITY_TIMESTAMP_PERSIST_GRANULARITY_MS = 5_000
+// Session checks run for every accepted replay event. Ordinary captures force a
+// reconciliation before reaching the session manager; direct/replay checks are
+// bounded so they do not synchronously scan document.cookie for every event.
+export const SESSION_COOKIE_SYNC_INTERVAL_MS = 1_000
 
 export class SessionIdManager {
     private readonly _sessionIdGenerator: () => string
@@ -35,9 +54,11 @@ export class SessionIdManager {
     private readonly _window_id_storage_key: string
     private readonly _primary_window_exists_storage_key: string
     private _sessionStartTimestamp: number | null
+    private _pendingBootstrapSession: { sessionId: string; sessionStartTimestamp: number } | undefined
 
     private _sessionActivityTimestamp: number | null
     private _lastPersistedActivityTimestamp: number | null = null
+    private _lastCookieSyncTimestamp: number | null = null
     private _sessionIdChangedHandlers: SessionIdChangedCallback[] = []
     private readonly _sessionTimeoutMs: number
 
@@ -67,6 +88,7 @@ export class SessionIdManager {
         this._windowId = undefined
         this._sessionId = undefined
         this._sessionStartTimestamp = null
+        this._pendingBootstrapSession = undefined
         this._sessionActivityTimestamp = null
         this._sessionIdGenerator = sessionIdGenerator || uuidv7
         this._windowIdGenerator = windowIdGenerator || uuidv7
@@ -107,12 +129,7 @@ export class SessionIdManager {
         }
 
         if (this._config.bootstrap?.sessionID) {
-            try {
-                const sessionStartTimestamp = uuid7ToTimestampMs(this._config.bootstrap.sessionID)
-                this._setSessionId(this._config.bootstrap.sessionID, new Date().getTime(), sessionStartTimestamp)
-            } catch (e) {
-                logger.error('Invalid sessionID in bootstrap', e)
-            }
+            this.setBootstrapSessionId(this._config.bootstrap.sessionID)
         }
 
         this._listenToReloadWindow()
@@ -302,9 +319,25 @@ export class SessionIdManager {
     // cannot rotate the freshly-cleared session.
     resetSessionId(): void {
         this._lastPersistedActivityTimestamp = null
+        this._pendingBootstrapSession = undefined
         clearTimeout(this._enforceIdleTimeout)
         this._enforceIdleTimeout = undefined
         this._setSessionId(null, null, null)
+    }
+
+    // Reset defers bootstrap assignment until the next session check so rotation listeners
+    // observe the same event-driven lifecycle as a normal reset, rather than starting a replay immediately.
+    setBootstrapSessionId(sessionID: string, deferUntilNextSession = false): boolean {
+        const sessionStartTimestamp = parseBootstrapSessionId(sessionID)
+        if (isUndefined(sessionStartTimestamp)) {
+            return false
+        }
+        if (deferUntilNextSession) {
+            this._pendingBootstrapSession = { sessionId: sessionID, sessionStartTimestamp }
+        } else {
+            this._setSessionId(sessionID, new Date().getTime(), sessionStartTimestamp)
+        }
+        return true
     }
 
     /**
@@ -368,22 +401,47 @@ export class SessionIdManager {
      * @param {boolean} readOnly (optional) Defaults to False. Should be set to True when the call to the function should not extend or cycle the session (e.g. being called for non-user generated events)
      * @param {Number} timestamp (optional) Defaults to the current time. The timestamp to be stored with the sessionId (used when determining if a new sessionId should be generated)
      */
-    checkAndGetSessionAndWindowId(readOnly = false, _timestamp: number | null = null) {
+    checkAndGetSessionAndWindowId(
+        readOnly = false,
+        _timestamp: number | null = null,
+        persistenceAlreadySynced = false
+    ) {
         if (this._config.cookieless_mode === COOKIELESS_ALWAYS) {
             throw new Error('checkAndGetSessionAndWindowId should not be called with cookieless_mode="always"')
         }
         const timestamp = _timestamp || new Date().getTime()
 
+        const managedSessionIdBeforeCookieSync = this._sessionId
+        if (persistenceAlreadySynced) {
+            this._lastCookieSyncTimestamp = timestamp
+        } else if (
+            isNull(this._lastCookieSyncTimestamp) ||
+            timestamp < this._lastCookieSyncTimestamp ||
+            timestamp - this._lastCookieSyncTimestamp >= SESSION_COOKIE_SYNC_INTERVAL_MS
+        ) {
+            this._persistence.syncCookieProperties?.()
+            this._lastCookieSyncTimestamp = timestamp
+        }
         let [, sessionId, startTimestamp] = this._getSessionId()
+        const cookieSessionAdoption =
+            !isUndefined(managedSessionIdBeforeCookieSync) && sessionId !== managedSessionIdBeforeCookieSync
         const lastActivityTimestamp = this._freshestActivityTimestamp()
         let windowId = this._getWindowId()
 
-        const sessionPastMaximumLength =
-            isPositiveNumber(startTimestamp) && Math.abs(timestamp - startTimestamp) > SESSION_LENGTH_LIMIT_MILLISECONDS
+        const pendingBootstrapSession = this._pendingBootstrapSession
+        const pendingBootstrapSessionPastMaximumLength =
+            !!pendingBootstrapSession &&
+            (pendingBootstrapSession.sessionStartTimestamp >
+                timestamp + BOOTSTRAP_SESSION_CLOCK_SKEW_TOLERANCE_MILLISECONDS ||
+                timestamp - pendingBootstrapSession.sessionStartTimestamp > SESSION_LENGTH_LIMIT_MILLISECONDS)
+        const sessionPastMaximumLength = pendingBootstrapSession
+            ? pendingBootstrapSessionPastMaximumLength
+            : isPositiveNumber(startTimestamp) &&
+              Math.abs(timestamp - startTimestamp) > SESSION_LENGTH_LIMIT_MILLISECONDS
 
         let valuesChanged = false
-        let crossTabAdoption = false
-        const noSessionId = !sessionId
+        let crossTabAdoption = cookieSessionAdoption
+        const noSessionId = !sessionId || !!pendingBootstrapSession
         const preRefreshSessionId = sessionId
         let activityTimeout =
             !noSessionId && !readOnly && this._sessionHasBeenIdleTooLong(timestamp, lastActivityTimestamp)
@@ -406,14 +464,18 @@ export class SessionIdManager {
             ;[, sessionId, startTimestamp] = this._getSessionId()
         }
         if (noSessionId || activityTimeout || sessionPastMaximumLength) {
-            sessionId = this._sessionIdGenerator()
+            crossTabAdoption = false
+            const usePendingBootstrapSession = pendingBootstrapSession && !pendingBootstrapSessionPastMaximumLength
+            sessionId = usePendingBootstrapSession ? pendingBootstrapSession.sessionId : this._sessionIdGenerator()
             windowId = this._windowIdGenerator()
-            logger.info('new session ID generated', {
+            logger.info('new session ID assigned', {
                 sessionId,
                 windowId,
+                bootstrapped: !!usePendingBootstrapSession,
                 changeReason: { noSessionId, activityTimeout, sessionPastMaximumLength },
             })
-            startTimestamp = timestamp
+            startTimestamp = usePendingBootstrapSession ? pendingBootstrapSession.sessionStartTimestamp : timestamp
+            this._pendingBootstrapSession = undefined
             valuesChanged = true
         } else {
             if (!windowId) {
@@ -425,7 +487,7 @@ export class SessionIdManager {
             // change that handlers don't hear about leaves consumers (page-view
             // state, a stopped recorder, session-scoped props) on the old
             // session. If we adopted, we must notify.
-            crossTabAdoption = sessionId !== preRefreshSessionId
+            crossTabAdoption = crossTabAdoption || sessionId !== preRefreshSessionId
             if (crossTabAdoption) {
                 // We took a sibling tab's session id (keeping our own window
                 // id). Fire handlers so downstream consumers (session

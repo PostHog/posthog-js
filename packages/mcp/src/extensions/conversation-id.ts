@@ -102,20 +102,9 @@ export type ConversationIdResolution =
  * derivation is deterministic so that two pods agree — which also means two
  * *callers* sending the same string land in the same session. The strings agents
  * invent are not random (`conv-1`, `1`, `session`), so trusting them verbatim
- * would silently merge unrelated conversations, potentially across users.
- *
- * A compliant agent echoes the uuidv7 we minted and is unaffected. Anything else
- * is treated exactly as if the handle were absent: mint, and prompt back. Shape
+ * would silently merge unrelated conversations, potentially across users. Shape
  * rather than a registry of issued ids, because a per-request server has no
- * memory of what it minted.
- *
- * This narrows the problem, it does not prove provenance: a caller supplying a
- * well-formed uuidv7 is trusted, so two that pick the *same* one still merge. That
- * residue is far smaller than the case it replaces — an agent ignoring the
- * parameter description reaches for `conv-1` or `1`, not a conforming uuidv7 — and
- * closing it needs a signed handle, i.e. a secret shared by every pod. Worth doing
- * if this ever anchors something security-bearing; `$session_id` is an analytics
- * grouping key, so it does not today.
+ * memory of what it minted. Residual risk and why it's accepted: ADR-0004.
  */
 export function resolveConversationId(enabled: boolean, args: unknown): ConversationIdResolution {
   if (!enabled) {
@@ -123,10 +112,9 @@ export function resolveConversationId(enabled: boolean, args: unknown): Conversa
   }
   const supplied = extractConversationId(args)
   if (supplied && MINTED_CONVERSATION_ID.test(supplied)) {
-    // Lowercased because the shape test is case-insensitive but the hash behind
-    // `$session_id` is not. Some hosts normalise uuids to uppercase, and an
-    // uppercased echo of our own handle would otherwise clear the gate and then
-    // land in a different session than the call that minted it.
+    // Lowercased: the shape test is case-insensitive but the hash behind
+    // `$session_id` is not, so an uppercased echo (some hosts normalise uuids)
+    // would land in a different session than the call that minted it.
     return { minted: false, conversationId: supplied.toLowerCase() }
   }
   return { minted: true, conversationId: uuidv7() }
@@ -174,7 +162,10 @@ export function buildConversationIdPromptBack(conversationId: string): {
 } {
   return {
     type: 'text',
-    text: `[SERVER]: Reuse conversation_id=${conversationId} on every subsequent tool call in this conversation. Required for the server to correlate calls and provide context-aware results.`,
+    // Tool results are untrusted content. Keep this as data rather than an
+    // instruction so clients do not classify it as prompt injection when they
+    // are still using a cached tool schema without `conversation_id`.
+    text: JSON.stringify({ conversation_id: conversationId }),
   }
 }
 

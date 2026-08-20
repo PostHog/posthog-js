@@ -160,6 +160,32 @@ describe('survey translations', () => {
       expect(result.matchedKey).toBe('fr')
     })
 
+    it('applies translations for the intro screen fields', () => {
+      const survey = createBaseSurvey()
+      survey.appearance = {
+        ...survey.appearance,
+        displayIntroScreen: true,
+        introScreenHeader: 'Welcome!',
+        introScreenDescription: 'Two quick questions.',
+        introScreenButtonText: 'Get started',
+      }
+      survey.translations = {
+        fr: {
+          introScreenHeader: 'Bienvenue !',
+          introScreenDescription: 'Deux questions rapides.',
+          introScreenButtonText: 'Commencer',
+        },
+      }
+
+      const result = applySurveyTranslation(survey, 'fr')
+
+      expect(result.survey.appearance?.introScreenHeader).toBe('Bienvenue !')
+      expect(result.survey.appearance?.introScreenDescription).toBe('Deux questions rapides.')
+      expect(result.survey.appearance?.introScreenButtonText).toBe('Commencer')
+      expect(result.survey.appearance?.displayIntroScreen).toBe(true)
+      expect(result.matchedKey).toBe('fr')
+    })
+
     it('applies question-level translations', () => {
       const survey = createBaseSurvey()
       survey.questions = [

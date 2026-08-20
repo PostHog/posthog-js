@@ -1,3 +1,5 @@
+import { convertToURL } from '@posthog/browser-common/utils/request-utils'
+
 import { PostHog } from '../posthog-core'
 
 /**
@@ -17,10 +19,16 @@ export type RequestRouterTarget = 'api' | 'ui' | 'assets' | 'flags'
 
 const ingestionDomain = 'i.posthog.com'
 const staticAssetPath = /^\/static\//
+const ingestionPaths = ['/s/', '/e/', '/i/']
 
 export class RequestRouter {
     instance: PostHog
     private _regionCache: Record<string, RequestRouterRegion> = {}
+    private _ingestionEndpoints?: {
+        apiHost: string
+        rewriteRequestPath: PostHog['config']['rewriteRequestPath']
+        urls: Set<string>
+    }
 
     constructor(instance: PostHog) {
         this.instance = instance
@@ -87,37 +95,89 @@ export class RequestRouter {
         return normalizedOverride || undefined
     }
 
+    private _urlKey(url: string): string | undefined {
+        const parsedUrl = convertToURL(url)
+        return parsedUrl ? parsedUrl.protocol + '//' + parsedUrl.host + parsedUrl.pathname : undefined
+    }
+
+    private _prepareEndpoint(target: RequestRouterTarget, path: string, url: string): string {
+        if (target === 'ui') {
+            return url
+        }
+
+        let rewrittenUrl = url
+        const rewriteRequestPath = this.instance.config.rewriteRequestPath
+        if (rewriteRequestPath) {
+            // `URL` is intentionally exposed by this opt-in hook so callers can inspect and update each component safely.
+            const resolvedUrl = convertToURL(url)?.href || url
+            rewrittenUrl = rewriteRequestPath(new URL(resolvedUrl)).toString()
+        }
+
+        if (
+            rewriteRequestPath &&
+            target === 'api' &&
+            ingestionPaths.some((ingestionPath) => path.indexOf(ingestionPath) === 0)
+        ) {
+            const urlKey = this._urlKey(rewrittenUrl)
+            if (urlKey) {
+                const apiHost = this.apiHost
+                let ingestionEndpoints = this._ingestionEndpoints
+                if (
+                    ingestionEndpoints?.apiHost !== apiHost ||
+                    ingestionEndpoints.rewriteRequestPath !== rewriteRequestPath
+                ) {
+                    ingestionEndpoints = { apiHost, rewriteRequestPath, urls: new Set() }
+                    this._ingestionEndpoints = ingestionEndpoints
+                }
+                ingestionEndpoints.urls.add(urlKey)
+            }
+        }
+
+        return rewrittenUrl
+    }
+
+    isIngestionEndpoint(url: string): boolean {
+        const ingestionEndpoints = this._ingestionEndpoints
+        const urlKey = this._urlKey(url)
+        return (
+            ingestionEndpoints?.apiHost === this.apiHost &&
+            ingestionEndpoints.rewriteRequestPath === this.instance.config.rewriteRequestPath &&
+            !!urlKey &&
+            ingestionEndpoints.urls.has(urlKey)
+        )
+    }
+
     endpointFor(target: RequestRouterTarget, path: string = ''): string {
         if (path) {
             path = path[0] === '/' ? path : `/${path}`
         }
 
         if (target === 'ui') {
-            return this.uiHost + path
+            return this._prepareEndpoint(target, path, this.uiHost + path)
         }
 
         if (target === 'flags') {
-            return this.flagsApiHost + path
+            return this._prepareEndpoint(target, path, this.flagsApiHost + path)
         }
 
         if (target === 'assets') {
             const assetHostOverride = this._staticAssetHostOverride(path)
             if (assetHostOverride) {
-                return `${assetHostOverride}${path}`
+                return this._prepareEndpoint(target, path, `${assetHostOverride}${path}`)
             }
         }
 
         if (this.region === RequestRouterRegion.CUSTOM) {
-            return this.apiHost + path
+            return this._prepareEndpoint(target, path, this.apiHost + path)
         }
 
         const suffix = ingestionDomain + path
 
         switch (target) {
             case 'assets':
-                return `https://${this.region}-assets.${suffix}`
+                return this._prepareEndpoint(target, path, `https://${this.region}-assets.${suffix}`)
             case 'api':
-                return `https://${this.region}.${suffix}`
+                return this._prepareEndpoint(target, path, `https://${this.region}.${suffix}`)
         }
     }
 }

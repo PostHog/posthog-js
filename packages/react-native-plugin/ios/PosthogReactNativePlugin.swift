@@ -1,4 +1,5 @@
 import PostHog
+import React
 
 /// Meant for internally logging PostHog related things
 private func hedgeLog(_ message: String) {
@@ -55,7 +56,7 @@ private func declinePushIdentity(_ completion: (String?) -> Void, _ reason: Stri
 }
 
 @objc(PosthogReactNativePlugin)
-class PosthogReactNativePlugin: RCTEventEmitter {
+public class PosthogReactNativePlugin: RCTEventEmitter {
     private var config: PostHogConfig?
 
     private static let pushIdentityEvent = "PostHogPushIdentityRequest"
@@ -68,15 +69,15 @@ class PosthogReactNativePlugin: RCTEventEmitter {
     private var hasPushListeners = false
     private var pushIdentityCompletions: [String: (String?) -> Void] = [:]
 
-    override func supportedEvents() -> [String]! {
+    public override func supportedEvents() -> [String]! {
         [PosthogReactNativePlugin.pushIdentityEvent]
     }
 
-    override func startObserving() {
+    public override func startObserving() {
         DispatchQueue.main.async { self.hasPushListeners = true }
     }
 
-    override func stopObserving() {
+    public override func stopObserving() {
         DispatchQueue.main.async { self.hasPushListeners = false }
     }
 

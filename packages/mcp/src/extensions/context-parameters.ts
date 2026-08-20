@@ -41,7 +41,6 @@ export function addContextParameterToTool<TTool extends ContextInjectableTool>(
   contextDescriptionOverride?: string,
   logger: LoggerFn = log
 ): TTool {
-  // Create a shallow copy of the tool to avoid modifying the original
   const modifiedTool = { ...tool }
   const toolName = tool.name || 'unknown'
   const schema = modifiedTool.inputSchema as AnalyticsInjectableJsonSchema | undefined
@@ -55,10 +54,6 @@ export function addContextParameterToTool<TTool extends ContextInjectableTool>(
     return modifiedTool
   }
 
-  // Note: If additionalProperties is false, we'll need to remove that constraint
-  // when adding context, otherwise the schema would be invalid. We handle this
-  // after the deep copy below.
-
   if (!modifiedTool.inputSchema) {
     modifiedTool.inputSchema = {
       type: 'object',
@@ -69,29 +64,26 @@ export function addContextParameterToTool<TTool extends ContextInjectableTool>(
 
   const contextDescription = contextDescriptionOverride || DEFAULT_CONTEXT_PARAMETER_DESCRIPTION
 
-  // Deep copy the inputSchema to avoid mutations
+  // Deep copy: the server may reuse or freeze the schema object it handed us.
   modifiedTool.inputSchema = JSON.parse(JSON.stringify(modifiedTool.inputSchema)) as AnalyticsInjectableJsonSchema
 
   const inputSchema = modifiedTool.inputSchema as AnalyticsInjectableJsonSchema
 
-  // Ensure properties object exists
   if (!inputSchema.properties) {
     inputSchema.properties = {}
   }
 
-  // Handle additionalProperties: false - must remove this constraint since we're adding context
-  // The MCP SDK adds this constraint when converting Zod schemas to JSON Schema
+  // The MCP SDK emits `additionalProperties: false` when converting Zod schemas;
+  // left in place it would make the injected `context` key invalid.
   if (inputSchema.additionalProperties === false) {
     inputSchema.additionalProperties = undefined
   }
 
-  // Add context property
   inputSchema.properties.context = {
     type: 'string',
     description: contextDescription,
   }
 
-  // Add context to required array
   if (Array.isArray(inputSchema.required)) {
     if (!inputSchema.required.includes('context')) {
       inputSchema.required.push('context')

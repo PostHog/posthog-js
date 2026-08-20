@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.413.3",
+    "version": "1.418.6",
     "bugs": {
         "url": "https://github.com/PostHog/posthog-js/issues"
     },
@@ -67,7 +67,7 @@
         "@posthog/core": "workspace:^",
         "@posthog/types": "workspace:^",
         "core-js": "^3.49.0",
-        "dompurify": "^3.4.12",
+        "dompurify": "^3.4.13",
         "fflate": "^0.4.8",
         "preact": "^10.29.3",
         "query-selector-shadow-dom": "^1.0.1",

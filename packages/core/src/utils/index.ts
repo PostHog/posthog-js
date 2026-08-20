@@ -125,10 +125,6 @@ export const isPromise = (obj: any): obj is Promise<any> => {
   return obj && typeof obj.then === 'function'
 }
 
-export const isError = (x: unknown): x is Error => {
-  return x instanceof Error
-}
-
 export function getFetch(): FetchLike | undefined {
   return typeof fetch !== 'undefined' ? fetch : typeof globalThis.fetch !== 'undefined' ? globalThis.fetch : undefined
 }

@@ -1,5 +1,19 @@
 # @posthog/react-native-plugin
 
+## 2.4.0
+
+### Minor Changes
+
+- [#4505](https://github.com/PostHog/posthog-js/pull/4505) [`ace454d`](https://github.com/PostHog/posthog-js/commit/ace454d792e1f279114ee18984cc601616d5f448) Thanks [@marandaneto](https://github.com/marandaneto)! - Add native Swift Package Manager support for React Native 0.87's experimental CocoaPods-free iOS integration.
+  (2026-08-13)
+
+## 2.3.1
+
+### Patch Changes
+
+- [#4457](https://github.com/PostHog/posthog-js/pull/4457) [`bfdab20`](https://github.com/PostHog/posthog-js/commit/bfdab20be329b9f08fb70812db6d7f3578444db9) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Fix Android compilation with React Native 0.86.
+  (2026-08-07)
+
 ## 2.3.0
 
 ### Minor Changes
