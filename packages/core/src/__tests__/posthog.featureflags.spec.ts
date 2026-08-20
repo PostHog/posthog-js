@@ -2733,5 +2733,40 @@ describe('PostHog Feature Flags v4', () => {
       // and exactly one re-issued request served them both
       expect(sent).toEqual(['missing', 'premium'])
     })
+
+    it('settles every displaced caller when the re-issued request fails, keeping cached flags', async () => {
+      let releaseFirst!: () => void
+      const firstGate = new Promise<void>((r) => (releaseFirst = r))
+      let n = 0
+
+      const [client] = createTestClient('TEST_API_KEY', {}, (m) => {
+        m.fetch.mockImplementation(async () => {
+          n += 1
+          if (n === 1) {
+            await firstGate
+            return {
+              status: 200,
+              text: () => Promise.resolve('ok'),
+              json: () => Promise.resolve({ featureFlags: { 'beta-ui': true }, featureFlagPayloads: {} }),
+            }
+          }
+          return { status: 503, text: () => Promise.resolve('nope'), json: () => Promise.resolve({}) }
+        })
+      })
+
+      void client.reloadFeatureFlagsAsync()
+      await waitForPromises()
+      const displaced = client.reloadFeatureFlagsAsync()
+      await waitForPromises()
+      const displacing = client.reloadFeatureFlagsAsync()
+      await waitForPromises()
+      releaseFirst()
+
+      // a failed re-issue settles every waiter rather than leaving any pending
+      expect(await displaced).toBeUndefined()
+      expect(await displacing).toBeUndefined()
+      // and the flags loaded before it are kept
+      expect(client.getFeatureFlags()).toEqual({ 'beta-ui': true })
+    })
   })
 })

@@ -654,16 +654,14 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       return undefined
     }
     if (this._flagsResponsePromise) {
-      // Queue the reload request instead of dropping it
-      // This ensures that requests with $anon_distinct_id (from identify()) are not lost
+      // Queue rather than drop, so an identity-changing reload still reaches the server. Displaced
+      // callers are carried over rather than settled against the in-flight request: that request
+      // was issued before their context changed, so it cannot reflect it.
+      // Known gap: the newest caller's options replace the queued ones wholesale, so a queued
+      // config fetch displaced by a plain reload loses config=true and onRemoteConfig never fires
+      // for that cycle. (sendAnonDistinctId only differs if an app passes it false explicitly;
+      // every internal caller passes true.) Fixing it means merging the options, not replacing.
       this._logger.info('Feature flags are being loaded already, queuing reload.')
-      // Return a promise that resolves when the pending request completes. Displaced callers are
-      // carried over rather than settled against the in-flight request: that request was issued
-      // before their properties were set, so it cannot reflect them.
-      // Known gap: the newest options win wholesale, so a displaced caller's sendAnonDistinctId,
-      // fetchConfig and triggerOnRemoteConfig are all discarded. A queued identify() reload can
-      // lose $anon_distinct_id despite the comment above, and a queued config fetch never fires
-      // onRemoteConfig. Fixing that means merging the options rather than replacing them.
       return new Promise((resolve, reject) => {
         this._pendingFlagsRequest = {
           sendAnonDistinctId,
