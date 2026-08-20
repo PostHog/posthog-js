@@ -36,6 +36,10 @@ on:
                 description: 'Whether to replace existing immutable S3 assets without purging CDN caches'
                 required: true
                 type: boolean
+        secrets:
+            slack_bot_token:
+                description: 'Slack bot token used to notify recovery approvers'
+                required: true
         outputs:
             source-sha:
                 description: 'Validated posthog-js source commit'
@@ -253,9 +257,50 @@ jobs:
                       echo "- Publish and finalize on npm: \`$PUBLISH_TO_NPM\`"
                   } >> "$GITHUB_STEP_SUMMARY"
 
+    notify-recovery-approval-needed:
+        name: Notify Slack - S3 recovery approval needed
+        needs: validate
+        runs-on: ubuntu-latest
+        permissions: {}
+        steps:
+            - name: Notify Slack - S3 recovery approval needed
+              continue-on-error: true
+              env:
+                  ACTION_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+                  FORCE_OVERWRITE: ${{ inputs.force_overwrite }}
+                  PUBLISH_TO_NPM: ${{ inputs.publish_to_npm }}
+                  REGION: ${{ inputs.region }}
+                  SLACK_BOT_TOKEN: ${{ secrets.slack_bot_token }}
+                  SLACK_CHANNEL_ID: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
+                  SLACK_USER_GROUP_ID: ${{ vars.GROUP_CLIENT_LIBRARIES_SLACK_GROUP_ID }}
+                  SOURCE_SHA: ${{ needs.validate.outputs.source-sha }}
+                  TARGET_VERSION: ${{ inputs.target_version }}
+                  TOOLBAR_SHA: ${{ needs.validate.outputs.toolbar-sha }}
+                  UPDATE_LATEST_ALIASES: ${{ inputs.update_latest_aliases }}
+              run: |
+                  set -euo pipefail
+                  text=$(printf '%s\n' \
+                      ":bufo-hotdog-rocket: <!subteam^$SLACK_USER_GROUP_ID> S3 recovery approval needed for posthog-js@$TARGET_VERSION" \
+                      "• SDK source: <https://github.com/PostHog/posthog-js/commit/$SOURCE_SHA|$SOURCE_SHA>" \
+                      "• Toolbar source: <https://github.com/PostHog/posthog/commit/$TOOLBAR_SHA|$TOOLBAR_SHA>" \
+                      "• Regions: $REGION" \
+                      "• Update latest aliases: $UPDATE_LATEST_ALIASES" \
+                      "• Force overwrite immutable assets: $FORCE_OVERWRITE" \
+                      "• Publish and finalize on npm: $PUBLISH_TO_NPM" \
+                      "<$ACTION_URL|Review and approve on GitHub>")
+                  response=$(curl -sS --connect-timeout 10 --max-time 30 -X POST 'https://slack.com/api/chat.postMessage' \
+                      -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+                      -H 'Content-Type: application/json; charset=utf-8' \
+                      --data "$(jq -n --arg channel "$SLACK_CHANNEL_ID" --arg text "$text" '{channel: $channel, text: $text}')")
+                  if [ "$(printf '%s' "$response" | jq -r '.ok')" != 'true' ]; then
+                      printf '%s\n' "$response" >&2
+                      exit 1
+                  fi
+
     approve-recovery:
         name: Approve production S3 recovery
-        needs: validate
+        needs: [validate, notify-recovery-approval-needed]
+        if: always() && needs.validate.result == 'success'
         runs-on: ubuntu-latest
         environment: 'S3 Recovery'
         permissions: {}
