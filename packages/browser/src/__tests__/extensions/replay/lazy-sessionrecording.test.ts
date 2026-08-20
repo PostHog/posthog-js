@@ -2717,7 +2717,8 @@ describe('Lazy SessionRecording', () => {
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_fullSnapshotTimer']).not.toBe(startTimer)
             })
 
-            it('schedules a snapshot when the tab becomes visible again', () => {
+            it('takes a snapshot immediately when the tab becomes visible again', () => {
+                posthog.config.session_recording!.full_snapshot_interval_millis = 0
                 sessionRecording.onRemoteConfig(
                     makeFlagsResponse({
                         sessionRecording: {
@@ -2727,18 +2728,43 @@ describe('Lazy SessionRecording', () => {
                 )
                 _emit(createFullSnapshot())
 
-                const scheduleFullSnapshot = jest.spyOn(
+                const takeFullSnapshot = jest.spyOn(
                     sessionRecording['_lazyLoadedSessionRecording'] as any,
-                    '_scheduleFullSnapshot'
+                    '_tryTakeFullSnapshot'
                 )
                 const visibilityState = jest.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
                 try {
                     document.dispatchEvent(new Event('visibilitychange'))
-                    expect(scheduleFullSnapshot).not.toHaveBeenCalled()
+                    expect(takeFullSnapshot).not.toHaveBeenCalled()
 
                     visibilityState.mockReturnValue('visible')
                     document.dispatchEvent(new Event('visibilitychange'))
-                    expect(scheduleFullSnapshot).toHaveBeenCalledTimes(1)
+                    expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
+                } finally {
+                    visibilityState.mockRestore()
+                }
+            })
+
+            it('does not take a snapshot when the tab becomes visible while idle', () => {
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                        },
+                    })
+                )
+                _emit(createFullSnapshot())
+
+                const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+                lazyRecorder['_isIdle'] = true
+                const takeFullSnapshot = jest.spyOn(lazyRecorder as any, '_tryTakeFullSnapshot')
+                const visibilityState = jest.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
+                try {
+                    document.dispatchEvent(new Event('visibilitychange'))
+                    visibilityState.mockReturnValue('visible')
+                    document.dispatchEvent(new Event('visibilitychange'))
+
+                    expect(takeFullSnapshot).not.toHaveBeenCalled()
                 } finally {
                     visibilityState.mockRestore()
                 }
@@ -3966,6 +3992,42 @@ describe('Lazy SessionRecording', () => {
                     data: { source: 5 },
                 }),
             ])
+        })
+
+        it('does not take or schedule snapshots after becoming visible on a blocked URL', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        urlBlocklist: [
+                            {
+                                matching: 'regex',
+                                url: '/blocked',
+                            },
+                        ],
+                    },
+                })
+            )
+            _emit(createFullSnapshot())
+
+            fakeNavigateTo('https://test.com/blocked')
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            expect(sessionRecording.status).toBe('paused')
+
+            const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+            const scheduleFullSnapshot = jest.spyOn(lazyRecorder as any, '_scheduleFullSnapshot')
+            const takeFullSnapshot = jest.spyOn(lazyRecorder as any, '_tryTakeFullSnapshot')
+            const visibilityState = jest.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
+            try {
+                document.dispatchEvent(new Event('visibilitychange'))
+                visibilityState.mockReturnValue('visible')
+                document.dispatchEvent(new Event('visibilitychange'))
+
+                expect(takeFullSnapshot).not.toHaveBeenCalled()
+                expect(scheduleFullSnapshot).not.toHaveBeenCalled()
+            } finally {
+                visibilityState.mockRestore()
+            }
         })
 
         it('only pauses once when sampling determines session should not record', () => {
