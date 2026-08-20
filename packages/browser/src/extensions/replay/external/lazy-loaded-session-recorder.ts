@@ -525,7 +525,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _strategy: RecordingStrategy | undefined
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
     private _fullSnapshotTimestamps: Array<[string, number]> = []
-    // ship-time FullSnapshot tracking for _ensureFullSnapshotForSession (unlike _fullSnapshotTimestamps, which records emit-time debug telemetry)
+    // the session a FullSnapshot was last captured for, read by _ensureFullSnapshotForSession and by
+    // the marker-only flush guard (unlike _fullSnapshotTimestamps, which records emit-time debug telemetry)
     private _lastFullSnapshotSessionId: string | undefined = undefined
     private _fullSnapshotHealAttemptedFor: string | undefined = undefined
 
@@ -1895,12 +1896,31 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
     }
 
+    // Custom events are replay markers rather than renderable content. When a minimum duration is
+    // configured, do not let markers open a recording before this session has captured a FullSnapshot.
+    // Later marker-only blocks can append to that recording, while session-linking markers are exempt
+    // because dropping them would break the chain through a session that recorded nothing.
+    private _wouldOpenRecordingWithMarkersOnly(): boolean {
+        if (this._lastFullSnapshotSessionId === this._buffer.sessionId || this._buffer.data.length === 0) {
+            return false
+        }
+        return this._buffer.data.every(
+            (event) =>
+                event?.type === EventType.Custom && !isSessionEndingEvent(event) && !isSessionStartingEvent(event)
+        )
+    }
+
     private _flushBuffer(): SnapshotBuffer {
         this._clearFlushBufferTimer()
 
         // hold the buffer rather than ship a billable recording for an epoch nobody touched
         if (this._holdFlushUntilInteraction) {
             return this._buffer
+        }
+
+        if (isNumber(this._minimumDuration) && this._wouldOpenRecordingWithMarkersOnly()) {
+            // A suppressed size-cap flush would otherwise let a marker-only buffer grow without bound.
+            return this._buffer.size > RECORDING_MAX_EVENT_SIZE ? this._clearBuffer() : this._buffer
         }
 
         // never flush while a sampling decision is missing (e.g. wiped by posthog.reset()) — an
@@ -1958,22 +1978,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         return lastTimestamp - firstTimestamp
     }
 
-    // A buffer holding only lifecycle custom events (e.g. a lone $session_starting pushed in on
-    // rotation) has no Meta/FullSnapshot to play back. Neither duration check below looks at
-    // event content, so without this a buffer like that can still cross a configured minimum
-    // duration on wall-clock/event-timestamp age alone and ship as an empty, unplayable recording.
-    private _hasOnlyLifecycleEvents = (): boolean => {
-        return this._buffer.data.length > 0 && this._buffer.data.every((event) => event?.type === EventType.Custom)
-    }
-
     private _isBelowMinimumDuration = (): boolean => {
         const minimumDuration = this._minimumDuration
         if (!isNumber(minimumDuration)) {
             return false
-        }
-
-        if (this._hasOnlyLifecycleEvents()) {
-            return true
         }
 
         const strictMode = this._instance.config.session_recording?.strictMinimumDuration ?? false

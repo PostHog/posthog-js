@@ -5546,39 +5546,89 @@ describe('Lazy SessionRecording', () => {
             expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toBe(0)
         })
 
-        it('does not flush a buffer that only holds lifecycle custom events, however old the session id is', () => {
+        it('does not let non-linking custom events open a recording', () => {
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
                     sessionRecording: { minimumDurationMilliseconds: 1500 },
                 })
             )
+            releaseInteractionHold()
 
             expect(sessionRecording.status).toBe('active')
             const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
-
-            // a lone lifecycle event (e.g. $session_starting pushed in on rotation), timestamped
-            // well past the minimum duration - old non-strict logic only looked at this event's
-            // age relative to session start, so it would ship this as an empty recording
-            _emit(
-                createCustomSnapshot(
-                    { timestamp: sessionStartTimestamp + 5000 },
-                    { nextSessionId: sessionId },
-                    '$session_starting'
-                )
-            )
-
-            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data.length).toBe(1)
-            expect(sessionRecording['_lazyLoadedSessionRecording']['_isBelowMinimumDuration']()).toBe(true)
+            const marker = createCustomSnapshot({ timestamp: sessionStartTimestamp + 5000 })
+            _emit(marker)
 
             sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
             expect(posthog.capture).not.toHaveBeenCalled()
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([marker])
+        })
 
-            // once real content (a snapshot) arrives, the buffer is free to flush again on its own duration logic
-            _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 5100 }))
-            expect(sessionRecording['_lazyLoadedSessionRecording']['_isBelowMinimumDuration']()).toBe(false)
+        it('flushes custom-only blocks after the session has captured a FullSnapshot', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { minimumDurationMilliseconds: 1500 },
+                })
+            )
+            releaseInteractionHold()
 
+            const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
+            _emit(createFullSnapshot({ timestamp: sessionStartTimestamp + 5000 }))
             sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
             expect(posthog.capture).toHaveBeenCalled()
+            ;(posthog.capture as Mock).mockClear()
+
+            const marker = createCustomSnapshot({ timestamp: sessionStartTimestamp + 5100 }, {}, 'app-state')
+            _emit(marker)
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                expect.objectContaining({ $snapshot_data: [marker] }),
+                expect.any(Object)
+            )
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([])
+        })
+
+        it.each(['$session_ending', '$session_starting'])('preserves the %s linking marker', (tag) => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { minimumDurationMilliseconds: 1500 },
+                })
+            )
+            releaseInteractionHold()
+
+            const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
+            const payload = tag === '$session_ending' ? { currentSessionId: sessionId } : { nextSessionId: sessionId }
+            const marker = createCustomSnapshot({ timestamp: sessionStartTimestamp + 5000 }, payload, tag)
+            _emit(marker)
+
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                expect.objectContaining({ $snapshot_data: [marker] }),
+                expect.any(Object)
+            )
+        })
+
+        it('drops a marker-only buffer that exceeds the size cap', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: { minimumDurationMilliseconds: 1500 },
+                })
+            )
+            releaseInteractionHold()
+
+            const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
+            _emit(createCustomSnapshot({ timestamp: sessionStartTimestamp + 5000 }))
+            sessionRecording['_lazyLoadedSessionRecording']['_buffer'].size = RECORDING_MAX_EVENT_SIZE + 1
+
+            sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+            expect(posthog.capture).not.toHaveBeenCalled()
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([])
         })
     })
 
