@@ -91,7 +91,8 @@ describe('ErrorEventCoercer', () => {
   it.each([
     { name: 'a zeroed position', lineno: 0, colno: 0 },
     { name: 'no position at all', lineno: undefined, colno: undefined },
-  ])('reports no stack trace when the browser sends $name', ({ lineno, colno }) => {
+    { name: 'a column but no line', lineno: 0, colno: 13 },
+  ])('reports no stack trace for $name', ({ lineno, colno }) => {
     const exception = buildException(
       new FakeErrorEvent({
         message: 'ResizeObserver loop completed with undelivered notifications.',

@@ -51,11 +51,11 @@ export class ErrorEventCoercer implements ErrorTrackingCoercer<ErrorEventLike> {
     if (!isString(location.filename) || location.filename.length === 0) {
       return undefined
     }
-    // Stack lines are 1-indexed, so a fully zeroed position means the browser reported none. It
-    // pairs that with the document URL as `filename`, and a frame built from the two names a page
-    // rather than a script, which no source map can resolve. Leaving the exception frameless says
-    // the same thing without inviting a lookup that cannot succeed.
-    if (lineno === 0 && colno === 0) {
+    // Stack lines are 1-indexed, so a zero line means the report carries no code position. The
+    // browser pairs that with the document URL as `filename`, and a frame built from the two names
+    // a page rather than a script, which no source map can resolve. Leaving the exception frameless
+    // says the same thing without inviting a lookup that cannot succeed.
+    if (lineno === 0) {
       return undefined
     }
     // The message stays in `value`, which prevents multiline messages from being parsed as extra frames.
