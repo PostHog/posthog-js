@@ -51,6 +51,7 @@ jobs:
         runs-on: ubuntu-latest
         outputs:
             source-sha: ${{ steps.source.outputs.source-sha }}
+            source-version: ${{ steps.source.outputs.source-version }}
             toolbar-sha: ${{ steps.toolbar.outputs.toolbar-sha }}
             toolbar-matrix: ${{ steps.regions.outputs.toolbar-matrix }}
             upload-matrix: ${{ steps.regions.outputs.upload-matrix }}
@@ -172,7 +173,10 @@ jobs:
                       fi
                   fi
 
-                  echo "source-sha=$source_sha" >> "$GITHUB_OUTPUT"
+                  {
+                      echo "source-sha=$source_sha"
+                      echo "source-version=$source_version"
+                  } >> "$GITHUB_OUTPUT"
                   echo "✓ source: posthog-js@$source_version from $source_sha"
                   echo "✓ S3 target: /static/$TARGET_VERSION/"
                   echo "✓ publish to npm: $PUBLISH_TO_NPM"
@@ -242,6 +246,7 @@ jobs:
                   PUBLISH_TO_NPM: ${{ inputs.publish_to_npm }}
                   REGION: ${{ inputs.region }}
                   SOURCE_SHA: ${{ steps.source.outputs.source-sha }}
+                  SOURCE_VERSION: ${{ steps.source.outputs.source-version }}
                   TARGET_VERSION: ${{ inputs.target_version }}
                   TOOLBAR_SHA: ${{ steps.toolbar.outputs.toolbar-sha }}
                   UPDATE_LATEST_ALIASES: ${{ inputs.update_latest_aliases }}
@@ -249,7 +254,7 @@ jobs:
                   {
                       echo "### S3 recovery approval requested for posthog-js@$TARGET_VERSION"
                       echo
-                      echo "- SDK source: [\`$SOURCE_SHA\`](https://github.com/PostHog/posthog-js/commit/$SOURCE_SHA)"
+                      echo "- SDK source: [\`$SOURCE_SHA\`](https://github.com/PostHog/posthog-js/commit/$SOURCE_SHA) (\`posthog-js@$SOURCE_VERSION\`)"
                       echo "- Toolbar source: [\`$TOOLBAR_SHA\`](https://github.com/PostHog/posthog/commit/$TOOLBAR_SHA)"
                       echo "- Regions: \`$REGION\`"
                       echo "- Update latest CDN aliases: \`$UPDATE_LATEST_ALIASES\`"
@@ -274,6 +279,7 @@ jobs:
                   SLACK_CHANNEL_ID: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
                   SLACK_USER_GROUP_ID: ${{ vars.GROUP_CLIENT_LIBRARIES_SLACK_GROUP_ID }}
                   SOURCE_SHA: ${{ needs.validate.outputs.source-sha }}
+                  SOURCE_VERSION: ${{ needs.validate.outputs.source-version }}
                   TARGET_VERSION: ${{ inputs.target_version }}
                   TOOLBAR_SHA: ${{ needs.validate.outputs.toolbar-sha }}
                   UPDATE_LATEST_ALIASES: ${{ inputs.update_latest_aliases }}
@@ -281,7 +287,7 @@ jobs:
                   set -euo pipefail
                   text=$(printf '%s\n' \
                       ":bufo-hotdog-rocket: <!subteam^$SLACK_USER_GROUP_ID> S3 recovery approval needed for posthog-js@$TARGET_VERSION" \
-                      "• SDK source: <https://github.com/PostHog/posthog-js/commit/$SOURCE_SHA|$SOURCE_SHA>" \
+                      "• SDK source: <https://github.com/PostHog/posthog-js/commit/$SOURCE_SHA|$SOURCE_SHA> (posthog-js@$SOURCE_VERSION)" \
                       "• Toolbar source: <https://github.com/PostHog/posthog/commit/$TOOLBAR_SHA|$TOOLBAR_SHA>" \
                       "• Regions: $REGION" \
                       "• Update latest aliases: $UPDATE_LATEST_ALIASES" \
