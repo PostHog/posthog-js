@@ -355,15 +355,63 @@ describe('LazyLoadedSessionRecording compression paths', () => {
         await lazyLoadedSessionRecording['_compressionQueue']
         expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
 
-        // only healed once per session id, even if the requested snapshot has not landed yet
+        // the requested snapshot has not landed, so the next incremental retries the heal
         emit(createIncrementalSnapshot(200))
         await lazyLoadedSessionRecording['_compressionQueue']
-        expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
+        expect(takeFullSnapshot).toHaveBeenCalledTimes(2)
 
         // once the healed full snapshot ships, incrementals stop triggering healing
         emit(createFullSnapshot({ content: 'healed' }))
         emit(createIncrementalSnapshot(300))
         await lazyLoadedSessionRecording['_compressionQueue']
+        expect(takeFullSnapshot).toHaveBeenCalledTimes(2)
+    })
+
+    it('stops healing a session after a bounded number of failed attempts', async () => {
+        const { emit, posthog, lazyLoadedSessionRecording } = await setupLazyLoadedSessionRecording({
+            gzipSupported: true,
+        })
+        const { assignableWindow } = require('../../../utils/globals')
+        const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot
+
+        emit(createFullSnapshot({ content: 'initial' }))
+        await lazyLoadedSessionRecording['_compressionQueue']
+
+        posthog.sessionManager['_setSessionId']('rotated-session-id', 123, 123)
+        lazyLoadedSessionRecording['_isIdle'] = 'unknown'
+        lazyLoadedSessionRecording['_sessionId'] = 'rotated-session-id'
+
+        // the heal never produces a full snapshot, so each incremental retries up to the cap, then stops
+        for (let i = 0; i < 10; i++) {
+            emit(createIncrementalSnapshot(100 + i))
+            await lazyLoadedSessionRecording['_compressionQueue']
+        }
+        expect(takeFullSnapshot).toHaveBeenCalledTimes(5)
+    })
+
+    it('heals again after a second rotation exhausts the first session budget', async () => {
+        const { emit, posthog, lazyLoadedSessionRecording } = await setupLazyLoadedSessionRecording({
+            gzipSupported: true,
+        })
+        const { assignableWindow } = require('../../../utils/globals')
+        const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot
+
+        emit(createFullSnapshot({ content: 'initial' }))
+        await lazyLoadedSessionRecording['_compressionQueue']
+
+        // first rotation heals but never lands a full snapshot
+        posthog.sessionManager['_setSessionId']('rotated-session-id', 123, 123)
+        lazyLoadedSessionRecording['_isIdle'] = 'unknown'
+        lazyLoadedSessionRecording['_sessionId'] = 'rotated-session-id'
+        emit(createIncrementalSnapshot(100))
+        await lazyLoadedSessionRecording['_compressionQueue']
         expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
+
+        // a second rotation gets its own heal budget rather than staying broken
+        posthog.sessionManager['_setSessionId']('rotated-session-id-2', 456, 456)
+        lazyLoadedSessionRecording['_sessionId'] = 'rotated-session-id-2'
+        emit(createIncrementalSnapshot(200))
+        await lazyLoadedSessionRecording['_compressionQueue']
+        expect(takeFullSnapshot).toHaveBeenCalledTimes(2)
     })
 })

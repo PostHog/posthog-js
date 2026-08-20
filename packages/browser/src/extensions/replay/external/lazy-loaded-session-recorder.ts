@@ -108,6 +108,11 @@ const ONE_HOUR = ONE_MINUTE * 60
 const MIN_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS = 1000
 const MAX_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS = ONE_HOUR
 
+// A heal request can fail to produce a full snapshot (rrweb not ready, the take dropped), so
+// retry a few times for the same session before giving up, to keep the retries bounded and
+// avoid a loop when every take keeps failing.
+const MAX_FULL_SNAPSHOT_HEAL_ATTEMPTS = 5
+
 // A full snapshot runs as one uninterruptible task, so anything at this scale is a
 // visible freeze - no rendering, scrolling, or cursor movement - and worth a warning.
 const SLOW_FULL_SNAPSHOT_THRESHOLD_MS = 500
@@ -549,7 +554,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // the marker-only flush guard (unlike _fullSnapshotTimestamps, which records emit-time debug
     // telemetry). Capture-time, not ship-time: a buffer cleared before it flushed leaves this set.
     private _lastFullSnapshotSessionId: string | undefined = undefined
+    // the session heal attempts are counted against, plus the count so far, so a heal that never
+    // produces a full snapshot retries a bounded number of times instead of latching off after one
     private _fullSnapshotHealAttemptedFor: string | undefined = undefined
+    private _fullSnapshotHealAttempts: number = 0
 
     private _windowId: string
     private _sessionId: string
@@ -1578,7 +1586,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
     }
 
-    // A session whose incrementals ship before any FullSnapshot is unplayable until the next periodic snapshot, so request one from rrweb (once per session id, to avoid loops if taking one keeps failing).
+    // A session whose incrementals ship before any FullSnapshot is unplayable until the next periodic
+    // snapshot, so request one from rrweb. A heal request can fail to produce a snapshot, and the session
+    // can rotate again, so retry up to MAX_FULL_SNAPSHOT_HEAL_ATTEMPTS per session id rather than latching
+    // off after one attempt. The count resets when the heal target changes, so each rotated session gets
+    // its own budget.
     private _ensureFullSnapshotForSession(event: eventWithTime, targetSessionId: string) {
         if (event.type === EventType.FullSnapshot) {
             this._lastFullSnapshotSessionId = targetSessionId
@@ -1592,15 +1604,24 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         if (
             // deliberately conservative: only heal after this recorder shipped a FullSnapshot to another session (the rotation signature), since on a fresh start rrweb's init snapshot is always ordered ahead of any incremental
             isUndefined(this._lastFullSnapshotSessionId) ||
-            this._lastFullSnapshotSessionId === targetSessionId ||
-            this._fullSnapshotHealAttemptedFor === targetSessionId
+            this._lastFullSnapshotSessionId === targetSessionId
         ) {
             return
         }
 
-        this._fullSnapshotHealAttemptedFor = targetSessionId
+        if (this._fullSnapshotHealAttemptedFor !== targetSessionId) {
+            this._fullSnapshotHealAttemptedFor = targetSessionId
+            this._fullSnapshotHealAttempts = 0
+        }
+
+        if (this._fullSnapshotHealAttempts >= MAX_FULL_SNAPSHOT_HEAL_ATTEMPTS) {
+            return
+        }
+
+        this._fullSnapshotHealAttempts += 1
         logger.info('incremental snapshot for a session with no full snapshot - requesting one', {
             sessionId: targetSessionId,
+            attempt: this._fullSnapshotHealAttempts,
         })
         this._tryTakeFullSnapshot()
     }
