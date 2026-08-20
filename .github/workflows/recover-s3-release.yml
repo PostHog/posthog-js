@@ -288,7 +288,7 @@ jobs:
                       "• Force overwrite immutable assets: $FORCE_OVERWRITE" \
                       "• Publish and finalize on npm: $PUBLISH_TO_NPM" \
                       "<$ACTION_URL|Review and approve on GitHub>")
-                  response=$(curl -sS -X POST 'https://slack.com/api/chat.postMessage' \
+                  response=$(curl -sS --connect-timeout 10 --max-time 30 -X POST 'https://slack.com/api/chat.postMessage' \
                       -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
                       -H 'Content-Type: application/json; charset=utf-8' \
                       --data "$(jq -n --arg channel "$SLACK_CHANNEL_ID" --arg text "$text" '{channel: $channel, text: $text}')")
