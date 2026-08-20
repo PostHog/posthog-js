@@ -198,7 +198,7 @@ const results = {
         toolCalls.length > 0 &&
         toolCalls.every((e) => p(e, '$mcp_protocol_version') === (LANE === '2026' ? MODERN : LEGACY)),
     warnings: (r.warnings ?? []).length === 0,
-    header: isV2 ? mintedHeaders.length === 0 : headerOk,
+    header: headerOk,
     alive: null, // measured by matrix.mjs in a separate boot
 }
 
