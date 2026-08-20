@@ -1,4 +1,5 @@
 import { window as commonWindow } from '@posthog/browser-common/utils/globals'
+import type { Client } from '@posthog/browser-common'
 import type { DeferredStylesheetStats, MutationCost, SnapshotCost } from '@posthog/rrweb-record'
 import type { ErrorTracking } from '@posthog/core'
 
@@ -295,7 +296,7 @@ interface PostHogExtensions {
     generateSurveys?: (posthog: PostHog, isSurveysEnabled: boolean) => any | undefined
     generateProductTours?: (posthog: PostHog, isEnabled: boolean) => any | undefined
     logs?: {
-        initializeLogs?: (posthog: PostHog) => (() => void) | undefined
+        initializeLogs?: (host: PostHog | Client) => (() => void) | undefined
     }
     /** @deprecated Use `postHogWebVitalsCallbacksByFlavor` to select callbacks explicitly. */
     postHogWebVitalsCallbacks?: WebVitalsCallbacks

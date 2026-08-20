@@ -17,6 +17,7 @@ import { assignableWindow } from './utils/globals'
 import { addEventListener } from '@posthog/browser-common/utils/general-utils'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { resolveLogsConfig } from './logs-defaults'
+import { LogsExtension } from './extension-tokens'
 import {
     isStatusZeroFailureCircuitBreakerTripped,
     updateStatusZeroFailureCount,
@@ -55,7 +56,7 @@ const isHandledLogsRequestError = (error: unknown): error is HandledLogsRequestE
     (error as Partial<HandledLogsRequestError>)[HANDLED_LOGS_REQUEST_ERROR] === true
 
 export class PostHogLogs implements Extension {
-    readonly name = 'logs'
+    readonly name = LogsExtension
     private _isLogsEnabled: boolean = false
     private _isLoaded: boolean = false
     private _isLoading: boolean = false
@@ -90,6 +91,7 @@ export class PostHogLogs implements Extension {
     // Shared across both cores: they send to the same endpoint, so one blocker
     // verdict covers both.
     private _consecutiveStatusZeroFailures = 0
+    private _client?: Client
     private _remoteConfigSubscription?: Disposable
     private _disposed = false
 
@@ -172,6 +174,7 @@ export class PostHogLogs implements Extension {
         if (this._disposed) {
             return
         }
+        this._client = client
         let replayedEnabledConfig = false
         const subscription = client.onRemoteConfig((result) => {
             replayedEnabledConfig = result.ok && result.config.logs?.captureConsoleLogs === true
@@ -198,6 +201,7 @@ export class PostHogLogs implements Extension {
         this._disposed = true
         this._remoteConfigSubscription?.dispose()
         this._remoteConfigSubscription = undefined
+        this._client = undefined
         this._isLoading = false
         window?.removeEventListener('online', this._onReconnect)
         // TODO: Multiplex console capture across instances and settle pending log sends so
@@ -239,7 +243,7 @@ export class PostHogLogs implements Extension {
     // Console auto-capture (the lazy `logs` chunk) routes here so its records run
     // through the shared core pipeline and carry `service.name: posthog-browser-logs`.
     /** @internal */
-    _captureConsoleLog(options: CaptureLogOptions): void {
+    captureConsoleLog(options: CaptureLogOptions): void {
         if (!this._disposed) {
             this._getConsoleCore().captureLog(options)
         }
@@ -305,10 +309,11 @@ export class PostHogLogs implements Extension {
                 if (this._disposed) {
                     return
                 }
-                if (err || !phExtensions.logs?.initializeLogs) {
+                const logsExtension = phExtensions.logs
+                if (err || !logsExtension?.initializeLogs) {
                     this._logger.error('Could not load logs script', err)
                 } else {
-                    this._consoleLogsDispose = phExtensions.logs.initializeLogs(this._instance)
+                    this._consoleLogsDispose = logsExtension.initializeLogs(this._client ?? this._instance)
                     this._isLoaded = true
                 }
             })

@@ -106,6 +106,8 @@ export interface Client {
     readonly groups: DeepReadonly<Record<string, string>>
     /** The current session, created on first read if needed. */
     readonly session: SessionContext
+    /** Whether the host currently permits data capture. */
+    readonly canCapture: boolean
 
     /** Records an analytics event through the client's normal pipeline. */
     capture(event: string, properties?: Properties | null, options?: CaptureOptions): Promise<void>

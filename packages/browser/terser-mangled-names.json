@@ -56,7 +56,6 @@
         "_canvasRecording",
         "_canvasResolutionScale",
         "_capture",
-        "_captureConsoleLog",
         "_captureDeadClick",
         "_captureEvent",
         "_captureExtensionExceptions",
