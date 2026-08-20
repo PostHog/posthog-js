@@ -15,7 +15,7 @@
         "runId": 32348835948,
         "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/32348835948"
       },
-      "attempts": 0
+      "attempts": 1
     },
     {
       "id": "pull_request-4567-auto-none-no-comment-no-close-1787214423610",
