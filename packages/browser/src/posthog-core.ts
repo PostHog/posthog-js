@@ -1425,7 +1425,8 @@ export class PostHog implements PostHogInterface {
             : undefined
 
         if (clientRateLimitContext?.isRateLimited) {
-            logger.critical('This capture call is ignored due to client rate limiting.')
+            // Console error autocapture would re-enter capture while this rate limit remains active.
+            logger.warn('This capture call is ignored due to client rate limiting.')
             return
         }
 

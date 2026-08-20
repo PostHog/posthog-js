@@ -1,5 +1,6 @@
 import posthogErrorWrappingFunctions from '../../../entrypoints/exception-autocapture'
 import { ErrorTracking } from '@posthog/core'
+import { createLogger, logger } from '@posthog/browser-common/utils/logger'
 
 const { wrapOnError, wrapUnhandledRejection, wrapConsoleError } = posthogErrorWrappingFunctions
 
@@ -105,16 +106,30 @@ describe('error wrapping functions', () => {
             expect(captureFn).toHaveBeenCalled()
         })
 
-        it('still chains to a callable original handler', () => {
+        it('captures customer output that resembles a PostHog log and still chains to the original handler', () => {
             const con = console as any
             const original = jest.fn()
             con.error = original
             unwrap = wrapConsoleError(captureFn)
 
-            con.error('boom')
+            con.error('[PostHog.js]', 'customer error')
 
-            expect(original).toHaveBeenCalledWith('boom')
+            expect(original).toHaveBeenCalledWith('[PostHog.js]', 'customer error')
             expect(captureFn).toHaveBeenCalled()
+        })
+
+        it('does not capture PostHog logger output but still logs it', () => {
+            const con = console as any
+            const original = jest.fn()
+            con.error = original
+            unwrap = wrapConsoleError(captureFn)
+
+            logger.critical('critical message')
+            createLogger('[Test]', { debugEnabled: true }).error('debug message')
+
+            expect(original).toHaveBeenNthCalledWith(1, '[PostHog.js]', 'critical message')
+            expect(original).toHaveBeenNthCalledWith(2, '[PostHog.js] [Test]', 'debug message')
+            expect(captureFn).not.toHaveBeenCalled()
         })
     })
 })

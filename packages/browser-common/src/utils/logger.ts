@@ -3,8 +3,34 @@ import { isUndefined } from '@posthog/core'
 import type { Logger } from '@posthog/types'
 import { window } from './globals'
 
+const POSTHOG_LOGGER_ACTIVE = '__PosthogLoggerActive__'
+
 interface DebugWindow extends Window {
     POSTHOG_DEBUG?: boolean
+    [POSTHOG_LOGGER_ACTIVE]?: boolean
+}
+
+// The logger and exception autocapture can run from separate bundles, so share this synchronous guard on window.
+export const isPostHogLoggerActive = (): boolean => !!(window && (window as DebugWindow)[POSTHOG_LOGGER_ACTIVE])
+
+const withPostHogLoggerActive = (callback: () => void): void => {
+    const debugWindow = window as DebugWindow | undefined
+    if (!debugWindow) {
+        callback()
+        return
+    }
+
+    const wasActive = debugWindow[POSTHOG_LOGGER_ACTIVE]
+    debugWindow[POSTHOG_LOGGER_ACTIVE] = true
+    try {
+        callback()
+    } finally {
+        if (isUndefined(wasActive)) {
+            delete debugWindow[POSTHOG_LOGGER_ACTIVE]
+        } else {
+            debugWindow[POSTHOG_LOGGER_ACTIVE] = wasActive
+        }
+    }
 }
 
 export type CreateLoggerOptions = {
@@ -36,7 +62,7 @@ const _createLogger = (prefix: string, { debugEnabled }: CreateLoggerOptions = {
                         ? (window.console[level] as any)['__rrweb_original__']
                         : window.console[level]
 
-                consoleLog(prefix, ...args)
+                withPostHogLoggerActive(() => consoleLog(prefix, ...args))
             }
         },
 
@@ -59,7 +85,7 @@ const _createLogger = (prefix: string, { debugEnabled }: CreateLoggerOptions = {
         critical: (...args: any[]) => {
             // Critical errors are always logged to the console
             // eslint-disable-next-line no-console
-            console.error(prefix, ...args)
+            withPostHogLoggerActive(() => console.error(prefix, ...args))
         },
 
         uninitializedWarning: (methodName: string) => {

@@ -1,7 +1,7 @@
 import { window } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from '../utils/globals'
 import { ErrorEventArgs } from '../types'
-import { createLogger } from '@posthog/browser-common/utils/logger'
+import { createLogger, isPostHogLoggerActive } from '@posthog/browser-common/utils/logger'
 import { isArray, isFunction, isNull, isString, type ErrorTracking } from '@posthog/core'
 import { buildErrorPropertiesBuilder } from '../posthog-exceptions'
 
@@ -82,6 +82,12 @@ const wrapConsoleError = (captureFn: (props: ErrorTracking.ErrorProperties) => v
     const originalConsoleError = con.error
 
     con.error = function (...args: any[]): void {
+        if (isPostHogLoggerActive()) {
+            if (isFunction(originalConsoleError)) {
+                originalConsoleError(...args)
+            }
+            return
+        }
         let event
         if (args.length == 1) {
             event = args[0]

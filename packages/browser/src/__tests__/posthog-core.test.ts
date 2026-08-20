@@ -191,11 +191,7 @@ describe('posthog core', () => {
                 }
                 expect(beforeSendMock).toHaveBeenCalledTimes(1)
                 expect(beforeSendMock.mock.calls[0][0].event).toBe('$$client_ingestion_warning')
-                expect(console.error).toHaveBeenCalledTimes(50)
-                expect(console.error).toHaveBeenCalledWith(
-                    '[PostHog.js]',
-                    'This capture call is ignored due to client rate limiting.'
-                )
+                expect(console.error).not.toHaveBeenCalled()
             })
 
             it('does not reintroduce denylisted page or session context into a warning', () => {
