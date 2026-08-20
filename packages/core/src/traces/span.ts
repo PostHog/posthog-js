@@ -3,7 +3,7 @@ import type { Logger } from '../types'
 import type { SpanEventRecord, SpanRecord } from './types'
 import { formatTraceparent } from './traceparent'
 import { clampEndTime, resolveSuppliedTime, sanitizeName } from './sanitize'
-import { isError } from '../utils'
+import { isError, isNullish } from '../utils'
 
 /**
  * A monotonic millisecond reading where the platform has one.
@@ -72,7 +72,11 @@ export class PostHogSpan implements Span {
     this._autoKeys = new Set(init.autoAttributeKeys)
     this._maxAttributes = init.maxAttributes
     this._maxEvents = init.maxEvents
-    this._attributes = {}
+    // Null-prototype: a caller-supplied `__proto__` key (JSON.parse produces one)
+    // would otherwise swap this object's prototype instead of becoming an entry,
+    // smuggling every key inside it past the cap and into the encoder's `for…in`.
+    // It also keeps `toString` and friends from reading as already-present.
+    this._attributes = Object.create(null) as SpanAttributes
     for (const key in init.attributes) {
       this._writeAttribute(key, init.attributes[key])
     }
@@ -111,7 +115,9 @@ export class PostHogSpan implements Span {
    * it, so a span at the cap still carries its person and session ids.
    */
   private _writeAttribute(key: string, value: SpanAttributeValue): void {
-    if (this._autoKeys.has(key) || key in this._attributes) {
+    // Nullish values are dropped at encode time, so charging them would spend
+    // budget on keys that can never be exported.
+    if (this._autoKeys.has(key) || key in this._attributes || isNullish(value)) {
       this._attributes[key] = value
       return
     }

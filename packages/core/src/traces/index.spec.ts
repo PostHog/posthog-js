@@ -538,6 +538,47 @@ describe('PostHogTraces', () => {
       expect(sent).not.toHaveProperty('droppedEventsCount')
     })
 
+    it('counts a parsed __proto__ key against the cap instead of smuggling it through', async () => {
+      // JSON.parse produces an own `__proto__` key; a plain object store would
+      // swap its prototype and leak every nested key past the cap.
+      const traces = createTraces({ maxAttributesPerSpan: 2 })
+      const parsed = JSON.parse('{"__proto__": {"leaked": 1}, "orderId": "abc"}')
+      traces.startSpan('checkout', { attributes: parsed }).end()
+      await traces.flush()
+
+      const keys = sentSpans()[0].attributes!.map((attribute) => attribute.key)
+      expect(keys).not.toContain('leaked')
+      expect(keys).toContain('orderId')
+    })
+
+    it('does not let reserved property names bypass the cap', async () => {
+      const traces = createTraces({ maxAttributesPerSpan: 1 })
+      const span = traces.startSpan('checkout')
+      span.setAttribute('kept', 1)
+      span.setAttribute('toString', 'nope')
+      span.setAttribute('constructor', 'nope')
+      span.end()
+      await traces.flush()
+
+      const [sent] = sentSpans()
+      expect(sent.attributes!.map((attribute) => attribute.key)).toEqual(['kept'])
+      expect(sent.droppedAttributesCount).toBe(2)
+    })
+
+    it('does not spend cap budget on values that are dropped at encode time', async () => {
+      const traces = createTraces({ maxAttributesPerSpan: 2 })
+      const span = traces.startSpan('checkout')
+      span.setAttribute('skipped-a', undefined)
+      span.setAttribute('skipped-b', null)
+      span.setAttribute('orderId', 'abc-123')
+      span.end()
+      await traces.flush()
+
+      const [sent] = sentSpans()
+      expect(sent.attributes!.map((attribute) => attribute.key)).toEqual(['orderId'])
+      expect(sent.droppedAttributesCount).toBeUndefined()
+    })
+
     it('caps attributes supplied at start', async () => {
       const traces = createTraces({ maxAttributesPerSpan: 2 })
       traces.startSpan('checkout', { attributes: { a: 1, b: 2, c: 3 } }).end()
