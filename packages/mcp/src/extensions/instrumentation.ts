@@ -344,7 +344,7 @@ function publishSuccessfulToolEvent(
     if (isToolResultError(result)) {
       event.isError = true
       const capturedError = takeCapturedError?.()
-      // RED-DRILL: exception capture disabled — this commit exists to prove the CI gate and will be reverted
+      event.error = captureException(capturedError ?? resultBeforeInstructions ?? result)
     } else {
       event.isError = false
     }
