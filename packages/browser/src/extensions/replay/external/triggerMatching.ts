@@ -106,32 +106,6 @@ type TriggerMatchingConfig = Pick<
     'urlTriggers' | 'urlBlocklist' | 'eventTriggers' | 'linkedFlag'
 >
 
-/**
- * Detect URL trigger regexes that are anchored at both ends without an obvious way to match more
- * than one page. For example, `^https://app.example.com/$` matches the bare homepage but not
- * `/dashboard` or `/?utm=x`. Under AND trigger matching, an unexpectedly narrow URL condition can
- * veto every other trigger and leave the session buffering indefinitely.
- */
-export function isOverAnchoredUrlTrigger(pattern: string): boolean {
-    // A trailing escaped dollar (`\$`) is a literal character, not an end anchor.
-    if (!pattern.startsWith('^') || !/(?:^|[^\\])\$$/.test(pattern)) {
-        return false
-    }
-
-    // Quantifiers, alternation, character classes, and regex character classes all make the
-    // pattern intentionally variable rather than unexpectedly narrow.
-    if (/[*+?{|[]/.test(pattern) || /\\(?:[dDsSwWpP]|[1-9])/.test(pattern)) {
-        return false
-    }
-
-    // Dots in a hostname are commonly left unescaped, but an unescaped dot in a path or query is
-    // normally being used as a wildcard.
-    const body = pattern.slice(1, -1)
-    const absoluteUrl = /^https?:\/\/[^/]*(\/.*)?$/.exec(body)
-    const pathAndQuery = absoluteUrl ? absoluteUrl[1] || '' : body
-    return !/(^|[^\\])\./.test(pathAndQuery)
-}
-
 function sessionRecordingUrlTriggerMatches(
     url: string,
     triggers: SessionRecordingUrlTrigger[],
@@ -270,13 +244,6 @@ export class URLTriggerMatching implements TriggerStatusMatching {
             if (trigger.matching === 'regex' && !this._compiledTriggerRegexes.has(trigger.url)) {
                 try {
                     this._compiledTriggerRegexes.set(trigger.url, new RegExp(trigger.url))
-                    if (isOverAnchoredUrlTrigger(trigger.url)) {
-                        logger.warn(
-                            `URL trigger "${trigger.url}" is anchored at both ends without an obvious path wildcard, ` +
-                                'so it may match only one page. If you intended to match a prefix, ' +
-                                'drop the trailing "$" or add ".*".'
-                        )
-                    }
                 } catch (e) {
                     logger.error('Invalid URL trigger regex pattern:', trigger.url, e)
                 }

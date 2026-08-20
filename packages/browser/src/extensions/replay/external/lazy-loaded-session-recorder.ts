@@ -1992,8 +1992,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     /**
      * Names the trigger conditions that are keeping the session in BUFFERING, so a customer looking
      * at the console can tell which leg failed instead of only seeing an unexplained "buffering".
-     * A URL trigger that never matches (e.g. an over-anchored regex) under the default AND matching
-     * otherwise reads, from the outside, exactly like a session that is about to record.
+     * A URL trigger that never matches under the default AND matching otherwise reads, from the
+     * outside, exactly like a session that is about to record.
      */
     private _describePendingTriggerConditions(): string[] {
         return this._strategy?.getPendingTriggerConditions(this.sessionId) ?? []
