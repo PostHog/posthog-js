@@ -46,12 +46,19 @@ export class ErrorEventCoercer implements ErrorTrackingCoercer<ErrorEventLike> {
 
   private _buildLocationStack(err: ErrorEventLike): string | undefined {
     const location = err as ErrorEventLike & ErrorEventLocation
-    if (isString(location.filename) && location.filename.length > 0) {
-      const lineno = location.lineno ?? 0
-      const colno = location.colno ?? 0
-      // The message stays in `value`, which prevents multiline messages from being parsed as extra frames.
-      return `Error\n    at ${location.filename}:${lineno}:${colno}`
+    const lineno = location.lineno ?? 0
+    const colno = location.colno ?? 0
+    if (!isString(location.filename) || location.filename.length === 0) {
+      return undefined
     }
-    return undefined
+    // Stack lines are 1-indexed, so a fully zeroed position means the browser reported none. It
+    // pairs that with the document URL as `filename`, and a frame built from the two names a page
+    // rather than a script, which no source map can resolve. Leaving the exception frameless says
+    // the same thing without inviting a lookup that cannot succeed.
+    if (lineno === 0 && colno === 0) {
+      return undefined
+    }
+    // The message stays in `value`, which prevents multiline messages from being parsed as extra frames.
+    return `Error\n    at ${location.filename}:${lineno}:${colno}`
   }
 }
