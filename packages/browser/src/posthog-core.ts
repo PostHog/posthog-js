@@ -504,6 +504,10 @@ export class PostHog implements PostHogInterface {
      * `$posthog_cookieless` person.
      */
     private _healCookielessSentinelDistinctId(): void {
+        if (this._inCookielessMode() || this.get_distinct_id() !== COOKIELESS_SENTINEL_VALUE) {
+            return
+        }
+
         const persistence = this.persistence
         if (!persistence) {
             return
@@ -1451,13 +1455,7 @@ export class PostHog implements PostHogInterface {
             return
         }
 
-        // A tab that missed a cross-tab consent flip can still hold the cookieless sentinel as its
-        // distinct_id even though it is no longer in cookieless mode. Never let that sentinel leave
-        // as a real distinct_id (it would merge every affected browser onto one person) — heal it
-        // to a fresh anonymous device id first.
-        if (!this._inCookielessMode() && this.get_distinct_id() === COOKIELESS_SENTINEL_VALUE) {
-            this._healCookielessSentinelDistinctId()
-        }
+        this._healCookielessSentinelDistinctId()
 
         const isBot = !this.config.opt_out_useragent_filter && this._is_bot()
         const shouldDropBotEvent = isBot && !this.config.__preview_capture_bot_pageviews
@@ -2805,13 +2803,7 @@ export class PostHog implements PostHogInterface {
             return
         }
 
-        // If this tab is still holding the cookieless sentinel as its distinct_id (e.g. it missed a
-        // cross-tab consent flip), don't let it leak into $identify as $anon_distinct_id — that would
-        // merge every such user into a single '$posthog_cookieless' person. Reconcile the identity
-        // persisted by the tab that handled consent before linking it to the new identity.
-        if (!this._inCookielessMode() && this.get_distinct_id() === COOKIELESS_SENTINEL_VALUE) {
-            this._healCookielessSentinelDistinctId()
-        }
+        this._healCookielessSentinelDistinctId()
 
         // Adopt any sibling identity first, then make this explicit identify
         // authoritative until its complete replacement cookie is published. Keep
