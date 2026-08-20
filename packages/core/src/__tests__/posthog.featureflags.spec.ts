@@ -2683,4 +2683,55 @@ describe('PostHog Feature Flags v4', () => {
       })
     })
   })
+
+  describe('queued reloads', () => {
+    it('resolves a displaced caller against a request that carried its properties', async () => {
+      let releaseFirst!: () => void
+      const firstGate = new Promise<void>((r) => (releaseFirst = r))
+      let isFirst = true
+      const sent: string[] = []
+
+      const [client] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (m) => {
+        m.fetch.mockImplementation(async (_url: string, options: any) => {
+          const tier = JSON.parse(options.body ?? '{}').person_properties?.tier ?? 'missing'
+          sent.push(tier)
+          if (isFirst) {
+            isFirst = false
+            await firstGate
+          }
+          return {
+            status: 200,
+            text: () => Promise.resolve('ok'),
+            json: () => Promise.resolve({ featureFlags: { 'tier-flag': tier }, featureFlagPayloads: {} }),
+          }
+        })
+      })
+
+      // a reload goes out before the app sets its overrides, and stays in flight
+      void client.reloadFeatureFlagsAsync()
+      await waitForPromises()
+      expect(sent).toEqual(['missing'])
+
+      client.setPersonPropertiesForFlags({ tier: 'premium' }, false)
+
+      // queues behind the in-flight request
+      const displaced = client.reloadFeatureFlagsAsync()
+      await waitForPromises()
+
+      // displaces it from the pending slot
+      const displacing = client.reloadFeatureFlagsAsync()
+      await waitForPromises()
+
+      // neither queued caller issued its own request, so both really are behind the in-flight one
+      expect(sent).toEqual(['missing'])
+
+      releaseFirst()
+
+      // both must see a response to a request that actually carried the override
+      expect((await displaced)?.['tier-flag']).toEqual('premium')
+      expect((await displacing)?.['tier-flag']).toEqual('premium')
+      // and exactly one re-issued request served them both
+      expect(sent).toEqual(['missing', 'premium'])
+    })
+  })
 })
