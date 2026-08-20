@@ -137,6 +137,7 @@ describe('SessionRecording', () => {
             config: config,
             capture: jest.fn(),
             persistence: postHogPersistence,
+            register: jest.fn(),
             onFeatureFlags: (): (() => void) => {
                 return () => {}
             },
@@ -171,6 +172,10 @@ describe('SessionRecording', () => {
     })
 
     afterEach(() => {
+        posthog.sessionManager?.destroy()
+        if (posthog.sessionManager !== sessionManager) {
+            sessionManager.destroy()
+        }
         // @ts-expect-error this is a test, it's safe to write to location like this
         window!.location = originalLocation
     })
@@ -218,6 +223,44 @@ describe('SessionRecording', () => {
             expect(registerForSessionMock).toHaveBeenCalledWith({
                 [SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED]: true,
             })
+        })
+
+        it('does not flag the session when a stale recorder script load fails', () => {
+            let finishLoading: ((error?: string) => void) | undefined
+            loadScriptMock.mockImplementation((_ph, _path, callback) => {
+                finishLoading = callback
+            })
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            posthog.sessionManager = undefined
+            finishLoading?.('blocked')
+
+            expect(registerForSessionMock).not.toHaveBeenCalled()
+            expect(sessionRecording.status).toBe('disabled')
+        })
+
+        it.each([
+            ['consent is opted out', () => jest.spyOn(posthog.consent, 'isOptedOut').mockReturnValue(true)],
+            ['the session manager is unavailable', () => (posthog.sessionManager = undefined)],
+            ['the session manager is replaced', () => (posthog.sessionManager = new SessionIdManager(posthog))],
+        ])('does not initialize after %s while the recorder script is loading', (_condition, disableRecording) => {
+            let finishLoading: (() => void) | undefined
+            loadScriptMock.mockImplementation((_ph, _path, callback) => {
+                finishLoading = callback
+            })
+            const initSessionRecording = jest.fn(() => new LazyLoadedSessionRecording(posthog))
+            assignableWindow.__PosthogExtensions__.initSessionRecording = initSessionRecording
+
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+            expect(finishLoading).toBeDefined()
+
+            disableRecording()
+            addRRwebToWindow()
+
+            expect(() => finishLoading?.()).not.toThrow()
+            expect(initSessionRecording).not.toHaveBeenCalled()
+            expect(sessionRecording['_lazyLoadedSessionRecording']).toBeUndefined()
+            expect(sessionRecording.status).toBe('disabled')
         })
 
         it('uses anyMatchSessionRecordingStatus when triggerMatching is "any"', () => {
