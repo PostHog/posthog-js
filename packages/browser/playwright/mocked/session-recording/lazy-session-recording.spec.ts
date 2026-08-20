@@ -190,6 +190,72 @@ test.describe('Session recording - array.js', () => {
         }
     })
 
+    test('takes a full snapshot when a backgrounded tab becomes visible', async ({ page }) => {
+        await page.evaluate(() => {
+            const ph = (window as WindowWithPostHog).posthog
+            ph?.set_config({
+                session_recording: {
+                    ...ph.config.session_recording,
+                    compress_events: false,
+                    full_snapshot_interval_millis: 0,
+                },
+            })
+        })
+
+        await page.waitingForNetworkCausedBy({
+            urlPatternsToWaitFor: ['**/ses/*'],
+            action: async () => {
+                await page.locator('[data-cy-input]').fill('activate recording')
+            },
+        })
+        await page.waitingForNetworkCausedBy({
+            urlPatternsToWaitFor: ['**/ses/*'],
+            action: async () => {
+                await page.evaluate(() => {
+                    document.body.style.minHeight = '3000px'
+                    window.scrollTo(0, 400)
+                })
+            },
+        })
+        await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(400)
+        await page.resetCapturedEvents()
+
+        // Headless browser pages never become background tabs, so drive the lifecycle signal directly.
+        await page.evaluate(() => {
+            Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
+            document.dispatchEvent(new Event('visibilitychange'))
+        })
+        await expect.poll(() => page.evaluate(() => document.visibilityState)).toBe('hidden')
+
+        await page.evaluate(() => {
+            const marker = document.createElement('div')
+            marker.id = 'backgrounded-tab-content'
+            marker.textContent = 'content streamed while hidden'
+            document.body.appendChild(marker)
+        })
+
+        await page.waitingForNetworkCausedBy({
+            urlPatternsToWaitFor: ['**/ses/*'],
+            action: async () => {
+                await page.evaluate(() => {
+                    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' })
+                    document.dispatchEvent(new Event('visibilitychange'))
+                })
+            },
+        })
+        await expect.poll(() => page.evaluate(() => document.visibilityState)).toBe('visible')
+
+        const capturedEvents = await page.capturedEvents()
+        const fullSnapshots = capturedEvents
+            .filter((event) => event.event === '$snapshot')
+            .flatMap((event) => event.properties.$snapshot_data)
+            .filter((event) => event.type === 2)
+
+        expect(fullSnapshots).toHaveLength(1)
+        expect(fullSnapshots[0].data.initialOffset.top).toBe(400)
+        expect(JSON.stringify(fullSnapshots[0].data.node)).toContain('backgrounded-tab-content')
+    })
+
     test('continues capturing to the same session when the page reloads', async ({ page }) => {
         await page.waitingForNetworkCausedBy({
             urlPatternsToWaitFor: ['**/ses/*'],
