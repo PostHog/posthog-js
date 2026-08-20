@@ -285,8 +285,24 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     this.scheduleDebouncedFlush()
   }
 
+  /**
+   * Drains the event queue and, when tracing is configured, the span queue too.
+   *
+   * Both run concurrently so a serverless handler waits for one round trip
+   * rather than two. A failing span export never rejects here: spans that could
+   * not be sent stay queued for the next flush, and surfacing them would add a
+   * rejection path to a method callers already treat as safe.
+   */
+  private _flushEventsAndSpans(): Promise<void> {
+    const events = this.flushWithPendingPromises()
+    if (!this._traces) {
+      return events
+    }
+    return Promise.all([events, this._traces.flush().catch(() => {})]).then(() => undefined)
+  }
+
   override async flush(): Promise<void> {
-    const flushPromise = this.flushWithPendingPromises()
+    const flushPromise = this._flushEventsAndSpans()
     const waitUntil = this.options.waitUntil
     // Only register when no debounce promise is already keeping runtime alive
     if (waitUntil && !this._waitUntilCycle) {
@@ -359,7 +375,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private async resolveWaitUntilFlush(): Promise<void> {
     const resolve = this._consumeWaitUntilCycle()
     try {
-      await this.flushWithPendingPromises()
+      await this._flushEventsAndSpans()
     } catch {
       // Flush errors are already logged by flush() internals
     } finally {
