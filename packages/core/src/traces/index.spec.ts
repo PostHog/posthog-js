@@ -579,6 +579,38 @@ describe('PostHogTraces', () => {
       expect(sent.droppedAttributesCount).toBeUndefined()
     })
 
+    it('still caps a key first seen with an optional value', async () => {
+      const traces = createTraces({ maxAttributesPerSpan: 2 })
+      const span = traces.startSpan('checkout')
+      for (let i = 0; i < 5; i++) {
+        span.setAttribute(`field-${i}`, undefined)
+      }
+      for (let i = 0; i < 5; i++) {
+        span.setAttribute(`field-${i}`, i)
+      }
+      span.end()
+      await traces.flush()
+
+      const [sent] = sentSpans()
+      expect(sent.attributes).toHaveLength(2)
+      expect(sent.droppedAttributesCount).toBe(3)
+    })
+
+    it('clears a key that is set back to null', async () => {
+      const traces = createTraces({ maxAttributesPerSpan: 2 })
+      const span = traces.startSpan('checkout')
+      span.setAttribute('orderId', 'abc-123')
+      span.setAttribute('orderId', null)
+      span.setAttribute('a', 1)
+      span.setAttribute('b', 2)
+      span.end()
+      await traces.flush()
+
+      const [sent] = sentSpans()
+      expect(sent.attributes!.map((attribute) => attribute.key)).toEqual(['a', 'b'])
+      expect(sent.droppedAttributesCount).toBeUndefined()
+    })
+
     it('caps attributes supplied at start', async () => {
       const traces = createTraces({ maxAttributesPerSpan: 2 })
       traces.startSpan('checkout', { attributes: { a: 1, b: 2, c: 3 } }).end()

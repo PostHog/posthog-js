@@ -115,9 +115,17 @@ export class PostHogSpan implements Span {
    * it, so a span at the cap still carries its person and session ids.
    */
   private _writeAttribute(key: string, value: SpanAttributeValue): void {
-    // Nullish values are dropped at encode time, so charging them would spend
-    // budget on keys that can never be exported.
-    if (this._autoKeys.has(key) || key in this._attributes || isNullish(value)) {
+    // Nullish removes the key rather than occupying it: the encoder drops these
+    // anyway, and storing one would both spend no budget and make every later
+    // write to that key free, letting the span exceed its cap.
+    if (isNullish(value)) {
+      if (key in this._attributes && !this._autoKeys.has(key)) {
+        this._userAttributeCount--
+      }
+      delete this._attributes[key]
+      return
+    }
+    if (this._autoKeys.has(key) || key in this._attributes) {
       this._attributes[key] = value
       return
     }
@@ -225,7 +233,10 @@ export class PostHogSpan implements Span {
       name: this._name,
       kind: this._kind,
       ...(this._status && { status: this._status }),
-      attributes: this._attributes,
+      // Copied out with an ordinary prototype: the store is null-prototype to keep
+      // `__proto__` from swapping it, but a record handed to user code should
+      // behave like a normal object.
+      attributes: { ...this._attributes },
       events: this._events,
       startTime: this._startTime,
       endTime: clampEndTime(resolved, this._startTime),

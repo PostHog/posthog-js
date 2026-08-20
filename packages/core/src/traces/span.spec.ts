@@ -226,6 +226,59 @@ describe('NoopSpan', () => {
   })
 })
 
+describe('attribute store', () => {
+  it('hands out a record whose attributes behave like an ordinary object', () => {
+    const ended: SpanRecord[] = []
+    const span = new PostHogSpan(
+      {
+        traceId: TRACE_ID,
+        spanId: SPAN_ID,
+        name: 'checkout',
+        kind: 'internal',
+        attributes: { plan: 'pro' },
+        startTime: Date.now(),
+        backdated: false,
+        autoAttributeKeys: [],
+        maxAttributes: 128,
+        maxEvents: 128,
+      },
+      (record) => ended.push(record)
+    )
+    span.end()
+
+    const { attributes } = ended[0]
+    expect(Object.getPrototypeOf(attributes)).toBe(Object.prototype)
+    expect(Object.prototype.hasOwnProperty.call(attributes, 'plan')).toBe(true)
+    expect(() => JSON.stringify(attributes)).not.toThrow()
+  })
+
+  it('keeps a parsed __proto__ key as an ordinary attribute', () => {
+    const ended: SpanRecord[] = []
+    const span = new PostHogSpan(
+      {
+        traceId: TRACE_ID,
+        spanId: SPAN_ID,
+        name: 'checkout',
+        kind: 'internal',
+        attributes: JSON.parse('{"__proto__": {"leaked": 1}, "orderId": "abc"}'),
+        startTime: Date.now(),
+        backdated: false,
+        autoAttributeKeys: [],
+        maxAttributes: 128,
+        maxEvents: 128,
+      },
+      (record) => ended.push(record)
+    )
+    span.end()
+
+    const keys: string[] = []
+    for (const key in ended[0].attributes) {
+      keys.push(key)
+    }
+    expect(keys).not.toContain('leaked')
+  })
+})
+
 describe('describeError', () => {
   it.each([
     ['an Error', new Error('boom'), { type: 'Error', message: 'boom' }],
