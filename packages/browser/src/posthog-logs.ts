@@ -200,6 +200,8 @@ export class PostHogLogs implements Extension {
         this._remoteConfigSubscription = undefined
         this._isLoading = false
         window?.removeEventListener('online', this._onReconnect)
+        // TODO: Multiplex console capture across instances and settle pending log sends so
+        // wrappers and request timers cannot outlive their final owner.
         this._consoleLogsDispose?.()
         this._consoleLogsDispose = undefined
         this._core?.reset()
