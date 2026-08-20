@@ -2044,6 +2044,8 @@ export class Replayer {
                   const newSn = mirror.getMeta(
                     target as Node & RRNode,
                   ) as serializedElementNodeWithId;
+                  const siblingNode = target.nextSibling;
+                  const parentNode = target.parentNode;
                   const newNode = buildNodeWithSN(
                     {
                       ...newSn,
@@ -2064,10 +2066,10 @@ export class Replayer {
                     newSn.attributes,
                     mutation.attributes as attributes,
                   );
-                  const siblingNode = target.nextSibling;
-                  const parentNode = target.parentNode;
                   if (newNode && parentNode) {
-                    parentNode.removeChild(target as Node & RRNode);
+                    if (target.parentNode === parentNode) {
+                      parentNode.removeChild(target as Node & RRNode);
+                    }
                     parentNode.insertBefore(
                       newNode as Node & RRNode,
                       siblingNode as (Node & RRNode) | null,

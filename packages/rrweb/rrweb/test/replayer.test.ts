@@ -332,6 +332,47 @@ describe('replayer', function () {
     await assertDomSnapshot(page);
   });
 
+  for (const useVirtualDom of [true, false]) {
+    it(`keeps a stylesheet attached when late CSS text replaces it (virtual dom: ${useVirtualDom})`, async () => {
+      const eventsWithLateCssText = [
+        ...styleSheetRuleEvents,
+        {
+          type: EventType.IncrementalSnapshot,
+          data: {
+            source: IncrementalSource.Mutation,
+            adds: [],
+            removes: [],
+            texts: [],
+            attributes: [
+              {
+                id: 101,
+                attributes: { _cssText: 'a { color: rgb(1, 2, 3); }' },
+              },
+            ],
+          },
+          timestamp: styleSheetRuleEvents[0].timestamp + 3200,
+        },
+      ];
+      await page.evaluate(`events = ${JSON.stringify(eventsWithLateCssText)}`);
+
+      const result = await page.evaluate(`
+        const { Replayer } = rrweb;
+        const replayer = new Replayer(events, { useVirtualDom: ${useVirtualDom} });
+        replayer.pause(3500);
+        const doc = replayer.iframe.contentDocument;
+        ({
+          stylesheetCount: doc.querySelectorAll('style[data-meta^="from full-snapshot"]').length,
+          linkColor: replayer.iframe.contentWindow.getComputedStyle(doc.querySelector('a')).color,
+        });
+      `);
+
+      expect(result).toEqual({
+        stylesheetCount: 1,
+        linkColor: 'rgb(1, 2, 3)',
+      });
+    });
+  }
+
   it('should delete fast forwarded StyleSheetRules that where removed', async () => {
     await page.evaluate(`events = ${JSON.stringify(styleSheetRuleEvents)}`);
     const result = await page.evaluate(`
