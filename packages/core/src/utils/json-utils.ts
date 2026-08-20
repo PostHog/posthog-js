@@ -15,7 +15,12 @@ interface JsonSafeValueConversionState {
   remainingNodes: number
 }
 
-function sanitizeString(value: string): string {
+/**
+ * Replaces unpaired surrogates with U+FFFD. A lone surrogate survives
+ * `JSON.stringify` as a `\uD800`-style escape, which strict JSON parsers
+ * reject — for OTLP that means the whole request is refused.
+ */
+export function sanitizeString(value: string): string {
   let output = ''
   for (let index = 0; index < value.length; index++) {
     const codeUnit = value.charCodeAt(index)

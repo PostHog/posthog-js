@@ -9,8 +9,10 @@ import type {
   OtlpSeverityEntry,
   OtlpSeverityText,
 } from '@posthog/types'
+import type { Logger } from '../types'
 import type { LogSdkContext, ResolvedPostHogLogsConfig } from './types'
 import { isArray, isBoolean, isNull, isNullish, isUndefined } from '../utils'
+import { sanitizeString } from '../utils/json-utils'
 
 // ============================================================================
 // Severity mapping
@@ -39,49 +41,203 @@ export function getOtlpSeverityNumber(level: LogSeverityLevel): number {
 // OTLP AnyValue conversion
 // ============================================================================
 
-export function toOtlpAnyValue(value: LogAttributeValue): OtlpAnyValue {
+// 2^63 — one past int64 max.
+const INT64_RANGE_LIMIT = 9223372036854775808
+
+// Matches `toJsonSafeValue`: depth bounds stack use, the counts stop a shared
+// object graph expanding into millions of key-values on the way to the wire.
+const MAX_DEPTH = 20
+const MAX_ITEMS = 1_000
+const MAX_NODES = 10_000
+
+const CIRCULAR_MARKER = '[Circular]'
+const TRUNCATED_MARKER = '[Truncated]'
+const UNSERIALIZABLE_MARKER = '[Unserializable]'
+const FUNCTION_MARKER = '[Function]'
+
+const propertyIsEnumerable = Object.prototype.propertyIsEnumerable
+
+interface EncodeState {
+  /** Containers on the current path, so a back-reference becomes a marker. */
+  ancestors: WeakSet<object>
+  remainingNodes: number
+}
+
+function newState(): EncodeState {
+  return { ancestors: new WeakSet(), remainingNodes: MAX_NODES }
+}
+
+export function toOtlpAnyValue(value: LogAttributeValue, logger?: Logger): OtlpAnyValue {
+  try {
+    return encodeAnyValue(value, logger, newState(), 0)
+  } catch {
+    // Runs inside `captureLog` and the metrics flush: an error escaping here
+    // surfaces in the caller's own code.
+    return { stringValue: UNSERIALIZABLE_MARKER }
+  }
+}
+
+export function toOtlpKeyValueList(attrs: Record<string, LogAttributeValue>, logger?: Logger): OtlpKeyValue[] {
+  try {
+    return encodeKeyValueList(attrs, logger, newState(), 0)
+  } catch {
+    return []
+  }
+}
+
+function encodeAnyValue(
+  value: LogAttributeValue,
+  logger: Logger | undefined,
+  state: EncodeState,
+  depth: number
+): OtlpAnyValue {
+  if (state.remainingNodes <= 0) {
+    return { stringValue: TRUNCATED_MARKER }
+  }
+  state.remainingNodes--
+
   if (isBoolean(value)) {
     return { boolValue: value }
   }
-  // NOTE: typeof check (not core's isNumber) so NaN is included. core's
-  // isNumber explicitly excludes NaN via the `x === x` guard, which would
-  // route NaN through the JSON.stringify branch below — JSON has no
-  // representation for non-finite floats and JSON.stringify turns them into
-  // `null`, losing the value server-side. proto3 JSON mapping (which OTLP/HTTP
-  // rides) requires the literal strings; we encode them as stringValue to keep
-  // the human-readable signal regardless of which downstream parser sees them.
+  // typeof, not core's isNumber, which excludes NaN — proto3 JSON distinguishes
+  // a non-finite float from an ordinary string.
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) {
       return { stringValue: String(value) }
     }
     if (Number.isInteger(value)) {
-      return { intValue: value }
+      if (Number.isSafeInteger(value)) {
+        return { intValue: String(value) }
+      }
+      // Past MAX_SAFE_INTEGER only BigInt gives the double's exact decimal:
+      // `String(-(2**63))` lands 192 below int64 min, outside the field it is
+      // about to be parsed into. Without BigInt the value rides as a string,
+      // which is never range-checked.
+      if (typeof BigInt === 'undefined') {
+        return { stringValue: String(value) }
+      }
+      const decimal = BigInt(value).toString()
+      if (value >= INT64_RANGE_LIMIT || value < -INT64_RANGE_LIMIT) {
+        // An out-of-range intValue 400s the whole logs request; on the metrics
+        // path it is swallowed server-side and the metric just disappears.
+        logger?.debug(`Attribute ${decimal} is outside the int64 range; encoding it as a string`)
+        return { stringValue: decimal }
+      }
+      return { intValue: decimal }
     }
     return { doubleValue: value }
   }
   if (typeof value === 'string') {
-    return { stringValue: value }
+    return { stringValue: sanitizeString(value) }
   }
-  if (isArray(value)) {
-    return { arrayValue: { values: value.map((v) => toOtlpAnyValue(v as LogAttributeValue)) } }
+  // `String(value)` would put a function's source text on the wire.
+  if (typeof value === 'function') {
+    return { stringValue: FUNCTION_MARKER }
   }
-  // Objects fall back to JSON. OTLP supports kvlistValue but the encoder
-  // stays flat for simplicity.
-  try {
-    return { stringValue: JSON.stringify(value) }
-  } catch {
+  if (typeof value === 'symbol') {
     return { stringValue: String(value) }
   }
+  if (typeof value === 'object' && value !== null) {
+    if (state.ancestors.has(value)) {
+      return { stringValue: CIRCULAR_MARKER }
+    }
+    if (depth >= MAX_DEPTH) {
+      return { stringValue: TRUNCATED_MARKER }
+    }
+    if (value instanceof Date) {
+      const time = value.getTime()
+      const iso = Number.isFinite(time) ? value.toISOString() : String(value)
+      // An overridden toISOString can return a non-string, which the server
+      // refuses for the whole request.
+      return { stringValue: typeof iso === 'string' ? sanitizeString(iso) : String(iso) }
+    }
+    // Registered before the toJSON probe: a toJSON returning a structure that
+    // references its own object is a cycle like any other.
+    state.ancestors.add(value)
+    try {
+      // The representation a value defines for itself — dayjs, Decimal, an ORM
+      // document, and a cross-realm Date that fails the `instanceof` above.
+      try {
+        const toJSON = (value as { toJSON?: unknown }).toJSON
+        if (typeof toJSON === 'function') {
+          return encodeAnyValue(toJSON.call(value) as LogAttributeValue, logger, state, depth + 1)
+        }
+      } catch {
+        // A throwing toJSON falls through to the plain walk.
+      }
+      if (isArray(value)) {
+        return { arrayValue: { values: encodeArrayValues(value, logger, state, depth + 1) } }
+      }
+      return {
+        kvlistValue: {
+          values: encodeKeyValueList(value as Record<string, LogAttributeValue>, logger, state, depth + 1),
+        },
+      }
+    } finally {
+      // Siblings that reference the same object are duplication, not a cycle.
+      state.ancestors.delete(value)
+    }
+  }
+  return { stringValue: sanitizeString(String(value)) }
 }
 
-export function toOtlpKeyValueList(attrs: Record<string, LogAttributeValue>): OtlpKeyValue[] {
+function encodeArrayValues(
+  values: unknown[],
+  logger: Logger | undefined,
+  state: EncodeState,
+  depth: number
+): OtlpAnyValue[] {
+  const result: OtlpAnyValue[] = []
+  const itemCount = Math.min(values.length, MAX_ITEMS)
+  let index = 0
+  for (; index < itemCount && state.remainingNodes > 0; index++) {
+    try {
+      const element = index in values ? values[index] : undefined
+      // Dropped, as iOS and Android do: proto3 JSON has no null AnyValue, and
+      // both `null` and `{}` here are rejected for the whole request.
+      if (isNullish(element)) {
+        continue
+      }
+      result.push(encodeAnyValue(element as LogAttributeValue, logger, state, depth))
+    } catch {
+      result.push({ stringValue: UNSERIALIZABLE_MARKER })
+    }
+  }
+  if (values.length > index) {
+    result.push({ stringValue: TRUNCATED_MARKER })
+  }
+  return result
+}
+
+function encodeKeyValueList(
+  attrs: Record<string, LogAttributeValue>,
+  logger: Logger | undefined,
+  state: EncodeState,
+  depth: number
+): OtlpKeyValue[] {
   const result: OtlpKeyValue[] = []
   for (const key in attrs) {
-    const value = attrs[key]
-    if (isNull(value) || isUndefined(value)) {
+    // for...in walks the prototype chain once own keys are exhausted. Skipped
+    // rather than broken out of: a proxy can yield keys in any order.
+    if (!propertyIsEnumerable.call(attrs, key)) {
       continue
     }
-    result.push({ key, value: toOtlpAnyValue(value) })
+    if (result.length >= MAX_ITEMS || state.remainingNodes <= 0) {
+      // Reported rather than written into the attributes: a synthetic key would
+      // land in the user's own namespace and could collide with a real one.
+      logger?.debug('Attributes truncated: the value exceeds the OTLP encoder budget')
+      break
+    }
+    try {
+      const value = attrs[key]
+      if (isNull(value) || isUndefined(value)) {
+        continue
+      }
+      result.push({ key: sanitizeString(key), value: encodeAnyValue(value, logger, state, depth) })
+    } catch {
+      // A getter that throws costs its own key, not the whole record.
+      result.push({ key: sanitizeString(key), value: { stringValue: UNSERIALIZABLE_MARKER } })
+    }
   }
   return result
 }
@@ -111,7 +267,11 @@ function timestampToUnixNano(): string {
  *
  * User-provided `options.attributes` always wins on conflicts.
  */
-export function buildOtlpLogRecord(options: CaptureLogOptions, sdkContext: LogSdkContext): OtlpLogRecord {
+export function buildOtlpLogRecord(
+  options: CaptureLogOptions,
+  sdkContext: LogSdkContext,
+  logger?: Logger
+): OtlpLogRecord {
   const level: LogSeverityLevel = options.level || 'info'
   const { text: severityText, number: severityNumber } = OTLP_SEVERITY_MAP[level] || DEFAULT_OTLP_SEVERITY
   const now = timestampToUnixNano()
@@ -146,9 +306,28 @@ export function buildOtlpLogRecord(options: CaptureLogOptions, sdkContext: LogSd
     autoAttributes.feature_flags = sdkContext.activeFeatureFlags
   }
 
-  const mergedAttributes = {
-    ...autoAttributes,
-    ...(options.attributes || {}),
+  // Read key by key rather than spreading: a getter over a disposed store or a
+  // revoked proxy throws on the read itself, before the encoder's guards see it.
+  const mergedAttributes: Record<string, LogAttributeValue> = { ...autoAttributes }
+  const userAttributes = options.attributes
+  if (userAttributes) {
+    let keys: string[] = []
+    try {
+      keys = Object.keys(userAttributes)
+    } catch {
+      keys = []
+    }
+    for (const key of keys) {
+      let value: LogAttributeValue
+      try {
+        value = userAttributes[key]
+      } catch {
+        value = UNSERIALIZABLE_MARKER
+      }
+      // defineProperty, not assignment: `attributes['__proto__'] = v` hits the
+      // prototype setter and the attribute vanishes.
+      Object.defineProperty(mergedAttributes, key, { value, enumerable: true, writable: true, configurable: true })
+    }
   }
 
   const record: OtlpLogRecord = {
@@ -156,8 +335,10 @@ export function buildOtlpLogRecord(options: CaptureLogOptions, sdkContext: LogSd
     observedTimeUnixNano: now,
     severityNumber,
     severityText,
-    body: { stringValue: options.body },
-    attributes: toOtlpKeyValueList(mergedAttributes),
+    // `body` is only typed as a string: an untyped caller passing a number
+    // emits a non-string stringValue, which the server refuses.
+    body: { stringValue: sanitizeString(String(options.body)) },
+    attributes: toOtlpKeyValueList(mergedAttributes, logger),
   }
 
   if (options.trace_id) {
