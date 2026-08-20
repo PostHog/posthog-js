@@ -18,6 +18,7 @@
         "test:docs-scripts": "node --test \"scripts/docs/__tests__/*.test.js\"",
         "test:functional": "turbo test:functional",
         "test:e2e": "turbo test:e2e",
+        "test:mcp-harness": "node packages/mcp/harness/run-all.mjs",
         "build": "turbo build",
         "dev": "turbo dev",
         "package": "export PACKAGE_DEST=$(pwd)/target && turbo package",
