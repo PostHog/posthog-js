@@ -26,7 +26,8 @@ import '@testing-library/jest-dom'
 import * as Preact from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { PostHog } from '../../posthog-core'
-import type { PostHogFeatureFlags } from '../../posthog-featureflags'
+import { PostHogFeatureFlags } from '../../posthog-featureflags'
+import { MutableFeatureFlagsConfigSource } from '../../feature-flags-config'
 import { FeatureFlagsExtension } from '../../extension-tokens'
 import { FlagsResponse } from '../../types'
 import { SURVEY_IN_PROGRESS_PREFIX } from '../../utils/survey-utils'
@@ -499,11 +500,9 @@ describe('SurveyManager', () => {
     })
 
     it('resolves feature flags through the extension registry', () => {
-        const registeredFeatureFlags = Object.assign(Object.create(mockPostHog.featureFlags), {
-            name: FeatureFlagsExtension,
-            getFeatureFlag: jest.fn(() => 'control'),
-            isFeatureEnabled: jest.fn(() => true),
-        }) as PostHogFeatureFlags
+        const registeredFeatureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(mockPostHog.config))
+        jest.spyOn(registeredFeatureFlags, 'getFeatureFlag').mockReturnValue('control')
+        jest.spyOn(registeredFeatureFlags, 'isFeatureEnabled').mockReturnValue(true)
         mockPostHog.getExtension = jest.fn(() => registeredFeatureFlags) as PostHog['getExtension']
         const survey = {
             ...mockSurveys[0],
