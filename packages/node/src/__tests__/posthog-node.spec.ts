@@ -758,6 +758,32 @@ describe('PostHog Node.js', () => {
       expect(mockedFetch).not.toHaveBeenCalledWith('http://example.com/batch/', expect.anything())
     })
 
+    it('should fail closed when a before_send function throws', async () => {
+      const error = new Error('before_send failed')
+      const sentinel = jest.fn((event) => event)
+      const ph = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        fetchRetryCount: 0,
+        disableCompression: true,
+        before_send: [
+          (event) => ({ ...event, properties: { ...event.properties, transformed: true } }),
+          () => {
+            throw error
+          },
+          sentinel,
+        ],
+      })
+      const loggerSpy = jest.spyOn((ph as any)._logger, 'error').mockImplementation(() => {})
+
+      ph.capture({ distinctId: '123', event: 'test-event', properties: { foo: 'bar' } })
+      await waitForFlushTimer()
+
+      expect(sentinel).not.toHaveBeenCalled()
+      expect(loggerSpy).toHaveBeenCalledWith("Error in before_send function for event 'test-event':", error)
+      expect(mockedFetch).not.toHaveBeenCalledWith('http://example.com/batch/', expect.anything())
+      loggerSpy.mockRestore()
+    })
+
     it('should work with captureImmediate', async () => {
       const beforeSendFn = jest.fn((event) => ({ ...event, event: 'modified-event' }))
       const ph = new PostHog('TEST_API_KEY', {

@@ -3057,14 +3057,19 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     let result: EventMessage | null = eventMessage
 
     for (const fn of fns) {
-      result = fn(result)
-      if (!result) {
-        this._logger.info(`Event '${eventMessage.event}' was rejected in beforeSend function`)
+      try {
+        result = fn(result)
+        if (!result) {
+          this._logger.info(`Event '${eventMessage.event}' was rejected in beforeSend function`)
+          return null
+        }
+        if (!result.properties || Object.keys(result.properties).length === 0) {
+          const message = `Event '${result.event}' has no properties after beforeSend function, this is likely an error.`
+          this._logger.warn(message)
+        }
+      } catch (error) {
+        this._logger.error(`Error in before_send function for event '${eventMessage.event}':`, error)
         return null
-      }
-      if (!result.properties || Object.keys(result.properties).length === 0) {
-        const message = `Event '${result.event}' has no properties after beforeSend function, this is likely an error.`
-        this._logger.warn(message)
       }
     }
 
