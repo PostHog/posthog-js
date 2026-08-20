@@ -280,7 +280,7 @@ jobs:
               run: |
                   set -euo pipefail
                   text=$(printf '%s\n' \
-                      "🚨 <!subteam^$SLACK_USER_GROUP_ID> S3 recovery approval needed for posthog-js@$TARGET_VERSION" \
+                      ":bufo-hotdog-rocket: <!subteam^$SLACK_USER_GROUP_ID> S3 recovery approval needed for posthog-js@$TARGET_VERSION" \
                       "• SDK source: <https://github.com/PostHog/posthog-js/commit/$SOURCE_SHA|$SOURCE_SHA>" \
                       "• Toolbar source: <https://github.com/PostHog/posthog/commit/$TOOLBAR_SHA|$TOOLBAR_SHA>" \
                       "• Regions: $REGION" \
