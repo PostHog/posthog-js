@@ -1739,6 +1739,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
         }
       } catch (e) {
         this._logger.error(`Error in before_send function for event '${captureEvent.event}':`, e)
+        return null
       }
     }
 
