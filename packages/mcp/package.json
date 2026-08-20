@@ -12,8 +12,8 @@
   },
   "scripts": {
     "clean": "rimraf dist coverage",
-    "lint": "eslint src",
-    "lint:fix": "eslint src --fix",
+    "lint": "eslint src && prettier --check harness",
+    "lint:fix": "eslint src --fix && prettier --write harness",
     "generate-version": "node -p \"'export const version = \\'' + require('./package.json').version + '\\''\" > src/version.ts",
     "pretest:unit": "pnpm generate-version",
     "test:unit": "jest",

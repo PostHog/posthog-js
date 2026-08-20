@@ -33,69 +33,67 @@ const STATEFUL = process.env.STATEFUL === '1'
 const recorder = createRecorder(`v2:${LEVEL}:${MODE}`)
 
 function buildServer() {
-    if (LEVEL === 'high') {
-        const server = new McpServer({ name: 'testbed-v2', version: '1.0.0' })
-        for (const t of TOOLS) {
-            server.registerTool(t.name, { description: t.description, inputSchema: t.inputShape }, t.handler)
-        }
-        return server
+  if (LEVEL === 'high') {
+    const server = new McpServer({ name: 'testbed-v2', version: '1.0.0' })
+    for (const t of TOOLS) {
+      server.registerTool(t.name, { description: t.description, inputSchema: t.inputShape }, t.handler)
     }
-    const server = new Server({ name: 'testbed-v2', version: '1.0.0' }, { capabilities: { tools: {} } })
-    server.setRequestHandler('tools/list', async () => ({
-        tools: TOOLS.map((t) => ({ name: t.name, description: t.description, inputSchema: t.jsonSchema })),
-    }))
-    server.setRequestHandler('tools/call', async (request) => {
-        const tool = TOOL_BY_NAME[request.params.name]
-        if (!tool) throw new Error(`Unknown tool: ${request.params.name}`)
-        return tool.handler(request.params.arguments ?? {})
-    })
     return server
+  }
+  const server = new Server({ name: 'testbed-v2', version: '1.0.0' }, { capabilities: { tools: {} } })
+  server.setRequestHandler('tools/list', async () => ({
+    tools: TOOLS.map((t) => ({ name: t.name, description: t.description, inputSchema: t.jsonSchema })),
+  }))
+  server.setRequestHandler('tools/call', async (request) => {
+    const tool = TOOL_BY_NAME[request.params.name]
+    if (!tool) throw new Error(`Unknown tool: ${request.params.name}`)
+    return tool.handler(request.params.arguments ?? {})
+  })
+  return server
 }
 
 function instrumented() {
-    const server = buildServer()
-    instrument(server, recorder.client, { logger: recorder.logger, enableConversationId: CONVERSATION_ID })
-    if (CUSTOM_3ARG) {
-        // Must survive instrument(). Our patched setRequestHandler forwards only
-        // two arguments, so v2's 3-argument custom form is rejected.
-        const low = server.server ?? server
-        low.setRequestHandler(
-            'testbed/custom',
-            { paramsSchema: undefined, resultSchema: undefined },
-            async () => ({ ok: true })
-        )
-    }
-    return server
+  const server = buildServer()
+  instrument(server, recorder.client, { logger: recorder.logger, enableConversationId: CONVERSATION_ID })
+  if (CUSTOM_3ARG) {
+    // Must survive instrument(). Our patched setRequestHandler forwards only
+    // two arguments, so v2's 3-argument custom form is rejected.
+    const low = server.server ?? server
+    low.setRequestHandler('testbed/custom', { paramsSchema: undefined, resultSchema: undefined }, async () => ({
+      ok: true,
+    }))
+  }
+  return server
 }
 
 let mcp
 if (MODE === 'perrequest') {
-    const handler = createMcpHandler(instrumented, {
-        responseMode: 'json',
-        onerror: (e) => recorder.logger(`handler error: ${e}`),
-    })
-    mcp = toNodeHandler(handler)
+  const handler = createMcpHandler(instrumented, {
+    responseMode: 'json',
+    onerror: (e) => recorder.logger(`handler error: ${e}`),
+  })
+  mcp = toNodeHandler(handler)
 } else {
-    // One server for the process. sessionIdGenerator gives it the legacy stateful
-    // behaviour a v2 operator opts into — the only way ctx.sessionId is ever set.
-    const server = instrumented()
-    const transport = new NodeStreamableHTTPServerTransport({
-        // undefined ⇒ stateless: no handshake required, so the modern era works
-        // with a long-lived server. That is the control for the per-request case.
-        sessionIdGenerator: STATEFUL ? () => randomUUID() : undefined,
-        responseMode: 'json',
-    })
-    await server.connect(transport)
-    mcp = (req, res) => transport.handleRequest(req, res)
+  // One server for the process. sessionIdGenerator gives it the legacy stateful
+  // behaviour a v2 operator opts into — the only way ctx.sessionId is ever set.
+  const server = instrumented()
+  const transport = new NodeStreamableHTTPServerTransport({
+    // undefined ⇒ stateless: no handshake required, so the modern era works
+    // with a long-lived server. That is the control for the per-request case.
+    sessionIdGenerator: STATEFUL ? () => randomUUID() : undefined,
+    responseMode: 'json',
+  })
+  await server.connect(transport)
+  mcp = (req, res) => transport.handleRequest(req, res)
 }
 
 createServer(async (req, res) => {
-    if (handleInspectionRoute(req, res, recorder)) return
-    await mcp(req, res)
+  if (handleInspectionRoute(req, res, recorder)) return
+  await mcp(req, res)
 }).listen(PORT, function () {
-    const port = this.address().port
-    console.log(`MCP_HARNESS_LISTENING port=${port}`)
-    console.log(
-        `v2 ${LEVEL}/${MODE} on http://localhost:${port}/  conversationId=${CONVERSATION_ID} custom3arg=${CUSTOM_3ARG}`
-    )
+  const port = this.address().port
+  console.log(`MCP_HARNESS_LISTENING port=${port}`)
+  console.log(
+    `v2 ${LEVEL}/${MODE} on http://localhost:${port}/  conversationId=${CONVERSATION_ID} custom3arg=${CUSTOM_3ARG}`
+  )
 })

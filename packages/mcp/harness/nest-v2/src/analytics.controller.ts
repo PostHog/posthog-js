@@ -1,5 +1,5 @@
-import { McpController, Tool } from 'rekog-mcp-nest-v2';
-import { Payload } from '@nestjs/microservices';
+import { McpController, Tool } from 'rekog-mcp-nest-v2'
+import { Payload } from '@nestjs/microservices'
 
 /**
  * Three tools, mirroring the dual-era testbed's `echo` / `add` / `fail_always`
@@ -27,7 +27,7 @@ export class AnalyticsController {
     },
   })
   async echo(@Payload() { text }: { text: string }) {
-    return { content: [{ type: 'text', text: String(text ?? '') }] };
+    return { content: [{ type: 'text', text: String(text ?? '') }] }
   }
 
   @Tool({
@@ -40,7 +40,7 @@ export class AnalyticsController {
     },
   })
   async add(@Payload() { a, b }: { a: number; b: number }) {
-    return { content: [{ type: 'text', text: String(Number(a) + Number(b)) }] };
+    return { content: [{ type: 'text', text: String(Number(a) + Number(b)) }] }
   }
 
   @Tool({
@@ -49,6 +49,6 @@ export class AnalyticsController {
     parameters: { type: 'object', properties: {} },
   })
   async failAlways() {
-    throw new Error('intentional failure');
+    throw new Error('intentional failure')
   }
 }

@@ -36,8 +36,8 @@ const RED = '\x1b[31m'
 const RESET = '\x1b[0m'
 const results = []
 const check = (name, ok, detail = '') => {
-    results.push({ name, ok })
-    console.log(`  ${ok ? GREEN + '✓' : RED + '✗'}${RESET} ${name}${detail ? `  ${detail}` : ''}`)
+  results.push({ name, ok })
+  console.log(`  ${ok ? GREEN + '✓' : RED + '✗'}${RESET} ${name}${detail ? `  ${detail}` : ''}`)
 }
 
 /**
@@ -47,29 +47,29 @@ const check = (name, ok, detail = '') => {
  * so a cold per-request instance never mints one and the bug is unreachable.
  */
 function registerAll(server) {
-    for (const t of TOOLS) {
-        server.registerTool(t.name, { description: t.description, inputSchema: t.inputShape }, t.handler)
-    }
-    return server
+  for (const t of TOOLS) {
+    server.registerTool(t.name, { description: t.description, inputSchema: t.inputShape }, t.handler)
+  }
+  return server
 }
 
 const MODERN_META = {
-    'io.modelcontextprotocol/protocolVersion': '2026-07-28',
-    'io.modelcontextprotocol/clientInfo': { name: 'probe', version: '1.0.0' },
-    'io.modelcontextprotocol/clientCapabilities': {},
+  'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+  'io.modelcontextprotocol/clientInfo': { name: 'probe', version: '1.0.0' },
+  'io.modelcontextprotocol/clientCapabilities': {},
 }
 
 async function post(port, body, headers = {}) {
-    const res = await fetch(`http://localhost:${port}/mcp`, {
-        method: 'POST',
-        headers: {
-            'content-type': 'application/json',
-            accept: 'application/json, text/event-stream',
-            ...headers,
-        },
-        body: JSON.stringify(body),
-    })
-    return { status: res.status, text: await res.text() }
+  const res = await fetch(`http://localhost:${port}/mcp`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+      ...headers,
+    },
+    body: JSON.stringify(body),
+  })
+  return { status: res.status, text: await res.text() }
 }
 
 /**
@@ -87,50 +87,50 @@ const deliversHandle = (responseText) => HANDLE.test(responseText.replace(/\\"/g
 
 /** Both assertions matter, and they pull in opposite directions. */
 function assertBoth(label, recorder, responseText) {
-    const call = recorder.events.filter((e) => e.event === '$mcp_tool_call').at(-1)
-    const message = call?.properties?.$mcp_error_message
-    check(`${label} · error captured`, call?.properties?.$mcp_is_error === true)
-    check(`${label} · $mcp_error_message is clean`, message === 'intentional failure', JSON.stringify(message))
-    // The agent must still receive the handle on a failed call — otherwise the
-    // retry opens a new conversation and the failure and its fix land in
-    // different sessions. Fixing the message by withholding it would be worse.
-    check(`${label} · handle still delivered to the caller`, deliversHandle(responseText))
+  const call = recorder.events.filter((e) => e.event === '$mcp_tool_call').at(-1)
+  const message = call?.properties?.$mcp_error_message
+  check(`${label} · error captured`, call?.properties?.$mcp_is_error === true)
+  check(`${label} · $mcp_error_message is clean`, message === 'intentional failure', JSON.stringify(message))
+  // The agent must still receive the handle on a failed call — otherwise the
+  // retry opens a new conversation and the failure and its fix land in
+  // different sessions. Fixing the message by withholding it would be worse.
+  check(`${label} · handle still delivered to the caller`, deliversHandle(responseText))
 }
 
 // ── v2, high-level, modern era, conversation ids on ─────────────────────────
 async function probeV2() {
-    console.log('\nv2 · first call of the conversation fails · modern era · conv=on')
-    const recorder = createRecorder('probe:v2')
-    const handler = createMcpHandler(
-        () => {
-            const server = registerAll(new V2McpServer({ name: 'probe-v2', version: '1.0.0' }))
-            instrument(server, recorder.client, { logger: recorder.logger, enableConversationId: true })
-            return server
-        },
-        { responseMode: 'json', onerror: (e) => recorder.logger(`handler error: ${e}`) }
+  console.log('\nv2 · first call of the conversation fails · modern era · conv=on')
+  const recorder = createRecorder('probe:v2')
+  const handler = createMcpHandler(
+    () => {
+      const server = registerAll(new V2McpServer({ name: 'probe-v2', version: '1.0.0' }))
+      instrument(server, recorder.client, { logger: recorder.logger, enableConversationId: true })
+      return server
+    },
+    { responseMode: 'json', onerror: (e) => recorder.logger(`handler error: ${e}`) }
+  )
+  const node = toNodeHandler(handler)
+  const http = createServer((req, res) => node(req, res)).listen(0)
+  await sleep(300)
+  const port = http.address().port
+  try {
+    // No tools/list first, and no handle supplied: this call mints one.
+    const call = await post(
+      port,
+      {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'fail_always', arguments: {}, _meta: MODERN_META },
+      },
+      { 'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/call', 'mcp-name': 'fail_always' }
     )
-    const node = toNodeHandler(handler)
-    const http = createServer((req, res) => node(req, res)).listen(0)
-    await sleep(300)
-    const port = http.address().port
-    try {
-        // No tools/list first, and no handle supplied: this call mints one.
-        const call = await post(
-            port,
-            {
-                jsonrpc: '2.0',
-                id: 1,
-                method: 'tools/call',
-                params: { name: 'fail_always', arguments: {}, _meta: MODERN_META },
-            },
-            { 'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/call', 'mcp-name': 'fail_always' }
-        )
-        await sleep(200)
-        assertBoth('v2', recorder, call.text)
-    } finally {
-        http.close()
-        await sleep(150)
-    }
+    await sleep(200)
+    assertBoth('v2', recorder, call.text)
+  } finally {
+    http.close()
+    await sleep(150)
+  }
 }
 
 await probeV2()

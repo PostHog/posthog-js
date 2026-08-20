@@ -6,68 +6,70 @@ name: MCP harness
 # client is an in-process recorder — so it runs on fork PRs too.
 
 on:
-  pull_request:
-  push:
-    branches: [main]
+    pull_request:
+    push:
+        branches: [main]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+    group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+    cancel-in-progress: true
 
 permissions:
-  contents: read
+    contents: read
 
 jobs:
-  affected:
-    uses: ./.github/workflows/check-affected.yml
-    with:
-      package-name: '@posthog/mcp'
-      # The harness lives inside packages/mcp, so the turbo filter already covers
-      # it. What turbo cannot see is the gate's own machinery: list it, or a
-      # change that breaks how "affected" is computed skips this workflow and
-      # reports green.
-      additional-paths: |
-        .github/workflows/mcp-harness.yml
-        .github/workflows/check-affected.yml
-        .github/actions/is-affected/action.yaml
-        .github/actions/setup/action.yaml
-
-  harness:
-    name: ${{ matrix.lane.name }}
-    needs: affected
-    if: needs.affected.outputs.is-affected == 'true'
-    runs-on: ubuntu-22.04
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        lane:
-          - { name: 'official SDK v1', script: 'test:integration:sdk-v1' }
-          - { name: 'official SDK v2', script: 'test:integration:sdk-v2' }
-          - { name: 'mcp-nest (SDK v1)', script: 'test:integration:nest-v1' }
-          - { name: 'mcp-nest (SDK v2)', script: 'test:integration:nest-v2' }
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Setup environment
-        uses: ./.github/actions/setup
+    affected:
+        uses: ./.github/workflows/check-affected.yml
         with:
-          build: false
+            package-name: '@posthog/mcp'
+            # The harness lives inside packages/mcp, so the turbo filter already covers
+            # it. What turbo cannot see is the gate's own machinery: list it, or a
+            # change that breaks how "affected" is computed skips this workflow and
+            # reports green.
+            additional-paths: |
+                .github/workflows/mcp-harness.yml
+                .github/workflows/check-affected.yml
+                .github/actions/is-affected/action.yaml
+                .github/actions/setup/action.yaml
 
-      # Scoped build (only @posthog/core + @posthog/mcp): an unrelated package's
-      # build breakage cannot take the gate down.
-      - name: Build @posthog/mcp
-        run: pnpm exec turbo run build --filter=@posthog/mcp
+    harness:
+        name: ${{ matrix.lane.name }}
+        needs: affected
+        if: needs.affected.outputs.is-affected == 'true'
+        runs-on: ubuntu-22.04
+        timeout-minutes: 15
+        strategy:
+            fail-fast: false
+            matrix:
+                lane:
+                    - { name: 'official SDK v1', script: 'test:integration:sdk-v1' }
+                    - { name: 'official SDK v2', script: 'test:integration:sdk-v2' }
+                    - { name: 'mcp-nest (SDK v1)', script: 'test:integration:nest-v1' }
+                    - { name: 'mcp-nest (SDK v2)', script: 'test:integration:nest-v2' }
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Run lane
-        run: |
-          set -o pipefail
-          pnpm --filter @posthog/mcp run ${{ matrix.lane.script }} 2>&1 | tee harness.log
+            - name: Setup environment
+              uses: ./.github/actions/setup
+              with:
+                  build: false
 
-      - name: Upload harness log
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: failure()
-        with:
-          name: mcp-harness-${{ strategy.job-index }}
-          path: harness.log
-          retention-days: 14
+            # Scoped build: @posthog/mcp plus its workspace dependency closure
+            # (@posthog/types, @posthog/core, posthog-node — needed for its .d.ts
+            # build), not the whole workspace. A package outside that closure cannot
+            # take the gate down by failing to build.
+            - name: Build @posthog/mcp
+              run: pnpm exec turbo run build --filter=@posthog/mcp
+
+            - name: Run lane
+              run: |
+                  set -o pipefail
+                  pnpm --filter @posthog/mcp run ${{ matrix.lane.script }} 2>&1 | tee harness.log
+
+            - name: Upload harness log
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              if: failure()
+              with:
+                  name: mcp-harness-${{ strategy.job-index }}
+                  path: harness.log
+                  retention-days: 14

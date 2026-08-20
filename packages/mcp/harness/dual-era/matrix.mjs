@@ -19,54 +19,63 @@ const DIR = fileURLToPath(new URL('.', import.meta.url))
 
 /** The build under test and the SDK majors it runs against — resolved, not assumed. */
 function versionBanner() {
-    // fs reads, not require(): both SDKs' `exports` deny the package.json subpath.
-    const version = (rel) => {
-        try {
-            return JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf8')).version
-        } catch {
-            return '?'
-        }
+  // fs reads, not require(): both SDKs' `exports` deny the package.json subpath.
+  const version = (rel) => {
+    try {
+      return JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf8')).version
+    } catch {
+      return '?'
     }
-    const local = version('../../package.json')
-    const v1 = version('../../node_modules/@modelcontextprotocol/sdk/package.json')
-    const v2 = version('../../node_modules/@modelcontextprotocol/server/package.json')
-    return `@posthog/mcp ${local} (workspace build) · sdk v1 ${v1} · v2 ${v2}`
+  }
+  const local = version('../../package.json')
+  const v1 = version('../../node_modules/@modelcontextprotocol/sdk/package.json')
+  const v2 = version('../../node_modules/@modelcontextprotocol/server/package.json')
+  return `@posthog/mcp ${local} (workspace build) · sdk v1 ${v1} · v2 ${v2}`
 }
 
 const MAJOR = (() => {
-    const i = process.argv.indexOf('--major')
-    return i === -1 ? 'all' : process.argv[i + 1]
+  const i = process.argv.indexOf('--major')
+  return i === -1 ? 'all' : process.argv[i + 1]
 })()
 
 const COLUMNS = [
-    ['calls', 5],
-    ['errors', 6],
-    ['intent', 6],
-    ['schema', 6],
-    ['session', 7],
-    ['client', 6],
-    ['protocol', 8],
-    ['warnings', 8],
-    ['header', 6],
-    ['alive', 5],
+  ['calls', 5],
+  ['errors', 6],
+  ['intent', 6],
+  ['schema', 6],
+  ['session', 7],
+  ['client', 6],
+  ['protocol', 8],
+  ['warnings', 8],
+  ['header', 6],
+  ['alive', 5],
 ]
 
 // label, server file, env, lane, conv, header expectation
 const V1_ROWS = [
-    ['v1  stateful   high', 'v1.mjs', { LEVEL: 'high', MODE: 'stateful' }, '2025', 'off', 'present'],
-    ['v1  stateful   low', 'v1.mjs', { LEVEL: 'low', MODE: 'stateful' }, '2025', 'off', 'present'],
-    ['v1  stateless  high', 'v1.mjs', { LEVEL: 'high', MODE: 'stateless' }, '2025', 'off', 'token'],
-    ['v1  stateless  low', 'v1.mjs', { LEVEL: 'low', MODE: 'stateless' }, '2025', 'off', 'token'],
+  ['v1  stateful   high', 'v1.mjs', { LEVEL: 'high', MODE: 'stateful' }, '2025', 'off', 'present'],
+  ['v1  stateful   low', 'v1.mjs', { LEVEL: 'low', MODE: 'stateful' }, '2025', 'off', 'present'],
+  ['v1  stateless  high', 'v1.mjs', { LEVEL: 'high', MODE: 'stateless' }, '2025', 'off', 'token'],
+  ['v1  stateless  low', 'v1.mjs', { LEVEL: 'low', MODE: 'stateless' }, '2025', 'off', 'token'],
 ]
+// The first eight rows run MODE=perrequest (the default): createMcpHandler
+// builds a fresh server per HTTP request, the only modern-capable topology.
+// The two longlived rows are the control — one server for the whole process on
+// NodeStreamableHTTPServerTransport. That transport tops out at 2025-11-25, so
+// there is no longlived 2026 row, and on the legacy era the server mints an
+// Mcp-Session-Id (ADR-0009), so these rows expect our token where the
+// per-request rows expect no header at all.
 const V2_ROWS = [
-    ['v2  high  2025  conv=off', 'v2.mjs', { LEVEL: 'high' }, '2025', 'off'],
-    ['v2  high  2025  conv=on', 'v2.mjs', { LEVEL: 'high' }, '2025', 'on'],
-    ['v2  high  2026  conv=off', 'v2.mjs', { LEVEL: 'high' }, '2026', 'off'],
-    ['v2  high  2026  conv=on', 'v2.mjs', { LEVEL: 'high' }, '2026', 'on'],
-    ['v2  low   2025  conv=off', 'v2.mjs', { LEVEL: 'low' }, '2025', 'off'],
-    ['v2  low   2025  conv=on', 'v2.mjs', { LEVEL: 'low' }, '2025', 'on'],
-    ['v2  low   2026  conv=off', 'v2.mjs', { LEVEL: 'low' }, '2026', 'off'],
-    ['v2  low   2026  conv=on', 'v2.mjs', { LEVEL: 'low' }, '2026', 'on'],
+  ['v2  high  2025  conv=off', 'v2.mjs', { LEVEL: 'high' }, '2025', 'off'],
+  ['v2  high  2025  conv=on', 'v2.mjs', { LEVEL: 'high' }, '2025', 'on'],
+  ['v2  high  2026  conv=off', 'v2.mjs', { LEVEL: 'high' }, '2026', 'off'],
+  ['v2  high  2026  conv=on', 'v2.mjs', { LEVEL: 'high' }, '2026', 'on'],
+  ['v2  low   2025  conv=off', 'v2.mjs', { LEVEL: 'low' }, '2025', 'off'],
+  ['v2  low   2025  conv=on', 'v2.mjs', { LEVEL: 'low' }, '2025', 'on'],
+  ['v2  low   2026  conv=off', 'v2.mjs', { LEVEL: 'low' }, '2026', 'off'],
+  ['v2  low   2026  conv=on', 'v2.mjs', { LEVEL: 'low' }, '2026', 'on'],
+  ['v2  high  longlived  2025', 'v2.mjs', { LEVEL: 'high', MODE: 'longlived' }, '2025', 'off', 'token'],
+  ['v2  low   longlived  2025', 'v2.mjs', { LEVEL: 'low', MODE: 'longlived' }, '2025', 'off', 'token'],
 ]
 const ROWS = MAJOR === 'v1' ? V1_ROWS : MAJOR === 'v2' ? V2_ROWS : [...V1_ROWS, null, ...V2_ROWS]
 
@@ -78,43 +87,43 @@ const children = new Set()
  * if it never does.
  */
 function boot(file, env) {
-    return new Promise((resolve) => {
-        const child = spawn('node', [`${DIR}servers/${file}`], {
-            env: { ...process.env, ...env, PORT: '0' },
-            stdio: ['ignore', 'pipe', 'inherit'],
-        })
-        children.add(child)
-        let out = ''
-        let settled = false
-        const settle = (port) => {
-            if (settled) return
-            settled = true
-            resolve({ child, port })
-        }
-        child.stdout.on('data', (d) => {
-            out += d
-            const m = out.match(/MCP_HARNESS_LISTENING port=(\d+)/)
-            if (m) settle(Number(m[1]))
-        })
-        child.on('exit', () => settle(null))
-        setTimeout(() => settle(null), 15000)
+  return new Promise((resolve) => {
+    const child = spawn('node', [`${DIR}servers/${file}`], {
+      env: { ...process.env, ...env, PORT: '0' },
+      stdio: ['ignore', 'pipe', 'inherit'],
     })
+    children.add(child)
+    let out = ''
+    let settled = false
+    const settle = (port) => {
+      if (settled) return
+      settled = true
+      resolve({ child, port })
+    }
+    child.stdout.on('data', (d) => {
+      out += d
+      const m = out.match(/MCP_HARNESS_LISTENING port=(\d+)/)
+      if (m) settle(Number(m[1]))
+    })
+    child.on('exit', () => settle(null))
+    setTimeout(() => settle(null), 15000)
+  })
 }
 async function stop(child) {
-    child.kill('SIGKILL')
-    children.delete(child)
-    await sleep(100)
+  child.kill('SIGKILL')
+  children.delete(child)
+  await sleep(100)
 }
 async function waitUp(port) {
-    for (let i = 0; i < 80; i++) {
-        try {
-            await fetch(`http://localhost:${port}/__events`)
-            return true
-        } catch {
-            await sleep(150)
-        }
+  for (let i = 0; i < 80; i++) {
+    try {
+      await fetch(`http://localhost:${port}/__events`)
+      return true
+    } catch {
+      await sleep(150)
     }
-    return false
+  }
+  return false
 }
 
 const COLUMN_NAMES = COLUMNS.map(([n]) => n)
@@ -122,9 +131,12 @@ const lastLine = (s) => s.trim().split('\n').filter(Boolean).pop() ?? ''
 
 /** The one line of a Node crash dump that names the failure, for the summary. */
 function whyItDied(stderr) {
-    const lines = stderr.split('\n').map((l) => l.trim()).filter(Boolean)
-    // A crash dump ends with `Node.js v22.x`, so the last line is never the reason.
-    return lines.find((l) => /^[\w$.]*(?:Error|Exception)\b/.test(l)) ?? lines[0] ?? ''
+  const lines = stderr
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+  // A crash dump ends with `Node.js v22.x`, so the last line is never the reason.
+  return lines.find((l) => /^[\w$.]*(?:Error|Exception)\b/.test(l)) ?? lines[0] ?? ''
 }
 
 /**
@@ -139,149 +151,156 @@ function whyItDied(stderr) {
  * red, which is a result, not a crash.
  */
 function runClient(port, sdk, lane, conv, headerExpect) {
-    return new Promise((resolve) => {
-        const child = spawn(
-            'node',
-            [
-                `${DIR}client/run.mjs`,
-                ...['--url', `http://localhost:${port}`, '--sdk', sdk, '--lane', lane],
-                ...['--conv', conv, '--header', headerExpect, '--json'],
-            ],
-            { env: process.env, stdio: ['ignore', 'pipe', 'pipe'] }
-        )
-        let out = ''
-        let err = ''
-        // Both pipes must be drained: an unread stderr can wedge the child once
-        // the pipe buffer fills, and its tail is the only clue when one crashes.
-        child.stdout.on('data', (d) => (out += d))
-        child.stderr.on('data', (d) => (err += d))
-        child.on('error', (e) => resolve({ error: `client could not be spawned: ${e.message}` }))
-        child.on('close', (code) => {
-            let results
-            try {
-                results = JSON.parse(lastLine(out)).results
-            } catch {
-                const why = whyItDied(err) || lastLine(out) || 'no output'
-                resolve({ error: `client exited ${code} without a verdict — ${why}`, detail: err })
-                return
-            }
-            const missing = COLUMN_NAMES.filter((n) => !(n in Object(results)))
-            if (missing.length > 0) {
-                resolve({ error: `client exited ${code} reporting nothing for: ${missing.join(', ')}`, detail: err })
-                return
-            }
-            resolve({ results })
-        })
+  return new Promise((resolve) => {
+    const child = spawn(
+      'node',
+      [
+        `${DIR}client/run.mjs`,
+        ...['--url', `http://localhost:${port}`, '--sdk', sdk, '--lane', lane],
+        ...['--conv', conv, '--header', headerExpect, '--json'],
+      ],
+      { env: process.env, stdio: ['ignore', 'pipe', 'pipe'] }
+    )
+    let out = ''
+    let err = ''
+    // Both pipes must be drained: an unread stderr can wedge the child once
+    // the pipe buffer fills, and its tail is the only clue when one crashes.
+    child.stdout.on('data', (d) => (out += d))
+    child.stderr.on('data', (d) => (err += d))
+    child.on('error', (e) => resolve({ error: `client could not be spawned: ${e.message}` }))
+    child.on('close', (code) => {
+      let results
+      try {
+        results = JSON.parse(lastLine(out)).results
+      } catch {
+        const why = whyItDied(err) || lastLine(out) || 'no output'
+        resolve({ error: `client exited ${code} without a verdict — ${why}`, detail: err })
+        return
+      }
+      const missing = COLUMN_NAMES.filter((n) => !(n in Object(results)))
+      if (missing.length > 0) {
+        resolve({ error: `client exited ${code} reporting nothing for: ${missing.join(', ')}`, detail: err })
+        return
+      }
+      resolve({ results })
     })
+  })
 }
 
-/** Separate boot: does the host server survive a 3-arg custom registration? */
-async function checkAlive(file, env) {
-    if (file === 'v1.mjs') return null // v1's setRequestHandler has no 3-argument form
-    const { child, port } = await boot(file, { ...env, CUSTOM_3ARG: '1' })
-    if (!port || !(await waitUp(port))) {
-        await stop(child)
-        return false
-    }
-    let ok = false
-    try {
-        const res = await fetch(`http://localhost:${port}/mcp`, {
-            method: 'POST',
-            headers: {
-                'content-type': 'application/json',
-                accept: 'application/json, text/event-stream',
-                'mcp-protocol-version': '2026-07-28',
-                'mcp-method': 'tools/list',
-            },
-            body: JSON.stringify({
-                jsonrpc: '2.0',
-                id: 1,
-                method: 'tools/list',
-                params: {
-                    _meta: {
-                        'io.modelcontextprotocol/protocolVersion': '2026-07-28',
-                        'io.modelcontextprotocol/clientInfo': { name: 'p', version: '1' },
-                        'io.modelcontextprotocol/clientCapabilities': {},
-                    },
-                },
-            }),
-        })
-        ok = res.status === 200
-    } catch {
-        ok = false
-    }
+/**
+ * Separate boot: does the host server survive a 3-arg custom registration?
+ * The probe request speaks the row's own era — a longlived transport tops out
+ * at 2025-11-25, so a modern-era probe would report it dead when it is fine.
+ */
+async function checkAlive(file, env, lane) {
+  if (file === 'v1.mjs') return null // v1's setRequestHandler has no 3-argument form
+  const { child, port } = await boot(file, { ...env, CUSTOM_3ARG: '1' })
+  if (!port || !(await waitUp(port))) {
     await stop(child)
-    return ok
+    return false
+  }
+  const modern = lane === '2026'
+  let ok = false
+  try {
+    const res = await fetch(`http://localhost:${port}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        'mcp-protocol-version': modern ? '2026-07-28' : '2025-11-25',
+        ...(modern ? { 'mcp-method': 'tools/list' } : {}),
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/list',
+        params: modern
+          ? {
+              _meta: {
+                'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+                'io.modelcontextprotocol/clientInfo': { name: 'p', version: '1' },
+                'io.modelcontextprotocol/clientCapabilities': {},
+              },
+            }
+          : {},
+      }),
+    })
+    ok = res.status === 200
+  } catch {
+    ok = false
+  }
+  await stop(child)
+  return ok
 }
 
 // ── run ─────────────────────────────────────────────────────────────────────
 const rendered = []
 for (const row of ROWS) {
-    if (row === null) {
-        rendered.push(null)
-        continue
-    }
-    const [label, file, env, lane, conv, headerExpect = 'none'] = row
-    const sdk = file === 'v1.mjs' ? 'v1' : 'v2'
-    const { child, port } = await boot(file, { ...env, CONVERSATION_ID: conv === 'on' ? '1' : '0' })
-    if (!port || !(await waitUp(port))) {
-        await stop(child)
-        rendered.push([label, null, 'server did not start'])
-        continue
-    }
-    const { results, error, detail } = await runClient(port, sdk, lane, conv, headerExpect)
+  if (row === null) {
+    rendered.push(null)
+    continue
+  }
+  const [label, file, env, lane, conv, headerExpect = 'none'] = row
+  const sdk = file === 'v1.mjs' ? 'v1' : 'v2'
+  const { child, port } = await boot(file, { ...env, CONVERSATION_ID: conv === 'on' ? '1' : '0' })
+  if (!port || !(await waitUp(port))) {
     await stop(child)
-    if (error) {
-        rendered.push([label, null, error])
-        process.stderr.write(`  ran ${label} — ${error}\n`)
-        // The crash dump, indented: the summary line alone rarely says enough to fix
-        // it from a CI log. Capped — a client that spews should not bury the matrix.
-        const dump = (detail ?? '').trimEnd().split('\n').slice(0, 40)
-        if (dump.join('').trim()) process.stderr.write(dump.join('\n').replace(/^/gm, '      ') + '\n')
-        continue
-    }
-    results.alive = await checkAlive(file, env)
-    rendered.push([label, results])
-    process.stderr.write(`  ran ${label}\n`)
+    rendered.push([label, null, 'server did not start'])
+    continue
+  }
+  const { results, error, detail } = await runClient(port, sdk, lane, conv, headerExpect)
+  await stop(child)
+  if (error) {
+    rendered.push([label, null, error])
+    process.stderr.write(`  ran ${label} — ${error}\n`)
+    // The crash dump, indented: the summary line alone rarely says enough to fix
+    // it from a CI log. Capped — a client that spews should not bury the matrix.
+    const dump = (detail ?? '').trimEnd().split('\n').slice(0, 40)
+    if (dump.join('').trim()) process.stderr.write(dump.join('\n').replace(/^/gm, '      ') + '\n')
+    continue
+  }
+  results.alive = await checkAlive(file, env, lane)
+  rendered.push([label, results])
+  process.stderr.write(`  ran ${label}\n`)
 }
 
 // ── render ──────────────────────────────────────────────────────────────────
 const LABEL_W = 30
 const cell = (v) => (v === null || v === undefined ? '·' : v ? '✓' : '✗')
 const centre = (s, w) => {
-    const pad = w - s.length
-    return ' '.repeat(Math.floor(pad / 2)) + s + ' '.repeat(Math.ceil(pad / 2))
+  const pad = w - s.length
+  return ' '.repeat(Math.floor(pad / 2)) + s + ' '.repeat(Math.ceil(pad / 2))
 }
 
 const groups = [
-    ['capture', 4],
-    ['identity', 3],
-    ['safety', 3],
+  ['capture', 4],
+  ['identity', 3],
+  ['safety', 3],
 ]
 let g1 = ' '.repeat(LABEL_W)
 let idx = 0
 for (const [name, span] of groups) {
-    const w = COLUMNS.slice(idx, idx + span).reduce((a, [, cw]) => a + cw + 1, 0)
-    const inner = ` ${name} `
-    const dashes = Math.max(0, w - inner.length)
-    g1 += '─'.repeat(Math.floor(dashes / 2)) + inner + '─'.repeat(Math.ceil(dashes / 2))
-    idx += span
+  const w = COLUMNS.slice(idx, idx + span).reduce((a, [, cw]) => a + cw + 1, 0)
+  const inner = ` ${name} `
+  const dashes = Math.max(0, w - inner.length)
+  g1 += '─'.repeat(Math.floor(dashes / 2)) + inner + '─'.repeat(Math.ceil(dashes / 2))
+  idx += span
 }
 const head = ' '.repeat(LABEL_W) + COLUMNS.map(([n, w]) => centre(n, w + 1)).join('')
 const rule = '─'.repeat(head.length)
 
 console.log(`\n${g1}\n${head}\n${rule}`)
 for (const row of rendered) {
-    if (row === null) {
-        console.log(rule)
-        continue
-    }
-    const [label, results, reason] = row
-    if (!results) {
-        console.log(label.padEnd(LABEL_W) + `  ${reason}`)
-        continue
-    }
-    console.log(label.padEnd(LABEL_W) + COLUMNS.map(([n, w]) => centre(cell(results[n]), w + 1)).join(''))
+  if (row === null) {
+    console.log(rule)
+    continue
+  }
+  const [label, results, reason] = row
+  if (!results) {
+    console.log(label.padEnd(LABEL_W) + `  ${reason}`)
+    continue
+  }
+  console.log(label.padEnd(LABEL_W) + COLUMNS.map(([n, w]) => centre(cell(results[n]), w + 1)).join(''))
 }
 console.log(rule)
 console.log(`  ✓ pass    ✗ fail    · not applicable        ${versionBanner()}`)
@@ -291,8 +310,8 @@ for (const c of children) c.kill('SIGKILL')
 // ── expected-failures reconciliation ────────────────────────────────────────
 const norm = (s) => s.replace(/\s+/g, ' ').trim()
 const expected = JSON.parse(readFileSync(new URL('./expected-failures.json', import.meta.url), 'utf8'))
-    .filter((f) => (MAJOR === 'all' ? true : norm(f.row).startsWith(MAJOR)))
-    .map((f) => ({ row: norm(f.row), key: `${norm(f.row)} · ${f.col}` }))
+  .filter((f) => (MAJOR === 'all' ? true : norm(f.row).startsWith(MAJOR)))
+  .map((f) => ({ row: norm(f.row), key: `${norm(f.row)} · ${f.col}` }))
 const expectedKeys = new Set(expected.map((e) => e.key))
 const failing = new Set()
 // Rows that produced no verdict at all. They are a hard failure in their own
@@ -300,14 +319,14 @@ const failing = new Set()
 const unreported = []
 const unreportedRows = new Set()
 for (const row of rendered) {
-    if (row === null) continue
-    const [label, results, reason] = row
-    if (!results) {
-        unreported.push(`${norm(label)} — ${reason}`)
-        unreportedRows.add(norm(label))
-        continue
-    }
-    for (const [n] of COLUMNS) if (results[n] === false) failing.add(`${norm(label)} · ${n}`)
+  if (row === null) continue
+  const [label, results, reason] = row
+  if (!results) {
+    unreported.push(`${norm(label)} — ${reason}`)
+    unreportedRows.add(norm(label))
+    continue
+  }
+  for (const [n] of COLUMNS) if (results[n] === false) failing.add(`${norm(label)} · ${n}`)
 }
 const regressed = [...failing].filter((k) => !expectedKeys.has(k))
 // An unreported row proves nothing about its expected failures, so don't claim
@@ -317,5 +336,5 @@ const nowPassing = expected.filter((e) => !failing.has(e.key) && !unreportedRows
 if (unreported.length > 0) console.error(`\nno verdict: ${unreported.join('  ·  ')}`)
 if (regressed.length > 0) console.error(`\nregressed: ${regressed.join('  ·  ')}`)
 if (nowPassing.length > 0)
-    console.error(`\nnow passing — remove from expected-failures.json: ${nowPassing.join('  ·  ')}`)
+  console.error(`\nnow passing — remove from expected-failures.json: ${nowPassing.join('  ·  ')}`)
 process.exit(unreported.length === 0 && regressed.length === 0 && nowPassing.length === 0 ? 0 : 1)

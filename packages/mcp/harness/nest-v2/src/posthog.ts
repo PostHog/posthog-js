@@ -5,16 +5,16 @@
 // failure through it and otherwise returns a healthy-looking handle, which is the
 // exact silent-degradation this harness exists to catch.
 
-import { instrument, getRequestHeaders } from '@posthog/mcp';
+import { instrument, getRequestHeaders } from '@posthog/mcp'
 
 export interface RecordedEvent {
-  event: string;
-  distinctId?: string;
-  properties?: Record<string, unknown>;
+  event: string
+  distinctId?: string
+  properties?: Record<string, unknown>
 }
 
-export const events: RecordedEvent[] = [];
-export const warnings: string[] = [];
+export const events: RecordedEvent[] = []
+export const warnings: string[] = []
 
 /**
  * What `extra` actually looked like each time a host callback received it.
@@ -26,17 +26,17 @@ export const warnings: string[] = [];
  * the invariant is asserted positively and `identify` is free to be correct.
  */
 export interface ObservedExtraShape {
-  hasRequestInfo: boolean;
-  hasHttpReq: boolean;
-  headersResolved: boolean;
+  hasRequestInfo: boolean
+  hasHttpReq: boolean
+  headersResolved: boolean
 }
-export const extraShapes: ObservedExtraShape[] = [];
+export const extraShapes: ObservedExtraShape[] = []
 
-const DIM = '\x1b[2m';
-const RESET = '\x1b[0m';
+const DIM = '\x1b[2m'
+const RESET = '\x1b[0m'
 
 function summarise(e: RecordedEvent): string {
-  const p = e.properties ?? {};
+  const p = e.properties ?? {}
   return [
     e.event,
     p.$mcp_tool_name ? `tool=${p.$mcp_tool_name}` : null,
@@ -47,12 +47,12 @@ function summarise(e: RecordedEvent): string {
     p.$mcp_is_error ? 'ERROR' : null,
   ]
     .filter(Boolean)
-    .join(' ');
+    .join(' ')
 }
 
 function record(event: RecordedEvent): void {
-  events.push(event);
-  console.log(`${DIM}[posthog]${RESET} ${summarise(event)}`);
+  events.push(event)
+  console.log(`${DIM}[posthog]${RESET} ${summarise(event)}`)
 }
 
 const client = {
@@ -62,21 +62,21 @@ const client = {
     record({ event: '$exception', distinctId, properties: { ...properties, message: String(error) } }),
   flush: async () => {},
   shutdown: async () => {},
-};
+}
 
 const logger = (...args: unknown[]): void => {
-  const line = args.join(' ');
+  const line = args.join(' ')
   // Match the SDK's own prefixes only, so routine notices are not counted as
   // failures. A substring match on /fail/ would flag "Tool fail_always callback
   // already wrapped".
-  if (/^(Warning|Error):|compatibility error|Failed to /.test(line)) warnings.push(line);
-  console.log(`${DIM}[posthog:sdk]${RESET} ${line}`);
-};
+  if (/^(Warning|Error):|compatibility error|Failed to /.test(line)) warnings.push(line)
+  console.log(`${DIM}[posthog:sdk]${RESET} ${line}`)
+}
 
 export function reset(): void {
-  events.length = 0;
-  warnings.length = 0;
-  extraShapes.length = 0;
+  events.length = 0
+  warnings.length = 0
+  extraShapes.length = 0
 }
 
 /**
@@ -100,15 +100,14 @@ function identifyFromHeader(_request: unknown, extra: any) {
     hasRequestInfo: !!extra?.requestInfo,
     hasHttpReq: !!extra?.http?.req,
     headersResolved: !!getRequestHeaders(extra),
-  });
+  })
   const auth =
     process.env.IDENTIFY === 'legacy'
-      ? (extra?.requestInfo?.headers?.['authorization'] ??
-        extra?.requestInfo?.headers?.['Authorization'])
-      : getRequestHeaders(extra)?.['authorization'];
-  if (typeof auth !== 'string') return null;
-  const token = auth.replace(/^Bearer\s+/i, '');
-  return { distinctId: `user_${token}`, properties: { token } };
+      ? (extra?.requestInfo?.headers?.['authorization'] ?? extra?.requestInfo?.headers?.['Authorization'])
+      : getRequestHeaders(extra)?.['authorization']
+  if (typeof auth !== 'string') return null
+  const token = auth.replace(/^Bearer\s+/i, '')
+  return { distinctId: `user_${token}`, properties: { token } }
 }
 
 /**
@@ -123,9 +122,9 @@ export const instrumentationMutator = (server: any) => {
     context: true,
     enableConversationId: true,
     identify: identifyFromHeader as any,
-  });
-  return server;
-};
+  })
+  return server
+}
 
 /** Same, but through the `instrument(server.server)` workaround users adopted. */
 export const instrumentationMutatorLowLevel = (server: any) => {
@@ -134,6 +133,6 @@ export const instrumentationMutatorLowLevel = (server: any) => {
     context: true,
     enableConversationId: true,
     identify: identifyFromHeader as any,
-  });
-  return server;
-};
+  })
+  return server
+}

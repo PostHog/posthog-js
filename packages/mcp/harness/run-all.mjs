@@ -17,32 +17,33 @@ const ROOT = fileURLToPath(new URL('../../..', import.meta.url))
 // Resolve the package manager that invoked us, so `node run-all.mjs` also works.
 const PM = process.env.npm_execpath
 const pm = (args, cwd) =>
-    PM
-        ? spawnSync(process.execPath, [PM, ...args], { cwd, stdio: 'inherit' })
-        : spawnSync('pnpm', [...args], { cwd, stdio: 'inherit' })
+  PM
+    ? spawnSync(process.execPath, [PM, ...args], { cwd, stdio: 'inherit' })
+    : spawnSync('pnpm', [...args], { cwd, stdio: 'inherit' })
 
-// Scoped build: only @posthog/core + @posthog/mcp, so an unrelated package's
-// build breakage cannot take the harness down.
+// Scoped build: @posthog/mcp plus its workspace dependency closure
+// (@posthog/types, @posthog/core, posthog-node — needed for its .d.ts build),
+// so a package outside that closure cannot take the harness down.
 console.log('· building @posthog/mcp (turbo, scoped)')
 const build = pm(['exec', 'turbo', 'run', 'build', '--filter=@posthog/mcp'], ROOT)
 if (build.status !== 0) process.exit(build.status ?? 1)
 
 const LANES = [
-    ['official SDK v1', 'test:integration:sdk-v1'],
-    ['official SDK v2', 'test:integration:sdk-v2'],
-    ['mcp-nest (SDK v1)', 'test:integration:nest-v1'],
-    ['mcp-nest (SDK v2)', 'test:integration:nest-v2'],
+  ['official SDK v1', 'test:integration:sdk-v1'],
+  ['official SDK v2', 'test:integration:sdk-v2'],
+  ['mcp-nest (SDK v1)', 'test:integration:nest-v1'],
+  ['mcp-nest (SDK v2)', 'test:integration:nest-v2'],
 ]
 
 const outcomes = []
 for (const [name, script] of LANES) {
-    console.log(`\n━━ ${name} ━━`)
-    const res = pm(['run', script], PKG_DIR)
-    outcomes.push([name, res.status === 0])
+  console.log(`\n━━ ${name} ━━`)
+  const res = pm(['run', script], PKG_DIR)
+  outcomes.push([name, res.status === 0])
 }
 
 console.log('\n━━ summary ━━')
 for (const [name, ok] of outcomes) {
-    console.log(`  ${ok ? '\x1b[32m✓\x1b[0m' : '\x1b[31m✗\x1b[0m'} ${name}`)
+  console.log(`  ${ok ? '\x1b[32m✓\x1b[0m' : '\x1b[31m✗\x1b[0m'} ${name}`)
 }
 process.exit(outcomes.every(([, ok]) => ok) ? 0 : 1)

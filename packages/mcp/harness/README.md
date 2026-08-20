@@ -36,15 +36,15 @@ Fixtures import `@posthog/mcp` through Node self-reference, which resolves to
 
 ## What runs
 
-| Lane | Path | Covers |
-|---|---|---|
-| `official SDK v1` | `dual-era/matrix.mjs --major v1` | 4 rows: high/low-level instrumentation × stateful/stateless, legacy era |
-| `official SDK v2` | `dual-era/matrix.mjs --major v2` | 8 rows: high/low × 2025/2026 era × conversation-id on/off |
-| each SDK lane | `dual-era/probe-late-handlers.mjs --major v1\|v2` | handlers registered *after* `instrument()` — the mcp-nest/adapter ordering. Each lane runs only its own major's half, so a red probe names the stack |
-| `official SDK v2` only | `dual-era/probe-first-call-error.mjs` | the **first** call of a conversation fails, with `conversation_id` on (v2-only by construction: on v1 the thrown error is captured before the appended result, so the bug is unreachable) |
-| each SDK lane | `dual-era/probe-pagination.mjs --major v1\|v2` | a **two-page** tool catalogue: `nextCursor`, `ttlMs`, `cacheScope` and result `_meta` survive the listing wrapper |
-| `mcp-nest (SDK v1)` | `nest-v1/verify.mjs` | NestJS + `@rekog/mcp-nest` 1.9 + SDK v1, stateless — 16 assertions × `LEVEL=high\|low` |
-| `mcp-nest (SDK v2)` | `nest-v2/verify.mjs` | NestJS + `@rekog/mcp-nest` 2.0 + SDK v2, stateless, both eras — 37 assertions × `LEVEL=high\|low` |
+| Lane                   | Path                                              | Covers                                                                                                                                                                                    |
+| ---------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `official SDK v1`      | `dual-era/matrix.mjs --major v1`                  | 4 rows: high/low-level instrumentation × stateful/stateless, legacy era                                                                                                                   |
+| `official SDK v2`      | `dual-era/matrix.mjs --major v2`                  | 10 rows: high/low × 2025/2026 era × conversation-id on/off (per-request), plus two long-lived-server control rows (legacy era only — the long-lived transport tops out at 2025-11-25)     |
+| each SDK lane          | `dual-era/probe-late-handlers.mjs --major v1\|v2` | handlers registered _after_ `instrument()` — the mcp-nest/adapter ordering. Each lane runs only its own major's half, so a red probe names the stack                                      |
+| `official SDK v2` only | `dual-era/probe-first-call-error.mjs`             | the **first** call of a conversation fails, with `conversation_id` on (v2-only by construction: on v1 the thrown error is captured before the appended result, so the bug is unreachable) |
+| each SDK lane          | `dual-era/probe-pagination.mjs --major v1\|v2`    | a **two-page** tool catalogue: `nextCursor`, `ttlMs`, `cacheScope` and result `_meta` survive the listing wrapper                                                                         |
+| `mcp-nest (SDK v1)`    | `nest-v1/verify.mjs`                              | NestJS + `@rekog/mcp-nest` 1.9 + SDK v1, stateless — 16 assertions × `LEVEL=high\|low`                                                                                                    |
+| `mcp-nest (SDK v2)`    | `nest-v2/verify.mjs`                              | NestJS + `@rekog/mcp-nest` 2.0 + SDK v2, stateless, both eras — 37 assertions × `LEVEL=high\|low`                                                                                         |
 
 `LEVEL=high` is `instrument(server)`, as documented. `LEVEL=low` is `instrument(server.server)`,
 the workaround users adopted before the compatibility gate opened. Both run.
@@ -63,7 +63,7 @@ Known-broken cells are pinned in `dual-era/expected-failures.json` and
 **exactly matches** the file:
 
 - a new failure prints `regressed: …` and exits non-zero;
-- a fixed one prints `now passing — remove from expected-failures.json: …` and *also* exits
+- a fixed one prints `now passing — remove from expected-failures.json: …` and _also_ exits
   non-zero, so improvements are ratcheted in deliberately;
 - a row that reports nothing — server never booted, client died mid-run — prints
   `no verdict: …` with the crash dump and exits non-zero. Silence is never a pass: an absent
@@ -92,22 +92,22 @@ PORT=3222 LEVEL=high CONVERSATION_ID=1 node servers/v2.mjs &
 node client/run.mjs --url http://localhost:3222 --sdk v2 --lane 2026 --conv on
 ```
 
-| Env / flag | Meaning |
-|---|---|
-| `PORT` | explicit port; default 0 = ephemeral |
-| `LEVEL=high\|low` | high-level `McpServer` or bare low-level `Server` |
-| `MODE=` | v1: `stateful`/`stateless` · v2: `perrequest`/`longlived` |
-| `CONVERSATION_ID=1` | turn on `enableConversationId` (off by default) |
-| `CUSTOM_3ARG=1` | register a custom method via v2's 3-argument form after `instrument()` |
-| `--sdk v1\|v2` | client-side: which SDK major serves the URL (era-conditional assertions) |
-| `--conv on` | client-side: expect the injected parameter and echo the handle |
+| Env / flag          | Meaning                                                                  |
+| ------------------- | ------------------------------------------------------------------------ |
+| `PORT`              | explicit port; default 0 = ephemeral                                     |
+| `LEVEL=high\|low`   | high-level `McpServer` or bare low-level `Server`                        |
+| `MODE=`             | v1: `stateful`/`stateless` · v2: `perrequest`/`longlived`                |
+| `CONVERSATION_ID=1` | turn on `enableConversationId` (off by default)                          |
+| `CUSTOM_3ARG=1`     | register a custom method via v2's 3-argument form after `instrument()`   |
+| `--sdk v1\|v2`      | client-side: which SDK major serves the URL (era-conditional assertions) |
+| `--conv on`         | client-side: expect the injected parameter and echo the handle           |
 
 Same shape for a Nest harness: `LEVEL=low node harness/nest-v2/verify.mjs`.
 
 ## Why it is built this way
 
-- **Real HTTP, not in-process transports.** Two assertions are impossible in process: *"the
-  response carries no `mcp-session-id` header"* is an absence you can only observe on the wire,
+- **Real HTTP, not in-process transports.** Two assertions are impossible in process: _"the
+  response carries no `mcp-session-id` header"_ is an absence you can only observe on the wire,
   and `createMcpHandler`'s per-request server instances only exist under a real handler.
 - **Raw JSON-RPC over `fetch`, never the SDK `Client`.** A stock v2 `Client` negotiates the
   **legacy** era and sends an `initialize` handshake — it exercises none of 2026-07-28 and
@@ -117,7 +117,7 @@ Same shape for a Nest harness: `LEVEL=low node harness/nest-v2/verify.mjs`.
   between per-request instances.
 - **Identical tool surface everywhere** — `echo`, `add`, `fail_always`. If a number differs
   between harnesses it is the SDK or the adapter doing it, not the fixture.
-- **Ephemeral ports.** Fixed shared ports let a row occasionally reach the *previous* row's dying
+- **Ephemeral ports.** Fixed shared ports let a row occasionally reach the _previous_ row's dying
   server, which shows up as a red cell indistinguishable from a regression.
 - **Assertions, not eyeballs.** Every verifier exits non-zero; the matrix reconciles against its
   expected-failures snapshot.

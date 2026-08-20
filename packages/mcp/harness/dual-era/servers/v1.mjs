@@ -31,81 +31,81 @@ const CONVERSATION_ID = process.env.CONVERSATION_ID === '1'
 const recorder = createRecorder(`v1:${LEVEL}:${MODE}`)
 
 function buildServer() {
-    if (LEVEL === 'high') {
-        const server = new McpServer({ name: 'testbed-v1', version: '1.0.0' })
-        for (const t of TOOLS) {
-            server.registerTool(t.name, { description: t.description, inputSchema: t.inputShape }, t.handler)
-        }
-        return server
+  if (LEVEL === 'high') {
+    const server = new McpServer({ name: 'testbed-v1', version: '1.0.0' })
+    for (const t of TOOLS) {
+      server.registerTool(t.name, { description: t.description, inputSchema: t.inputShape }, t.handler)
     }
-    const server = new Server({ name: 'testbed-v1', version: '1.0.0' }, { capabilities: { tools: {} } })
-    server.setRequestHandler(ListToolsRequestSchema, async () => ({
-        tools: TOOLS.map((t) => ({ name: t.name, description: t.description, inputSchema: t.jsonSchema })),
-    }))
-    server.setRequestHandler(CallToolRequestSchema, async (request) => {
-        const tool = TOOL_BY_NAME[request.params.name]
-        if (!tool) throw new Error(`Unknown tool: ${request.params.name}`)
-        return tool.handler(request.params.arguments ?? {})
-    })
     return server
+  }
+  const server = new Server({ name: 'testbed-v1', version: '1.0.0' }, { capabilities: { tools: {} } })
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: TOOLS.map((t) => ({ name: t.name, description: t.description, inputSchema: t.jsonSchema })),
+  }))
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const tool = TOOL_BY_NAME[request.params.name]
+    if (!tool) throw new Error(`Unknown tool: ${request.params.name}`)
+    return tool.handler(request.params.arguments ?? {})
+  })
+  return server
 }
 
 function instrumented() {
-    const server = buildServer()
-    instrument(server, recorder.client, { logger: recorder.logger, enableConversationId: CONVERSATION_ID })
-    return server
+  const server = buildServer()
+  instrument(server, recorder.client, { logger: recorder.logger, enableConversationId: CONVERSATION_ID })
+  return server
 }
 
 async function readBody(req) {
-    if (req.method !== 'POST') return undefined
-    const chunks = []
-    for await (const c of req) chunks.push(c)
-    const raw = Buffer.concat(chunks).toString('utf8')
-    return raw ? JSON.parse(raw) : undefined
+  if (req.method !== 'POST') return undefined
+  const chunks = []
+  for await (const c of req) chunks.push(c)
+  const raw = Buffer.concat(chunks).toString('utf8')
+  return raw ? JSON.parse(raw) : undefined
 }
 
 // ── stateful: one server for the whole process ──────────────────────────────
 let sharedTransport
 if (MODE === 'stateful') {
-    const server = instrumented()
-    sharedTransport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: () => randomUUID(),
-        enableJsonResponse: true,
-    })
-    await server.connect(sharedTransport)
+  const server = instrumented()
+  sharedTransport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: () => randomUUID(),
+    enableJsonResponse: true,
+  })
+  await server.connect(sharedTransport)
 }
 
 createServer(async (req, res) => {
-    if (handleInspectionRoute(req, res, recorder)) return
-    let body
-    try {
-        body = await readBody(req)
-    } catch {
-        res.writeHead(400).end('bad json')
-        return
-    }
+  if (handleInspectionRoute(req, res, recorder)) return
+  let body
+  try {
+    body = await readBody(req)
+  } catch {
+    res.writeHead(400).end('bad json')
+    return
+  }
 
-    if (MODE === 'stateful') {
-        await sharedTransport.handleRequest(req, res, body)
-        return
-    }
+  if (MODE === 'stateful') {
+    await sharedTransport.handleRequest(req, res, body)
+    return
+  }
 
-    // stateless: everything per request, as the v1 SDK prescribes.
-    // sessionIdGenerator: undefined + enableJsonResponse: true is the combination
-    // in which @posthog/mcp mints its own token into the response header.
-    const server = instrumented()
-    const transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: undefined,
-        enableJsonResponse: true,
-    })
-    res.on('close', () => {
-        transport.close?.()
-        server.close?.()
-    })
-    await server.connect(transport)
-    await transport.handleRequest(req, res, body)
+  // stateless: everything per request, as the v1 SDK prescribes.
+  // sessionIdGenerator: undefined + enableJsonResponse: true is the combination
+  // in which @posthog/mcp mints its own token into the response header.
+  const server = instrumented()
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+    enableJsonResponse: true,
+  })
+  res.on('close', () => {
+    transport.close?.()
+    server.close?.()
+  })
+  await server.connect(transport)
+  await transport.handleRequest(req, res, body)
 }).listen(PORT, function () {
-    const port = this.address().port
-    console.log(`MCP_HARNESS_LISTENING port=${port}`)
-    console.log(`v1 ${LEVEL}/${MODE} on http://localhost:${port}/mcp  conversationId=${CONVERSATION_ID}`)
+  const port = this.address().port
+  console.log(`MCP_HARNESS_LISTENING port=${port}`)
+  console.log(`v1 ${LEVEL}/${MODE} on http://localhost:${port}/mcp  conversationId=${CONVERSATION_ID}`)
 })

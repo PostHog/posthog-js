@@ -1,9 +1,9 @@
-import { Module } from '@nestjs/common';
-import { McpModule, McpTransportType } from 'rekog-mcp-nest-v1';
-import { AnalyticsTool } from './analytics.tool';
-import { instrumentationMutator, instrumentationMutatorLowLevel } from './posthog';
+import { Module } from '@nestjs/common'
+import { McpModule, McpTransportType } from 'rekog-mcp-nest-v1'
+import { AnalyticsTool } from './analytics.tool'
+import { instrumentationMutator, instrumentationMutatorLowLevel } from './posthog'
 
-const LEVEL = process.env.LEVEL === 'low' ? 'low' : 'high';
+const LEVEL = process.env.LEVEL === 'low' ? 'low' : 'high'
 
 @Module({
   imports: [
