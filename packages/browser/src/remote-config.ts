@@ -126,13 +126,16 @@ export class RemoteConfigLoader {
                 logger.error('Failed to fetch remote config from PostHog.')
             }
 
-            // A custom api_host points at a self-hosted reverse proxy. The proxy must forward
-            // the /array assets path, or the config request fails and session recording never
-            // gets its server settings. Name the missing rule so the fix is self-serve.
+            // A custom api_host commonly points at a self-hosted reverse proxy. If that proxy
+            // does not forward the /array assets path, the config request fails and session
+            // recording never gets its server settings. This branch also fires for unrelated
+            // failures (outages, CORS, blocked requests, non-JSON bodies), so surface the
+            // missing /array rule as a likely cause to check, not as a stated fact.
             if (this._instance.requestRouter.region === RequestRouterRegion.CUSTOM) {
                 logger.warn(
-                    'Your api_host points at a reverse proxy that did not return the remote config from /array/{token}/config. ' +
-                        'Add a proxy rule that forwards /array to PostHog, or session recording and other features will not start. ' +
+                    'Could not load the remote config from /array/{token}/config for a custom api_host. ' +
+                        'If api_host points at a reverse proxy, make sure it forwards /array to PostHog, ' +
+                        'or session recording and other features may not start. ' +
                         'See https://posthog.com/docs/advanced/proxy'
                 )
             }
