@@ -9,6 +9,7 @@ export type {
   SpanTimeInput,
   StartSpanOptions,
   TracesConfig,
+  BeforeSpanSendFn,
   OtlpSpan,
   OtlpSpanAnyValue,
   OtlpSpanEvent,
@@ -17,7 +18,15 @@ export type {
   OtlpTracesPayload,
 } from '@posthog/types'
 
-import type { OtlpTracesPayload, Span, SpanAttributes, SpanKind, SpanStatusCode, TracesConfig } from '@posthog/types'
+import type {
+  BeforeSpanSendFn,
+  OtlpTracesPayload,
+  Span,
+  SpanAttributes,
+  SpanKind,
+  SpanStatusCode,
+  TracesConfig,
+} from '@posthog/types'
 
 /** Same tagged outcome shape as `SendLogsBatchOutcome` — one policy for all three signals. */
 export type SendTracesBatchOutcome =
@@ -112,4 +121,5 @@ export interface ResolvedTracesConfig extends TracesConfig {
    * may already have been exported.
    */
   maxQueueSize: number
+  beforeSpanSend: BeforeSpanSendFn[]
 }

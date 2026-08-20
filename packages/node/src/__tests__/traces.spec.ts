@@ -310,6 +310,40 @@ describe('PostHog traces', () => {
     })
   })
 
+  describe('beforeSpanSend', () => {
+    it('scrubs attributes before they leave the process', async () => {
+      const client = createClient({
+        traces: {
+          serviceName: 'svc',
+          beforeSpanSend: (span: any) => {
+            delete span.attributes.password
+            return span
+          },
+        },
+      })
+      client.startSpan('login', { attributes: { password: 'hunter2', ok: true } }).end()
+      await client.shutdown()
+
+      const [span] = sentSpans()
+      expect(span.attributes?.find((a) => a.key === 'password')).toBeUndefined()
+      expect(span.attributes?.find((a) => a.key === 'ok')).toBeDefined()
+    })
+
+    it('drops a span the hook rejects', async () => {
+      const client = createClient({
+        traces: {
+          serviceName: 'svc',
+          beforeSpanSend: (span: any) => (span.attributes['http.route'] === '/health' ? null : span),
+        },
+      })
+      client.startSpan('GET /health', { attributes: { 'http.route': '/health' } }).end()
+      client.startSpan('GET /orders', { attributes: { 'http.route': '/orders' } }).end()
+      await client.shutdown()
+
+      expect(sentSpans().map((s) => s.name)).toEqual(['GET /orders'])
+    })
+  })
+
   describe('shutdown', () => {
     it('drains queued spans', async () => {
       posthog.startSpan('a').end()

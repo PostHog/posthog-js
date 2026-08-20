@@ -11,7 +11,7 @@ import type {
 import { NOOP_SPAN, PostHogSpan, describeError } from './span'
 import { newSpanId, newTraceId } from './ids'
 import { parseTraceparent, sanitizeTracestate } from './traceparent'
-import { resolveStartTime, sanitizeName } from './sanitize'
+import { clampEndTime, resolveStartTime, sanitizeName } from './sanitize'
 import { buildOtlpSpan, buildOtlpTracesPayload, buildTracesResourceAttributes } from './otlp'
 import { isPromise, safeSetTimeout } from '../utils'
 
@@ -296,10 +296,15 @@ export class PostHogTraces {
   // Queue and export
   // ==========================================================================
 
-  private _onSpanEnd(record: SpanRecord): void {
+  private _onSpanEnd(incoming: SpanRecord): void {
     // Re-checked at end, not just at start: opting out mid-trace must stop the
     // span exporting, without throwing into code holding a live handle.
     if (this._instance.isDisabled || this._instance.optedOut) {
+      return
+    }
+
+    const record = this._runBeforeSpanSend(incoming)
+    if (!record) {
       return
     }
 
@@ -321,6 +326,54 @@ export class PostHogTraces {
     } else {
       this._armFlushTimerIfQueued()
     }
+  }
+
+  /**
+   * Runs the `beforeSpanSend` chain, returning the span to enqueue or `null` to
+   * drop it.
+   *
+   * A throwing hook drops the span. The hook is the documented scrubbing point,
+   * so a scrubber that breaks must not let the unscrubbed record through.
+   *
+   * Identity fields are restored afterwards: rewriting them would orphan
+   * children that already shipped with the original parent id.
+   */
+  private _runBeforeSpanSend(record: SpanRecord): SpanRecord | null {
+    if (!this._config.beforeSpanSend.length) {
+      return record
+    }
+
+    const identity = { traceId: record.traceId, spanId: record.spanId, parentSpanId: record.parentSpanId }
+    let current = record
+
+    for (const hook of this._config.beforeSpanSend) {
+      let result: SpanRecord | null
+      try {
+        result = hook(current)
+      } catch (error) {
+        this._logger.warn('beforeSpanSend threw; dropping the span rather than exporting it unscrubbed', error)
+        return null
+      }
+      if (!result) {
+        return null
+      }
+      current = result
+    }
+
+    if (
+      current.traceId !== identity.traceId ||
+      current.spanId !== identity.spanId ||
+      current.parentSpanId !== identity.parentSpanId
+    ) {
+      this._logger.debug('beforeSpanSend changed a span identity field; keeping the original ids')
+      current.traceId = identity.traceId
+      current.spanId = identity.spanId
+      current.parentSpanId = identity.parentSpanId
+    }
+
+    current.name = sanitizeName(current.name, 'Span name', this._logger)
+    current.endTime = clampEndTime(current.endTime, current.startTime)
+    return current
   }
 
   private _recordDrop(count: number, reason: string): void {

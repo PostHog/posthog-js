@@ -6,6 +6,7 @@ import type {
   OtlpTracesPayload,
   ResolvedTracesConfig,
   SendTracesBatchOutcome,
+  SpanRecord,
   TraceSdkContext,
 } from './types'
 import type { Logger } from '../types'
@@ -18,6 +19,7 @@ const resolveForTest = (partial?: Partial<ResolvedTracesConfig>): ResolvedTraces
   flushIntervalMs: 5000,
   maxExportBatchSize: 512,
   maxQueueSize: 2048,
+  beforeSpanSend: [],
   ...partial,
 })
 
@@ -466,6 +468,84 @@ describe('PostHogTraces', () => {
 
       await traces.flush()
       expect(instance._sendTracesBatch).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('beforeSpanSend', () => {
+    const endOneSpan = (beforeSpanSend: any): PostHogTraces => {
+      const traces = createTraces({ beforeSpanSend: [beforeSpanSend].flat() })
+      traces.startSpan('checkout', { attributes: { userId: 42 } }).end()
+      return traces
+    }
+
+    it('drops a span when the hook returns null', async () => {
+      await endOneSpan(() => null).flush()
+      expect(sentSpans()).toHaveLength(0)
+    })
+
+    it('drops the span when the hook throws', async () => {
+      await endOneSpan(() => {
+        throw new Error('scrubber broke')
+      }).flush()
+
+      expect(sentSpans()).toHaveLength(0)
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('beforeSpanSend threw'), expect.anything())
+    })
+
+    it('hands the hook plain values, not the OTLP encoding', () => {
+      const seen: unknown[] = []
+      endOneSpan((span: SpanRecord) => {
+        seen.push(span.attributes.userId)
+        return span
+      })
+
+      expect(seen).toEqual([42])
+    })
+
+    it('keeps the original ids when a hook rewrites them', async () => {
+      await endOneSpan((span: any) => {
+        span.traceId = '0'.repeat(32)
+        span.spanId = '1'.repeat(16)
+        return span
+      }).flush()
+
+      const [span] = sentSpans()
+      expect(span.traceId).not.toBe('0'.repeat(32))
+      expect(span.spanId).not.toBe('1'.repeat(16))
+      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('identity field'))
+    })
+
+    it('runs hooks left to right and stops at the first null', async () => {
+      const order: string[] = []
+      await endOneSpan([
+        (span: SpanRecord) => {
+          order.push('first')
+          return span
+        },
+        () => {
+          order.push('second')
+          return null
+        },
+        (span: SpanRecord) => {
+          order.push('third')
+          return span
+        },
+      ]).flush()
+
+      expect(order).toEqual(['first', 'second'])
+      expect(sentSpans()).toHaveLength(0)
+    })
+
+    it('exports the edits a hook made', async () => {
+      await endOneSpan((span: SpanRecord) => {
+        delete span.attributes.userId
+        span.name = 'redacted'
+        return span
+      }).flush()
+
+      const [span] = sentSpans()
+      expect(span.name).toBe('redacted')
+      expect(span.attributes?.find((attribute) => attribute.key === 'userId')).toBeUndefined()
     })
   })
 
