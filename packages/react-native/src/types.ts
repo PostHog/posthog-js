@@ -187,7 +187,7 @@ export type PostHogSessionReplayConfig = {
   captureNetworkTelemetry?: boolean
   /**
    * Verify that masks remain aligned while capturing session replay screenshots.
-   * Android only. Experimental.
+   * Android only.
    *
    * Enabling this can preserve screenshots during pixel-only redraws, including
    * continuously animated content, but performs additional view hierarchy walks
