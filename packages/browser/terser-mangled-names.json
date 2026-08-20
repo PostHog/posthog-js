@@ -228,6 +228,7 @@
         "_formatQueue",
         "_freshestActivityTimestamp",
         "_fullSnapshotHealAttemptedFor",
+        "_fullSnapshotHealAttempts",
         "_fullSnapshotIntervalMillis",
         "_fullSnapshotTimer",
         "_fullSnapshotTimestamps",
