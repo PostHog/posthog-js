@@ -16,6 +16,20 @@
         "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/32348835948"
       },
       "attempts": 0
+    },
+    {
+      "id": "pull_request-4567-auto-none-no-comment-no-close-1787214423610",
+      "kind": "pull_request",
+      "number": 4567,
+      "mode": "auto",
+      "commandMention": "@posthog-watcher",
+      "enqueuedAt": "2026-08-20T08:27:03.610Z",
+      "source": {
+        "eventName": "pull_request",
+        "runId": 32347698928,
+        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/32347698928"
+      },
+      "attempts": 0
     }
   ]
 }
