@@ -50,6 +50,7 @@ function createMockPostHog(
         get_distinct_id: jest.fn(() => props.distinct_id as string),
         get_property: jest.fn((key: string) => props[key]),
         getGroups: jest.fn(() => props.$groups),
+        is_capturing: jest.fn(() => true),
         sessionManager: {
             checkAndGetSessionAndWindowId: jest.fn(() => currentSession),
         },
@@ -104,6 +105,9 @@ describe('BrowserClientAdapter', () => {
             windowId: 'window-id',
             sessionStartTimestamp: 123,
         })
+        expect(client?.canCapture).toBe(true)
+        ;(instance.is_capturing as jest.Mock).mockReturnValue(false)
+        expect(client?.canCapture).toBe(false)
         expect(instance.sessionManager?.checkAndGetSessionAndWindowId).toHaveBeenCalledWith(true)
         expect(client?.logger).toBeDefined()
 

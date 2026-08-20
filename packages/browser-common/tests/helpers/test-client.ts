@@ -31,6 +31,7 @@ export interface TestClientOptions {
     anonymousId?: string
     groups?: Record<string, string>
     session?: SessionContext
+    canCapture?: boolean
     remoteConfig?: RemoteConfig
     logger?: Logger
     requestResponse?: ApiResponse
@@ -111,6 +112,7 @@ export class TestClient implements Client {
     initialPersonProperties: Record<string, unknown> = {}
     groups: Record<string, string>
     session: SessionContext
+    canCapture: boolean
 
     private _remoteConfigResult: RemoteConfigResult | undefined
     private _requestResponse: ApiResponse
@@ -138,6 +140,7 @@ export class TestClient implements Client {
             windowId: 'test-window-id',
             sessionStartTimestamp: 0,
         }
+        this.canCapture = options.canCapture ?? true
         this._remoteConfigResult = options.remoteConfig ? { ok: true, config: options.remoteConfig } : undefined
         this.logger = options.logger ?? noopLogger
         this._requestResponse = options.requestResponse ?? createDefaultApiResponse()

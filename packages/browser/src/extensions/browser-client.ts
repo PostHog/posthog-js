@@ -151,6 +151,10 @@ export class BrowserClientAdapter implements Client, Disposable {
         }
     }
 
+    get canCapture(): boolean {
+        return this.instance.is_capturing()
+    }
+
     get projectToken(): string {
         return this.instance.config.token
     }
