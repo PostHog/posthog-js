@@ -3,4 +3,4 @@
 'posthog-react-native': patch
 ---
 
-Add an experimental Android session replay option to verify screenshot mask alignment during capture.
+Add an Android session replay option to verify screenshot mask alignment during capture.
