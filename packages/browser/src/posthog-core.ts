@@ -1665,9 +1665,17 @@ export class PostHog implements PostHogInterface {
         return this.on('eventCaptured', (data) => callback(data.event, data))
     }
 
-    /** Returns an installed browser extension by its typed stable name. */
+    /**
+     * Returns an installed browser extension by its typed stable name.
+     *
+     * @internal
+     */
     getExtension<T extends BrowserCommonExtension>(token: ExtensionToken<T>): T | undefined
-    /** Returns an installed browser extension by its stable name. */
+    /**
+     * Returns an installed browser extension by its stable name.
+     *
+     * @internal
+     */
     getExtension<T extends BrowserCommonExtension = BrowserCommonExtension>(name: string): T | undefined
     getExtension<T extends BrowserCommonExtension = BrowserCommonExtension>(name: string): T | undefined {
         return this._browserClientAdapter?.getExtension<T>(name)
