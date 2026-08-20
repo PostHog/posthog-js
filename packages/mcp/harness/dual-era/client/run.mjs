@@ -166,6 +166,16 @@ function decodesAsOurToken(value) {
         return false
     }
 }
+// 2026-07-28 MUST NOT: a v2 server must never mint a session header. Every
+// current v2 matrix row omits --header (defaulting HEADER_EXPECT to 'none'),
+// which is why `header: headerOk` alone still catches a v2 regression today —
+// but that's contingent on no v2 row ever passing a non-'none' --header. Make
+// the invariant structural instead of implicit: fail fast if one ever does.
+if (isV2 && HEADER_EXPECT !== 'none') {
+    console.error(`fatal: --sdk v2 requires --header none (2026-07-28 forbids minting a session header), got '${HEADER_EXPECT}'`)
+    process.exit(1)
+}
+
 const mintedHeaders = seenSessionHeaders.map((s) => s.header).filter(Boolean)
 const headerOk =
     HEADER_EXPECT === 'none'
