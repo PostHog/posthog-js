@@ -19,6 +19,7 @@ import {
     SurveyRenderReason,
 } from './posthog-surveys-types'
 import type { SurveysConfigSource, SurveysExtensionHost } from './surveys-config'
+import { SurveysExtension } from './extension-tokens'
 import { Properties, RemoteConfigResult } from './types'
 import type { SurveyEventReceiver } from './utils/survey-event-receiver'
 import {
@@ -43,7 +44,7 @@ export type SurveyFetchResult = {
 type SurveysClientState = Pick<Client, 'projectToken' | 'kv'>
 
 export class PostHogSurveys implements Extension {
-    readonly name = 'surveys'
+    readonly name = SurveysExtension
     // this is set to undefined until the remote config is loaded
     // then it's set to true if there are surveys to load
     // or false if there are no surveys to load
