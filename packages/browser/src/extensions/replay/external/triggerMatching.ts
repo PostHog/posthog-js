@@ -107,23 +107,29 @@ type TriggerMatchingConfig = Pick<
 >
 
 /**
- * A URL trigger regex anchored at both ends with no quantifier, optional group, or alternation can
- * only ever match a single exact URL. For example `^https://app.example.com/$` matches only the bare
- * homepage, never `/dashboard` or `/?utm=x`. This is almost always a misconfiguration — the customer
- * meant to match every page under a host — and under the default AND trigger matching it silently
- * vetoes every other trigger (e.g. a `$rageclick` event trigger), leaving the session buffering
- * forever with no error. Warn about it at config time, the way we already log invalid patterns.
+ * Detect URL trigger regexes that are anchored at both ends without an obvious way to match more
+ * than one page. For example, `^https://app.example.com/$` matches the bare homepage but not
+ * `/dashboard` or `/?utm=x`. Under AND trigger matching, an unexpectedly narrow URL condition can
+ * veto every other trigger and leave the session buffering indefinitely.
  */
 export function isOverAnchoredUrlTrigger(pattern: string): boolean {
-    const anchoredStart = pattern.startsWith('^')
-    // trailing `$` that isn't escaped (`\$` is a literal dollar, not an anchor)
-    const anchoredEnd = /(?:^|[^\\])\$$/.test(pattern)
-    if (!anchoredStart || !anchoredEnd) {
+    // A trailing escaped dollar (`\$`) is a literal character, not an end anchor.
+    if (!pattern.startsWith('^') || !/(?:^|[^\\])\$$/.test(pattern)) {
         return false
     }
-    // any of these let the pattern match more than one string: a path/query wildcard, repetition,
-    // optionality, or alternation. Their absence means the pattern is effectively a fixed URL.
-    return !/[*+?{|]/.test(pattern)
+
+    // Quantifiers, alternation, character classes, and regex character classes all make the
+    // pattern intentionally variable rather than unexpectedly narrow.
+    if (/[*+?{|[]/.test(pattern) || /\\(?:[dDsSwWpP]|[1-9])/.test(pattern)) {
+        return false
+    }
+
+    // Dots in a hostname are commonly left unescaped, but an unescaped dot in a path or query is
+    // normally being used as a wildcard.
+    const body = pattern.slice(1, -1)
+    const absoluteUrl = /^https?:\/\/[^/]*(\/.*)?$/.exec(body)
+    const pathAndQuery = absoluteUrl ? absoluteUrl[1] || '' : body
+    return !/(^|[^\\])\./.test(pathAndQuery)
 }
 
 function sessionRecordingUrlTriggerMatches(
@@ -266,9 +272,9 @@ export class URLTriggerMatching implements TriggerStatusMatching {
                     this._compiledTriggerRegexes.set(trigger.url, new RegExp(trigger.url))
                     if (isOverAnchoredUrlTrigger(trigger.url)) {
                         logger.warn(
-                            `URL trigger "${trigger.url}" is anchored at both ends and can only match one exact URL, ` +
-                                'so no other page will start recording. Did you mean to match a prefix, ' +
-                                'e.g. drop the trailing "$" or add ".*"?'
+                            `URL trigger "${trigger.url}" is anchored at both ends without an obvious path wildcard, ` +
+                                'so it may match only one page. If you intended to match a prefix, ' +
+                                'drop the trailing "$" or add ".*".'
                         )
                     }
                 } catch (e) {
@@ -611,6 +617,44 @@ export class TriggerGroupMatching implements TriggerStatusMatching {
 
     triggerStatus(sessionId: string): TriggerStatus {
         return this._combinedMatching.triggerStatus(sessionId)
+    }
+
+    triggerStatusNoSideEffects(sessionId: string): TriggerStatus {
+        const statuses = [
+            this._eventTriggerMatching.triggerStatusNoSideEffects(sessionId),
+            this._urlTriggerMatching.triggerStatusNoSideEffects(sessionId),
+            this._linkedFlagMatching.triggerStatusNoSideEffects(),
+        ].filter((status) => status !== TRIGGER_DISABLED)
+
+        if (statuses.length === 0) {
+            return TRIGGER_ACTIVATED
+        }
+        if (this.group.conditions.matchType === 'any') {
+            return statuses.includes(TRIGGER_ACTIVATED) ? TRIGGER_ACTIVATED : TRIGGER_PENDING
+        }
+        return statuses.every((status) => status === TRIGGER_ACTIVATED) ? TRIGGER_ACTIVATED : TRIGGER_PENDING
+    }
+
+    getPendingTriggerConditions(sessionId: string): string[] {
+        if (this.triggerStatusNoSideEffects(sessionId) !== TRIGGER_PENDING) {
+            return []
+        }
+
+        const legs = [
+            {
+                label: 'URL condition not matched',
+                status: this._urlTriggerMatching.triggerStatusNoSideEffects(sessionId),
+            },
+            {
+                label: 'event condition not matched',
+                status: this._eventTriggerMatching.triggerStatusNoSideEffects(sessionId),
+            },
+            {
+                label: 'linked flag condition not matched',
+                status: this._linkedFlagMatching.triggerStatusNoSideEffects(),
+            },
+        ]
+        return legs.filter(({ status }) => status === TRIGGER_PENDING).map(({ label }) => label)
     }
 
     checkEventTriggerConditions(

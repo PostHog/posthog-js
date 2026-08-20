@@ -596,7 +596,7 @@ describe('Lazy SessionRecording', () => {
                 }
             })
 
-            it('treats config without cache_timestamp as stale so it is revalidated, not trusted', () => {
+            it('keeps config without cache_timestamp compatible in the lazy bundle', () => {
                 sessionRecording.stopRecording()
 
                 posthog.persistence?.register({
@@ -604,8 +604,8 @@ describe('Lazy SessionRecording', () => {
                 })
 
                 const result = sessionRecording['_lazyLoadedSessionRecording']['_remoteConfig']
-                expect(result).toBeUndefined()
-                expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)).toBeUndefined()
+                expect(result?.enabled).toBe(true)
+                expect(posthog.get_property(SESSION_RECORDING_REMOTE_CONFIG)).toBeDefined()
             })
 
             it('ignores invalid persisted JSON config when checking freshness', () => {
@@ -3880,6 +3880,25 @@ describe('Lazy SessionRecording', () => {
             ])
         })
 
+        it('evaluates recording status once per buffering flush', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        eventTriggers: ['$exception'],
+                    },
+                })
+            )
+
+            const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+            lazyRecorder['_holdFlushUntilInteraction'] = false
+            const getStatus = jest.spyOn(lazyRecorder['_strategy']!, 'getStatus')
+
+            lazyRecorder['_flushBuffer']()
+
+            expect(getStatus).toHaveBeenCalledTimes(1)
+        })
+
         it('never sends data when sampling is false regardless of event triggers', async () => {
             // this is a regression test for https://posthoghelp.zendesk.com/agent/tickets/24373
             // where the buffered data was sent to capture when the event trigger fired
@@ -6617,6 +6636,33 @@ describe('Lazy SessionRecording', () => {
     })
 
     describe('V2 Trigger Groups Integration', () => {
+        it('describes pending conditions within trigger groups', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [
+                            {
+                                id: 'error-group',
+                                name: 'Error Tracking',
+                                sampleRate: 1.0,
+                                conditions: {
+                                    matchType: 'any',
+                                    events: [{ name: '$exception' }],
+                                },
+                            },
+                        ],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_describePendingTriggerConditions']()).toEqual([
+                'trigger group "Error Tracking": event condition not matched',
+            ])
+        })
+
         it('uses the active snapshot interval immediately after a trigger group matches', () => {
             jest.useFakeTimers()
             try {

@@ -17,6 +17,11 @@ describe('over-anchored URL trigger detection', () => {
             ['^https://example.com/(login|signup)$', false],
             ['^https://example.com/page?$', false],
             ['^https://example.com/x{2}$', false],
+            ['^/invoice/[0-9]$', false],
+            ['^/foo.$', false],
+            ['^/user/\\d$', false],
+            ['^https://example.com/file.json$', false],
+            ['^https://example.com/file\\.json$', true],
             // not over-anchored: not anchored at both ends (prefix/suffix matches still match many URLs)
             ['^https://example.com/', false],
             ['https://example.com/$', false],
@@ -39,7 +44,7 @@ describe('over-anchored URL trigger detection', () => {
             mockLogger.warn.mockClear()
         })
 
-        it('warns when a URL trigger can only match one exact URL', () => {
+        it('warns when a URL trigger appears unexpectedly narrow', () => {
             configureTriggers([{ url: '^https://app.2chat.io/$', matching: 'regex' }])
 
             expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('^https://app.2chat.io/$'))

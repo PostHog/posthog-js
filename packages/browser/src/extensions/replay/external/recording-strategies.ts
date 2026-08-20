@@ -147,6 +147,11 @@ export interface RecordingStrategy {
     hasPendingTriggers(sessionId: string): boolean
 
     /**
+     * Describe trigger conditions that are currently waiting for activation without persisting debug state.
+     */
+    getPendingTriggerConditions(sessionId: string): string[]
+
+    /**
      * Stop and cleanup the strategy
      */
     stop(): void
@@ -316,6 +321,24 @@ export class V1RecordingStrategy implements RecordingStrategy {
 
     hasPendingTriggers(sessionId: string): boolean {
         return this._triggerStatusMatcher?.triggerStatus(sessionId) === TRIGGER_PENDING
+    }
+
+    getPendingTriggerConditions(sessionId: string): string[] {
+        const legs = [
+            {
+                label: 'URL condition not matched',
+                status: this._urlTriggerMatching.triggerStatusNoSideEffects(sessionId),
+            },
+            {
+                label: 'event condition not matched',
+                status: this._eventTriggerMatching.triggerStatusNoSideEffects(sessionId),
+            },
+            {
+                label: 'linked flag condition not matched',
+                status: this._linkedFlagMatching.triggerStatusNoSideEffects(),
+            },
+        ]
+        return legs.filter(({ status }) => status === TRIGGER_PENDING).map(({ label }) => label)
     }
 
     stop(): void {
@@ -621,6 +644,17 @@ export class V2TriggerGroupStrategy implements RecordingStrategy {
             }
         }
         return false
+    }
+
+    getPendingTriggerConditions(sessionId: string): string[] {
+        return this._triggerGroupMatchers.flatMap((matcher) => {
+            if (matcher.triggerStatusNoSideEffects(sessionId) !== TRIGGER_PENDING) {
+                return []
+            }
+            return matcher
+                .getPendingTriggerConditions(sessionId)
+                .map((condition) => `trigger group "${matcher.group.name}": ${condition}`)
+        })
     }
 
     stop(): void {
