@@ -18,6 +18,8 @@ const resolveForTest = (partial?: Partial<ResolvedTracesConfig>): ResolvedTraces
   flushIntervalMs: 5000,
   maxExportBatchSize: 512,
   maxQueueSize: 2048,
+  maxAttributesPerSpan: 128,
+  maxEventsPerSpan: 128,
   ...partial,
 })
 
@@ -466,6 +468,84 @@ describe('PostHogTraces', () => {
 
       await traces.flush()
       expect(instance._sendTracesBatch).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('span limits', () => {
+    it('keeps the earliest attributes and counts the rest', async () => {
+      const traces = createTraces({ maxAttributesPerSpan: 3 })
+      const span = traces.startSpan('checkout')
+      for (let i = 0; i < 5; i++) {
+        span.setAttribute(`key-${i}`, i)
+      }
+      span.end()
+      await traces.flush()
+
+      const [sent] = sentSpans()
+      expect(sent.attributes!.map((attribute) => attribute.key)).toEqual(['key-0', 'key-1', 'key-2'])
+      expect(sent.droppedAttributesCount).toBe(2)
+    })
+
+    it('never evicts the auto-context keys', async () => {
+      context = { distinctId: 'alice', sessionId: 'session-1' }
+      const traces = createTraces({ maxAttributesPerSpan: 1 })
+      const span = traces.startSpan('checkout')
+      for (let i = 0; i < 5; i++) {
+        span.setAttribute(`key-${i}`, i)
+      }
+      span.end()
+      await traces.flush()
+
+      const keys = sentSpans()[0].attributes!.map((attribute) => attribute.key)
+      expect(keys).toEqual(expect.arrayContaining(['posthogDistinctId', 'sessionId', 'key-0']))
+      expect(keys).not.toContain('key-1')
+    })
+
+    it('caps events and counts the rest', async () => {
+      const traces = createTraces({ maxEventsPerSpan: 2 })
+      const span = traces.startSpan('checkout')
+      for (let i = 0; i < 4; i++) {
+        span.addEvent(`event-${i}`)
+      }
+      span.end()
+      await traces.flush()
+
+      const [sent] = sentSpans()
+      expect(sent.events!.map((event) => event.name)).toEqual(['event-0', 'event-1'])
+      expect(sent.droppedEventsCount).toBe(2)
+    })
+
+    it('lets a caller overwrite an attribute it already set while at the cap', async () => {
+      const traces = createTraces({ maxAttributesPerSpan: 1 })
+      const span = traces.startSpan('checkout')
+      span.setAttribute('plan', 'free')
+      span.setAttribute('plan', 'pro')
+      span.end()
+      await traces.flush()
+
+      const [sent] = sentSpans()
+      expect(sent.attributes).toEqual([{ key: 'plan', value: { stringValue: 'pro' } }])
+      expect(sent.droppedAttributesCount).toBeUndefined()
+    })
+
+    it('omits the counters when nothing was dropped', async () => {
+      const traces = createTraces()
+      traces.startSpan('checkout', { attributes: { plan: 'pro' } }).end()
+      await traces.flush()
+
+      const [sent] = sentSpans()
+      expect(sent).not.toHaveProperty('droppedAttributesCount')
+      expect(sent).not.toHaveProperty('droppedEventsCount')
+    })
+
+    it('caps attributes supplied at start', async () => {
+      const traces = createTraces({ maxAttributesPerSpan: 2 })
+      traces.startSpan('checkout', { attributes: { a: 1, b: 2, c: 3 } }).end()
+      await traces.flush()
+
+      const [sent] = sentSpans()
+      expect(sent.attributes!.map((attribute) => attribute.key)).toEqual(['a', 'b'])
+      expect(sent.droppedAttributesCount).toBe(1)
     })
   })
 

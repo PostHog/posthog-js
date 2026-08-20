@@ -107,6 +107,12 @@ export function buildOtlpSpan(record: SpanRecord, logger?: Logger): OtlpSpan {
   if (record.events.length) {
     span.events = record.events.map((event) => toOtlpEvent(event, logger))
   }
+  if (record.droppedAttributesCount) {
+    span.droppedAttributesCount = record.droppedAttributesCount
+  }
+  if (record.droppedEventsCount) {
+    span.droppedEventsCount = record.droppedEventsCount
+  }
   // An unset status is omitted rather than sent as code 0 — the server treats
   // both the same, and omitting keeps the payload honest about "never set".
   if (record.status) {

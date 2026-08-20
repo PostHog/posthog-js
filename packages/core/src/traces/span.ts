@@ -29,6 +29,10 @@ export interface SpanInit {
   startTime: number
   /** True when the caller supplied an explicit `startTime`. */
   backdated: boolean
+  /** Keys the SDK attached itself. Exempt from the attribute cap and never evicted. */
+  autoAttributeKeys: string[]
+  maxAttributes: number
+  maxEvents: number
 }
 
 export class PostHogSpan implements Span {
@@ -47,6 +51,12 @@ export class PostHogSpan implements Span {
   private _events: SpanEventRecord[] = []
   private _status?: { code: SpanStatusCode; message?: string }
   private _ended = false
+  private readonly _autoKeys: Set<string>
+  private readonly _maxAttributes: number
+  private readonly _maxEvents: number
+  private _userAttributeCount = 0
+  private _droppedAttributes = 0
+  private _droppedEvents = 0
 
   constructor(
     init: SpanInit,
@@ -59,7 +69,13 @@ export class PostHogSpan implements Span {
     this._traceState = init.traceState
     this._name = init.name
     this._kind = init.kind
-    this._attributes = init.attributes
+    this._autoKeys = new Set(init.autoAttributeKeys)
+    this._maxAttributes = init.maxAttributes
+    this._maxEvents = init.maxEvents
+    this._attributes = {}
+    for (const key in init.attributes) {
+      this._writeAttribute(key, init.attributes[key])
+    }
     this._startTime = init.startTime
     this._startMono = init.backdated ? undefined : monotonicNow()
   }
@@ -87,9 +103,29 @@ export class PostHogSpan implements Span {
     return true
   }
 
+  /**
+   * Writes an attribute unless the span is already at its user-attribute cap.
+   *
+   * Overwriting a key already on the span always succeeds — the cap counts
+   * distinct user keys, not writes — and SDK-attached keys never count toward
+   * it, so a span at the cap still carries its person and session ids.
+   */
+  private _writeAttribute(key: string, value: SpanAttributeValue): void {
+    if (this._autoKeys.has(key) || key in this._attributes) {
+      this._attributes[key] = value
+      return
+    }
+    if (this._userAttributeCount >= this._maxAttributes) {
+      this._droppedAttributes++
+      return
+    }
+    this._userAttributeCount++
+    this._attributes[key] = value
+  }
+
   setAttribute(key: string, value: SpanAttributeValue): this {
     if (this._mutable('setAttribute')) {
-      this._attributes[key] = value
+      this._writeAttribute(key, value)
     }
     return this
   }
@@ -97,7 +133,7 @@ export class PostHogSpan implements Span {
   setAttributes(attributes: SpanAttributes): this {
     if (this._mutable('setAttributes')) {
       for (const key in attributes) {
-        this._attributes[key] = attributes[key]
+        this._writeAttribute(key, attributes[key])
       }
     }
     return this
@@ -105,6 +141,10 @@ export class PostHogSpan implements Span {
 
   addEvent(name: string, attributes?: SpanAttributes, timestamp?: SpanTimeInput): this {
     if (this._mutable('addEvent')) {
+      if (this._events.length >= this._maxEvents) {
+        this._droppedEvents++
+        return this
+      }
       this._events.push({
         name: sanitizeName(name, 'Span event name', this._logger),
         timestamp: resolveSuppliedTime(timestamp, this._now(), 'event timestamp', this._logger),
@@ -183,6 +223,8 @@ export class PostHogSpan implements Span {
       events: this._events,
       startTime: this._startTime,
       endTime: clampEndTime(resolved, this._startTime),
+      ...(this._droppedAttributes && { droppedAttributesCount: this._droppedAttributes }),
+      ...(this._droppedEvents && { droppedEventsCount: this._droppedEvents }),
     })
   }
 }
