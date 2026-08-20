@@ -22,6 +22,7 @@ import RageClick from './extensions/rageclick'
 import { EventName, Properties, RemoteConfigResult } from './types'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 import type { AutocaptureConfig, AutocaptureConfigSource } from './autocapture-config'
+import { AutocaptureExtension } from './extension-tokens'
 
 import { isBoolean, isFunction, isNull, stripUrlHash } from '@posthog/core'
 import { createLogger } from '@posthog/browser-common/utils/logger'
@@ -272,7 +273,7 @@ export function autocapturePropertiesForElement(
 }
 
 export class Autocapture implements Extension {
-    readonly name = 'autocapture'
+    readonly name = AutocaptureExtension
     _initialized: boolean = false
     _isDisabledServerSide: boolean | null = null
     _hasReceivedConfigResponse: boolean = false

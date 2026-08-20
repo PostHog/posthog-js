@@ -7,6 +7,7 @@ import type {
     DeepReadonly,
     Disposable,
     Extension,
+    ExtensionToken,
     KeyValueStore,
     Listener,
     SendRequestInit,
@@ -156,6 +157,12 @@ export class BrowserClientAdapter implements Client, Disposable {
 
     add(extension: Extension): Promise<void> {
         return this._runtime.add(extension)
+    }
+
+    getExtension<T extends Extension>(token: ExtensionToken<T>): T | undefined
+    getExtension<T extends Extension = Extension>(name: string): T | undefined
+    getExtension<T extends Extension = Extension>(name: string): T | undefined {
+        return this._runtime.getExtension<T>(name)
     }
 
     async capture(event: string, properties?: Properties | null, options?: BrowserCommonCaptureOptions): Promise<void> {
