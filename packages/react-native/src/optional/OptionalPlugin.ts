@@ -35,16 +35,15 @@ if (Platform.OS !== 'web') {
     OptionalReactNativePlugin = require('@posthog/react-native-plugin')
     try {
       OptionalReactNativePluginVersion = require('@posthog/react-native-plugin/package.json')?.version
-    } catch (e) {}
+    } catch {
+      // Plugin versions released before the metadata entrypoint remain supported.
+    }
   } catch (e) {}
 
   // The legacy fallback is session-replay only and has no macOS support, so it's skipped on macOS.
   if (!OptionalReactNativePlugin && Platform.OS !== 'macos') {
     try {
       OptionalReactNativePlugin = require('posthog-react-native-session-replay')
-      try {
-        OptionalReactNativePluginVersion = require('posthog-react-native-session-replay/package.json')?.version
-      } catch (e) {}
     } catch (e) {}
   }
 }
