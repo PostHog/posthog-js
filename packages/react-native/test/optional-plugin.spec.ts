@@ -26,7 +26,16 @@ const loadOptionalPlugin = (
   jest.isolateModules(() => {
     jest.doMock('react-native', () => ({ Platform: { OS: os } }))
     mockOptional('@posthog/react-native-plugin', primaryInstalled, PRIMARY)
-    mockOptional('@posthog/react-native-plugin/package.json', primaryMetadataAvailable, { version: '2.3.1' })
+    jest.doMock(
+      '@posthog/react-native-plugin/package.json',
+      () => {
+        if (!primaryMetadataAvailable) {
+          throw new Error('not installed')
+        }
+        return { version: '2.4.1' }
+      },
+      { virtual: true }
+    )
     mockOptional('posthog-react-native-session-replay', legacyInstalled, LEGACY)
     // eslint-disable-next-line @typescript-eslint/no-require-imports -- isolated require re-runs the module's platform-gated load under a fresh registry
     const optionalPlugin = require('../src/optional/OptionalPlugin')
@@ -43,7 +52,6 @@ describe('OptionalPlugin loader', () => {
     jest.resetModules()
     jest.dontMock('react-native')
     jest.dontMock('@posthog/react-native-plugin')
-    jest.dontMock('@posthog/react-native-plugin/package.json')
     jest.dontMock('posthog-react-native-session-replay')
   })
 
@@ -60,7 +68,7 @@ describe('OptionalPlugin loader', () => {
   })
 
   it('loads the primary plugin version from its exported package metadata', () => {
-    expect(loadOptionalPlugin('ios').version).toBe('2.3.1')
+    expect(loadOptionalPlugin('ios').version).toBe('2.4.1')
   })
 
   it('keeps primary plugin versions that predate the package metadata export usable', () => {
