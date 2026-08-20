@@ -200,6 +200,9 @@ describe('RemoteConfigLoader', () => {
         })
 
         it('does not re-log status-zero failures already handled by the request layer', () => {
+            // Use a PostHog-hosted host so the CUSTOM-region /array hint does not apply here.
+            posthog.config.api_host = 'https://us.i.posthog.com'
+            posthog.requestRouter = new RequestRouter(posthog)
             assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(
                 (_ph: PostHog, _name: string, cb: (err?: any) => void) => cb()
             )
@@ -237,6 +240,31 @@ describe('RemoteConfigLoader', () => {
             new RemoteConfigLoader(posthog).load()
 
             expect(mockLogger.error).toHaveBeenCalledWith('Failed to fetch remote config from PostHog.')
+        })
+
+        it('names the missing /array proxy rule when a custom api_host fails to return config', () => {
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(
+                (_ph: PostHog, _name: string, cb: (err?: any) => void) => cb()
+            )
+            // api_host is https://test.com, so the request router classifies the region as CUSTOM.
+            posthog._send_request = jest.fn().mockImplementation(({ callback }) => callback?.({ statusCode: 500 }))
+
+            new RemoteConfigLoader(posthog).load()
+
+            expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('/array'))
+        })
+
+        it('does not name the /array proxy rule for a PostHog-hosted region', () => {
+            posthog.config.api_host = 'https://us.i.posthog.com'
+            posthog.requestRouter = new RequestRouter(posthog)
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(
+                (_ph: PostHog, _name: string, cb: (err?: any) => void) => cb()
+            )
+            posthog._send_request = jest.fn().mockImplementation(({ callback }) => callback?.({ statusCode: 500 }))
+
+            new RemoteConfigLoader(posthog).load()
+
+            expect(mockLogger.warn).not.toHaveBeenCalledWith(expect.stringContaining('/array'))
         })
 
         it('does not call ensureFlagsLoaded when advanced_disable_feature_flags_on_first_load is true', () => {

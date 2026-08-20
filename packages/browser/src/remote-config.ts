@@ -4,6 +4,7 @@ import { RemoteConfig } from './types'
 import { createLogger } from '@posthog/browser-common/utils/logger'
 import { document } from '@posthog/browser-common/utils/globals'
 import { assignableWindow } from './utils/globals'
+import { RequestRouterRegion } from './utils/request-router'
 import type { RequestResponse } from '@posthog/types'
 
 const logger = createLogger('[RemoteConfig]')
@@ -123,6 +124,17 @@ export class RemoteConfigLoader {
                 }
             } else {
                 logger.error('Failed to fetch remote config from PostHog.')
+            }
+
+            // A custom api_host points at a self-hosted reverse proxy. The proxy must forward
+            // the /array assets path, or the config request fails and session recording never
+            // gets its server settings. Name the missing rule so the fix is self-serve.
+            if (this._instance.requestRouter.region === RequestRouterRegion.CUSTOM) {
+                logger.warn(
+                    'Your api_host points at a reverse proxy that did not return the remote config from /array/{token}/config. ' +
+                        'Add a proxy rule that forwards /array to PostHog, or session recording and other features will not start. ' +
+                        'See https://posthog.com/docs/advanced/proxy'
+                )
             }
         }
 
