@@ -79,6 +79,8 @@ jobs:
             update_latest_aliases: ${{ inputs.update_latest_aliases }}
             publish_to_npm: ${{ inputs.publish_to_npm }}
             force_overwrite: ${{ inputs.force_overwrite }}
+        secrets:
+            slack_bot_token: ${{ secrets.SLACK_CLIENT_LIBRARIES_BOT_TOKEN }}
 
     check-changesets:
         name: Check for changesets
