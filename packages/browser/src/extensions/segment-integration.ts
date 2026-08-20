@@ -28,6 +28,8 @@ import type { SegmentUser, SegmentAnalytics, SegmentContext, SegmentPlugin } fro
 // Re-export for backwards compatibility
 export type { SegmentUser, SegmentAnalytics, SegmentContext, SegmentPlugin }
 
+type SegmentIntegrationUser = Awaited<ReturnType<SegmentAnalytics['user']>>
+
 const logger = createLogger('[SegmentIntegration]')
 
 const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
@@ -75,7 +77,7 @@ function setupPostHogFromSegment(posthog: PostHog, done: () => void) {
         return done()
     }
 
-    const bootstrapUser = (user: SegmentUser) => {
+    const bootstrapUser = (user: SegmentIntegrationUser) => {
         // Use segments anonymousId instead
         const getSegmentAnonymousId = () => user.anonymousId() || uuidv7()
         posthog.config.get_device_id = getSegmentAnonymousId
@@ -96,7 +98,7 @@ function setupPostHogFromSegment(posthog: PostHog, done: () => void) {
     if ('then' in segmentUser && isFunction(segmentUser.then)) {
         segmentUser.then(bootstrapUser)
     } else {
-        bootstrapUser(segmentUser as SegmentUser)
+        bootstrapUser(segmentUser as SegmentIntegrationUser)
     }
 }
 

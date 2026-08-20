@@ -1,5 +1,17 @@
 pnpmfile: ../.pnpmfile.cjs
+
+# @preact/preset-vite loads its babel plugins by bare name from the project root,
+# so they have to be flat in node_modules.
+nodeLinker: hoisted
 minimumReleaseAge: 10080
 
 blockExoticSubdeps: true
 trustPolicy: no-downgrade
+
+# Same exclusion the root workspace makes: these are old transitive versions,
+# not downgrades of anything we depend on directly.
+trustPolicyExclude:
+  - semver@6.3.1
+
+allowBuilds:
+  esbuild: true

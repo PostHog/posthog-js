@@ -3,6 +3,7 @@ export default {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
   modulePathIgnorePatterns: ['<rootDir>/src/__tests__/test-utils/*'],
+  testPathIgnorePatterns: ['<rootDir>/harness/'],
   collectCoverage: true,
   clearMocks: true,
   fakeTimers: { enableGlobally: false },

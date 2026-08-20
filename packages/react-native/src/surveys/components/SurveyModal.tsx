@@ -3,6 +3,7 @@ import { Keyboard, KeyboardAvoidingView, Modal, Platform, View, useWindowDimensi
 
 import { Cancel } from './Cancel'
 import { ConfirmationMessage } from './ConfirmationMessage'
+import { IntroMessage } from './IntroMessage'
 import { createSafeStyleSheet } from '../safeStyleSheet'
 import { SurveyAppearanceTheme, resolveSurveyAlignment } from '../surveys-utils'
 import { Survey, type SurveyResponses } from '@posthog/core'
@@ -36,6 +37,12 @@ const IOS_DISMISS_FALLBACK_MS = 1000
 export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
   const { survey, surveyLanguage, appearance, onShow, onClose: onCloseProp, androidKeyboardBehavior = 'height' } = props
   const [isSurveySent, setIsSurveySent] = useState(false)
+  // The intro screen is a leading page mirroring the trailing confirmation message. Dismissing it
+  // only flips local state — no response is recorded and no survey event is sent. It has no
+  // default header, so an intro with no copy at all is skipped instead of drawing an empty box.
+  const [showIntro, setShowIntro] = useState(
+    Boolean(appearance.displayIntroScreen) && Boolean(appearance.introScreenHeader || appearance.introScreenDescription)
+  )
   const [responses, setResponses] = useState<SurveyResponses>({})
   const [isVisible, setIsVisible] = useState(true)
   // Two-step hide for RN Fabric snapshot recycling — see
@@ -148,6 +155,14 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
                         isModal={true}
                       />
                     ) : null
+                  ) : showIntro ? (
+                    <IntroMessage
+                      appearance={appearance}
+                      header={appearance.introScreenHeader}
+                      description={appearance.introScreenDescription}
+                      contentType={appearance.introScreenDescriptionContentType}
+                      onStart={() => setShowIntro(false)}
+                    />
                   ) : (
                     <Questions
                       survey={survey}

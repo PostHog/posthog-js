@@ -160,8 +160,13 @@ const POSTHOG_PATHS_TO_IGNORE = ['/s/', '/e/', '/i/']
 // because calls to PostHog would be reported using a call to PostHog which would be reported....
 const ignorePostHogPaths = (
     data: CapturedNetworkRequest,
-    apiHostConfig: PostHogConfig['api_host']
+    apiHostConfig: PostHogConfig['api_host'],
+    isIngestionEndpoint?: (url: string) => boolean
 ): CapturedNetworkRequest | undefined => {
+    if (isIngestionEndpoint?.(data.name)) {
+        return undefined
+    }
+
     const url = convertToURL(data.name)
 
     // we need to account for api host config as e.g. pathname could be /ingest/s/ and we want to ignore that
@@ -267,7 +272,8 @@ export const buildNetworkRequestOptions = (
     remoteNetworkOptions: Pick<
         NetworkRecordOptions,
         'recordHeaders' | 'recordBody' | 'recordPerformance' | 'payloadHostDenyList'
-    >
+    >,
+    isIngestionEndpoint?: (url: string) => boolean
 ): NetworkRecordOptions => {
     const config: NetworkRecordOptions = {
         payloadSizeLimitBytes: defaultNetworkOptions.payloadSizeLimitBytes,
@@ -288,7 +294,7 @@ export const buildNetworkRequestOptions = (
     const payloadLimiter = limitPayloadSize(config)
 
     const enforcedCleaningFn: NetworkRecordOptions['maskRequestFn'] = (d: CapturedNetworkRequest) =>
-        payloadLimiter(ignorePostHogPaths(removeAuthorizationHeader(d), instanceConfig.api_host))
+        payloadLimiter(ignorePostHogPaths(removeAuthorizationHeader(d), instanceConfig.api_host, isIngestionEndpoint))
 
     const hasDeprecatedMaskFunction = isFunction(instanceConfig.session_recording.maskNetworkRequestFn)
 

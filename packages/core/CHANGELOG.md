@@ -1,5 +1,96 @@
 # @posthog/core
 
+## 1.48.6
+
+### Patch Changes
+
+- [#4578](https://github.com/PostHog/posthog-js/pull/4578) [`bae46bf`](https://github.com/PostHog/posthog-js/commit/bae46bfd11f73d3e62a6d0733144c180df354916) Thanks [@marandaneto](https://github.com/marandaneto)! - Drop events when a before-send hook throws instead of sending the unmodified event.
+  (2026-08-20)
+
+- [#4582](https://github.com/PostHog/posthog-js/pull/4582) [`aef2f49`](https://github.com/PostHog/posthog-js/commit/aef2f493cc8d834780f6b670e15e909e6363c259) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Stop building a stack frame for a `window.onerror` report that carries no code position, such as the `ResizeObserver` loop warning. The frame named the document URL rather than a script, so no source map could resolve it. These exceptions now arrive with no stack trace.
+  (2026-08-20)
+
+## 1.48.5
+
+### Patch Changes
+
+- [#4572](https://github.com/PostHog/posthog-js/pull/4572) [`9701637`](https://github.com/PostHog/posthog-js/commit/9701637b359859f69d8c876838241ed90ccbfa99) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Stop counting Chromium `<anonymous>` stack frames (extension-injected, devtools or string-evaluated code) as in-app code.
+  (2026-08-19)
+
+## 1.48.4
+
+### Patch Changes
+
+- [#4558](https://github.com/PostHog/posthog-js/pull/4558) [`3f9ba71`](https://github.com/PostHog/posthog-js/commit/3f9ba71c50aa106e82d54f2e8f176fde9a4d54a2) Thanks [@posthog](https://github.com/apps/posthog)! - Fall back to the synthetic exception stack when a captured `Error` has no stack, so frameless failures (such as a Firefox network `fetch` `TypeError`) keep their call-site frames and group per call site instead of merging into one issue.
+  (2026-08-19)
+
+## 1.48.3
+
+### Patch Changes
+
+- [#4549](https://github.com/PostHog/posthog-js/pull/4549) [`0599fe0`](https://github.com/PostHog/posthog-js/commit/0599fe051e86a1df76f34952a650fb004ade0479) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Recognise Firefox and Safari extension frames when filtering extension exceptions, and stop counting Safari's masked `webkit-masked-url://` frames as in-app code.
+  (2026-08-18)
+
+## 1.48.2
+
+### Patch Changes
+
+- [#4413](https://github.com/PostHog/posthog-js/pull/4413) [`7b61aa4`](https://github.com/PostHog/posthog-js/commit/7b61aa45cda28e3a4facfa179d7d3146ff3a81a4) Thanks [@posthog](https://github.com/apps/posthog)! - Fix error tracking coercion reporting the wrong exception type for non-`Error` objects (e.g. `TypeError`, `ReferenceError`) that are thrown by browser extensions or other cross-realm code. Previously these always reported as type `Error`, burying the real type in the message string. Also fixed a local `isError` helper shadowing the more robust cross-realm-aware implementation, which caused some errors thrown from iframes or extension isolated worlds to be misclassified.
+  (2026-08-17)
+
+## 1.48.1
+
+### Patch Changes
+
+- [#4521](https://github.com/PostHog/posthog-js/pull/4521) [`0a0206f`](https://github.com/PostHog/posthog-js/commit/0a0206f907f4b58dc28f36aa1fc441b55c489faf) Thanks [@marandaneto](https://github.com/marandaneto)! - Normalize capture timestamp overrides to equivalent UTC ISO strings in the browser and Node.js SDKs and shared core.
+  (2026-08-14)
+- Updated dependencies [[`eb05237`](https://github.com/PostHog/posthog-js/commit/eb0523729c4f989663a38d3ce9d0e61d4f262ee1)]:
+  - @posthog/types@1.404.1
+
+## 1.48.0
+
+### Minor Changes
+
+- [#4289](https://github.com/PostHog/posthog-js/pull/4289) [`c9086de`](https://github.com/PostHog/posthog-js/commit/c9086de42e1c7f102b6cca318c875bdf030d630f) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Public beta `captureAi()` / `captureAiImmediate()`: AI events on a dedicated isolated endpoint with the event UUID returned. New `enableFullAiCapture` option replaces the internal `_useAiLane` / `_enableMultimodalCapture`; wrappers route through the AI endpoint and skip redaction/truncation when set (privacy mode still wins).
+  (2026-08-13)
+
+### Patch Changes
+
+- Updated dependencies [[`b2c6830`](https://github.com/PostHog/posthog-js/commit/b2c683051fae7da40be872666a3e8cadf958f804)]:
+  - @posthog/types@1.403.1
+
+## 1.47.1
+
+### Patch Changes
+
+- [#4506](https://github.com/PostHog/posthog-js/pull/4506) [`a77115b`](https://github.com/PostHog/posthog-js/commit/a77115bbfdd9e89a8510ad2faf9e8327863c2a33) Thanks [@marandaneto](https://github.com/marandaneto)! - Log shutdown timeouts without rejecting, and correct the Node.js `shutdown()` return type to `Promise<void>`.
+  (2026-08-12)
+
+## 1.47.0
+
+### Minor Changes
+
+- [#4436](https://github.com/PostHog/posthog-js/pull/4436) [`80f15a3`](https://github.com/PostHog/posthog-js/commit/80f15a386621514c43f19e99ee4e3f702e4d369d) Thanks [@jakesciotto](https://github.com/jakesciotto)! - feat(surveys): optional intro screen shown before the first question
+
+  Surveys can now display an intro screen before question 1, configured via the new
+  `displayIntroScreen`, `introScreenHeader`, `introScreenDescription`,
+  `introScreenDescriptionContentType`, and `introScreenButtonText` appearance fields.
+  The intro is dismissed with a button and records no response, does not affect
+  completion or partial-response metrics, does not re-fire "survey shown", and is
+  skipped when a survey is resumed with answers in progress. Intro copy is
+  translatable like the thank-you message. `renderSurveysPreview` accepts
+  `previewPageIndex: -1` (exported as `INTRO_SCREEN_PREVIEW_INDEX`) to preview the
+  intro screen. (2026-08-10)
+
+## 1.46.9
+
+### Patch Changes
+
+- [#4423](https://github.com/PostHog/posthog-js/pull/4423) [`64ba193`](https://github.com/PostHog/posthog-js/commit/64ba19370e4a974596712296c8a7f80ddbcc13b1) Thanks [@marandaneto](https://github.com/marandaneto)! - Use Node's zlib gzip implementation for Node SDK payloads to avoid sustained memory growth from frequent Web Streams compression.
+  (2026-08-06)
+- Updated dependencies [[`75fb719`](https://github.com/PostHog/posthog-js/commit/75fb719bafd4eeb22ed41e10958d32a388c9883e)]:
+  - @posthog/types@1.402.2
+
 ## 1.46.8
 
 ### Patch Changes

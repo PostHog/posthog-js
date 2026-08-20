@@ -287,15 +287,18 @@ void webVitals
     })
 })
 
-describe('Full no-external bundles', () => {
+describe('Full bundles', () => {
+    // session recording only skips its runtime script fetch when *both* `rrweb.record` and
+    // `initSessionRecording` are already defined, so the full bundles have to inline both or
+    // they still request `/static/lazy-recorder.js` — the exact thing they exist to avoid.
     it.each([
-        ['array', arrayFullNoExternalJs, arrayNoExternalJs],
-        ['module', moduleFullNoExternalJs, moduleNoExternalJs],
-    ])(
-        '%s full no-external bundle should eagerly bootstrap session recording',
-        (_name, fullNoExternalBundle, noExternalBundle) => {
-            expect(fullNoExternalBundle).toMatch(/__PosthogExtensions__\.initSessionRecording\s*=/)
-            expect(noExternalBundle).not.toMatch(/__PosthogExtensions__\.initSessionRecording\s*=/)
-        }
-    )
+        ['array', arrayFullJs, arrayJs],
+        ['module', moduleFullJs, moduleJs],
+        ['array no-external', arrayFullNoExternalJs, arrayNoExternalJs],
+        ['module no-external', moduleFullNoExternalJs, moduleNoExternalJs],
+    ])('%s full bundle should eagerly bootstrap session recording', (_name, fullBundle, nonFullBundle) => {
+        expect(fullBundle).toMatch(/__PosthogExtensions__\.rrweb\s*=/)
+        expect(fullBundle).toMatch(/__PosthogExtensions__\.initSessionRecording\s*=/)
+        expect(nonFullBundle).not.toMatch(/__PosthogExtensions__\.initSessionRecording\s*=/)
+    })
 })

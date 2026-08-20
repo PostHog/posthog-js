@@ -68,7 +68,7 @@ export class WrappedModels {
         model: geminiParams.model,
         provider: 'gemini',
         input: this.formatInputForPostHog(geminiParams),
-        output: formatResponseGemini(response),
+        output: formatResponseGemini(response, this.phClient),
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
         modelParameters: getModelParams(params as GenerateContentParameters & MonitoringParams),
@@ -80,6 +80,11 @@ export class WrappedModels {
             (metadata as GenerateContentResponseUsageMetadata & { thoughtsTokenCount?: number })?.thoughtsTokenCount ??
             0,
           cacheReadInputTokens: metadata?.cachedContentTokenCount ?? 0,
+          // Gemini counts cachedContentTokenCount inside promptTokenCount, so declare the
+          // accounting model rather than leaving ingestion to infer it. Under explicit
+          // context caching the two counts come from separate measurements and can disagree
+          // by a few percent, which makes inference from the counts alone unreliable.
+          ...(metadata?.cachedContentTokenCount ? { cacheReportingExclusive: false } : {}),
           webSearchCount: calculateGoogleWebSearchCount(response),
           rawUsage: metadata,
         },
@@ -196,6 +201,9 @@ export class WrappedModels {
               (metadata as GenerateContentResponseUsageMetadata & { thoughtsTokenCount?: number }).thoughtsTokenCount ??
               0,
             cacheReadInputTokens: metadata.cachedContentTokenCount ?? 0,
+            // See the non-streaming path: Gemini counts cachedContentTokenCount inside
+            // promptTokenCount, so the accounting model is declared rather than inferred.
+            ...(metadata.cachedContentTokenCount ? { cacheReportingExclusive: false } : {}),
             webSearchCount: usage.webSearchCount,
             rawUsage: metadata,
           }
@@ -416,7 +424,7 @@ export class WrappedModels {
   }
 
   private formatInputForPostHog(params: GenerateContentParameters): FormattedMessage[] {
-    const sanitized = sanitizeGemini(params.contents)
+    const sanitized = sanitizeGemini(params.contents, this.phClient)
     const messages = this.formatInput(sanitized)
 
     const systemInstruction = this.extractSystemInstruction(params)

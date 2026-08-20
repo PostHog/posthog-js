@@ -86,13 +86,16 @@ header, or path.
   cannot mutate them.
 - **Keep disposables.** Store and release values returned by listeners, dynamic-property registration, and timer or
   patch wrappers. Use `createDisposable(teardown)` for idempotent synchronous cleanup.
-- **Reads are sync; I/O is awaitable.** Identity, session, and `projectToken` are synchronous. Capture, requests, and
-  KV are awaitable; remote-config outcomes are delivered through `onRemoteConfig`.
+- **Initialize KV, then use it synchronously.** `client.kv.initialize()` may be awaitable while a host hydrates its
+  memory buffer. Once initialization completes, KV reads, writes, and removals are synchronous; the host owns ordered
+  durable flushing. Identity, session, and `projectToken` are also synchronous, while capture and requests are
+  awaitable and remote-config outcomes are delivered through `onRemoteConfig`.
 - **Design for async readiness.** Setup may occur before remote config loads or after events have already been captured.
   Guard work after each `await` so disposal cannot be followed by late installation.
-- **Persist through `client.kv`, not globals.** Browser-v1 keys are passed verbatim to persistence. Unknown keys may be
-  captured as event properties, collisions can overwrite SDK state, and reset clears them. Use stable extension-owned
-  keys and define their exposure policy.
+- **Persist through `client.kv`, not globals.** Complete `client.kv.initialize()` during setup before using the
+  synchronous buffer. Browser-v1 keys are passed verbatim to persistence. Unknown keys may be captured as event
+  properties, collisions can overwrite SDK state, and reset clears them. Use stable extension-owned keys and define
+  their exposure policy.
 - **browser-common owns shared extensions outright.** SDKs construct shared extensions and call `setup(client)` and
   optional `dispose()`; they do not wrap or subclass extension implementations.
 

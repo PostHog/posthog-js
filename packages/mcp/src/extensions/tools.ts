@@ -3,7 +3,7 @@
 // Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
-import { type CallToolResult, type ListToolsResult } from '@modelcontextprotocol/sdk/types.js'
+import type { CompatibleTextToolResult, CompatibleToolsListLike } from '../types'
 import { log, type LoggerFn } from './logger'
 
 export const GET_MORE_TOOLS_NAME = 'get_more_tools' as const
@@ -17,7 +17,7 @@ export function resolveMissingCapabilityToolName(options?: { missingCapabilityTo
   return options?.missingCapabilityToolName ?? GET_MORE_TOOLS_NAME
 }
 
-type ReportMissingToolDescriptor = ListToolsResult['tools'][number]
+type ReportMissingToolDescriptor = CompatibleToolsListLike['tools'][number]
 
 export function getReportMissingToolDescriptor(name: string = GET_MORE_TOOLS_NAME): ReportMissingToolDescriptor {
   return {
@@ -36,15 +36,12 @@ export function getReportMissingToolDescriptor(name: string = GET_MORE_TOOLS_NAM
     },
     annotations: {
       title: 'Get More Tools',
-      // Doesn't mutate state on the MCP server
       readOnlyHint: true,
-      // Interacts with external entities because we store this in analytics
+      // Interacts with an external entity: the report lands in analytics.
       openWorldHint: true,
-      // A tool like `get_more_tools` would usually NOT be idempontent, but since we are
-      // only using this to keep track of missing tools/feedback/analytics, it is actually idempontent.
-      // It's also preferable to track it as idempontent to make agents more prone to call it proactively.
+      // Only records the gap, so repeat calls are harmless — and advertising it
+      // as idempotent makes agents more willing to call it proactively.
       idempotentHint: true,
-      // Never deletes any data from the MCP server
       destructiveHint: false,
     },
   }
@@ -56,7 +53,7 @@ export function getReportMissingToolDescriptor(name: string = GET_MORE_TOOLS_NAM
  * report was recorded (custom dispatcher path); the `instrument()` path returns
  * it automatically.
  */
-export function getMoreToolsResult(): CallToolResult {
+export function getMoreToolsResult(): CompatibleTextToolResult {
   return {
     content: [
       {
@@ -67,7 +64,7 @@ export function getMoreToolsResult(): CallToolResult {
   }
 }
 
-export function handleReportMissing(args: { context: string }, logger: LoggerFn = log): CallToolResult {
+export function handleReportMissing(args: { context: string }, logger: LoggerFn = log): CompatibleTextToolResult {
   logger(`Missing tool reported: ${JSON.stringify(args)}`)
   return getMoreToolsResult()
 }

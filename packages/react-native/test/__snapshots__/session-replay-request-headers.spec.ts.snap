@@ -1,0 +1,84 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`PostHog RN session replay request headers snapshots the complete legacy native start envelope 1`] = `
+{
+  "cachedConfig": {},
+  "pluginConfig": {
+    "androidDebouncerDelayMs": 1000,
+    "captureLog": true,
+    "captureNetworkTelemetry": true,
+    "iOSdebouncerDelayMs": 1000,
+    "maskAllImages": true,
+    "maskAllSandboxedViews": true,
+    "maskAllTextInputs": true,
+    "sampleRate": undefined,
+    "screenshotModeBackgroundCapture": false,
+    "throttleDelayMs": 1000,
+  },
+  "sdkOptions": {
+    "anonymousId": "<anonymous-id>",
+    "apiKey": "test-token",
+    "debug": false,
+    "distinctId": "<anonymous-id>",
+    "flushAt": 20,
+    "host": "https://us.i.posthog.com",
+    "optOut": false,
+    "preloadFeatureFlags": true,
+    "requestHeaders": {
+      "Authorization": "Bearer test-jwt",
+    },
+    "sdkVersion": "<sdk-version>",
+  },
+  "sessionId": "<session-id>",
+}
+`;
+
+exports[`PostHog RN session replay request headers snapshots the complete native setup envelope used by session replay 1`] = `
+{
+  "pluginConfig": {
+    "errorTracking": {
+      "exceptionSteps": {
+        "enabled": true,
+        "maxBytes": 32768,
+      },
+      "nativeAutocapture": false,
+    },
+    "push": {
+      "capturePushNotificationOpened": false,
+      "capturePushNotificationSubscriptions": false,
+      "pushIdentityProviderEnabled": false,
+    },
+    "sessionReplay": {
+      "decideReplayConfig": {},
+      "enabled": true,
+      "sdkReplayConfig": {
+        "androidDebouncerDelayMs": 1000,
+        "captureLog": true,
+        "captureNetworkTelemetry": false,
+        "iOSdebouncerDelayMs": 1000,
+        "maskAllImages": false,
+        "maskAllSandboxedViews": true,
+        "maskAllTextInputs": true,
+        "sampleRate": undefined,
+        "screenshotModeBackgroundCapture": true,
+        "throttleDelayMs": 250,
+      },
+    },
+  },
+  "sdkOptions": {
+    "anonymousId": "replay-snapshot-id",
+    "apiKey": "test-token",
+    "debug": false,
+    "distinctId": "replay-snapshot-id",
+    "flushAt": 20,
+    "host": "https://us.i.posthog.com",
+    "optOut": false,
+    "preloadFeatureFlags": true,
+    "requestHeaders": {
+      "Authorization": "Bearer test-jwt",
+    },
+    "sdkVersion": "<sdk-version>",
+  },
+  "sessionId": "<session-id>",
+}
+`;

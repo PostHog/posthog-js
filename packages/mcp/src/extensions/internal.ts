@@ -14,7 +14,8 @@ import type {
 } from '../types'
 import { MCPAnalyticsEventType } from './event-types'
 import { captureEvent } from './capture'
-import { stampMetaClientInfo } from './client-identity'
+import { stampClientIdentity } from './client-identity'
+import { stampTransportIdentity } from './transport-identity'
 
 /**
  * Bounded LRU cache for session identities, capped at `maxSize` entries so a
@@ -130,7 +131,14 @@ export async function handleIdentify(
   sessionId: string,
   request: MCPRequestLike,
   requestAttribution: SessionInfo,
-  extra?: CompatibleRequestHandlerExtra
+  extra?: CompatibleRequestHandlerExtra,
+  /**
+   * True when this session id came from an agent-carried `conversation_id`
+   * rather than the transport. Such a session is brand new and was never
+   * announced at `initialize`, whatever `data.sessionSource` still says about
+   * the connection.
+   */
+  sessionFromConversation = false
 ): Promise<UserIdentity | undefined> {
   const identityBeforeRequest = data.identifiedSessions.get(sessionId)
   const sessionSourceBeforeIdentify = data.sessionSource
@@ -145,7 +153,8 @@ export async function handleIdentify(
     parameters: { request, extra },
     timestamp: new Date(),
   }
-  stampMetaClientInfo(identifyEvent, request)
+  stampClientIdentity(identifyEvent, request, extra, server)
+  stampTransportIdentity(identifyEvent, extra)
 
   try {
     const identityResult =
@@ -159,14 +168,14 @@ export async function handleIdentify(
       // was already announced by whichever pod handled `initialize`, so only the
       // handshake, or a genuine change a long-lived server observed, publishes
       // $identify. Every event still carries distinct_id/$set regardless, so
-      // person properties are never lost. Known gap: if identity is null at
-      // `initialize` but resolves later on a token session, that first $identify
-      // is suppressed too, so any pre-identify (anonymous) events aren't aliased
-      // onto the user. Inherent to statelessness (no pod knows a sibling already
-      // announced); revisit with the stateless-by-default rework.
+      // person properties are never lost. Known accepted gap (ADR-0003): an
+      // identity resolving only after `initialize` on a token session gets no
+      // standalone $identify, so its pre-identify events aren't aliased onto
+      // the user.
       const changed = previousIdentity !== undefined && !areIdentitiesEqual(previousIdentity, mergedIdentity)
       const firstSeen = previousIdentity === undefined
-      const announcedAtInitialize = sessionSourceBeforeIdentify === 'token' && request.method !== 'initialize'
+      const announcedAtInitialize =
+        !sessionFromConversation && sessionSourceBeforeIdentify === 'token' && request.method !== 'initialize'
       const shouldPublish = changed || (firstSeen && !announcedAtInitialize)
 
       data.identifiedSessions.set(sessionId, mergedIdentity)

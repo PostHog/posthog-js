@@ -210,6 +210,9 @@ export {
   PostHogMCPAnalyticsEvent,
   PostHogMCPAnalyticsProperty,
 } from './extensions/constants'
+// Host callbacks receive the SDK's `extra`/`ctx` unchanged, and the two SDK
+// majors carry HTTP headers in different places and shapes. This reads either.
+export { getRequestHeaders } from './extensions/request-headers'
 export { PostHogMCP, type PostHogMCPOptions } from './extensions/posthog-mcp'
 export { getMoreToolsResult } from './extensions/tools'
 export { setLogger } from './extensions/logger'
@@ -229,6 +232,7 @@ export type {
   MissingCapabilityCaptureData,
   PreparedToolCall,
   PrepareToolListOptions,
+  RequestHeaderBag,
   ToolCallCaptureData,
   ToolsListCaptureData,
   UserIdentity,

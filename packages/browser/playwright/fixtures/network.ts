@@ -84,13 +84,15 @@ export class NetworkPage {
             ...flagsOverrides,
         }
 
-        await this.page.route('**/flags/*', async (route) => {
-            await route.fulfill({
-                status: 200,
-                contentType: 'application/json',
-                body: JSON.stringify(flagsResponse),
+        for (const routePattern of ['**/flags/*', '**/decide/*']) {
+            await this.page.route(routePattern, async (route) => {
+                await route.fulfill({
+                    status: 200,
+                    contentType: 'application/json',
+                    body: JSON.stringify(flagsResponse),
+                })
             })
-        })
+        }
 
         // Mock the remote config endpoint to return the same config data.
         // RemoteConfig is now the sole config loading mechanism.

@@ -1,6 +1,6 @@
 {
   "name": "@posthog/mcp",
-  "version": "0.10.7",
+  "version": "0.11.7",
   "bugs": {
     "url": "https://github.com/PostHog/posthog-js/issues"
   },
@@ -12,11 +12,16 @@
   },
   "scripts": {
     "clean": "rimraf dist coverage",
-    "lint": "eslint src",
-    "lint:fix": "eslint src --fix",
+    "lint": "eslint src && prettier --check harness",
+    "lint:fix": "eslint src --fix && prettier --write harness",
     "generate-version": "node -p \"'export const version = \\'' + require('./package.json').version + '\\''\" > src/version.ts",
     "pretest:unit": "pnpm generate-version",
     "test:unit": "jest",
+    "test:integration": "pnpm test:integration:sdk-v1 && pnpm test:integration:sdk-v2 && pnpm test:integration:nest-v1 && pnpm test:integration:nest-v2",
+    "test:integration:sdk-v1": "node harness/dual-era/matrix.mjs --major v1 && node harness/dual-era/probe-late-handlers.mjs --major v1 && node harness/dual-era/probe-pagination.mjs --major v1",
+    "test:integration:sdk-v2": "node harness/dual-era/matrix.mjs --major v2 && node harness/dual-era/probe-late-handlers.mjs --major v2 && node harness/dual-era/probe-first-call-error.mjs && node harness/dual-era/probe-pagination.mjs --major v2",
+    "test:integration:nest-v1": "node harness/nest-v1/verify.mjs && LEVEL=low node harness/nest-v1/verify.mjs",
+    "test:integration:nest-v2": "node harness/nest-v2/verify.mjs && LEVEL=low node harness/nest-v2/verify.mjs",
     "prebuild": "pnpm generate-version",
     "build": "rslib build",
     "dev": "rslib build -w",
@@ -46,18 +51,40 @@
   "devDependencies": {
     "@babel/preset-env": "catalog:",
     "@babel/preset-typescript": "catalog:",
-    "@modelcontextprotocol/sdk": "~1.29.0",
+    "@modelcontextprotocol/node": "^2.0.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/server": "^2.0.0",
+    "@nestjs/common": "^11.1.27",
+    "@nestjs/core": "^11.1.27",
+    "@nestjs/microservices": "^11.1.27",
+    "@nestjs/platform-express": "^11.1.27",
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@rslib/core": "catalog:",
     "@types/jest": "catalog:",
     "@types/node": "^20.0.0",
     "jest": "catalog:",
     "posthog-node": "workspace:^",
-    "zod": "^3.25.0"
+    "reflect-metadata": "^0.2.2",
+    "rekog-mcp-nest-v1": "npm:@rekog/mcp-nest@1.9.11",
+    "rekog-mcp-nest-v2": "npm:@rekog/mcp-nest@2.0.0",
+    "rxjs": "^7.8.2",
+    "ts-node": "^10.9.2",
+    "typescript": "catalog:",
+    "zod": "^3.25.0",
+    "zod4": "npm:zod@^4.4.3"
   },
   "peerDependencies": {
     "@modelcontextprotocol/sdk": ">=1.26.0",
+    "@modelcontextprotocol/server": ">=2.0.0",
     "posthog-node": "^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@modelcontextprotocol/sdk": {
+      "optional": true
+    },
+    "@modelcontextprotocol/server": {
+      "optional": true
+    }
   },
   "keywords": [
     "posthog",

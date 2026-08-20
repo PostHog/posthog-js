@@ -3,8 +3,8 @@
 // Copyright (c) 2025 AgentCat, Inc. (formerly MCPcat)
 // Licensed under the MIT License: https://github.com/agentcathq/agentcat-typescript-sdk/blob/main/LICENSE
 
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { ErrorTracking } from '@posthog/core'
+import type { AnalyticsInjectableJsonSchema } from './extensions/analytics-parameters'
 import type { MCPAnalyticsEventType } from './extensions/event-types'
 import type { IdentityCache } from './extensions/internal'
 import type { PostHogCaptureEvent } from './extensions/posthog-events'
@@ -17,6 +17,54 @@ export type JsonRecord = Record<string, unknown>
 export type ErrorProperties = ErrorTracking.ErrorProperties
 /** A single parsed stack frame. Re-exported from `@posthog/core`. */
 export type StackFrame = ErrorTracking.StackFrame
+
+/**
+ * The MCP wire shapes we touch, declared structurally rather than imported from
+ * `@modelcontextprotocol/sdk`.
+ *
+ * Both SDK majors are **optional** peers — a v2-only consumer has no v1 SDK
+ * installed — so a type import of it in shipped `.d.ts` output is a `TS2307`
+ * for anyone type-checking without `skipLibCheck`. These are deliberately loose
+ * (open-ended, everything optional): they describe what we *read* off an SDK
+ * result, and an SDK-typed value assigns to them cleanly. What we hand back to
+ * the SDK is typed precisely instead — see {@link CompatibleTextToolResult}.
+ */
+export interface CompatibleToolResultLike {
+  content?: unknown[]
+  structuredContent?: JsonRecord
+  isError?: boolean
+  _meta?: JsonRecord
+  [key: string]: unknown
+}
+
+/** One entry of a `tools/list` response, as we read it. */
+export interface CompatibleToolDescriptorLike {
+  name: string
+  title?: string
+  description?: string
+  /** The advertised JSON Schema, as the analytics parameters are injected into it. */
+  inputSchema?: AnalyticsInjectableJsonSchema
+  outputSchema?: unknown
+  _meta?: JsonRecord
+  [key: string]: unknown
+}
+
+/** A `tools/list` response, as we read it. */
+export interface CompatibleToolsListLike {
+  tools: CompatibleToolDescriptorLike[]
+  nextCursor?: string
+  [key: string]: unknown
+}
+
+/**
+ * A text-only tool result *we* construct and a host may hand straight back to
+ * the SDK. Typed precisely, not loosely, so it stays assignable to the SDK's own
+ * `CallToolResult` — the direction that would silently break callers.
+ */
+export interface CompatibleTextToolResult {
+  content: { type: 'text'; text: string }[]
+  isError?: boolean
+}
 
 export interface MCPRequestParamsLike {
   arguments?: JsonRecord
@@ -57,7 +105,21 @@ export interface MCPAnalyticsOptions {
    * detected under the same name.
    */
   missingCapabilityToolName?: string
-  /** Enables the `conversation_id` tool parameter + prompt-back loop. */
+  /**
+   * Opt in to session correlation for the MCP **2026-07-28** revision, which removed
+   * protocol-level sessions: no `initialize`, no `mcp-session-id` header, and a fresh
+   * server instance per HTTP request. With none of those left to anchor on, the only
+   * thing that can carry a session across calls is the agent itself.
+   *
+   * Turning this on injects a `conversation_id` parameter into every tool, mints one
+   * on the first call, asks the agent to echo it back, and derives `$session_id` from
+   * that handle — so calls correlate across reconnects, restarts, and per-request
+   * instances.
+   *
+   * Off by default, and fully inert when off: no parameter is injected, no schema is
+   * touched, no prompt-back is appended, and `$session_id` resolves exactly as it did
+   * before (the request's own session id, else this instance's).
+   */
   enableConversationId?: boolean
   /**
    * Emit a `$exception` event alongside any failed tool call. Defaults to `true`.
@@ -114,8 +176,11 @@ export type MaybePromise<T> = T | Promise<T>
 export type MCPAnalyticsIntentSource = 'context_parameter' | 'inferred'
 
 export type ToolCallback =
-  | ((args: unknown, extra: CompatibleRequestHandlerExtra) => CallToolResult | Promise<CallToolResult>)
-  | ((extra: CompatibleRequestHandlerExtra) => CallToolResult | Promise<CallToolResult>)
+  | ((
+      args: unknown,
+      extra: CompatibleRequestHandlerExtra
+    ) => CompatibleToolResultLike | Promise<CompatibleToolResultLike>)
+  | ((extra: CompatibleRequestHandlerExtra) => CompatibleToolResultLike | Promise<CompatibleToolResultLike>)
 
 // RegisteredTool type that supports both MCP SDK 1.23- (callback) and 1.24+ (handler)
 export type RegisteredTool = {
@@ -123,6 +188,8 @@ export type RegisteredTool = {
   /** MCP tool `_meta` block (spec-allowed arbitrary metadata, e.g. `category`). */
   _meta?: Record<string, unknown>
   inputSchema?: unknown
+  /** Present when the tool was registered with a declared output schema. */
+  outputSchema?: unknown
   update?: (...args: unknown[]) => unknown
 } & ({ callback: ToolCallback; handler?: never } | { handler: ToolCallback; callback?: never })
 
@@ -135,6 +202,15 @@ export type BeforeSendFn = (event: PostHogCaptureEvent) => MaybePromise<PostHogC
 export interface Event {
   actorId?: string
   clientName?: string
+  /**
+   * Raw `user-agent` request header → `$mcp_client_user_agent`. HTTP transports
+   * only. The only place a client's *surface* is distinguishable: one vendor
+   * ships many products under a single `clientName` (Anthropic's CLI, Agent SDK
+   * and VS Code extension all report `claude-code`), and only the User-Agent
+   * parenthetical tells them apart. Captured verbatim — surfaces are resolved to
+   * friendly labels at query time, never in this SDK.
+   */
+  clientUserAgent?: string
   clientVersion?: string
   conversationId?: string
   duration?: number
@@ -183,6 +259,12 @@ export interface Event {
   toolDescription?: string
   userIntent?: string
   userIntentSource?: MCPAnalyticsIntentSource
+  /**
+   * Raw vendor client header (`x-anthropic-client`) → `$mcp_vendor_client`. HTTP
+   * transports only. A second, independent surface signal alongside
+   * {@link Event.clientUserAgent}; captured verbatim, never classified.
+   */
+  vendorClient?: string
 }
 
 /** A partially-built MCP event as it flows through the SDK before capture. */
@@ -194,13 +276,37 @@ export interface CompatibleRequestInfoLike {
   [key: string]: unknown
 }
 
+/**
+ * The HTTP request an MCP SDK v2 server attaches to the handler context, as a
+ * WHATWG `Request` — so `headers` answers to `.get()`, not to indexing.
+ */
+export interface CompatibleHttpRequestLike {
+  req?: { headers?: unknown; [key: string]: unknown }
+  [key: string]: unknown
+}
+
 export interface CompatibleRequestHandlerExtra {
   headers?: Record<string, string | string[]>
   sessionId?: string
   /** Present on HTTP transports only — headers ride every request, unlike `clientInfo`. */
   requestInfo?: CompatibleRequestInfoLike
+  /** Where MCP SDK v2 puts the same thing. Read both through `getRequestHeaders`. */
+  http?: CompatibleHttpRequestLike
+  /**
+   * MCP SDK v2's parsed request. It lifts the reserved `io.modelcontextprotocol/*`
+   * keys out of `params._meta` into `envelope`, so client identity is here rather
+   * than on the request by the time a handler runs.
+   */
+  mcpReq?: { envelope?: Record<string, unknown>; [key: string]: unknown }
   [key: string]: unknown
 }
+
+/**
+ * HTTP headers normalised to lowercase keys, as `getRequestHeaders` returns
+ * them — a plain bag, so a host's existing `headers['authorization']` keeps
+ * working when only the source of the headers changes.
+ */
+export type RequestHeaderBag = Record<string, string | string[]>
 
 export interface ServerClientInfoLike {
   name?: string
@@ -274,6 +380,12 @@ export interface SessionInfo {
 export interface AnalyticsParameterOwnership {
   context: boolean
   conversationId: boolean
+  /**
+   * True when we declared `_mcp_instructions` on this tool's advertised output
+   * schema, so writing that key into `structuredContent` will validate. False
+   * for tools with no output schema, or one we could not extend.
+   */
+  outputInstructions: boolean
 }
 
 export interface MCPAnalyticsData {
@@ -322,13 +434,31 @@ export interface McpCaptureCommon {
    * not just the initialize event — the `PostHogMCP` client holds no per-session state.
    */
   protocolVersion?: string
+  /**
+   * Raw `user-agent` request header → `$mcp_client_user_agent`. The
+   * `instrument()` path reads this off the transport automatically; a custom
+   * dispatcher has no `extra`, so pass `req.headers['user-agent']` yourself.
+   *
+   * Worth wiring up: it is the only signal that separates a vendor's surfaces
+   * (Anthropic's CLI, Agent SDK and VS Code extension all report
+   * `clientName: "claude-code"`, and only the User-Agent parenthetical —
+   * `(cli)` / `(sdk-ts)` / `(claude-vscode)` — tells them apart). Send it raw;
+   * PostHog resolves friendly product labels at query time.
+   */
+  clientUserAgent?: string
+  /**
+   * Raw vendor client header → `$mcp_vendor_client`. Anthropic's clients send
+   * `x-anthropic-client`; pass it as a second, independent surface signal
+   * alongside {@link McpCaptureCommon.clientUserAgent}. Sent verbatim.
+   */
+  vendorClient?: string
   /** Person properties → `$set` (e.g. `{ name, email, plan }`). */
   setProperties?: JsonRecord
   /** Group memberships → `$groups`. */
   groups?: Record<string, string>
   /** Extra event properties, spread onto the PostHog event verbatim. */
   properties?: JsonRecord
-  /** Event timestamp. Defaults to the time of the capture call. */
+  /** Event timestamp. Defaults to the capture time. UTC is preferred; non-UTC input is converted to UTC. */
   timestamp?: Date
 }
 
