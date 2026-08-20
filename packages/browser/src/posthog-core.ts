@@ -4579,20 +4579,25 @@ export class PostHog implements PostHogInterface {
         const fns = isArray(this.config.before_send) ? this.config.before_send : [this.config.before_send]
         let beforeSendResult: CaptureResult | null = data
         for (const fn of fns) {
-            beforeSendResult = fn(beforeSendResult)
-            if (isNullish(beforeSendResult)) {
-                const logMessage = `Event '${data.event}' was rejected in beforeSend function`
-                if (isKnownUnsafeEditableEvent(data.event)) {
-                    logger.warn(`${logMessage}. This can cause unexpected behavior.`)
-                } else {
-                    logger.info(logMessage)
+            try {
+                beforeSendResult = fn(beforeSendResult)
+                if (isNullish(beforeSendResult)) {
+                    const logMessage = `Event '${data.event}' was rejected in beforeSend function`
+                    if (isKnownUnsafeEditableEvent(data.event)) {
+                        logger.warn(`${logMessage}. This can cause unexpected behavior.`)
+                    } else {
+                        logger.info(logMessage)
+                    }
+                    return null
                 }
+                if (!beforeSendResult.properties || isEmptyObject(beforeSendResult.properties)) {
+                    logger.warn(
+                        `Event '${data.event}' has no properties after beforeSend function, this is likely an error.`
+                    )
+                }
+            } catch (e) {
+                logger.error(`Error in beforeSend function for event '${data.event}':`, e)
                 return null
-            }
-            if (!beforeSendResult.properties || isEmptyObject(beforeSendResult.properties)) {
-                logger.warn(
-                    `Event '${data.event}' has no properties after beforeSend function, this is likely an error.`
-                )
             }
         }
         // If a beforeSend hook removed a property the event needs to be ingested
