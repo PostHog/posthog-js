@@ -1,5 +1,6 @@
 import React, { FunctionComponent } from 'react'
 import { PostHogContext } from '../context'
+import { addReactComponentStack } from '../helpers/react-component-stack'
 import { isFunction } from '../utils/type-utils'
 
 export type Properties = Record<string, any>
@@ -52,10 +53,7 @@ export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryPr
         }
         const { client } = this.context
         const { componentStack } = errorInfo
-        const exceptionEvent = client.captureException(error, {
-            ...currentProperties,
-            $exception_component_stack: componentStack,
-        })
+        const exceptionEvent = client.captureException(addReactComponentStack(error, componentStack), currentProperties)
         this.setState({
             error,
             componentStack: componentStack ?? null,

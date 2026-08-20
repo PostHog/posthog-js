@@ -9,8 +9,12 @@ describe('setupReactErrorHandler', () => {
 
         handler(undefined, errorInfo)
 
-        expect(captureException).toHaveBeenCalledWith(undefined, {
-            $exception_component_stack: errorInfo.componentStack,
-        })
+        expect(captureException).toHaveBeenCalledWith(
+            expect.objectContaining({
+                message: 'Primitive value captured as exception: undefined',
+                name: 'React ErrorBoundary Error',
+                stack: errorInfo.componentStack,
+            })
+        )
     })
 })
