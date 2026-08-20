@@ -489,7 +489,7 @@ describe('PostHogTraces', () => {
       }).flush()
 
       expect(sentSpans()).toHaveLength(0)
-      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('beforeSpanSend threw'), expect.anything())
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('beforeSpanSend failed'), expect.anything())
     })
 
     it('hands the hook plain values, not the OTLP encoding', () => {
@@ -503,16 +503,64 @@ describe('PostHogTraces', () => {
     })
 
     it('keeps the original ids when a hook rewrites them', async () => {
-      await endOneSpan((span: any) => {
-        span.traceId = '0'.repeat(32)
-        span.spanId = '1'.repeat(16)
-        return span
-      }).flush()
+      const traces = createTraces({
+        beforeSpanSend: [
+          (span: any) => {
+            span.traceId = '0'.repeat(32)
+            span.spanId = '1'.repeat(16)
+            return span
+          },
+        ],
+      })
+      const started = traces.startSpan('checkout')
+      const originalTraceId = started.traceparent()!.split('-')[1]
+      started.end()
+      await traces.flush()
 
       const [span] = sentSpans()
-      expect(span.traceId).not.toBe('0'.repeat(32))
-      expect(span.spanId).not.toBe('1'.repeat(16))
+      expect(span.traceId).toBe(originalTraceId)
       expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('identity field'))
+    })
+
+    it('survives a hook that returns a frozen record', async () => {
+      const traces = createTraces({
+        beforeSpanSend: [(span: SpanRecord) => Object.freeze({ ...span, attributes: {} })],
+      })
+      const span = traces.startSpan('checkout')
+
+      expect(() => span.end()).not.toThrow()
+      await traces.flush()
+      expect(sentSpans()).toHaveLength(0)
+    })
+
+    it('rejects a timestamp the server could not decode', async () => {
+      const instance = createMockInstance()
+      const traces = createTraces(
+        { beforeSpanSend: [(span: SpanRecord) => ({ ...span, startTime: span.startTime * 1e6 })] },
+        instance
+      )
+      traces.startSpan('poison').end()
+      await traces.flush()
+
+      const [span] = sentSpans(instance)
+      expect(span.startTimeUnixNano.length).toBeLessThanOrEqual(19)
+    })
+
+    it('logs when a hook drops a span', async () => {
+      await endOneSpan(() => null).flush()
+      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('dropped a span'))
+    })
+
+    it('keeps tracestate a rebuilding hook would have dropped', async () => {
+      const instance = createMockInstance()
+      const traces = createTraces(
+        { beforeSpanSend: [(span: SpanRecord) => ({ ...span, traceState: undefined }) as SpanRecord] },
+        instance
+      )
+      traces.startSpan('child', { parent: `00-${TRACE_ID}-${REMOTE_SPAN_ID}-01`, tracestate: 'vendor=abc' }).end()
+      await traces.flush()
+
+      expect(sentSpans(instance)[0].traceState).toBe('vendor=abc')
     })
 
     it('runs hooks left to right and stops at the first null', async () => {

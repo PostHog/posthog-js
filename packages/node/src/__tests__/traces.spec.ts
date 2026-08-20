@@ -329,6 +329,29 @@ describe('PostHog traces', () => {
       expect(span.attributes?.find((a) => a.key === 'ok')).toBeDefined()
     })
 
+    it('runs an array of hooks through the client option', async () => {
+      const client = createClient({
+        traces: {
+          serviceName: 'svc',
+          beforeSpanSend: [
+            (span: any) => {
+              span.attributes.first = true
+              return span
+            },
+            (span: any) => {
+              span.attributes.second = true
+              return span
+            },
+          ],
+        },
+      })
+      client.startSpan('checkout').end()
+      await client.shutdown()
+
+      const keys = sentSpans()[0].attributes?.map((a) => a.key)
+      expect(keys).toEqual(expect.arrayContaining(['first', 'second']))
+    })
+
     it('drops a span the hook rejects', async () => {
       const client = createClient({
         traces: {

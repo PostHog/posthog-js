@@ -11,11 +11,18 @@ import type {
 import { NOOP_SPAN, PostHogSpan, describeError } from './span'
 import { newSpanId, newTraceId } from './ids'
 import { parseTraceparent, sanitizeTracestate } from './traceparent'
-import { clampEndTime, resolveStartTime, sanitizeName } from './sanitize'
+import { clampEndTime, resolveStartTime, sanitizeName, toEpochMs } from './sanitize'
 import { buildOtlpSpan, buildOtlpTracesPayload, buildTracesResourceAttributes } from './otlp'
 import { isPromise, safeSetTimeout } from '../utils'
 
 type SpanCallback<T> = (span: Span) => T
+
+interface SpanIdentity {
+  traceId: string
+  spanId: string
+  parentSpanId?: string
+  traceState?: string
+}
 
 interface ParentContext {
   traceId: string
@@ -343,37 +350,60 @@ export class PostHogTraces {
       return record
     }
 
-    const identity = { traceId: record.traceId, spanId: record.spanId, parentSpanId: record.parentSpanId }
-    let current = record
-
-    for (const hook of this._config.beforeSpanSend) {
-      let result: SpanRecord | null
-      try {
-        result = hook(current)
-      } catch (error) {
-        this._logger.warn('beforeSpanSend threw; dropping the span rather than exporting it unscrubbed', error)
-        return null
-      }
-      if (!result) {
-        return null
-      }
-      current = result
+    // Snapshotted before any hook runs: a hook that mutates in place would
+    // otherwise leave nothing to restore from.
+    const identity = {
+      traceId: record.traceId,
+      spanId: record.spanId,
+      parentSpanId: record.parentSpanId,
+      traceState: record.traceState,
     }
+    const originalTimes = { startTime: record.startTime, endTime: record.endTime }
+    let current = record
+    try {
+      for (const hook of this._config.beforeSpanSend) {
+        const result = hook(current)
+        if (!result) {
+          this._logger.debug('beforeSpanSend dropped a span')
+          return null
+        }
+        current = this._keepSpanIdentity(result, identity)
+      }
 
+      // Re-applied to whatever the hook returned: a hook can write a timestamp
+      // the server cannot decode, and one such span 400s the whole request it
+      // travels in, taking unrelated spans with it.
+      current.name = sanitizeName(current.name, 'Span name', this._logger)
+      current.startTime = toEpochMs(current.startTime) ?? originalTimes.startTime
+      current.endTime = clampEndTime(toEpochMs(current.endTime) ?? originalTimes.endTime, current.startTime)
+      return current
+    } catch (error) {
+      // Covers the hook and everything done to its return value: a frozen or
+      // hostile record must not throw out of `end()` into application code.
+      this._logger.warn('beforeSpanSend failed; dropping the span rather than exporting it unscrubbed', error)
+      return null
+    }
+  }
+
+  /**
+   * Restores the fields a hook must not change. Runs per hook so a later hook in
+   * the chain cannot sample on an id an earlier one forged.
+   */
+  private _keepSpanIdentity(hooked: SpanRecord, original: SpanIdentity): SpanRecord {
     if (
-      current.traceId !== identity.traceId ||
-      current.spanId !== identity.spanId ||
-      current.parentSpanId !== identity.parentSpanId
+      hooked.traceId !== original.traceId ||
+      hooked.spanId !== original.spanId ||
+      hooked.parentSpanId !== original.parentSpanId
     ) {
       this._logger.debug('beforeSpanSend changed a span identity field; keeping the original ids')
-      current.traceId = identity.traceId
-      current.spanId = identity.spanId
-      current.parentSpanId = identity.parentSpanId
     }
-
-    current.name = sanitizeName(current.name, 'Span name', this._logger)
-    current.endTime = clampEndTime(current.endTime, current.startTime)
-    return current
+    hooked.traceId = original.traceId
+    hooked.spanId = original.spanId
+    hooked.parentSpanId = original.parentSpanId
+    // A hook that rebuilds the record instead of spreading it would otherwise
+    // drop tracestate, which is not part of the record the hook is handed.
+    hooked.traceState = original.traceState
+    return hooked
   }
 
   private _recordDrop(count: number, reason: string): void {
