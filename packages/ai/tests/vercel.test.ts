@@ -200,6 +200,18 @@ describe('Vercel AI SDK - Dual Version Support', () => {
     jest.restoreAllMocks()
   })
 
+  it('rejects AI SDK v7 models and points callers to the OpenTelemetry integration', () => {
+    const v4Model = {
+      specificationVersion: 'v4',
+      provider: 'openai',
+      modelId: 'gpt-test',
+    }
+
+    expect(() => Reflect.apply(withTracing, undefined, [v4Model, mockPostHogClient, {}])).toThrow(
+      'withTracing supports Vercel AI SDK v5 and v6 models only. Use @ai-sdk/otel with @posthog/ai/otel for AI SDK v7 models.'
+    )
+  })
+
   describe('V3 Model (AI SDK 6)', () => {
     it('should wrap a V3 model and track generation', async () => {
       const baseModel = createMockV3Model('gpt-4')
@@ -303,6 +315,39 @@ describe('Vercel AI SDK - Dual Version Support', () => {
       const input = JSON.stringify((mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties['$ai_input'])
       expect(input).not.toContain(binary)
       expect(input).toContain('[base64 image/png redacted]')
+    })
+
+    it('preserves binary content nested in tool results when the client enables multimodal capture', async () => {
+      const binary = 'U0hPUlQgVE9PTCBSRVNVTFQ='
+      const clientWithMultimodal = mockPostHogClient as PostHog & { enableFullAiCapture?: boolean }
+      clientWithMultimodal.enableFullAiCapture = true
+      const baseModel = createMockV3Model('tool-model')
+      const model = withTracing(baseModel, clientWithMultimodal, { posthogDistinctId: 'test-user' })
+      const params = {
+        prompt: [
+          {
+            role: 'tool',
+            content: [
+              {
+                type: 'tool-result',
+                toolCallId: 'tool-call-id',
+                toolName: 'read-file',
+                output: {
+                  type: 'content',
+                  value: [{ type: 'media', data: binary, mediaType: 'image/png' }],
+                },
+              },
+            ],
+          },
+        ],
+      } as any
+
+      await model.doGenerate(params)
+
+      expect(baseModel.doGenerate).toHaveBeenCalledWith(params)
+      const input = JSON.stringify((mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties['$ai_input'])
+      expect(input).toContain(binary)
+      expect(input).not.toContain('redacted')
     })
 
     it('redacts data URL objects from input while preserving HTTP URL objects', async () => {
@@ -1122,6 +1167,180 @@ describe('Vercel AI SDK - Dual Version Support', () => {
         expect(JSON.stringify(input).length).toBeLessThan(210_000)
       }
     )
+
+    it('skips the oversized-prompt aggregate trim entirely when the client enables multimodal capture', async () => {
+      const clientWithMultimodal = mockPostHogClient as PostHog & { enableFullAiCapture?: boolean }
+      clientWithMultimodal.enableFullAiCapture = true
+      const baseModel = createMockV3Model('gpt-4')
+      const model = withTracing(baseModel, clientWithMultimodal, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-trim-bypass',
+      })
+
+      // Same oversized prompt as the default-mode trim test above: well past MAX_OUTPUT_SIZE (200kb).
+      const oversizedPrompt = Array.from({ length: 100 }, (_, i) => ({
+        role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+        content: [{ type: 'text' as const, text: 'x'.repeat(15_000) }],
+      }))
+
+      await model.doGenerate({ prompt: oversizedPrompt as any })
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+      const input = captureCall[0].properties.$ai_input as Array<{ role: string; content: unknown }>
+      expect(input).toHaveLength(oversizedPrompt.length)
+      expect(input.some((message) => message.role === 'posthog')).toBe(false)
+      expect(JSON.stringify(input).length).toBeGreaterThan(1_000_000)
+    })
+
+    it('skips truncation of oversized output when the client enables multimodal capture', async () => {
+      const oversizedText = 'y'.repeat(250_000)
+      const baseModel: LanguageModelV3 = {
+        specificationVersion: 'v3',
+        provider: 'openai',
+        modelId: 'gpt-4',
+        supportedUrls: {},
+        doGenerate: jest.fn().mockResolvedValue({
+          content: [{ type: 'text', text: oversizedText }],
+          usage: { inputTokens: 1, outputTokens: 1 },
+          finishReason: { unified: 'stop' as const, raw: undefined },
+          warnings: [],
+        }),
+        doStream: jest.fn(),
+      }
+
+      const clientWithMultimodal = mockPostHogClient as PostHog & { enableFullAiCapture?: boolean }
+      clientWithMultimodal.enableFullAiCapture = true
+      const model = withTracing(baseModel, clientWithMultimodal, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-truncation-skip',
+      })
+
+      await model.doGenerate({
+        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'hi' }] }],
+      } as any)
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const output = captureCall[0].properties.$ai_output_choices[0].content
+      expect(output).toBe(oversizedText)
+      expect(output).not.toContain('[truncated]')
+    })
+
+    it('truncates oversized output when the client does not enable multimodal capture', async () => {
+      const oversizedText = 'y'.repeat(250_000)
+      const baseModel: LanguageModelV3 = {
+        specificationVersion: 'v3',
+        provider: 'openai',
+        modelId: 'gpt-4',
+        supportedUrls: {},
+        doGenerate: jest.fn().mockResolvedValue({
+          content: [{ type: 'text', text: oversizedText }],
+          usage: { inputTokens: 1, outputTokens: 1 },
+          finishReason: { unified: 'stop' as const, raw: undefined },
+          warnings: [],
+        }),
+        doStream: jest.fn(),
+      }
+
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-truncation',
+      })
+
+      await model.doGenerate({
+        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'hi' }] }],
+      } as any)
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const output = captureCall[0].properties.$ai_output_choices[0].content
+      expect(output.length).toBeLessThan(oversizedText.length)
+      expect(output).toContain('... [truncated]')
+    })
+
+    it('preserves input and output file part base64 data when the client enables multimodal capture', async () => {
+      const base64Data = `data:image/png;base64,${'A'.repeat(2000)}`
+      const baseModel: LanguageModelV3 = {
+        specificationVersion: 'v3',
+        provider: 'openai',
+        modelId: 'gpt-4',
+        supportedUrls: {},
+        doGenerate: jest.fn().mockResolvedValue({
+          content: [{ type: 'file', data: base64Data, mediaType: 'image/png' }],
+          usage: { inputTokens: 1, outputTokens: 1 },
+          finishReason: { unified: 'stop' as const, raw: undefined },
+          warnings: [],
+        }),
+        doStream: jest.fn(),
+      }
+
+      const clientWithMultimodal = mockPostHogClient as PostHog & { enableFullAiCapture?: boolean }
+      clientWithMultimodal.enableFullAiCapture = true
+      const model = withTracing(baseModel, clientWithMultimodal, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-multimodal-passthrough',
+      })
+
+      await model.doGenerate({
+        prompt: [
+          {
+            role: 'user' as const,
+            content: [{ type: 'file' as const, data: base64Data, mediaType: 'image/png' }],
+          },
+        ],
+      } as any)
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const inputFile = captureCall[0].properties.$ai_input[0].content[0]
+      const outputFile = captureCall[0].properties.$ai_output_choices[0].content[0]
+
+      expect(inputFile.file).toBe(base64Data)
+      expect(outputFile.data).toBe(base64Data)
+    })
+
+    it('redacts input and output file part base64 data when the client does not enable multimodal capture', async () => {
+      const base64Data = `data:image/png;base64,${'A'.repeat(2000)}`
+      const baseModel: LanguageModelV3 = {
+        specificationVersion: 'v3',
+        provider: 'openai',
+        modelId: 'gpt-4',
+        supportedUrls: {},
+        doGenerate: jest.fn().mockResolvedValue({
+          content: [{ type: 'file', data: base64Data, mediaType: 'image/png' }],
+          usage: { inputTokens: 1, outputTokens: 1 },
+          finishReason: { unified: 'stop' as const, raw: undefined },
+          warnings: [],
+        }),
+        doStream: jest.fn(),
+      }
+
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-multimodal-redacted',
+      })
+
+      await model.doGenerate({
+        prompt: [
+          {
+            role: 'user' as const,
+            content: [{ type: 'file' as const, data: base64Data, mediaType: 'image/png' }],
+          },
+        ],
+      } as any)
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const inputFile = captureCall[0].properties.$ai_input[0].content[0]
+      const outputFile = captureCall[0].properties.$ai_output_choices[0].content[0]
+
+      expect(inputFile.file).not.toBe(base64Data)
+      expect(inputFile.file).toContain('redacted')
+      expect(outputFile.data).not.toBe(base64Data)
+      expect(outputFile.data).toContain('redacted')
+    })
   })
 
   describe('Anthropic V3 cache token handling', () => {

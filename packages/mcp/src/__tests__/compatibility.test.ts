@@ -31,6 +31,21 @@ describe('isCompatibleServerType', () => {
     expect(log).not.toHaveBeenCalled()
   })
 
+  // MCP SDK v2's McpServer dropped the deprecated tool() and kept registerTool().
+  // Demanding tool() rejected every v2 high-level server, and instrument()
+  // swallows the rejection — so the integration captured nothing, silently.
+  it('accepts a high-level server that has registerTool() but no tool()', () => {
+    const wrapper = { server: validLowLevelServer(), _registeredTools: {}, registerTool: () => {} }
+    expect(isCompatibleServerType(wrapper, log)).toBe(wrapper)
+    expect(log).not.toHaveBeenCalled()
+  })
+
+  it('rejects a high-level server with neither registration method', () => {
+    const wrapper = { server: validLowLevelServer(), _registeredTools: {} }
+    expect(() => isCompatibleServerType(wrapper, log)).toThrow(/registerTool\(\) or tool\(\)/)
+    expect(log).toHaveBeenCalled()
+  })
+
   it.each([
     ['null', null, /Server must be an object/],
     ['undefined', undefined, /Server must be an object/],

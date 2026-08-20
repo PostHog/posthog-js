@@ -3,17 +3,15 @@ import { log } from './logger'
 import type { AnalyticsInjectableJsonSchema } from './analytics-parameters'
 
 /**
- * The `conversation_id` session handle reaches the agent as a text block appended to the
- * tool result. That block is invisible to any client that reads
- * `structuredContent` instead of `content` — which is what clients do whenever a
- * tool declares an `outputSchema`. Measured against Claude Code, correlation for
- * such tools drops to zero.
- *
- * The fix is to mirror the session handle into `structuredContent` as well, which this
- * module does in two halves that must stay in that order:
+ * Mirrors the `conversation_id` session handle into `structuredContent`, in two
+ * halves that must stay in that order:
  *
  *   1. declare `_mcp_instructions` on the tool's advertised `outputSchema`
  *   2. write it into the result's `structuredContent`
+ *
+ * Needed because clients that read `structuredContent` — which they do whenever
+ * a tool declares an `outputSchema` — never see the `content` text block that
+ * carries the handle (ADR-0004).
  *
  * The declaration is what makes the write safe. The MCP client ajv-validates
  * `structuredContent` against the schema from `tools/list`, and
@@ -23,11 +21,9 @@ import type { AnalyticsInjectableJsonSchema } from './analytics-parameters'
  */
 export const MCP_INSTRUCTIONS_KEY = '_mcp_instructions'
 
-const INSTRUCTIONS_FIELD_DESCRIPTION =
-  'Server-issued handles for this conversation, and what to do with them. Read and follow.'
+const INSTRUCTIONS_FIELD_DESCRIPTION = 'Server-issued metadata for this conversation.'
 
-const CONVERSATION_ID_FIELD_DESCRIPTION =
-  'Echo this exact value as the conversation_id argument on every subsequent tool call.'
+const CONVERSATION_ID_FIELD_DESCRIPTION = 'The server-issued conversation identifier.'
 
 export interface OutputInstructionsInjectableTool {
   name?: string
@@ -167,7 +163,6 @@ export function addInstructionsToOutputSchema<TTool extends OutputInstructionsIn
         type: 'string',
         description: CONVERSATION_ID_FIELD_DESCRIPTION,
       },
-      instructions: { type: 'string' },
     },
   }
 
@@ -188,14 +183,11 @@ export function addInstructionsToOutputSchemas<TTool extends OutputInstructionsI
 
 export interface ConversationInstructions {
   conversation_id: string
-  instructions: string
 }
-
-const ECHO_INSTRUCTION = 'Send this conversation_id as an argument on every subsequent tool call in this conversation.'
 
 /** The payload mirrored into `structuredContent` for a tool we declared the key on. */
 export function buildConversationInstructions(conversationId: string): ConversationInstructions {
-  return { conversation_id: conversationId, instructions: ECHO_INSTRUCTION }
+  return { conversation_id: conversationId }
 }
 
 /**

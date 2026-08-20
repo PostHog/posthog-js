@@ -422,15 +422,21 @@ describe('PostHog Node.js', () => {
       }
     )
 
-    it('should allow overriding timestamp', async () => {
+    it('should serialize timestamp overrides as the equivalent UTC instant', async () => {
       expect(mockedFetch).toHaveBeenCalledTimes(0)
-      posthog.capture({ event: 'custom-time', distinctId: '123', timestamp: new Date('2021-02-03') })
+      posthog.capture({
+        event: 'custom-time',
+        distinctId: '123',
+        properties: { callerTimestamp: '2021-02-03T04:05:06.000-04:00' },
+        timestamp: new Date('2021-02-03T04:05:06.000-04:00'),
+      })
       await waitForFlushTimer()
       const batchEvents = getLastBatchEvents()
       expect(batchEvents).toMatchObject([
         {
           distinct_id: '123',
-          timestamp: '2021-02-03T00:00:00.000Z',
+          properties: { callerTimestamp: '2021-02-03T04:05:06.000-04:00' },
+          timestamp: '2021-02-03T08:05:06.000Z',
           event: 'custom-time',
           uuid: expect.any(String),
         },
@@ -750,6 +756,32 @@ describe('PostHog Node.js', () => {
       expect(beforeSend2).toHaveBeenCalledTimes(1)
       expect(beforeSend3).not.toHaveBeenCalled()
       expect(mockedFetch).not.toHaveBeenCalledWith('http://example.com/batch/', expect.anything())
+    })
+
+    it('should fail closed when a before_send function throws', async () => {
+      const error = new Error('before_send failed')
+      const sentinel = jest.fn((event) => event)
+      const ph = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        fetchRetryCount: 0,
+        disableCompression: true,
+        before_send: [
+          (event) => ({ ...event, properties: { ...event.properties, transformed: true } }),
+          () => {
+            throw error
+          },
+          sentinel,
+        ],
+      })
+      const loggerSpy = jest.spyOn((ph as any)._logger, 'error').mockImplementation(() => {})
+
+      ph.capture({ distinctId: '123', event: 'test-event', properties: { foo: 'bar' } })
+      await waitForFlushTimer()
+
+      expect(sentinel).not.toHaveBeenCalled()
+      expect(loggerSpy).toHaveBeenCalledWith("Error in before_send function for event 'test-event':", error)
+      expect(mockedFetch).not.toHaveBeenCalledWith('http://example.com/batch/', expect.anything())
+      loggerSpy.mockRestore()
     })
 
     it('should work with captureImmediate', async () => {

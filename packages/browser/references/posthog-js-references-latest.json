@@ -1686,6 +1686,11 @@
               "code": "\n\n// reset and generate new device ID\nposthog.reset(true)  // also resets device_id\n\n\n"
             },
             {
+              "id": "reset_with_a_custom_anonymous_id_and_bootstrapped_feature_flags",
+              "name": "reset with a custom anonymous ID and bootstrapped feature flags",
+              "code": "\n\n// reset with a custom anonymous ID and bootstrapped feature flags\nposthog.reset({\n    bootstrap: {\n        distinctID: myAnonymousID,\n        isIdentifiedID: false,\n        featureFlags: { 'my-flag': true },\n    }\n})\n\n\n"
+            },
+            {
               "id": "with_opt_out_capturing_by_default,_reset()_before_opting_in,_never_after",
               "name": "with opt_out_capturing_by_default, reset() before opting in, never after",
               "code": "\n\n// with opt_out_capturing_by_default, reset() before opting in, never after\nposthog.reset()\nposthog.opt_in_capturing()\n\n\n\n"
@@ -1694,10 +1699,10 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "Whether to generate a new device ID as well as a new distinct ID.",
+              "description": "Boolean to reset the device ID (legacy), or reset options including bootstrap values.",
               "isOptional": true,
-              "type": "boolean",
-              "name": "reset_device_id"
+              "type": "boolean | ResetOptions",
+              "name": "options"
             }
           ],
           "returnType": {
@@ -2504,6 +2509,13 @@
       "path": "lib/src/posthog-conversations-types.d.ts"
     },
     {
+      "id": "ConversationsUnavailableReason",
+      "name": "ConversationsUnavailableReason",
+      "properties": [],
+      "path": "lib/src/posthog-conversations-types.d.ts",
+      "example": "\"disabled_by_config\" | \"consent_opted_out\" | \"disabled_for_toolbar\" | \"remote_config_pending\" | \"remote_config_failed\" | \"disabled_in_project\" | \"missing_token\" | \"extensions_unavailable\" | \"load_failed\" | \"initializing\" | \"not_loaded\""
+    },
+    {
       "id": "ConversationsWidgetState",
       "name": "ConversationsWidgetState",
       "properties": [],
@@ -2960,6 +2972,11 @@
           "name": "flags_api_host"
         },
         {
+          "description": "Rewrites the URL used for PostHog API, feature flag, and asset requests.\nThis is intended for customers who use a reverse proxy and need custom paths.\nThe proxy must map the rewritten paths back to the canonical PostHog paths.\n\nUI links are not rewritten.",
+          "type": "(url: URL) => URL",
+          "name": "rewriteRequestPath"
+        },
+        {
           "description": "If using a reverse proxy for `api_host` then this should be the actual PostHog app URL (e.g. https://us.posthog.com).\nThis ensures that links to PostHog point to the correct host.",
           "type": "string",
           "name": "ui_host"
@@ -3159,8 +3176,8 @@
           "name": "disable_external_dependency_loading"
         },
         {
-          "description": "Determines whether PostHog should load external dependency scripts from\nsemver-qualified asset paths such as /static/1.370.0/recorder.js instead\nof the legacy /static/recorder.js?v=1.370.0 form.",
-          "type": "boolean",
+          "description": "Determines whether PostHog should load external dependency scripts from\nsemver-qualified asset paths such as /static/1.370.0/recorder.js instead\nof the legacy /static/recorder.js?v=1.370.0 form. Set to `true` to use only\nversioned paths, `false` to use only legacy paths, or `'fallback'` to try\nthe versioned path first and retry with the legacy path if it fails.",
+          "type": "boolean | \"fallback\"",
           "name": "strict_script_versioning"
         },
         {
@@ -3278,9 +3295,20 @@
           "name": "properties_string_max_length"
         },
         {
-          "description": "Configuration defaults for breaking changes. When set to a specific date,\nenables new default behaviors that were introduced on that date.\n\n- `'unset'`: Use legacy default behaviors\n- `'2025-05-24'`: Use updated default behaviors (e.g. capture_pageview defaults to 'history_change')\n- `'2025-11-30'`: Defaults from '2025-05-24' plus additional changes (e.g. strict minimum duration for replay and rageclick content ignore list defaults to active)\n- `'2026-01-30'`: Defaults from '2025-11-30' plus external_scripts_inject_target defaults to 'head' (avoids SSR hydration errors)\n- `'2026-05-30'`: Defaults from '2026-01-30' plus `persistence_save_debounce_ms` defaults to `250`, `split_storage` and `detect_google_search_app` default to `true`, and rageclick defaults also exclude stepper controls and text-selection surfaces\n- `'2026-06-25'`: Defaults from '2026-05-30' plus `session_recording.streamNetworkBody` defaults to `true` (streams network bodies to enforce the payload size limit)",
+          "description": "Configuration defaults for breaking changes. When set to a specific date,\nenables new default behaviors that were introduced on that date.\n\n- `'unset'`: Use legacy default behaviors\n- `'2025-05-24'`: Use updated default behaviors (e.g. capture_pageview defaults to 'history_change')\n- `'2025-11-30'`: Defaults from '2025-05-24' plus additional changes (e.g. strict minimum duration for replay and rageclick content ignore list defaults to active)\n- `'2026-01-30'`: Defaults from '2025-11-30' plus external_scripts_inject_target defaults to 'head' (avoids SSR hydration errors)\n- `'2026-05-30'`: Defaults from '2026-01-30' plus `persistence_save_debounce_ms` defaults to `250`, `split_storage` and `detect_google_search_app` default to `true`, and rageclick defaults also exclude stepper controls and text-selection surfaces\n- `'2026-06-25'`: Defaults from '2026-05-30' plus `session_recording.streamNetworkBody` defaults to `true` (streams network bodies to enforce the payload size limit)\n- `'2026-08-29'`: Defaults from '2026-06-25' plus `cookieWinsOnConflict` defaults to `true` (the shared cross-subdomain cookie wins over stale per-origin localStorage)",
           "type": "ConfigDefaults",
           "name": "defaults"
+        },
+        {
+          "description": "In `'localStorage+cookie'` persistence mode, prefer shared cookie values over\nper-origin localStorage when both stores carry the same key. The SDK also checks\nfor cookie changes before captures and persistence writes so already-open sibling\nsubdomains adopt identity changes made by `identify()` or `reset()`.\n\nWhen `defaults` is `'2026-08-29'` or later, this defaults to `true`.",
+          "type": "boolean",
+          "name": "cookieWinsOnConflict"
+        },
+        {
+          "description": "Deprecated: Use `cookieWinsOnConflict` instead.",
+          "type": "boolean",
+          "name": "__preview_cookie_wins_on_conflict",
+          "releaseTag": "deprecated"
         },
         {
           "description": "Determines the session recording options.\n\nFor more session recording settings, see the `enable_recording_console_log` and `capture_performance` configuration option.\nWhen `defaults` is `'2025-11-30'` or later, `strictMinimumDuration` defaults to `true`.",
@@ -3693,7 +3721,7 @@
         },
         {
           "description": "Reset the user's identity and start a new session.",
-          "type": "(reset_device_id?: boolean) => void",
+          "type": "(options?: boolean | ResetOptions) => void",
           "name": "reset"
         },
         {

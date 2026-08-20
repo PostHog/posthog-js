@@ -1,5 +1,32 @@
 # posthog-ai
 
+## 8.8.0
+
+### Minor Changes
+
+- [#4289](https://github.com/PostHog/posthog-js/pull/4289) [`c9086de`](https://github.com/PostHog/posthog-js/commit/c9086de42e1c7f102b6cca318c875bdf030d630f) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Public beta `captureAi()` / `captureAiImmediate()`: AI events on a dedicated isolated endpoint with the event UUID returned. New `enableFullAiCapture` option replaces the internal `_useAiLane` / `_enableMultimodalCapture`; wrappers route through the AI endpoint and skip redaction/truncation when set (privacy mode still wins).
+  (2026-08-13)
+
+### Patch Changes
+
+- Updated dependencies [[`c9086de`](https://github.com/PostHog/posthog-js/commit/c9086de42e1c7f102b6cca318c875bdf030d630f)]:
+  - @posthog/core@1.48.0
+  - posthog-node@5.49.0
+
+## 8.7.1
+
+### Patch Changes
+
+- [#4473](https://github.com/PostHog/posthog-js/pull/4473) [`9b5922f`](https://github.com/PostHog/posthog-js/commit/9b5922ffcf9f01ae6a0b834ff1cafc2f0ac521a4) Thanks [@fivestarspicy](https://github.com/fivestarspicy)! - fix(gemini): declare Gemini's cache accounting model on generations with cache reads, so ingestion prices cached tokens from `$ai_cache_reporting_exclusive` instead of inferring it from the token counts
+  (2026-08-07)
+
+## 8.7.0
+
+### Minor Changes
+
+- [#4319](https://github.com/PostHog/posthog-js/pull/4319) [`4d379bb`](https://github.com/PostHog/posthog-js/commit/4d379bb327ed76cca9c9c9734f72f585c15fb057) Thanks [@kdawgwilk](https://github.com/kdawgwilk)! - Support AI SDK v7 provider peers for OpenTelemetry integrations and reject v7 models passed to the legacy `withTracing` wrapper.
+  (2026-08-07)
+
 ## 8.6.8
 
 ### Patch Changes

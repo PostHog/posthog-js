@@ -98,6 +98,15 @@ describe('useFeatureFlagResult', () => {
     expect(result.current).toEqual(updated)
   })
 
+  it('does not reread the feature flag result on an unrelated rerender', () => {
+    const { rerender } = renderHook(() => useFeatureFlagResult('test-flag'), { wrapper })
+    ;(mockPostHog.getFeatureFlagResult as jest.Mock).mockClear()
+
+    rerender()
+
+    expect(mockPostHog.getFeatureFlagResult).not.toHaveBeenCalled()
+  })
+
   it('should unsubscribe on cleanup', () => {
     const unsubscribe = jest.fn()
     ;(mockPostHog.onFeatureFlags as jest.Mock).mockReturnValue(unsubscribe)

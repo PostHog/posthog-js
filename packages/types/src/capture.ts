@@ -103,7 +103,7 @@ export interface CaptureOptions {
     transport?: 'XHR' | 'fetch' | 'sendBeacon'
 
     /**
-     * If set, overrides the current timestamp
+     * If set, overrides the current timestamp. UTC is preferred; non-UTC input is converted to UTC.
      */
     timestamp?: Date
 

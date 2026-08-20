@@ -316,6 +316,64 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
   })
 
+  test('preserves output inline data when the client enables multimodal capture', async () => {
+    const base64Data = 'A'.repeat(2000)
+    ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue({
+      candidates: [
+        {
+          content: {
+            parts: [{ inlineData: { mimeType: 'image/png', data: base64Data } }],
+          },
+          finishReason: 'STOP',
+        },
+      ],
+      usageMetadata: { promptTokenCount: 15, candidatesTokenCount: 8, totalTokenCount: 23 },
+    })
+    ;(mockPostHogClient as PostHog & { enableFullAiCapture?: boolean }).enableFullAiCapture = true
+
+    await client.models.generateContent({
+      model: 'gemini-2.0-flash-001',
+      contents: 'Describe this image',
+      posthogDistinctId: 'test-id',
+    })
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { properties } = captureArgs[0]
+
+    const imageBlock = properties['$ai_output_choices'][0].content[0]
+    expect(imageBlock.inline_data.data).toBe(base64Data)
+  })
+
+  test('redacts output inline data when the client does not enable multimodal capture', async () => {
+    const base64Data = 'A'.repeat(2000)
+    ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue({
+      candidates: [
+        {
+          content: {
+            parts: [{ inlineData: { mimeType: 'image/png', data: base64Data } }],
+          },
+          finishReason: 'STOP',
+        },
+      ],
+      usageMetadata: { promptTokenCount: 15, candidatesTokenCount: 8, totalTokenCount: 23 },
+    })
+
+    await client.models.generateContent({
+      model: 'gemini-2.0-flash-001',
+      contents: 'Describe this image',
+      posthogDistinctId: 'test-id',
+    })
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { properties } = captureArgs[0]
+
+    const imageBlock = properties['$ai_output_choices'][0].content[0]
+    expect(imageBlock.inline_data.data).not.toBe(base64Data)
+    expect(imageBlock.inline_data.data).toContain('redacted')
+  })
+
   test('error handling', async () => {
     const error = new Error('API Error')
     ;(error as any).status = 400
@@ -673,6 +731,96 @@ describe('PostHogGemini - Jest test suite', () => {
       { role: 'system', content: 'You are an AI expert.' },
       { role: 'user', content: 'Tell me about AI' },
     ])
+  })
+
+  describe('Cache reporting', () => {
+    test('declares inclusive cache reporting when cached tokens are present', async () => {
+      mockGeminiResponse = {
+        text: 'Cached answer',
+        candidates: [{ content: { parts: [{ text: 'Cached answer' }] }, finishReason: 'STOP' }],
+        usageMetadata: {
+          promptTokenCount: 23000,
+          candidatesTokenCount: 8,
+          cachedContentTokenCount: 25000,
+        },
+      }
+      ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue(mockGeminiResponse)
+
+      await client.models.generateContent({
+        model: 'gemini-2.0-flash-001',
+        contents: 'Test',
+        posthogDistinctId: 'test-id',
+      })
+
+      const { properties } = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
+      expect(properties['$ai_cache_read_input_tokens']).toBe(25000)
+      expect(properties['$ai_cache_reporting_exclusive']).toBe(false)
+    })
+
+    test('drops the cache reporting flag when the caller overrides token counts', async () => {
+      mockGeminiResponse = {
+        text: 'Cached answer',
+        candidates: [{ content: { parts: [{ text: 'Cached answer' }] }, finishReason: 'STOP' }],
+        usageMetadata: {
+          promptTokenCount: 23000,
+          candidatesTokenCount: 8,
+          cachedContentTokenCount: 25000,
+        },
+      }
+      ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue(mockGeminiResponse)
+
+      await client.models.generateContent({
+        model: 'gemini-2.0-flash-001',
+        contents: 'Test',
+        posthogDistinctId: 'test-id',
+        posthogProperties: { $ai_input_tokens: 400, $ai_cache_read_input_tokens: 25000 },
+      })
+
+      const { properties } = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
+      expect(properties['$ai_tokens_source']).toBe('passthrough')
+      expect(properties['$ai_input_tokens']).toBe(400)
+      expect(properties).not.toHaveProperty('$ai_cache_reporting_exclusive')
+    })
+
+    test('keeps an explicit cache reporting flag from the caller', async () => {
+      mockGeminiResponse = {
+        text: 'Cached answer',
+        candidates: [{ content: { parts: [{ text: 'Cached answer' }] }, finishReason: 'STOP' }],
+        usageMetadata: {
+          promptTokenCount: 23000,
+          candidatesTokenCount: 8,
+          cachedContentTokenCount: 25000,
+        },
+      }
+      ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue(mockGeminiResponse)
+
+      await client.models.generateContent({
+        model: 'gemini-2.0-flash-001',
+        contents: 'Test',
+        posthogDistinctId: 'test-id',
+        posthogProperties: {
+          $ai_input_tokens: 400,
+          $ai_cache_read_input_tokens: 25000,
+          $ai_cache_reporting_exclusive: true,
+        },
+      })
+
+      const { properties } = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
+      expect(properties['$ai_cache_reporting_exclusive']).toBe(true)
+    })
+
+    test('omits the cache reporting flag when no tokens were cached', async () => {
+      ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue(mockGeminiResponse)
+
+      await client.models.generateContent({
+        model: 'gemini-2.0-flash-001',
+        contents: 'Test',
+        posthogDistinctId: 'test-id',
+      })
+
+      const { properties } = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0]
+      expect(properties).not.toHaveProperty('$ai_cache_reporting_exclusive')
+    })
   })
 
   describe('Web Search Tracking', () => {

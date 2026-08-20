@@ -454,3 +454,37 @@ describe('captureAiGeneration', () => {
     expect(lastCaptureProperties(client).$ai_tokens_source).toBe('passthrough')
   })
 })
+
+describe('AI lane routing', () => {
+  const baseOptions = { provider: 'openai', model: 'gpt-4', input: 'hi', output: 'hello' }
+
+  const makeClient = (overrides: Record<string, unknown> = {}): any => ({
+    capture: jest.fn(),
+    captureImmediate: jest.fn().mockResolvedValue(undefined),
+    captureAi: jest.fn(),
+    captureAiImmediate: jest.fn().mockResolvedValue(undefined),
+    ...overrides,
+  })
+
+  it('routes through captureAi when the client opted into the lane', async () => {
+    const client = makeClient({ enableFullAiCapture: true })
+    await captureAiGeneration(client, { ...baseOptions, distinctId: 'u' })
+    expect(client.captureAi).toHaveBeenCalledTimes(1)
+    expect(client.capture).not.toHaveBeenCalled()
+    expect(client.captureAi.mock.calls[0][0].event).toBe('$ai_generation')
+  })
+
+  it('uses capture() for clients that did not opt in', async () => {
+    const client = makeClient()
+    await captureAiGeneration(client, { ...baseOptions, distinctId: 'u' })
+    expect(client.capture).toHaveBeenCalledTimes(1)
+    expect(client.captureAi).not.toHaveBeenCalled()
+  })
+
+  it('routes captureImmediate mode through captureAiImmediate when opted in', async () => {
+    const client = makeClient({ enableFullAiCapture: true })
+    await captureAiGeneration(client, { ...baseOptions, distinctId: 'u', captureImmediate: true })
+    expect(client.captureAiImmediate).toHaveBeenCalledTimes(1)
+    expect(client.captureImmediate).not.toHaveBeenCalled()
+  })
+})

@@ -66,6 +66,30 @@ describe('PostHog final decoded request envelopes', () => {
         jest.useRealTimers()
     })
 
+    it('serializes timestamp overrides as UTC without rewriting caller properties', async () => {
+        const posthog = await createPosthogInstance('utc-override-token', {
+            advanced_disable_feature_flags: true,
+            autocapture: false,
+            capture_pageview: false,
+            capture_pageleave: false,
+            disable_compression: true,
+            persistence: 'memory',
+            request_batching: false,
+            before_send: (event) => event,
+        })
+        mockedFetch.mockClear()
+
+        posthog.capture(
+            'timezone override',
+            { caller_timestamp: '2023-11-15T03:43:20.000+05:30' },
+            { timestamp: new Date('2023-11-15T03:43:20.000+05:30') }
+        )
+
+        const event = parsedFetchBodyForPath('/e/').batch[0]
+        expect(event.timestamp).toBe('2023-11-14T22:13:20.000Z')
+        expect(event.properties.caller_timestamp).toBe('2023-11-15T03:43:20.000+05:30')
+    })
+
     it('serializes complete enriched /e/ and configured /s/ JSON bodies', async () => {
         const posthog = await createPosthogInstance('wire-snapshot-token', {
             advanced_disable_feature_flags: true,

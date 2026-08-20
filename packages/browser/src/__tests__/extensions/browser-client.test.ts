@@ -33,7 +33,13 @@ function createMockPostHog(
         props,
         get_property: jest.fn((prop: string) => props[prop]),
         set_property: jest.fn((prop: string, value: Property) => (props[prop] = value)),
-        unregister: jest.fn((prop: string) => delete props[prop]),
+        register: jest.fn((values: Properties) => Object.assign(props, values)),
+        unregister: jest.fn((keyOrKeys: string | readonly string[]) => {
+            for (const key of typeof keyOrKeys === 'string' ? [keyOrKeys] : keyOrKeys) {
+                delete props[key]
+            }
+        }),
+        get_initial_props: jest.fn(() => ({ initial: 'person-property' })),
     } as unknown as PostHogPersistence
 
     const instance = {
@@ -87,6 +93,11 @@ describe('BrowserClientAdapter', () => {
         expect(secondClient).toBe(client)
         expect(client?.distinctId).toBe('distinct-id')
         expect(client?.anonymousId).toBe('anonymous-id')
+        expect(client?.deviceId).toBe('anonymous-id')
+        expect(client?.library).toEqual(
+            expect.objectContaining({ name: expect.any(String), version: expect.any(String) })
+        )
+        expect(client?.initialPersonProperties).toEqual({ initial: 'person-property' })
         expect(client?.groups).toEqual({ organization: 'org-id' })
         expect(client?.session).toEqual({
             sessionId: 'session-id',
@@ -123,6 +134,7 @@ describe('BrowserClientAdapter', () => {
         host.add(testExtension('test', (value) => (client = value)))
 
         expect(client?.anonymousId).toBe('distinct-id')
+        expect(client?.deviceId).toBeUndefined()
         expect(client?.session).toEqual({ sessionId: '', windowId: '', sessionStartTimestamp: 0 })
         await host.dispose()
     })
@@ -134,24 +146,36 @@ describe('BrowserClientAdapter', () => {
         host.add(testExtension('test', (value) => (client = value)))
 
         const key = '$extension_state'
+        expect(client?.kv.initialize()).toBeUndefined()
         instance.persistence!.props[key] = { prepopulated: true }
         expect(client?.kv.get(key)).toEqual({ prepopulated: true })
 
         expect(client?.kv.set(key, { enabled: true })).toBeUndefined()
-        expect(instance.persistence?.set_property).toHaveBeenCalledWith(key, { enabled: true })
+        expect(instance.persistence?.register).toHaveBeenCalledWith({ [key]: { enabled: true } })
         expect(instance.persistence?.props[key]).toEqual({ enabled: true })
 
         client?.kv.set(key, null)
         client?.kv.set(key, undefined)
-        expect(instance.persistence?.set_property).toHaveBeenNthCalledWith(2, key, null)
-        expect(instance.persistence?.set_property).toHaveBeenNthCalledWith(3, key, undefined)
+        expect(instance.persistence?.register).toHaveBeenNthCalledWith(2, { [key]: null })
+        expect(instance.persistence?.register).toHaveBeenNthCalledWith(3, { [key]: undefined })
         expect(instance.persistence?.unregister).not.toHaveBeenCalled()
 
-        instance.persistence!.props[key] = { externallyUpdated: true }
-        expect(await client?.kv.get(key)).toEqual({ externallyUpdated: true })
+        client?.kv.set({ first: true, second: 'value' })
+        expect(instance.persistence?.register).toHaveBeenCalledTimes(4)
+        expect(instance.persistence?.register).toHaveBeenLastCalledWith({ first: true, second: 'value' })
+        expect(
+            client?.kv.get<{ first: boolean; second: string; missing: unknown }>(['first', 'missing', 'second'])
+        ).toEqual({ first: true, second: 'value' })
 
-        await client?.kv.remove(key)
-        expect(instance.persistence?.unregister).toHaveBeenCalledWith(key)
+        client?.kv.remove(['first', 'second'])
+        expect(instance.persistence?.unregister).toHaveBeenCalledWith(['first', 'second'])
+        expect(client?.kv.get<{ first: boolean; second: string }>(['first', 'second'])).toEqual({})
+
+        instance.persistence!.props[key] = { externallyUpdated: true }
+        expect(client?.kv.get(key)).toEqual({ externallyUpdated: true })
+
+        client?.kv.remove(key)
+        expect(instance.persistence?.unregister).toHaveBeenLastCalledWith(key)
         expect(instance.persistence?.props[key]).toBeUndefined()
         await host.dispose()
     })
@@ -319,6 +343,8 @@ describe('BrowserClientAdapter', () => {
             headers: { 'X-Extension-Header': 'value' },
             transport: 'XHR',
             timeoutMs: 321,
+            compression: 'base64',
+            sentAt: 'body',
         })
 
         expect(response).toEqual({ statusCode: 201, json: { created: true }, text: '{"created":true}' })
@@ -331,6 +357,8 @@ describe('BrowserClientAdapter', () => {
                 headers: { 'X-Extension-Header': 'value' },
                 transport: 'XHR',
                 timeout: 321,
+                compression: 'base64',
+                timestampMode: 'body',
                 fireCallbackOnDrop: true,
                 callback: expect.any(Function),
             })
@@ -649,9 +677,10 @@ describe('PostHog extension dynamic properties', () => {
         const beforeSend = jest.fn((event) => event)
         const posthog = await createPosthogInstance(undefined, { before_send: beforeSend })
         const error = jest.spyOn(logger, 'error').mockImplementation()
-        const calculateEventProperties = jest.spyOn(posthog, 'calculateEventProperties')
+        posthog.register({ producerWinsPersistence: 'persistent' })
         const removeDynamic = posthog._registerExtensionEventProperties(() => ({
             dynamic: 'value',
+            producerWinsPersistence: 'dynamic',
             overridden: 'dynamic',
             overriddenWithUndefined: 'dynamic',
         }))
@@ -663,18 +692,16 @@ describe('PostHog extension dynamic properties', () => {
         posthog._registerExtensionEventProperties(duplicateProducer)
 
         posthog.capture('with-dynamic', { overridden: 'explicit', overriddenWithUndefined: undefined })
-        expect(calculateEventProperties.mock.calls[0][1]).toEqual(
-            expect.objectContaining({
-                dynamic: 'value',
-                overridden: 'explicit',
-                overriddenWithUndefined: undefined,
-            })
-        )
         expect(beforeSend).toHaveBeenLastCalledWith(
             expect.objectContaining({
-                properties: expect.objectContaining({ dynamic: 'value', overridden: 'explicit' }),
+                properties: expect.objectContaining({
+                    dynamic: 'value',
+                    producerWinsPersistence: 'dynamic',
+                    overridden: 'explicit',
+                }),
             })
         )
+        expect(beforeSend.mock.calls[0][0]?.properties).not.toHaveProperty('overriddenWithUndefined')
 
         expect(duplicateProducer).toHaveBeenCalledTimes(2)
         removeFirstDuplicate()

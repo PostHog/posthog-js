@@ -1,181 +1,81 @@
+import { MutableFeatureFlagsConfigSource } from '../feature-flags-config'
+import { defaultConfig } from '../posthog-core'
 import { PostHogFeatureFlags } from '../posthog-featureflags'
-import { PostHog } from '../posthog-core'
-import { PostHogConfig } from '../types'
-import { assignableWindow } from '../utils/globals'
+import { createPosthogInstance } from './helpers/posthog-instance'
 
-describe('Evaluation Tags/Contexts', () => {
-    let posthog: PostHog
-    let featureFlags: PostHogFeatureFlags
-    let mockSendRequest: jest.Mock
-
-    beforeEach(() => {
-        // Create a mock PostHog instance
-        posthog = {
-            config: {} as PostHogConfig,
-            persistence: {
-                get_distinct_id: jest.fn().mockReturnValue('test-distinct-id'),
-                get_initial_props: jest.fn().mockReturnValue({}),
-            },
-            get_property: jest.fn().mockReturnValue({}),
-            get_distinct_id: jest.fn().mockReturnValue('test-distinct-id'),
-            getGroups: jest.fn().mockReturnValue({}),
-            requestRouter: {
-                endpointFor: jest.fn().mockReturnValue('/flags/?v=2'),
-            },
-            _send_request: jest.fn(),
-            _shouldDisableFlags: jest.fn().mockReturnValue(false),
-        } as any
-
-        mockSendRequest = posthog._send_request as jest.Mock
-
-        featureFlags = new PostHogFeatureFlags(posthog)
+describe('feature flag evaluation contexts', () => {
+    afterEach(() => {
+        jest.restoreAllMocks()
+        delete (window as Window & { POSTHOG_DEBUG?: boolean }).POSTHOG_DEBUG
     })
 
-    describe('_getValidEvaluationEnvironments', () => {
-        it('should return empty array when no contexts configured', () => {
-            posthog.config.evaluation_contexts = undefined
-            const result = (featureFlags as any)._getValidEvaluationEnvironments()
-            expect(result).toEqual([])
-        })
+    it('includes valid evaluation contexts in Client flags requests', async () => {
+        const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
+        const client = posthog._getBrowserClientAdapter()
+        const sendRequest = jest.spyOn(client, 'sendRequest').mockResolvedValue({ statusCode: 200, json: {} })
+        const config = defaultConfig()
+        config.evaluation_contexts = ['production', '', 'experiment-A']
+        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(config))
+        featureFlags.setup(client)
 
-        it('should return empty array when contexts is empty', () => {
-            posthog.config.evaluation_contexts = []
-            const result = (featureFlags as any)._getValidEvaluationEnvironments()
-            expect(result).toEqual([])
-        })
+        featureFlags._callFlagsEndpoint()
 
-        it('should filter out invalid contexts', () => {
-            posthog.config.evaluation_contexts = [
-                'production',
-                '',
-                'staging',
-                null as any,
-                'development',
-                undefined as any,
-                '   ', // whitespace only
-            ] as readonly string[]
-
-            const result = (featureFlags as any)._getValidEvaluationEnvironments()
-            expect(result).toEqual(['production', 'staging', 'development'])
-        })
-
-        it('should handle readonly array of valid contexts', () => {
-            const contexts: readonly string[] = ['production', 'staging', 'development']
-            posthog.config.evaluation_contexts = contexts
-
-            const result = (featureFlags as any)._getValidEvaluationEnvironments()
-            expect(result).toEqual(['production', 'staging', 'development'])
-        })
-
-        it('should support deprecated evaluation_environments field', () => {
-            assignableWindow.POSTHOG_DEBUG = true
-            const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
-            posthog.config.evaluation_environments = ['production', 'staging']
-
-            // Call multiple times
-            ;(featureFlags as any)._getValidEvaluationEnvironments()
-            ;(featureFlags as any)._getValidEvaluationEnvironments()
-
-            const result = (featureFlags as any)._getValidEvaluationEnvironments()
-            expect(result).toEqual(['production', 'staging'])
-
-            // Warning should be logged only once
-            expect(warnSpy).toHaveBeenCalledTimes(1)
-            expect(warnSpy).toHaveBeenCalledWith(
-                '[PostHog.js] [FeatureFlags]',
-                'evaluation_environments is deprecated. Use evaluation_contexts instead. evaluation_environments will be removed in a future version.'
-            )
-
-            warnSpy.mockRestore()
-            assignableWindow.POSTHOG_DEBUG = false
-        })
-
-        it('should prioritize evaluation_contexts over evaluation_environments', () => {
-            posthog.config.evaluation_contexts = ['new-context']
-            posthog.config.evaluation_environments = ['old-environment']
-            const result = (featureFlags as any)._getValidEvaluationEnvironments()
-            expect(result).toEqual(['new-context'])
-        })
+        expect(sendRequest).toHaveBeenCalledWith(
+            '/flags/?v=2',
+            expect.objectContaining({
+                target: 'flags',
+                body: expect.objectContaining({ evaluation_contexts: ['production', 'experiment-A'] }),
+            })
+        )
+        featureFlags.dispose()
     })
 
-    describe('_shouldIncludeEvaluationEnvironments', () => {
-        it('should return false when no valid contexts', () => {
-            posthog.config.evaluation_contexts = ['', '   ']
-            const result = (featureFlags as any)._shouldIncludeEvaluationEnvironments()
-            expect(result).toBe(false)
-        })
+    it('omits evaluation contexts when none are configured', async () => {
+        const posthog = await createPosthogInstance(undefined, { advanced_disable_feature_flags: true })
+        const client = posthog._getBrowserClientAdapter()
+        const sendRequest = jest.spyOn(client, 'sendRequest').mockResolvedValue({ statusCode: 200, json: {} })
+        const featureFlags = new PostHogFeatureFlags(new MutableFeatureFlagsConfigSource(defaultConfig()))
+        featureFlags.setup(client)
 
-        it('should return true when valid contexts exist', () => {
-            posthog.config.evaluation_contexts = ['production']
-            const result = (featureFlags as any)._shouldIncludeEvaluationEnvironments()
-            expect(result).toBe(true)
-        })
+        featureFlags._callFlagsEndpoint()
+
+        expect(sendRequest).toHaveBeenCalledWith(
+            '/flags/?v=2',
+            expect.objectContaining({ body: expect.not.objectContaining({ evaluation_contexts: expect.anything() }) })
+        )
+        featureFlags.dispose()
     })
 
-    describe('_callFlagsEndpoint', () => {
-        it('should include evaluation_contexts in request when configured', () => {
-            posthog.config.evaluation_contexts = ['production', 'experiment-A']
-            ;(featureFlags as any)._callFlagsEndpoint()
+    it('maps deprecated evaluation environments and warns once', () => {
+        const config = defaultConfig()
+        config.evaluation_environments = ['legacy']
+        ;(window as Window & { POSTHOG_DEBUG?: boolean }).POSTHOG_DEBUG = true
+        const warn = jest.spyOn(window.console, 'warn').mockImplementation()
+        const source = new MutableFeatureFlagsConfigSource(config)
 
-            expect(mockSendRequest).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    data: expect.objectContaining({
-                        evaluation_contexts: ['production', 'experiment-A'],
-                    }),
-                })
-            )
-        })
+        source.update(config, false)
 
-        it('should not include evaluation_contexts when not configured', () => {
-            posthog.config.evaluation_contexts = undefined
-            ;(featureFlags as any)._callFlagsEndpoint()
+        expect(source.get().evaluationContexts).toEqual(['legacy'])
+        expect(warn).toHaveBeenCalledTimes(1)
+        expect(warn).toHaveBeenCalledWith(
+            '[PostHog.js] [FeatureFlags]',
+            expect.stringContaining('evaluation_environments is deprecated')
+        )
+    })
 
-            expect(mockSendRequest).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    data: expect.not.objectContaining({
-                        evaluation_contexts: expect.anything(),
-                    }),
-                })
-            )
-        })
+    it('scopes invalid flag key configuration errors to feature flags', () => {
+        ;(window as Window & { POSTHOG_DEBUG?: boolean }).POSTHOG_DEBUG = true
+        const config = defaultConfig()
+        config.flag_keys = 'invalid' as unknown as string[]
+        const error = jest.spyOn(window.console, 'error').mockImplementation()
 
-        it('should not include evaluation_contexts when empty array', () => {
-            posthog.config.evaluation_contexts = []
-            ;(featureFlags as any)._callFlagsEndpoint()
+        new MutableFeatureFlagsConfigSource(config)
 
-            expect(mockSendRequest).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    data: expect.not.objectContaining({
-                        evaluation_contexts: expect.anything(),
-                    }),
-                })
-            )
-        })
-
-        it('should filter out invalid contexts before sending', () => {
-            posthog.config.evaluation_contexts = ['production', '', null as any, 'staging']
-            ;(featureFlags as any)._callFlagsEndpoint()
-
-            expect(mockSendRequest).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    data: expect.objectContaining({
-                        evaluation_contexts: ['production', 'staging'],
-                    }),
-                })
-            )
-        })
-
-        it('should support deprecated evaluation_environments field', () => {
-            posthog.config.evaluation_environments = ['production', 'experiment-A']
-            ;(featureFlags as any)._callFlagsEndpoint()
-
-            expect(mockSendRequest).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    data: expect.objectContaining({
-                        evaluation_contexts: ['production', 'experiment-A'],
-                    }),
-                })
-            )
-        })
+        expect(error).toHaveBeenCalledWith(
+            '[PostHog.js] [FeatureFlags]',
+            'Invalid flag_keys found:',
+            'invalid',
+            'Expected array of non-empty strings'
+        )
     })
 })

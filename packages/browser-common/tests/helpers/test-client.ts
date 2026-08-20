@@ -1,4 +1,4 @@
-import type { Logger } from '@posthog/core'
+import { isUndefined, type Logger } from '@posthog/core'
 import type { Properties } from '@posthog/types'
 
 import type {
@@ -39,16 +39,44 @@ export interface TestClientOptions {
 export class InMemoryKeyValueStore implements KeyValueStore {
     private _values = new Map<string, unknown>()
 
-    async get<T = unknown>(key: string): Promise<T | undefined> {
-        return this._values.get(key) as T | undefined
+    initialize(): void {}
+
+    get<T = unknown>(key: string): T | undefined
+    get<T extends object>(keys: readonly (keyof T & string)[]): Partial<T>
+    get(keyOrKeys: string | readonly string[]): unknown {
+        if (typeof keyOrKeys === 'string') {
+            return this._values.get(keyOrKeys)
+        }
+        const values: Record<string, unknown> = {}
+        for (const key of keyOrKeys) {
+            const value = this._values.get(key)
+            if (!isUndefined(value)) {
+                values[key] = value
+            }
+        }
+        return values
     }
 
-    async set(key: string, value: unknown): Promise<void> {
-        this._values.set(key, value)
+    set(key: string, value: unknown): void
+    set(values: Record<string, unknown>): void
+    set(keyOrValues: string | Record<string, unknown>, value?: unknown): void {
+        if (typeof keyOrValues === 'string') {
+            this._values.set(keyOrValues, value)
+        } else {
+            for (const [key, entry] of Object.entries(keyOrValues)) {
+                this._values.set(key, entry)
+            }
+        }
     }
 
-    async remove(key: string): Promise<void> {
-        this._values.delete(key)
+    remove(keyOrKeys: string | readonly string[]): void {
+        if (typeof keyOrKeys === 'string') {
+            this._values.delete(keyOrKeys)
+        } else {
+            for (const key of keyOrKeys) {
+                this._values.delete(key)
+            }
+        }
     }
 }
 
@@ -76,6 +104,9 @@ export class TestClient implements Client {
 
     distinctId: string
     anonymousId: string
+    deviceId: string | undefined
+    library = { name: 'posthog-test', version: '0.0.0' }
+    initialPersonProperties: Record<string, unknown> = {}
     groups: Record<string, string>
     session: SessionContext
 
@@ -98,6 +129,7 @@ export class TestClient implements Client {
         this.projectToken = options.projectToken ?? 'test-project-token'
         this.distinctId = options.distinctId ?? 'test-distinct-id'
         this.anonymousId = options.anonymousId ?? 'test-anonymous-id'
+        this.deviceId = this.anonymousId
         this.groups = options.groups ?? {}
         this.session = options.session ?? {
             sessionId: 'test-session-id',

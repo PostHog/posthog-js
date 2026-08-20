@@ -1,6 +1,7 @@
 import type { Logger } from '@posthog/core'
 import type { Properties } from '@posthog/types'
 
+import type { Compression } from './types/compression'
 import type { Disposable } from './disposable'
 import type { KeyValueStore } from './persistence'
 import type { Listener } from './pubsub'
@@ -33,7 +34,7 @@ export interface CapturedEventInfo {
 
 /** Per-call capture overrides, mirroring the client's public capture options. */
 export interface CaptureOptions {
-    /** Override the event timestamp sent to PostHog. */
+    /** Override the event timestamp sent to PostHog. UTC is preferred; non-UTC input is converted to UTC. */
     timestamp?: Date
     /** Override the event UUID used for de-duplication. */
     uuid?: string
@@ -77,6 +78,10 @@ export interface SendRequestInit {
     transport?: RequestTransport
     /** Abort the request if it does not complete within this many milliseconds. */
     timeoutMs?: number
+    /** Compression used by the browser transport. */
+    compression?: Compression | 'best-available'
+    /** Where POST requests add `sent_at`. For GET, `query` adds the cache-busting `_` parameter and `body` has no effect. */
+    sentAt?: 'body' | 'query'
 }
 
 /**
@@ -89,6 +94,12 @@ export interface Client {
     readonly distinctId: string
     /** The anonymous device id carried across identify calls. */
     readonly anonymousId: string
+    /** The actual persisted device id, absent in cookieless contexts. */
+    readonly deviceId: string | undefined
+    /** Live host SDK metadata. */
+    readonly library: { readonly name: string; readonly version: string }
+    /** Initial person properties used for feature evaluation. */
+    readonly initialPersonProperties: DeepReadonly<Record<string, unknown>>
     /** Active group memberships attached to events as `$groups`. */
     readonly groups: DeepReadonly<Record<string, string>>
     /** The current session, created on first read if needed. */
@@ -112,7 +123,7 @@ export interface Client {
     /** Sends a request through the host SDK's transport. */
     sendRequest(path: string, init?: SendRequestInit): Promise<ApiResponse>
 
-    /** Awaitable key-value storage backed by the host client's persistence. */
+    /** Initializable, synchronously buffered key-value storage backed by the host client's persistence. */
     readonly kv: KeyValueStore
 
     /** Logger that follows the host client's debug/noise policy. */
