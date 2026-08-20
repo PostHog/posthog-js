@@ -64,7 +64,10 @@ Known-broken cells are pinned in `dual-era/expected-failures.json` and
 
 - a new failure prints `regressed: …` and exits non-zero;
 - a fixed one prints `now passing — remove from expected-failures.json: …` and *also* exits
-  non-zero, so improvements are ratcheted in deliberately.
+  non-zero, so improvements are ratcheted in deliberately;
+- a row that reports nothing — server never booted, client died mid-run — prints
+  `no verdict: …` with the crash dump and exits non-zero. Silence is never a pass: an absent
+  assertion renders as `·` (not applicable), so a crashed client would otherwise read green.
 
 A floor ("≥35 of 37") would let a regression hide behind a coincidental improvement. Every cell
 that moves needs a reason, and the diff of the snapshot file is where the reason lives.

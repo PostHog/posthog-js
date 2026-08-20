@@ -4,12 +4,12 @@
 //   node matrix.mjs --major v1     the 4 SDK-v1 rows
 //   node matrix.mjs --major v2     the 8 SDK-v2 rows
 //
-// This is the CI gate, not just a report: it exits non-zero when a server fails
-// to boot or when the set of red cells differs from expected-failures.json in
-// EITHER direction — a regression fails, and so does an unexpected improvement
-// (remove the entry to ratchet it in). Servers bind ephemeral ports (PORT=0) and
-// announce the chosen port on stdout, so rows cannot collide or reach a dying
-// neighbour.
+// This is the CI gate, not just a report: it exits non-zero when a row produces
+// no verdict (server never booted, client died mid-run) or when the set of red
+// cells differs from expected-failures.json in EITHER direction — a regression
+// fails, and so does an unexpected improvement (remove the entry to ratchet it
+// in). Servers bind ephemeral ports (PORT=0) and announce the chosen port on
+// stdout, so rows cannot collide or reach a dying neighbour.
 import { spawn } from 'node:child_process'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { readFileSync } from 'node:fs'
@@ -117,6 +117,27 @@ async function waitUp(port) {
     return false
 }
 
+const COLUMN_NAMES = COLUMNS.map(([n]) => n)
+const lastLine = (s) => s.trim().split('\n').filter(Boolean).pop() ?? ''
+
+/** The one line of a Node crash dump that names the failure, for the summary. */
+function whyItDied(stderr) {
+    const lines = stderr.split('\n').map((l) => l.trim()).filter(Boolean)
+    // A crash dump ends with `Node.js v22.x`, so the last line is never the reason.
+    return lines.find((l) => /^[\w$.]*(?:Error|Exception)\b/.test(l)) ?? lines[0] ?? ''
+}
+
+/**
+ * Run the client for one row and resolve with { results } or { error, detail }.
+ *
+ * A client that dies before reporting must never resolve to a partial verdict:
+ * an absent assertion renders as `·` (not applicable) and is skipped by the
+ * reconciliation, so a crash would read as a green row. Anything short of a
+ * verdict for every column is an error, and an error fails the lane.
+ *
+ * A non-zero exit is NOT an error — the client exits 1 whenever an assertion is
+ * red, which is a result, not a crash.
+ */
 function runClient(port, sdk, lane, conv, headerExpect) {
     return new Promise((resolve) => {
         const child = spawn(
@@ -126,16 +147,30 @@ function runClient(port, sdk, lane, conv, headerExpect) {
                 ...['--url', `http://localhost:${port}`, '--sdk', sdk, '--lane', lane],
                 ...['--conv', conv, '--header', headerExpect, '--json'],
             ],
-            { env: process.env }
+            { env: process.env, stdio: ['ignore', 'pipe', 'pipe'] }
         )
         let out = ''
+        let err = ''
+        // Both pipes must be drained: an unread stderr can wedge the child once
+        // the pipe buffer fills, and its tail is the only clue when one crashes.
         child.stdout.on('data', (d) => (out += d))
-        child.on('close', () => {
+        child.stderr.on('data', (d) => (err += d))
+        child.on('error', (e) => resolve({ error: `client could not be spawned: ${e.message}` }))
+        child.on('close', (code) => {
+            let results
             try {
-                resolve(JSON.parse(out.trim().split('\n').pop()))
+                results = JSON.parse(lastLine(out)).results
             } catch {
-                resolve({ results: {}, error: out.slice(0, 200) })
+                const why = whyItDied(err) || lastLine(out) || 'no output'
+                resolve({ error: `client exited ${code} without a verdict — ${why}`, detail: err })
+                return
             }
+            const missing = COLUMN_NAMES.filter((n) => !(n in Object(results)))
+            if (missing.length > 0) {
+                resolve({ error: `client exited ${code} reporting nothing for: ${missing.join(', ')}`, detail: err })
+                return
+            }
+            resolve({ results })
         })
     })
 }
@@ -191,11 +226,20 @@ for (const row of ROWS) {
     const { child, port } = await boot(file, { ...env, CONVERSATION_ID: conv === 'on' ? '1' : '0' })
     if (!port || !(await waitUp(port))) {
         await stop(child)
-        rendered.push([label, null])
+        rendered.push([label, null, 'server did not start'])
         continue
     }
-    const { results } = await runClient(port, sdk, lane, conv, headerExpect)
+    const { results, error, detail } = await runClient(port, sdk, lane, conv, headerExpect)
     await stop(child)
+    if (error) {
+        rendered.push([label, null, error])
+        process.stderr.write(`  ran ${label} — ${error}\n`)
+        // The crash dump, indented: the summary line alone rarely says enough to fix
+        // it from a CI log. Capped — a client that spews should not bury the matrix.
+        const dump = (detail ?? '').trimEnd().split('\n').slice(0, 40)
+        if (dump.join('').trim()) process.stderr.write(dump.join('\n').replace(/^/gm, '      ') + '\n')
+        continue
+    }
     results.alive = await checkAlive(file, env)
     rendered.push([label, results])
     process.stderr.write(`  ran ${label}\n`)
@@ -232,9 +276,9 @@ for (const row of rendered) {
         console.log(rule)
         continue
     }
-    const [label, results] = row
+    const [label, results, reason] = row
     if (!results) {
-        console.log(label.padEnd(LABEL_W) + '  server did not start')
+        console.log(label.padEnd(LABEL_W) + `  ${reason}`)
         continue
     }
     console.log(label.padEnd(LABEL_W) + COLUMNS.map(([n, w]) => centre(cell(results[n]), w + 1)).join(''))
@@ -246,27 +290,32 @@ for (const c of children) c.kill('SIGKILL')
 
 // ── expected-failures reconciliation ────────────────────────────────────────
 const norm = (s) => s.replace(/\s+/g, ' ').trim()
-const expected = new Set(
-    JSON.parse(readFileSync(new URL('./expected-failures.json', import.meta.url), 'utf8'))
-        .filter((f) => (MAJOR === 'all' ? true : norm(f.row).startsWith(MAJOR)))
-        .map((f) => `${norm(f.row)} · ${f.col}`)
-)
+const expected = JSON.parse(readFileSync(new URL('./expected-failures.json', import.meta.url), 'utf8'))
+    .filter((f) => (MAJOR === 'all' ? true : norm(f.row).startsWith(MAJOR)))
+    .map((f) => ({ row: norm(f.row), key: `${norm(f.row)} · ${f.col}` }))
+const expectedKeys = new Set(expected.map((e) => e.key))
 const failing = new Set()
-let booted = true
+// Rows that produced no verdict at all. They are a hard failure in their own
+// right — never a row of `·` cells that the reconciliation would wave through.
+const unreported = []
+const unreportedRows = new Set()
 for (const row of rendered) {
     if (row === null) continue
-    const [label, results] = row
+    const [label, results, reason] = row
     if (!results) {
-        booted = false
+        unreported.push(`${norm(label)} — ${reason}`)
+        unreportedRows.add(norm(label))
         continue
     }
     for (const [n] of COLUMNS) if (results[n] === false) failing.add(`${norm(label)} · ${n}`)
 }
-const regressed = [...failing].filter((k) => !expected.has(k))
-const nowPassing = [...expected].filter((k) => !failing.has(k))
+const regressed = [...failing].filter((k) => !expectedKeys.has(k))
+// An unreported row proves nothing about its expected failures, so don't claim
+// they started passing — that would bury the real error under a stale-snapshot one.
+const nowPassing = expected.filter((e) => !failing.has(e.key) && !unreportedRows.has(e.row)).map((e) => e.key)
 
-if (!booted) console.error('\na server failed to boot')
+if (unreported.length > 0) console.error(`\nno verdict: ${unreported.join('  ·  ')}`)
 if (regressed.length > 0) console.error(`\nregressed: ${regressed.join('  ·  ')}`)
 if (nowPassing.length > 0)
     console.error(`\nnow passing — remove from expected-failures.json: ${nowPassing.join('  ·  ')}`)
-process.exit(booted && regressed.length === 0 && nowPassing.length === 0 ? 0 : 1)
+process.exit(unreported.length === 0 && regressed.length === 0 && nowPassing.length === 0 ? 0 : 1)

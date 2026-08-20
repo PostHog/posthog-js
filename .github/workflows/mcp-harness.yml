@@ -22,10 +22,15 @@ jobs:
     uses: ./.github/workflows/check-affected.yml
     with:
       package-name: '@posthog/mcp'
-      # The harness is inside packages/mcp, so the turbo filter covers it; only
-      # this workflow itself needs listing.
+      # The harness lives inside packages/mcp, so the turbo filter already covers
+      # it. What turbo cannot see is the gate's own machinery: list it, or a
+      # change that breaks how "affected" is computed skips this workflow and
+      # reports green.
       additional-paths: |
         .github/workflows/mcp-harness.yml
+        .github/workflows/check-affected.yml
+        .github/actions/is-affected/action.yaml
+        .github/actions/setup/action.yaml
 
   harness:
     name: ${{ matrix.lane.name }}
