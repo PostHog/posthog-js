@@ -34,6 +34,7 @@ export interface TestClientOptions {
     remoteConfig?: RemoteConfig
     logger?: Logger
     requestResponse?: ApiResponse
+    getExtension?: Client['getExtension']
 }
 
 export class InMemoryKeyValueStore implements KeyValueStore {
@@ -101,6 +102,7 @@ export class TestClient implements Client {
     readonly sentRequests: TestSentRequest[] = []
     readonly kv: KeyValueStore = new InMemoryKeyValueStore()
     readonly logger: Logger
+    readonly getExtension: Client['getExtension']
 
     distinctId: string
     anonymousId: string
@@ -139,6 +141,7 @@ export class TestClient implements Client {
         this._remoteConfigResult = options.remoteConfig ? { ok: true, config: options.remoteConfig } : undefined
         this.logger = options.logger ?? noopLogger
         this._requestResponse = options.requestResponse ?? createDefaultApiResponse()
+        this.getExtension = options.getExtension ?? (() => undefined)
     }
 
     async capture(event: string, properties?: Properties | null, options?: CaptureOptions): Promise<void> {

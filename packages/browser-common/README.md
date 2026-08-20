@@ -57,6 +57,7 @@ What an extension is given in `setup` — the adapter shared by extensions on th
 - **identity and session**: `distinctId`, `anonymousId`, `deviceId`, `groups`, `session`, `initialPersonProperties`
 - **SDK metadata**: `library`
 - **events**: `capture(...)`, `registerDynamicEventProperties(...)`, `onEvent(...)`
+- **extensions**: `getExtension(token)`
 - **server config**: `onRemoteConfig(...)`
 - **transport**: `projectToken`, `sendRequest(path, init?)`, including `compression` and `sentAt` options
 - **storage and logging**: `kv`, `logger`
@@ -66,6 +67,24 @@ Identity, session, SDK metadata, and the public project token are always-ready s
 uses the cache-busting `_` parameter instead, and GET body mode has no effect. `onRemoteConfig` immediately replays the
 latest known success or failure and then reports subsequent outcomes. Extensions that want a named log prefix can
 create a child with `client.logger.createLogger('[myExtension]')`.
+
+Extensions that expose controls to other extensions should export a typed stable-name token:
+
+```ts
+import type { Extension, ExtensionToken } from '@posthog/browser-common'
+
+export interface DiagnosticsExtension extends Extension {
+    flush(): void
+}
+
+export const DiagnosticsExtension = 'diagnostics' as ExtensionToken<DiagnosticsExtension>
+
+const diagnostics = client.getExtension(DiagnosticsExtension)
+diagnostics?.flush()
+```
+
+Tokens are strings at runtime and must match the installed extension's `Extension.name`. Lookup is per-client and optional; a
+returned extension may still be running `setup`, so consumers must not create mandatory startup cycles.
 
 Initialize KV during asynchronous setup before using its synchronous buffer:
 
@@ -89,9 +108,10 @@ store sensitive values unless their transmission is approved.
 PostHog browser SDK implementations share extension registration and teardown
 through `ExtensionRuntime`, imported from the dedicated
 `@posthog/browser-common/extension-runtime` subpath. It reserves extension names
-during setup, rolls back failed setup, and disposes extensions once in reverse
-registration order without waiting for pending setup. Concrete SDKs still own
-their `Client` adapter and SDK lifecycle hooks.
+during setup, exposes registered extensions by typed stable name through `Client`,
+rolls back failed setup, and disposes extensions once in reverse registration
+order without waiting for pending setup. Concrete SDKs still own their `Client`
+adapter and SDK lifecycle hooks.
 
 `ExtensionRuntime` is host infrastructure, not part of the extension-author
 surface exported from the package root.

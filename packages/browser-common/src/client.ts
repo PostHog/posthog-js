@@ -3,7 +3,9 @@ import type { Properties } from '@posthog/types'
 
 import type { Compression } from './types/compression'
 import type { Disposable } from './disposable'
+import type { Extension } from './extension'
 import type { KeyValueStore } from './persistence'
+import type { ExtensionToken } from './token'
 import type { Listener } from './pubsub'
 import type { RemoteConfigResult } from './types/remote-config'
 
@@ -110,6 +112,11 @@ export interface Client {
 
     /** Registers a synchronous producer of properties merged into every captured event. */
     registerDynamicEventProperties(producer: () => Record<string, unknown>): Disposable
+
+    /** Returns the extension registered under a typed stable name, or `undefined` when it is not installed. */
+    getExtension<T extends Extension>(token: ExtensionToken<T>): T | undefined
+    /** Returns the extension registered under a stable name, or `undefined` when it is not installed. */
+    getExtension<T extends Extension = Extension>(name: string): T | undefined
 
     /** Fires for every captured event through a deeply readonly view. */
     readonly onEvent: Listener<CapturedEventInfo>

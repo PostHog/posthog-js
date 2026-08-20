@@ -21,6 +21,7 @@ import {
 } from './types'
 import type { PostHog } from './posthog-core'
 import { MutableFeatureFlagsConfigSource, type FeatureFlagsConfigSource } from './feature-flags-config'
+import { FeatureFlagsExtension } from './extension-tokens'
 
 import {
     PERSISTENCE_EARLY_ACCESS_FEATURES,
@@ -249,7 +250,7 @@ export const QuotaLimitedResource = {
 export type QuotaLimitedResource = (typeof QuotaLimitedResource)[keyof typeof QuotaLimitedResource]
 
 export class PostHogFeatureFlags implements Extension {
-    readonly name = 'featureFlags'
+    readonly name = FeatureFlagsExtension
     _override_warning: boolean = false
     featureFlagEventHandlers: FeatureFlagsCallback[] = []
     $anon_distinct_id: string | undefined
