@@ -295,8 +295,14 @@ export class PostHogPersistence {
         return p
     }
 
-    load(): void {
-        if (this._disabled) {
+    /**
+     * Reload persisted properties from storage.
+     *
+     * @param allowDisabled - Read while this instance is disabled when shared consent changed in another tab
+     * and the in-memory disabled state has not yet been reconciled.
+     */
+    load(allowDisabled: boolean = false): void {
+        if (this._disabled && !allowDisabled) {
             return
         }
 

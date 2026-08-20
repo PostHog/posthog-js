@@ -438,17 +438,72 @@ describe('cookieless', () => {
             // longer in cookieless mode but still holds the sentinel. The sentinel must never leak out.
             const optOutThenFlipConsentInAnotherTab = async () => {
                 const consentName = uuidv7()
+                const persistenceName = uuidv7()
 
                 // Tab A: opted out → capturing cookieless events, distinct_id is the sentinel.
+                const { posthog: tabA, beforeSendMock } = await setup({
+                    cookieless_mode: 'on_reject',
+                    consent_persistence_name: consentName,
+                    persistence_name: persistenceName,
+                })
+                tabA.opt_out_capturing()
+                expect(tabA.get_distinct_id()).toEqual('$posthog_cookieless')
+
+                // Tab B: shared persistence and consent store, as in two tabs for the same project.
+                // Opting in resets and persists the canonical replacement identity.
+                const { posthog: tabB } = await setup({
+                    cookieless_mode: 'on_reject',
+                    consent_persistence_name: consentName,
+                    persistence_name: persistenceName,
+                })
+                tabB.opt_in_capturing()
+                const optedInDistinctId = tabB.get_distinct_id()
+                expect(optedInDistinctId).toMatch(uuidV7Pattern)
+
+                // Tab A now reads the granted consent from shared storage, so it is no longer in
+                // cookieless mode, yet it still holds the stale sentinel distinct_id in memory.
+                expect(tabA.has_opted_in_capturing()).toBe(true)
+                expect(tabA.get_distinct_id()).toEqual('$posthog_cookieless')
+
+                beforeSendMock.mockClear()
+                return { tabA, beforeSendMock, optedInDistinctId }
+            }
+
+            it('does not leak the sentinel into $identify as $anon_distinct_id', async () => {
+                const { tabA, beforeSendMock, optedInDistinctId } = await optOutThenFlipConsentInAnotherTab()
+
+                tabA.identify('real-user-123')
+
+                const identifyEvent = beforeSendMock.mock.calls.find(([e]) => e.event === '$identify')?.[0]
+                expect(identifyEvent).toBeDefined()
+                expect(identifyEvent.properties.distinct_id).toEqual('real-user-123')
+                expect(identifyEvent.properties.$anon_distinct_id).toEqual(optedInDistinctId)
+                expect(tabA.get_distinct_id()).toEqual('real-user-123')
+                expect(tabA.persistence?.isDisabled?.()).toBe(false)
+            })
+
+            it('heals the sentinel at capture time for a plain event', async () => {
+                const { tabA, beforeSendMock, optedInDistinctId } = await optOutThenFlipConsentInAnotherTab()
+
+                tabA.capture(eventName, eventProperties)
+
+                const event = beforeSendMock.mock.calls.find(([e]) => e.event === eventName)?.[0]
+                expect(event).toBeDefined()
+                expect(event.properties.distinct_id).toEqual(optedInDistinctId)
+                expect(event.properties.$device_id).toEqual(optedInDistinctId)
+                expect(event.properties.$cookieless_mode).toEqual(undefined)
+                expect(tabA.persistence?.isDisabled?.()).toBe(false)
+            })
+
+            it('generates a fallback device id when the consent store is shared but persistence is not', async () => {
+                const consentName = uuidv7()
                 const { posthog: tabA, beforeSendMock } = await setup({
                     cookieless_mode: 'on_reject',
                     consent_persistence_name: consentName,
                     persistence_name: uuidv7(),
                 })
                 tabA.opt_out_capturing()
-                expect(tabA.get_distinct_id()).toEqual('$posthog_cookieless')
 
-                // Tab B: separate persistence, shared consent store. Opting in flips shared consent.
                 const { posthog: tabB } = await setup({
                     cookieless_mode: 'on_reject',
                     consent_persistence_name: consentName,
@@ -456,40 +511,13 @@ describe('cookieless', () => {
                 })
                 tabB.opt_in_capturing()
 
-                // Tab A now reads the granted consent from shared storage, so it is no longer in
-                // cookieless mode, yet it still holds the stale sentinel distinct_id.
-                expect(tabA.has_opted_in_capturing()).toBe(true)
-                expect(tabA.get_distinct_id()).toEqual('$posthog_cookieless')
-
                 beforeSendMock.mockClear()
-                return { tabA, beforeSendMock }
-            }
-
-            it('does not leak the sentinel into $identify as $anon_distinct_id', async () => {
-                const { tabA, beforeSendMock } = await optOutThenFlipConsentInAnotherTab()
-
-                tabA.identify('real-user-123')
-
-                const identifyEvent = beforeSendMock.mock.calls.find(([e]) => e.event === '$identify')?.[0]
-                expect(identifyEvent).toBeDefined()
-                expect(identifyEvent.properties.distinct_id).toEqual('real-user-123')
-                // $anon_distinct_id must be a fresh device id, never the sentinel.
-                expect(identifyEvent.properties.$anon_distinct_id).toMatch(uuidV7Pattern)
-                expect(identifyEvent.properties.$anon_distinct_id).not.toEqual('$posthog_cookieless')
-                expect(tabA.get_distinct_id()).toEqual('real-user-123')
-            })
-
-            it('heals the sentinel at capture time for a plain event', async () => {
-                const { tabA, beforeSendMock } = await optOutThenFlipConsentInAnotherTab()
-
                 tabA.capture(eventName, eventProperties)
 
                 const event = beforeSendMock.mock.calls.find(([e]) => e.event === eventName)?.[0]
-                expect(event).toBeDefined()
                 expect(event.properties.distinct_id).toMatch(uuidV7Pattern)
                 expect(event.properties.distinct_id).not.toEqual('$posthog_cookieless')
-                expect(event.properties.$device_id).toMatch(uuidV7Pattern)
-                expect(event.properties.$cookieless_mode).toEqual(undefined)
+                expect(event.properties.$device_id).toEqual(event.properties.distinct_id)
             })
         })
 
