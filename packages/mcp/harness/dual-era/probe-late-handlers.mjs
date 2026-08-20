@@ -6,7 +6,9 @@
 // majors, and asserts instrument() stayed quiet and the late-registered
 // dispatcher was still instrumented.
 //
-//   node probe-late-handlers.mjs
+//   node probe-late-handlers.mjs                 both majors
+//   node probe-late-handlers.mjs --major v1|v2  one major (what each CI lane runs,
+//                                                so a red probe names the stack)
 import { createServer } from 'node:http'
 import { randomUUID } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -172,9 +174,18 @@ async function probeV1Late() {
     }
 }
 
-await probeV1NoCapability()
-await probeV1Late()
-await probeV2()
+const MAJOR = (() => {
+    const i = process.argv.indexOf('--major')
+    return i === -1 ? 'all' : process.argv[i + 1]
+})()
+
+if (MAJOR !== 'v2') {
+    await probeV1NoCapability()
+    await probeV1Late()
+}
+if (MAJOR !== 'v1') {
+    await probeV2()
+}
 
 const passed = results.filter((r) => r.ok).length
 console.log(`\n${passed}/${results.length} passed`)

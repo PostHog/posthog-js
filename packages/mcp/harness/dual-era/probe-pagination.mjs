@@ -181,8 +181,13 @@ async function probeV2() {
     }
 }
 
-await probeV1()
-await probeV2()
+const MAJOR = (() => {
+    const i = process.argv.indexOf('--major')
+    return i === -1 ? 'all' : process.argv[i + 1]
+})()
+
+if (MAJOR !== 'v2') await probeV1()
+if (MAJOR !== 'v1') await probeV2()
 
 const passed = results.filter((r) => r.ok).length
 console.log(`\n${passed}/${results.length} passed`)
