@@ -286,12 +286,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * Drains the event queue and, when tracing is configured, the span queue too.
-   *
-   * Both run concurrently so a serverless handler waits for one round trip
-   * rather than two. A failing span export never rejects here: spans that could
-   * not be sent stay queued for the next flush, and surfacing them would add a
-   * rejection path to a method callers already treat as safe.
+   * Concurrent so a serverless handler waits for one round trip, not two. A
+   * failed span export leaves the spans queued rather than rejecting, since
+   * callers already treat `flush()` as safe to leave unwrapped.
    */
   private _flushEventsAndSpans(): Promise<void> {
     const events = this.flushWithPendingPromises()

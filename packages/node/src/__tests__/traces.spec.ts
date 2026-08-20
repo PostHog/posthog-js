@@ -298,8 +298,6 @@ describe('PostHog traces', () => {
 
   describe('flush cycle', () => {
     it('drains queued spans', async () => {
-      // A serverless handler calls flush() rather than shutdown(), because the
-      // container is reused across invocations.
       posthog.startSpan('checkout').end()
       await posthog.flush()
 
@@ -307,8 +305,6 @@ describe('PostHog traces', () => {
     })
 
     it('resolves when the span export fails', async () => {
-      // Spans that could not be sent stay queued; flush() must not start
-      // rejecting for callers who already treat it as safe.
       mockedFetch.mockRejectedValue(new Error('network down'))
       posthog.startSpan('checkout').end()
 
