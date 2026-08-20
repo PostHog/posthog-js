@@ -660,8 +660,10 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       // Return a promise that resolves when the pending request completes. Displaced callers are
       // carried over rather than settled against the in-flight request: that request was issued
       // before their properties were set, so it cannot reflect them.
-      // Known gap: the newest options still win, so a queued fetchConfig/triggerOnRemoteConfig
-      // caller displaced by a plain reload loses config=true and never fires onRemoteConfig.
+      // Known gap: the newest options win wholesale, so a displaced caller's sendAnonDistinctId,
+      // fetchConfig and triggerOnRemoteConfig are all discarded. A queued identify() reload can
+      // lose $anon_distinct_id despite the comment above, and a queued config fetch never fires
+      // onRemoteConfig. Fixing that means merging the options rather than replacing them.
       return new Promise((resolve, reject) => {
         this._pendingFlagsRequest = {
           sendAnonDistinctId,
