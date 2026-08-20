@@ -11,6 +11,7 @@ const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
 
 const posthogImmediateResolveOptions: PostHogOptions = {
   fetchRetryCount: 0,
+  featureFlagsPollingInterval: 3_600_000,
 }
 
 const flagsResponseFixture = (): PostHogV2FlagsResponse => ({
@@ -718,6 +719,38 @@ describe('evaluateFlags', () => {
       expect(remoteFlagCalls).toHaveLength(1)
       const [, init] = remoteFlagCalls[0]
       expect(JSON.parse((init as any).body as string).flag_keys_to_evaluate).toEqual(['local-flag', 'remote-only'])
+    })
+
+    it('falls back once per evaluation when the requested key is also missing remotely', async () => {
+      await posthog.shutdown()
+      mockedFetch.mockClear()
+
+      const remoteResponse = flagsResponseFixture()
+      remoteResponse.flags = {}
+      const localApi = apiImplementation({ localFlags: localFlagsFixture() })
+      const remoteApi = apiImplementationV4(remoteResponse)
+      mockedFetch.mockImplementation((url) =>
+        String(url).includes('flags/definitions') ? localApi(url) : remoteApi(url)
+      )
+      setup({ personalApiKey: 'TEST_PERSONAL_API_KEY' })
+
+      for (let i = 0; i < 2; i++) {
+        const flags = await posthog.evaluateFlags('user-1', {
+          flagKeys: ['local-flag', 'typo-flag'],
+        })
+
+        expect(flags.keys).toEqual(['local-flag'])
+        expect(flags.getFlag('local-flag')).toBe(true)
+        expect(flags.getFlag('typo-flag')).toBeUndefined()
+      }
+
+      // Node does not cache evaluateFlags() responses across calls. Each call still makes at most
+      // one scoped fallback and keeps the local value when the server cannot resolve the typo.
+      const remoteFlagCalls = mockedFetch.mock.calls.filter((call) => String(call[0]).includes('/flags/?v=2'))
+      expect(remoteFlagCalls).toHaveLength(2)
+      for (const [, init] of remoteFlagCalls) {
+        expect(JSON.parse((init as any).body as string).flag_keys_to_evaluate).toEqual(['local-flag', 'typo-flag'])
+      }
     })
 
     it('does not fall back for a missing requested flag in local-only mode', async () => {
