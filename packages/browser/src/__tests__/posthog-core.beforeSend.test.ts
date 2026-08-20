@@ -120,20 +120,20 @@ describe('posthog core - before send', () => {
     it('can take an array of fns', () => {
         const posthog = posthogWith({
             before_send: [
-                (cr) => {
-                    cr.properties = { ...cr.properties, edited_one: true }
-                    return cr
-                },
+                (cr) => ({ ...cr, properties: { ...cr.properties, edited_one: true } }),
                 (cr) => {
                     if (cr.event === 'to reject') {
                         return null
                     }
-                    return cr
+                    return {
+                        ...cr,
+                        properties: {
+                            ...cr.properties,
+                            second_saw_first: cr.properties.edited_one === true,
+                        },
+                    }
                 },
-                (cr) => {
-                    cr.properties = { ...cr.properties, edited_two: true }
-                    return cr
-                },
+                (cr) => ({ ...cr, properties: { ...cr.properties, edited_two: true } }),
             ],
         })
         ;(posthog._send_request as jest.Mock).mockClear()
@@ -142,7 +142,8 @@ describe('posthog core - before send', () => {
 
         expect(capturedData.filter((cd) => !!cd)).toHaveLength(1)
         expect(capturedData[0]).toHaveProperty(['properties', 'edited_one'], true)
-        expect(capturedData[0]).toHaveProperty(['properties', 'edited_one'], true)
+        expect(capturedData[0]).toHaveProperty(['properties', 'second_saw_first'], true)
+        expect(capturedData[0]).toHaveProperty(['properties', 'edited_two'], true)
         expect(posthog._send_request).toHaveBeenCalledWith({
             batchKey: undefined,
             callback: expect.any(Function),
@@ -152,6 +153,31 @@ describe('posthog core - before send', () => {
             timestampMode: 'capture-body',
             url: 'https://us.i.posthog.com/e/',
         })
+    })
+
+    it('fails closed when a before_send function throws', () => {
+        const error = new Error('before_send failed')
+        const sentinel = jest.fn((event: CaptureResult) => event)
+        const posthog = posthogWith({
+            before_send: [
+                (event) => ({ ...event, properties: { ...event.properties, transformed: true } }),
+                () => {
+                    throw error
+                },
+                sentinel,
+            ],
+        })
+        ;(posthog._send_request as jest.Mock).mockClear()
+        let capturedData: CaptureResult | undefined
+
+        expect(() => {
+            capturedData = posthog.capture(eventName, {}, {})
+        }).not.toThrow()
+
+        expect(capturedData).toBeUndefined()
+        expect(sentinel).not.toHaveBeenCalled()
+        expect(posthog._send_request).not.toHaveBeenCalled()
+        expect(mockLogger.error).toHaveBeenCalledWith(`Error in beforeSend function for event '${eventName}':`, error)
     })
 
     it('can sanitize $set event', () => {
