@@ -757,11 +757,10 @@ export class PostHog extends PostHogCore {
    * @public
    */
   reset(propertiesToKeep?: PostHogPersistedProperty[]): void {
-    // Exception steps are in-memory user-session state, so they must not cross the logout boundary.
-    // On a shared device the next user can trigger an exception, and the buffer would still hold the
-    // previous user's screen names and tap labels. Clear it first, and outside the wrapped
-    // super.reset() below, so a disabled or not-yet-initialized client still drops the steps.
-    this._errorTracking.clearExceptionSteps()
+    // NOTE: reset() deliberately keeps the exception-step buffer. Steps scope to the app session, not
+    // to the user session, because error tracking explains what the app did rather than what one user
+    // did. Clearing here would drop exactly the steps that explain a failure in a login or logout
+    // flow. Every other SDK keeps them too. See the ExceptionSteps docs before changing this.
 
     // When propertiesToKeep is not explicitly provided, automatically preserve app lifecycle
     // properties and device_id to prevent duplicate "Application Installed" events and

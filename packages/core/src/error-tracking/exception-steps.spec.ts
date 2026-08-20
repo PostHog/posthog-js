@@ -3,7 +3,6 @@ import {
   ExceptionStep,
   ExceptionStepsBuffer,
   getUtf8ByteLength,
-  resolveAutomaticExceptionStepsConfig,
   resolveExceptionStepsConfig,
   stripReservedExceptionStepFields,
 } from './exception-steps'
@@ -25,34 +24,6 @@ describe('exception steps', () => {
     })
   })
 
-  describe('resolveAutomaticExceptionStepsConfig', () => {
-    const allOff = { navigation: false, taps: false, lifecycle: false }
-    const allOn = { navigation: true, taps: true, lifecycle: true }
-
-    it('disables every signal when no config is passed', () => {
-      expect(resolveAutomaticExceptionStepsConfig()).toEqual(allOff)
-      expect(resolveAutomaticExceptionStepsConfig(false)).toEqual(allOff)
-      expect(resolveAutomaticExceptionStepsConfig(null)).toEqual(allOff)
-    })
-
-    it('enables every signal for true', () => {
-      expect(resolveAutomaticExceptionStepsConfig(true)).toEqual(allOn)
-    })
-
-    it('enables only the signals the object sets', () => {
-      expect(resolveAutomaticExceptionStepsConfig({ navigation: true })).toEqual({ ...allOff, navigation: true })
-      expect(resolveAutomaticExceptionStepsConfig({ taps: true, lifecycle: true })).toEqual({
-        ...allOn,
-        navigation: false,
-      })
-    })
-
-    it('ignores a value that is neither a boolean nor an object', () => {
-      expect(resolveAutomaticExceptionStepsConfig('yes' as any)).toEqual(allOff)
-      expect(resolveAutomaticExceptionStepsConfig([] as any)).toEqual(allOff)
-    })
-  })
-
   describe('stripReservedExceptionStepFields', () => {
     it('strips reserved fields and keeps custom properties', () => {
       const result = stripReservedExceptionStepFields({
@@ -67,14 +38,13 @@ describe('exception steps', () => {
       })
     })
 
-    it('keeps a caller-provided $type and $level, which the SDK does not own', () => {
+    it('keeps a caller-provided $type, which the SDK does not own', () => {
       const result = stripReservedExceptionStepFields({
         [EXCEPTION_STEP_INTERNAL_FIELDS.TYPE]: 'checkout',
-        [EXCEPTION_STEP_INTERNAL_FIELDS.LEVEL]: 'warning',
       })
 
       expect(result).toEqual({
-        sanitizedProperties: { $type: 'checkout', $level: 'warning' },
+        sanitizedProperties: { $type: 'checkout' },
         droppedKeys: [],
       })
     })

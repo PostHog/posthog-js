@@ -11,7 +11,12 @@ import {
 } from '@posthog/core'
 import { Properties } from '@posthog/types'
 import { trackConsole, trackUncaughtExceptions, trackUnhandledRejections } from './utils'
-import { buildAutomaticExceptionStep } from './automatic-steps'
+import {
+  AutomaticExceptionStepsOptions,
+  ResolvedAutomaticExceptionStepsOptions,
+  buildAutomaticExceptionStep,
+  resolveAutomaticExceptionStepsOptions,
+} from './automatic-steps'
 import { getRemoteConfigBool } from '../utils'
 import { OptionalReactNativePlugin } from '../optional/OptionalPlugin'
 
@@ -55,7 +60,7 @@ export interface ExceptionStepsOptions {
    *
    * @default false
    */
-  automatic?: boolean | CoreErrorTracking.AutomaticExceptionStepsConfig
+  automatic?: boolean | AutomaticExceptionStepsOptions
 }
 
 export interface ErrorTrackingOptions {
@@ -78,7 +83,7 @@ export class ErrorTracking {
   private logger: Logger
   private options: ResolvedErrorTrackingOptions
   private _exceptionStepsConfig: CoreErrorTracking.ResolvedExceptionStepsConfig
-  private _automaticStepsConfig: CoreErrorTracking.ResolvedAutomaticExceptionStepsConfig
+  private _automaticStepsConfig: ResolvedAutomaticExceptionStepsOptions
   private _exceptionStepsBuffer: CoreErrorTracking.ExceptionStepsBuffer
   private _nativeForwardingEnabled: boolean = false
 
@@ -101,7 +106,7 @@ export class ErrorTracking {
     this._exceptionStepsConfig = CoreErrorTracking.resolveExceptionStepsConfig(
       exceptionSteps ? { enabled: exceptionSteps.enabled, max_bytes: exceptionSteps.maxBytes } : undefined
     )
-    this._automaticStepsConfig = CoreErrorTracking.resolveAutomaticExceptionStepsConfig(exceptionSteps?.automatic)
+    this._automaticStepsConfig = resolveAutomaticExceptionStepsOptions(exceptionSteps?.automatic)
     this._exceptionStepsBuffer = new CoreErrorTracking.ExceptionStepsBuffer(this._exceptionStepsConfig)
     this.autocapture(this.options.autocapture)
   }
@@ -245,9 +250,9 @@ export class ErrorTracking {
   }
 
   /**
-   * Clears the buffer. The host calls this on SDK close and on `reset()`, which is the logout
-   * boundary, so one user's steps never reach the next user's exception. A capture does not clear the
-   * buffer: the steps stay attached to every exception in the same session.
+   * Clears the buffer. The host calls this on SDK close only. A capture keeps the buffer, so every
+   * exception in one app session carries the same steps, and `reset()` keeps it too, because steps
+   * scope to the app session rather than to the user session.
    */
   clearExceptionSteps(): void {
     this._exceptionStepsBuffer.clear()

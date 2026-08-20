@@ -109,22 +109,9 @@ describe('PostHog React Native automatic exception steps capture', () => {
     expect(exceptionSteps(spy)).toBeUndefined()
   })
 
-  it('drops buffered steps on reset, so one user never sees the previous user activity', async () => {
-    await newPostHog({ errorTracking: { exceptionSteps: { automatic: true } } })
-    const spy = captureSpy(posthog)
-
-    await posthog.screen('Cart')
-    posthog.addExceptionStep('Submitting payment')
-    await wait(20)
-
-    posthog.reset()
-
-    posthog.captureException(new Error('boom'))
-
-    expect(exceptionSteps(spy)).toBeUndefined()
-  })
-
-  it('records steps again after a reset', async () => {
+  // Steps scope to the app session, not to the user session, so a logout keeps the steps that explain
+  // a failure in the logout flow itself. Every other SDK behaves the same way.
+  it('keeps buffered steps across a reset', async () => {
     await newPostHog({ errorTracking: { exceptionSteps: { automatic: true } } })
     const spy = captureSpy(posthog)
 
@@ -135,7 +122,7 @@ describe('PostHog React Native automatic exception steps capture', () => {
 
     posthog.captureException(new Error('boom'))
 
-    expect(messagesOf(spy)).toEqual(['Screen: Login'])
+    expect(messagesOf(spy)).toEqual(['Screen: Cart', 'Screen: Login'])
   })
 
   it('leaves no automatic step for an event that before_send dropped', async () => {

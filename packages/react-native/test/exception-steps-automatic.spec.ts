@@ -1,6 +1,8 @@
 import { ErrorTracking, ExceptionStepsOptions } from '../src/error-tracking'
-import { buildAutomaticExceptionStep } from '../src/error-tracking/automatic-steps'
-import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
+import {
+  buildAutomaticExceptionStep,
+  resolveAutomaticExceptionStepsOptions,
+} from '../src/error-tracking/automatic-steps'
 
 // Prevent the autocapture handlers from registering real global handlers.
 jest.mock('../src/error-tracking/utils', () => ({
@@ -18,7 +20,7 @@ import { createMockLogger, createMockPostHog } from './test-utils'
 
 const mockPostHog = createMockPostHog()
 
-const ALL_ON = CoreErrorTracking.resolveAutomaticExceptionStepsConfig(true)
+const ALL_ON = resolveAutomaticExceptionStepsOptions(true)
 
 const touchProperties = (elements: unknown[], extra: Record<string, unknown> = {}): Record<string, unknown> => ({
   $event_type: 'touch',
@@ -107,7 +109,7 @@ describe('buildAutomaticExceptionStep', () => {
   })
 
   it('records only the signals the caller enabled', () => {
-    const navigationOnly = CoreErrorTracking.resolveAutomaticExceptionStepsConfig({ navigation: true })
+    const navigationOnly = resolveAutomaticExceptionStepsOptions({ navigation: true })
 
     expect(buildAutomaticExceptionStep(navigationOnly, '$screen', { $screen_name: 'Cart' })).toBeDefined()
     expect(buildAutomaticExceptionStep(navigationOnly, '$autocapture', touchProperties([]))).toBeUndefined()
@@ -115,7 +117,7 @@ describe('buildAutomaticExceptionStep', () => {
   })
 
   it('records nothing when no signal is enabled', () => {
-    const allOff = CoreErrorTracking.resolveAutomaticExceptionStepsConfig()
+    const allOff = resolveAutomaticExceptionStepsOptions()
 
     expect(buildAutomaticExceptionStep(allOff, '$screen', { $screen_name: 'Cart' })).toBeUndefined()
     expect(buildAutomaticExceptionStep(allOff, '$autocapture', touchProperties([]))).toBeUndefined()
