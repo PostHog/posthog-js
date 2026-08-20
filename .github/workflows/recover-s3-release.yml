@@ -285,19 +285,49 @@ jobs:
                   UPDATE_LATEST_ALIASES: ${{ inputs.update_latest_aliases }}
               run: |
                   set -euo pipefail
-                  text=$(printf '%s\n' \
+                  details=$(printf '%s\n' \
                       ":bufo-hotdog-rocket: <!subteam^$SLACK_USER_GROUP_ID> S3 recovery approval needed for posthog-js@$TARGET_VERSION" \
                       "• SDK source: <https://github.com/PostHog/posthog-js/commit/$SOURCE_SHA|$SOURCE_SHA> (posthog-js@$SOURCE_VERSION)" \
                       "• Toolbar source: <https://github.com/PostHog/posthog/commit/$TOOLBAR_SHA|$TOOLBAR_SHA>" \
                       "• Regions: $REGION" \
                       "• Update latest aliases: $UPDATE_LATEST_ALIASES" \
                       "• Force overwrite immutable assets: $FORCE_OVERWRITE" \
-                      "• Publish and finalize on npm: $PUBLISH_TO_NPM" \
-                      "<$ACTION_URL|Review and approve on GitHub>")
+                      "• Publish and finalize on npm: $PUBLISH_TO_NPM")
+                  fallback_text=$(printf '%s\n%s' "$details" "<$ACTION_URL|Review and approve on GitHub>")
+                  payload=$(jq -n \
+                      --arg action_url "$ACTION_URL" \
+                      --arg channel "$SLACK_CHANNEL_ID" \
+                      --arg details "$details" \
+                      --arg text "$fallback_text" \
+                      '{
+                          channel: $channel,
+                          text: $text,
+                          blocks: [
+                              {
+                                  type: "section",
+                                  text: { type: "mrkdwn", text: $details }
+                              },
+                              {
+                                  type: "actions",
+                                  elements: [
+                                      {
+                                          type: "button",
+                                          text: {
+                                              type: "plain_text",
+                                              text: "Approve/Reject on GitHub",
+                                              emoji: true
+                                          },
+                                          url: $action_url,
+                                          style: "primary"
+                                      }
+                                  ]
+                              }
+                          ]
+                      }')
                   response=$(curl -sS --connect-timeout 10 --max-time 30 -X POST 'https://slack.com/api/chat.postMessage' \
                       -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
                       -H 'Content-Type: application/json; charset=utf-8' \
-                      --data "$(jq -n --arg channel "$SLACK_CHANNEL_ID" --arg text "$text" '{channel: $channel, text: $text}')")
+                      --data "$payload")
                   if [ "$(printf '%s' "$response" | jq -r '.ok')" != 'true' ]; then
                       printf '%s\n' "$response" >&2
                       exit 1
