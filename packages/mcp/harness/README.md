@@ -19,10 +19,10 @@ pnpm test:mcp-harness      # from the repo root: builds @posthog/mcp, runs all f
 Or one lane at a time — exactly what CI runs, one job per lane:
 
 ```bash
-pnpm --filter @posthog/mcp run test:integration:sdk-v1     # "sdk v1"
-pnpm --filter @posthog/mcp run test:integration:sdk-v2     # "sdk v2"
-pnpm --filter @posthog/mcp run test:integration:nest-v1    # "nest mcp sdk v1"
-pnpm --filter @posthog/mcp run test:integration:nest-v2    # "nest mcp sdk v2"
+pnpm --filter @posthog/mcp run test:integration:sdk-v1     # "official SDK v1"
+pnpm --filter @posthog/mcp run test:integration:sdk-v2     # "official SDK v2"
+pnpm --filter @posthog/mcp run test:integration:nest-v1    # "mcp-nest (SDK v1)"
+pnpm --filter @posthog/mcp run test:integration:nest-v2    # "mcp-nest (SDK v2)"
 ```
 
 No secrets, no network: the PostHog client is an in-process recorder
@@ -38,13 +38,13 @@ Fixtures import `@posthog/mcp` through Node self-reference, which resolves to
 
 | Lane | Path | Covers |
 |---|---|---|
-| `sdk v1` | `dual-era/matrix.mjs --major v1` | 4 rows: high/low-level instrumentation × stateful/stateless, legacy era |
-| `sdk v2` | `dual-era/matrix.mjs --major v2` | 8 rows: high/low × 2025/2026 era × conversation-id on/off |
-| each sdk lane | `dual-era/probe-late-handlers.mjs --major v1\|v2` | handlers registered *after* `instrument()` — the mcp-nest/adapter ordering. Each lane runs only its own major's half, so a red probe names the stack |
-| `sdk v2` only | `dual-era/probe-first-call-error.mjs` | the **first** call of a conversation fails, with `conversation_id` on (v2-only by construction: on v1 the thrown error is captured before the appended result, so the bug is unreachable) |
-| each sdk lane | `dual-era/probe-pagination.mjs --major v1\|v2` | a **two-page** tool catalogue: `nextCursor`, `ttlMs`, `cacheScope` and result `_meta` survive the listing wrapper |
-| `nest mcp sdk v1` | `nest-v1/verify.mjs` | NestJS + `@rekog/mcp-nest` 1.9 + SDK v1, stateless — 16 assertions × `LEVEL=high\|low` |
-| `nest mcp sdk v2` | `nest-v2/verify.mjs` | NestJS + `@rekog/mcp-nest` 2.0 + SDK v2, stateless, both eras — 37 assertions × `LEVEL=high\|low` |
+| `official SDK v1` | `dual-era/matrix.mjs --major v1` | 4 rows: high/low-level instrumentation × stateful/stateless, legacy era |
+| `official SDK v2` | `dual-era/matrix.mjs --major v2` | 8 rows: high/low × 2025/2026 era × conversation-id on/off |
+| each SDK lane | `dual-era/probe-late-handlers.mjs --major v1\|v2` | handlers registered *after* `instrument()` — the mcp-nest/adapter ordering. Each lane runs only its own major's half, so a red probe names the stack |
+| `official SDK v2` only | `dual-era/probe-first-call-error.mjs` | the **first** call of a conversation fails, with `conversation_id` on (v2-only by construction: on v1 the thrown error is captured before the appended result, so the bug is unreachable) |
+| each SDK lane | `dual-era/probe-pagination.mjs --major v1\|v2` | a **two-page** tool catalogue: `nextCursor`, `ttlMs`, `cacheScope` and result `_meta` survive the listing wrapper |
+| `mcp-nest (SDK v1)` | `nest-v1/verify.mjs` | NestJS + `@rekog/mcp-nest` 1.9 + SDK v1, stateless — 16 assertions × `LEVEL=high\|low` |
+| `mcp-nest (SDK v2)` | `nest-v2/verify.mjs` | NestJS + `@rekog/mcp-nest` 2.0 + SDK v2, stateless, both eras — 37 assertions × `LEVEL=high\|low` |
 
 `LEVEL=high` is `instrument(server)`, as documented. `LEVEL=low` is `instrument(server.server)`,
 the workaround users adopted before the compatibility gate opened. Both run.

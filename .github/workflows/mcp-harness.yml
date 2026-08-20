@@ -42,10 +42,10 @@ jobs:
       fail-fast: false
       matrix:
         lane:
-          - { name: 'sdk v1', script: 'test:integration:sdk-v1' }
-          - { name: 'sdk v2', script: 'test:integration:sdk-v2' }
-          - { name: 'nest mcp sdk v1', script: 'test:integration:nest-v1' }
-          - { name: 'nest mcp sdk v2', script: 'test:integration:nest-v2' }
+          - { name: 'official SDK v1', script: 'test:integration:sdk-v1' }
+          - { name: 'official SDK v2', script: 'test:integration:sdk-v2' }
+          - { name: 'mcp-nest (SDK v1)', script: 'test:integration:nest-v1' }
+          - { name: 'mcp-nest (SDK v2)', script: 'test:integration:nest-v2' }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 

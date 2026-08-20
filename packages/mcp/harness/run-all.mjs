@@ -28,10 +28,10 @@ const build = pm(['exec', 'turbo', 'run', 'build', '--filter=@posthog/mcp'], ROO
 if (build.status !== 0) process.exit(build.status ?? 1)
 
 const LANES = [
-    ['sdk v1', 'test:integration:sdk-v1'],
-    ['sdk v2', 'test:integration:sdk-v2'],
-    ['nest mcp sdk v1', 'test:integration:nest-v1'],
-    ['nest mcp sdk v2', 'test:integration:nest-v2'],
+    ['official SDK v1', 'test:integration:sdk-v1'],
+    ['official SDK v2', 'test:integration:sdk-v2'],
+    ['mcp-nest (SDK v1)', 'test:integration:nest-v1'],
+    ['mcp-nest (SDK v2)', 'test:integration:nest-v2'],
 ]
 
 const outcomes = []
