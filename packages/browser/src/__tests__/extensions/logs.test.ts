@@ -36,6 +36,7 @@ describe('logs entrypoint', () => {
             },
             get_distinct_id: jest.fn(() => 'user-123'),
             is_capturing: jest.fn(() => true),
+            version: '1.392.0',
             logs: { captureLog: mockEmit, captureConsoleLog: mockEmit, le: mockEmit },
         } as unknown as PostHog
 
@@ -165,19 +166,32 @@ describe('logs entrypoint', () => {
             expect(mockEmit).not.toHaveBeenCalled()
         })
 
-        it('should not use programmatic capture when a legacy core predates the console capture path', () => {
-            const captureLog = jest.fn()
-            const legacyPostHog = {
-                ...mockPostHog,
-                logs: { captureLog },
-            } as unknown as PostHog
-            const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
-            initializeLogs(legacyPostHog)
+        it.each(['1.391.3', '1.410.5-canary', '1.410.11', '1.418.10-invalid', '1.418.11', '1.419.0'])(
+            'should not select a capture method for unsupported PostHog version %s',
+            (version) => {
+                const captures = {
+                    captureLog: jest.fn(),
+                    captureConsoleLog: jest.fn(),
+                    le: jest.fn(),
+                    de: jest.fn(),
+                    he: jest.fn(),
+                    ui: jest.fn(),
+                }
+                const legacyPostHog = {
+                    ...mockPostHog,
+                    version,
+                    logs: captures,
+                } as unknown as PostHog
+                const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
+                initializeLogs(legacyPostHog)
 
-            assignableWindow.console.warn('not captured')
+                assignableWindow.console.warn('not captured')
 
-            expect(captureLog).not.toHaveBeenCalled()
-        })
+                for (const capture of Object.values(captures)) {
+                    expect(capture).not.toHaveBeenCalled()
+                }
+            }
+        )
 
         it('should resolve the console capture path from a shared client', () => {
             const captureLog = jest.fn()
@@ -609,13 +623,29 @@ describe('logs entrypoint', () => {
             await import('../../entrypoints/logs')
         })
 
-        it('should route legacy PostHog capture through the historical console method', () => {
+        it.each([
+            ['1.392.0', 'le'],
+            ['1.410.4', 'le'],
+            ['1.410.5', 'de'],
+            ['1.410.10', 'de'],
+            ['1.411.0', 'he'],
+            ['1.418.3', 'he'],
+            ['1.418.4', 'ui'],
+            ['1.418.10', 'ui'],
+        ] as const)('should route PostHog %s through the historical %s console method', (version, expectedName) => {
             const captureLog = jest.fn()
             const currentConsoleCapture = jest.fn()
+            const historicalCaptures = {
+                le: jest.fn(),
+                de: jest.fn(),
+                he: jest.fn(),
+                ui: jest.fn(),
+            }
+            mockPostHog.version = version
             mockPostHog.logs = {
                 captureLog,
                 captureConsoleLog: currentConsoleCapture,
-                le: mockEmit,
+                ...historicalCaptures,
             } as unknown as NonNullable<PostHog['logs']>
             const initializeLogs = assignableWindow.__PosthogExtensions__.logs.initializeLogs
             initializeLogs(mockPostHog)
@@ -624,14 +654,19 @@ describe('logs entrypoint', () => {
 
             expect(captureLog).not.toHaveBeenCalled()
             expect(currentConsoleCapture).not.toHaveBeenCalled()
-            expect(mockEmit).toHaveBeenCalledTimes(1)
-            expect(mockEmit).toHaveBeenCalledWith({
+            expect(historicalCaptures[expectedName]).toHaveBeenCalledTimes(1)
+            expect(historicalCaptures[expectedName]).toHaveBeenCalledWith({
                 level: 'info',
                 body: '"Test message"',
                 attributes: expect.objectContaining({
                     'log.source': 'console.log',
                 }),
             })
+            for (const [name, capture] of Object.entries(historicalCaptures)) {
+                if (name !== expectedName) {
+                    expect(capture).not.toHaveBeenCalled()
+                }
+            }
         })
 
         it('should not set distinct_id or location.href — core adds posthogDistinctId/url.full', () => {

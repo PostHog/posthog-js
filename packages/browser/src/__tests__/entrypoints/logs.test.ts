@@ -33,6 +33,7 @@ describe('logs entrypoint', () => {
             },
             get_distinct_id: jest.fn(() => 'user-123'),
             is_capturing: jest.fn(() => true),
+            version: '1.392.0',
             logs: { le: mockEmit },
         } as unknown as PostHog
 

@@ -39,6 +39,7 @@ describe('logs entrypoint — golden (console-capture record handed to core)', (
             },
             get_distinct_id: jest.fn(() => 'user-123'),
             is_capturing: jest.fn(() => true),
+            version: '1.392.0',
             logs: { le: mockCapture },
         } as unknown as PostHog
 
