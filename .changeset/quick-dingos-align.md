@@ -1,6 +1,6 @@
 ---
-'@posthog/react-native-plugin': patch
-'posthog-react-native': patch
+'@posthog/react-native-plugin': minor
+'posthog-react-native': minor
 ---
 
-Add an Android session replay option to verify screenshot mask alignment during capture.
+Add `sessionReplayConfig.verifyScreenshotMaskAlignment` for Android session replay. This option requires `@posthog/react-native-plugin`.

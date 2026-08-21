@@ -4177,7 +4177,7 @@
           "name": "captureNetworkTelemetry"
         },
         {
-          "description": "Verify that masks remain aligned while capturing session replay screenshots.\nAndroid only.\n\nEnabling this can preserve screenshots during pixel-only redraws, including\ncontinuously animated content, but performs additional view hierarchy walks\nwhile a screenshot is captured.",
+          "description": "Verify that masks remain aligned while capturing session replay screenshots.\nAndroid only. Requires `@posthog/react-native-plugin`.\n\nEnabling this can preserve screenshots during pixel-only redraws, including\ncontinuously animated content, but performs additional view hierarchy walks\nwhile a screenshot is captured.",
           "type": "boolean",
           "name": "verifyScreenshotMaskAlignment"
         },
