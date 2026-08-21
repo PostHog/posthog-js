@@ -43,14 +43,17 @@ const executableSource = source
   // Turn the module's `export default` into a value the wrapper returns.
   .replace('export default defineNuxtModule(', 'return defineNuxtModule(')
 
-function loadModule({ failPublicUpload = false } = {}) {
+function loadModule({ failPublicUpload = false, nuxtVersion = '4.1.2' } = {}) {
   const spawnCalls = []
+  const pluginCalls = []
+  const serverPluginCalls = []
   const stubs = {
     defineNuxtModule: config => config,
-    addPlugin: () => {},
-    addServerPlugin: () => {},
+    addPlugin: plugin => pluginCalls.push(plugin),
+    addServerPlugin: plugin => serverPluginCalls.push(plugin),
     addImportsDir: () => {},
     createResolver: () => ({ resolve: p => p }),
+    getNuxtVersion: () => nuxtVersion,
     resolveBinaryPath: () => '/fake/posthog-cli',
     spawnLocal: async (bin, args) => {
       spawnCalls.push({ bin, args: [...args] })
@@ -65,7 +68,43 @@ function loadModule({ failPublicUpload = false } = {}) {
   }
   const factory = new Function(...Object.keys(stubs), executableSource)
   const mod = factory(...Object.values(stubs))
-  return { mod, spawnCalls }
+  return { mod, spawnCalls, pluginCalls, serverPluginCalls }
+}
+
+async function runRegistration({ nuxtVersion, compatibilityVersion }) {
+  const { mod, pluginCalls, serverPluginCalls } = loadModule({ nuxtVersion })
+  const nuxt = {
+    options: {
+      dev: true,
+      future: { compatibilityVersion },
+      runtimeConfig: { public: {} },
+    },
+    hook() {},
+  }
+
+  await mod.setup(
+    {
+      host: 'https://us.i.posthog.com',
+      publicKey: 'phc_test',
+      clientConfig: {},
+      serverConfig: {},
+    },
+    nuxt,
+  )
+
+  return { pluginCalls, serverPluginCalls }
+}
+
+for (const { nuxtVersion, compatibilityVersion, expectedServerPlugin } of [
+  { nuxtVersion: '3.7.0', expectedServerPlugin: './runtime/nitro-plugin-v2' },
+  { nuxtVersion: '4.1.2', expectedServerPlugin: './runtime/nitro-plugin-v2' },
+  { nuxtVersion: '4.1.2', compatibilityVersion: 5, expectedServerPlugin: './runtime/nitro-plugin-v2' },
+  { nuxtVersion: '5.0.0-0', expectedServerPlugin: './runtime/nitro-plugin-v3' },
+  { nuxtVersion: '5.0.0-29762631.396a4ae3', expectedServerPlugin: './runtime/nitro-plugin-v3' },
+]) {
+  const { pluginCalls, serverPluginCalls } = await runRegistration({ nuxtVersion, compatibilityVersion })
+  assert.deepEqual(pluginCalls, [{ src: './runtime/vue-plugin', mode: 'client' }])
+  assert.deepEqual(serverPluginCalls, [expectedServerPlugin])
 }
 
 async function runLifecycle({ ssr, deleteAfterUpload, failPublicUpload = false }) {

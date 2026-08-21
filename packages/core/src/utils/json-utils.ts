@@ -1,10 +1,12 @@
-const MAX_JSON_SAFE_VALUE_DEPTH = 20
-const MAX_JSON_SAFE_VALUE_ITEMS = 1_000
-const MAX_JSON_SAFE_VALUE_NODES = 10_000
-const CIRCULAR_VALUE = '[Circular]'
-const TRUNCATED_VALUE = '[Truncated]'
-const UNSERIALIZABLE_VALUE = '[Unserializable]'
-const FUNCTION_VALUE = '[Function]'
+/** Traversal budgets and markers, shared with the OTLP attribute encoder. Not
+ * public API — `utils/index.ts` re-exports `toJsonSafeValue` only. */
+export const MAX_JSON_SAFE_VALUE_DEPTH = 20
+export const MAX_JSON_SAFE_VALUE_ITEMS = 1_000
+export const MAX_JSON_SAFE_VALUE_NODES = 10_000
+export const CIRCULAR_VALUE = '[Circular]'
+export const TRUNCATED_VALUE = '[Truncated]'
+export const UNSERIALIZABLE_VALUE = '[Unserializable]'
+export const FUNCTION_VALUE = '[Function]'
 
 const dateGetTime = Date.prototype.getTime
 const dateToISOString = Date.prototype.toISOString
@@ -15,7 +17,12 @@ interface JsonSafeValueConversionState {
   remainingNodes: number
 }
 
-function sanitizeString(value: string): string {
+/**
+ * Replaces unpaired surrogates with U+FFFD. A lone surrogate survives
+ * `JSON.stringify` as a `\uD800`-style escape, which strict JSON parsers
+ * reject — for OTLP that means the whole request is refused.
+ */
+export function sanitizeString(value: string): string {
   let output = ''
   for (let index = 0; index < value.length; index++) {
     const codeUnit = value.charCodeAt(index)

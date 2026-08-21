@@ -1,12 +1,19 @@
 /**
  * @vitest-environment jsdom
  */
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import snapshot from '../src/snapshot';
 import {
+  beginSnapshotCostTracking,
+  endSnapshotCostTracking,
+  getDeferredStylesheetStats,
+  getDiscardedDurationSamples,
   getLastSnapshotCost,
   getMutationCost,
+  getSuspensionGeneration,
+  noteVisibilityChange,
+  recordDeferredStylesheetSlice,
   recordMutationCost,
   resetSnapshotCostState,
   safeCssRuleCount,
@@ -202,6 +209,26 @@ describe('snapshot cost accounting', () => {
       expect(safeCssRuleCount(sheet)).toBe(1 + 1 + 50);
     });
 
+    it('counts a multi-level @import chain in full, so structure cannot hide bulk from the gate', () => {
+      // the review repro: A imports B imports C, and C holds the bulk. A
+      // one-level descent would price A at ~3 rules, wave it past any budget,
+      // and stringify all 50,003 rules synchronously inside the snapshot.
+      const c = {
+        href: 'http://localhost/c.css',
+        cssRules: { length: 50_000 },
+      };
+      const b = {
+        href: 'http://localhost/b.css',
+        cssRules: [{ styleSheet: c }],
+      };
+      const a = {
+        href: 'http://localhost/a.css',
+        cssRules: [{ cssText: '.a {}' }, { styleSheet: b }],
+      } as unknown as CSSStyleSheet;
+
+      expect(safeCssRuleCount(a)).toBe(2 + 1 + 50_000);
+    });
+
     it('terminates on cyclic @import graphs, counting each sheet once', () => {
       const a: { href: string; cssRules?: unknown } = {
         href: 'http://localhost/a.css',
@@ -327,5 +354,175 @@ describe('snapshot cost accounting', () => {
 
     resetSnapshotCostState();
     expect(getMutationCost()).toEqual({ slowestBatchMs: 0 });
+  });
+
+  it('charges a mutation batch drained inside the snapshot window to the snapshot, not to slowestBatchMs', () => {
+    // the post-snapshot buffer unlock drains queued mutations inside the same
+    // synchronous task; that cost belongs to the snapshot's duration
+    beginSnapshotCostTracking(null);
+    recordMutationCost(50);
+    endSnapshotCostTracking();
+
+    recordMutationCost(7);
+
+    expect(getMutationCost()).toEqual({ slowestBatchMs: 7 });
+  });
+
+  it('does not charge never-deferrable CSSOM-only <style> rules to the budget', () => {
+    // styled-components/Emotion production mode: every rule lives only in the
+    // CSSOM, the element has no text and no href, so nothing can be deferred
+    const cssomStyle = document.createElement('style');
+    Object.defineProperty(cssomStyle, 'sheet', {
+      configurable: true,
+      get: () => makeSheet(null, 500),
+    });
+    document.head.appendChild(cssomStyle);
+    appendLink('/a.css', makeSheet('http://localhost/a.css', 8));
+
+    const sn = takeSnapshot(100);
+
+    // the CSSOM sheet alone exceeds the budget, but deferring the link would
+    // buy no freeze reduction, so it must still be inlined synchronously
+    const links = findByTag(sn!, 'link');
+    expect(links[0].attributes._cssText).toBeDefined();
+    expect(takeDeferredStylesheetLinks()).toHaveLength(0);
+    // fidelity kept for the CSSOM sheet itself
+    const styles = findByTag(sn!, 'style');
+    expect(styles[0].attributes._cssText).toBeDefined();
+
+    const cost = getLastSnapshotCost()!;
+    expect(cost.cssRuleCount).toBe(508);
+    expect(cost.nonDeferrableCssRuleCount).toBe(500);
+    expect(cost.deferredStylesheetCount).toBe(0);
+  });
+
+  it('accumulates deferred sheet counts across snapshots for the session', () => {
+    const first = appendLink('/a.css', makeSheet('http://localhost/a.css', 8));
+    const second = appendLink('/b.css', makeSheet('http://localhost/b.css', 8));
+
+    takeSnapshot(1);
+    expect(getLastSnapshotCost()!.deferredStylesheetCount).toBe(2);
+    takeDeferredStylesheetLinks();
+
+    first.remove();
+    second.remove();
+    takeSnapshot(1);
+
+    // the slowest-snapshot record only sees this snapshot's zero, but the
+    // session total must keep the first snapshot's deferrals
+    expect(getLastSnapshotCost()!.deferredStylesheetCount).toBe(0);
+    expect(getDeferredStylesheetStats().deferredCount).toBe(2);
+  });
+
+  describe('suspension guards on duration samples', () => {
+    it('discards the snapshot sample when a visibility change lands mid-snapshot, then records the next clean one', () => {
+      // a visibility handler can run inside the "synchronous" window via a
+      // nested event loop (alert, sync XHR); the sheet's stringification
+      // stands in for that by bumping the generation mid-snapshot
+      const rules = [
+        {
+          get cssText(): string {
+            noteVisibilityChange();
+            return '.hidden-mid-snapshot { color: red }';
+          },
+        },
+      ] as unknown as CSSRule[];
+      const trapLink = appendLink('/mid.css', {
+        href: 'http://localhost/mid.css',
+        cssRules: rules,
+      } as unknown as CSSStyleSheet);
+
+      takeSnapshot();
+
+      expect(getLastSnapshotCost()).toBeNull();
+      expect(getDiscardedDurationSamples()).toBe(1);
+
+      // a clean window opened after the change still records
+      trapLink.remove();
+      takeSnapshot();
+      expect(getLastSnapshotCost()).not.toBeNull();
+      expect(getDiscardedDurationSamples()).toBe(1);
+    });
+
+    it('discards a synchronous window that exceeds the plausibility cap', () => {
+      // an OS-level suspension mid-task fires no event a handler could see,
+      // so only the wall clock betrays it: fake a 100s reading
+      const spy = vi.spyOn(performance, 'now');
+      spy.mockReturnValueOnce(0);
+      spy.mockReturnValue(100_000);
+      try {
+        beginSnapshotCostTracking(null);
+        endSnapshotCostTracking();
+      } finally {
+        spy.mockRestore();
+      }
+
+      expect(getLastSnapshotCost()).toBeNull();
+      expect(getDiscardedDurationSamples()).toBe(1);
+    });
+
+    it('discards a mutation batch whose window straddles a visibility change', () => {
+      const startGeneration = getSuspensionGeneration();
+      noteVisibilityChange();
+      recordMutationCost(40, startGeneration);
+
+      expect(getMutationCost()).toEqual({ slowestBatchMs: 0 });
+      expect(getDiscardedDurationSamples()).toBe(1);
+
+      // a batch begun after the change records normally
+      recordMutationCost(7, getSuspensionGeneration());
+      expect(getMutationCost()).toEqual({ slowestBatchMs: 7 });
+      expect(getDiscardedDurationSamples()).toBe(1);
+    });
+
+    it('discards an implausibly long mutation batch even without a visibility change', () => {
+      recordMutationCost(100_000);
+
+      expect(getMutationCost()).toEqual({ slowestBatchMs: 0 });
+      expect(getDiscardedDurationSamples()).toBe(1);
+    });
+
+    it('discards a deferred stylesheet slice whose window straddles a visibility change', () => {
+      const startGeneration = getSuspensionGeneration();
+      noteVisibilityChange();
+      recordDeferredStylesheetSlice(40, startGeneration);
+
+      expect(getDeferredStylesheetStats()).toMatchObject({
+        totalMs: 0,
+        slowestSliceMs: 0,
+      });
+      expect(getDiscardedDurationSamples()).toBe(1);
+
+      recordDeferredStylesheetSlice(5, getSuspensionGeneration());
+      expect(getDeferredStylesheetStats()).toMatchObject({
+        totalMs: 5,
+        slowestSliceMs: 5,
+      });
+    });
+
+    it('resets the discard counter with the rest of the cost state', () => {
+      recordMutationCost(100_000);
+      expect(getDiscardedDurationSamples()).toBe(1);
+
+      resetSnapshotCostState();
+      expect(getDiscardedDurationSamples()).toBe(0);
+    });
+  });
+
+  it('tracks cumulative deferred stringification time and the slowest slice', () => {
+    recordDeferredStylesheetSlice(12);
+    recordDeferredStylesheetSlice(40);
+    recordDeferredStylesheetSlice(3);
+
+    expect(getDeferredStylesheetStats()).toMatchObject({
+      totalMs: 55,
+      slowestSliceMs: 40,
+    });
+
+    resetSnapshotCostState();
+    expect(getDeferredStylesheetStats()).toMatchObject({
+      totalMs: 0,
+      slowestSliceMs: 0,
+    });
   });
 });

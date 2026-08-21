@@ -129,7 +129,8 @@ export function assertNoCompatibilityVersionNamespaceCollisions(assets: ReleaseA
 
 export function buildAssetUploadPlans(
     version: string,
-    assets: ReleaseAsset[]
+    assets: ReleaseAsset[],
+    publishMutableAliases = true
 ): {
     immutable: PlannedAssetUpload[]
     majorAlias: PlannedAssetUpload[]
@@ -143,7 +144,7 @@ export function buildAssetUploadPlans(
     const versionPrefix = `static/${version}/`
     const majorPrefix = `static/${parsedVersion.major}/`
     const compatibilityPrefix = 'static/'
-    const shouldPublishMutableAliases = !parsedVersion.prerelease
+    const shouldPublishMutableAliases = publishMutableAliases && !parsedVersion.prerelease
 
     assertNoCompatibilityVersionNamespaceCollisions(assets)
 
@@ -173,7 +174,12 @@ export function buildAssetUploadPlans(
     }
 }
 
-async function uploadReleaseAssets(bucket: string, uploads: PlannedAssetUpload[], label: string): Promise<string[]> {
+async function uploadReleaseAssets(
+    bucket: string,
+    uploads: PlannedAssetUpload[],
+    label: string,
+    options: { ifNoneMatch?: string } = {}
+): Promise<string[]> {
     if (uploads.length === 0) {
         return []
     }
@@ -185,6 +191,7 @@ async function uploadReleaseAssets(bucket: string, uploads: PlannedAssetUpload[]
             putS3ObjectFromFile(bucket, upload.key, upload.filePath, {
                 cacheControl: upload.cacheControl,
                 contentType: upload.contentType,
+                ifNoneMatch: options.ifNoneMatch,
             })
         )
     )
@@ -203,25 +210,61 @@ async function verifyUploadedAssets(bucket: string, keys: string[], label: strin
     await Promise.all(keys.map((key) => verifyUploadedObject(bucket, key)))
 }
 
-export async function uploadPostHogJsS3(bucket: string, version: string): Promise<void> {
+export async function assertCanUploadImmutableAssets(
+    bucket: string,
+    uploads: PlannedAssetUpload[],
+    forceOverwrite: boolean,
+    objectExists: (bucket: string, key: string) => Promise<boolean> = s3ObjectExists
+): Promise<void> {
+    if (forceOverwrite) {
+        return
+    }
+
+    const existingKeys = (
+        await Promise.all(uploads.map(async ({ key }) => ((await objectExists(bucket, key)) ? key : undefined)))
+    ).filter((key): key is string => key !== undefined)
+
+    if (existingKeys.length > 0) {
+        const examples = existingKeys.slice(0, 3).map((key) => `s3://${bucket}/${key}`)
+        const remaining = existingKeys.length - examples.length
+        const suffix = remaining > 0 ? ` (and ${remaining} more)` : ''
+        throw new Error(
+            `Refusing to overwrite existing immutable release assets: ${examples.join(', ')}${suffix}. Retry with force overwrite enabled (CLI: --force-overwrite) to replace this S3 release.`
+        )
+    }
+}
+
+export async function uploadPostHogJsS3(
+    bucket: string,
+    version: string,
+    options: { publishMutableAliases?: boolean; forceOverwrite?: boolean } = {}
+): Promise<void> {
     const parsedVersion = parseSemver(version)
     if (!parsedVersion) {
         throw new Error(`Invalid version format: '${version}'`)
     }
 
     const assets = await collectReleaseAssets()
-    const uploadPlans = buildAssetUploadPlans(version, assets)
+    const publishMutableAliases = options.publishMutableAliases ?? true
+    const forceOverwrite = options.forceOverwrite ?? false
+    const uploadPlans = buildAssetUploadPlans(version, assets, publishMutableAliases)
+
+    await assertCanUploadImmutableAssets(bucket, uploadPlans.immutable, forceOverwrite)
 
     console.log(`==> Uploading posthog-js v${version}`)
     console.log(`    immutable prefix: s3://${bucket}/static/${version}/`)
-    if (parsedVersion.prerelease) {
+    if (!publishMutableAliases) {
+        console.log('    mutable aliases: skipped by request')
+    } else if (parsedVersion.prerelease) {
         console.log('    mutable aliases: skipped for prerelease publish')
     } else {
         console.log(`    major alias prefix: s3://${bucket}/static/${parsedVersion.major}/`)
         console.log(`    compatibility prefix: s3://${bucket}/static/`)
     }
 
-    const immutableKeys = await uploadReleaseAssets(bucket, uploadPlans.immutable, 'immutable release assets')
+    const immutableKeys = await uploadReleaseAssets(bucket, uploadPlans.immutable, 'immutable release assets', {
+        ifNoneMatch: forceOverwrite ? undefined : '*',
+    })
     await verifyUploadedAssets(bucket, immutableKeys, 'immutable assets')
 
     const majorAliasKeys = await uploadReleaseAssets(bucket, uploadPlans.majorAlias, 'major-version alias assets')
@@ -234,7 +277,11 @@ export async function uploadPostHogJsS3(bucket: string, version: string): Promis
     )
     await verifyUploadedAssets(bucket, compatibilityKeys, 'top-level compatibility assets')
 
-    console.log(
-        `==> Finished publishing immutable, major-version alias, and top-level compatibility assets for v${version}`
-    )
+    if (uploadPlans.majorAlias.length > 0 || uploadPlans.compatibility.length > 0) {
+        console.log(
+            `==> Finished publishing immutable, major-version alias, and top-level compatibility assets for v${version}`
+        )
+    } else {
+        console.log(`==> Finished publishing immutable assets for v${version}`)
+    }
 }

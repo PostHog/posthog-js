@@ -42,6 +42,8 @@ describe('identify()', () => {
                 setPersonPropertiesForFlags: jest.fn(),
                 unsetPersonPropertiesForFlags: jest.fn(),
                 reloadFeatureFlags: jest.fn(),
+                reset: jest.fn(),
+                resetFlagCallReported: jest.fn(),
             },
             unregister: jest.fn(),
         })
@@ -56,6 +58,67 @@ describe('identify()', () => {
 
         expect(instance.register).toHaveBeenCalledWith({ $user_id: 'a-new-id' })
         expect(instance.register).toHaveBeenCalledWith({ distinct_id: 'a-new-id' })
+    })
+
+    it('reloads flags when synchronization adopts the requested identity', () => {
+        instance.config.cookieWinsOnConflict = true
+        jest.spyOn(instance.persistence!, 'syncCookieProperties').mockImplementation(() => {
+            instance.persistence!.props.distinct_id = 'a-new-id'
+            instance.persistence!.props.$user_state = 'identified'
+            return true
+        })
+
+        instance.identify('a-new-id')
+
+        expect(instance.featureFlags?.reloadFeatureFlags).toHaveBeenCalledTimes(1)
+        expect(instance.featureFlags?.resetFlagCallReported).toHaveBeenCalledTimes(1)
+    })
+
+    it('cleans an adopted cookie identity before applying explicit identify properties', () => {
+        instance.config.cookieWinsOnConflict = true
+        jest.spyOn(instance.persistence!, 'syncCookieProperties')
+            .mockImplementationOnce(() => {
+                instance.persistence!.props.distinct_id = 'sibling-anonymous-id'
+                instance.persistence!.props.$user_state = 'anonymous'
+                return true
+            })
+            .mockReturnValue(false)
+        jest.spyOn(instance.persistence!, 'consumeCookieIdentityChange')
+            .mockReturnValueOnce(true)
+            .mockReturnValue(false)
+        const resetFeatureFlags = instance.featureFlags!.reset as jest.Mock
+        const setPersonPropertiesForFlags = instance.featureFlags!.setPersonPropertiesForFlags as jest.Mock
+
+        instance.identify('a-new-id', { plan: 'pro' })
+
+        expect(resetFeatureFlags.mock.invocationCallOrder[0]).toBeLessThan(
+            setPersonPropertiesForFlags.mock.invocationCallOrder[0]!
+        )
+        expect(setPersonPropertiesForFlags).toHaveBeenCalledWith({ $set: { plan: 'pro' }, $set_once: {} }, false)
+    })
+
+    it('releases suppression without publishing a final snapshot when identify throws', () => {
+        instance.config.cookieWinsOnConflict = true
+        jest.spyOn(instance.persistence!, '_beginCookieSyncSuppression').mockReturnValue(true)
+        const endSuppression = jest.spyOn(instance.persistence!, '_endCookieSyncSuppression')
+        const publish = jest.spyOn(instance.persistence!, '_publishSuppressedCookieSnapshot')
+        jest.spyOn(instance.persistence!, 'set_property').mockImplementation(() => {
+            throw new Error('persistence failed')
+        })
+
+        expect(() => instance.identify('a-new-id')).toThrow()
+        expect(endSuppression).toHaveBeenCalledWith(false)
+        expect(publish).not.toHaveBeenCalled()
+    })
+
+    it('publishes the identified snapshot before capturing the identify event', () => {
+        instance.config.cookieWinsOnConflict = true
+        const publish = jest.spyOn(instance.persistence!, '_publishSuppressedCookieSnapshot')
+        const capture = jest.spyOn(instance, 'capture')
+
+        instance.identify('a-new-id')
+
+        expect(publish.mock.invocationCallOrder[0]).toBeLessThan(capture.mock.invocationCallOrder[0]!)
     })
 
     it('calls capture when identity changes', () => {
@@ -392,7 +455,7 @@ describe('identify()', () => {
         it('clears flag calls reported when identity changes', () => {
             instance.identify('a-new-id')
 
-            expect(instance.unregister).toHaveBeenCalledWith('$flag_call_reported')
+            expect(instance.featureFlags.resetFlagCallReported).toHaveBeenCalled()
         })
     })
 

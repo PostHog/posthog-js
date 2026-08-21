@@ -1,0 +1,32 @@
+[
+  {
+    "row": "v2 high 2025 conv=off",
+    "col": "client",
+    "why": "Documented limitation: on createMcpHandler's legacy (2025-era) leg, clientInfo exists only at a handshake a per-request instance never saw, and the session token that would carry it cannot reach the wire"
+  },
+  {
+    "row": "v2 high 2025 conv=on",
+    "col": "client",
+    "why": "Same legacy-leg clientInfo limitation"
+  },
+  {
+    "row": "v2 low 2025 conv=off",
+    "col": "client",
+    "why": "Same legacy-leg clientInfo limitation"
+  },
+  {
+    "row": "v2 low 2025 conv=on",
+    "col": "client",
+    "why": "Same legacy-leg clientInfo limitation"
+  },
+  {
+    "row": "v2 low 2025 conv=on",
+    "col": "session",
+    "why": "C2, parked: the low-level path has no tool registry to read conversation_id ownership from, so a cold per-request instance never correlates the session"
+  },
+  {
+    "row": "v2 low 2026 conv=on",
+    "col": "session",
+    "why": "Same parked C2 low-level ownership gap"
+  }
+]

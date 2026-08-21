@@ -10,12 +10,21 @@ export type SegmentUser = {
     id(): string | undefined
 }
 
+type SegmentAnalyticsUser = {
+    anonymousId(): string | null | undefined
+    id(): string | null | undefined
+}
+
 /**
  * Segment analytics object used for integration with PostHog
  */
 export type SegmentAnalytics = {
-    user: () => SegmentUser | Promise<SegmentUser>
-    register: (integration: SegmentPlugin) => Promise<void>
+    user: () => SegmentAnalyticsUser | Promise<SegmentAnalyticsUser>
+    /**
+     * Segment SDK versions use different plugin and resolved value types. `any` keeps current SDK types assignable
+     * without breaking legacy consumers that expect `Promise<void>`.
+     */
+    register: (integration: any) => Promise<any>
 }
 
 /**

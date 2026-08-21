@@ -565,6 +565,45 @@ describe('PostHogOpenAI - Jest test suite', () => {
     )
   })
 
+  conditionalTest('preserves images when the client enables multimodal capture', async () => {
+    Object.assign(mockPostHogClient, { enableFullAiCapture: true })
+    const dataUrl = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...'
+
+    await client.chat.completions.create({
+      model: 'gpt-4',
+      messages: [
+        {
+          role: 'user',
+          content: [{ type: 'image_url', image_url: { url: dataUrl } }],
+        } as any,
+      ],
+      posthogDistinctId: 'test-id',
+    })
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    expect(JSON.stringify(captureArgs[0].properties['$ai_input'])).toContain(dataUrl)
+  })
+
+  conditionalTest('redacts images when the client does not enable multimodal capture', async () => {
+    const dataUrl = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...'
+
+    await client.chat.completions.create({
+      model: 'gpt-4',
+      messages: [
+        {
+          role: 'user',
+          content: [{ type: 'image_url', image_url: { url: dataUrl } }],
+        } as any,
+      ],
+      posthogDistinctId: 'test-id',
+    })
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    expect(JSON.stringify(captureArgs[0].properties['$ai_input'])).toContain('redacted')
+  })
+
   test('chat completions create preserves OpenAI APIPromise helpers', async () => {
     const promise = client.chat.completions.create({
       model: 'gpt-4',
@@ -1281,6 +1320,41 @@ describe('PostHogOpenAI - Jest test suite', () => {
       expect(properties['$ai_is_error']).toBe(true)
       expect(properties['$ai_error']).toContain('provider response failed')
       expect(properties['$ai_provider_metadata']).toEqual({ request_id: 'req_failed' })
+    })
+  })
+
+  describe('full AI capture', () => {
+    test('preserves binary image content in a streaming Responses output when enabled', async () => {
+      Object.assign(mockPostHogClient, { enableFullAiCapture: true })
+      const binary = 'A'.repeat(80)
+      const response = {
+        ...mockOpenAiParsedResponse,
+        id: 'resp_full_capture',
+        status: 'completed',
+        output: [{ type: 'image_generation_call', id: 'image-1', status: 'completed', result: binary }],
+        usage: { input_tokens: 11, output_tokens: 7, total_tokens: 18 },
+      }
+      const chunks = [{ type: 'response.completed', sequence_number: 0, response }]
+      const ResponsesMock: any = openaiModule.Responses
+      ResponsesMock.prototype.create = jest
+        .fn()
+        .mockImplementation(() => createMockAPIPromise(createMockAsyncIterator(chunks)))
+
+      const stream = await client.responses.create({
+        model: 'gpt-4',
+        input: 'Hello',
+        stream: true,
+        posthogDistinctId: 'test-id',
+      })
+      for await (const _chunk of stream) {
+        // consume the returned stream while analytics consumes its monitored copy
+      }
+      await flushPromises()
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const properties = (mockPostHogClient.capture as jest.Mock).mock.calls[0][0].properties
+      expect(JSON.stringify(properties['$ai_output_choices'])).toContain(binary)
+      expect(JSON.stringify(properties)).not.toContain('redacted')
     })
   })
 

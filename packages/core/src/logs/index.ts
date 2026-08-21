@@ -119,7 +119,7 @@ export class PostHogLogs {
     // Build before deferring so attributes reflect state at capture time, not
     // at drain time (identity/session changes between capture and drain must
     // not corrupt recorded attributes).
-    const record = buildOtlpLogRecord(filtered, this._getContext())
+    const record = buildOtlpLogRecord(filtered, this._getContext(), this._logger)
     const entry: BufferedLogEntry = { record }
 
     this._onReady(() => this._enqueue(entry))

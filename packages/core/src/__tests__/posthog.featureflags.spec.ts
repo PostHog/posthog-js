@@ -1,4 +1,4 @@
-import { PostHogPersistedProperty, PostHogV2FlagsResponse } from '@/types'
+import { PostHogPersistedProperty, PostHogRemoteConfig, PostHogV2FlagsResponse } from '@/types'
 import { normalizeFlagsResponse } from '@/featureFlagUtils'
 import {
   parseBody,
@@ -2681,6 +2681,156 @@ describe('PostHog Feature Flags v4', () => {
         expect(receivedFlags).toEqual([])
         expect(exposedPosthog.getFeatureFlags()).toEqual({ 'local-flag': true })
       })
+    })
+  })
+
+  describe('queued reloads', () => {
+    it('resolves a displaced caller against a request that carried its properties', async () => {
+      let releaseFirst!: () => void
+      const firstGate = new Promise<void>((r) => (releaseFirst = r))
+      let isFirst = true
+      const sent: string[] = []
+
+      const [client] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (m) => {
+        m.fetch.mockImplementation(async (_url: string, options: any) => {
+          const tier = JSON.parse(options.body ?? '{}').person_properties?.tier ?? 'missing'
+          sent.push(tier)
+          if (isFirst) {
+            isFirst = false
+            await firstGate
+          }
+          return {
+            status: 200,
+            text: () => Promise.resolve('ok'),
+            json: () => Promise.resolve({ featureFlags: { 'tier-flag': tier }, featureFlagPayloads: {} }),
+          }
+        })
+      })
+
+      // a reload goes out before the app sets its overrides, and stays in flight
+      void client.reloadFeatureFlagsAsync()
+      await waitForPromises()
+      expect(sent).toEqual(['missing'])
+
+      client.setPersonPropertiesForFlags({ tier: 'premium' }, false)
+
+      // queues behind the in-flight request
+      const displaced = client.reloadFeatureFlagsAsync()
+      await waitForPromises()
+
+      // displaces it from the pending slot
+      const displacing = client.reloadFeatureFlagsAsync()
+      await waitForPromises()
+
+      // neither queued caller issued its own request, so both really are behind the in-flight one
+      expect(sent).toEqual(['missing'])
+
+      releaseFirst()
+
+      // both must see a response to a request that actually carried the override
+      expect((await displaced)?.['tier-flag']).toEqual('premium')
+      expect((await displacing)?.['tier-flag']).toEqual('premium')
+      // and exactly one re-issued request served them both
+      expect(sent).toEqual(['missing', 'premium'])
+    })
+
+    it('settles every displaced caller when the re-issued request fails, keeping cached flags', async () => {
+      let releaseFirst!: () => void
+      const firstGate = new Promise<void>((r) => (releaseFirst = r))
+      let n = 0
+
+      const [client] = createTestClient('TEST_API_KEY', {}, (m) => {
+        m.fetch.mockImplementation(async () => {
+          n += 1
+          if (n === 1) {
+            await firstGate
+            return {
+              status: 200,
+              text: () => Promise.resolve('ok'),
+              json: () => Promise.resolve({ featureFlags: { 'beta-ui': true }, featureFlagPayloads: {} }),
+            }
+          }
+          return { status: 503, text: () => Promise.resolve('nope'), json: () => Promise.resolve({}) }
+        })
+      })
+
+      void client.reloadFeatureFlagsAsync()
+      await waitForPromises()
+      const displaced = client.reloadFeatureFlagsAsync()
+      await waitForPromises()
+      const displacing = client.reloadFeatureFlagsAsync()
+      await waitForPromises()
+      releaseFirst()
+
+      // a failed re-issue settles every waiter rather than leaving any pending
+      expect(await displaced).toBeUndefined()
+      expect(await displacing).toBeUndefined()
+      // and the flags loaded before it are kept
+      expect(client.getFeatureFlags()).toEqual({ 'beta-ui': true })
+    })
+
+    it('keeps the config fetch when a plain reload displaces a queued config request', async () => {
+      // Exposes the protected flagsAsync to drive the config-piggyback request, and records
+      // onRemoteConfig so we can see whether the re-issued request still notifies
+      class TestClientTrackingRemoteConfig extends PostHogCoreTestClient {
+        public onRemoteConfigCalls: PostHogRemoteConfig[] = []
+
+        public configReload(): Promise<unknown> {
+          return this.flagsAsync({ sendAnonDistinctId: true, fetchConfig: true, triggerOnRemoteConfig: true })
+        }
+
+        protected onRemoteConfig(response: PostHogRemoteConfig): void {
+          this.onRemoteConfigCalls.push(response)
+        }
+      }
+
+      let releaseFirst!: () => void
+      const firstGate = new Promise<void>((r) => (releaseFirst = r))
+      let isFirst = true
+      const flagsUrls: string[] = []
+
+      const [, clientMocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (m) => {
+        m.fetch.mockImplementation(async (url: string) => {
+          if (url.includes('/flags/')) {
+            flagsUrls.push(url)
+          }
+          if (isFirst) {
+            isFirst = false
+            await firstGate
+          }
+          return {
+            status: 200,
+            text: () => Promise.resolve('ok'),
+            json: () => Promise.resolve({ featureFlags: { 'beta-ui': true }, sessionRecording: { endpoint: '/s/' } }),
+          }
+        })
+      })
+      const client = new TestClientTrackingRemoteConfig(clientMocks, 'TEST_API_KEY', {
+        disableCompression: true,
+        flushAt: 1,
+      })
+
+      void client.reloadFeatureFlagsAsync()
+      await waitForPromises()
+
+      // queues behind the in-flight request, then a plain reload displaces it
+      const queuedConfig = client.configReload()
+      await waitForPromises()
+      const displacing = client.reloadFeatureFlagsAsync()
+      await waitForPromises()
+
+      releaseFirst()
+      await queuedConfig
+      await displacing
+      await waitForPromises()
+
+      // the single re-issued request has to carry the displaced caller's config fetch too
+      expect(flagsUrls).toHaveLength(2)
+      expect(flagsUrls[0]).not.toContain('config=true')
+      expect(flagsUrls[1]).toContain('config=true')
+      expect(client.onRemoteConfigCalls).toHaveLength(1)
+
+      await client.shutdown()
     })
   })
 })

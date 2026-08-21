@@ -159,6 +159,18 @@ describe('config', () => {
                 expect(x).toEqual(expected)
             })
 
+            it('ignores rewritten ingestion paths identified by the request router', () => {
+                const networkOptions = buildNetworkRequestOptions(defaultConfig(), {}, (url) => {
+                    return new URL(url).pathname === '/custom-replay/'
+                })
+
+                expect(
+                    networkOptions.maskRequestFn!({
+                        name: 'https://proxy.example.com/custom-replay/?compression=gzip-js',
+                    } as CapturedNetworkRequest)
+                ).toBeUndefined()
+            })
+
             it('redacts large request body', () => {
                 const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
                 const cleaned = networkOptions.maskRequestFn!({

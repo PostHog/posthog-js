@@ -316,6 +316,64 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
   })
 
+  test('preserves output inline data when the client enables multimodal capture', async () => {
+    const base64Data = 'A'.repeat(2000)
+    ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue({
+      candidates: [
+        {
+          content: {
+            parts: [{ inlineData: { mimeType: 'image/png', data: base64Data } }],
+          },
+          finishReason: 'STOP',
+        },
+      ],
+      usageMetadata: { promptTokenCount: 15, candidatesTokenCount: 8, totalTokenCount: 23 },
+    })
+    ;(mockPostHogClient as PostHog & { enableFullAiCapture?: boolean }).enableFullAiCapture = true
+
+    await client.models.generateContent({
+      model: 'gemini-2.0-flash-001',
+      contents: 'Describe this image',
+      posthogDistinctId: 'test-id',
+    })
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { properties } = captureArgs[0]
+
+    const imageBlock = properties['$ai_output_choices'][0].content[0]
+    expect(imageBlock.inline_data.data).toBe(base64Data)
+  })
+
+  test('redacts output inline data when the client does not enable multimodal capture', async () => {
+    const base64Data = 'A'.repeat(2000)
+    ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue({
+      candidates: [
+        {
+          content: {
+            parts: [{ inlineData: { mimeType: 'image/png', data: base64Data } }],
+          },
+          finishReason: 'STOP',
+        },
+      ],
+      usageMetadata: { promptTokenCount: 15, candidatesTokenCount: 8, totalTokenCount: 23 },
+    })
+
+    await client.models.generateContent({
+      model: 'gemini-2.0-flash-001',
+      contents: 'Describe this image',
+      posthogDistinctId: 'test-id',
+    })
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { properties } = captureArgs[0]
+
+    const imageBlock = properties['$ai_output_choices'][0].content[0]
+    expect(imageBlock.inline_data.data).not.toBe(base64Data)
+    expect(imageBlock.inline_data.data).toContain('redacted')
+  })
+
   test('error handling', async () => {
     const error = new Error('API Error')
     ;(error as any).status = 400

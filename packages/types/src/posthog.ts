@@ -5,7 +5,7 @@
  * It can be used to type `window.posthog` when loading PostHog via a script tag.
  */
 
-import type { PostHogConfig } from './posthog-config'
+import type { PostHogConfig, ResetOptions } from './posthog-config'
 import type { Properties, JsonType } from './common'
 import type { CaptureResult, CaptureOptions } from './capture'
 import type { CaptureLogOptions, Logger } from './capture-log'
@@ -191,9 +191,9 @@ export interface PostHog {
      * This also clears the stored consent, so with `opt_out_capturing_by_default` the instance
      * is opted out again afterwards — call `reset()` before `opt_in_capturing()`, not after.
      *
-     * @param {boolean} [reset_device_id] Whether to generate a new device ID as well as a new distinct ID.
+     * @param options - Boolean to reset the device ID (legacy), or reset options including bootstrap values.
      */
-    reset(reset_device_id?: boolean): void
+    reset(options?: boolean | ResetOptions): void
 
     /**
      * Flush any queued events and gracefully tear down the SDK.

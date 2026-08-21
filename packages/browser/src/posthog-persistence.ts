@@ -1,17 +1,43 @@
 /* eslint camelcase: "off" */
 
 import { each, extend, stripEmptyProperties, addEventListener } from '@posthog/browser-common/utils/general-utils'
-import { cookieStore, createLocalPlusCookieStore, localStore, memoryStore, sessionStore } from './storage'
+import {
+    COOKIE_IDENTITY_BOUND_LOCAL_PROPERTIES,
+    COOKIE_PERSISTED_PROPERTIES,
+    cookieStore,
+    createLocalPlusCookieStore,
+    getCookiePersistedProperties,
+    getCookiePersistedPropertiesMetadata,
+    getCookiePersistedPropertiesMetadataState,
+    getCookiePropertiesFingerprint,
+    getSafeCookieProperties,
+    localStore,
+    memoryStore,
+    sessionStore,
+} from './storage'
 import { PersistentStore, PostHogConfig, Properties } from './types'
 import { document, window } from '@posthog/browser-common/utils/globals'
 import {
+    ALIAS_ID_KEY,
+    DISTINCT_ID,
     ENABLED_FEATURE_FLAGS,
     EVENT_TIMERS_KEY,
+    FLAG_CALL_REPORTED,
     INITIAL_CAMPAIGN_PARAMS,
     INITIAL_PERSON_INFO,
     INITIAL_REFERRER_INFO,
+    PERSISTENCE_ACTIVE_FEATURE_FLAGS,
+    PERSISTENCE_FEATURE_FLAG_DETAILS,
+    PERSISTENCE_FEATURE_FLAG_ERRORS,
     PERSISTENCE_FEATURE_FLAG_EVALUATED_AT,
+    PERSISTENCE_FEATURE_FLAG_PAYLOADS,
+    PERSISTENCE_FEATURE_FLAG_REQUEST_ID,
+    STORED_GROUP_PROPERTIES_KEY,
+    STORED_PERSON_PROPERTIES_KEY,
     SURVEYS_LOADED_AT,
+    USER_STATE,
+    USER_STATE_ANONYMOUS,
+    USER_STATE_IDENTIFIED,
 } from './constants'
 import { getPersistenceKeyPolicy, PERSISTENCE_STORAGE_GROUPS, PersistenceStorageGroup } from './persistence-key-policy'
 
@@ -31,7 +57,7 @@ const GROUP_FRESHNESS_KEY: Partial<Record<PersistenceStorageGroup, string>> = {
     surveys: SURVEYS_LOADED_AT,
 }
 
-import { isArray, isNumber, isUndefined } from '@posthog/core'
+import { isArray, isNull, isNumber, isUndefined } from '@posthog/core'
 import {
     getCampaignParams,
     getInitialPersonPropsFromInfo,
@@ -49,6 +75,8 @@ const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['pers
     'sessionstorage',
     'memory',
 ]
+
+const getCookieIdentityChangePendingName = (name: string): string => `${name}_cookie_identity_change_pending`
 
 const parseName = (config: PostHogConfig): string => {
     let token = ''
@@ -96,6 +124,15 @@ const isArrayContentsEqual = (arr1: readonly string[], arr2: readonly string[]):
     return sortedArr1.every((item, index) => item === sortedArr2[index])
 }
 
+const clearStaleEventProperties = (props: Properties, cookieProperties: Properties): void => {
+    each(props, (_value, key) => {
+        const policy = getPersistenceKeyPolicy(key)
+        if ((!policy || policy.exposure === 'event') && !Object.prototype.hasOwnProperty.call(cookieProperties, key)) {
+            delete props[key]
+        }
+    })
+}
+
 /**
  * PostHog Persistence Object
  * @constructor
@@ -136,6 +173,18 @@ export class PostHogPersistence {
     // flushed on `beforeunload` and `pagehide` so no state is lost on
     // tab close.
     private _pendingSaveTimer: ReturnType<typeof setTimeout> | undefined
+    // Snapshot of the last shared-cookie state this instance observed or wrote.
+    // Cookies do not emit cross-origin storage events, so captures and writes use
+    // this fingerprint to cheaply detect identity changes made on sibling subdomains.
+    private _lastSeenCookiePropertiesFingerprint: string | undefined
+    private _lastSeenMainCookieValue: string | undefined
+    // Identity changes can be adopted by background persistence writes before
+    // capture runs. Keep the transition pending until core performs the flag and
+    // person-cache side effects associated with the new identity.
+    private _cookieIdentityChangePending = false
+    // A local reset or storage migration owns the next cookie snapshot. Ignore
+    // sibling writes until the complete replacement has been published.
+    private _cookieSyncSuppressed = false
 
     /**
      * @param {PostHogConfig} config initial PostHog configuration
@@ -175,6 +224,241 @@ export class PostHogPersistence {
         return isNumber(value) && value > 0 ? value : 0
     }
 
+    private _rememberCurrentCookieProperties(props?: Properties): void {
+        if (!this._config.cookieWinsOnConflict || this._config.persistence.toLowerCase() !== 'localstorage+cookie') {
+            return
+        }
+        if (props) {
+            // Remember exactly what this write attempted instead of rereading the
+            // shared cookie. A sibling can update the cookie immediately after our
+            // write; recording that later value here would hide an unseen update.
+            try {
+                const cookieProperties = getCookiePersistedProperties(
+                    props,
+                    this._config.cookie_persisted_properties || []
+                )
+                const customCookieProperties = this._config.cookie_persisted_properties || []
+                const metadata = getCookiePersistedPropertiesMetadata(cookieProperties, customCookieProperties)
+                const expectedFingerprint = JSON.stringify(cookieProperties) + '|' + JSON.stringify(metadata)
+                // `localStorage+cookie._set` reports localStorage success even if
+                // its best-effort cookie mirror fails. Advance the observed
+                // fingerprint only when the shared cookie actually contains this
+                // exact snapshot. A different value may be either the old cookie
+                // or a sibling write, and must remain eligible for reconciliation.
+                const currentCookieValue = cookieStore._get(this._name) || undefined
+                if (
+                    currentCookieValue &&
+                    getCookiePropertiesFingerprint(this._name, currentCookieValue) === expectedFingerprint
+                ) {
+                    this._lastSeenCookiePropertiesFingerprint = expectedFingerprint
+                    this._lastSeenMainCookieValue = currentCookieValue
+                }
+            } catch {}
+            return
+        }
+        try {
+            const cookieValue = cookieStore._get(this._name) || undefined
+            this._lastSeenCookiePropertiesFingerprint = cookieValue
+                ? getCookiePropertiesFingerprint(this._name, cookieValue)
+                : undefined
+            this._lastSeenMainCookieValue = cookieValue
+        } catch {}
+    }
+
+    /**
+     * Adopt shared-cookie changes made by a sibling subdomain without replacing
+     * localStorage-only or pending in-memory properties. Returns true when a new
+     * non-empty cookie snapshot was observed.
+     */
+    syncCookieProperties(): boolean {
+        return this._syncCookieProperties(this._config)
+    }
+
+    private _syncCookieProperties(config: PostHogConfig, ignoreDisabled: boolean = false): boolean {
+        if (
+            (this._disabled && !ignoreDisabled) ||
+            this._cookieSyncSuppressed ||
+            !config.cookieWinsOnConflict ||
+            config.persistence.toLowerCase() !== 'localstorage+cookie'
+        ) {
+            return false
+        }
+
+        let cookieValue: string | undefined
+        try {
+            cookieValue = cookieStore._get(this._name) || undefined
+        } catch {}
+        if (!cookieValue || cookieValue === this._lastSeenMainCookieValue) {
+            // Ignore sidecar-only changes. Metadata is meaningful only together
+            // with a new main snapshot, and treating it as a sibling identity
+            // update could roll back a local write when the main mirror failed.
+            return false
+        }
+        const cookieFingerprint = getCookiePropertiesFingerprint(this._name, cookieValue)
+
+        let cookieProperties: Properties
+        try {
+            cookieProperties = getSafeCookieProperties(JSON.parse(cookieValue))
+        } catch {
+            return false
+        }
+        // If the main cookie changed while its metadata was read, retry on the
+        // next synchronization rather than applying the old values while marking
+        // the new snapshot as observed.
+        if ((cookieStore._get(this._name) || undefined) !== cookieValue) {
+            return false
+        }
+        this._lastSeenCookiePropertiesFingerprint = cookieFingerprint
+        this._lastSeenMainCookieValue = cookieValue
+        const metadataState = getCookiePersistedPropertiesMetadataState(this._name, cookieValue)
+        const authoritativeCookieProperties = [...COOKIE_PERSISTED_PROPERTIES, ...metadataState.properties]
+        const invalidCookieProperties: Record<string, true> = {}
+        Object.keys(cookieProperties).forEach((key) => {
+            const value = cookieProperties[key]
+            if (
+                isUndefined(value) ||
+                isNull(value) ||
+                value === '' ||
+                (key === USER_STATE && value !== USER_STATE_ANONYMOUS && value !== USER_STATE_IDENTIFIED)
+            ) {
+                invalidCookieProperties[key] = true
+                delete cookieProperties[key]
+            }
+        })
+        if (isEmptyObject(cookieProperties)) {
+            return false
+        }
+        const hasValidCookieIdentity =
+            DISTINCT_ID in cookieProperties ||
+            cookieProperties[USER_STATE] === USER_STATE_ANONYMOUS ||
+            cookieProperties[USER_STATE] === USER_STATE_IDENTIFIED
+
+        const previousDistinctId = this.props[DISTINCT_ID]
+        const previousUserState = this.props[USER_STATE]
+        const nextProps = extend({}, this.props)
+        const cookiePersistedProperties = [
+            ...COOKIE_PERSISTED_PROPERTIES,
+            ...(config.cookie_persisted_properties || []),
+        ]
+        cookiePersistedProperties.forEach((key) => {
+            if (
+                authoritativeCookieProperties.indexOf(key) !== -1 &&
+                !(key in cookieProperties) &&
+                !invalidCookieProperties[key] &&
+                (hasValidCookieIdentity || (key !== DISTINCT_ID && key !== USER_STATE))
+            ) {
+                const localValue = nextProps[key]
+                const legacyFalsyBuiltIn =
+                    !metadataState.isValid &&
+                    COOKIE_PERSISTED_PROPERTIES.indexOf(key) !== -1 &&
+                    (localValue === false || localValue === 0)
+                if (!legacyFalsyBuiltIn) {
+                    delete nextProps[key]
+                }
+            }
+        })
+        this.props = extend(nextProps, cookieProperties)
+        // Older writers can omit $user_state entirely. Once that authoritative
+        // omission removes a prior identified state, represent it explicitly as
+        // anonymous so reset cleanup (including $groups) runs consistently.
+        if (hasValidCookieIdentity && !(USER_STATE in cookieProperties) && !(USER_STATE in this.props)) {
+            this._setProp(USER_STATE, USER_STATE_ANONYMOUS)
+        }
+        const nextDistinctId = this.props[DISTINCT_ID]
+        const nextUserState = this.props[USER_STATE]
+        if (hasValidCookieIdentity && (nextDistinctId !== previousDistinctId || nextUserState !== previousUserState)) {
+            this._cookieIdentityChangePending = true
+            sessionStore._set(getCookieIdentityChangePendingName(this._name), true)
+            this._deleteProp(STORED_PERSON_PROPERTIES_KEY)
+            this._deleteProp(PERSISTENCE_ACTIVE_FEATURE_FLAGS)
+            this._deleteProp(ENABLED_FEATURE_FLAGS)
+            this._deleteProp(PERSISTENCE_FEATURE_FLAG_DETAILS)
+            this._deleteProp(PERSISTENCE_FEATURE_FLAG_PAYLOADS)
+            this._deleteProp(PERSISTENCE_FEATURE_FLAG_REQUEST_ID)
+            this._deleteProp(PERSISTENCE_FEATURE_FLAG_EVALUATED_AT)
+            this._deleteProp(PERSISTENCE_FEATURE_FLAG_ERRORS)
+            this._deleteProp(FLAG_CALL_REPORTED)
+            const siblingReset =
+                nextUserState === USER_STATE_ANONYMOUS &&
+                (previousUserState === USER_STATE_IDENTIFIED ||
+                    cookieProperties[USER_STATE] === USER_STATE_ANONYMOUS ||
+                    (!isUndefined(previousDistinctId) && nextDistinctId !== previousDistinctId))
+            if (siblingReset) {
+                // reset() clears event-visible persistence. Mirror that for a
+                // sibling reset without discarding hidden SDK state or values
+                // that the new shared-cookie snapshot explicitly carries.
+                clearStaleEventProperties(this.props, cookieProperties)
+                this._deleteProp(STORED_GROUP_PROPERTIES_KEY)
+            }
+            // `$user_id` is localStorage-only, but it is bound to the current
+            // identity. Never carry the previous logged-in user across a sibling
+            // identify/reset adopted from the shared cookie.
+            if (nextUserState === USER_STATE_IDENTIFIED) {
+                this.props.$user_id = nextDistinctId
+            } else {
+                delete this.props.$user_id
+            }
+            this._deleteProp(ALIAS_ID_KEY)
+        }
+        return true
+    }
+
+    consumeCookieIdentityChange(): boolean {
+        const pendingName = getCookieIdentityChangePendingName(this._name)
+        const changed = this._cookieIdentityChangePending || !!sessionStore._get(pendingName)
+        this._cookieIdentityChangePending = false
+        if (changed) {
+            sessionStore._remove(pendingName)
+        }
+        return changed
+    }
+
+    _beginCookieSyncSuppression(ignoreDisabled: boolean = false): boolean {
+        if (
+            !this._cookieSyncSuppressed &&
+            (!this._disabled || ignoreDisabled) &&
+            this._config.cookieWinsOnConflict &&
+            this._config.persistence.toLowerCase() === 'localstorage+cookie'
+        ) {
+            this._cookieSyncSuppressed = true
+            return true
+        }
+        return false
+    }
+
+    _publishSuppressedCookieSnapshot(): void {
+        if (!this._cookieSyncSuppressed) {
+            return
+        }
+        if (!isUndefined(this._pendingSaveTimer)) {
+            clearTimeout(this._pendingSaveTimer)
+            this._pendingSaveTimer = undefined
+        }
+        // Force the complete local snapshot through without reconciling a
+        // stale sibling write observed during this authoritative transaction.
+        delete this._slotState[MAIN_STORAGE_SLOT]
+        this._writeNow(true)
+    }
+
+    _endCookieSyncSuppression(publish: boolean = true): void {
+        if (!this._cookieSyncSuppressed) {
+            return
+        }
+        try {
+            if (publish) {
+                this._publishSuppressedCookieSnapshot()
+            } else if (!isUndefined(this._pendingSaveTimer)) {
+                // A failed identify/reset may have scheduled saves before it
+                // threw. Do not let one run after suppression is released and
+                // publish the incomplete transaction asynchronously.
+                clearTimeout(this._pendingSaveTimer)
+                this._pendingSaveTimer = undefined
+            }
+        } finally {
+            this._cookieSyncSuppressed = false
+        }
+    }
+
     /**
      * Returns whether persistence is disabled. Only available in SDKs > 1.257.1. Do not use on extensions, otherwise
      * it'll break backwards compatibility for any version before 1.257.1.
@@ -200,7 +484,7 @@ export class PostHogPersistence {
         // so create it once for this specific config and use it if necessary
         const localPlusCookieStore = createLocalPlusCookieStore(
             config['cookie_persisted_properties'] || [],
-            config['__preview_cookie_wins_on_conflict'] || false
+            config.cookieWinsOnConflict
         )
 
         let store: PersistentStore
@@ -248,43 +532,14 @@ export class PostHogPersistence {
         return this._splitStorageEligible && !!config['split_storage']
     }
 
-    /**
-     * Check if the feature flag cache is stale based on the configured TTL.
-     * @param ttl Optional TTL override (uses config value if not provided)
-     * @internal
-     */
-    _isFeatureFlagCacheStale(ttl?: number): boolean {
-        const effectiveTtl = ttl ?? this._config.feature_flag_cache_ttl_ms
-        if (!effectiveTtl || effectiveTtl <= 0) {
-            return false
-        }
-        const evaluatedAt = this.props[PERSISTENCE_FEATURE_FLAG_EVALUATED_AT]
-        // If evaluatedAt is missing or not a numeric timestamp, consider cache stale.
-        // This handles SDK upgrades where old cached flags lack evaluatedAt.
-        if (!evaluatedAt || typeof evaluatedAt !== 'number') {
-            return true
-        }
-        return Date.now() - evaluatedAt > effectiveTtl
-    }
-
     properties(): Properties {
         const p: Properties = {}
 
         each(this.props, (v, k) => {
             const policy = getPersistenceKeyPolicy(k)
 
-            if (policy?.exposure === 'derived') {
-                const shouldSkip = k === ENABLED_FEATURE_FLAGS ? () => this._isFeatureFlagCacheStale() : () => false
-
-                if (policy.shouldSkipFromEventProperties?.(v, shouldSkip)) {
-                    return
-                }
-
-                if (policy.transformToEventProperties) {
-                    extend(p, policy.transformToEventProperties(v))
-                }
-            } else if (!policy || policy.exposure === 'event') {
-                if (policy?.shouldSkipFromEventProperties?.(v, () => false)) {
+            if (!policy || policy.exposure === 'event') {
+                if (policy?.shouldSkipFromEventProperties?.(v)) {
                     return
                 }
 
@@ -295,11 +550,31 @@ export class PostHogPersistence {
         return p
     }
 
-    load(): void {
-        if (this._disabled) {
+    /**
+     * Reload persisted properties from storage.
+     *
+     * @param allowDisabled - Read while this instance is disabled when shared consent changed in another tab
+     * and the in-memory disabled state has not yet been reconciled.
+     */
+    load(allowDisabled: boolean = false): void {
+        if (this._disabled && !allowDisabled) {
             return
         }
 
+        const reconcileCookieIdentity =
+            this._config.cookieWinsOnConflict && this._config.persistence.toLowerCase() === 'localstorage+cookie'
+        const localEntryBeforeMerge = reconcileCookieIdentity ? localStore._parse(this._name) : null
+        let cookieEntryBeforeMerge: Properties = {}
+        if (reconcileCookieIdentity) {
+            try {
+                cookieEntryBeforeMerge = getSafeCookieProperties(cookieStore._parse(this._name))
+                each(cookieEntryBeforeMerge, (value, key) => {
+                    if (isUndefined(value) || isNull(value) || value === '') {
+                        delete cookieEntryBeforeMerge[key]
+                    }
+                })
+            } catch {}
+        }
         const entry = this._storage._parse(this._name)
 
         if (entry) {
@@ -309,6 +584,69 @@ export class PostHogPersistence {
         if (this._splitStorage) {
             this._loadGroupEntries()
         }
+
+        if (reconcileCookieIdentity && entry) {
+            const previousDistinctId = localEntryBeforeMerge?.[DISTINCT_ID]
+            const previousUserState = localEntryBeforeMerge?.[USER_STATE] ?? USER_STATE_ANONYMOUS
+            const nextDistinctId = entry[DISTINCT_ID]
+            const nextUserState = entry[USER_STATE] ?? USER_STATE_ANONYMOUS
+            if (nextDistinctId !== previousDistinctId || nextUserState !== previousUserState) {
+                this._cookieIdentityChangePending = true
+                sessionStore._set(getCookieIdentityChangePendingName(this._name), true)
+                const nextProps = extend({}, this.props)
+                COOKIE_IDENTITY_BOUND_LOCAL_PROPERTIES.forEach((key) => delete nextProps[key])
+                const siblingReset =
+                    nextUserState === USER_STATE_ANONYMOUS &&
+                    (previousUserState === USER_STATE_IDENTIFIED ||
+                        cookieEntryBeforeMerge[USER_STATE] === USER_STATE_ANONYMOUS ||
+                        (!isUndefined(previousDistinctId) && nextDistinctId !== previousDistinctId))
+                if (siblingReset) {
+                    clearStaleEventProperties(nextProps, cookieEntryBeforeMerge)
+                    delete nextProps[STORED_GROUP_PROPERTIES_KEY]
+                }
+                this.props = nextProps
+
+                // Split entries are loaded after the main blob, so remove the
+                // previous identity's grouped flag state from both memory and its
+                // localStorage slot before a future load can restore it again.
+                const affectedGroups = new Set<PersistenceStorageGroup>()
+                COOKIE_IDENTITY_BOUND_LOCAL_PROPERTIES.forEach((key) => {
+                    const group = getPersistenceKeyPolicy(key)?.storageGroup
+                    if (group) {
+                        affectedGroups.add(group)
+                    }
+                })
+                affectedGroups.forEach((group) => {
+                    const groupProps: Properties = {}
+                    each(this.props, (value, key) => {
+                        if (getPersistenceKeyPolicy(key)?.storageGroup === group) {
+                            groupProps[key] = value
+                        }
+                    })
+                    if (isEmptyObject(groupProps)) {
+                        localStore._remove(this._groupEntryName(group))
+                        this._slotState[group] = {}
+                    } else if (localStore._set(this._groupEntryName(group), groupProps)) {
+                        this._slotState[group] = {
+                            persisted: true,
+                            fingerprint: this._entryFingerprint(groupProps, group),
+                        }
+                    }
+                })
+            }
+        }
+
+        // A write can durably adopt the new main-cookie identity before core has
+        // cleared the separate session persistence. Keep that cleanup pending
+        // across reloads in this browser tab.
+        if (sessionStore._get(getCookieIdentityChangePendingName(this._name))) {
+            this._cookieIdentityChangePending = true
+        }
+
+        // `_parse()` may have read a different cookie than a reread here if a
+        // sibling writes concurrently. Let the first synchronization compare the
+        // current shared cookie with the loaded props instead of marking an
+        // arbitrary later snapshot as observed.
     }
 
     // Merge each group entry over `props`, which already holds the main blob.
@@ -451,9 +789,18 @@ export class PostHogPersistence {
         this._writeNow()
     }
 
-    private _writeNow(): void {
-        if (this._disabled) {
+    private _writeNow(forceSuppressedSnapshot = false): void {
+        if (this._disabled || (this._cookieSyncSuppressed && !forceSuppressedSnapshot)) {
             return
+        }
+
+        // Reconcile immediately before writing as well as before capture. This
+        // closes the debounce window where a sibling identify/reset could
+        // otherwise be overwritten by this tab's pending stale whole-blob save.
+        // A transaction ending suppression owns its complete snapshot and must
+        // not adopt a sibling write that arrived while it was in progress.
+        if (!forceSuppressedSnapshot) {
+            this.syncCookieProperties()
         }
 
         if (this._splitStorage) {
@@ -461,7 +808,9 @@ export class PostHogPersistence {
             return
         }
 
-        this._writeEntry(this._storage, this._name, this.props, MAIN_STORAGE_SLOT)
+        if (this._writeEntry(this._storage, this._name, this.props, MAIN_STORAGE_SLOT)) {
+            this._rememberCurrentCookieProperties(this.props)
+        }
     }
 
     // Partition `props` by storage group and write each entry independently:
@@ -477,7 +826,9 @@ export class PostHogPersistence {
     // skip a needed rewrite.
     private _writeNowSplit(): void {
         const { main, groups } = this._partitionProps()
-        this._writeEntry(this._storage, this._name, main, MAIN_STORAGE_SLOT)
+        if (this._writeEntry(this._storage, this._name, main, MAIN_STORAGE_SLOT)) {
+            this._rememberCurrentCookieProperties(main)
+        }
         for (const group of PERSISTENCE_STORAGE_GROUPS) {
             const groupProps = groups[group]
             // Don't materialize an entry just to hold `{}`: skip a group that is
@@ -542,7 +893,7 @@ export class PostHogPersistence {
     // JSON.stringify can throw on BigInt / circular refs. We let the
     // underlying storage layer keep its existing try/catch behaviour
     // (log and drop) by falling through on serialization errors.
-    private _writeEntry(storage: PersistentStore, name: string, props: Properties, slot: StorageSlot): void {
+    private _writeEntry(storage: PersistentStore, name: string, props: Properties, slot: StorageSlot): boolean {
         const state = this._slotWriteState(slot)
         // Fast path for group slots (localStorage-only): when nothing in the
         // group changed since its last successful write, skip the JSON.stringify
@@ -550,7 +901,7 @@ export class PostHogPersistence {
         // it is small, changes on nearly every write, and carries cookie options
         // in its fingerprint, so it always serializes.
         if (slot !== MAIN_STORAGE_SLOT && !state.dirty && !isUndefined(state.fingerprint)) {
-            return
+            return false
         }
 
         let fingerprint: string | undefined
@@ -558,7 +909,7 @@ export class PostHogPersistence {
             fingerprint = this._entryFingerprint(props, slot)
             if (fingerprint === state.fingerprint) {
                 state.dirty = false
-                return
+                return false
             }
         } catch {
             // serialization failed (BigInt / circular ref); fall through to
@@ -582,6 +933,7 @@ export class PostHogPersistence {
             if (!isUndefined(fingerprint)) {
                 state.fingerprint = fingerprint
             }
+            return true
         } else if (this._config.debug) {
             // The durable write did not land (e.g. localStorage quota). The slot
             // stays dirty / un-fingerprinted so the next save retries it; surface
@@ -589,6 +941,7 @@ export class PostHogPersistence {
             // otherwise silently strand the flag cache — is visible.
             logger.warn(`failed to persist storage entry "${name}"; will retry on next save`)
         }
+        return false
     }
 
     // `keepGroupEntries` is set by the cookie-option setters (set_secure /
@@ -637,6 +990,8 @@ export class PostHogPersistence {
         } else {
             this._slotState = {}
         }
+        this._lastSeenCookiePropertiesFingerprint = undefined
+        this._lastSeenMainCookieValue = undefined
     }
 
     // removes the storage entry and deletes all loaded data
@@ -655,6 +1010,9 @@ export class PostHogPersistence {
 
     register_once(props: Properties, default_value: any, days?: number): boolean {
         if (isObject(props)) {
+            // Explicit local mutations are newer than any unobserved sibling
+            // snapshot. Reconcile first so the caller's values win afterward.
+            this.syncCookieProperties()
             if (isUndefined(default_value)) {
                 default_value = 'None'
             }
@@ -684,6 +1042,7 @@ export class PostHogPersistence {
 
     register(props: Properties, days?: number): boolean {
         if (isObject(props)) {
+            this.syncCookieProperties()
             this._expire_days = isUndefined(days) ? this._default_expiry : days
 
             let hasChanges = false
@@ -704,6 +1063,7 @@ export class PostHogPersistence {
     }
 
     unregister(propOrProps: string | readonly string[]): void {
+        this.syncCookieProperties()
         const props = typeof propOrProps === 'string' ? [propOrProps] : propOrProps
         let hasChanges = false
         for (const prop of props) {
@@ -800,33 +1160,87 @@ export class PostHogPersistence {
     }
 
     update_config(config: PostHogConfig, oldConfig: PostHogConfig, isDisabled?: boolean): void {
-        this._default_expiry = this._expire_days = config['cookie_expiration']
-        this.set_disabled(config['disable_persistence'] || !!isDisabled)
-        this.set_cross_subdomain(config['cross_subdomain_cookie'])
-        this.set_secure(config['secure_cookie'])
+        const persistenceModeChanged = config.persistence !== oldConfig.persistence
+        const cookiePersistedPropertiesChanged = !isArrayContentsEqual(
+            config.cookie_persisted_properties || [],
+            oldConfig.cookie_persisted_properties || []
+        )
+        const persistenceChanged = persistenceModeChanged || cookiePersistedPropertiesChanged
+        const cookiePrecedenceChanged = config.cookieWinsOnConflict !== oldConfig.cookieWinsOnConflict
 
-        const persistenceChanged =
-            config.persistence !== oldConfig.persistence ||
-            !isArrayContentsEqual(config.cookie_persisted_properties || [], oldConfig.cookie_persisted_properties || [])
+        const disabled = config['disable_persistence'] || !!isDisabled
+        const reEnabling = !!this._disabled && !disabled
+        // Reconcile through the old routing before replacing it. PostHog mutates
+        // its config object before calling this method, so use the old snapshot
+        // explicitly rather than relying on this._config. A configuration change
+        // that re-enables persistence may read the shared cookie before writes resume.
+        if (!disabled) {
+            this._syncCookieProperties(oldConfig, reEnabling)
+        }
+
+        this._config = config
+        // A newly enabled precedence policy or cookie-backed key set must apply
+        // to the current cookie even if the old-policy sync just fingerprinted it.
+        if (!disabled && (persistenceModeChanged || cookiePersistedPropertiesChanged || cookiePrecedenceChanged)) {
+            this._lastSeenCookiePropertiesFingerprint = undefined
+            this._lastSeenMainCookieValue = undefined
+            // Newly added cookie-backed keys are still local-only in the current
+            // cookie. Keep the old key set authoritative until migration writes
+            // the first snapshot under the new configuration.
+            this._syncCookieProperties(
+                {
+                    ...config,
+                    cookie_persisted_properties: oldConfig.cookie_persisted_properties,
+                },
+                reEnabling
+            )
+        }
 
         // `_buildStorage` re-resolves both the backend and `_splitStorageEligible`,
         // so on a persistence change build the new store first, then derive the
         // split flag from the fresh eligibility. The new backend may no longer be
         // split-eligible (e.g. localStorage -> memory).
-        const newStore = persistenceChanged ? this._buildStorage(config) : this._storage
+        const newStore = persistenceChanged || cookiePrecedenceChanged ? this._buildStorage(config) : this._storage
         const wantSplit = this._resolveSplitStorage(config)
+        const storageMigration = persistenceChanged || wantSplit !== this._splitStorage
+        const cookieOptionsChanged =
+            config['cross_subdomain_cookie'] !== this._cross_subdomain || config['secure_cookie'] !== this._secure
 
-        // Migrate when the backend changed or the split routing flipped at
-        // runtime, e.g. set_config({ split_storage: true })
-        // without touching persistence. Either way we clear the old layout and
-        // re-save so subsequent reads/writes land in the right entries.
-        if (persistenceChanged || wantSplit !== this._splitStorage) {
-            const props = this.props
-            this.clear()
-            this._storage = newStore
-            this._splitStorage = wantSplit
-            this.props = props
-            this.save()
+        const cookieSyncSuppressionStarted =
+            !disabled && (storageMigration || cookieOptionsChanged) && this._beginCookieSyncSuppression(reEnabling)
+        try {
+            this._default_expiry = this._expire_days = config['cookie_expiration']
+            this.set_disabled(disabled)
+            this.set_cross_subdomain(config['cross_subdomain_cookie'])
+            this.set_secure(config['secure_cookie'])
+
+            // Migrate when the backend changed or the split routing flipped at
+            // runtime, e.g. set_config({ split_storage: true }). Either way we
+            // clear the old layout and re-save in the new routing.
+            if (storageMigration) {
+                const props = this.props
+                this.clear()
+                this._storage = newStore
+                this._splitStorage = wantSplit
+                this.props = props
+                this.save()
+            } else if (cookiePrecedenceChanged) {
+                this._storage = newStore
+                if (!disabled) {
+                    // Persist the reconciled snapshot immediately. In particular,
+                    // when precedence is disabled, a later reload must not let the
+                    // stale localStorage value become authoritative again.
+                    delete this._slotState[MAIN_STORAGE_SLOT]
+                    this._writeNow()
+                }
+            }
+        } finally {
+            if (cookieSyncSuppressionStarted) {
+                // Cookie option and storage migrations clear the shared cookie.
+                // Restore one complete authoritative snapshot before another
+                // subdomain can initialize.
+                this._endCookieSyncSuppression()
+            }
         }
     }
 

@@ -272,6 +272,7 @@ export enum PostHogPersistedProperty {
   // legacy (v0) transport while other events move to Capture V1 — segregated so a
   // failure on one route can't re-send events already accepted on the other.
   AiQueue = 'ai_queue',
+  AiCaptureQueue = 'ai_capture_queue',
   // Logs queue. Individual SDKs may route this key to an isolated storage
   // instance if they want to separate logs write volume from main state.
   LogsQueue = 'logs_queue',
@@ -311,7 +312,7 @@ export type PostHogFetchOptions = {
 export type PostHogCaptureOptions = {
   /** If provided overrides the auto-generated event UUID. Must be a valid UUID. */
   uuid?: string
-  /** If provided overrides the auto-generated timestamp */
+  /** If provided, overrides the auto-generated timestamp. UTC is preferred; non-UTC input is converted to UTC. */
   timestamp?: Date
   disableGeoip?: boolean
   /**

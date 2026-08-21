@@ -241,7 +241,7 @@ describe('conversation-id', () => {
       }
       expect(content).toHaveLength(2)
       expect(content[1].type).toBe('text')
-      expect(content[1].text).toContain('conversation_id=conv-123')
+      expect(JSON.parse(content[1].text)).toEqual({ conversation_id: 'conv-123' })
     })
 
     it('injects into an errored result — the retry must land in the same conversation', () => {
@@ -354,7 +354,7 @@ describe('conversation_id tool parameter', () => {
       await capture.stop()
     })
 
-    it('mints a conversation_id and appends a prompt-back text block when the agent omits it', async () => {
+    it('mints a conversation_id and appends a data-only text block when the agent omits it', async () => {
       instrument(server, fakePostHog(), { enableConversationId: true })
 
       const result = await client.request(
@@ -369,7 +369,7 @@ describe('conversation_id tool parameter', () => {
       )
 
       const promptBack = result.content.find(
-        (c) => c.type === 'text' && typeof c.text === 'string' && c.text.includes('conversation_id=')
+        (c) => c.type === 'text' && typeof c.text === 'string' && c.text.includes('"conversation_id"')
       )
       expect(promptBack).toBeDefined()
     })
@@ -436,7 +436,7 @@ describe('conversation_id tool parameter', () => {
       // A tool that fails on the first call is exactly when the agent needs the
       // session handle, or its retry starts a different conversation.
       const hasPromptBack = (result.content ?? []).some(
-        (c) => c.type === 'text' && typeof c.text === 'string' && c.text.includes('conversation_id=')
+        (c) => c.type === 'text' && typeof c.text === 'string' && c.text.includes('"conversation_id"')
       )
       expect(hasPromptBack).toBe(true)
     })
@@ -552,7 +552,13 @@ describe('conversation_id edge cases', () => {
       CallToolResultSchema
     )
     const handle = (first.content ?? [])
-      .map((c: any) => String(c.text ?? '').match(/conversation_id=([\w-]+)/)?.[1])
+      .map((c: any) => {
+        try {
+          return JSON.parse(String(c.text ?? '')).conversation_id
+        } catch {
+          return undefined
+        }
+      })
       .find(Boolean)
     expect(handle).toBeDefined()
 
@@ -637,7 +643,7 @@ describe('conversation_id edge cases', () => {
         CallToolResultSchema
       )
 
-      const hasPromptBack = (result.content ?? []).some((c: any) => String(c.text ?? '').includes('conversation_id='))
+      const hasPromptBack = (result.content ?? []).some((c: any) => String(c.text ?? '').includes('"conversation_id"'))
       expect(hasPromptBack).toBe(false)
     })
 

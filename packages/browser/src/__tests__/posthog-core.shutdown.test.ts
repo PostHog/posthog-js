@@ -52,12 +52,12 @@ describe('shutdown()', () => {
         expect(sessionRecordingDispose).toHaveBeenCalledTimes(1)
     })
 
-    it('destroys feature flags listeners', async () => {
-        const featureFlagsDestroy = jest.spyOn(instance.featureFlags!, 'destroy')
+    it('disposes feature flags through the extension runtime', async () => {
+        const featureFlagsDispose = jest.spyOn(instance.featureFlags!, 'dispose')
 
         await instance.shutdown()
 
-        expect(featureFlagsDestroy).toHaveBeenCalledTimes(1)
+        expect(featureFlagsDispose).toHaveBeenCalledTimes(1)
     })
 
     it('isolates extension cleanup failures and continues queue flushing', async () => {

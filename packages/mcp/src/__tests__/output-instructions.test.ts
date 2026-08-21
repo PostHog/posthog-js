@@ -283,7 +283,7 @@ describe('mirroring the session handle into structuredContent', () => {
     const result = mirrorInstructionsIntoStructuredContent(withStructured(), 'conv-1') as any
 
     expect(result.structuredContent[MCP_INSTRUCTIONS_KEY].conversation_id).toBe('conv-1')
-    expect(result.structuredContent[MCP_INSTRUCTIONS_KEY].instructions).toEqual(expect.any(String))
+    expect(result.structuredContent[MCP_INSTRUCTIONS_KEY]).toEqual({ conversation_id: 'conv-1' })
     expect(result.structuredContent.ok).toBe(true)
   })
 
@@ -352,7 +352,7 @@ describe('mirroring over a real client', () => {
       const second = await call(client, echoed)
 
       // The text block is mint-only; the structured copy rides every response.
-      const hasText = (second.content ?? []).some((c: any) => String(c.text).includes('conversation_id='))
+      const hasText = (second.content ?? []).some((c: any) => String(c.text).includes('"conversation_id"'))
       expect(hasText).toBe(false)
       expect((second.structuredContent as any)[MCP_INSTRUCTIONS_KEY].conversation_id).toBe(echoed)
     } finally {
