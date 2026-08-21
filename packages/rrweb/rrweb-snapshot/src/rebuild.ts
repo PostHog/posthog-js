@@ -12,6 +12,7 @@ import {
   Mirror,
   isNodeMetaEqual,
   extractFileExtension,
+  attachShadowRootSafely,
 } from './utils';
 import postcss, { type Parser } from 'postcss';
 
@@ -409,7 +410,7 @@ function buildNode(
          * we can remove it.
          */
         if (!node.shadowRoot) {
-          node.attachShadow({ mode: 'open' });
+          attachShadowRootSafely(node);
         } else {
           while (node.shadowRoot.firstChild) {
             node.shadowRoot.removeChild(node.shadowRoot.firstChild);
