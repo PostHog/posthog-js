@@ -2465,10 +2465,6 @@ export class Replayer {
     if (!isSync) {
       this.drawMouseTail({ x: _x, y: _y });
     }
-    // A mouse event can resolve to a non-element node (e.g. a text or comment
-    // node). hoverElements resolves the nearest ancestor element to hover and
-    // clears the previous :hover state, and is safe for any node kind, so pass
-    // the target straight through.
     this.hoverElements(target);
   }
 
@@ -2514,11 +2510,8 @@ export class Replayer {
       .forEach((hoveredEl) => {
         hoveredEl.classList.remove(':hover');
       });
-    // getRootNode() returns the node itself when it is detached from any
-    // document, so it is not guaranteed to be a Document or ShadowRoot. Only
-    // those expose querySelectorAll, so cache it only when it actually is one –
-    // otherwise the next hover tick would call querySelectorAll on a node that
-    // has no such method and throw an unhandled TypeError mid-playback.
+    // A detached node's getRootNode() is the node itself, which may not expose
+    // querySelectorAll, so only cache it when it really is a root.
     const rootNode = el.getRootNode();
     if (
       rootNode.nodeType === Node.DOCUMENT_NODE ||
@@ -2528,8 +2521,7 @@ export class Replayer {
     } else {
       this.lastHoveredRootNode = undefined;
     }
-    // Non-element nodes (text/comment) cannot hold a :hover class, so start from
-    // the nearest ancestor element and climb the parent chain from there.
+    // Text and comment nodes cannot hold a class, so start at the nearest ancestor element.
     let currentEl: Element | null =
       el.nodeType === Node.ELEMENT_NODE ? (el as Element) : el.parentElement;
     while (currentEl) {
