@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.418.9
+
+### Patch Changes
+
+- [#4588](https://github.com/PostHog/posthog-js/pull/4588) [`c8df61c`](https://github.com/PostHog/posthog-js/commit/c8df61cf792d0835db57822fcd4a3efe1ea21c50) Thanks [@clr182](https://github.com/clr182)! - fix(replay): attribute the backdated sessionIdle marker to the session that went idle, so a rotation-born session's recording no longer starts hours before its first snapshot
+  (2026-08-21)
+
 ## 1.418.8
 
 ### Patch Changes
