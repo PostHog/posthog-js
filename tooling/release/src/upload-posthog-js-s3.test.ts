@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import {
+    assertCanUploadImmutableAssets,
     assertNoCompatibilityVersionNamespaceCollisions,
     buildAssetUploadPlans,
     collectReleaseAssets,
@@ -246,6 +247,61 @@ test('assertNoCompatibilityVersionNamespaceCollisions rejects compatibility keys
             },
         ])
     )
+})
+
+test('assertCanUploadImmutableAssets refuses to replace an existing release by default', async () => {
+    const uploads = [
+        {
+            key: 'static/1.370.0/array.js',
+            filePath: '/tmp/array.js',
+            contentType: 'application/javascript',
+            cacheControl: 'public, max-age=31536000, immutable',
+        },
+        {
+            key: 'static/1.370.0/toolbar.js',
+            filePath: '/tmp/toolbar.js',
+            contentType: 'application/javascript',
+            cacheControl: 'public, max-age=31536000, immutable',
+        },
+    ]
+
+    await assert.rejects(
+        () =>
+            assertCanUploadImmutableAssets('us-assets.i.posthog.com', uploads, false, async (_bucket, key) =>
+                key.endsWith('/array.js')
+            ),
+        /Refusing to overwrite existing immutable release assets.*--force-overwrite/
+    )
+})
+
+test('assertCanUploadImmutableAssets permits an explicit overwrite without checking S3', async () => {
+    let checked = false
+
+    await assertCanUploadImmutableAssets('us-assets.i.posthog.com', [], true, async () => {
+        checked = true
+        return true
+    })
+
+    assert.equal(checked, false)
+})
+
+test('buildAssetUploadPlans can publish only immutable assets during recovery', () => {
+    const assets: ReleaseAsset[] = [
+        {
+            relativeKey: 'array.js',
+            filePath: '/tmp/array.js',
+            contentType: 'application/javascript',
+        },
+    ]
+
+    const plans = buildAssetUploadPlans('1.370.0', assets, false)
+
+    assert.deepEqual(
+        plans.immutable.map(({ key }) => key),
+        ['static/1.370.0/array.js']
+    )
+    assert.deepEqual(plans.majorAlias, [])
+    assert.deepEqual(plans.compatibility, [])
 })
 
 test('buildAssetUploadPlans skips mutable aliases for prerelease versions', () => {

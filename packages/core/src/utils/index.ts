@@ -3,7 +3,9 @@ import { FetchLike } from '../types'
 export * from './bot-detection'
 export * from './browser-utils'
 export * from './bucketed-rate-limiter'
-export * from './json-utils'
+// Named rather than `export *`: the budgets, markers and `sanitizeString` are
+// shared with the OTLP encoder but are not public API.
+export { toJsonSafeValue } from './json-utils'
 export * from './number-utils'
 export * from './string-utils'
 export * from './type-utils'

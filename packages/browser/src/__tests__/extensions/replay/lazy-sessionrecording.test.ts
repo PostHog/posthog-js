@@ -355,6 +355,7 @@ describe('Lazy SessionRecording', () => {
     })
 
     afterEach(() => {
+        sessionRecording.stopRecording()
         // @ts-expect-error this is a test, it's safe to write to location like this
         window!.location = originalLocation
     })
@@ -1270,28 +1271,47 @@ describe('Lazy SessionRecording', () => {
                 expect(bufferedEvent.data.tag).toBe(eventTag)
             })
 
-            it.each(['$session_ending', '$session_starting'])(
-                'corrects timestamp for %s events when idle',
-                (eventTag: string) => {
-                    const lastActivityTime = startingTimestamp + 100
-                    const eventRecordedTime = startingTimestamp + 5000
+            it('corrects timestamp for $session_ending events when idle', () => {
+                const lastActivityTime = startingTimestamp + 100
+                const eventRecordedTime = startingTimestamp + 5000
 
-                    // force idle state
-                    sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = true
-                    sessionRecording['_lazyLoadedSessionRecording']['_lastActivityTimestamp'] = lastActivityTime
+                // force idle state
+                sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = true
+                sessionRecording['_lazyLoadedSessionRecording']['_lastActivityTimestamp'] = lastActivityTime
 
-                    const event = createCustomSnapshot(
-                        { timestamp: eventRecordedTime },
-                        { lastActivityTimestamp: lastActivityTime },
-                        eventTag
-                    )
-                    sessionRecording.onRRwebEmit(event as eventWithTime)
+                const event = createCustomSnapshot(
+                    { timestamp: eventRecordedTime },
+                    { lastActivityTimestamp: lastActivityTime },
+                    '$session_ending'
+                )
+                sessionRecording.onRRwebEmit(event as eventWithTime)
 
-                    const bufferedEvent = sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data[0]
-                    // timestamp should be corrected to lastActivityTimestamp, not the time rrweb recorded it
-                    expect(bufferedEvent.timestamp).toBe(lastActivityTime)
-                }
-            )
+                const bufferedEvent = sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data[0]
+                // timestamp should be corrected to lastActivityTimestamp, not the time rrweb recorded it,
+                // so a late-detected idle period doesn't artificially extend the old session
+                expect(bufferedEvent.timestamp).toBe(lastActivityTime)
+            })
+
+            it('does not backdate $session_starting events when idle', () => {
+                const lastActivityTime = startingTimestamp + 100
+                const eventRecordedTime = startingTimestamp + 5000
+
+                // force idle state
+                sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = true
+                sessionRecording['_lazyLoadedSessionRecording']['_lastActivityTimestamp'] = lastActivityTime
+
+                const event = createCustomSnapshot(
+                    { timestamp: eventRecordedTime },
+                    { lastActivityTimestamp: lastActivityTime },
+                    '$session_starting'
+                )
+                sessionRecording.onRRwebEmit(event as eventWithTime)
+
+                const bufferedEvent = sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data[0]
+                // $session_starting ships to the NEW session: stamping it with the old session's
+                // last activity would drag the new recording's start back by the whole idle gap
+                expect(bufferedEvent.timestamp).toBe(eventRecordedTime)
+            })
 
             it("enters idle state within one session if the activity is non-user generated and there's no activity for (RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) 5 minutes", () => {
                 const firstActivityTimestamp = startingTimestamp + 100
@@ -2652,6 +2672,62 @@ describe('Lazy SessionRecording', () => {
                     expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual('unknown')
                     // exactly one restart: the initial start plus a single re-record for the rotation
                     expect(recordMock).toHaveBeenCalledTimes(2)
+                } finally {
+                    _addCustomEvent.mockReset()
+                }
+            })
+
+            it('attributes the backdated sessionIdle marker to the session that went idle, not a rotation-born session', () => {
+                // A suspended tab emits nothing while backgrounded, so idle is only detected on
+                // wake — by which time an app-level capture may already have rotated the session.
+                // The sessionIdle marker is restamped to lastActivity + threshold (up to hours in
+                // the past); if it follows the rotation into the new session, it drags the new
+                // recording's start back by the whole idle gap and the player reports the prefix
+                // as unplayable ("the initial snapshot of the screen arrived late").
+                _addCustomEvent.mockImplementation((tag: string, payload: any) => {
+                    _emit({ type: EventType.Custom, data: { tag, payload }, timestamp: Date.now() })
+                })
+                try {
+                    const lazy = sessionRecording['_lazyLoadedSessionRecording']!
+                    jest.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                    emitActiveEvent(startingTimestamp + 100)
+                    _emit(createFullSnapshot({ timestamp: startingTimestamp + 110 }))
+                    jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                    ;(posthog.capture as Mock).mockClear()
+
+                    // the tab sleeps well past the session timeout; on wake an app-level capture
+                    // rotates the session before any rrweb event reaches the recorder
+                    const rotatedSessionId = 'wake-rotated-session-id'
+                    sessionIdGeneratorMock.mockImplementation(() => rotatedSessionId)
+                    const wakeTimestamp = startingTimestamp + 97 * 60 * 1000
+                    jest.setSystemTime(new Date(wakeTimestamp))
+                    sessionManager.checkAndGetSessionAndWindowId(false, wakeTimestamp)
+                    expect(lazy['_sessionId']).toEqual(rotatedSessionId)
+
+                    // the idle marker ships with the session that actually went idle
+                    expect(posthog.capture).toHaveBeenCalledWith(
+                        '$snapshot',
+                        expect.objectContaining({
+                            $session_id: sessionId,
+                            $snapshot_data: expect.arrayContaining([
+                                expect.objectContaining({ data: expect.objectContaining({ tag: 'sessionIdle' }) }),
+                            ]),
+                        }),
+                        expect.any(Object)
+                    )
+
+                    // nothing attributed to the rotation-born session predates the rotation
+                    const newEpochEvents = [
+                        ...(posthog.capture as Mock).mock.calls
+                            .filter(([name, props]) => name === '$snapshot' && props.$session_id === rotatedSessionId)
+                            .flatMap(([, props]) => props.$snapshot_data),
+                        ...lazy['_buffer'].data,
+                    ]
+                    expect(lazy['_buffer'].sessionId).toEqual(rotatedSessionId)
+                    expect(newEpochEvents.length).toBeGreaterThan(0)
+                    newEpochEvents.forEach((e) => {
+                        expect(e.timestamp).toBeGreaterThanOrEqual(wakeTimestamp)
+                    })
                 } finally {
                     _addCustomEvent.mockReset()
                 }

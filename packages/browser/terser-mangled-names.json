@@ -319,6 +319,7 @@
         "_hasUsableMessage",
         "_hasWarnedClientMaskingOverride",
         "_hasWarnedExclusiveAttributeMasking",
+        "_healCookielessSentinelDistinctId",
         "_heldBufferOverflowed",
         "_heldEpochShipsOnUnload",
         "_holdFlushUntilInteraction",

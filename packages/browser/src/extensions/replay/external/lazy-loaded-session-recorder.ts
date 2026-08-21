@@ -156,6 +156,11 @@ interface SessionIdlePayload {
     threshold: number
     bufferLength: number
     bufferSize: number
+    // the session that went idle. The marker is restamped to lastActivityTimestamp + threshold,
+    // so routing it by the recorder's live session id backdates a rotation-born session by the
+    // whole idle gap when a rotation lands between emit and capture (see onRRwebEmit)
+    sessionId?: string
+    windowId?: string
 }
 
 export interface SnapshotBuffer {
@@ -424,6 +429,10 @@ function isCustomEvent(e: eventWithTime, tag: string): e is eventWithTime & cust
 
 function isSessionIdleEvent(e: eventWithTime): e is eventWithTime & customEvent {
     return isCustomEvent(e, 'sessionIdle')
+}
+
+function getSessionIdlePayload(e: eventWithTime): SessionIdlePayload | null {
+    return isSessionIdleEvent(e) ? (e.data.payload as SessionIdlePayload) : null
 }
 
 type SessionEndingPayload = {
@@ -1789,23 +1798,29 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // TODO: Re-add ensureMaxMessageSize once we are confident in it
         const event = truncateLargeConsoleLogs(throttledEvent)
 
-        // Session lifecycle events ($session_ending, $session_starting) carry their target session ID
-        // in the payload. We must extract this BEFORE _updateWindowAndSessionIds runs, because that
-        // method triggers checkAndGetSessionAndWindowId() which would update this._sessionId.
-        // This is critical for $session_ending which must go to the OLD session, not the new one,
-        // and for $session_starting which must go to the NEW session.
+        // Session lifecycle events ($session_ending, $session_starting, sessionIdle) carry their
+        // target session ID in the payload. We must extract this BEFORE _updateWindowAndSessionIds
+        // runs, because that method triggers checkAndGetSessionAndWindowId() which would update
+        // this._sessionId. This is critical for $session_ending which must go to the OLD session,
+        // not the new one, and for $session_starting which must go to the NEW session.
         const sessionEndingPayload = getSessionEndingPayload(event)
         const sessionStartingPayload = getSessionStartingPayload(event)
+        const sessionIdlePayload = getSessionIdlePayload(event)
 
         if (sessionEndingPayload || sessionStartingPayload) {
-            // Adjust timestamp from payload to avoid artificially extending session duration
-            const payload = (sessionEndingPayload ?? sessionStartingPayload) as {
-                lastActivityTimestamp?: number
+            // Backdate $session_ending to the old session's real end so a late-detected idle
+            // period doesn't artificially extend it. $session_starting must NOT be backdated:
+            // it ships to the NEW session, and stamping it with the old session's last activity
+            // drags the new recording's start back by the whole idle gap
+            if (sessionEndingPayload?.lastActivityTimestamp) {
+                event.timestamp = sessionEndingPayload.lastActivityTimestamp
             }
-            if (payload?.lastActivityTimestamp) {
-                event.timestamp = payload.lastActivityTimestamp
-            }
-        } else {
+        } else if (!sessionIdlePayload?.sessionId) {
+            // sessionIdle markers with a pinned session id skip the session check: they are only
+            // emitted from inside _updateWindowAndSessionIds, whose caller runs the check itself
+            // right after, and running it here first can adopt a pending rotation before the
+            // marker is captured — attributing a marker backdated by the idle gap to the new
+            // session, which drags the new recording's start back and makes its prefix unplayable
             this._updateWindowAndSessionIds(event)
         }
 
@@ -1819,11 +1834,18 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // Route lifecycle events using their payload IDs:
         // - $session_ending uses currentSessionId (the old session it's ending)
         // - $session_starting uses nextSessionId (the new session it's starting)
+        // - sessionIdle uses the session that went idle (backdated markers must not follow a rotation)
         // - All other events use the current session ID
         const targetSessionId =
-            sessionEndingPayload?.currentSessionId ?? sessionStartingPayload?.nextSessionId ?? this._sessionId
+            sessionEndingPayload?.currentSessionId ??
+            sessionStartingPayload?.nextSessionId ??
+            sessionIdlePayload?.sessionId ??
+            this._sessionId
         const targetWindowId =
-            sessionEndingPayload?.currentWindowId ?? sessionStartingPayload?.nextWindowId ?? this._windowId
+            sessionEndingPayload?.currentWindowId ??
+            sessionStartingPayload?.nextWindowId ??
+            sessionIdlePayload?.windowId ??
+            this._windowId
 
         // When in an idle state we keep recording but don't capture the events,
         // we don't want to return early if idle is 'unknown'
@@ -1839,16 +1861,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._eventsDroppedWhileIdle = 0
         }
 
-        if (isSessionIdleEvent(event)) {
+        if (sessionIdlePayload) {
             // session idle events have a timestamp when rrweb sees them
             // which can artificially lengthen a session
             // we know when we detected it based on the payload and can correct the timestamp
-            const payload = event.data.payload as SessionIdlePayload
-            if (payload) {
-                const lastActivity = payload.lastActivityTimestamp
-                const threshold = payload.threshold
-                event.timestamp = lastActivity + threshold
-            }
+            event.timestamp = sessionIdlePayload.lastActivityTimestamp + sessionIdlePayload.threshold
         }
 
         const compressionEnabled = this._instance.config.session_recording.compress_events ?? true
@@ -2346,6 +2363,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     threshold: this._sessionIdleThresholdMilliseconds,
                     bufferLength: this._buffer.data.length,
                     bufferSize: this._buffer.size,
+                    // pin the marker to the session that actually went idle: it is restamped to
+                    // lastActivityTimestamp + threshold, and if a pending rotation is adopted
+                    // before it is captured (e.g. waking from a long-suspended tab), routing it
+                    // by the live session id would backdate the rotation-born session's start
+                    // by the whole idle gap
+                    sessionId: this._sessionId,
+                    windowId: this._windowId,
                 })
 
                 // proactively flush the buffer in case the session is idle for a long time
