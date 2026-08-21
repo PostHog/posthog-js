@@ -1,4 +1,17 @@
 {
+  "PostHog/posthog-js/issue/4596": {
+    "key": "PostHog/posthog-js/issue/4596",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4596",
+    "url": "https://github.com/PostHog/posthog-js/issues/4596",
+    "conclusion": "Confirmed regression in the Rollup plugin’s post-1.4.8 in-memory chunk-ID flow when a downstream minifier removes the injected comment.",
+    "labels": [
+      "feature/error-tracking",
+      "team/error-tracking"
+    ],
+    "closed": false,
+    "updatedAt": "2026-08-21T12:31:43.763Z"
+  },
   "PostHog/posthog-js/issue/4595": {
     "key": "PostHog/posthog-js/issue/4595",
     "repo": "PostHog/posthog-js",
