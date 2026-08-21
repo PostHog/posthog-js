@@ -32,11 +32,9 @@ const knownNonAbiOverlaps = [
     '_onRemoteConfig',
     '_persistence',
     '_queue',
-    '_refreshInterval',
     '_remove',
     '_runBeforeSend',
     '_set',
-    '_startRefreshInterval',
 ]
 
 module.exports = {

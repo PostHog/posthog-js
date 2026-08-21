@@ -58,6 +58,7 @@ const parseFlagsResponse = (
 }
 
 const createFeatureFlags = (instance: any): PostHogFeatureFlags => {
+    instance.config.remote_config_refresh_interval_ms ??= 0
     instance._shouldDisableFlags ??= jest.fn(() => false)
     instance._registerExtensionEventProperties ??= jest.fn(() => () => {})
     instance.on ??= jest.fn(() => () => {})
@@ -77,6 +78,7 @@ const createFeatureFlags = (instance: any): PostHogFeatureFlags => {
             advanced_only_evaluate_survey_feature_flags: instance.config.advanced_only_evaluate_survey_feature_flags,
             advanced_feature_flags_dedup_per_session: instance.config.advanced_feature_flags_dedup_per_session,
             feature_flag_cache_ttl_ms: instance.config.feature_flag_cache_ttl_ms,
+            remote_config_refresh_interval_ms: instance.config.remote_config_refresh_interval_ms,
             feature_flag_request_timeout_ms: instance.config.feature_flag_request_timeout_ms,
             disable_compression: instance.config.disable_compression,
             evaluation_contexts: instance.config.evaluation_contexts,
