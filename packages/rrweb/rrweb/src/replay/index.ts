@@ -173,7 +173,7 @@ export class Replayer {
   private lastMouseDownEvent: [Node, Event] | null = null;
 
   // Keep the rootNode of the last hovered element. So  when hovering a new element, we can remove the last hovered element's :hover style.
-  private lastHoveredRootNode: Document | ShadowRoot;
+  private lastHoveredRootNode: Document | ShadowRoot | undefined;
 
   // In the fast-forward mode, only the last selection data needs to be applied.
   private lastSelectionData: selectionData | null = null;
@@ -2465,7 +2465,7 @@ export class Replayer {
     if (!isSync) {
       this.drawMouseTail({ x: _x, y: _y });
     }
-    this.hoverElements(target as Element);
+    this.hoverElements(target);
   }
 
   private drawMouseTail(position: { x: number; y: number }) {
@@ -2504,18 +2504,28 @@ export class Replayer {
     }, duration / this.speedService.state.context.timer.speed);
   }
 
-  private hoverElements(el: Element) {
+  private hoverElements(el: Node) {
     (this.lastHoveredRootNode || this.iframe.contentDocument)
       ?.querySelectorAll('.\\:hover')
       .forEach((hoveredEl) => {
         hoveredEl.classList.remove(':hover');
       });
-    this.lastHoveredRootNode = el.getRootNode() as Document | ShadowRoot;
-    let currentEl: Element | null = el;
+    // A detached node's getRootNode() is the node itself, which may not expose
+    // querySelectorAll, so only cache it when it really is a root.
+    const rootNode = el.getRootNode();
+    if (
+      rootNode.nodeType === Node.DOCUMENT_NODE ||
+      rootNode.nodeType === Node.DOCUMENT_FRAGMENT_NODE
+    ) {
+      this.lastHoveredRootNode = rootNode as Document | ShadowRoot;
+    } else {
+      this.lastHoveredRootNode = undefined;
+    }
+    // Text and comment nodes cannot hold a class, so start at the nearest ancestor element.
+    let currentEl: Element | null =
+      el.nodeType === Node.ELEMENT_NODE ? (el as Element) : el.parentElement;
     while (currentEl) {
-      if (currentEl.classList) {
-        currentEl.classList.add(':hover');
-      }
+      currentEl.classList.add(':hover');
       currentEl = currentEl.parentElement;
     }
   }
