@@ -285,8 +285,21 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     this.scheduleDebouncedFlush()
   }
 
+  /**
+   * Concurrent so a serverless handler waits for one round trip, not two. A
+   * failed span export leaves the spans queued rather than rejecting, since
+   * callers already treat `flush()` as safe to leave unwrapped.
+   */
+  private _flushEventsAndSpans(): Promise<void> {
+    const events = this.flushWithPendingPromises()
+    if (!this._traces) {
+      return events
+    }
+    return Promise.all([events, this._traces.flush().catch(() => {})]).then(() => undefined)
+  }
+
   override async flush(): Promise<void> {
-    const flushPromise = this.flushWithPendingPromises()
+    const flushPromise = this._flushEventsAndSpans()
     const waitUntil = this.options.waitUntil
     // Only register when no debounce promise is already keeping runtime alive
     if (waitUntil && !this._waitUntilCycle) {
@@ -359,7 +372,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private async resolveWaitUntilFlush(): Promise<void> {
     const resolve = this._consumeWaitUntilCycle()
     try {
-      await this.flushWithPendingPromises()
+      await this._flushEventsAndSpans()
     } catch {
       // Flush errors are already logged by flush() internals
     } finally {
