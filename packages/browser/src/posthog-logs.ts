@@ -190,10 +190,6 @@ export class PostHogLogs implements Extension {
         }
     }
 
-    initialize(): void {
-        this.loadIfEnabled()
-    }
-
     dispose(): void {
         if (this._disposed) {
             return
