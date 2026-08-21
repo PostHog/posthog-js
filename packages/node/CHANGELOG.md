@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.50.0
+
+### Minor Changes
+
+- [#4484](https://github.com/PostHog/posthog-js/pull/4484) [`557140e`](https://github.com/PostHog/posthog-js/commit/557140e4bb344eb22b5bbd1d324487b3fcef895e) Thanks [@posthog](https://github.com/apps/posthog)! - `FeatureFlagEvaluations.isEnabled()` now accepts an optional `defaultValue` option, returned whenever the flag has no value (missing key, not loaded, or a failed request). A flag with a present value — including `false` and variant strings — always wins over `defaultValue`. Purely additive; omitting the option preserves the existing `false`-on-miss behavior.
+  (2026-08-21)
+
 ## 5.49.4
 
 ### Patch Changes

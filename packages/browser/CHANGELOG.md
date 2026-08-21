@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.418.10
+
+### Patch Changes
+
+- [#4451](https://github.com/PostHog/posthog-js/pull/4451) [`e1d993c`](https://github.com/PostHog/posthog-js/commit/e1d993c6ffa38b7fc8d622148ae0479fbdf1e210) Thanks [@posthog](https://github.com/apps/posthog)! - Guard the replayer's hover handling against non-element and detached hover targets, which previously threw an unhandled `TypeError` (`querySelectorAll` on a node without that method) and stopped session recording playback mid-stream.
+  (2026-08-21)
+
+- [#4557](https://github.com/PostHog/posthog-js/pull/4557) [`4451274`](https://github.com/PostHog/posthog-js/commit/4451274d10bfac8236a6e2f7d846ff71030513e4) Thanks [@posthog](https://github.com/apps/posthog)! - Keep replay playback running when a recording adopts constructed stylesheets across a document swap. A constructed stylesheet can only be adopted by the document that created it, so a sheet held over a swap is rejected and the error previously stopped the player. Adoption now falls back to whatever is already applied.
+  (2026-08-21)
+
 ## 1.418.9
 
 ### Patch Changes
