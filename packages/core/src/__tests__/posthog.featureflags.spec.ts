@@ -2787,11 +2787,13 @@ describe('PostHog Feature Flags v4', () => {
       let releaseFirst!: () => void
       const firstGate = new Promise<void>((r) => (releaseFirst = r))
       let isFirst = true
-      const urls: string[] = []
+      const flagsUrls: string[] = []
 
       const [, clientMocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (m) => {
         m.fetch.mockImplementation(async (url: string) => {
-          urls.push(url)
+          if (url.includes('/flags/')) {
+            flagsUrls.push(url)
+          }
           if (isFirst) {
             isFirst = false
             await firstGate
@@ -2823,9 +2825,9 @@ describe('PostHog Feature Flags v4', () => {
       await waitForPromises()
 
       // the single re-issued request has to carry the displaced caller's config fetch too
-      expect(urls).toHaveLength(2)
-      expect(urls[0]).not.toContain('config=true')
-      expect(urls[1]).toContain('config=true')
+      expect(flagsUrls).toHaveLength(2)
+      expect(flagsUrls[0]).not.toContain('config=true')
+      expect(flagsUrls[1]).toContain('config=true')
       expect(client.onRemoteConfigCalls).toHaveLength(1)
 
       await client.shutdown()
