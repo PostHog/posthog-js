@@ -2489,7 +2489,7 @@ export class PostHog extends PostHogCore {
     } else if (cachedRemoteConfig === undefined) {
       this._logger.warn(
         'Session replay starts with no sampleRate because no remote config is cached yet. ' +
-          'Every session records until the project setting arrives on the next launch.'
+          'Any project sample rate applies from the next launch.'
       )
     }
 

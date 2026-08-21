@@ -36,7 +36,8 @@ if (Platform.OS !== 'web') {
     try {
       OptionalReactNativePluginVersion = require('@posthog/react-native-plugin/package.json')?.version
     } catch {
-      // Plugin versions released before the metadata entrypoint remain supported.
+      // Strict resolvers such as Node and Jest can reject this unexported subpath on older plugin versions.
+      // Metro falls back to file-based resolution, so version logging only degrades to unknown where needed.
     }
   } catch (e) {}
 

@@ -94,7 +94,13 @@ describe('PostHog RN session replay sampleRate logging', () => {
     await posthog.ready()
     await wait(50)
 
-    expect(warnings().some((line) => line.includes('no sampleRate because no remote config is cached'))).toBe(true)
+    expect(
+      warnings().some(
+        (line) =>
+          line.includes('no sampleRate because no remote config is cached') &&
+          line.includes('Any project sample rate applies from the next launch')
+      )
+    ).toBe(true)
   })
 
   it('warns and names both values when a local sampleRate overrides the remote one', async () => {
