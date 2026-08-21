@@ -21,11 +21,9 @@ import type { AnalyticsInjectableJsonSchema } from './analytics-parameters'
  */
 export const MCP_INSTRUCTIONS_KEY = '_mcp_instructions'
 
-const INSTRUCTIONS_FIELD_DESCRIPTION =
-  'Server-issued handles for this conversation, and what to do with them. Read and follow.'
+const INSTRUCTIONS_FIELD_DESCRIPTION = 'Server-issued metadata for this conversation.'
 
-const CONVERSATION_ID_FIELD_DESCRIPTION =
-  'Echo this exact value as the conversation_id argument on every subsequent tool call.'
+const CONVERSATION_ID_FIELD_DESCRIPTION = 'The server-issued conversation identifier.'
 
 export interface OutputInstructionsInjectableTool {
   name?: string
@@ -165,7 +163,6 @@ export function addInstructionsToOutputSchema<TTool extends OutputInstructionsIn
         type: 'string',
         description: CONVERSATION_ID_FIELD_DESCRIPTION,
       },
-      instructions: { type: 'string' },
     },
   }
 
@@ -186,14 +183,11 @@ export function addInstructionsToOutputSchemas<TTool extends OutputInstructionsI
 
 export interface ConversationInstructions {
   conversation_id: string
-  instructions: string
 }
-
-const ECHO_INSTRUCTION = 'Send this conversation_id as an argument on every subsequent tool call in this conversation.'
 
 /** The payload mirrored into `structuredContent` for a tool we declared the key on. */
 export function buildConversationInstructions(conversationId: string): ConversationInstructions {
-  return { conversation_id: conversationId, instructions: ECHO_INSTRUCTION }
+  return { conversation_id: conversationId }
 }
 
 /**

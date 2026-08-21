@@ -4,6 +4,8 @@ import {
     resetMaxDepthState,
     getLastSnapshotCost,
     getMutationCost,
+    getDeferredStylesheetStats,
+    getDiscardedDurationSamples,
     resetSnapshotCostState,
 } from '@posthog/rrweb-record'
 import { getRecordConsolePlugin } from '@posthog/rrweb-plugin-console-record'
@@ -20,6 +22,8 @@ assignableWindow.__PosthogExtensions__.rrweb = {
     resetMaxDepthState,
     getLastSnapshotCost,
     getMutationCost,
+    getDeferredStylesheetStats,
+    getDiscardedDurationSamples,
     resetSnapshotCostState,
 }
 assignableWindow.__PosthogExtensions__.initSessionRecording = (ph, documentWasEverVisible) =>

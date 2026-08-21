@@ -505,7 +505,7 @@ describe('Low-level Server tracing (e2e)', () => {
 
         expect(receivedCalls.at(-1)).toEqual({ name: 'owned_reserved', arguments: suppliedArguments })
         expect(
-          (result.content as { text?: string }[]).some((content) => content.text?.includes('conversation_id='))
+          (result.content as { text?: string }[]).some((content) => content.text?.includes('"conversation_id"'))
         ).toBe(false)
 
         await new Promise((resolve) => setTimeout(resolve, 50))
@@ -547,7 +547,7 @@ describe('Low-level Server tracing (e2e)', () => {
     }
   })
 
-  it('preserves reserved arguments before low-level ownership is learned from tools/list', async () => {
+  it('captures intent, but strips nothing, before low-level ownership is learned from tools/list', async () => {
     const { server, client, receivedCalls, connect, cleanup } = await setupLowLevelServer()
     try {
       instrument(server, fakePostHog(), { context: true, enableConversationId: true })
@@ -569,11 +569,16 @@ describe('Low-level Server tracing (e2e)', () => {
         arguments: { context: 'unknown context', conversation_id: 'unknown conversation', text: 'hi' },
       })
       expect(
-        (result.content as { text?: string }[]).some((content) => content.text?.includes('conversation_id='))
+        (result.content as { text?: string }[]).some((content) => content.text?.includes('"conversation_id"'))
       ).toBe(false)
       await new Promise((resolve) => setTimeout(resolve, 50))
       const event = eventCapture.getEvents().find((candidate) => candidate.resourceName === 'echo')
-      expect(event?.userIntent).toBeUndefined()
+      // Ownership is unknown here — this instance never served a `tools/list`,
+      // which on a stateless server is every instance. Unknown no longer means
+      // "throw the intent away": the argument arrived because some advertised
+      // listing asked for it. Nothing is stripped and no handle is minted, since
+      // both of those can damage the customer's call and stay fail-closed.
+      expect(event?.userIntent).toBe('unknown context')
       expect(event?.conversationId).toBeUndefined()
     } finally {
       await cleanup()

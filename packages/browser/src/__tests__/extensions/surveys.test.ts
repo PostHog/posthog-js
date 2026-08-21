@@ -262,6 +262,169 @@ describe('usePopupVisibility', () => {
     })
 })
 
+describe('usePopupVisibility close animation path', () => {
+    const mockSurvey: Survey = {
+        id: 'testSurvey1',
+        name: 'Test survey 1',
+        description: 'Test survey description 1',
+        type: SurveyType.Popover,
+        linked_flag_key: null,
+        targeting_flag_key: null,
+        internal_targeting_flag_key: null,
+        questions: [
+            {
+                question: 'How satisfied are you with our newest product?',
+                description: 'This is a question description',
+                descriptionContentType: 'text',
+                type: SurveyQuestionType.Rating,
+                display: 'number',
+                scale: 10,
+                lowerBoundLabel: 'Not Satisfied',
+                upperBoundLabel: 'Very Satisfied',
+                id: 'question-a',
+            },
+        ],
+        appearance: {},
+        conditions: null,
+        start_date: '2021-01-01T00:00:00.000Z',
+        end_date: null,
+        current_iteration: null,
+        current_iteration_start_date: null,
+        feature_flag_keys: null,
+    }
+    const mockPostHog = createMockPostHog({
+        getActiveMatchingSurveys: jest.fn().mockImplementation((callback) => callback([mockSurvey])),
+        get_session_replay_url: jest.fn(),
+        capture: jest.fn().mockImplementation((eventName) => eventName),
+    })
+    const removeSurvey = jest.fn()
+
+    const renderWithContainer = (container?: HTMLElement) =>
+        renderHook(() =>
+            usePopupVisibility(
+                mockSurvey,
+                mockPostHog,
+                0,
+                false,
+                removeSurvey,
+                true,
+                container ? ({ current: container } as any) : undefined
+            )
+        )
+
+    const attachedContainer = () => {
+        const container = document.createElement('div')
+        document.body.appendChild(container)
+        return container
+    }
+
+    beforeEach(() => {
+        removeSurvey.mockClear()
+        jest.useFakeTimers()
+    })
+
+    afterEach(() => {
+        jest.useRealTimers()
+    })
+
+    test('tears down synchronously when there is no container ref to animate', () => {
+        const { result } = renderWithContainer()
+        expect(result.current.isPopupVisible).toBe(true)
+
+        act(() => {
+            result.current.hidePopupWithAnimation()
+        })
+
+        expect(result.current.isPopupVisible).toBe(false)
+        expect(removeSurvey).toHaveBeenCalledTimes(1)
+    })
+
+    test('fades the container out without removing it, then unmounts once the fade has run', () => {
+        const container = attachedContainer()
+        const { result } = renderWithContainer(container)
+
+        act(() => {
+            result.current.hidePopupWithAnimation()
+        })
+
+        // The container is faded out via a scoped opacity transition — NOT removed,
+        // and the popup stays mounted until the fade has had time to run.
+        expect(container.parentNode).not.toBeNull()
+        expect(container.style.opacity).toBe('0')
+        expect(container.style.transition).toContain('opacity')
+        expect(result.current.isPopupVisible).toBe(true)
+        expect(removeSurvey).not.toHaveBeenCalled()
+
+        act(() => {
+            jest.advanceTimersByTime(1000)
+        })
+
+        expect(result.current.isPopupVisible).toBe(false)
+        expect(removeSurvey).toHaveBeenCalledTimes(1)
+    })
+
+    test('never calls document.startViewTransition (no full-page snapshot on heavy pages)', () => {
+        const startViewTransition = jest.fn()
+        Object.defineProperty(document, 'startViewTransition', {
+            configurable: true,
+            writable: true,
+            value: startViewTransition,
+        })
+
+        const { result } = renderWithContainer(attachedContainer())
+        act(() => {
+            result.current.hidePopupWithAnimation()
+            jest.advanceTimersByTime(1000)
+        })
+
+        // The whole point of the fix: closing a survey must not snapshot the page.
+        expect(startViewTransition).not.toHaveBeenCalled()
+        expect(result.current.isPopupVisible).toBe(false)
+
+        // @ts-expect-error - clean up the property we added
+        delete document.startViewTransition
+    })
+
+    test('does not tear down twice on repeated close calls', () => {
+        const { result } = renderWithContainer(attachedContainer())
+
+        act(() => {
+            result.current.hidePopupWithAnimation()
+            // A second close while the first is still animating.
+            result.current.hidePopupWithAnimation()
+            jest.advanceTimersByTime(1000)
+        })
+
+        expect(removeSurvey).toHaveBeenCalledTimes(1)
+    })
+
+    test('a no-container close does not leave the close guard stuck for a later close', () => {
+        // The no-container path tears down synchronously with no settle timer, so it
+        // must not raise the in-flight guard — otherwise a popup that is shown again
+        // (e.g. a tab widget re-shown on a URL match) can never be closed a second time.
+        const { result } = renderWithContainer()
+
+        act(() => {
+            result.current.hidePopupWithAnimation()
+        })
+        expect(result.current.isPopupVisible).toBe(false)
+        expect(removeSurvey).toHaveBeenCalledTimes(1)
+
+        // The same hook instance shows the popup again.
+        act(() => {
+            result.current.setIsPopupVisible(true)
+        })
+        expect(result.current.isPopupVisible).toBe(true)
+
+        // The second close must still tear down — the guard was not left stuck.
+        act(() => {
+            result.current.hidePopupWithAnimation()
+        })
+        expect(result.current.isPopupVisible).toBe(false)
+        expect(removeSurvey).toHaveBeenCalledTimes(2)
+    })
+})
+
 describe('SurveyManager', () => {
     let mockPostHog: PostHog
     let surveyManager: SurveyManager

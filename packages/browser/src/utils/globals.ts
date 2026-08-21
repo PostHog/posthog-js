@@ -1,5 +1,5 @@
 import { window as commonWindow } from '@posthog/browser-common/utils/globals'
-import type { MutationCost, SnapshotCost } from '@posthog/rrweb-record'
+import type { DeferredStylesheetStats, MutationCost, SnapshotCost } from '@posthog/rrweb-record'
 import type { ErrorTracking } from '@posthog/core'
 
 import type { PostHog } from '../posthog-core'
@@ -81,6 +81,17 @@ export type AssignableWindow = Window &
          * @deprecated use `__PosthogExtensions__.errorWrappingFunctions` instead
          */
         posthogErrorWrappingFunctions: any
+
+        /**
+         * Legacy exception autocapture entrypoint names used by posthog-js <= 1.141.0.
+         * Both spellings are required because those clients checked one and called the other.
+         *
+         * See entrypoints/exception-autocapture.ts
+         *
+         * @deprecated use `__PosthogExtensions__.errorWrappingFunctions` instead
+         */
+        extendPostHogWithExceptionAutoCapture: any
+        extendPostHogWithExceptionAutocapture: any
 
         /**
          * This is a legacy way to expose these functions, but we still need to support it for backwards compatibility
@@ -264,6 +275,8 @@ interface PostHogExtensions {
         // see rrweb-snapshot/src/snapshot-cost.ts
         getLastSnapshotCost?: () => SnapshotCost | null
         getMutationCost?: () => MutationCost
+        getDeferredStylesheetStats?: () => DeferredStylesheetStats
+        getDiscardedDurationSamples?: () => number
         resetSnapshotCostState?: () => void
     }
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }

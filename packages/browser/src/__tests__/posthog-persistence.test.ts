@@ -3,6 +3,7 @@ import { PostHogPersistence } from '../posthog-persistence'
 import {
     DEVICE_ID,
     ENABLED_FEATURE_FLAGS,
+    FLAG_CALL_REPORTED,
     INITIAL_PERSON_INFO,
     PERSISTENCE_ACTIVE_FEATURE_FLAGS,
     PERSISTENCE_FEATURE_FLAG_DETAILS,
@@ -14,8 +15,11 @@ import {
     PRODUCT_TOURS,
     PRODUCT_TOURS_ACTIVATED,
     SESSION_ID,
+    SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_REMOTE_CONFIG,
     SESSION_RECORDING_TRIGGER_V2_GROUP_EVENT_PREFIX,
+    STORED_GROUP_PROPERTIES_KEY,
+    STORED_PERSON_PROPERTIES_KEY,
     SURVEYS,
     SURVEYS_ACTIVATED,
     SURVEYS_LOADED_AT,
@@ -28,6 +32,8 @@ import { window } from '@posthog/browser-common/utils/globals'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import {
     cookieStore,
+    getCookiePersistedPropertiesMetadata,
+    getCookiePersistedPropertiesMetadataName,
     localStore,
     resetLocalStorageSupported,
     resetSessionStorageSupported,
@@ -52,6 +58,10 @@ const LEGACY_RESERVED_PERSISTENCE_KEYS = new Set([
     '$heatmaps_enabled_server_side',
     '$sesid',
     '$enabled_feature_flags',
+    '$active_feature_flags',
+    '$feature_flag_payloads',
+    '$feature_flag_request_id',
+    '$override_feature_flags',
     '$error_tracking_suppression_rules',
     '$user_state',
     '$early_access_features',
@@ -259,110 +269,10 @@ describe('persistence', () => {
             expect(library.props['$referrer']).toBe('https://hedgebox.net/files/abc.png')
         })
 
-        it('extracts enabled feature flags', () => {
-            library.register({
-                $enabled_feature_flags: {
-                    'checkout-redesign': 'compact',
-                    'priority-support': true,
-                    'retired-dashboard': false,
-                },
-            })
-
-            expect(library.props['$enabled_feature_flags']).toEqual({
-                'checkout-redesign': 'compact',
-                'priority-support': true,
-                'retired-dashboard': false,
-            })
-            expect(library.properties()).toEqual({
-                '$feature/checkout-redesign': 'compact',
-                '$feature/priority-support': true,
-                '$feature/retired-dashboard': false,
-            })
-            expect({
-                persisted: library.props['$enabled_feature_flags'],
-                eventProperties: library.properties(),
-            }).toMatchSnapshot()
-        })
-
-        it('skips $feature/ properties when cache is stale and TTL is configured', () => {
-            const config = {
-                ...makePostHogConfig('test', persistenceMode),
-                feature_flag_cache_ttl_ms: 60 * 60 * 1000, // 1 hour TTL
-            }
-            const lib = new PostHogPersistence(config)
-
-            // Set evaluated_at to 2 hours ago (stale)
-            const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000
-            lib.register({
-                $enabled_feature_flags: { flag: 'variant', other: true },
-                $feature_flag_evaluated_at: twoHoursAgo,
-            })
-
-            // Should not include $feature/ properties since cache is stale
-            expect(lib.properties()).toEqual({})
-            lib.clear()
-        })
-
-        it('includes $feature/ properties when cache is fresh', () => {
-            const config = {
-                ...makePostHogConfig('test', persistenceMode),
-                feature_flag_cache_ttl_ms: 60 * 60 * 1000, // 1 hour TTL
-            }
-            const lib = new PostHogPersistence(config)
-
-            // Set evaluated_at to 30 minutes ago (fresh)
-            const thirtyMinutesAgo = Date.now() - 30 * 60 * 1000
-            lib.register({
-                $enabled_feature_flags: { flag: 'variant', other: true },
-                $feature_flag_evaluated_at: thirtyMinutesAgo,
-            })
-
-            // Should include $feature/ properties since cache is fresh
-            expect(lib.properties()).toEqual({
-                '$feature/flag': 'variant',
-                '$feature/other': true,
-            })
-            lib.clear()
-        })
-
-        it('includes $feature/ properties when TTL is not configured', () => {
-            const config = {
-                ...makePostHogConfig('test', persistenceMode),
-                // No feature_flag_cache_ttl_ms set
-            }
-            const lib = new PostHogPersistence(config)
-
-            // Set evaluated_at to a year ago
-            const oneYearAgo = Date.now() - 365 * 24 * 60 * 60 * 1000
-            lib.register({
-                $enabled_feature_flags: { flag: 'variant', other: true },
-                $feature_flag_evaluated_at: oneYearAgo,
-            })
-
-            // Should include $feature/ properties since TTL is not configured
-            expect(lib.properties()).toEqual({
-                '$feature/flag': 'variant',
-                '$feature/other': true,
-            })
-            lib.clear()
-        })
-
-        it('treats non-numeric evaluatedAt as stale when TTL is configured', () => {
-            const config = {
-                ...makePostHogConfig('test', persistenceMode),
-                feature_flag_cache_ttl_ms: 60 * 60 * 1000, // 1 hour TTL
-            }
-            const lib = new PostHogPersistence(config)
-
-            // Set evaluated_at to an ISO string instead of a timestamp
-            lib.register({
-                $enabled_feature_flags: { flag: 'variant' },
-                $feature_flag_evaluated_at: '2025-01-01T00:00:00Z',
-            })
-
-            // Should not include $feature/ properties since evaluatedAt is not a number
-            expect(lib.properties()).toEqual({})
-            lib.clear()
+        it('keeps enabled feature flags out of persistence event properties', () => {
+            library.register({ $enabled_feature_flags: { flag: 'variant', other: true } })
+            expect(library.props['$enabled_feature_flags']).toEqual({ flag: 'variant', other: true })
+            expect(library.properties()).toEqual({})
         })
 
         it('should not return hidden properties()', () => {
@@ -385,13 +295,13 @@ describe('persistence', () => {
             expect(library.properties()).toEqual({})
         })
 
-        it.each([
-            [PERSISTENCE_FEATURE_FLAG_PAYLOADS, { 'flag-a': '{"key":"value"}' }],
-            [SURVEYS_ACTIVATED, ['survey-1']],
-        ])('should include explicitly event-visible SDK property %s in event properties', (key, value) => {
-            library.register({ [key]: value })
-            expect(library.properties()).toEqual({ [key]: value })
-        })
+        it.each([[SURVEYS_ACTIVATED, ['survey-1']]])(
+            'should include explicitly event-visible SDK property %s in event properties',
+            (key, value) => {
+                library.register({ [key]: value })
+                expect(library.properties()).toEqual({ [key]: value })
+            }
+        )
 
         it.each(LEGACY_EVENT_VISIBLE_SDK_PERSISTENCE_KEYS)(
             'keeps legacy event-visible SDK persistence property %s visible in event properties',
@@ -868,7 +778,7 @@ describe('persistence', () => {
         describe('merge precedence', () => {
             // The default merge in createLocalPlusCookieStore._parse is
             // extend(cookieProperties, localStorageData) — localStorage wins.
-            // With __preview_cookie_wins_on_conflict: true, that order flips so the
+            // With cookieWinsOnConflict: true, that order flips so the
             // cross-subdomain cookie is authoritative for the keys it stores.
             const persistenceName = 'ph__posthog'
             const encodeCookie = (props: Record<string, any>) =>
@@ -883,7 +793,7 @@ describe('persistence', () => {
                         | 'localStorage+cookie'
                         | 'memory'
                         | 'sessionStorage',
-                    __preview_cookie_wins_on_conflict: cookieWins,
+                    cookieWinsOnConflict: cookieWins,
                 }
             }
 
@@ -941,6 +851,7 @@ describe('persistence', () => {
                 expect(lib.props.$device_id).toBe('anon-uuid')
                 expect(lib.props.$sesid).toEqual([9999, 'new-sid', 9999])
                 expect(lib.props.$user_state).toBe('identified')
+                expect(lib.props.$user_id).toBe('user@x.com')
                 expect(lib.props.$initial_person_info).toEqual({
                     u: 'https://app.example.com/dash',
                     r: 'https://www.example.com/',
@@ -958,7 +869,607 @@ describe('persistence', () => {
                 expect(localStorageAfter.distinct_id).toBe('from_cookie')
             })
 
-            it('flag on: localStorage-only keys are preserved (cookie does not carry them)', () => {
+            it('flag on: reopening after a sibling reset removes stale event-visible localStorage properties', () => {
+                const cookieProperties = {
+                    distinct_id: 'new-anonymous',
+                    $device_id: 'preserved-device',
+                    $user_state: 'anonymous',
+                }
+                document.cookie = encodeCookie(cookieProperties)
+                cookieStore._set(
+                    getCookiePersistedPropertiesMetadataName(persistenceName),
+                    getCookiePersistedPropertiesMetadata(cookieProperties, ['custom_property'])
+                )
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({
+                        distinct_id: 'identified-user',
+                        $user_state: 'identified',
+                        custom_property: 'old-user',
+                        local_only_property: 'preserved',
+                        $user_id: 'identified-user',
+                        __alias: 'old-alias',
+                        $groups: { organization: 'previous-organization' },
+                        [STORED_PERSON_PROPERTIES_KEY]: { plan: 'pro' },
+                        [STORED_GROUP_PROPERTIES_KEY]: { organization: { plan: 'enterprise' } },
+                        [ENABLED_FEATURE_FLAGS]: ['previous-flag'],
+                        [PERSISTENCE_FEATURE_FLAG_DETAILS]: { 'previous-flag': { key: 'previous-flag' } },
+                        [FLAG_CALL_REPORTED]: { 'previous-flag': true },
+                    })
+                )
+                const config = {
+                    ...makeConfig('localStorage+cookie', true),
+                    cookie_persisted_properties: ['custom_property'],
+                }
+
+                const lib = new PostHogPersistence(config)
+
+                expect(lib.props.distinct_id).toBe('new-anonymous')
+                expect(lib.props.$device_id).toBe('preserved-device')
+                expect(lib.props.custom_property).toBeUndefined()
+                expect(lib.props.local_only_property).toBeUndefined()
+                expect(lib.props.$user_id).toBeUndefined()
+                expect(lib.props.__alias).toBeUndefined()
+                expect(lib.props.$groups).toBeUndefined()
+                expect(lib.props[STORED_PERSON_PROPERTIES_KEY]).toBeUndefined()
+                expect(lib.props[STORED_GROUP_PROPERTIES_KEY]).toBeUndefined()
+                expect(lib.props[ENABLED_FEATURE_FLAGS]).toBeUndefined()
+                expect(lib.props[PERSISTENCE_FEATURE_FLAG_DETAILS]).toBeUndefined()
+                expect(lib.props[FLAG_CALL_REPORTED]).toBeUndefined()
+                expect(lib.consumeCookieIdentityChange()).toBe(true)
+                expect(JSON.parse(localStorage.getItem(persistenceName)!).custom_property).toBeUndefined()
+            })
+
+            it('flag on: reopening treats an omitted user state as anonymous and clears groups', () => {
+                document.cookie = encodeCookie({ distinct_id: 'shared-id' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({
+                        distinct_id: 'shared-id',
+                        $user_state: 'identified',
+                        $user_id: 'shared-id',
+                        $groups: { organization: 'previous-organization' },
+                    })
+                )
+
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+
+                expect(lib.props.$user_state).toBe('anonymous')
+                expect(lib.props.$user_id).toBeUndefined()
+                expect(lib.props.$groups).toBeUndefined()
+            })
+
+            it('flag on: startup identity adoption clears stale split flag storage', () => {
+                document.cookie = encodeCookie({ distinct_id: 'new-anonymous', $user_state: 'anonymous' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({ distinct_id: 'identified-user', $user_state: 'identified' })
+                )
+                localStorage.setItem(
+                    `${persistenceName}__flags`,
+                    JSON.stringify({
+                        [ENABLED_FEATURE_FLAGS]: ['previous-flag'],
+                        [PERSISTENCE_FEATURE_FLAG_DETAILS]: { 'previous-flag': { key: 'previous-flag' } },
+                    })
+                )
+
+                const lib = new PostHogPersistence({
+                    ...makeConfig('localStorage+cookie', true),
+                    split_storage: true,
+                })
+
+                expect(lib.props[ENABLED_FEATURE_FLAGS]).toBeUndefined()
+                expect(lib.props[PERSISTENCE_FEATURE_FLAG_DETAILS]).toBeUndefined()
+                expect(localStore._parse(`${persistenceName}__flags`)).toEqual({})
+            })
+
+            it('flag on: preserves a newly configured cookie-backed property when a legacy cookie omits it', () => {
+                document.cookie = encodeCookie({ distinct_id: 'identified-user' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({ distinct_id: 'identified-user', custom_property: 'preserved' })
+                )
+
+                const lib = new PostHogPersistence({
+                    ...makeConfig('localStorage+cookie', true),
+                    cookie_persisted_properties: ['custom_property'],
+                })
+
+                expect(lib.props.custom_property).toBe('preserved')
+                expect(cookieStore._parse(persistenceName).custom_property).toBe('preserved')
+            })
+
+            it.each([false, 0])('flag on: preserves a cookie-backed falsy value (%s)', (customValue) => {
+                const config = {
+                    ...makeConfig('localStorage+cookie', true),
+                    cookie_persisted_properties: ['custom_property'],
+                }
+                const lib = new PostHogPersistence(config)
+
+                lib.register({ distinct_id: 'identified-user', custom_property: customValue })
+
+                expect(cookieStore._parse(persistenceName).custom_property).toBe(customValue)
+                expect(new PostHogPersistence(config).props.custom_property).toBe(customValue)
+            })
+
+            it('flag on: a live tab preserves a falsy built-in omitted by a legacy sibling writer', () => {
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+                lib.register({ distinct_id: 'identified-user', [SESSION_RECORDING_IS_SAMPLED]: false })
+
+                // Older SDKs filtered falsy values while constructing the cookie.
+                // Their write invalidates the current sidecar fingerprint, so an
+                // omitted false is not an authoritative removal.
+                document.cookie = encodeCookie({ distinct_id: 'identified-user' })
+
+                expect(lib.syncCookieProperties()).toBe(true)
+                expect(lib.props[SESSION_RECORDING_IS_SAMPLED]).toBe(false)
+            })
+
+            it('flag on: treats an authoritative omitted user state as an anonymous identity change', () => {
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+                lib.register({ distinct_id: 'shared-id', $user_state: 'identified', $user_id: 'shared-id' })
+
+                // A legacy sibling reset can retain the generated distinct ID but
+                // omit $user_state entirely.
+                document.cookie = encodeCookie({ distinct_id: 'shared-id' })
+
+                expect(lib.syncCookieProperties()).toBe(true)
+                expect(lib.props.$user_state).toBe('anonymous')
+                expect(lib.props.$user_id).toBeUndefined()
+                expect(lib.consumeCookieIdentityChange()).toBe(true)
+            })
+
+            it('flag on: an anonymous ID change from a legacy writer clears prior event properties', () => {
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+                lib.register({
+                    distinct_id: 'old-anonymous',
+                    $user_state: 'anonymous',
+                    prior_user_property: 'private-value',
+                })
+
+                // Legacy writers can omit $user_state from their reset snapshot.
+                document.cookie = encodeCookie({ distinct_id: 'new-anonymous' })
+
+                expect(lib.syncCookieProperties()).toBe(true)
+                expect(lib.props.distinct_id).toBe('new-anonymous')
+                expect(lib.props.prior_user_property).toBeUndefined()
+            })
+
+            it('flag on: a live tab adopts a sibling identify before its next persistence write', () => {
+                document.cookie = encodeCookie({ distinct_id: 'anonymous', $user_state: 'anonymous' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({ distinct_id: 'anonymous', $user_state: 'anonymous' })
+                )
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+                lib.register({
+                    [STORED_PERSON_PROPERTIES_KEY]: { plan: 'free' },
+                    [STORED_GROUP_PROPERTIES_KEY]: { organization: { plan: 'enterprise' } },
+                })
+
+                // Another subdomain identifies the user while this instance remains open.
+                document.cookie = encodeCookie({ distinct_id: 'identified-user', $user_state: 'identified' })
+                lib.register({ local_only_property: 'preserved' })
+
+                expect(lib.props.distinct_id).toBe('identified-user')
+                expect(lib.props.$user_state).toBe('identified')
+                expect(lib.props.local_only_property).toBe('preserved')
+                expect(lib.props[STORED_PERSON_PROPERTIES_KEY]).toBeUndefined()
+                expect(lib.props[STORED_GROUP_PROPERTIES_KEY]).toEqual({ organization: { plan: 'enterprise' } })
+                expect(cookieStore._parse(persistenceName).distinct_id).toBe('identified-user')
+            })
+
+            it('flag on: does not mark a failed cookie mirror as observed', () => {
+                document.cookie = encodeCookie({ distinct_id: 'anonymous', $user_state: 'anonymous' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({ distinct_id: 'anonymous', $user_state: 'anonymous' })
+                )
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+                const setSpy = jest.spyOn(cookieStore, '_set').mockImplementation(() => false)
+
+                lib.register({ distinct_id: 'identified-user', $user_state: 'identified' })
+                setSpy.mockRestore()
+
+                expect(lib.syncCookieProperties()).toBe(false)
+                expect(lib.props.distinct_id).toBe('identified-user')
+                expect(lib.props.$user_state).toBe('identified')
+            })
+
+            it('flag on: explicit registration wins over an unobserved sibling value', () => {
+                document.cookie = encodeCookie({ distinct_id: 'anonymous', custom_property: 'sibling-value' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({ distinct_id: 'anonymous', custom_property: 'local-value' })
+                )
+                const lib = new PostHogPersistence({
+                    ...makeConfig('localStorage+cookie', true),
+                    cookie_persisted_properties: ['custom_property'],
+                })
+                document.cookie = encodeCookie({ distinct_id: 'anonymous', custom_property: 'new-sibling-value' })
+
+                lib.register({ custom_property: 'explicit-value' })
+
+                expect(lib.props.custom_property).toBe('explicit-value')
+                expect(cookieStore._parse(persistenceName).custom_property).toBe('explicit-value')
+            })
+
+            it('flag on: explicit removal wins over an unobserved sibling value', () => {
+                document.cookie = encodeCookie({ distinct_id: 'anonymous', custom_property: 'old-value' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({ distinct_id: 'anonymous', custom_property: 'old-value' })
+                )
+                const lib = new PostHogPersistence({
+                    ...makeConfig('localStorage+cookie', true),
+                    cookie_persisted_properties: ['custom_property'],
+                })
+                document.cookie = encodeCookie({ distinct_id: 'anonymous', custom_property: 'new-sibling-value' })
+
+                lib.unregister('custom_property')
+
+                expect(lib.props.custom_property).toBeUndefined()
+                expect(cookieStore._parse(persistenceName).custom_property).toBeUndefined()
+            })
+
+            it('flag on: does not hide a sibling update that lands immediately after a write', () => {
+                document.cookie = encodeCookie({ distinct_id: 'anonymous', $user_state: 'anonymous' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({ distinct_id: 'anonymous', $user_state: 'anonymous' })
+                )
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+                const writeEntry = (lib as any)._writeEntry.bind(lib)
+                const writeSpy = jest.spyOn(lib as any, '_writeEntry').mockImplementation((...args: any[]) => {
+                    const stored = writeEntry(...args)
+                    // Models a sibling write after our storage write but before
+                    // `_rememberCurrentCookieProperties` runs.
+                    document.cookie = encodeCookie({ distinct_id: 'identified-user', $user_state: 'identified' })
+                    return stored
+                })
+
+                lib.register({ local_only_property: 'preserved' })
+                writeSpy.mockRestore()
+
+                expect(lib.syncCookieProperties()).toBe(true)
+                expect(lib.props.distinct_id).toBe('identified-user')
+                expect(lib.props.$user_state).toBe('identified')
+                expect(lib.props.local_only_property).toBe('preserved')
+            })
+
+            it('flag on: a live tab adopts a sibling reset before its next capture', () => {
+                document.cookie = encodeCookie({ distinct_id: 'identified-user', $user_state: 'identified' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({
+                        distinct_id: 'identified-user',
+                        $user_state: 'identified',
+                        $user_id: 'identified-user',
+                        __alias: 'old-alias',
+                    })
+                )
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+
+                document.cookie = encodeCookie({ distinct_id: 'new-anonymous', $user_state: 'anonymous' })
+
+                expect(lib.syncCookieProperties()).toBe(true)
+                expect(lib.props.distinct_id).toBe('new-anonymous')
+                expect(lib.props.$user_state).toBe('anonymous')
+                expect(lib.props.$user_id).toBeUndefined()
+                expect(lib.props.__alias).toBeUndefined()
+            })
+
+            it('flag on: a same-ID sibling reset clears stale user identity', () => {
+                document.cookie = encodeCookie({ distinct_id: 'shared-id', $user_state: 'identified' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({ distinct_id: 'shared-id', $user_state: 'identified', $user_id: 'shared-id' })
+                )
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+
+                document.cookie = encodeCookie({ distinct_id: 'shared-id', $user_state: 'anonymous' })
+
+                expect(lib.syncCookieProperties()).toBe(true)
+                expect(lib.props.$user_state).toBe('anonymous')
+                expect(lib.props.$user_id).toBeUndefined()
+            })
+
+            it('flag on: a sibling reset removes prior local data before applying a new explicit registration', () => {
+                document.cookie = encodeCookie({ distinct_id: 'identified-user', custom_property: 'old-user' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({
+                        distinct_id: 'identified-user',
+                        custom_property: 'old-user',
+                        local_only_property: 'preserved',
+                    })
+                )
+                const config = {
+                    ...makeConfig('localStorage+cookie', true),
+                    cookie_persisted_properties: ['custom_property'],
+                }
+                const lib = new PostHogPersistence(config)
+
+                const resetCookieProperties = { distinct_id: 'new-anonymous', $user_state: 'anonymous' }
+                document.cookie = encodeCookie(resetCookieProperties)
+                cookieStore._set(
+                    getCookiePersistedPropertiesMetadataName(persistenceName),
+                    getCookiePersistedPropertiesMetadata(resetCookieProperties, ['custom_property'])
+                )
+                lib.register({ another_local_property: 'also-preserved' })
+
+                expect(lib.props.custom_property).toBeUndefined()
+                expect(lib.props.local_only_property).toBeUndefined()
+                expect(lib.props.another_local_property).toBe('also-preserved')
+                expect(cookieStore._parse(persistenceName).custom_property).toBeUndefined()
+            })
+
+            it('flag on: a background write preserves pending identity cleanup across reload', () => {
+                document.cookie = encodeCookie({ distinct_id: 'identified-user', $user_state: 'identified' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({
+                        distinct_id: 'identified-user',
+                        $user_state: 'identified',
+                        prior_user_property: 'private-value',
+                        [STORED_PERSON_PROPERTIES_KEY]: { plan: 'pro' },
+                        [ENABLED_FEATURE_FLAGS]: ['previous-flag'],
+                    })
+                )
+                const config = makeConfig('localStorage+cookie', true)
+                const lib = new PostHogPersistence(config)
+
+                document.cookie = encodeCookie({ distinct_id: 'new-anonymous', $user_state: 'anonymous' })
+                lib.register({ current_user_property: 'current-value' })
+
+                expect(lib.props.prior_user_property).toBeUndefined()
+                expect(lib.props[STORED_PERSON_PROPERTIES_KEY]).toBeUndefined()
+                expect(lib.props[ENABLED_FEATURE_FLAGS]).toBeUndefined()
+                const reloaded = new PostHogPersistence(config)
+                expect(reloaded.props.current_user_property).toBe('current-value')
+                expect(reloaded.consumeCookieIdentityChange()).toBe(true)
+            })
+
+            it('flag on: a local reset is not rolled back when a stale sibling writes during the clear window', () => {
+                document.cookie = encodeCookie({ distinct_id: 'identified-user', $user_state: 'identified' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({ distinct_id: 'identified-user', $user_state: 'identified' })
+                )
+                const config = {
+                    ...makeConfig('localStorage+cookie', true),
+                    persistence_save_debounce_ms: 250,
+                }
+                const lib = new PostHogPersistence(config)
+
+                lib._beginCookieSyncSuppression()
+                lib.clear()
+                lib.register({ distinct_id: 'new-anonymous', $user_state: 'anonymous' })
+                document.cookie = encodeCookie({ distinct_id: 'identified-user', $user_state: 'identified' })
+                lib._endCookieSyncSuppression()
+
+                expect(lib.props.distinct_id).toBe('new-anonymous')
+                expect(cookieStore._parse(persistenceName).distinct_id).toBe('new-anonymous')
+            })
+
+            it('flag on: canceling suppression drops pending partial writes', () => {
+                jest.useFakeTimers()
+                const config = {
+                    ...makeConfig('localStorage+cookie', true),
+                    persistence_save_debounce_ms: 250,
+                }
+                const lib = new PostHogPersistence(config)
+                const cookieBefore = document.cookie
+
+                lib._beginCookieSyncSuppression()
+                lib.register({ distinct_id: 'partial-identity', $user_state: 'identified' })
+                lib._endCookieSyncSuppression(false)
+                jest.advanceTimersByTime(250)
+
+                expect(document.cookie).toBe(cookieBefore)
+                jest.useRealTimers()
+            })
+
+            it('flag on: suppression publishes only the complete identity snapshot without debounce', () => {
+                document.cookie = encodeCookie({ distinct_id: 'anonymous', $user_state: 'anonymous' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({ distinct_id: 'anonymous', $user_state: 'anonymous' })
+                )
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+
+                lib._beginCookieSyncSuppression()
+                lib.register({ distinct_id: 'identified-user' })
+                expect(cookieStore._parse(persistenceName)).toMatchObject({
+                    distinct_id: 'anonymous',
+                    $user_state: 'anonymous',
+                })
+                lib.register({ $user_state: 'identified' })
+                expect(cookieStore._parse(persistenceName)).toMatchObject({
+                    distinct_id: 'anonymous',
+                    $user_state: 'anonymous',
+                })
+                lib._endCookieSyncSuppression()
+
+                expect(cookieStore._parse(persistenceName)).toMatchObject({
+                    distinct_id: 'identified-user',
+                    $user_state: 'identified',
+                })
+            })
+
+            it('flag on: a local identity update is not rolled back before its cookie write', () => {
+                document.cookie = encodeCookie({ distinct_id: 'anonymous' })
+                localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'anonymous' }))
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+
+                lib.register({ distinct_id: 'locally-identified' })
+
+                expect(lib.props.distinct_id).toBe('locally-identified')
+                expect(cookieStore._parse(persistenceName).distinct_id).toBe('locally-identified')
+            })
+
+            it('flag off: a live tab keeps legacy in-memory precedence', () => {
+                document.cookie = encodeCookie({ distinct_id: 'anonymous' })
+                localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'anonymous' }))
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', false))
+
+                document.cookie = encodeCookie({ distinct_id: 'identified-user' })
+
+                expect(lib.syncCookieProperties()).toBe(false)
+                expect(lib.props.distinct_id).toBe('anonymous')
+            })
+
+            it('flag on: a disabled live tab does not adopt a sibling cookie', () => {
+                document.cookie = encodeCookie({ distinct_id: 'anonymous' })
+                localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'anonymous' }))
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+                lib.set_disabled(true)
+
+                document.cookie = encodeCookie({ distinct_id: 'identified-user' })
+
+                expect(lib.syncCookieProperties()).toBe(false)
+                expect(lib.props.distinct_id).toBe('anonymous')
+            })
+
+            it('reconciles a sibling cookie before re-enabling persistence with a storage migration', () => {
+                document.cookie = encodeCookie({ distinct_id: 'anonymous' })
+                localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'anonymous' }))
+                const oldConfig = {
+                    ...makeConfig('localStorage+cookie', true),
+                    disable_persistence: true,
+                    persistence_save_debounce_ms: 250,
+                }
+                const lib = new PostHogPersistence(oldConfig, true)
+
+                document.cookie = encodeCookie({ distinct_id: 'identified-user' })
+                const newConfig = {
+                    ...oldConfig,
+                    disable_persistence: false,
+                    cookie_persisted_properties: ['custom_property'],
+                }
+                lib.update_config(newConfig, oldConfig, false)
+
+                expect(lib.props.distinct_id).toBe('identified-user')
+                expect(cookieStore._parse(persistenceName).distinct_id).toBe('identified-user')
+            })
+
+            it('enabling cookie precedence through update_config adopts the shared cookie without clearing it', () => {
+                document.cookie = encodeCookie({ distinct_id: 'anonymous' })
+                localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'anonymous' }))
+                const oldConfig = makeConfig('localStorage+cookie', false)
+                const lib = new PostHogPersistence(oldConfig)
+
+                document.cookie = encodeCookie({ distinct_id: 'identified-user' })
+                const newConfig = makeConfig('localStorage+cookie', true)
+                lib.update_config(newConfig, oldConfig)
+
+                expect(lib.props.distinct_id).toBe('identified-user')
+                expect(cookieStore._parse(persistenceName).distinct_id).toBe('identified-user')
+            })
+
+            it('re-enabling precedence re-reads a cookie matching an older observed snapshot', () => {
+                const sharedCookie = { distinct_id: 'shared-anonymous', $user_state: 'anonymous' }
+                document.cookie = encodeCookie(sharedCookie)
+                localStorage.setItem(persistenceName, JSON.stringify(sharedCookie))
+                const enabledConfig = makeConfig('localStorage+cookie', true)
+                const lib = new PostHogPersistence(enabledConfig)
+                const disabledConfig = makeConfig('localStorage+cookie', false)
+
+                lib.update_config(disabledConfig, enabledConfig)
+                lib.register({ distinct_id: 'local-identified', $user_state: 'identified' })
+                // A sibling restores the byte-identical snapshot observed before
+                // precedence was disabled.
+                document.cookie = encodeCookie(sharedCookie)
+                lib.update_config(enabledConfig, disabledConfig)
+
+                expect(lib.props.distinct_id).toBe('shared-anonymous')
+                expect(lib.props.$user_state).toBe('anonymous')
+            })
+
+            it('persists a reconciled cookie snapshot when disabling precedence', () => {
+                document.cookie = encodeCookie({ distinct_id: 'anonymous' })
+                localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'anonymous' }))
+                const oldConfig = makeConfig('localStorage+cookie', true)
+                const lib = new PostHogPersistence(oldConfig)
+
+                document.cookie = encodeCookie({ distinct_id: 'identified-user' })
+                const newConfig = makeConfig('localStorage+cookie', false)
+                lib.update_config(newConfig, oldConfig)
+
+                expect(lib.props.distinct_id).toBe('identified-user')
+                expect(localStore._parse(persistenceName).distinct_id).toBe('identified-user')
+                expect(new PostHogPersistence(newConfig).props.distinct_id).toBe('identified-user')
+            })
+
+            it('preserves the shared cookie when enabling precedence also rebuilds storage', () => {
+                document.cookie = encodeCookie({ distinct_id: 'anonymous' })
+                localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'anonymous' }))
+                const oldConfig = makeConfig('localStorage+cookie', false)
+                const lib = new PostHogPersistence(oldConfig)
+
+                document.cookie = encodeCookie({ distinct_id: 'identified-user' })
+                const newConfig = {
+                    ...makeConfig('localStorage+cookie', true),
+                    cookie_persisted_properties: ['custom_property'],
+                    persistence_save_debounce_ms: 250,
+                }
+                lib.update_config(newConfig, oldConfig)
+
+                expect(lib.props.distinct_id).toBe('identified-user')
+                expect(cookieStore._parse(persistenceName).distinct_id).toBe('identified-user')
+            })
+
+            it('migrates a newly configured cookie-backed property without deleting its local value', () => {
+                document.cookie = encodeCookie({ distinct_id: 'identified-user' })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({ distinct_id: 'identified-user', custom_property: 'preserved' })
+                )
+                const oldConfig = makeConfig('localStorage+cookie', true)
+                const lib = new PostHogPersistence(oldConfig)
+
+                const newConfig = {
+                    ...oldConfig,
+                    cookie_persisted_properties: ['custom_property'],
+                }
+                lib.update_config(newConfig, oldConfig)
+
+                expect(lib.props.custom_property).toBe('preserved')
+                expect(cookieStore._parse(persistenceName).custom_property).toBe('preserved')
+            })
+
+            it('reconciles the shared cookie before migrating away from localStorage+cookie', () => {
+                document.cookie = encodeCookie({ distinct_id: 'anonymous' })
+                localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'anonymous' }))
+                const oldConfig = makeConfig('localStorage+cookie', true)
+                const lib = new PostHogPersistence(oldConfig)
+
+                document.cookie = encodeCookie({ distinct_id: 'identified-user' })
+                const newConfig = makeConfig('localStorage', true)
+                lib.update_config(newConfig, oldConfig)
+
+                expect(lib.props.distinct_id).toBe('identified-user')
+                expect(localStore._parse(persistenceName).distinct_id).toBe('identified-user')
+            })
+
+            it('restores the cookie immediately when cookie options change with debounced persistence', () => {
+                document.cookie = encodeCookie({ distinct_id: 'identified-user' })
+                localStorage.setItem(persistenceName, JSON.stringify({ distinct_id: 'identified-user' }))
+                const oldConfig = {
+                    ...makeConfig('localStorage+cookie', true),
+                    cross_subdomain_cookie: false,
+                    secure_cookie: false,
+                    persistence_save_debounce_ms: 250,
+                }
+                const lib = new PostHogPersistence(oldConfig)
+
+                const newConfig = { ...oldConfig, cross_subdomain_cookie: true }
+                lib.update_config(newConfig, oldConfig)
+
+                expect(cookieStore._parse(persistenceName).distinct_id).toBe('identified-user')
+            })
+
+            it('flag on: a legacy anonymous reset clears event properties but preserves hidden local state', () => {
                 document.cookie = encodeCookie({ distinct_id: 'from_cookie' })
                 localStorage.setItem(
                     persistenceName,
@@ -974,7 +1485,7 @@ describe('persistence', () => {
 
                 expect(lib.props.distinct_id).toBe('from_cookie')
                 expect(lib.props.$surveys).toEqual(['s1', 's2'])
-                expect(lib.props.super_prop).toBe('value')
+                expect(lib.props.super_prop).toBeUndefined()
             })
 
             it('flag on: empty cookie is a no-op, localStorage round-trips intact', () => {
@@ -995,6 +1506,44 @@ describe('persistence', () => {
 
                 expect(lib.props.distinct_id).toBe('cookie_only')
                 expect(lib.props.$device_id).toBe('d1')
+            })
+
+            it('flag on: malformed identity does not clear valid local identity metadata', () => {
+                document.cookie = encodeCookie({ distinct_id: null, $sesid: [1000, 'new-session', 1000] })
+                localStorage.setItem(
+                    persistenceName,
+                    JSON.stringify({
+                        distinct_id: 'valid-local-id',
+                        $user_state: 'identified',
+                        $user_id: 'valid-local-id',
+                        __alias: 'alias',
+                    })
+                )
+
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+
+                expect(lib.props.distinct_id).toBe('valid-local-id')
+                expect(lib.props.$user_state).toBe('identified')
+                expect(lib.props.$user_id).toBe('valid-local-id')
+                expect(lib.props.__alias).toBe('alias')
+            })
+
+            it('flag on: a malformed live identity does not clear valid local identity metadata', () => {
+                const lib = new PostHogPersistence(makeConfig('localStorage+cookie', true))
+                lib.register({
+                    distinct_id: 'valid-local-id',
+                    $user_state: 'identified',
+                    $user_id: 'valid-local-id',
+                    __alias: 'alias',
+                })
+
+                document.cookie = encodeCookie({ distinct_id: null, $sesid: [1000, 'new-session', 1000] })
+
+                expect(lib.syncCookieProperties()).toBe(true)
+                expect(lib.props.distinct_id).toBe('valid-local-id')
+                expect(lib.props.$user_state).toBe('identified')
+                expect(lib.props.$user_id).toBe('valid-local-id')
+                expect(lib.props.__alias).toBe('alias')
             })
 
             it('flag on: defensive filter - null cookie value does NOT clobber valid localStorage value', () => {

@@ -162,8 +162,10 @@ export class SessionRecording implements Extension {
             this._recordingStatus = LAZY_LOADING
         }
 
-        // If recorder.js is already loaded (if array.full.js snippet is used or posthog-js/dist/recorder is
-        // imported), don't load the script. Otherwise, remotely import recorder.js from cdn since it hasn't been loaded.
+        // If the recorder is already loaded, don't load the script. Both halves are needed:
+        // `rrweb.record` is the recorder itself, `initSessionRecording` is the code that drives it.
+        // The `.full` bundles and `posthog-js/dist/posthog-recorder` (or `dist/lazy-recorder`) define both,
+        // so nothing is fetched. Otherwise remotely import the recorder from the cdn.
         if (
             !assignableWindow?.__PosthogExtensions__?.rrweb?.record ||
             !assignableWindow.__PosthogExtensions__?.initSessionRecording
@@ -173,6 +175,12 @@ export class SessionRecording implements Extension {
                 this._scriptName,
                 (err) => {
                     if (err) {
+                        // most often this is an ad blocker matching the `/static/<script>.js` path.
+                        // flag it on the session so a blocked recorder is visible in analytics
+                        // instead of only in the browser console
+                        this._instance.register_for_session({
+                            [SDK_DEBUG_RECORDING_SCRIPT_NOT_LOADED]: true,
+                        })
                         return logger.error('could not load recorder', err)
                     }
                     this._onScriptLoaded(startReason)
@@ -324,10 +332,13 @@ export class SessionRecording implements Extension {
             logger.warn('persisted remote config for session recording is invalid and will be ignored', e)
             return false
         }
-        // default to now so that configs persisted by older SDK versions
-        // (which never set cache_timestamp) are treated as fresh
-        const cacheTimestamp = config.cache_timestamp ?? Date.now()
-        return Date.now() - cacheTimestamp <= RECORDING_REMOTE_CONFIG_TTL_MS
+        // configs persisted by SDK versions that predate cache_timestamp have unknown age.
+        // Treat them as stale so recording waits for a fresh config instead of starting
+        // under arbitrarily old trigger/sampling settings.
+        if (isNullish(config.cache_timestamp)) {
+            return false
+        }
+        return Date.now() - config.cache_timestamp <= RECORDING_REMOTE_CONFIG_TTL_MS
     }
 
     private _onScriptLoaded(startReason?: SessionStartReason) {

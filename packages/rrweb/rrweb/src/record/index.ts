@@ -4,6 +4,10 @@ import {
   slimDOMDefaults,
   createMirror,
   takeDeferredStylesheetLinks,
+  recordDeferredStylesheetsAbandoned,
+  beginSnapshotCostTracking,
+  endSnapshotCostTracking,
+  noteVisibilityChange,
 } from '@posthog/rrweb-snapshot';
 import {
   initObservers,
@@ -41,6 +45,7 @@ import { IframeManager } from './iframe-manager';
 import { ShadowDomManager } from './shadow-dom-manager';
 import { CanvasManager } from './observers/canvas/canvas-manager';
 import { StylesheetManager } from './stylesheet-manager';
+import type { DeferredLinkInliningTask } from './stylesheet-manager';
 import ProcessedNodeManager from './processed-node-manager';
 import {
   callbackWrapper,
@@ -84,20 +89,6 @@ const nonUserInitiatedSources = new Set<IncrementalSource>([
   IncrementalSource.StyleDeclaration,
   IncrementalSource.AdoptedStyleSheet,
 ]);
-/**
- * Stylesheet stringification is the dominant, and least bounded, cost of a full
- * snapshot on CSS-heavy pages: `stringifyStylesheet` reads `cssText` for every
- * CSSRule of every sheet, all inside one uninterruptible task.
- *
- * The cap is in rules rather than elapsed time on purpose. A time cap can only stop
- * the *next* sheet, so a single enormous sheet slips straight through it, and it
- * makes the split depend on how contended the machine happens to be - the same page
- * would defer different sheets from load to load. ~10k rules costs a couple of
- * hundred ms in Chrome and sits well above what an ordinary page carries (Bootstrap
- * is around 2-3k rules), so this is inert for most sites.
- */
-export const DEFAULT_INLINE_STYLESHEET_BUDGET_RULES = 10_000;
-
 type IdleTask = { cancel: () => void };
 type IdleDeadline = { didTimeout: boolean; timeRemaining: () => number };
 
@@ -121,44 +112,135 @@ function whenIdle(cb: (deadline?: IdleDeadline) => void): IdleTask {
   return { cancel: () => clearTimeout(handle) };
 }
 
+// CSSRules stringified per slice before re-checking the idle deadline. A rule
+// stringifies in single-digit microseconds, so a slice stays around a
+// millisecond even on slow devices - small enough that overshooting a deadline
+// by one slice is negligible, big enough that a permanently busy page still
+// finishes real work with its one guaranteed slice per callback.
+const DEFERRED_STYLESHEET_RULES_PER_SLICE = 200;
+
+// Without idle deadlines (the setTimeout fallback in whenIdle) each tick gets a
+// fixed slice allowance instead: a tick stays a few ms, while a giant sheet
+// still completes in seconds rather than minutes.
+const DEFERRED_STYLESHEET_SLICES_PER_FALLBACK_TICK = 10;
+
+// Safety cap for the synchronous teardown flush (stop() / pagehide): at most
+// this many slices, i.e. 10,000 rules - the same synchronous CSS work the
+// default snapshot budget allows, tens of ms at worst. A sheet estimated not
+// to fit in what's left of the cap is abandoned up front (spending the budget
+// on it would emit nothing while starving the sheets queued behind it), and
+// everything abandoned or still queued at the cap is counted.
+const DEFERRED_STYLESHEET_SYNC_FLUSH_MAX_SLICES = 50;
+
+/** Controls one full snapshot's queue of budget-deferred stylesheets. */
+type DeferredStylesheetInlining = {
+  /** Drop everything still queued; nothing further is emitted. */
+  cancel: () => void;
+  /**
+   * Synchronously finish what remains - the partially-stringified sheet
+   * included - up to {@link DEFERRED_STYLESHEET_SYNC_FLUSH_MAX_SLICES}, so the
+   * `_cssText` mutations reach the recorder before teardown. Sheets estimated
+   * not to fit in the remaining budget are abandoned (and counted) up front,
+   * so one oversized sheet cannot starve the cheap sheets queued behind it.
+   */
+  flush: () => void;
+};
+
 /**
  * Inline the `<link rel=stylesheet>` elements the snapshot skipped once it ran out
- * of stylesheet budget, emitting each as an attribute mutation. At least one sheet
- * per idle callback so a busy main thread still makes progress, more while the
- * deadline says we're genuinely idle. Splitting the work this way keeps every task
- * short - the total CPU is unchanged, but the page stays responsive between chunks.
+ * of stylesheet budget, emitting each as an attribute mutation. The unit of work is
+ * a bounded range of CSSRules, not a whole sheet: a resumable cursor stringifies
+ * {@link DEFERRED_STYLESHEET_RULES_PER_SLICE} rules per slice and accumulates, so
+ * even a monolithic sheet never holds the main thread for one long task. At least
+ * one slice per idle callback so a busy main thread still makes progress, more
+ * slices (and more sheets) while the deadline says we're genuinely idle. A sheet's
+ * mutation is emitted atomically when its last slice completes - cancelling
+ * mid-sheet emits nothing for that sheet.
+ *
+ * Exported for unit tests only.
  */
-function inlineDeferredStylesheets(
+export function inlineDeferredStylesheets(
   links: Array<HTMLLinkElement | null>,
   stylesheetManager: StylesheetManager,
   onDone: () => void,
-): () => void {
+): DeferredStylesheetInlining {
   let cancelled = false;
   let pending: IdleTask | null = null;
   let index = 0;
+  // resumable stringification of the sheet currently being inlined; the
+  // accumulated slices live inside the task, so dropping it drops them
+  let task: DeferredLinkInliningTask | null = null;
+
+  const hasWork = () => task !== null || index < links.length;
+
+  const startNextTask = () => {
+    const link = links[index];
+    // release the element so completed entries aren't pinned by this closure
+    links[index] = null;
+    index += 1;
+    if (link) {
+      callSafely(() => {
+        task = stylesheetManager.beginDeferredLinkInlining(
+          link,
+          mirror.getId(link),
+        );
+      });
+    }
+  };
+
+  const advanceActiveTask = () => {
+    if (!task) {
+      return;
+    }
+    const activeTask = task;
+    let finished = true;
+    callSafely(() => {
+      finished = activeTask.advance(DEFERRED_STYLESHEET_RULES_PER_SLICE);
+    });
+    if (finished) {
+      task = null;
+    }
+  };
+
+  const runOneSlice = () => {
+    if (!task) {
+      startNextTask();
+    }
+    advanceActiveTask();
+  };
 
   const step = (deadline?: IdleDeadline) => {
     pending = null;
     if (cancelled) {
       return;
     }
+    let slices = 0;
     do {
-      const link = links[index];
-      // release the element so completed entries aren't pinned by this closure
-      links[index] = null;
-      index += 1;
-      if (link) {
-        callSafely(() =>
-          stylesheetManager.inlineDeferredLinkElement(link, mirror.getId(link)),
-        );
+      try {
+        runOneSlice();
+      } catch (e) {
+        // a throwing consumer emit or mask callback must not surface as an
+        // uncaught error on the customer's page; the sheet is dropped and
+        // counted, and the sheets behind it still get their turn
+        task?.discard();
+        task = null;
+        recordDeferredStylesheetsAbandoned(1);
       }
+      slices += 1;
     } while (
-      index < links.length &&
-      deadline &&
-      !deadline.didTimeout &&
-      deadline.timeRemaining() > 5
+      // a sheet's own emit can synchronously cancel()/flush() this queue (a
+      // full snapshot or recorder stop from inside emit); a superseded tick
+      // must stop immediately and leave completion signalling to them
+      !cancelled &&
+      hasWork() &&
+      (deadline
+        ? !deadline.didTimeout && deadline.timeRemaining() > 5
+        : slices < DEFERRED_STYLESHEET_SLICES_PER_FALLBACK_TICK)
     );
-    if (index < links.length) {
+    if (cancelled) {
+      return;
+    }
+    if (hasWork()) {
       pending = whenIdle(step);
     } else {
       onDone();
@@ -167,10 +249,76 @@ function inlineDeferredStylesheets(
 
   pending = whenIdle(step);
 
-  return () => {
-    cancelled = true;
-    pending?.cancel();
-    pending = null;
+  return {
+    cancel: () => {
+      cancelled = true;
+      // drop the half-stringified sheet, if any; its mutation is never emitted
+      task?.discard();
+      task = null;
+      pending?.cancel();
+      pending = null;
+    },
+    flush: () => {
+      if (cancelled) {
+        return;
+      }
+      cancelled = true;
+      pending?.cancel();
+      pending = null;
+      let slices = 0;
+      let skipped = 0;
+      while (hasWork() && slices < DEFERRED_STYLESHEET_SYNC_FLUSH_MAX_SLICES) {
+        if (!task) {
+          startNextTask();
+        }
+        const activeTask = task;
+        if (!activeTask) {
+          // this link had nothing to inline; on to the next
+          continue;
+        }
+        // Fairness: the budget is shared and a sheet only emits when its LAST
+        // slice completes, so a sheet that cannot finish in the remaining
+        // budget would burn it emitting nothing while starving every sheet
+        // queued behind it - abandon that one sheet up front instead.
+        // remainingRules() undercounts rules hidden in still-unopened frames,
+        // so a sheet can still overrun; re-checking every slice corrects the
+        // estimate as frames open.
+        const slicesNeeded =
+          Math.floor(
+            activeTask.remainingRules() / DEFERRED_STYLESHEET_RULES_PER_SLICE,
+          ) + 1;
+        if (slicesNeeded > DEFERRED_STYLESHEET_SYNC_FLUSH_MAX_SLICES - slices) {
+          activeTask.discard();
+          task = null;
+          skipped += 1;
+          continue;
+        }
+        try {
+          advanceActiveTask();
+        } catch (e) {
+          // a throwing consumer emit or mask callback must not abort the
+          // drain; the sheet is dropped and counted, and the sheets queued
+          // behind it still get their turn
+          task?.discard();
+          task = null;
+          skipped += 1;
+        }
+        slices += 1;
+      }
+      if (hasWork() || skipped > 0) {
+        // whatever was skipped or is still queued keeps only its href in the replay
+        let abandoned = skipped + (task !== null ? 1 : 0);
+        for (let i = index; i < links.length; i++) {
+          if (links[i] !== null) {
+            abandoned += 1;
+          }
+        }
+        recordDeferredStylesheetsAbandoned(abandoned);
+        task?.discard();
+        task = null;
+      }
+      onDone();
+    },
   };
 }
 
@@ -178,8 +326,8 @@ function record<T = eventWithTime>(
   options: recordOptions<T> = {},
 ): listenerHandler | undefined {
   // per-recorder, unlike its module-level siblings, so a stale recorder's stop
-  // handler can't cancel a newer recorder's pending deferred inlining
-  let cancelDeferredStylesheetInlining: (() => void) | undefined;
+  // handler can't touch a newer recorder's pending deferred inlining
+  let deferredStylesheetInlining: DeferredStylesheetInlining | undefined;
   const {
     emit,
     checkoutEveryNms,
@@ -191,7 +339,7 @@ function record<T = eventWithTime>(
     maskTextClass = 'rr-mask',
     maskTextSelector = null,
     inlineStylesheet = true,
-    inlineStylesheetBudgetRules = DEFAULT_INLINE_STYLESHEET_BUDGET_RULES,
+    inlineStylesheetBudgetRules,
     maskAllInputs,
     maskInputOptions: _maskInputOptions,
     slimDOMOptions: _slimDOMOptions,
@@ -523,125 +671,171 @@ function record<T = eventWithTime>(
     if (!recordDOM) {
       return;
     }
-    wrappedEmit(
-      {
-        type: EventType.Meta,
-        data: {
-          href: window.location.href,
-          width: getWindowWidth(),
-          height: getWindowHeight(),
-        },
-      },
-      isCheckout,
-    );
-
-    // Any deferred inlining from the previous snapshot targets mirror ids that this
-    // snapshot is about to replace, so drop it rather than emitting stale mutations.
-    cancelDeferredStylesheetInlining?.();
-    cancelDeferredStylesheetInlining = undefined;
-
-    // When we take a full snapshot, old tracked StyleSheets need to be removed.
-    stylesheetManager.reset();
-
-    shadowDomManager.init();
-
-    mutationBuffers.forEach((buf) => buf.lock()); // don't allow any mirror modifications during snapshotting
-    let node: ReturnType<typeof snapshot> = null;
-    let deferredStylesheetLinks: HTMLLinkElement[] = [];
+    // This whole body is one uninterruptible main-thread task: the serialize
+    // pass, the FullSnapshot emit, the locked-mutation drain on unlock, and the
+    // adoptedStyleSheets stringification all land in the same freeze, so they
+    // are tracked as one window. `snapshot()`'s own tracking nests inside it.
+    beginSnapshotCostTracking(inlineStylesheetBudgetRules);
     try {
-      node = snapshot(document, {
-        mirror,
-        blockClass,
-        blockSelector,
-        maskTextClass,
-        maskTextSelector,
-        inlineStylesheet,
-        maskAllInputs: maskInputOptions,
-        inlineStylesheetBudgetRules,
-        maskTextFn,
-        maskInputFn,
-        maskAllElementAttributes,
-        maskAttributeFn,
-        slimDOM: slimDOMOptions,
-        dataURLOptions,
-        recordCanvas,
-        canvasMaskingConfigured,
-        inlineImages,
-        onSerialize: (n) => {
-          if (isSerializedIframe(n, mirror)) {
-            iframeManager.addIframe(n as HTMLIFrameElement);
-          }
-          if (isSerializedStylesheet(n, mirror)) {
-            stylesheetManager.trackLinkElement(n as HTMLLinkElement);
-          }
-          if (hasShadowRoot(n)) {
-            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            shadowDomManager.addShadowRoot(dom.shadowRoot(n as Node)!, document);
-          }
+      wrappedEmit(
+        {
+          type: EventType.Meta,
+          data: {
+            href: window.location.href,
+            width: getWindowWidth(),
+            height: getWindowHeight(),
+          },
         },
-        onIframeLoad: (iframe, childSn) => {
-          iframeManager.attachIframe(iframe, childSn);
-          shadowDomManager.observeAttachShadow(iframe);
+        isCheckout,
+      );
+
+      // Any deferred inlining from the previous snapshot targets mirror ids that this
+      // snapshot is about to replace, so drop it rather than emitting stale mutations.
+      // No sheet is lost: this snapshot re-serializes every link, so a still-attached
+      // sheet is either inlined within the new budget or re-deferred into a new queue.
+      deferredStylesheetInlining?.cancel();
+      deferredStylesheetInlining = undefined;
+
+      // When we take a full snapshot, old tracked StyleSheets need to be removed.
+      stylesheetManager.reset();
+
+      shadowDomManager.init();
+
+      mutationBuffers.forEach((buf) => buf.lock()); // don't allow any mirror modifications during snapshotting
+      let node: ReturnType<typeof snapshot> = null;
+      let deferredStylesheetLinks: HTMLLinkElement[] = [];
+      try {
+        node = snapshot(document, {
+          mirror,
+          blockClass,
+          blockSelector,
+          maskTextClass,
+          maskTextSelector,
+          inlineStylesheet,
+          maskAllInputs: maskInputOptions,
+          inlineStylesheetBudgetRules,
+          maskTextFn,
+          maskInputFn,
+          maskAllElementAttributes,
+          maskAttributeFn,
+          slimDOM: slimDOMOptions,
+          dataURLOptions,
+          recordCanvas,
+          canvasMaskingConfigured,
+          inlineImages,
+          onSerialize: (n) => {
+            if (isSerializedIframe(n, mirror)) {
+              iframeManager.addIframe(n as HTMLIFrameElement);
+            }
+            if (isSerializedStylesheet(n, mirror)) {
+              stylesheetManager.trackLinkElement(n as HTMLLinkElement);
+            }
+            if (hasShadowRoot(n)) {
+              shadowDomManager.addShadowRoot(
+                // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+                dom.shadowRoot(n as Node)!,
+                document,
+              );
+            }
+          },
+          onIframeLoad: (iframe, childSn) => {
+            iframeManager.attachIframe(iframe, childSn);
+            shadowDomManager.observeAttachShadow(iframe);
+          },
+          onIframeListenerRegistered: (
+            iframe: HTMLIFrameElement,
+            disposer: () => void,
+          ) => {
+            iframeManager.registerLoadListenerDisposer(iframe, disposer);
+          },
+          onStylesheetLoad: (linkEl, childSn) => {
+            stylesheetManager.attachLinkElement(linkEl, childSn);
+          },
+          keepIframeSrcFn,
+        });
+      } finally {
+        // drain even when the snapshot throws, so a failed snapshot doesn't
+        // leave links queued for the next one
+        deferredStylesheetLinks = takeDeferredStylesheetLinks();
+      }
+
+      if (!node) {
+        return console.warn('Failed to snapshot the document');
+      }
+
+      wrappedEmit(
+        {
+          type: EventType.FullSnapshot,
+          data: {
+            node,
+            initialOffset: getWindowScroll(window),
+          },
         },
-        onIframeListenerRegistered: (
-          iframe: HTMLIFrameElement,
-          disposer: () => void,
-        ) => {
-          iframeManager.registerLoadListenerDisposer(iframe, disposer);
-        },
-        onStylesheetLoad: (linkEl, childSn) => {
-          stylesheetManager.attachLinkElement(linkEl, childSn);
-        },
-        keepIframeSrcFn,
-      });
+        isCheckout,
+      );
+      mutationBuffers.forEach((buf) => buf.unlock()); // generate & emit any mutations that happened during snapshotting, as can now apply against the newly built mirror
+      canvasManager.onFullSnapshot();
+
+      if (deferredStylesheetLinks.length) {
+        const inlining = inlineDeferredStylesheets(
+          deferredStylesheetLinks,
+          stylesheetManager,
+          () => {
+            // queue drained: drop the handle so the closure and its links can
+            // be collected; a superseded queue must not clobber the handle of
+            // the one a newer full snapshot installed
+            if (deferredStylesheetInlining === inlining) {
+              deferredStylesheetInlining = undefined;
+            }
+          },
+        );
+        deferredStylesheetInlining = inlining;
+      }
+
+      if (recordCrossOriginIframes) {
+        iframeManager.reattachIframes();
+      }
+
+      // Some old browsers don't support adoptedStyleSheets.
+      if (document.adoptedStyleSheets && document.adoptedStyleSheets.length > 0)
+        stylesheetManager.adoptStyleSheets(
+          document.adoptedStyleSheets,
+          mirror.getId(document),
+        );
     } finally {
-      // drain even when the snapshot throws, so a failed snapshot doesn't
-      // leave links queued for the next one
-      deferredStylesheetLinks = takeDeferredStylesheetLinks();
+      endSnapshotCostTracking();
     }
-
-    if (!node) {
-      return console.warn('Failed to snapshot the document');
-    }
-
-    wrappedEmit(
-      {
-        type: EventType.FullSnapshot,
-        data: {
-          node,
-          initialOffset: getWindowScroll(window),
-        },
-      },
-      isCheckout,
-    );
-    mutationBuffers.forEach((buf) => buf.unlock()); // generate & emit any mutations that happened during snapshotting, as can now apply against the newly built mirror
-    canvasManager.onFullSnapshot();
-
-    if (deferredStylesheetLinks.length) {
-      cancelDeferredStylesheetInlining = inlineDeferredStylesheets(
-        deferredStylesheetLinks,
-        stylesheetManager,
-        () => {
-          // queue drained: drop the handle so the closure and its links can be collected
-          cancelDeferredStylesheetInlining = undefined;
-        },
-      );
-    }
-
-    if (recordCrossOriginIframes) {
-      iframeManager.reattachIframes();
-    }
-
-    // Some old browsers don't support adoptedStyleSheets.
-    if (document.adoptedStyleSheets && document.adoptedStyleSheets.length > 0)
-      stylesheetManager.adoptStyleSheets(
-        document.adoptedStyleSheets,
-        mirror.getId(document),
-      );
   };
 
   try {
     const handlers: listenerHandler[] = [];
+
+    // pagehide is the last event a dying page can rely on; flush the deferred
+    // CSS synchronously so it reaches the emitted stream while the SDK's own
+    // pagehide flush (registered after this one) can still ship it.
+    handlers.push(
+      on(
+        'pagehide',
+        () => {
+          try {
+            deferredStylesheetInlining?.flush();
+          } catch (e) {
+            // flush drives the user's emit/mask callbacks; their throw must
+            // not surface on the host page's pagehide dispatch
+          }
+          deferredStylesheetInlining = undefined;
+        },
+        window,
+      ),
+    );
+
+    // A hidden tab can be frozen or its renderer suspended by the OS, which
+    // turns the wall-clock cost samples into sleep measurements. rrweb-snapshot
+    // has no DOM event access of its own, so the recorder feeds it the
+    // suspension boundaries; see snapshot-cost.ts for the discard rules.
+    for (const suspensionEvent of ['visibilitychange', 'freeze', 'resume']) {
+      handlers.push(on(suspensionEvent, noteVisibilityChange, document));
+    }
 
     // Disposes per-iframe observer cleanups and unlinks them from `handlers`.
     runAndDetachIframeCleanup = (iframeId: number) => {
@@ -815,15 +1009,17 @@ function record<T = eventWithTime>(
       try {
         const iframeId = mirror.getId(iframeEl);
         const cleanup = observe(iframeEl.contentDocument!);
-        handlers.push(cleanup);
-        // Accumulate cleanups across iframe navigations.
-        if (iframeId !== -1) {
-          let bucket = iframeObserverCleanups.get(iframeId);
-          if (!bucket) {
-            bucket = new Set();
-            iframeObserverCleanups.set(iframeId, bucket);
+        if (typeof cleanup === 'function') {
+          handlers.push(cleanup);
+          // Accumulate cleanups across iframe navigations.
+          if (iframeId !== -1) {
+            let bucket = iframeObserverCleanups.get(iframeId);
+            if (!bucket) {
+              bucket = new Set();
+              iframeObserverCleanups.set(iframeId, bucket);
+            }
+            bucket.add(cleanup);
           }
-          bucket.add(cleanup);
         }
       } catch (error) {
         // TODO: handle internal error
@@ -878,7 +1074,8 @@ function record<T = eventWithTime>(
 
     const init = () => {
       takeFullSnapshot();
-      handlers.push(observe(document));
+      const cleanup = observe(document);
+      if (typeof cleanup === 'function') handlers.push(cleanup);
       handlers.push(on('fullscreenchange', emitFullscreenChange));
       handlers.push(on('webkitfullscreenchange', emitFullscreenChange));
       handlers.push(on('mozfullscreenchange', emitFullscreenChange));
@@ -912,8 +1109,15 @@ function record<T = eventWithTime>(
       );
     }
     return () => {
-      cancelDeferredStylesheetInlining?.();
-      cancelDeferredStylesheetInlining = undefined;
+      // finish the deferred CSS while the emit path is still wired up, so the
+      // sheets this recording deferred don't silently vanish with it
+      try {
+        deferredStylesheetInlining?.flush();
+      } catch (e) {
+        // flush drives the user's emit/mask callbacks; their throw must not
+        // abort the teardown below and leak observers and listeners
+      }
+      deferredStylesheetInlining = undefined;
       handlers.forEach((h) => callSafely(h));
       processedNodeManager.destroy();
       iframeManager.removeLoadListener();
