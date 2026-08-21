@@ -62,6 +62,7 @@ import {
     SESSION_RECORDING_PAST_MINIMUM_DURATION,
     SESSION_RECORDING_REMOTE_CONFIG,
     SESSION_RECORDING_START_REASON,
+    SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS,
     SDK_DEBUG_REPLAY_RRWEB_ATTACHED,
     SDK_DEBUG_REPLAY_RRWEB_START_ATTEMPTED,
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
@@ -2007,10 +2008,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     /**
-     * Names the trigger conditions that are keeping the session in BUFFERING, so a customer looking
-     * at the console can tell which leg failed instead of only seeing an unexplained "buffering".
-     * A URL trigger that never matches under the default AND matching otherwise reads, from the
-     * outside, exactly like a session that is about to record.
+     * Names the trigger conditions that are keeping the session in BUFFERING, so diagnostics can
+     * identify which leg failed instead of only reporting an unexplained "buffering". A URL trigger
+     * that never matches under the default AND matching otherwise looks like a session that is about
+     * to record.
      */
     private _describePendingTriggerConditions(): string[] {
         return this._strategy?.getPendingTriggerConditions(this.sessionId) ?? []
@@ -2020,19 +2021,28 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _maybeLogBufferingReason(status: SessionRecordingStatus): void {
         if (status !== BUFFERING) {
+            if (!isUndefined(this._lastLoggedBufferingReason)) {
+                this._instance.register_for_session({ [SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS]: [] })
+            }
             this._lastLoggedBufferingReason = undefined
             return
         }
         const pending = this._describePendingTriggerConditions()
         if (pending.length === 0) {
+            if (!isUndefined(this._lastLoggedBufferingReason)) {
+                this._instance.register_for_session({ [SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS]: [] })
+            }
+            this._lastLoggedBufferingReason = undefined
             return
         }
         const reason = pending.join(', ')
-        // only log on change so the flush cadence doesn't spam the console while buffering
-        if (reason === this._lastLoggedBufferingReason) {
+        const reasonKey = `${this.sessionId}:${reason}`
+        // only report on change so the flush cadence doesn't repeat diagnostics while buffering
+        if (reasonKey === this._lastLoggedBufferingReason) {
             return
         }
-        this._lastLoggedBufferingReason = reason
+        this._lastLoggedBufferingReason = reasonKey
+        this._instance.register_for_session({ [SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS]: pending })
         logger.info(`buffering: ${reason}`)
     }
 

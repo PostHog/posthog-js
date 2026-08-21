@@ -125,20 +125,43 @@ function sessionRecordingUrlTriggerMatches(
 
 export interface TriggerStatusMatching {
     triggerStatus(sessionId: string): TriggerStatus
+    triggerStatusNoSideEffects(sessionId: string): TriggerStatus
     stop(): void
 }
+
+function orTriggerStatus(statuses: TriggerStatus[]): TriggerStatus {
+    if (statuses.includes(TRIGGER_ACTIVATED)) {
+        return TRIGGER_ACTIVATED
+    }
+    if (statuses.includes(TRIGGER_PENDING)) {
+        return TRIGGER_PENDING
+    }
+    return TRIGGER_DISABLED
+}
+
+function andTriggerStatus(statuses: TriggerStatus[]): TriggerStatus {
+    const enabledStatuses = new Set(statuses)
+    // trigger_disabled means no config
+    enabledStatuses.delete(TRIGGER_DISABLED)
+    switch (enabledStatuses.size) {
+        case 0:
+            return TRIGGER_DISABLED
+        case 1:
+            return Array.from(enabledStatuses)[0]
+        default:
+            return TRIGGER_PENDING
+    }
+}
+
 export class OrTriggerMatching implements TriggerStatusMatching {
     constructor(private readonly _matchers: TriggerStatusMatching[]) {}
 
     triggerStatus(sessionId: string): TriggerStatus {
-        const statuses = this._matchers.map((m) => m.triggerStatus(sessionId))
-        if (statuses.includes(TRIGGER_ACTIVATED)) {
-            return TRIGGER_ACTIVATED
-        }
-        if (statuses.includes(TRIGGER_PENDING)) {
-            return TRIGGER_PENDING
-        }
-        return TRIGGER_DISABLED
+        return orTriggerStatus(this._matchers.map((matcher) => matcher.triggerStatus(sessionId)))
+    }
+
+    triggerStatusNoSideEffects(sessionId: string): TriggerStatus {
+        return orTriggerStatus(this._matchers.map((matcher) => matcher.triggerStatusNoSideEffects(sessionId)))
     }
 
     stop(): void {
@@ -150,21 +173,11 @@ export class AndTriggerMatching implements TriggerStatusMatching {
     constructor(private readonly _matchers: TriggerStatusMatching[]) {}
 
     triggerStatus(sessionId: string): TriggerStatus {
-        const statuses = new Set<TriggerStatus>()
-        for (const matcher of this._matchers) {
-            statuses.add(matcher.triggerStatus(sessionId))
-        }
+        return andTriggerStatus(this._matchers.map((matcher) => matcher.triggerStatus(sessionId)))
+    }
 
-        // trigger_disabled means no config
-        statuses.delete(TRIGGER_DISABLED)
-        switch (statuses.size) {
-            case 0:
-                return TRIGGER_DISABLED
-            case 1:
-                return Array.from(statuses)[0]
-            default:
-                return TRIGGER_PENDING
-        }
+    triggerStatusNoSideEffects(sessionId: string): TriggerStatus {
+        return andTriggerStatus(this._matchers.map((matcher) => matcher.triggerStatusNoSideEffects(sessionId)))
     }
 
     stop(): void {
@@ -174,6 +187,10 @@ export class AndTriggerMatching implements TriggerStatusMatching {
 
 export class PendingTriggerMatching implements TriggerStatusMatching {
     triggerStatus(): TriggerStatus {
+        return this.triggerStatusNoSideEffects()
+    }
+
+    triggerStatusNoSideEffects(): TriggerStatus {
         return TRIGGER_PENDING
     }
 
@@ -184,6 +201,10 @@ export class PendingTriggerMatching implements TriggerStatusMatching {
 
 export class AlwaysActivatedTriggerMatching implements TriggerStatusMatching {
     triggerStatus(): TriggerStatus {
+        return this.triggerStatusNoSideEffects()
+    }
+
+    triggerStatusNoSideEffects(): TriggerStatus {
         return TRIGGER_ACTIVATED
     }
 
@@ -587,19 +608,7 @@ export class TriggerGroupMatching implements TriggerStatusMatching {
     }
 
     triggerStatusNoSideEffects(sessionId: string): TriggerStatus {
-        const statuses = [
-            this._eventTriggerMatching.triggerStatusNoSideEffects(sessionId),
-            this._urlTriggerMatching.triggerStatusNoSideEffects(sessionId),
-            this._linkedFlagMatching.triggerStatusNoSideEffects(),
-        ].filter((status) => status !== TRIGGER_DISABLED)
-
-        if (statuses.length === 0) {
-            return TRIGGER_ACTIVATED
-        }
-        if (this.group.conditions.matchType === 'any') {
-            return statuses.includes(TRIGGER_ACTIVATED) ? TRIGGER_ACTIVATED : TRIGGER_PENDING
-        }
-        return statuses.every((status) => status === TRIGGER_ACTIVATED) ? TRIGGER_ACTIVATED : TRIGGER_PENDING
+        return this._combinedMatching.triggerStatusNoSideEffects(sessionId)
     }
 
     getPendingTriggerConditions(sessionId: string): string[] {
