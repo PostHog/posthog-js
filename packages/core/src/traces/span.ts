@@ -3,7 +3,7 @@ import type { Logger } from '../types'
 import type { SpanEventRecord, SpanRecord } from './types'
 import { formatTraceparent } from './traceparent'
 import { clampEndTime, resolveSuppliedTime, sanitizeName } from './sanitize'
-import { isError } from '../utils'
+import { isError, isNullish } from '../utils'
 
 /**
  * A monotonic millisecond reading where the platform has one.
@@ -29,6 +29,10 @@ export interface SpanInit {
   startTime: number
   /** True when the caller supplied an explicit `startTime`. */
   backdated: boolean
+  /** Keys the SDK attached itself. Exempt from the attribute cap and never evicted. */
+  autoAttributeKeys: string[]
+  maxAttributes: number
+  maxEvents: number
 }
 
 export class PostHogSpan implements Span {
@@ -47,6 +51,12 @@ export class PostHogSpan implements Span {
   private _events: SpanEventRecord[] = []
   private _status?: { code: SpanStatusCode; message?: string }
   private _ended = false
+  private readonly _autoKeys: Set<string>
+  private readonly _maxAttributes: number
+  private readonly _maxEvents: number
+  private _userAttributeCount = 0
+  private _droppedAttributes = 0
+  private _droppedEvents = 0
 
   constructor(
     init: SpanInit,
@@ -59,7 +69,17 @@ export class PostHogSpan implements Span {
     this._traceState = init.traceState
     this._name = init.name
     this._kind = init.kind
-    this._attributes = init.attributes
+    this._autoKeys = new Set(init.autoAttributeKeys)
+    this._maxAttributes = init.maxAttributes
+    this._maxEvents = init.maxEvents
+    // Null-prototype: a caller-supplied `__proto__` key (JSON.parse produces one)
+    // would otherwise swap this object's prototype instead of becoming an entry,
+    // smuggling every key inside it past the cap and into the encoder's `for…in`.
+    // It also keeps `toString` and friends from reading as already-present.
+    this._attributes = Object.create(null) as SpanAttributes
+    for (const key in init.attributes) {
+      this._writeAttribute(key, init.attributes[key])
+    }
     this._startTime = init.startTime
     this._startMono = init.backdated ? undefined : monotonicNow()
   }
@@ -87,9 +107,39 @@ export class PostHogSpan implements Span {
     return true
   }
 
+  /**
+   * Writes an attribute unless the span is already at its user-attribute cap.
+   *
+   * Overwriting a key already on the span always succeeds — the cap counts
+   * distinct user keys, not writes — and SDK-attached keys never count toward
+   * it, so a span at the cap still carries its person and session ids.
+   */
+  private _writeAttribute(key: string, value: SpanAttributeValue): void {
+    // Nullish removes the key rather than occupying it: the encoder drops these
+    // anyway, and storing one would both spend no budget and make every later
+    // write to that key free, letting the span exceed its cap.
+    if (isNullish(value)) {
+      if (key in this._attributes && !this._autoKeys.has(key)) {
+        this._userAttributeCount--
+      }
+      delete this._attributes[key]
+      return
+    }
+    if (this._autoKeys.has(key) || key in this._attributes) {
+      this._attributes[key] = value
+      return
+    }
+    if (this._userAttributeCount >= this._maxAttributes) {
+      this._droppedAttributes++
+      return
+    }
+    this._userAttributeCount++
+    this._attributes[key] = value
+  }
+
   setAttribute(key: string, value: SpanAttributeValue): this {
     if (this._mutable('setAttribute')) {
-      this._attributes[key] = value
+      this._writeAttribute(key, value)
     }
     return this
   }
@@ -97,7 +147,7 @@ export class PostHogSpan implements Span {
   setAttributes(attributes: SpanAttributes): this {
     if (this._mutable('setAttributes')) {
       for (const key in attributes) {
-        this._attributes[key] = attributes[key]
+        this._writeAttribute(key, attributes[key])
       }
     }
     return this
@@ -105,6 +155,10 @@ export class PostHogSpan implements Span {
 
   addEvent(name: string, attributes?: SpanAttributes, timestamp?: SpanTimeInput): this {
     if (this._mutable('addEvent')) {
+      if (this._events.length >= this._maxEvents) {
+        this._droppedEvents++
+        return this
+      }
       this._events.push({
         name: sanitizeName(name, 'Span event name', this._logger),
         timestamp: resolveSuppliedTime(timestamp, this._now(), 'event timestamp', this._logger),
@@ -179,10 +233,15 @@ export class PostHogSpan implements Span {
       name: this._name,
       kind: this._kind,
       ...(this._status && { status: this._status }),
-      attributes: this._attributes,
+      // Copied out with an ordinary prototype: the store is null-prototype to keep
+      // `__proto__` from swapping it, but a record handed to user code should
+      // behave like a normal object.
+      attributes: { ...this._attributes },
       events: this._events,
       startTime: this._startTime,
       endTime: clampEndTime(resolved, this._startTime),
+      ...(this._droppedAttributes && { droppedAttributesCount: this._droppedAttributes }),
+      ...(this._droppedEvents && { droppedEventsCount: this._droppedEvents }),
     })
   }
 }

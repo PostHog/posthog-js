@@ -221,6 +221,28 @@ export interface TracesConfig {
      * @default 512
      */
     maxExportBatchSize?: number
+
+    /**
+     * Maximum user-supplied attributes on a single span. Attributes the SDK
+     * attaches itself — `posthogDistinctId`, `sessionId` and friends — are
+     * exempt and are never evicted, because they are what links a span to a
+     * person and a session.
+     *
+     * On overflow the earliest-set attributes are kept and later ones are
+     * dropped, with the number dropped reported on the exported span.
+     *
+     * @default 128
+     */
+    maxAttributesPerSpan?: number
+
+    /**
+     * Maximum events on a single span. On overflow the earliest events are kept
+     * and later ones are dropped, with the number dropped reported on the
+     * exported span.
+     *
+     * @default 128
+     */
+    maxEventsPerSpan?: number
 }
 
 // ============================================================================
@@ -264,6 +286,10 @@ export interface OtlpSpan {
     status?: OtlpSpanStatus
     /** W3C trace flags in the low byte; the sampled bit is always set. */
     flags?: number
+    /** User attributes dropped by `maxAttributesPerSpan`. Omitted when none were. */
+    droppedAttributesCount?: number
+    /** Events dropped by `maxEventsPerSpan`. Omitted when none were. */
+    droppedEventsCount?: number
 }
 
 export interface OtlpTracesPayload {

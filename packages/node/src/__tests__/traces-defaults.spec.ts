@@ -1,11 +1,23 @@
 import { resolveTracesConfig } from '../traces-defaults'
 
 describe('resolveTracesConfig', () => {
+  it.each([
+    ['zero', 0],
+    ['negative', -1],
+    ['not a number', NaN],
+  ])('falls back to the default per-span caps when given %s', (_label, value) => {
+    const resolved = resolveTracesConfig({ maxAttributesPerSpan: value, maxEventsPerSpan: value })
+    expect(resolved.maxAttributesPerSpan).toBe(128)
+    expect(resolved.maxEventsPerSpan).toBe(128)
+  })
+
   it('applies the documented defaults', () => {
     expect(resolveTracesConfig(undefined)).toMatchObject({
       flushIntervalMs: 5000,
       maxExportBatchSize: 512,
       maxQueueSize: 2048,
+      maxAttributesPerSpan: 128,
+      maxEventsPerSpan: 128,
     })
   })
 

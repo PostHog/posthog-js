@@ -310,6 +310,36 @@ describe('PostHog traces', () => {
     })
   })
 
+  describe('span limits', () => {
+    it('caps attributes and reports how many were dropped', async () => {
+      const client = createClient({ traces: { serviceName: 'svc', maxAttributesPerSpan: 2 } })
+      const span = client.startSpan('checkout')
+      span.setAttribute('a', 1)
+      span.setAttribute('b', 2)
+      span.setAttribute('c', 3)
+      span.end()
+      await client.shutdown()
+
+      const [sent] = sentSpans()
+      expect(sent.attributes?.map((a) => a.key)).toEqual(['a', 'b'])
+      expect(sent.droppedAttributesCount).toBe(1)
+    })
+
+    it('defaults to the OpenTelemetry cap of 128', async () => {
+      const client = createClient({ traces: { serviceName: 'svc' } })
+      const span = client.startSpan('checkout')
+      for (let i = 0; i < 130; i++) {
+        span.setAttribute(`key-${i}`, i)
+      }
+      span.end()
+      await client.shutdown()
+
+      const [sent] = sentSpans()
+      expect(sent.attributes).toHaveLength(128)
+      expect(sent.droppedAttributesCount).toBe(2)
+    })
+  })
+
   describe('shutdown', () => {
     it('drains queued spans', async () => {
       posthog.startSpan('a').end()
