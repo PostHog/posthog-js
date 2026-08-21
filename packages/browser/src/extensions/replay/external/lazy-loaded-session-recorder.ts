@@ -494,6 +494,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     // Sticky for the document lifetime: background tabs that are never foregrounded should
     // not release a fresh-start hold just because they unload.
     private _documentWasEverVisible: boolean
+    // set when rrweb captures content while the document is hidden, so returning to the
+    // document can re-sync DOM and scroll state without snapshotting every focus change
+    private _capturedWhileHidden = false
     // set when a held buffer hit the size cap and was dropped to bound memory; a release
     // then takes a fresh full snapshot so the recording resumes playable
     private _heldBufferOverflowed = false
@@ -1763,6 +1766,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return
         }
 
+        if (document?.visibilityState === 'hidden' && event.type === EventType.IncrementalSnapshot) {
+            this._capturedWhileHidden = true
+        }
+
         if (isSessionIdleEvent(event)) {
             // session idle events have a timestamp when rrweb sees them
             // which can artificially lengthen a session
@@ -2187,7 +2194,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 // Mouse behaviour differs by state: a hidden tab receives no mousemove, so
                 // nothing is captured, but a visible-but-unfocused window still records mouse
                 // movement.
-                if (this._isIdle !== true && this.status !== PAUSED && this.status !== DISABLED) {
+                const capturedWhileHidden = this._capturedWhileHidden
+                this._capturedWhileHidden = false
+                if (
+                    capturedWhileHidden &&
+                    !this._holdFlushUntilInteraction &&
+                    ['sampled', 'active'].includes(this.status)
+                ) {
                     this._tryTakeFullSnapshot()
                     this._scheduleFullSnapshot()
                 }
