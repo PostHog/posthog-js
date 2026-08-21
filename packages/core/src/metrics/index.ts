@@ -374,7 +374,7 @@ export class PostHogMetrics {
         byMetric.set(metricKey, metric)
       }
 
-      const attributes = toOtlpKeyValueList(state.attributes ?? {})
+      const attributes = toOtlpKeyValueList(state.attributes ?? {}, this._logger)
       const startNano = msToUnixNano(state.windowStartMs)
 
       if (state.type === 'count') {

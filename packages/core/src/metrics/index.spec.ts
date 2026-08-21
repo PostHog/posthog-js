@@ -169,8 +169,22 @@ describe('PostHogMetrics', () => {
 
       const attrs = sentMetrics()[0].sum!.dataPoints[0].attributes
       expect(attrs).toContainEqual({ key: 'route', value: { stringValue: '/home' } })
-      expect(attrs).toContainEqual({ key: 'retries', value: { intValue: 2 } })
+      expect(attrs).toContainEqual({ key: 'retries', value: { intValue: '2' } })
       expect(attrs).toContainEqual({ key: 'cached', value: { boolValue: true } })
+    })
+
+    // The encoder is shared with logs, so the debug line it emits on the
+    // out-of-range path only reaches anyone if metrics passes its logger down.
+    it('encodes an out-of-int64 attribute as a string and reports it through the logger', async () => {
+      const metrics = createMetrics()
+      metrics.count('api_calls', 1, { attributes: { huge: 2 ** 63 } as any })
+      await metrics.flush()
+
+      const attrs = sentMetrics()[0].sum!.dataPoints[0].attributes
+      expect(attrs).toContainEqual({ key: 'huge', value: { stringValue: '9223372036854775808' } })
+      expect((logger.debug as jest.Mock).mock.calls.some((c) => String(c[0]).includes('outside the int64 range'))).toBe(
+        true
+      )
     })
 
     it('stamps delta data points with a window: startTimeUnixNano <= timeUnixNano, both nano strings', async () => {
