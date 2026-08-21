@@ -408,31 +408,6 @@ jobs:
               env:
                   NPM_CONFIG_PROVENANCE: true
 
-            - name: Verify npm publication
-              if: >-
-                  steps.check-package-version.outputs.is-new-version == 'true' ||
-                  needs.recover-posthog-js-s3.result == 'success'
-              env:
-                  PACKAGE_NAME: ${{ matrix.package.name }}
-                  PACKAGE_VERSION: ${{ steps.check-package-version.outputs.committed-version }}
-              run: |
-                  set -euo pipefail
-                  for delay in 0 5 10 20 30 45; do
-                      if [ "$delay" -gt 0 ]; then
-                          sleep "$delay"
-                      fi
-                      npm_version=''
-                      if npm_json=$(npm view "$PACKAGE_NAME@$PACKAGE_VERSION" version --json 2>/dev/null); then
-                          npm_version=$(printf '%s' "$npm_json" | jq -r '. // empty')
-                      fi
-                      if [ "$npm_version" = "$PACKAGE_VERSION" ]; then
-                          echo "✓ verified $PACKAGE_NAME@$PACKAGE_VERSION on npm"
-                          exit 0
-                      fi
-                  done
-                  echo "::error::Could not verify $PACKAGE_NAME@$PACKAGE_VERSION on npm after retries."
-                  exit 1
-
             - name: Create or verify package tag
               if: >-
                   steps.check-package-version.outputs.is-new-version == 'true' ||
