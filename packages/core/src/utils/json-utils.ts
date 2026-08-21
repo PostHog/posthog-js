@@ -1,4 +1,5 @@
-/** Traversal budgets and markers, shared with the OTLP attribute encoder. */
+/** Traversal budgets and markers, shared with the OTLP attribute encoder. Not
+ * public API — `utils/index.ts` re-exports `toJsonSafeValue` only. */
 export const MAX_JSON_SAFE_VALUE_DEPTH = 20
 export const MAX_JSON_SAFE_VALUE_ITEMS = 1_000
 export const MAX_JSON_SAFE_VALUE_NODES = 10_000
