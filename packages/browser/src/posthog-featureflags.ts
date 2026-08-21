@@ -478,9 +478,7 @@ export class PostHogFeatureFlags implements Extension {
             const featureFlagPayloads = Object.keys(bootstrapPayloads)
                 .filter((key) => activeFlags[key])
                 .reduce((res: Record<string, JsonType>, key) => {
-                    if (bootstrapPayloads[key]) {
-                        res[key] = bootstrapPayloads[key]
-                    }
+                    res[key] = bootstrapPayloads[key]
                     return res
                 }, {})
 
@@ -1026,11 +1024,11 @@ export class PostHogFeatureFlags implements Extension {
                 const properties: Record<string, any | undefined> = {
                     $feature_flag: key,
                     $feature_flag_response: flagValue,
-                    $feature_flag_payload: payload || null,
+                    $feature_flag_payload: payload ?? null,
                     $feature_flag_request_id: requestId,
                     $feature_flag_evaluated_at: evaluatedAt,
-                    $feature_flag_bootstrapped_response: this._config.bootstrap?.featureFlags?.[key] || null,
-                    $feature_flag_bootstrapped_payload: this._config.bootstrap?.featureFlagPayloads?.[key] || null,
+                    $feature_flag_bootstrapped_response: this._config.bootstrap?.featureFlags?.[key] ?? null,
+                    $feature_flag_bootstrapped_payload: this._config.bootstrap?.featureFlagPayloads?.[key] ?? null,
                     // If we haven't yet received a response from the /flags endpoint, we must have used the bootstrapped value
                     $used_bootstrap_value: !this._flagsLoadedFromRemote,
                 }
@@ -1617,7 +1615,8 @@ export class PostHogFeatureFlags implements Extension {
     reset(): void {
         this._requestGeneration++
         this._additionalReloadRequested = false
-        this._rebuildEventProperties()
+        this._baseEventProperties = {}
+        this._eventPropertiesWithFlagValues = {}
         this._hasLoadedFlags = false
         this._reloadingDisabled = false
         this._flagsLoadedFromRemote = false

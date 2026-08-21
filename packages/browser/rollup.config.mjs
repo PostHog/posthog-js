@@ -171,6 +171,9 @@ const plugins = (es5, noExternal, preserveCrossBundleProperties) => [
                               '_noTruncate',
                               '_onCapture',
 
+                              // passed from the exception extension bundle to legacy cores
+                              '_noHeatmaps',
+
                               // used in surveys, however, this shouldn't be needed
                               // TODO: figure out how to remove them
                               '_posthog',

@@ -1,5 +1,62 @@
 # @posthog/types
 
+## 1.405.1
+
+### Patch Changes
+
+- [#4583](https://github.com/PostHog/posthog-js/pull/4583) [`6322f09`](https://github.com/PostHog/posthog-js/commit/6322f09922270e9d1562bacf0e602e76d238d395) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix logs and metrics being silently dropped when an attribute holds a very large integer, a function, a symbol, a sparse array, or a truncated emoji.
+  Cap log and metric attributes at 20 levels of nesting, 1,000 entries per object and 10,000 values in total, marking anything beyond as `[Truncated]`.
+  Type `OtlpAnyValue.intValue` as `string | number` — code reading that field must handle both. (2026-08-21)
+
+## 1.405.0
+
+### Minor Changes
+
+- [#4496](https://github.com/PostHog/posthog-js/pull/4496) [`1ade666`](https://github.com/PostHog/posthog-js/commit/1ade6663991eeff176b3127181195f1e0012241b) Thanks [@marandaneto](https://github.com/marandaneto)! - Add `cookieWinsOnConflict` to keep shared cross-subdomain identity and session state ahead of stale per-origin localStorage, deprecate `__preview_cookie_wins_on_conflict`, and enable the new behavior for the `2026-08-29` defaults.
+  (2026-08-18)
+
+## 1.404.1
+
+### Patch Changes
+
+- [#4503](https://github.com/PostHog/posthog-js/pull/4503) [`eb05237`](https://github.com/PostHog/posthog-js/commit/eb0523729c4f989663a38d3ce9d0e61d4f262ee1) Thanks [@pauldambra](https://github.com/pauldambra)! - fix(dead-clicks): treat visibility and focus changes as liveness signals, not dead-click evidence
+
+    The dead-click detector treated a `visibilitychange` as evidence a click was dead: it measured `Math.abs(clickTimestamp - lastVisibilityChange)` and, once that exceeded the threshold, timed the click out as dead. Because it only recorded the tab becoming visible, any click in a session where the tab had ever been backgrounded (median gap ~1 minute) was flagged.
+
+    A visibility or focus change near a click is the opposite — a sign the click did something (it woke/focused the tab, opened a new tab, or opened a new window/popup) — so these signals now only ever _suppress_ a dead click, never cause one:
+    - Visibility changes are recorded in both directions (a click that opens a new tab sends the current tab to `hidden`), and a window `focus`/`blur` observer is added, since a click that opens a new window/popup may leave the tab visible and only surface as the current window losing focus.
+    - A click within a wake-up/interaction window (1s, wide enough for a real "tab back, then click" gesture) of any such change is suppressed.
+    - The visibility signal no longer feeds the dead-marking path at all. `$dead_click_visibility_changed_timeout` stays in the payload (always false) for shape compatibility, and a new `$dead_click_focus_changed_delay_ms` is emitted for observability.
+    - Visibility/focus changes are now recorded onto each queued candidate the instant they fire (like scroll), instead of being read from a single shared timestamp when the click is checked ~1s later. A click that hides or blurs the tab (opening a new tab/window) suspends that check while the tab is backgrounded; by the time it resumes the tab has usually returned, and the shared timestamp would have been overwritten by that later transition — losing the click-correlated one and wrongly flagging the click dead. Stamping the candidate as the event fires makes delayed hide→show and blur→focus sequences suppress correctly. (2026-08-14)
+
+## 1.404.0
+
+### Minor Changes
+
+- [#4485](https://github.com/PostHog/posthog-js/pull/4485) [`8bc63c3`](https://github.com/PostHog/posthog-js/commit/8bc63c368e46d0f392a45712d2a72f9f97fcbd3e) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Default external dependency loading to versioned asset paths with automatic fallback to legacy paths, and add a `strict_script_versioning: 'fallback'` mode.
+  (2026-08-13)
+
+## 1.403.1
+
+### Patch Changes
+
+- [#4443](https://github.com/PostHog/posthog-js/pull/4443) [`b2c6830`](https://github.com/PostHog/posthog-js/commit/b2c683051fae7da40be872666a3e8cadf958f804) Thanks [@arnohillen](https://github.com/arnohillen)! - Harden the session replay stylesheet inlining budget (`inlineStylesheetBudgetRules`):
+    - The default budget (10,000 rules) moves from the recorder chunk into posthog-js session recording options, so npm-pinned or cached bundles keep their configured override (including `0` to disable) and direct `rrweb.record()` consumers keep unbounded inlining unless they opt in.
+    - Deferred inlining is bounded inside a sheet: a resumable cursor stringifies 200 rules per idle slice and emits a sheet's `_cssText` atomically, so monolithic sheets no longer produce one long task and partial CSS never reaches the wire.
+    - Deferred sheets are flushed synchronously when recording stops and on `pagehide`; residual failure modes are counted via `$sdk_debug_replay_deferred_stylesheets_failed` / `_abandoned`.
+    - CSSOM-only styles (`insertRule` output, `adoptedStyleSheets`) no longer charge the budget, since deferring `<link>` sheets buys those pages nothing.
+    - Telemetry fixes: full-snapshot duration wraps the whole synchronous task, deferred counts are cumulative per session, new gauges cover non-deferrable rules and idle stringification cost, and duration samples straddling tab suspension are discarded (`$sdk_debug_replay_discarded_duration_samples`). (2026-08-13)
+
+## 1.403.0
+
+### Minor Changes
+
+- [#4495](https://github.com/PostHog/posthog-js/pull/4495) [`e4b9947`](https://github.com/PostHog/posthog-js/commit/e4b9947c5fa197624133832ba13eba223ce6ab06) Thanks [@marandaneto](https://github.com/marandaneto)! - feat(browser): add `rewriteRequestPath` to customize API, feature flag, and asset paths for reverse proxies
+  (2026-08-12)
+
+- [#4493](https://github.com/PostHog/posthog-js/pull/4493) [`e34ebf9`](https://github.com/PostHog/posthog-js/commit/e34ebf996bf1f19857335df20de249955e9d3466) Thanks [@marandaneto](https://github.com/marandaneto)! - Add reset options for applying bootstrapped identity, feature flag, and session values after `posthog.reset()` while preserving the legacy boolean argument.
+  (2026-08-12)
+
 ## 1.402.3
 
 ### Patch Changes

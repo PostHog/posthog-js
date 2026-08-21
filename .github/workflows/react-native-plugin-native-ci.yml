@@ -16,6 +16,7 @@ on:
     paths:
       - 'packages/react-native-plugin/**'
       - 'examples/example-rn-native-plugin/**'
+      - 'examples/example-rn-spm/**'
       - '.github/workflows/react-native-plugin-native-ci.yml'
 
 concurrency:
@@ -145,12 +146,13 @@ jobs:
             -destination generic/platform=iOS | xcpretty
         working-directory: ${{ env.EXAMPLE_DIR }}/ios
 
-  build-ios-spm:
-    name: Build example for iOS (SPM opt-in)
-    # Exercises the opt-in path: `posthog.useSpm` in Podfile.properties.json
-    # routes posthog-ios through the React Native spm_dependency helper. The
-    # SPM path requires dynamic frameworks. macos-26 uses the latest Xcode
-    # shipped with the runner image.
+  build-ios-hybrid-spm:
+    name: Build example for iOS (CocoaPods plugin + SwiftPM posthog-ios)
+    # Exercises the hybrid opt-in path: `posthog.useSpm` in
+    # Podfile.properties.json routes posthog-ios through the React Native
+    # spm_dependency helper while the React Native plugin remains a CocoaPod.
+    # The hybrid path requires dynamic frameworks. macos-26 uses the latest
+    # Xcode shipped with the runner image.
     runs-on: macos-26
     steps:
       - name: Checkout repository
@@ -209,6 +211,87 @@ jobs:
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator'
         working-directory: ${{ env.EXAMPLE_DIR }}/ios
+
+  build-ios-full-spm:
+    name: Build example for iOS (React Native full SwiftPM)
+    runs-on: macos-26
+    env:
+      SPM_EXAMPLE_DIR: examples/example-rn-spm
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup environment
+        uses: ./.github/actions/setup
+        with:
+          build: false
+
+      - name: Build React Native package tarballs
+        run: |
+          export PACKAGE_DEST="$PWD/target"
+          pnpm turbo package \
+            --filter=posthog-react-native... \
+            --filter=@posthog/react-native-plugin
+
+      - name: Install React Native 0.87 example dependencies
+        run: pnpm install --lockfile=false --config.node-linker=hoisted
+        working-directory: ${{ env.SPM_EXAMPLE_DIR }}
+
+      - name: Verify the published plugin contains its Swift package
+        run: test -f node_modules/@posthog/react-native-plugin/ios/Package.swift
+        working-directory: ${{ env.SPM_EXAMPLE_DIR }}
+
+      - name: Convert the iOS project to React Native full SwiftPM
+        run: |
+          npx react-native spm add --deintegrate --yes
+          hermesc="$PWD/../node_modules/hermes-compiler/hermesc/osx-bin/hermesc"
+          sed -i '' -E "s#HERMES_CLI_PATH = .*;#HERMES_CLI_PATH = \"$hermesc\";#" \
+            PosthogReactNativeSpmExample.xcodeproj/project.pbxproj
+        working-directory: ${{ env.SPM_EXAMPLE_DIR }}/ios
+
+      - name: Verify the pinned Hermes compiler matches SwiftPM Hermes
+        run: |
+          hermesc=node_modules/hermes-compiler/hermesc/osx-bin/hermesc
+          "$hermesc" -version | grep 'HBC bytecode version: 99'
+        working-directory: ${{ env.SPM_EXAMPLE_DIR }}
+
+      - name: Build Debug with SwiftPM
+        run: |
+          xcodebuild \
+            -project PosthogReactNativeSpmExample.xcodeproj \
+            -scheme PosthogReactNativeSpmExample \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO
+        working-directory: ${{ env.SPM_EXAMPLE_DIR }}/ios
+
+      - name: Verify the native plugin was linked into the app
+        run: |
+          app="ios/build/DerivedData/Build/Products/Debug-iphonesimulator/PosthogReactNativeSpmExample.app"
+          for binary in \
+            "$app/PosthogReactNativeSpmExample" \
+            "$app/PosthogReactNativeSpmExample.debug.dylib"; do
+            if [ -f "$binary" ]; then
+              nm -g "$binary"
+            fi
+          done | grep '_OBJC_CLASS_.*PosthogReactNativePlugin'
+        working-directory: ${{ env.SPM_EXAMPLE_DIR }}
+
+      - name: Build Release with SwiftPM
+        run: |
+          xcodebuild \
+            -project PosthogReactNativeSpmExample.xcodeproj \
+            -scheme PosthogReactNativeSpmExample \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO
+        working-directory: ${{ env.SPM_EXAMPLE_DIR }}/ios
 
   build-macos:
     name: Build example for macOS (CocoaPods)

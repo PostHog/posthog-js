@@ -1107,6 +1107,27 @@ describe('featureflags', () => {
                 })
             })
 
+            it('preserves falsy payload and bootstrap values in feature flag called events', () => {
+                instance.config.bootstrap = {
+                    featureFlags: { 'beta-feature': false },
+                    featureFlagPayloads: { 'beta-feature': false },
+                }
+                instance.persistence.props.$feature_flag_payloads = { 'beta-feature': false }
+                instance.capture = jest.fn()
+                featureFlags._hasLoadedFlags = true
+
+                featureFlags.getFeatureFlag('beta-feature')
+
+                expect(instance.capture).toHaveBeenCalledWith(
+                    '$feature_flag_called',
+                    expect.objectContaining({
+                        $feature_flag_payload: false,
+                        $feature_flag_bootstrapped_response: false,
+                        $feature_flag_bootstrapped_payload: false,
+                    })
+                )
+            })
+
             it('includes original values in feature flag called event when details are available', () => {
                 instance.persistence.props = {
                     $feature_flag_details: {

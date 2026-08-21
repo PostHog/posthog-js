@@ -13,6 +13,26 @@ function normalizeHost(value?: unknown): string {
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent'
 
+/**
+ * How an exception gets associated with a release, mirroring posthog-cli's `--release-mode`.
+ *
+ * `symbol-set` binds the uploaded symbol sets to a release. `event` leaves them unbound and
+ * injects the release id into each chunk instead, so the release is resolved per exception.
+ */
+export type ReleaseMode = 'symbol-set' | 'event'
+
+const RELEASE_MODES: ReleaseMode[] = ['symbol-set', 'event']
+
+function normalizeReleaseMode(value: string | undefined): ReleaseMode {
+    if (value === undefined || value === '') {
+        return 'symbol-set'
+    }
+    if (!(RELEASE_MODES as string[]).includes(value)) {
+        throw new Error(`sourcemaps.releaseMode must be one of ${RELEASE_MODES.join(', ')}, got '${value}'`)
+    }
+    return value as ReleaseMode
+}
+
 export interface PluginConfig {
     personalApiKey: string
     /** @deprecated Use projectId instead */
@@ -32,6 +52,12 @@ export interface PluginConfig {
         build?: string | number
         deleteAfterUpload?: boolean
         batchSize?: number
+        /**
+         * EXPERIMENTAL. Defaults to the `POSTHOG_RELEASE_MODE` env var, the same one posthog-cli
+         * reads, then to `symbol-set`. Event mode needs a posthog-cli that supports
+         * `release resolve` and `--release-mode`.
+         */
+        releaseMode?: ReleaseMode
     }
 }
 
@@ -47,6 +73,7 @@ export interface ResolvedPluginConfig extends Omit<PluginConfig, 'envId' | 'proj
         build?: string
         deleteAfterUpload: boolean
         batchSize?: number
+        releaseMode: ReleaseMode
     }
 }
 
@@ -96,6 +123,7 @@ export function resolveConfig(options: PluginConfig, resolveOptions?: ResolveCon
             build: userSourcemaps.build !== undefined ? String(userSourcemaps.build) : undefined,
             deleteAfterUpload: userSourcemaps.deleteAfterUpload ?? true,
             batchSize: userSourcemaps.batchSize,
+            releaseMode: normalizeReleaseMode(userSourcemaps.releaseMode ?? process.env.POSTHOG_RELEASE_MODE),
         },
     }
 }

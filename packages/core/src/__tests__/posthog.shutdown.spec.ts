@@ -22,19 +22,17 @@ describe('PostHog Core', () => {
       expect(mocks.fetch).toHaveBeenCalledTimes(1)
     })
 
-    it('respects timeout', async () => {
+    it('logs and resolves when shutdown times out', async () => {
       mocks.fetch.mockImplementation(() => new Promise(() => {}))
+      const criticalSpy = jest.spyOn((posthog as any)._logger, 'critical').mockImplementation(() => {})
 
       posthog.capture('test-event')
 
-      await posthog
-        .shutdown(100)
-        .then(() => {
-          throw new Error('Should not resolve')
-        })
-        .catch((e) => {
-          expect(e).toEqual('Timeout while shutting down PostHog. Some events may not have been sent.')
-        })
+      await expect(posthog.shutdown(100)).resolves.toBeUndefined()
+      expect(criticalSpy).toHaveBeenCalledWith(
+        'Timeout while shutting down PostHog. Some events may not have been sent.',
+        { shutdownTimeoutMs: 100 }
+      )
       expect(mocks.fetch).toHaveBeenCalledTimes(1)
     })
 

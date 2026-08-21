@@ -424,6 +424,143 @@ describe('error-handler', function (this: ISuite) {
     });
   });
 
+  it('cleans up and remains restartable when observer initialization fails', async () => {
+    const result = await ctx.page.evaluate(
+      (incrementalSnapshotType, mouseInteractionSource) => {
+        const { record } = (window as unknown as IWindow).rrweb;
+        let mouseInteractions = 0;
+        const emit = (event: eventWithTime) => {
+          if (
+            event.type === incrementalSnapshotType &&
+            event.data.source === mouseInteractionSource
+          ) {
+            mouseInteractions += 1;
+          }
+        };
+
+        const stop = record({
+          emit,
+          errorHandler: (_error, context) => context === 'rrweb',
+          plugins: [
+            {
+              name: 'throwing-observer',
+              options: {},
+              observer: () => {
+                throw new Error('observer initialization failed');
+              },
+            },
+          ],
+        });
+
+        let firstStopThrew = false;
+        try {
+          stop?.();
+        } catch {
+          firstStopThrew = true;
+        }
+
+        const restartedStop = record({ emit });
+        mouseInteractions = 0;
+        document.body.click();
+
+        let restartedStopThrew = false;
+        try {
+          restartedStop?.();
+        } catch {
+          restartedStopThrew = true;
+        }
+
+        return {
+          firstStopThrew,
+          initialStarted: typeof stop === 'function',
+          mouseInteractions,
+          restarted: typeof restartedStop === 'function',
+          restartedStopThrew,
+        };
+      },
+      EventType.IncrementalSnapshot,
+      IncrementalSource.MouseInteraction,
+    );
+
+    expect(result).toEqual({
+      firstStopThrew: false,
+      initialStarted: true,
+      mouseInteractions: 1,
+      restarted: true,
+      restartedStopThrew: false,
+    });
+  });
+
+  it('cleans up a failed iframe observer initialization', async () => {
+    const result = await ctx.page.evaluate(
+      async (incrementalSnapshotType, mouseInteractionSource) => {
+        const { record } = (window as unknown as IWindow).rrweb;
+        let iframeInitializationFailed = false;
+        let mouseInteractions = 0;
+        const emit = (event: eventWithTime) => {
+          if (
+            event.type === incrementalSnapshotType &&
+            event.data.source === mouseInteractionSource
+          ) {
+            mouseInteractions += 1;
+          }
+        };
+
+        const stop = record({
+          emit,
+          errorHandler: (_error, context) => context === 'rrweb',
+          recordCrossOriginIframes: true,
+          plugins: [
+            {
+              name: 'throwing-iframe-observer',
+              options: {},
+              observer: (_callback, currentWindow) => {
+                if (currentWindow !== window) {
+                  iframeInitializationFailed = true;
+                  throw new Error('iframe observer initialization failed');
+                }
+                return () => undefined;
+              },
+            },
+          ],
+        });
+
+        const iframe = document.createElement('iframe');
+        document.body.appendChild(iframe);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        let stopThrew = false;
+        try {
+          stop?.();
+        } catch {
+          stopThrew = true;
+        }
+
+        mouseInteractions = 0;
+        iframe.contentDocument!.body.click();
+
+        const restartedStop = record({ emit: () => undefined });
+        restartedStop?.();
+
+        return {
+          iframeInitializationFailed,
+          mouseInteractionsAfterStop: mouseInteractions,
+          restarted: typeof restartedStop === 'function',
+          stopThrew,
+        };
+      },
+      EventType.IncrementalSnapshot,
+      IncrementalSource.MouseInteraction,
+    );
+
+    expect(result).toEqual({
+      iframeInitializationFailed: true,
+      mouseInteractionsAfterStop: 0,
+      restarted: true,
+      stopThrew: false,
+    });
+  });
+
   it('contains errors from the recorder-owned mutation observer callback', async () => {
     await ctx.page.evaluate(() => {
       const { record } = (window as unknown as IWindow).rrweb;

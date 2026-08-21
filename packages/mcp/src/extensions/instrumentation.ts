@@ -109,6 +109,14 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     parameterOwnership,
     resolvedEventType === MCPAnalyticsEventType.mcpMissingCapability
   )
+  // Reading the argument and removing it are separate questions: deleting one the
+  // application declared costs the customer their call, so the strip below still
+  // requires positive ownership, while reading it when ownership is unresolved
+  // costs at worst a mislabelled property. ADR-0011.
+  const canCaptureContextIntent =
+    resolvedEventType !== MCPAnalyticsEventType.mcpMissingCapability &&
+    isContextEnabled(data.options.context) &&
+    (ownership.context || !ownership.contextOwnershipKnown)
   const conversation = resolveConversationId(ownership.conversationId, request.params?.arguments)
   const downstreamRequest = cloneRequestWithoutOwnedAnalyticsArguments(request, ownership)
 
@@ -124,7 +132,8 @@ export async function captureToolCall(params: TraceToolCallParams): Promise<unkn
     startTime,
     conversation,
     ownership,
-    resolvedEventType
+    resolvedEventType,
+    canCaptureContextIntent
   )
   if (preparedEvent && explicitContextIntent) {
     setExplicitContextIntent(preparedEvent.event, explicitContextIntent)
@@ -150,15 +159,24 @@ interface PreparedToolEvent {
   requestAttribution: SessionInfo
 }
 
+/**
+ * Ownership for one request, plus whether it could be resolved at all — "no
+ * answer" must not read the same as "the application owns it".
+ */
+interface ActiveAnalyticsParameterOwnership extends AnalyticsParameterOwnership {
+  contextOwnershipKnown: boolean
+}
+
 function getActiveAnalyticsParameterOwnership(
   data: MCPAnalyticsData,
   toolName: string | undefined,
   override: AnalyticsParameterOwnership | undefined,
   isMissingCapabilityTool: boolean
-): AnalyticsParameterOwnership {
+): ActiveAnalyticsParameterOwnership {
   const listed = toolName ? data.toolAnalyticsParameterOwnership.get(toolName) : undefined
   const ownership = override ?? listed
   return {
+    contextOwnershipKnown: ownership !== undefined,
     context: !isMissingCapabilityTool && isContextEnabled(data.options.context) && ownership?.context === true,
     conversationId: data.options.enableConversationId === true && ownership?.conversationId === true,
     // Deliberately read off `listed`, never the override: only the advertised
@@ -199,23 +217,14 @@ async function prepareToolCallEvent(
   startTime: Date,
   conversation: ConversationIdResolution,
   ownership: AnalyticsParameterOwnership,
-  eventType: MCPAnalyticsEventType
+  eventType: MCPAnalyticsEventType,
+  canCaptureContextIntent: boolean
 ): Promise<PreparedToolEvent | null> {
   try {
     const sessionId = getSessionId(server, extra, conversation.conversationId)
     // Snapshot token/client/protocol metadata synchronously, before identify or
     // metadata callbacks can yield and let another request replace shared state.
     const sessionInfo = getSessionInfo(server, data, sessionId)
-    const identity = await handleIdentify(
-      server,
-      data,
-      sessionId,
-      request,
-      sessionInfo,
-      extra,
-      !!conversation.conversationId
-    )
-    const requestAttribution = withIdentity(sessionInfo, identity)
 
     const toolName = request.params?.name
     const event: McpEvent = {
@@ -230,14 +239,30 @@ async function prepareToolCallEvent(
     }
     // Modern (stateless) clients carry client name/version + protocol version in
     // `_meta` on every request rather than at `initialize`; stamp them onto this
-    // event now so concurrent requests can't cross-attribute it.
+    // event now so concurrent requests can't cross-attribute it. Stamped before
+    // the identify await below for the same reason the snapshot is: the chain's
+    // last link is the server's own `getClientVersion()`, which a concurrent
+    // `initialize` can replace while an identify callback is in flight — and
+    // `captureEvent` prefers a stamped value over `sessionInfo`, so a late stamp
+    // would win with the wrong client's name.
     stampClientIdentity(event, request, extra, server)
     // Which *surface* of the client made this call lives only in the request
     // headers (HTTP transports); `clientInfo` can't tell a vendor's products apart.
     stampTransportIdentity(event, extra)
 
+    const identity = await handleIdentify(
+      server,
+      data,
+      sessionId,
+      request,
+      sessionInfo,
+      extra,
+      !!conversation.conversationId
+    )
+    const requestAttribution = withIdentity(sessionInfo, identity)
+
     await applyResolvedMetadata(event, data, request, extra)
-    setEventIntent(event, await resolveToolCallIntent(data, request, ownership.context, extra))
+    setEventIntent(event, await resolveToolCallIntent(data, request, canCaptureContextIntent, extra))
     return { event, requestAttribution }
   } catch (error) {
     data.logger(
@@ -511,27 +536,39 @@ export async function handleListToolsRequest(
   request: MCPRequestLike,
   extra: CompatibleRequestHandlerExtra | undefined,
   logger: LoggerFn
-): Promise<{ tools: CompatibleToolsListLike['tools'] }> {
+): Promise<CompatibleToolsListLike> {
   const data = getServerTrackingData(server)
   const startTime = new Date()
   const sessionId = getSessionId(server, extra)
-  // Snapshot before metadata resolution or the list handler can yield to a
-  // concurrent request using the same instrumented server.
-  const requestAttribution = getSessionInfo(server, data, sessionId)
+  // Snapshot before identify, metadata resolution, or the list handler can yield
+  // to a concurrent request using the same instrumented server.
+  const sessionInfo = getSessionInfo(server, data, sessionId)
   const event: McpEvent = {
     sessionId,
     parameters: buildCapturedMcpParameters(request),
     eventType: MCPAnalyticsEventType.mcpToolsList,
     timestamp: startTime,
   }
+  // Stamp before the identify await below. The last link of the identity chain is
+  // the server's own `getClientVersion()`, which a concurrent `initialize` can
+  // replace while a slow identify callback is in flight — and `captureEvent`
+  // prefers a stamped value over the `sessionInfo` snapshot, so a late stamp
+  // would win with the wrong client's name.
   stampClientIdentity(event, request, extra, server)
   stampTransportIdentity(event, extra)
+
+  // `getSessionInfo` only surfaces an identity some earlier request already
+  // cached on this instance. On a per-request instance that cache is always
+  // empty, so without resolving `identify` here too, `tools/list` would be the
+  // one request path that never attributes to a person.
+  const identity = data ? await handleIdentify(server, data, sessionId, request, sessionInfo, extra) : undefined
+  const requestAttribution = withIdentity(sessionInfo, identity)
 
   if (data) {
     await applyResolvedMetadata(event, data, request, extra)
   }
 
-  const tools = await getTracedToolsList(
+  const response = await getTracedToolsList(
     server,
     originalListToolsHandler,
     request,
@@ -540,12 +577,13 @@ export async function handleListToolsRequest(
     logger,
     requestAttribution
   )
+  const tools = response.tools
 
   if (!data) {
     logger(
       'Warning: PostHog MCP analytics is unable to find server tracking data. Please ensure you have called instrument(server, options) before using tool calls.'
     )
-    return { tools }
+    return response
   }
 
   if (tools.length === 0) {
@@ -556,15 +594,15 @@ export async function handleListToolsRequest(
     event.isError = true
     event.duration = Date.now() - startTime.getTime()
     captureEvent(server, event, data.logger, requestAttribution)
-    return { tools }
+    return response
   }
 
-  event.response = { tools }
+  event.response = response
   event.listedToolNames = collectListedToolNames(tools)
   event.isError = false
   event.duration = Date.now() - startTime.getTime()
   captureEvent(server, event, data.logger, requestAttribution)
-  return { tools }
+  return response
 }
 
 function cacheToolAnalyticsParameterOwnership(
@@ -595,7 +633,7 @@ async function getTracedToolsList(
   event: McpEvent,
   logger: LoggerFn,
   requestAttribution: SessionInfo
-): Promise<CompatibleToolsListLike['tools']> {
+): Promise<CompatibleToolsListLike> {
   try {
     const data = getServerTrackingData(server)
     const originalResponse = (await originalListToolsHandler(request, extra)) as CompatibleToolsListLike
@@ -637,7 +675,8 @@ async function getTracedToolsList(
       cacheToolCategories(data.toolCategories, tools)
     }
 
-    return tools
+    // Spread, never enumerate — fields later revisions add survive by default.
+    return { ...originalResponse, tools }
   } catch (error) {
     logger(
       `Warning: Original list tools handler failed, this suggests an error PostHog MCP analytics did not cause - ${error}`
@@ -837,9 +876,6 @@ export async function handleInitializeRequest(
     clientName: initializeClientInfo?.name ?? sessionInfo.clientName,
     clientVersion: initializeClientInfo?.version ?? sessionInfo.clientVersion,
   }
-  const identity = await handleIdentify(server, data, sessionId, request, requestSessionInfo, extra)
-  const requestAttribution = withIdentity(requestSessionInfo, identity)
-
   const event: McpEvent = {
     sessionId,
     resourceName: request.params?.name || 'Unknown Tool Name',
@@ -847,11 +883,29 @@ export async function handleInitializeRequest(
     parameters: buildCapturedMcpParameters(request),
     timestamp: new Date(),
   }
-  // Harmless for a legacy `initialize` (client info rides the body there, and the
-  // negotiated protocol version below overrides any `_meta` one); picks up client
-  // info if a client also sends it in `_meta`.
+  // Picks up client info if a client also sends it in `_meta` (the negotiated
+  // protocol version below overrides any `_meta` one). Stamped before the
+  // identify await for the same reason the snapshot is taken there: the chain's
+  // last link is the server's own `getClientVersion()`, which a concurrent
+  // `initialize` can replace while an identify callback is in flight.
   stampClientIdentity(event, request, extra, server)
+  // A legacy `initialize` carries its client in the request body, which is the
+  // one place the chain does not read. That body is this request's own answer,
+  // so it outranks the accessor — which on a server that already handshaked
+  // still names the *previous* client, because the SDK only records this one
+  // when its handler runs further below. Without this, the second and every
+  // later handshake on a shared instance reports the first client's name, since
+  // `captureEvent` prefers a stamped value over `requestSessionInfo`.
+  if (initializeClientInfo?.name) {
+    event.clientName = initializeClientInfo.name
+  }
+  if (initializeClientInfo?.version) {
+    event.clientVersion = initializeClientInfo.version
+  }
   stampTransportIdentity(event, extra)
+
+  const identity = await handleIdentify(server, data, sessionId, request, requestSessionInfo, extra)
+  const requestAttribution = withIdentity(requestSessionInfo, identity)
 
   await applyResolvedMetadata(event, data, request, extra)
 

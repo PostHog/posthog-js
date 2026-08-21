@@ -1,5 +1,61 @@
 # posthog-node
 
+## 5.49.4
+
+### Patch Changes
+
+- [#4569](https://github.com/PostHog/posthog-js/pull/4569) [`00d22ea`](https://github.com/PostHog/posthog-js/commit/00d22ea71400190a0154d1a961b3f52652c50a1e) Thanks [@v11t](https://github.com/v11t)! - fix getFeatureFlagResult returning null variant instead of undefined when remotely evaluated
+  (2026-08-21)
+
+## 5.49.3
+
+### Patch Changes
+
+- [#4583](https://github.com/PostHog/posthog-js/pull/4583) [`6322f09`](https://github.com/PostHog/posthog-js/commit/6322f09922270e9d1562bacf0e602e76d238d395) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix logs and metrics being silently dropped when an attribute holds a very large integer, a function, a symbol, a sparse array, or a truncated emoji.
+  Cap log and metric attributes at 20 levels of nesting, 1,000 entries per object and 10,000 values in total, marking anything beyond as `[Truncated]`.
+  Type `OtlpAnyValue.intValue` as `string | number` — code reading that field must handle both. (2026-08-21)
+- Updated dependencies [[`6322f09`](https://github.com/PostHog/posthog-js/commit/6322f09922270e9d1562bacf0e602e76d238d395)]:
+  - @posthog/core@1.48.7
+
+## 5.49.2
+
+### Patch Changes
+
+- [#4578](https://github.com/PostHog/posthog-js/pull/4578) [`bae46bf`](https://github.com/PostHog/posthog-js/commit/bae46bfd11f73d3e62a6d0733144c180df354916) Thanks [@marandaneto](https://github.com/marandaneto)! - Drop events when a before-send hook throws instead of sending the unmodified event.
+  (2026-08-20)
+- Updated dependencies [[`bae46bf`](https://github.com/PostHog/posthog-js/commit/bae46bfd11f73d3e62a6d0733144c180df354916), [`aef2f49`](https://github.com/PostHog/posthog-js/commit/aef2f493cc8d834780f6b670e15e909e6363c259)]:
+  - @posthog/core@1.48.6
+
+## 5.49.1
+
+### Patch Changes
+
+- [#4521](https://github.com/PostHog/posthog-js/pull/4521) [`0a0206f`](https://github.com/PostHog/posthog-js/commit/0a0206f907f4b58dc28f36aa1fc441b55c489faf) Thanks [@marandaneto](https://github.com/marandaneto)! - Normalize capture timestamp overrides to equivalent UTC ISO strings in the browser and Node.js SDKs and shared core.
+  (2026-08-14)
+- Updated dependencies [[`0a0206f`](https://github.com/PostHog/posthog-js/commit/0a0206f907f4b58dc28f36aa1fc441b55c489faf)]:
+  - @posthog/core@1.48.1
+
+## 5.49.0
+
+### Minor Changes
+
+- [#4289](https://github.com/PostHog/posthog-js/pull/4289) [`c9086de`](https://github.com/PostHog/posthog-js/commit/c9086de42e1c7f102b6cca318c875bdf030d630f) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Public beta `captureAi()` / `captureAiImmediate()`: AI events on a dedicated isolated endpoint with the event UUID returned. New `enableFullAiCapture` option replaces the internal `_useAiLane` / `_enableMultimodalCapture`; wrappers route through the AI endpoint and skip redaction/truncation when set (privacy mode still wins).
+  (2026-08-13)
+
+### Patch Changes
+
+- Updated dependencies [[`c9086de`](https://github.com/PostHog/posthog-js/commit/c9086de42e1c7f102b6cca318c875bdf030d630f)]:
+  - @posthog/core@1.48.0
+
+## 5.48.2
+
+### Patch Changes
+
+- [#4506](https://github.com/PostHog/posthog-js/pull/4506) [`a77115b`](https://github.com/PostHog/posthog-js/commit/a77115bbfdd9e89a8510ad2faf9e8327863c2a33) Thanks [@marandaneto](https://github.com/marandaneto)! - Log shutdown timeouts without rejecting, and correct the Node.js `shutdown()` return type to `Promise<void>`.
+  (2026-08-12)
+- Updated dependencies [[`a77115b`](https://github.com/PostHog/posthog-js/commit/a77115bbfdd9e89a8510ad2faf9e8327863c2a33)]:
+  - @posthog/core@1.47.1
+
 ## 5.48.1
 
 ### Patch Changes

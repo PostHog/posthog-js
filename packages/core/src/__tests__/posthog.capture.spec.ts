@@ -61,20 +61,39 @@ describe('PostHog Core', () => {
       })
     })
 
-    it('should allow overriding the timestamp', async () => {
-      jest.setSystemTime(new Date('2022-01-01'))
+    it('should preserve Date timestamp overrides until serializing the equivalent UTC instant', async () => {
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 10 })
+      const timestamp = new Date('2021-01-02T03:04:05.000+05:30')
+      const captureListener = jest.fn()
+      posthog.on('capture', captureListener)
 
-      posthog.capture('custom-event', { foo: 'bar' }, { timestamp: new Date('2021-01-02') })
+      posthog.capture('custom-event', {}, { timestamp })
+
+      expect(captureListener.mock.calls[0][0].timestamp).toBe(timestamp)
+      const queue = posthog.getPersistedProperty<any[]>(PostHogPersistedProperty.Queue)
+      expect(queue[0].message.timestamp).toBe(timestamp)
+
+      await posthog.flush()
+      const body = parseBody(mocks.fetch.mock.calls[0])
+      expect(body.batch[0]).toMatchObject({
+        event: 'custom-event',
+        timestamp: '2021-01-01T21:34:05.000Z',
+      })
+    })
+
+    it('should normalize string timestamp overrides from untyped callers at serialization', async () => {
+      const timestamp = '2021-01-02T03:04:05.123456+05:30'
+      const captureListener = jest.fn()
+      posthog.on('capture', captureListener)
+
+      posthog.capture('custom-event', {}, { timestamp: timestamp as unknown as Date })
+
+      expect(captureListener.mock.calls[0][0].timestamp).toBe(timestamp)
       await waitForPromises()
       const body = parseBody(mocks.fetch.mock.calls[0])
-      expect(body).toMatchObject({
-        api_key: 'TEST_API_KEY',
-        batch: [
-          {
-            event: 'custom-event',
-            timestamp: '2021-01-02T00:00:00.000Z',
-          },
-        ],
+      expect(body.batch[0]).toMatchObject({
+        event: 'custom-event',
+        timestamp: '2021-01-01T21:34:05.123456Z',
       })
     })
 
@@ -258,6 +277,34 @@ describe('PostHog Core', () => {
       expect(beforeSend2).toHaveBeenCalledTimes(1)
       expect(beforeSend3).not.toHaveBeenCalled() // Should not be called because beforeSend2 returned null
       expect(mocks.fetch).not.toHaveBeenCalled()
+    })
+
+    it('should fail closed when a before_send function throws', async () => {
+      const error = new Error('before_send failed')
+      const sentinel = jest.fn((event: CaptureEvent | null) => event)
+      const captureListener = jest.fn()
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+        flushAt: 1,
+        before_send: [
+          (event) => event && { ...event, properties: { ...event.properties, transformed: true } },
+          () => {
+            throw error
+          },
+          sentinel,
+        ],
+      })
+      const errorSpy = jest.spyOn((posthog as any)._logger, 'error').mockImplementation(() => {})
+      posthog.on('capture', captureListener)
+
+      expect(() => posthog.capture('custom-event')).not.toThrow()
+      await waitForPromises()
+
+      expect(sentinel).not.toHaveBeenCalled()
+      expect(captureListener).not.toHaveBeenCalled()
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.Queue)).toBeUndefined()
+      expect(mocks.fetch).not.toHaveBeenCalled()
+      expect(errorSpy).toHaveBeenCalledWith("Error in before_send function for event 'custom-event':", error)
+      errorSpy.mockRestore()
     })
 
     it('should pass timestamp and uuid through before_send', async () => {

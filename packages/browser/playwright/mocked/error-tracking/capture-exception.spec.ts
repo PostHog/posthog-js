@@ -65,7 +65,7 @@ test.describe('ErrorTracking captureException', () => {
             const exceptionObject = { name: 'foo', message: 'bar' }
             ph.captureException(exceptionObject)
         })
-        exceptionMatch(exception, 'Error', "'foo' captured as exception with message: 'bar'")
+        exceptionMatch(exception, 'foo', "'foo' captured as exception with message: 'bar'")
     })
 
     test('captureException(DOMException)', async ({ posthog, events, browserName }) => {
