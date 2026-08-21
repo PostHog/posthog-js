@@ -1,3 +1,5 @@
+import type { OtlpAnyValue, OtlpKeyValue } from './capture-log'
+
 /**
  * Types for the distributed tracing API (`startSpan` / `withSpan` / `getActiveSpan`).
  *
@@ -224,25 +226,14 @@ export interface TracesConfig {
 // ============================================================================
 // OTLP wire types
 //
-// Deliberately separate from the log OTLP types: `OtlpAnyValue.intValue` is a
-// number there, while the proto3 JSON mapping requires int64 fields to be
-// strings.
+// `AnyValue` and `KeyValue` are the same shapes the logs and metrics payloads
+// use, and one shared encoder produces all three, so spans alias them rather
+// than redeclaring them. The alias names remain so the span types below read as
+// span types.
 // ============================================================================
 
-export interface OtlpSpanAnyValue {
-    stringValue?: string
-    /** Stringified int64, per the proto3 JSON mapping. */
-    intValue?: string
-    doubleValue?: number
-    boolValue?: boolean
-    arrayValue?: { values: OtlpSpanAnyValue[] }
-    kvlistValue?: { values: OtlpSpanKeyValue[] }
-}
-
-export interface OtlpSpanKeyValue {
-    key: string
-    value: OtlpSpanAnyValue
-}
+export type OtlpSpanAnyValue = OtlpAnyValue
+export type OtlpSpanKeyValue = OtlpKeyValue
 
 export interface OtlpSpanEvent {
     name: string

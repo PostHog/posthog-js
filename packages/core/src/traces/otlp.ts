@@ -1,24 +1,22 @@
 // OTLP encoding for spans.
 //
-// Deliberately not shared with the logs encoder: `logs-utils.toOtlpAnyValue`
-// emits `intValue` as a JSON number and flattens objects to JSON strings, while
-// the proto3 JSON mapping requires int64 fields as strings and OTLP has a real
-// `kvlistValue` for maps.
+// Attribute values go through the shared `AnyValue` encoder, which is what the
+// logs and metrics senders use: the wire shape is the same for all three, and
+// the guards that keep a single bad value from 400ing an entire batch are worth
+// having in one place.
 
 import type {
   OtlpSpan,
-  OtlpSpanAnyValue,
   OtlpSpanEvent,
   OtlpSpanKeyValue,
   OtlpTracesPayload,
-  SpanAttributeValue,
   SpanAttributes,
   SpanKind,
   SpanStatusCode,
 } from '@posthog/types'
 import type { Logger } from '../types'
 import type { ResolvedTracesConfig, SpanRecord } from './types'
-import { isArray, isBoolean, isNullish } from '../utils'
+import { toOtlpKeyValueList } from '../utils/otlp-any-value'
 
 // ============================================================================
 // Enums
@@ -66,112 +64,6 @@ export function msToUnixNanoString(ms: number): string {
     fractionalNanos = 0
   }
   return String(whole) + String(fractionalNanos).padStart(6, '0')
-}
-
-// ============================================================================
-// AnyValue encoding
-// ============================================================================
-
-// proto3 JSON maps int64 to a string. A value outside the range is encoded as a
-// decimal string instead — sending it as an `intValue` would 400 the entire
-// batch, taking every other span in the request with it.
-const INT64_MAX = 9223372036854775807n
-const INT64_MIN = -9223372036854775808n
-// 2^63 as a float; JS numbers at this magnitude are already imprecise, so the
-// comparison is deliberately exclusive at the top.
-const INT64_MAX_FLOAT = 9223372036854775808
-
-const CIRCULAR_MARKER = '[Circular]'
-
-function exactIntegerString(value: number): string {
-  try {
-    return BigInt(value).toString()
-  } catch {
-    return String(value)
-  }
-}
-
-export function toOtlpAnyValue(
-  value: SpanAttributeValue,
-  logger?: Logger,
-  // Containers on the current path, so a back-reference degrades to a marker
-  // instead of recursing until the stack blows. Span attributes are ordinary
-  // application objects — ORM entities and request objects routinely have one.
-  seen?: WeakSet<object>
-): OtlpSpanAnyValue {
-  if (isBoolean(value)) {
-    return { boolValue: value }
-  }
-  if (typeof value === 'bigint') {
-    if (value > INT64_MAX || value < INT64_MIN) {
-      logger?.debug(`Span attribute ${value} is outside the int64 range; encoding it as a string`)
-      return { stringValue: String(value) }
-    }
-    return { intValue: String(value) }
-  }
-  if (typeof value === 'number') {
-    // typeof rather than core's isNumber, which excludes NaN. JSON has no
-    // representation for non-finite floats and JSON.stringify turns them into
-    // `null`, losing the value; proto3 JSON requires the literal strings.
-    if (!Number.isFinite(value)) {
-      return { stringValue: String(value) }
-    }
-    if (Number.isInteger(value)) {
-      if (value >= INT64_MAX_FLOAT || value < -INT64_MAX_FLOAT) {
-        logger?.debug(`Span attribute ${value} is outside the int64 range; encoding it as a string`)
-        // Via BigInt for the double's exact decimal value: `String(2**64)` gives
-        // the shortest round-tripping form ("18446744073709552000"), not the
-        // number the caller actually holds.
-        return { stringValue: exactIntegerString(value) }
-      }
-      return { intValue: String(value) }
-    }
-    return { doubleValue: value }
-  }
-  if (typeof value === 'string') {
-    return { stringValue: value }
-  }
-  if (value instanceof Date) {
-    // Before the object branch: a Date has no own enumerable keys, so it would
-    // otherwise encode as an empty kvlist and lose the value silently.
-    const time = value.getTime()
-    return { stringValue: Number.isFinite(time) ? value.toISOString() : String(value) }
-  }
-  if (typeof value === 'object' && value !== null) {
-    const path = seen ?? new WeakSet<object>()
-    if (path.has(value)) {
-      return { stringValue: CIRCULAR_MARKER }
-    }
-    path.add(value)
-    try {
-      if (isArray(value)) {
-        // A null inside an array becomes an empty AnyValue rather than being
-        // skipped, so positions line up with what the caller passed.
-        return { arrayValue: { values: value.map((v) => (isNullish(v) ? {} : toOtlpAnyValue(v, logger, path))) } }
-      }
-      return { kvlistValue: { values: toOtlpKeyValueList(value as SpanAttributes, logger, path) } }
-    } finally {
-      // Siblings that reference the same object are duplication, not a cycle.
-      path.delete(value)
-    }
-  }
-  return { stringValue: String(value) }
-}
-
-export function toOtlpKeyValueList(
-  attributes: SpanAttributes,
-  logger?: Logger,
-  seen?: WeakSet<object>
-): OtlpSpanKeyValue[] {
-  const result: OtlpSpanKeyValue[] = []
-  for (const key in attributes) {
-    const value = attributes[key]
-    if (isNullish(value)) {
-      continue
-    }
-    result.push({ key, value: toOtlpAnyValue(value, logger, seen) })
-  }
-  return result
 }
 
 // ============================================================================

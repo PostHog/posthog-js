@@ -730,12 +730,13 @@ describe('PostHogTraces', () => {
       expect(JSON.stringify(sentPayloads()[0])).not.toContain('[Circular]')
     })
 
-    it('drops a span whose attributes throw, and keeps draining the rest', async () => {
-      // Encoding happens before the send and outside the outcome handling, so
-      // an unguarded throw would leave the queue unspliced and every later
-      // flush would die on the same span — silently taking the pipeline down.
+    it('keeps a span whose attribute getter throws, marking only that key', async () => {
+      // The shared encoder contains a throwing getter at the key it belongs to,
+      // so the span keeps its name, timing and every other attribute instead of
+      // being dropped whole.
       const traces = createTraces({ maxExportBatchSize: 1 })
       const exploding = {
+        ok: 1,
         get boom() {
           throw new Error('getter exploded')
         },
@@ -745,8 +746,9 @@ describe('PostHogTraces', () => {
       traces.startSpan('healthy').end()
       await traces.flush()
 
-      expect(sentSpans().map((s) => s.name)).toEqual(['healthy'])
-      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('could not be encoded'))
+      expect(sentSpans().map((s) => s.name)).toEqual(['poison', 'healthy'])
+      expect(JSON.stringify(sentPayloads()[0])).toContain('[Unserializable]')
+      expect(JSON.stringify(sentPayloads()[0])).toContain('"intValue":"1"')
     })
   })
 

@@ -4,11 +4,8 @@ import {
   buildTracesResourceAttributes,
   msToUnixNanoString,
   spanKindToOtlp,
-  toOtlpAnyValue,
-  toOtlpKeyValueList,
 } from './otlp'
 import type { ResolvedTracesConfig, SpanRecord } from './types'
-import { createMockLogger } from '@/testing'
 
 const record = (overrides: Partial<SpanRecord> = {}): SpanRecord => ({
   traceId: '4bf92f3577b34da6a3ce929d0e0e4736',
@@ -53,89 +50,6 @@ describe('OTLP span encoding', () => {
         expect(encoded).toMatch(/^\d+$/)
       }
     )
-  })
-
-  describe('toOtlpAnyValue', () => {
-    it('encodes integers as stringified int64', () => {
-      // proto3 JSON maps int64 to a string. The logs encoder emits a raw number
-      // here; traces must not, and this is the assertion that pins it.
-      expect(toOtlpAnyValue(42)).toEqual({ intValue: '42' })
-      expect(toOtlpAnyValue(-7)).toEqual({ intValue: '-7' })
-      expect(toOtlpAnyValue(0)).toEqual({ intValue: '0' })
-    })
-
-    it('encodes floats as doubles', () => {
-      expect(toOtlpAnyValue(1.5)).toEqual({ doubleValue: 1.5 })
-    })
-
-    it('encodes booleans and strings', () => {
-      expect(toOtlpAnyValue(true)).toEqual({ boolValue: true })
-      expect(toOtlpAnyValue('hello')).toEqual({ stringValue: 'hello' })
-    })
-
-    it('encodes non-finite floats as strings', () => {
-      expect(toOtlpAnyValue(NaN)).toEqual({ stringValue: 'NaN' })
-      expect(toOtlpAnyValue(Infinity)).toEqual({ stringValue: 'Infinity' })
-      expect(toOtlpAnyValue(-Infinity)).toEqual({ stringValue: '-Infinity' })
-    })
-
-    it('encodes an integer beyond int64 as a string, with a warning', () => {
-      const logger = createMockLogger()
-      // An out-of-range intValue would 400 the whole batch, taking every other
-      // span in the request with it.
-      expect(toOtlpAnyValue(2 ** 64, logger)).toEqual({ stringValue: '18446744073709551616' })
-      expect(logger.debug).toHaveBeenCalled()
-    })
-
-    it('encodes bigints inside int64 as intValue', () => {
-      expect(toOtlpAnyValue(9007199254740993n)).toEqual({ intValue: '9007199254740993' })
-    })
-
-    it('encodes bigints beyond int64 as strings', () => {
-      const logger = createMockLogger()
-      expect(toOtlpAnyValue(18446744073709551616n, logger)).toEqual({ stringValue: '18446744073709551616' })
-      expect(logger.debug).toHaveBeenCalled()
-    })
-
-    it('encodes arrays', () => {
-      expect(toOtlpAnyValue(['a', 1])).toEqual({
-        arrayValue: { values: [{ stringValue: 'a' }, { intValue: '1' }] },
-      })
-    })
-
-    it('keeps array positions when an entry is null', () => {
-      expect(toOtlpAnyValue(['a', null, 'b'])).toEqual({
-        arrayValue: { values: [{ stringValue: 'a' }, {}, { stringValue: 'b' }] },
-      })
-    })
-
-    it('encodes maps as kvlistValue rather than a JSON string', () => {
-      expect(toOtlpAnyValue({ nested: { depth: 2 } })).toEqual({
-        kvlistValue: {
-          values: [{ key: 'nested', value: { kvlistValue: { values: [{ key: 'depth', value: { intValue: '2' } }] } } }],
-        },
-      })
-    })
-
-    it('encodes a Date as an ISO string', () => {
-      // A Date has no own enumerable keys, so the object branch would encode it
-      // as an empty kvlist and lose the value with no warning.
-      expect(toOtlpAnyValue(new Date('2026-01-01T00:00:00.000Z') as any)).toEqual({
-        stringValue: '2026-01-01T00:00:00.000Z',
-      })
-    })
-
-    it('encodes an invalid Date without throwing', () => {
-      expect(toOtlpAnyValue(new Date('nonsense') as any)).toEqual({ stringValue: 'Invalid Date' })
-    })
-  })
-
-  describe('toOtlpKeyValueList', () => {
-    it('drops null and undefined keys', () => {
-      expect(toOtlpKeyValueList({ kept: 'yes', dropped: null, alsoDropped: undefined })).toEqual([
-        { key: 'kept', value: { stringValue: 'yes' } },
-      ])
-    })
   })
 
   describe('spanKindToOtlp', () => {
