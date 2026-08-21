@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.49.4
+
+### Patch Changes
+
+- [#4569](https://github.com/PostHog/posthog-js/pull/4569) [`00d22ea`](https://github.com/PostHog/posthog-js/commit/00d22ea71400190a0154d1a961b3f52652c50a1e) Thanks [@v11t](https://github.com/v11t)! - fix getFeatureFlagResult returning null variant instead of undefined when remotely evaluated
+  (2026-08-21)
+
 ## 5.49.3
 
 ### Patch Changes
