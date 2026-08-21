@@ -30,6 +30,7 @@ export function resolveTracesConfig(config: TracesConfig | undefined): ResolvedT
     serviceVersion: (resourceAttributes?.['service.version'] as string | undefined) ?? config?.serviceVersion,
     environment: (resourceAttributes?.['deployment.environment'] as string | undefined) ?? config?.environment,
     resourceAttributes,
+    beforeSpanSend: config?.beforeSpanSend ? [config.beforeSpanSend].flat() : [],
     flushIntervalMs: positiveInteger(config?.flushIntervalMs, DEFAULT_FLUSH_INTERVAL_MS),
     maxExportBatchSize,
     // Never below the flush trigger, or the depth-based flush could never fire.

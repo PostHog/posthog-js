@@ -168,6 +168,34 @@ export interface Span {
 }
 
 /**
+ * A completed span as `beforeSpanSend` sees it: plain values, not the OTLP wire
+ * encoding — `userId: 42` reads as `42`, not `{ intValue: "42" }`.
+ *
+ * @experimental Subject to change in a minor release.
+ */
+export interface SpanRecord {
+    /** Assignment is ignored with a debug warning: rewriting ids orphans children that already shipped. */
+    readonly traceId: string
+    readonly spanId: string
+    readonly parentSpanId?: string
+    name: string
+    kind: SpanKind
+    status?: { code: SpanStatusCode; message?: string }
+    attributes: SpanAttributes
+    events: { name: string; timestamp: number; attributes?: SpanAttributes }[]
+    /** Millisecond epoch. */
+    startTime: number
+    endTime: number
+}
+
+/**
+ * Inspects, edits or drops a finished span. Return `null` to drop it.
+ *
+ * @experimental Subject to change in a minor release.
+ */
+export type BeforeSpanSendFn = (span: SpanRecord) => SpanRecord | null
+
+/**
  * Configuration for distributed tracing, passed as the `traces` client option.
  * Tracing stays off until this object is supplied.
  *
@@ -221,6 +249,27 @@ export interface TracesConfig {
      * @default 512
      */
     maxExportBatchSize?: number
+
+    /**
+     * Runs on every finished span before it is queued. Edit the span in place,
+     * or return `null` to drop it. An array runs left to right, and the first
+     * hook to return `null` stops the chain.
+     *
+     * This is the place to scrub sensitive attributes, so a hook that throws
+     * drops the span rather than exporting an unscrubbed one.
+     *
+     * @example Drop health checks and redact a header
+     * ```ts
+     * traces: {
+     *   beforeSpanSend: (span) => {
+     *     if (span.attributes['http.route'] === '/health') return null
+     *     delete span.attributes['http.request.header.authorization']
+     *     return span
+     *   },
+     * }
+     * ```
+     */
+    beforeSpanSend?: BeforeSpanSendFn | BeforeSpanSendFn[]
 }
 
 // ============================================================================

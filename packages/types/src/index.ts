@@ -137,6 +137,8 @@ export type {
     SpanTimeInput,
     StartSpanOptions,
     Span,
+    SpanRecord,
+    BeforeSpanSendFn,
     TracesConfig,
     OtlpSpanAnyValue,
     OtlpSpanKeyValue,

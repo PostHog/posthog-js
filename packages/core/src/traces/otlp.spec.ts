@@ -118,6 +118,7 @@ describe('OTLP span encoding', () => {
       flushIntervalMs: 5000,
       maxExportBatchSize: 512,
       maxQueueSize: 2048,
+      beforeSpanSend: [],
       ...partial,
     })
 
