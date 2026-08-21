@@ -1,7 +1,7 @@
 import { PostHog } from '../../posthog-core'
 import { PostHogConfig, RemoteConfigResult, SupportedWebVitalsMetrics } from '../../types'
 import { createLogger } from '@posthog/browser-common/utils/logger'
-import { isBoolean, isNullish, isNumber, isUndefined, isObject, stripUrlHash } from '@posthog/core'
+import { isArray, isBoolean, isNullish, isNumber, isUndefined, isObject, stripUrlHash } from '@posthog/core'
 import { WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
 import { window, location } from '@posthog/browser-common/utils/globals'
 import { assignableWindow, WebVitalsCallbackFlavor, WebVitalsReportOpts } from '../../utils/globals'
@@ -17,6 +17,48 @@ type WebVitalsMetricCallback = (onReport: (metric: any) => void, opts?: WebVital
 export const DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS = 5000
 const ONE_MINUTE_IN_MILLIS = 60 * 1000
 export const FIFTEEN_MINUTES_IN_MILLIS = 15 * ONE_MINUTE_IN_MILLIS
+
+// Attribute INP and LCP by default. Their attribution names the slow interaction target
+// and the load-phase breakdown, which is what makes a slow number diagnosable.
+// CLS is excluded because onCLS with attribution holds detached DOM nodes and leaks in
+// single-page apps (see the web-vitals-with-attribution entrypoint).
+const ALL_WEB_VITALS_METRICS: SupportedWebVitalsMetrics[] = ['CLS', 'FCP', 'INP', 'LCP']
+const DEFAULT_WEB_VITALS_ATTRIBUTION_METRICS: SupportedWebVitalsMetrics[] = ['INP', 'LCP']
+
+// web-vitals attribution objects can carry DOM nodes and large PerformanceEntry arrays.
+// We keep only these small scalar fields so the captured payload stays bounded.
+const WEB_VITALS_ATTRIBUTION_ALLOWLIST = [
+    // INP: which element was interacted with, plus the phase breakdown
+    'interactionTarget',
+    'interactionType',
+    'inputDelay',
+    'processingDuration',
+    'presentationDelay',
+    'loadState',
+    // LCP: which element rendered, plus the load-phase breakdown
+    'element',
+    'url',
+    'timeToFirstByte',
+    'resourceLoadDelay',
+    'resourceLoadDuration',
+    'elementRenderDelay',
+    // CLS: the single largest shift
+    'largestShiftTarget',
+    'largestShiftTime',
+    'largestShiftValue',
+    // FCP
+    'firstByteToFCP',
+]
+
+const boundedAttribution = (attribution: Record<string, unknown>): Record<string, unknown> => {
+    const bounded: Record<string, unknown> = {}
+    for (const key of WEB_VITALS_ATTRIBUTION_ALLOWLIST) {
+        if (!isUndefined(attribution[key])) {
+            bounded[key] = attribution[key]
+        }
+    }
+    return bounded
+}
 
 type WebVitalsEventBuffer = {
     navigationKey: string | undefined
@@ -53,7 +95,7 @@ export class WebVitalsAutocapture {
             : undefined
         return !isNullish(clientConfigMetricAllowList)
             ? clientConfigMetricAllowList
-            : this._instance.persistence?.props[WEB_VITALS_ALLOWED_METRICS] || ['CLS', 'FCP', 'INP', 'LCP']
+            : this._instance.persistence?.props[WEB_VITALS_ALLOWED_METRICS] || ALL_WEB_VITALS_METRICS
     }
 
     public get flushToCaptureTimeoutMs(): number {
@@ -63,11 +105,21 @@ export class WebVitalsAutocapture {
         return clientConfig || DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS
     }
 
+    // The metrics we capture attribution for. `true` attributes all metrics, `false` none,
+    // an array names them explicitly, and the default attributes INP and LCP only.
+    public get attributionMetrics(): SupportedWebVitalsMetrics[] {
+        const clientConfig = isObject(this._perfConfig) ? this._perfConfig.web_vitals_attribution : undefined
+        if (isBoolean(clientConfig)) {
+            return clientConfig ? ALL_WEB_VITALS_METRICS : []
+        }
+        if (isArray(clientConfig)) {
+            return clientConfig
+        }
+        return DEFAULT_WEB_VITALS_ATTRIBUTION_METRICS
+    }
+
     public get useAttribution(): boolean {
-        const clientConfig: boolean | undefined = isObject(this._perfConfig)
-            ? this._perfConfig.web_vitals_attribution
-            : undefined
-        return clientConfig ?? false
+        return this.attributionMetrics.length > 0
     }
 
     public get useSoftNavs(): boolean {
@@ -266,20 +318,23 @@ export class WebVitalsAutocapture {
             ? Date.now()
             : this._buffer.firstMetricTimestamp
 
-        if (metric.attribution && metric.attribution.interactionTargetElement) {
-            // we don't want to send the entire element
-            // they can be very large
-            // TODO we could run this through autocapture code so that we get elements chain info
-            //  and can display the element in the UI
-            metric.attribution.interactionTargetElement = undefined
-        }
-
         const sessionIds = this._instance.sessionManager?.checkAndGetSessionAndWindowId(true)
         const bufferedMetric: Record<string, unknown> = {
             ...metric,
             ...(navigationURL ? { navigationURL: $currentUrl } : {}),
             $current_url: $currentUrl,
             timestamp: Date.now(),
+        }
+
+        // `entries` is an array of raw PerformanceEntry objects that serialises to `[{}]`.
+        // It adds payload weight with no diagnostic value, so we always drop it.
+        delete bufferedMetric.entries
+
+        // Keep attribution only for the metrics we attribute, and bound it to small fields.
+        if (isObject(metric.attribution) && this.attributionMetrics.indexOf(metric.name) > -1) {
+            bufferedMetric.attribution = boundedAttribution(metric.attribution)
+        } else {
+            delete bufferedMetric.attribution
         }
         if (!isUndefined(sessionIds)) {
             bufferedMetric.$session_id = sessionIds.sessionId

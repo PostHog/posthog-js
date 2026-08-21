@@ -146,21 +146,23 @@ describe('web vitals', () => {
                     capture_pageview: false,
                 })
 
-                loadScriptMock.mockImplementation((_ph, _path, callback) => {
+                loadScriptMock.mockImplementation((_ph, kind, callback) => {
                     // we need a set of fake web vitals handlers, so we can manually trigger the events
                     assignableWindow.__PosthogExtensions__ = {}
-                    assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
-                        onLCP: (cb: any) => {
-                            onLCPCallback = cb
-                        },
-                        onCLS: (cb: any) => {
-                            onCLSCallback = cb
-                        },
-                        onFCP: (cb: any) => {
-                            onFCPCallback = cb
-                        },
-                        onINP: (cb: any) => {
-                            onINPCallback = cb
+                    assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacksByFlavor = {
+                        [kind]: {
+                            onLCP: (cb: any) => {
+                                onLCPCallback = cb
+                            },
+                            onCLS: (cb: any) => {
+                                onCLSCallback = cb
+                            },
+                            onFCP: (cb: any) => {
+                                onFCPCallback = cb
+                            },
+                            onINP: (cb: any) => {
+                                onINPCallback = cb
+                            },
                         },
                     }
                     callback()
@@ -279,20 +281,22 @@ describe('web vitals', () => {
 
             expect(posthog.sessionManager).toBeUndefined()
 
-            loadScriptMock.mockImplementation((_ph, _path, callback) => {
+            loadScriptMock.mockImplementation((_ph, kind, callback) => {
                 assignableWindow.__PosthogExtensions__ = {}
-                assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
-                    onLCP: (cb: any) => {
-                        onLCPCallback = cb
-                    },
-                    onCLS: (cb: any) => {
-                        onCLSCallback = cb
-                    },
-                    onFCP: (cb: any) => {
-                        onFCPCallback = cb
-                    },
-                    onINP: (cb: any) => {
-                        onINPCallback = cb
+                assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacksByFlavor = {
+                    [kind]: {
+                        onLCP: (cb: any) => {
+                            onLCPCallback = cb
+                        },
+                        onCLS: (cb: any) => {
+                            onCLSCallback = cb
+                        },
+                        onFCP: (cb: any) => {
+                            onFCPCallback = cb
+                        },
+                        onINP: (cb: any) => {
+                            onINPCallback = cb
+                        },
                     },
                 }
                 callback()
@@ -370,20 +374,22 @@ describe('web vitals', () => {
 
             expect(posthog.sessionManager).toBeUndefined()
 
-            loadScriptMock.mockImplementation((_ph, _path, callback) => {
+            loadScriptMock.mockImplementation((_ph, kind, callback) => {
                 assignableWindow.__PosthogExtensions__ = {}
-                assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
-                    onLCP: (cb: any) => {
-                        onLCPCallback = cb
-                    },
-                    onCLS: (cb: any) => {
-                        onCLSCallback = cb
-                    },
-                    onFCP: (cb: any) => {
-                        onFCPCallback = cb
-                    },
-                    onINP: (cb: any) => {
-                        onINPCallback = cb
+                assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacksByFlavor = {
+                    [kind]: {
+                        onLCP: (cb: any) => {
+                            onLCPCallback = cb
+                        },
+                        onCLS: (cb: any) => {
+                            onCLSCallback = cb
+                        },
+                        onFCP: (cb: any) => {
+                            onFCPCallback = cb
+                        },
+                        onINP: (cb: any) => {
+                            onINPCallback = cb
+                        },
                     },
                 }
                 callback()
@@ -423,9 +429,11 @@ describe('web vitals', () => {
 
     describe('web_vitals_attribution config', () => {
         it.each([
-            [undefined, false],
+            [undefined, true],
             [true, true],
             [false, false],
+            [[] as SupportedWebVitalsMetrics[], false],
+            [['INP'] as SupportedWebVitalsMetrics[], true],
         ])(
             'when web_vitals_attribution is %p, useAttribution should be %p',
             async (attributionConfig, expectedUseAttribution) => {
@@ -439,7 +447,7 @@ describe('web vitals', () => {
         )
 
         it.each([
-            [undefined, 'web-vitals'],
+            [undefined, 'web-vitals-with-attribution'],
             [false, 'web-vitals'],
             [true, 'web-vitals-with-attribution'],
         ])('when web_vitals_attribution is %p, should load %s bundle', async (attributionConfig, expectedBundle) => {
@@ -473,6 +481,90 @@ describe('web vitals', () => {
         })
     })
 
+    describe('captured metric payload', () => {
+        const setupAndEmit = async (
+            config: Partial<PerformanceCaptureConfig>,
+            emit: () => void
+        ): Promise<Record<string, any>> => {
+            beforeSendMock = jest.fn().mockImplementation((e) => e)
+            onLCPCallback = onCLSCallback = onFCPCallback = onINPCallback = undefined
+
+            const loadScriptMock = jest.fn().mockImplementation((_ph, kind, callback) => {
+                assignableWindow.__PosthogExtensions__ = {
+                    postHogWebVitalsCallbacksByFlavor: {
+                        [kind]: {
+                            onLCP: (cb: any) => (onLCPCallback = cb),
+                            onCLS: (cb: any) => (onCLSCallback = cb),
+                            onFCP: (cb: any) => (onFCPCallback = cb),
+                            onINP: (cb: any) => (onINPCallback = cb),
+                        },
+                    },
+                }
+                callback()
+            })
+            assignableWindow.__PosthogExtensions__ = { loadExternalDependency: loadScriptMock }
+
+            posthog = await createPosthogInstance(uuidv7(), {
+                before_send: beforeSendMock,
+                capture_performance: { web_vitals: true, ...config },
+                capture_pageview: false,
+            })
+            posthog.webVitalsAutocapture!.onRemoteConfig({
+                ok: true,
+                config: { capturePerformance: { web_vitals: true } } as RemoteConfig,
+            })
+
+            emit()
+            jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+            const call = beforeSendMock.mock.calls.find((c: any[]) => c[0].event === '$web_vitals')
+            return call![0].properties
+        }
+
+        it('drops the useless entries array from the captured metric', async () => {
+            const properties = await setupAndEmit({}, () => {
+                onINPCallback?.({ name: 'INP', value: 100, entries: [{}] })
+            })
+
+            expect(properties.$web_vitals_INP_event).not.toHaveProperty('entries')
+        })
+
+        it('keeps only whitelisted attribution fields for an attributed metric', async () => {
+            const properties = await setupAndEmit({}, () => {
+                onINPCallback?.({
+                    name: 'INP',
+                    value: 100,
+                    attribution: {
+                        interactionTarget: 'button#pay',
+                        inputDelay: 10,
+                        processingDuration: 20,
+                        presentationDelay: 30,
+                        interactionTargetElement: { huge: 'node' },
+                        longAnimationFrameEntries: [{ scripts: [{ duration: 1 }] }],
+                    },
+                })
+            })
+
+            expect(properties.$web_vitals_INP_event.attribution).toEqual({
+                interactionTarget: 'button#pay',
+                inputDelay: 10,
+                processingDuration: 20,
+                presentationDelay: 30,
+            })
+        })
+
+        it('drops attribution for CLS by default', async () => {
+            const properties = await setupAndEmit({}, () => {
+                onCLSCallback?.({
+                    name: 'CLS',
+                    value: 0.1,
+                    attribution: { largestShiftTarget: 'div#banner', largestShiftValue: 0.1 },
+                })
+            })
+
+            expect(properties.$web_vitals_CLS_event).not.toHaveProperty('attribution')
+        })
+    })
+
     describe('__preview_web_vitals_soft_navs config', () => {
         it.each([
             [undefined, false],
@@ -492,9 +584,9 @@ describe('web vitals', () => {
 
         it.each([
             // [soft_navs, attribution, expected bundle]
-            [undefined, undefined, 'web-vitals'],
+            [undefined, undefined, 'web-vitals-with-attribution'],
             [false, false, 'web-vitals'],
-            [true, undefined, 'web-vitals-soft-navs'],
+            [true, undefined, 'web-vitals-with-attribution-soft-navs'],
             [true, false, 'web-vitals-soft-navs'],
             [true, true, 'web-vitals-with-attribution-soft-navs'],
             [false, true, 'web-vitals-with-attribution'],
@@ -608,7 +700,11 @@ describe('web vitals', () => {
             }
 
             posthog = await createPosthogInstance(uuidv7(), {
-                capture_performance: { web_vitals: true, __preview_web_vitals_soft_navs: true },
+                capture_performance: {
+                    web_vitals: true,
+                    __preview_web_vitals_soft_navs: true,
+                    web_vitals_attribution: false,
+                },
                 capture_pageview: false,
             })
 
@@ -649,7 +745,7 @@ describe('web vitals', () => {
             }
 
             posthog = await createPosthogInstance(uuidv7(), {
-                capture_performance: { web_vitals: true },
+                capture_performance: { web_vitals: true, web_vitals_attribution: false },
                 capture_pageview: false,
             })
 
@@ -681,7 +777,11 @@ describe('web vitals', () => {
             }
 
             posthog = await createPosthogInstance(uuidv7(), {
-                capture_performance: { web_vitals: true, __preview_web_vitals_soft_navs: true },
+                capture_performance: {
+                    web_vitals: true,
+                    __preview_web_vitals_soft_navs: true,
+                    web_vitals_attribution: false,
+                },
                 capture_pageview: false,
             })
 
@@ -950,6 +1050,7 @@ describe('web vitals', () => {
                     web_vitals: true,
                     web_vitals_allowed_metrics: ['LCP', 'CLS'],
                     __preview_web_vitals_soft_navs: true,
+                    web_vitals_attribution: false,
                 },
                 capture_pageview: false,
                 mask_personal_data_properties: true,
@@ -1064,21 +1165,23 @@ describe('web vitals', () => {
                     custom_personal_data_properties: customPersonalDataProperties,
                 })
 
-                loadScriptMock.mockImplementation((_ph, _path, callback) => {
+                loadScriptMock.mockImplementation((_ph, kind, callback) => {
                     // we need a set of fake web vitals handlers, so we can manually trigger the events
                     assignableWindow.__PosthogExtensions__ = {}
-                    assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
-                        onLCP: (cb: any) => {
-                            onLCPCallback = cb
-                        },
-                        onCLS: (cb: any) => {
-                            onCLSCallback = cb
-                        },
-                        onFCP: (cb: any) => {
-                            onFCPCallback = cb
-                        },
-                        onINP: (cb: any) => {
-                            onINPCallback = cb
+                    assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacksByFlavor = {
+                        [kind]: {
+                            onLCP: (cb: any) => {
+                                onLCPCallback = cb
+                            },
+                            onCLS: (cb: any) => {
+                                onCLSCallback = cb
+                            },
+                            onFCP: (cb: any) => {
+                                onFCPCallback = cb
+                            },
+                            onINP: (cb: any) => {
+                                onINPCallback = cb
+                            },
                         },
                     }
                     callback()
