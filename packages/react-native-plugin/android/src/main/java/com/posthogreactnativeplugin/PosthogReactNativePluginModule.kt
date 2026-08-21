@@ -15,7 +15,6 @@ import com.posthog.PostHog
 import com.posthog.PostHogConfig
 import com.posthog.android.PostHogAndroid
 import com.posthog.android.PostHogAndroidConfig
-import com.posthog.android.replay.PostHogSessionReplayConfig
 import com.posthog.internal.PostHogPreferences
 import com.posthog.internal.PostHogPreferences.Companion.ANONYMOUS_ID
 import com.posthog.internal.PostHogPreferences.Companion.DISTINCT_ID
@@ -159,7 +158,8 @@ class PosthogReactNativePluginModule(
               sessionReplayConfig.maskAllImages = maskAllImages
               sessionReplayConfig.maskAllTextInputs = maskAllTextInputs
               sessionReplayConfig.sampleRate = getDoubleOrNull(sdkReplayConfig, "sampleRate")
-              applyVerifyScreenshotMaskAlignment(sessionReplayConfig, sdkReplayConfig)
+              sessionReplayConfig.verifyScreenshotMaskAlignment =
+                getBoolean(sdkReplayConfig, "verifyScreenshotMaskAlignment", false)
 
               val endpoint = getString(decideReplayConfig, "endpoint", "")
               if (endpoint.isNotEmpty()) {
@@ -375,17 +375,6 @@ class PosthogReactNativePluginModule(
         null
       }
     }.getOrNull()
-
-  private fun hasKey(
-    map: ReadableMap?,
-    key: String,
-  ): Boolean = runCatching { map != null && map.hasKey(key) && !map.isNull(key) }.getOrDefault(false)
-
-  private fun getBoolean(
-    map: ReadableMap?,
-    key: String,
-    default: Boolean,
-  ): Boolean = runCatching { if (hasKey(map, key)) map?.getBoolean(key) ?: default else default }.getOrDefault(default)
 
   private fun getString(
     map: ReadableMap?,
@@ -637,20 +626,13 @@ class PosthogReactNativePluginModule(
   }
 }
 
-internal fun applyVerifyScreenshotMaskAlignment(
-  sessionReplayConfig: PostHogSessionReplayConfig,
-  sdkReplayConfig: ReadableMap?,
-) {
-  sessionReplayConfig.verifyScreenshotMaskAlignment =
-    runCatching {
-      if (
-        sdkReplayConfig != null &&
-        sdkReplayConfig.hasKey("verifyScreenshotMaskAlignment") &&
-        !sdkReplayConfig.isNull("verifyScreenshotMaskAlignment")
-      ) {
-        sdkReplayConfig.getBoolean("verifyScreenshotMaskAlignment")
-      } else {
-        false
-      }
-    }.getOrDefault(false)
-}
+private fun hasKey(
+  map: ReadableMap?,
+  key: String,
+): Boolean = runCatching { map != null && map.hasKey(key) && !map.isNull(key) }.getOrDefault(false)
+
+internal fun getBoolean(
+  map: ReadableMap?,
+  key: String,
+  default: Boolean,
+): Boolean = runCatching { if (hasKey(map, key)) map?.getBoolean(key) ?: default else default }.getOrDefault(default)
