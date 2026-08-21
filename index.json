@@ -1,4 +1,20 @@
 {
+  "PostHog/posthog-js/issue/4595": {
+    "key": "PostHog/posthog-js/issue/4595",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4595",
+    "url": "https://github.com/PostHog/posthog-js/issues/4595",
+    "conclusion": "Confirmed feature gap: React Native supports legacy conditional-recording fields but does not evaluate the v2 trigger-group configuration.",
+    "labels": [
+      "feature",
+      "feature/replay",
+      "feature/mobile",
+      "react-native",
+      "team/client-libraries"
+    ],
+    "closed": false,
+    "updatedAt": "2026-08-21T10:13:21.946Z"
+  },
   "PostHog/posthog-js/issue/4574": {
     "key": "PostHog/posthog-js/issue/4574",
     "repo": "PostHog/posthog-js",
