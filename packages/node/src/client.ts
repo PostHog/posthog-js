@@ -690,7 +690,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *
    * @example
    * ```ts
-   * await posthog.withSpan('POST /checkout', { parent: req.headers.traceparent }, async (span) => {
+   * await posthog.withSpan('POST /checkout', { parent: req.get('traceparent') }, async (span) => {
    *   span.setAttribute('plan', user.plan)
    *   return processOrder()
    * })

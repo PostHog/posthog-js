@@ -1457,7 +1457,7 @@
             {
               "id": "",
               "name": "",
-              "code": "\n\nawait posthog.withSpan('POST /checkout', { parent: req.headers.traceparent }, async (span) => {\n  span.setAttribute('plan', user.plan)\n  return processOrder()\n})\n\n\n\n"
+              "code": "\n\nawait posthog.withSpan('POST /checkout', { parent: req.get('traceparent') }, async (span) => {\n  span.setAttribute('plan', user.plan)\n  return processOrder()\n})\n\n\n\n"
             }
           ],
           "releaseTag": "public",

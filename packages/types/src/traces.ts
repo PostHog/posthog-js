@@ -80,7 +80,7 @@ export interface StartSpanOptions {
      *
      * @example Continue an inbound trace
      * ```ts
-     * posthog.withSpan('POST /checkout', { parent: req.headers.traceparent }, handler)
+     * posthog.withSpan('POST /checkout', { parent: req.get('traceparent') }, handler)
      * ```
      */
     parent?: Span | string

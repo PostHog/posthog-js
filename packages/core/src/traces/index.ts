@@ -68,10 +68,16 @@ export class PostHogTraces {
 
     const explicitParent = options?.parent
     if (explicitParent && typeof explicitParent !== 'string' && !(explicitParent instanceof PostHogSpan)) {
-      // A child of a no-op is itself a no-op, never an orphan with invented ids.
-      // A foreign Span implementation lands here too, which is why it is logged.
-      this._logger.debug('Span parent is not a span from this SDK; returning an inert span')
-      return NOOP_SPAN
+      if (typeof (explicitParent as Span).traceparent === 'function') {
+        // A child of a no-op is itself a no-op, never an orphan with invented ids.
+        // A foreign Span implementation lands here too, which is why it is logged.
+        this._logger.debug('Span parent is not a span from this SDK; returning an inert span')
+        return NOOP_SPAN
+      }
+      // Not a span at all — `req.headers.traceparent` is `string[]` when the
+      // header arrives twice, and W3C treats that as no inbound context. Ignored
+      // like a malformed traceparent string rather than costing the span.
+      this._logger.debug('Ignoring an unusable span parent')
     }
 
     const parent = this._resolveParent(options)

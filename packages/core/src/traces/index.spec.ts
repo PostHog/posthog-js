@@ -209,6 +209,16 @@ describe('PostHogTraces', () => {
       expect(span.traceId).not.toBe(TRACE_ID)
       expect(span.parentSpanId).toBeUndefined()
     })
+
+    it('starts a fresh root when the parent is not a span, as a duplicated header is', async () => {
+      const traces = createTraces()
+      traces.startSpan('handler', { parent: [`00-${TRACE_ID}-${REMOTE_SPAN_ID}-01`] as unknown as string }).end()
+      await traces.flush()
+
+      const [span] = sentSpans()
+      expect(span.traceId).not.toBe(TRACE_ID)
+      expect(span.parentSpanId).toBeUndefined()
+    })
   })
 
   describe('withSpan', () => {
