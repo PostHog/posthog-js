@@ -23,9 +23,8 @@ export {
   buildResourceAttributes,
   getOtlpSeverityNumber,
   getOtlpSeverityText,
-  toOtlpAnyValue,
-  toOtlpKeyValueList,
 } from './logs/logs-utils'
+export { toOtlpAnyValue, toOtlpKeyValueList } from './utils/otlp-any-value'
 export { PostHogLogs } from './logs'
 export type {
   BeforeSendLogFn,
