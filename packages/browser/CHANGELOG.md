@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.418.7
+
+### Patch Changes
+
+- [#4459](https://github.com/PostHog/posthog-js/pull/4459) [`caed377`](https://github.com/PostHog/posthog-js/commit/caed377b3827c365fcb4bc9a093ec811030a7356) Thanks [@posthog](https://github.com/apps/posthog)! - fix(browser): stop the `$posthog_cookieless` sentinel from leaking into `identify()` and real events. A tab that missed a cross-tab consent flip could emit the sentinel as a durable distinct_id — merging distinct real users into a single person. It now adopts the identity persisted by the tab that handled consent, falling back to a fresh anonymous device id when persistence is not shared.
+  (2026-08-21)
+
+- [#4567](https://github.com/PostHog/posthog-js/pull/4567) [`5bd2c8d`](https://github.com/PostHog/posthog-js/commit/5bd2c8d0f30ecdd2fa14f0f05b3d43ef4e6b8d41) Thanks [@github-actions](https://github.com/apps/github-actions)! - Render React component stacks as linked exception causes so error tracking identifies the crashing component.
+  (2026-08-21)
+
 ## 1.418.6
 
 ### Patch Changes
