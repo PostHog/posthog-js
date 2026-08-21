@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 4595](https://github.com/PostHog/posthog-js/issues/4595) | Confirmed feature gap: React Native supports legacy conditional-recording fields but does not evaluate the v2 trigger-group configuration. | feature, feature/replay, feature/mobile, react-native, team/client-libraries |  | no | 2026-08-21T10:13:21.946Z |
 | PostHog/posthog-js | [issue 4574](https://github.com/PostHog/posthog-js/issues/4574) | Confirmed Expo iOS symbol-upload integration bug affecting build ordering and release-version attribution with EAS remote versioning. | react-native, feature/error-tracking, team/client-libraries |  | no | 2026-08-19T21:32:57.755Z |
 | PostHog/posthog-js | [issue 4571](https://github.com/PostHog/posthog-js/issues/4571) | Confirmed OTLP/HTTP JSON encoding bug affecting log and metric attribute integers. | team/client-libraries |  | no | 2026-08-19T21:31:51.972Z |
 | PostHog/posthog-js | [issue 4570](https://github.com/PostHog/posthog-js/issues/4570) | Confirmed bug: logs drops batches after exhausted retryable HTTP failures, unlike metrics. | team/client-libraries | https://github.com/PostHog/posthog-js/pull/4575 | no | 2026-08-19T21:30:22.119Z |
