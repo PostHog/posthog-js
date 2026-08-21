@@ -130,7 +130,7 @@ describe('cookieless', () => {
             expect(document.cookie).toBe('')
         })
 
-        it.each([[true], ['history_change']])(
+        it.each([[true], ['history_change'], [{ path: true }]])(
             'should send the initial pageview event when capture_pageview is %p',
             async (capturePageview: PostHogConfig['capture_pageview']) => {
                 const { posthog, beforeSendMock } = await setup({
