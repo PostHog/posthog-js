@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { test, expect } from './utils/posthog-playwright-test-base'
 import { Compression, FlagsResponse, PostHogConfig } from '@/types'
 import { PostHog } from '@/posthog-core'
@@ -329,6 +330,94 @@ test.describe('slim bundle + extension bundles (#3313)', () => {
 
                 await page.waitForTimeout(1000)
                 expect(error).toBeNull()
+                expect(errors).toEqual([])
+            })
+
+            // ── LogsExtensions ───────────────────────────────────────────────
+
+            test('without LogsExtensions: logs stay absent and console stays unwrapped', async ({ page }) => {
+                const errors: string[] = []
+                const logsRequests: string[] = []
+                page.on('pageerror', (error) => errors.push(error.message))
+                page.on('request', (request) => {
+                    if (/\/static\/logs\.js(?:\?|$)/.test(request.url())) {
+                        logsRequests.push(request.url())
+                    }
+                })
+
+                await page.goto(slimBundle.url)
+                await waitForSlimBundleReady(page)
+
+                const result = await page.evaluate(() => {
+                    const ph = (window as any).posthog as PostHog
+                    const originalWarn = console.warn
+                    ph.init('test-token', {
+                        api_host: 'http://localhost:2345',
+                        capture_pageview: false,
+                        __extensionClasses: {},
+                        logs: { captureConsoleLogs: true },
+                    } as Partial<PostHogConfig>)
+                    console.warn('slim bundle without logs')
+                    return {
+                        hasLogs: ph.logs !== undefined,
+                        consoleWrapped: console.warn !== originalWarn,
+                    }
+                })
+                await page.waitForTimeout(100)
+
+                expect(result).toEqual({ hasLogs: false, consoleWrapped: false })
+                expect(logsRequests).toEqual([])
+                expect(errors).toEqual([])
+            })
+
+            test('with LogsExtensions: captures a console record through the lazy bundle', async ({ page }) => {
+                const errors: string[] = []
+                const logsRequests: string[] = []
+                page.on('pageerror', (error) => errors.push(error.message))
+                page.on('request', (request) => {
+                    if (/\/static\/logs\.js(?:\?|$)/.test(request.url())) {
+                        logsRequests.push(request.url())
+                    }
+                })
+
+                await page.goto(slimBundle.url)
+                await waitForSlimBundleReady(page)
+                if (slimBundle.name === 'module.slim.no-external.js') {
+                    // The no-external build omits the lazy-script loader by design.
+                    await page.addScriptTag({ url: '/dist/external-scripts-loader.js' })
+                }
+
+                const error = await initPostHogWithExtensions(page, 'LogsExtensions', {
+                    api_host: 'http://localhost:2345',
+                })
+                expect(error).toBeNull()
+
+                await page.evaluate(() => {
+                    const logs = (window as any).posthog.logs
+                    logs.onRemoteConfig({ ok: true, config: { logs: { captureConsoleLogs: true } } })
+                })
+                await expect.poll(() => page.evaluate(() => !!(console.warn as any).__rrweb_original__)).toBe(true)
+
+                const captured = await page.evaluate(() => {
+                    const logs = (window as any).posthog.logs
+                    const originalCaptureConsoleLog = logs.captureConsoleLog
+                    let record: any
+                    logs.captureConsoleLog = (options: any) => {
+                        record = options
+                        return originalCaptureConsoleLog.call(logs, options)
+                    }
+                    console.warn('slim bundle logs smoke')
+                    return record
+                })
+
+                expect(captured).toEqual(
+                    expect.objectContaining({
+                        level: 'warn',
+                        body: '"slim bundle logs smoke"',
+                        attributes: expect.objectContaining({ 'log.source': 'console.warn' }),
+                    })
+                )
+                expect(logsRequests).toHaveLength(1)
                 expect(errors).toEqual([])
             })
 
