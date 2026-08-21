@@ -3390,9 +3390,6 @@ export class PostHog implements PostHogInterface {
                 this.persistence?.register({ [SESSION_RECORDING_REMOTE_CONFIG]: recordingRemoteConfig })
             }
             this.surveys?.reset()
-            // Stop the refresh interval before resetting flags — featureFlags.reset() clears
-            // the debouncer, so if the order were reversed a pending refresh could fire after reset.
-            this._remoteConfigLoader?.stop()
             this.featureFlags?.reset()
             this.conversations?.reset()
             this.logs?.reset()
@@ -3503,7 +3500,6 @@ export class PostHog implements PostHogInterface {
             return
         }
 
-        this._remoteConfigLoader?.stop()
         this._getBrowserClientAdapter().dispose()
         this.sessionRecording?.dispose()
 

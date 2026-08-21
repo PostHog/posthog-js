@@ -36,14 +36,6 @@ describe('shutdown()', () => {
         expect(retryQueueUnload).toHaveBeenCalledTimes(1)
     })
 
-    it('stops periodic remote config refreshes', async () => {
-        const remoteConfigStop = jest.spyOn(instance._remoteConfigLoader!, 'stop')
-
-        await instance.shutdown()
-
-        expect(remoteConfigStop).toHaveBeenCalledTimes(1)
-    })
-
     it('disposes session recording visibility tracking', async () => {
         const sessionRecordingDispose = jest.spyOn(instance.sessionRecording!, 'dispose')
 
