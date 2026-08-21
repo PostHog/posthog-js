@@ -1098,6 +1098,11 @@ describe('posthog-logs', () => {
                 expect((logs as any)._queue).toHaveLength(1)
             })
 
+            it('keeps records on a 408 so they retry later', async () => {
+                await flushWith(408)
+                expect((logs as any)._queue).toHaveLength(1)
+            })
+
             it('drops records on a 4xx client error', async () => {
                 await flushWith(400)
                 expect((logs as any)._queue).toHaveLength(0)

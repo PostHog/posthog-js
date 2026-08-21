@@ -760,4 +760,57 @@ describe('PostHog Core', () => {
       ])
     })
   })
+
+  describe('OTLP batch senders', () => {
+    // All three share one `_sendOtlpBatch`; the table pins them to the same
+    // classification so a wrapper can't reintroduce a per-signal retry policy.
+    const senders = {
+      logs: (client: PostHogCoreTestClient) => client._sendLogsBatch({ resourceLogs: [] }),
+      metrics: (client: PostHogCoreTestClient) => client._sendMetricsBatch({ resourceMetrics: [] }),
+      traces: (client: PostHogCoreTestClient) => client._sendTracesBatch({ resourceSpans: [] }),
+    }
+
+    const cases: [number, string][] = [
+      [408, 'retry-later'],
+      [429, 'retry-later'],
+      [500, 'retry-later'],
+      [503, 'retry-later'],
+      [413, 'too-large'],
+      [400, 'fatal'],
+      [401, 'fatal'],
+    ]
+
+    describe.each(Object.entries(senders))('%s', (_name, send) => {
+      it.each(cases)('classifies an exhausted %i as %s', async (status, kind) => {
+        ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+          fetchRetryCount: 0,
+          preloadFeatureFlags: false,
+        })
+        mocks.fetch.mockResolvedValue({
+          status,
+          text: async () => 'err',
+          json: async () => ({ status: 'err' }),
+        })
+
+        await expect(send(posthog)).resolves.toMatchObject({ kind })
+        expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      })
+
+      it('carries the HTTP error on a retry-later outcome', async () => {
+        ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+          fetchRetryCount: 0,
+          preloadFeatureFlags: false,
+        })
+        mocks.fetch.mockResolvedValue({
+          status: 503,
+          text: async () => 'err',
+          json: async () => ({ status: 'err' }),
+        })
+
+        await expect(send(posthog)).resolves.toMatchObject({
+          error: { name: 'PostHogFetchHttpError', status: 503 },
+        })
+      })
+    })
+  })
 })
