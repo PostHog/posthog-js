@@ -2377,14 +2377,20 @@ export class Replayer {
         .map((styleId) => this.styleMirror.getStyle(styleId))
         .filter((style) => style !== null) as CSSStyleSheet[];
       let adopted = false;
-      if (hasShadowRoot(targetHost)) {
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        (targetHost as HTMLElement).shadowRoot!.adoptedStyleSheets =
-          stylesToAdopt;
-        adopted = true;
-      } else if (targetHost.nodeName === '#document') {
-        (targetHost as Document).adoptedStyleSheets = stylesToAdopt;
-        adopted = true;
+      try {
+        if (hasShadowRoot(targetHost)) {
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          (targetHost as HTMLElement).shadowRoot!.adoptedStyleSheets =
+            stylesToAdopt;
+          adopted = true;
+        } else if (targetHost.nodeName === '#document') {
+          (targetHost as Document).adoptedStyleSheets = stylesToAdopt;
+          adopted = true;
+        }
+      } catch (e) {
+        // A constructed sheet can only be adopted by the document that built it,
+        // so a sheet held across a document swap is rejected by every engine.
+        // Keep whatever is already adopted rather than killing playback.
       }
       // remember hosts that can't adopt yet so applyMutation can finish the
       // adoption when it attaches the shadow root, independent of the
