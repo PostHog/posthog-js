@@ -656,18 +656,17 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     if (this._flagsResponsePromise) {
       // Queue rather than drop, so an identity-changing reload still reaches the server. Displaced
       // callers are carried over rather than settled against the in-flight request: that request
-      // was issued before their context changed, so it cannot reflect it.
-      // Known gap: the newest caller's options replace the queued ones wholesale, so a queued
-      // config fetch displaced by a plain reload loses config=true and onRemoteConfig never fires
-      // for that cycle. (sendAnonDistinctId only differs if an app passes it false explicitly;
-      // every internal caller passes true.) Fixing it means merging the options, not replacing.
+      // was issued before their context changed, so it cannot reflect it. Options are merged so
+      // the single queued request satisfies every caller behind it — one caller asking for the
+      // remote config or for $anon_distinct_id is enough for the re-issued request to carry it.
       this._logger.info('Feature flags are being loaded already, queuing reload.')
+      const pending = this._pendingFlagsRequest
       return new Promise((resolve, reject) => {
         this._pendingFlagsRequest = {
-          sendAnonDistinctId,
-          fetchConfig,
-          triggerOnRemoteConfig,
-          waiters: [...(this._pendingFlagsRequest?.waiters ?? []), { resolve, reject }],
+          sendAnonDistinctId: sendAnonDistinctId || !!pending?.sendAnonDistinctId,
+          fetchConfig: fetchConfig || !!pending?.fetchConfig,
+          triggerOnRemoteConfig: triggerOnRemoteConfig || !!pending?.triggerOnRemoteConfig,
+          waiters: [...(pending?.waiters ?? []), { resolve, reject }],
         }
       })
     }

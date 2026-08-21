@@ -1,4 +1,4 @@
-import { PostHogPersistedProperty, PostHogV2FlagsResponse } from '@/types'
+import { PostHogPersistedProperty, PostHogRemoteConfig, PostHogV2FlagsResponse } from '@/types'
 import { normalizeFlagsResponse } from '@/featureFlagUtils'
 import {
   parseBody,
@@ -2767,6 +2767,68 @@ describe('PostHog Feature Flags v4', () => {
       expect(await displacing).toBeUndefined()
       // and the flags loaded before it are kept
       expect(client.getFeatureFlags()).toEqual({ 'beta-ui': true })
+    })
+
+    it('keeps the config fetch when a plain reload displaces a queued config request', async () => {
+      // Exposes the protected flagsAsync to drive the config-piggyback request, and records
+      // onRemoteConfig so we can see whether the re-issued request still notifies
+      class TestClientTrackingRemoteConfig extends PostHogCoreTestClient {
+        public onRemoteConfigCalls: PostHogRemoteConfig[] = []
+
+        public configReload(): Promise<unknown> {
+          return this.flagsAsync({ sendAnonDistinctId: true, fetchConfig: true, triggerOnRemoteConfig: true })
+        }
+
+        protected onRemoteConfig(response: PostHogRemoteConfig): void {
+          this.onRemoteConfigCalls.push(response)
+        }
+      }
+
+      let releaseFirst!: () => void
+      const firstGate = new Promise<void>((r) => (releaseFirst = r))
+      let isFirst = true
+      const urls: string[] = []
+
+      const [, clientMocks] = createTestClient('TEST_API_KEY', { flushAt: 1 }, (m) => {
+        m.fetch.mockImplementation(async (url: string) => {
+          urls.push(url)
+          if (isFirst) {
+            isFirst = false
+            await firstGate
+          }
+          return {
+            status: 200,
+            text: () => Promise.resolve('ok'),
+            json: () => Promise.resolve({ featureFlags: { 'beta-ui': true }, sessionRecording: { endpoint: '/s/' } }),
+          }
+        })
+      })
+      const client = new TestClientTrackingRemoteConfig(clientMocks, 'TEST_API_KEY', {
+        disableCompression: true,
+        flushAt: 1,
+      })
+
+      void client.reloadFeatureFlagsAsync()
+      await waitForPromises()
+
+      // queues behind the in-flight request, then a plain reload displaces it
+      const queuedConfig = client.configReload()
+      await waitForPromises()
+      const displacing = client.reloadFeatureFlagsAsync()
+      await waitForPromises()
+
+      releaseFirst()
+      await queuedConfig
+      await displacing
+      await waitForPromises()
+
+      // the single re-issued request has to carry the displaced caller's config fetch too
+      expect(urls).toHaveLength(2)
+      expect(urls[0]).not.toContain('config=true')
+      expect(urls[1]).toContain('config=true')
+      expect(client.onRemoteConfigCalls).toHaveLength(1)
+
+      await client.shutdown()
     })
   })
 })
