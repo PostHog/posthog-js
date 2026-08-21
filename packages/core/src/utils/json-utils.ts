@@ -1,10 +1,11 @@
-const MAX_JSON_SAFE_VALUE_DEPTH = 20
-const MAX_JSON_SAFE_VALUE_ITEMS = 1_000
-const MAX_JSON_SAFE_VALUE_NODES = 10_000
-const CIRCULAR_VALUE = '[Circular]'
-const TRUNCATED_VALUE = '[Truncated]'
-const UNSERIALIZABLE_VALUE = '[Unserializable]'
-const FUNCTION_VALUE = '[Function]'
+/** Traversal budgets and markers, shared with the OTLP attribute encoder. */
+export const MAX_JSON_SAFE_VALUE_DEPTH = 20
+export const MAX_JSON_SAFE_VALUE_ITEMS = 1_000
+export const MAX_JSON_SAFE_VALUE_NODES = 10_000
+export const CIRCULAR_VALUE = '[Circular]'
+export const TRUNCATED_VALUE = '[Truncated]'
+export const UNSERIALIZABLE_VALUE = '[Unserializable]'
+export const FUNCTION_VALUE = '[Function]'
 
 const dateGetTime = Date.prototype.getTime
 const dateToISOString = Date.prototype.toISOString

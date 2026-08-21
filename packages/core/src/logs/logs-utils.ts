@@ -12,7 +12,16 @@ import type {
 import type { Logger } from '../types'
 import type { LogSdkContext, ResolvedPostHogLogsConfig } from './types'
 import { isArray, isBoolean, isNull, isNullish, isUndefined } from '../utils'
-import { sanitizeString } from '../utils/json-utils'
+import {
+  CIRCULAR_VALUE,
+  FUNCTION_VALUE,
+  MAX_JSON_SAFE_VALUE_DEPTH,
+  MAX_JSON_SAFE_VALUE_ITEMS,
+  MAX_JSON_SAFE_VALUE_NODES,
+  sanitizeString,
+  TRUNCATED_VALUE,
+  UNSERIALIZABLE_VALUE,
+} from '../utils/json-utils'
 
 // ============================================================================
 // Severity mapping
@@ -44,17 +53,6 @@ export function getOtlpSeverityNumber(level: LogSeverityLevel): number {
 // 2^63 — one past int64 max.
 const INT64_RANGE_LIMIT = 9223372036854775808
 
-// Matches `toJsonSafeValue`: depth bounds stack use, the counts stop a shared
-// object graph expanding into millions of key-values on the way to the wire.
-const MAX_DEPTH = 20
-const MAX_ITEMS = 1_000
-const MAX_NODES = 10_000
-
-const CIRCULAR_MARKER = '[Circular]'
-const TRUNCATED_MARKER = '[Truncated]'
-const UNSERIALIZABLE_MARKER = '[Unserializable]'
-const FUNCTION_MARKER = '[Function]'
-
 const propertyIsEnumerable = Object.prototype.propertyIsEnumerable
 
 interface EncodeState {
@@ -64,7 +62,7 @@ interface EncodeState {
 }
 
 function newState(): EncodeState {
-  return { ancestors: new WeakSet(), remainingNodes: MAX_NODES }
+  return { ancestors: new WeakSet(), remainingNodes: MAX_JSON_SAFE_VALUE_NODES }
 }
 
 export function toOtlpAnyValue(value: LogAttributeValue, logger?: Logger): OtlpAnyValue {
@@ -73,7 +71,7 @@ export function toOtlpAnyValue(value: LogAttributeValue, logger?: Logger): OtlpA
   } catch {
     // Runs inside `captureLog` and the metrics flush: an error escaping here
     // surfaces in the caller's own code.
-    return { stringValue: UNSERIALIZABLE_MARKER }
+    return { stringValue: UNSERIALIZABLE_VALUE }
   }
 }
 
@@ -92,7 +90,7 @@ function encodeAnyValue(
   depth: number
 ): OtlpAnyValue {
   if (state.remainingNodes <= 0) {
-    return { stringValue: TRUNCATED_MARKER }
+    return { stringValue: TRUNCATED_VALUE }
   }
   state.remainingNodes--
 
@@ -132,17 +130,17 @@ function encodeAnyValue(
   }
   // `String(value)` would put a function's source text on the wire.
   if (typeof value === 'function') {
-    return { stringValue: FUNCTION_MARKER }
+    return { stringValue: FUNCTION_VALUE }
   }
   if (typeof value === 'symbol') {
     return { stringValue: String(value) }
   }
   if (typeof value === 'object' && value !== null) {
     if (state.ancestors.has(value)) {
-      return { stringValue: CIRCULAR_MARKER }
+      return { stringValue: CIRCULAR_VALUE }
     }
-    if (depth >= MAX_DEPTH) {
-      return { stringValue: TRUNCATED_MARKER }
+    if (depth >= MAX_JSON_SAFE_VALUE_DEPTH) {
+      return { stringValue: TRUNCATED_VALUE }
     }
     if (value instanceof Date) {
       const time = value.getTime()
@@ -188,7 +186,7 @@ function encodeArrayValues(
   depth: number
 ): OtlpAnyValue[] {
   const result: OtlpAnyValue[] = []
-  const itemCount = Math.min(values.length, MAX_ITEMS)
+  const itemCount = Math.min(values.length, MAX_JSON_SAFE_VALUE_ITEMS)
   let index = 0
   for (; index < itemCount && state.remainingNodes > 0; index++) {
     try {
@@ -200,11 +198,11 @@ function encodeArrayValues(
       }
       result.push(encodeAnyValue(element as LogAttributeValue, logger, state, depth))
     } catch {
-      result.push({ stringValue: UNSERIALIZABLE_MARKER })
+      result.push({ stringValue: UNSERIALIZABLE_VALUE })
     }
   }
   if (values.length > index) {
-    result.push({ stringValue: TRUNCATED_MARKER })
+    result.push({ stringValue: TRUNCATED_VALUE })
   }
   return result
 }
@@ -222,7 +220,7 @@ function encodeKeyValueList(
     if (!propertyIsEnumerable.call(attrs, key)) {
       continue
     }
-    if (result.length >= MAX_ITEMS || state.remainingNodes <= 0) {
+    if (result.length >= MAX_JSON_SAFE_VALUE_ITEMS || state.remainingNodes <= 0) {
       // Reported rather than written into the attributes: a synthetic key would
       // land in the user's own namespace and could collide with a real one.
       logger?.debug('Attributes truncated: the value exceeds the OTLP encoder budget')
@@ -236,7 +234,7 @@ function encodeKeyValueList(
       result.push({ key: sanitizeString(key), value: encodeAnyValue(value, logger, state, depth) })
     } catch {
       // A getter that throws costs its own key, not the whole record.
-      result.push({ key: sanitizeString(key), value: { stringValue: UNSERIALIZABLE_MARKER } })
+      result.push({ key: sanitizeString(key), value: { stringValue: UNSERIALIZABLE_VALUE } })
     }
   }
   return result
@@ -267,6 +265,17 @@ function timestampToUnixNano(): string {
  *
  * User-provided `options.attributes` always wins on conflicts.
  */
+// `body` is only typed as a string. An untyped caller — or a `beforeSend` that
+// rewrites it — can pass anything, and `String()` throws on a value whose
+// `toString` does, or on a null-prototype object.
+function encodeBody(body: string): string {
+  try {
+    return sanitizeString(String(body))
+  } catch {
+    return UNSERIALIZABLE_VALUE
+  }
+}
+
 export function buildOtlpLogRecord(
   options: CaptureLogOptions,
   sdkContext: LogSdkContext,
@@ -322,7 +331,7 @@ export function buildOtlpLogRecord(
       try {
         value = userAttributes[key]
       } catch {
-        value = UNSERIALIZABLE_MARKER
+        value = UNSERIALIZABLE_VALUE
       }
       // defineProperty, not assignment: `attributes['__proto__'] = v` hits the
       // prototype setter and the attribute vanishes.
@@ -335,9 +344,7 @@ export function buildOtlpLogRecord(
     observedTimeUnixNano: now,
     severityNumber,
     severityText,
-    // `body` is only typed as a string: an untyped caller passing a number
-    // emits a non-string stringValue, which the server refuses.
-    body: { stringValue: sanitizeString(String(options.body)) },
+    body: { stringValue: encodeBody(options.body) },
     attributes: toOtlpKeyValueList(mergedAttributes, logger),
   }
 

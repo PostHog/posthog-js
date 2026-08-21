@@ -402,6 +402,21 @@ describe('logs-utils', () => {
       expect(record.body).toEqual({ stringValue: '12345' })
     })
 
+    // `String()` throws on these, and buildOtlpLogRecord is called straight from
+    // captureLog — beforeSend can also hand back any body.
+    it('marks a body that cannot be coerced to a string', () => {
+      const throwing = {
+        toString() {
+          throw new Error('boom')
+        },
+      } as unknown as string
+      expect(() => buildOtlpLogRecord({ body: throwing }, {})).not.toThrow()
+      expect(buildOtlpLogRecord({ body: throwing }, {}).body).toEqual({ stringValue: '[Unserializable]' })
+      expect(buildOtlpLogRecord({ body: Object.create(null) }, {}).body).toEqual({
+        stringValue: '[Unserializable]',
+      })
+    })
+
     it('keeps the record when the attributes object itself cannot be read', () => {
       const revocable = Proxy.revocable({ a: 1 }, {})
       revocable.revoke()
