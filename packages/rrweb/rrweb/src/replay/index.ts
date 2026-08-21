@@ -2067,6 +2067,8 @@ export class Replayer {
                     mutation.attributes as attributes,
                   );
                   if (newNode && parentNode) {
+                    // buildNodeWithSN already detached `target` when it rebuilt
+                    // the node; removeChild would throw into the catch below.
                     if (target.parentNode === parentNode) {
                       parentNode.removeChild(target as Node & RRNode);
                     }

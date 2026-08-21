@@ -150,10 +150,45 @@ describe('rebuild', function () {
       expect(oldChild?.parentNode).toBe(null);
     });
 
+    it('keeps the old node when the replacement cannot be built', function () {
+      const parent = buildNodeWithSN(
+        {
+          id: 3,
+          tagName: 'div',
+          type: NodeType.Element,
+          attributes: {},
+          childNodes: [
+            {
+              id: 4,
+              tagName: 'span',
+              type: NodeType.Element,
+              attributes: {},
+              childNodes: [],
+            },
+          ],
+        },
+        { doc: document, mirror, hackCss: false, cache },
+      ) as HTMLDivElement;
+      const oldChild = mirror.getNode(4);
+
+      const replacement = buildNodeWithSN(
+        {
+          id: 4,
+          type: NodeType.CDATA,
+          textContent: '   ',
+        },
+        { doc: document, mirror, hackCss: false, cache },
+      );
+
+      expect(replacement).toBe(null);
+      expect(mirror.getNode(4)).toBe(oldChild);
+      expect(parent.firstChild).toBe(oldChild);
+    });
+
     it('reuses the existing node when the meta is unchanged', function () {
       buildNodeWithSN(
         {
-          id: 3,
+          id: 5,
           tagName: 'p',
           type: NodeType.Element,
           attributes: { class: 'a' },
@@ -161,11 +196,11 @@ describe('rebuild', function () {
         },
         { doc: document, mirror, hackCss: false, cache },
       );
-      const first = mirror.getNode(3);
+      const first = mirror.getNode(5);
 
       const second = buildNodeWithSN(
         {
-          id: 3,
+          id: 5,
           tagName: 'p',
           type: NodeType.Element,
           attributes: { class: 'a' },

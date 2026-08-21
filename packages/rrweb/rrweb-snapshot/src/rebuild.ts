@@ -466,6 +466,7 @@ export function buildNodeWithSN(
    * This situation (duplicated nodes) can happen when recorder has some unfixed bugs and the same node is recorded twice. Or something goes wrong when saving or transferring event data.
    * Duplicated node creation may cause unexpected errors in replayer. This check tries best effort to prevent the errors.
    */
+  let staleNode: Node | null = null;
   if (mirror.has(n.id)) {
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const nodeInMirror = mirror.getNode(n.id)!;
@@ -473,15 +474,15 @@ export function buildNodeWithSN(
     const meta = mirror.getMeta(nodeInMirror)!;
     // For safety concern, check if the node in mirror is the same as the node we are trying to build
     if (isNodeMetaEqual(meta, n)) return mirror.getNode(n.id);
-    // The meta differs, so we build a replacement below and re-point the id at
-    // it. Detach the old node first, otherwise it stays in the document with no
-    // mirror id, which no later remove can reach, and renders as a duplicate.
-    nodeInMirror.parentNode?.removeChild(nodeInMirror);
+    staleNode = nodeInMirror;
   }
   let node = buildNode(n, { doc, hackCss, cache });
   if (!node) {
     return null;
   }
+  // The meta differs, so re-point the id at the replacement without leaving
+  // the stale node in the document where no later mirror-based remove can reach it.
+  staleNode?.parentNode?.removeChild(staleNode);
   // If the snapshot is created by checkout, the rootId doesn't change but the iframe's document can be changed automatically when a new iframe element is created.
   if (n.rootId && (mirror.getNode(n.rootId) as Document) !== doc) {
     mirror.replace(n.rootId, doc);
