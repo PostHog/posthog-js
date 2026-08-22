@@ -596,8 +596,8 @@ describe('applyPostHogAndroidGradlePlugin', () => {
 
   it('configures native symbol tasks to prefer a project-local CLI', () => {
     const result = applyPostHogAndroidGradlePlugin(appBuildGradle)
-    expect(result).toContain('new File(rootDir.parentFile, "node_modules/.bin")')
-    expect(result).toContain('["posthog-cli", "posthog-cli.cmd"]')
+    expect(result).toContain('new File(rootDir.parentFile, "node_modules/.bin/posthog-cli")')
+    expect(result).toContain('!System.getProperty("os.name").toLowerCase().contains("windows")')
     expect(result).toContain('tasks.withType(com.posthog.android.PostHogCliExecTask).configureEach')
     expect(result).toContain('postHogExecutable.convention(postHogLocalCli.absolutePath)')
   })

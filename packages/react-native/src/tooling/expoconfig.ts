@@ -112,12 +112,11 @@ export function addPostHogAndroidGradlePluginClasspath(projectBuildGradle: strin
 }
 
 const POSTHOG_ANDROID_LOCAL_CLI_CONFIG = `// Prefer a project-local CLI so native symbol uploads work on clean CI machines.
-def postHogLocalCliDirectory = new File(rootDir.parentFile, "node_modules/.bin")
-def postHogLocalCli = ["posthog-cli", "posthog-cli.cmd"]
-    .collect { new File(postHogLocalCliDirectory, it) }
-    .find { it.isFile() }
+// Keep the Gradle plugin's existing resolution on Windows, where npm's launcher is a .cmd file.
+def postHogLocalCli = new File(rootDir.parentFile, "node_modules/.bin/posthog-cli")
+def postHogCanUseLocalCli = !System.getProperty("os.name").toLowerCase().contains("windows")
 
-if (postHogLocalCli != null) {
+if (postHogCanUseLocalCli && postHogLocalCli.isFile()) {
     tasks.withType(com.posthog.android.PostHogCliExecTask).configureEach {
         // A user-provided postHogExecutable still takes precedence over this convention.
         postHogExecutable.convention(postHogLocalCli.absolutePath)
@@ -147,7 +146,7 @@ export function applyPostHogAndroidGradlePlugin(appBuildGradle: string): string 
     }
   }
 
-  if (!contents.includes('postHogLocalCliDirectory')) {
+  if (!contents.includes('postHogCanUseLocalCli')) {
     contents = contents.replace(
       /^(apply plugin: ["']com\.posthog\.android["'].*)$/m,
       `$1\n\n${POSTHOG_ANDROID_LOCAL_CLI_CONFIG}`

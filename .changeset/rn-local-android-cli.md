@@ -2,4 +2,4 @@
 'posthog-react-native': patch
 ---
 
-Fix Android native symbol uploads in Expo projects to use a project-local `@posthog/cli` installation when available.
+Fix Android native symbol uploads in Expo projects on macOS and Linux to use a project-local `@posthog/cli` installation when available.
