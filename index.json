@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/3593": {
+    "key": "PostHog/posthog-js/issue/3593",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3593",
+    "url": "https://github.com/PostHog/posthog-js/issues/3593",
+    "conclusion": "Valid experiments feature request, but it requires a deliberately designed backend metadata contract rather than an SDK-only getter.",
+    "labels": [
+      "enhancement",
+      "team/experiments",
+      "feature/experiments",
+      "node"
+    ],
+    "closed": false,
+    "updatedAt": "2026-08-22T16:27:12.260Z"
+  },
   "PostHog/posthog-js/issue/3588": {
     "key": "PostHog/posthog-js/issue/3588",
     "repo": "PostHog/posthog-js",
