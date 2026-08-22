@@ -249,17 +249,17 @@ export interface PerformanceCaptureConfig {
     web_vitals_delayed_flush_ms?: number
 
     /**
-     * Whether to include attribution data in web vitals metrics.
-     * Attribution data includes additional debugging information like
-     * which elements caused layout shifts (CLS), timing breakdowns, etc.
+     * Which web vitals metrics include attribution data. Attribution names the
+     * cause of a metric, such as the slow interaction target for INP or the load-phase
+     * breakdown for LCP, which is what makes a slow number diagnosable.
      *
-     * Disabling this uses a lighter build of the web-vitals library
-     * which may help reduce memory usage in SPAs where elements
-     * causing layout shifts are removed during navigation.
+     * Pass `true` to attribute all metrics, `false` for none, or an array to name them.
+     * The default attributes INP and LCP only. CLS is excluded by default because its
+     * attribution holds detached DOM nodes and can leak memory in single-page apps.
      *
-     * @default false
+     * @default ['INP', 'LCP']
      */
-    web_vitals_attribution?: boolean
+    web_vitals_attribution?: boolean | SupportedWebVitalsMetrics[]
 
     /**
      * Scope web vitals metrics to the browser's Soft Navigation entries, so that
