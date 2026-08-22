@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 2097](https://github.com/PostHog/posthog-js/issues/2097) | Core support for synchronously preloaded remote config exists, but @posthog/next does not provide a first-class SSR fetch/cache/bootstrap integration. | enhancement, feature, feature/autocapture, feature/flags, frameworks/next-js, team/feature-flags, web |  | no | 2026-08-22T15:51:11.859Z |
 | PostHog/posthog-js | [issue 1968](https://github.com/PostHog/posthog-js/issues/1968) | Already fixed in the current browser session-replay implementation. | feature/replay, web, team/client-libraries |  | no | 2026-08-22T15:49:57.162Z |
 | PostHog/posthog-js | [issue 1683](https://github.com/PostHog/posthog-js/issues/1683) | Already fixed in posthog-js 1.415.4 via PR #4494. | web |  | no | 2026-08-22T15:45:06.779Z |
 | PostHog/posthog-js | [issue 1101](https://github.com/PostHog/posthog-js/issues/1101) | Confirmed replay feature gap: rrweb intentionally treats only the browser top-level window as the emitting recorder when cross-origin iframe recording is enabled. | enhancement, feature/replay, web, team/client-libraries |  | no | 2026-08-22T15:26:37.382Z |
