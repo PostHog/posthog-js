@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 1683](https://github.com/PostHog/posthog-js/issues/1683) | Already fixed in posthog-js 1.415.4 via PR #4494. | web |  | no | 2026-08-22T15:45:06.779Z |
 | PostHog/posthog-js | [issue 1101](https://github.com/PostHog/posthog-js/issues/1101) | Confirmed replay feature gap: rrweb intentionally treats only the browser top-level window as the emitting recorder when cross-origin iframe recording is enabled. | enhancement, feature/replay, web, team/client-libraries |  | no | 2026-08-22T15:26:37.382Z |
 | PostHog/posthog-js | [issue 1100](https://github.com/PostHog/posthog-js/issues/1100) | This appears to be a Canvas replay performance-warning question, not evidence of broken replay. A blanket SDK-side change would be unsafe without a current reproduction. | feature/replay, web, question |  | no | 2026-08-22T15:25:33.389Z |
 | PostHog/posthog-js | [issue 1089](https://github.com/PostHog/posthog-js/issues/1089) | Valid session-replay feature request, but changing the cap affects session rotation and recording volume. | feature, feature/replay, web, team/client-libraries |  | no | 2026-08-22T15:24:30.585Z |
