@@ -1,5 +1,29 @@
 # posthog-node
 
+## 5.50.0
+
+### Minor Changes
+
+- [#4484](https://github.com/PostHog/posthog-js/pull/4484) [`557140e`](https://github.com/PostHog/posthog-js/commit/557140e4bb344eb22b5bbd1d324487b3fcef895e) Thanks [@posthog](https://github.com/apps/posthog)! - `FeatureFlagEvaluations.isEnabled()` now accepts an optional `defaultValue` option, returned whenever the flag has no value (missing key, not loaded, or a failed request). A flag with a present value — including `false` and variant strings — always wins over `defaultValue`. Purely additive; omitting the option preserves the existing `false`-on-miss behavior.
+  (2026-08-21)
+
+## 5.49.4
+
+### Patch Changes
+
+- [#4569](https://github.com/PostHog/posthog-js/pull/4569) [`00d22ea`](https://github.com/PostHog/posthog-js/commit/00d22ea71400190a0154d1a961b3f52652c50a1e) Thanks [@v11t](https://github.com/v11t)! - fix getFeatureFlagResult returning null variant instead of undefined when remotely evaluated
+  (2026-08-21)
+
+## 5.49.3
+
+### Patch Changes
+
+- [#4583](https://github.com/PostHog/posthog-js/pull/4583) [`6322f09`](https://github.com/PostHog/posthog-js/commit/6322f09922270e9d1562bacf0e602e76d238d395) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix logs and metrics being silently dropped when an attribute holds a very large integer, a function, a symbol, a sparse array, or a truncated emoji.
+  Cap log and metric attributes at 20 levels of nesting, 1,000 entries per object and 10,000 values in total, marking anything beyond as `[Truncated]`.
+  Type `OtlpAnyValue.intValue` as `string | number` — code reading that field must handle both. (2026-08-21)
+- Updated dependencies [[`6322f09`](https://github.com/PostHog/posthog-js/commit/6322f09922270e9d1562bacf0e602e76d238d395)]:
+  - @posthog/core@1.48.7
+
 ## 5.49.2
 
 ### Patch Changes

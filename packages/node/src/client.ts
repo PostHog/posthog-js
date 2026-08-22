@@ -1347,7 +1347,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
           result = {
             key,
             enabled: flagDetail.enabled,
-            variant: flagDetail.variant,
+            // The flags API serializes missing variants as null
+            variant: flagDetail.variant ?? undefined,
             payload: parsedPayload,
           }
         }

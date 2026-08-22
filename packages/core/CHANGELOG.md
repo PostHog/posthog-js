@@ -1,5 +1,22 @@
 # @posthog/core
 
+## 1.48.8
+
+### Patch Changes
+
+- [#4581](https://github.com/PostHog/posthog-js/pull/4581) [`556d235`](https://github.com/PostHog/posthog-js/commit/556d23503a0409b455b4e77334624db583effbd0) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix `reloadFeatureFlags` and `reloadFeatureFlagsAsync` returning flags evaluated before the caller's most recent identity or person-property change when several reloads overlap, and stop overlapping reloads from skipping the remote config refresh
+  (2026-08-21)
+
+## 1.48.7
+
+### Patch Changes
+
+- [#4583](https://github.com/PostHog/posthog-js/pull/4583) [`6322f09`](https://github.com/PostHog/posthog-js/commit/6322f09922270e9d1562bacf0e602e76d238d395) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix logs and metrics being silently dropped when an attribute holds a very large integer, a function, a symbol, a sparse array, or a truncated emoji.
+  Cap log and metric attributes at 20 levels of nesting, 1,000 entries per object and 10,000 values in total, marking anything beyond as `[Truncated]`.
+  Type `OtlpAnyValue.intValue` as `string | number` — code reading that field must handle both. (2026-08-21)
+- Updated dependencies [[`6322f09`](https://github.com/PostHog/posthog-js/commit/6322f09922270e9d1562bacf0e602e76d238d395)]:
+  - @posthog/types@1.405.1
+
 ## 1.48.6
 
 ### Patch Changes

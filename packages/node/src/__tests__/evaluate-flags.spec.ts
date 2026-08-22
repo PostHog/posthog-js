@@ -131,6 +131,21 @@ describe('evaluateFlags', () => {
       ])
     })
 
+    it('isEnabled resolves a missing flag to the caller-supplied defaultValue', async () => {
+      const flags = await posthog.evaluateFlags('user-1')
+
+      expect(flags.isEnabled('missing-flag')).toBe(false)
+      expect(flags.isEnabled('missing-flag', { defaultValue: false })).toBe(false)
+      expect(flags.isEnabled('missing-flag', { defaultValue: true })).toBe(true)
+    })
+
+    it('isEnabled prefers a present flag value over defaultValue, including a falsy value', async () => {
+      const flags = await posthog.evaluateFlags('user-1')
+
+      expect(flags.isEnabled('disabled-flag', { defaultValue: true })).toBe(false)
+      expect(flags.isEnabled('variant-flag', { defaultValue: false })).toBe(true)
+    })
+
     it('getFlag returns variant/true/false/undefined and carries full metadata', async () => {
       const flags = await posthog.evaluateFlags('user-1')
 
