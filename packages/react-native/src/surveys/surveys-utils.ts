@@ -121,12 +121,85 @@ export const defaultDescriptionOpacity = 0.8
 export const defaultRatingLabelOpacity = 0.7
 
 // textColor and inputTextColor are optional overrides (auto-calculated if not provided)
+/**
+ * The distinct kinds of text a survey renders, each at its own base size. They
+ * are separate because one ceiling cannot serve all of them: `question` is an
+ * 18pt headline that can wrap freely, while `ratingNumber` sits inside a
+ * fixed-width button and has nowhere to grow.
+ */
+export type SurveyTextRole =
+  /** The question headline. */
+  | 'question'
+  /** Body copy under a question, an intro screen, or the thank-you screen. */
+  | 'description'
+  /** The intro-screen and thank-you-screen headers. */
+  | 'header'
+  /** A choice label in a single- or multiple-choice question. */
+  | 'choice'
+  /** Text the user types - the open-text answer and the open-choice field. */
+  | 'input'
+  /** The submit / next button label. */
+  | 'button'
+  /** The lower- and upper-bound labels under a rating scale. */
+  | 'ratingLabel'
+  /** The numeral inside a rating button, which cannot grow past the button. */
+  | 'ratingNumber'
+  /** The validation hint under an open-text answer. */
+  | 'validationHint'
+
 export type SurveyAppearanceTheme = Omit<
   Required<SurveyAppearance>,
   'widgetSelector' | 'widgetType' | 'widgetColor' | 'widgetLabel' | 'shuffleQuestions' | 'textColor' | 'inputTextColor'
 > & {
   textColor?: string
   inputTextColor?: string
+  /**
+   * Caps how far survey text may grow under the OS text-size setting, as a
+   * multiple of its base size - React Native's `maxFontSizeMultiplier`, applied
+   * to every `Text` and `TextInput` the survey renders.
+   *
+   * Pass a number to cap every role at once, or an object to cap them
+   * separately: a survey headline can usually take more scaling than a numeral
+   * inside a rating button, and a host app that already caps its own text by
+   * role will want to match those ceilings here.
+   *
+   * ```ts
+   * maxFontSizeMultiplier: 1.6
+   * // or
+   * maxFontSizeMultiplier: { question: 1.5, description: 1.8, ratingNumber: 1.2 }
+   * ```
+   *
+   * Roles left out of the object are uncapped, as they are today.
+   *
+   * Leave it unset (the default) and survey text scales without a ceiling. That
+   * is what the OS asks for, but not always what a fixed-size survey card can
+   * hold - at the largest accessibility sizes an unbounded 18pt headline renders
+   * roughly one word per line.
+   *
+   * React Native only inherits this prop through nested `Text`, so a host app
+   * cannot apply it from the outside - it has to come in here.
+   *
+   * @default undefined (no ceiling)
+   */
+  maxFontSizeMultiplier?: number | Partial<Record<SurveyTextRole, number>>
+}
+
+/**
+ * The ceiling for one role, from either form of `maxFontSizeMultiplier`.
+ *
+ * Returns `undefined` when nothing is configured for that role, which is also
+ * React Native's "no ceiling" - so an unset appearance renders exactly as it
+ * did before this option existed.
+ */
+export function getMaxFontSizeMultiplier(
+  appearance: Pick<SurveyAppearanceTheme, 'maxFontSizeMultiplier'>,
+  role: SurveyTextRole
+): number | undefined {
+  const configured = appearance.maxFontSizeMultiplier
+  if (typeof configured === 'number') {
+    return configured
+  }
+  return configured?.[role]
 }
 export const defaultSurveyAppearance: SurveyAppearanceTheme = {
   backgroundColor: defaultBackgroundColor,

@@ -5,6 +5,7 @@ import { createSafeStyleSheet } from '../safeStyleSheet'
 import {
   defaultDescriptionOpacity,
   getContrastingTextColor,
+  getMaxFontSizeMultiplier,
   shouldRenderDescription,
   SurveyAppearanceTheme,
 } from '../surveys-utils'
@@ -33,9 +34,19 @@ export function ConfirmationMessage({
   return (
     <View style={styleOverrides}>
       <View style={styles.thankYouMessageContainer}>
-        <Text style={[styles.thankYouMessageHeader, { color: textColor }]}>{header}</Text>
+        <Text
+          maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'header')}
+          style={[styles.thankYouMessageHeader, { color: textColor }]}
+        >
+          {header}
+        </Text>
         {shouldRenderDescription(description, contentType) && (
-          <Text style={{ color: textColor, opacity: defaultDescriptionOpacity }}>{description}</Text>
+          <Text
+            maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'description')}
+            style={{ color: textColor, opacity: defaultDescriptionOpacity }}
+          >
+            {description}
+          </Text>
         )}
       </View>
       {isModal && (

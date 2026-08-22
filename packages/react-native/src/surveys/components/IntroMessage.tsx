@@ -5,6 +5,7 @@ import { createSafeStyleSheet } from '../safeStyleSheet'
 import {
   defaultDescriptionOpacity,
   getContrastingTextColor,
+  getMaxFontSizeMultiplier,
   shouldRenderDescription,
   SurveyAppearanceTheme,
 } from '../surveys-utils'
@@ -29,9 +30,21 @@ export function IntroMessage({
   return (
     <View>
       <View style={styles.introMessageContainer}>
-        {header ? <Text style={[styles.introMessageHeader, { color: textColor }]}>{header}</Text> : null}
+        {header ? (
+          <Text
+            maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'header')}
+            style={[styles.introMessageHeader, { color: textColor }]}
+          >
+            {header}
+          </Text>
+        ) : null}
         {shouldRenderDescription(description, contentType) && (
-          <Text style={{ color: textColor, opacity: defaultDescriptionOpacity }}>{description}</Text>
+          <Text
+            maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'description')}
+            style={{ color: textColor, opacity: defaultDescriptionOpacity }}
+          >
+            {description}
+          </Text>
         )}
       </View>
       <BottomSection

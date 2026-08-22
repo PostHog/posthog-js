@@ -23,6 +23,7 @@ jest.mock('react-native', () => {
     delete domProps.placeholderTextColor
     delete domProps.onChangeText
     delete domProps.underlineColorAndroid
+    delete domProps.maxFontSizeMultiplier
     return domProps
   }
   const Box = RealReact.forwardRef(({ children, testID, ...rest }: any, ref: any) =>
