@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 1089](https://github.com/PostHog/posthog-js/issues/1089) | Valid session-replay feature request, but changing the cap affects session rotation and recording volume. | feature, feature/replay, web, team/client-libraries |  | no | 2026-08-22T15:24:30.585Z |
 | PostHog/posthog-js | [issue 4599](https://github.com/PostHog/posthog-js/issues/4599) | Confirmed integration bug: the Expo React Native integration wires an external Android Gradle plugin whose mapping-upload task does not inherit the SDK's project-local CLI resolution. | react-native, Android, feature/error-tracking, team/client-libraries |  | no | 2026-08-22T14:07:48.899Z |
 | PostHog/posthog-js | [issue 4596](https://github.com/PostHog/posthog-js/issues/4596) | Confirmed regression in the Rollup plugin’s post-1.4.8 in-memory chunk-ID flow when a downstream minifier removes the injected comment. | feature/error-tracking, team/error-tracking |  | no | 2026-08-21T12:31:43.763Z |
 | PostHog/posthog-js | [issue 4595](https://github.com/PostHog/posthog-js/issues/4595) | Confirmed feature gap: React Native supports legacy conditional-recording fields but does not evaluate the v2 trigger-group configuration. | feature, feature/replay, feature/mobile, react-native, team/client-libraries |  | no | 2026-08-21T10:13:21.946Z |
