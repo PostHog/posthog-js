@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 3582](https://github.com/PostHog/posthog-js/issues/3582) | Survey position support is already released; font-family customization remains an unscoped React Native surveys enhancement. | enhancement, feature/surveys, feature/mobile, react-native |  | no | 2026-08-22T16:23:55.230Z |
 | PostHog/posthog-js | [issue 3578](https://github.com/PostHog/posthog-js/issues/3578) | Already fixed and released in posthog-js 1.418.0. | feature/product-analytics, web, team/client-libraries |  | no | 2026-08-22T16:23:10.995Z |
 | PostHog/posthog-js | [issue 3577](https://github.com/PostHog/posthog-js/issues/3577) | Valid feature request for configurable survey option-list height; existing labels are appropriate. | enhancement, feature/surveys, web |  | no | 2026-08-22T16:22:30.277Z |
 | PostHog/posthog-js | [issue 3576](https://github.com/PostHog/posthog-js/issues/3576) | Already fixed and released in posthog-js@1.379.1. | feature/replay, web, team/client-libraries |  | no | 2026-08-22T16:21:50.149Z |
