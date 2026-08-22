@@ -288,7 +288,7 @@ describe('buildDsymUploadShellScript', () => {
     const script = buildDsymUploadShellScript()
     expect(script).toContain('xcrun dwarfdump --uuid "$POSTHOG_MAIN_DWARF"')
     expect(script).toContain('xcrun dwarfdump --uuid "$POSTHOG_APP_EXECUTABLE"')
-    expect(script).toContain('POSTHOG_DSYM_MAX_ATTEMPTS=10')
+    expect(script).toContain('POSTHOG_DSYM_MAX_ATTEMPTS=60')
   })
 
   it('passes Expo source Info.plist versions to posthog-ios', () => {
@@ -340,6 +340,8 @@ describe('buildDsymUploadShellScript', () => {
           POSTHOG_PLIST_BUDDY: plistBuddy,
           MARKETING_VERSION: '1.0',
           CURRENT_PROJECT_VERSION: '1',
+          CONFIGURATION: 'Release-Staging',
+          DEBUG_INFORMATION_FORMAT: 'dwarf-with-dsym',
           DWARF_DSYM_FOLDER_PATH: dwarfFolder,
           DWARF_DSYM_FILE_NAME: dwarfFileName,
           EXECUTABLE_NAME: executableName,
@@ -389,6 +391,7 @@ describe('buildDsymUploadShellScript', () => {
           PODS_ROOT: podsRoot,
           BUILD_DIR: path.join(tempDir, 'Build', 'Products'),
           CONFIGURATION: 'Release',
+          DEBUG_INFORMATION_FORMAT: 'dwarf-with-dsym',
           INFOPLIST_FILE: '',
           DWARF_DSYM_FOLDER_PATH: dwarfFolder,
           DWARF_DSYM_FILE_NAME: dwarfFileName,
@@ -399,8 +402,8 @@ describe('buildDsymUploadShellScript', () => {
         },
       })
 
-      expect(result.status).toBe(1)
-      expect(result.stdout).toContain('error: Main app dSYM was not ready')
+      expect(result.status).toBe(0)
+      expect(result.stdout).toContain('warning: Main app dSYM was not ready')
       expect(fs.existsSync(uploadMarker)).toBe(false)
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true })
