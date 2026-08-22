@@ -56,6 +56,20 @@
         "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/32584756230"
       },
       "attempts": 0
+    },
+    {
+      "id": "issue-3980-auto-none-no-comment-no-close-1787416056957",
+      "kind": "issue",
+      "number": 3980,
+      "mode": "auto",
+      "commandMention": "@posthog-watcher",
+      "enqueuedAt": "2026-08-22T16:27:36.957Z",
+      "source": {
+        "eventName": "issues",
+        "runId": 32584753675,
+        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/32584753675"
+      },
+      "attempts": 0
     }
   ]
 }
