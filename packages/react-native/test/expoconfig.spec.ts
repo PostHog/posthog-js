@@ -348,6 +348,50 @@ describe('buildDsymUploadShellScript', () => {
     }
   })
 
+  it('does not upload when the main app dSYM stays invalid', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-dsym-invalid-'))
+    const fakeBin = path.join(tempDir, 'bin')
+    const podsRoot = path.join(tempDir, 'Pods')
+    const dwarfFolder = path.join(tempDir, 'dSYMs')
+    const dwarfFileName = 'ExampleApp.app.dSYM'
+    const executableName = 'ExampleApp'
+    const dwarfFile = path.join(dwarfFolder, dwarfFileName, 'Contents', 'Resources', 'DWARF', executableName)
+    const uploadScript = path.join(podsRoot, 'PostHog', 'build-tools', 'upload-symbols.sh')
+    const uploadMarker = path.join(tempDir, 'upload-ran')
+
+    try {
+      fs.mkdirSync(fakeBin, { recursive: true })
+      fs.mkdirSync(path.dirname(dwarfFile), { recursive: true })
+      fs.mkdirSync(path.dirname(uploadScript), { recursive: true })
+      fs.writeFileSync(dwarfFile, 'invalid dwarf')
+      fs.writeFileSync(path.join(fakeBin, 'xcrun'), '#!/bin/sh\nexit 1\n', { mode: 0o755 })
+      fs.writeFileSync(path.join(fakeBin, 'sleep'), '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+      fs.writeFileSync(uploadScript, '#!/bin/sh\ntouch "$TEST_UPLOAD_MARKER"\n')
+
+      const result = spawnSync('/bin/sh', ['-c', buildDsymUploadShellScript()], {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PATH: `${fakeBin}:${process.env.PATH}`,
+          PODS_ROOT: podsRoot,
+          BUILD_DIR: path.join(tempDir, 'Build', 'Products'),
+          CONFIGURATION: 'Release',
+          INFOPLIST_FILE: '',
+          DWARF_DSYM_FOLDER_PATH: dwarfFolder,
+          DWARF_DSYM_FILE_NAME: dwarfFileName,
+          EXECUTABLE_NAME: executableName,
+          TEST_UPLOAD_MARKER: uploadMarker,
+        },
+      })
+
+      expect(result.status).toBe(1)
+      expect(result.stdout).toContain('error: Main app dSYM was not ready')
+      expect(fs.existsSync(uploadMarker)).toBe(false)
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it('does not set POSTHOG_INCLUDE_SOURCE by default', () => {
     expect(buildDsymUploadShellScript()).not.toContain('POSTHOG_INCLUDE_SOURCE')
     expect(buildDsymUploadShellScript(false)).not.toContain('POSTHOG_INCLUDE_SOURCE')

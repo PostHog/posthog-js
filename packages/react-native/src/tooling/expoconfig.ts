@@ -318,7 +318,8 @@ function buildDsymUploadShellScriptInternal(
       '    POSTHOG_DSYM_ATTEMPT=$((POSTHOG_DSYM_ATTEMPT + 1))',
       '  done',
       '  if [ "$POSTHOG_DSYM_READY" -ne 1 ]; then',
-      '    echo "warning: Main app dSYM was not ready after ${POSTHOG_DSYM_MAX_ATTEMPTS} attempts: $POSTHOG_MAIN_DWARF"',
+      '    echo "error: Main app dSYM was not ready after ${POSTHOG_DSYM_MAX_ATTEMPTS} attempts: $POSTHOG_MAIN_DWARF"',
+      '    exit 1',
       '  fi',
       'fi',
       ''
