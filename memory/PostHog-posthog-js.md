@@ -2,22 +2,7 @@
 
 ...<older entries truncated>
 
-ained through build and validation, then excluded only from the npm tarball rather than disabled globally.
-- Fix assessment: The requested behavior is isolated to npm package contents. It does not require changing runtime code or disabling source-map generation used by existing build checks.
-
-## 2026-08-19T13:55:13.093Z
-- Item: issue #4566 — PostHogErrorBoundary drops componentStack from the captured exception event
-- Conclusion: Confirmed @posthog/react bug: React's component stack is available at both React error-capture call sites but is not included in the captured exception properties.
-- Labels: feature/error-tracking, team/client-libraries
-- URL: https://github.com/PostHog/posthog-js/issues/4566
-- Relevant files: `packages/react/src/components/PostHogErrorBoundary.tsx`, `packages/react/src/components/__tests__/PostHogErrorBoundary.test.tsx`, `packages/react/src/helpers/error-helpers.ts`, `packages/browser/src/posthog-core.ts`, `packages/types/src/posthog.ts`, `packages/core/src/error-tracking/error-properties-builder.ts`
-- Findings: `PostHogErrorBoundary.componentDidCatch(error, errorInfo)` calls `additionalProperties(error)` and `client.captureException(error, currentProperties)`, then stores `errorInfo.componentStack` solely in component state for the fallback.; `setupReactErrorHandler` receives `(error, errorInfo)` but calls `client.captureException(error)` before passing `errorInfo` only to its optional callback.; The public `captureException(error, additionalProperties?)` API accepts arbitrary additional event properties, and the browser implementation merges those properties into the generated exception payload before sending it. This permits a React-specific component-stack property without modifying the core exception builder.; Current boundary tests cover capture invocation, caller-provided additional properties, and normal Error stacktrace generation, but do not assert that React `componentStack` is sent. No tests were found for `setupReactErrorHandler`.
-- Fix assessment: The missing data is explicitly available at both call sites, and captureException already supports additional properties. The change can remain confined to @posthog/react plus focused regression tests.
-- PR: https://github.com/PostHog/posthog-js/pull/4567
-
-## 2026-08-19T21:30:25.047Z
-- Item: issue #4570 — Extract the three duplicated OTLP senders; logs drops batches on 5xx where metrics and traces retry
-- Conclusion: Confirmed bug: logs drops batches after exhausted retryable HTTP failures, unlike metrics.
+batches after exhausted retryable HTTP failures, unlike metrics.
 - Labels: team/client-libraries
 - URL: https://github.com/PostHog/posthog-js/issues/4570
 - Relevant files: `packages/core/src/posthog-core-stateless.ts`, `packages/core/src/logs/index.ts`, `packages/core/src/metrics/index.ts`, `packages/core/src/__tests__/posthog.flush.spec.ts`, `packages/core/src/logs/types.ts`, `packages/core/src/metrics/types.ts`
@@ -87,3 +72,12 @@ ained through build and validation, then excluded only from the npm tarball rath
 - Relevant files: `packages/browser/src/sessionid.ts`, `packages/types/src/posthog-config.ts`, `packages/browser/src/posthog-core.ts`, `packages/browser/src/extensions/replay/external/lazy-loaded-session-recorder.ts`, `packages/browser/src/__tests__/sessionid.test.ts`, `packages/browser/src/__tests__/extensions/replay/lazy-sessionrecording.test.ts`, `packages/browser/playwright/mocked/session-recording/session-rotation-scenarios.spec.ts`, `packages/browser/playwright/mocked/session-recording/session-recording-idle-timeout.spec.ts`
 - Findings: `packages/browser/src/sessionid.ts` defines `SESSION_LENGTH_LIMIT_MILLISECONDS` as 24 hours and rotates a session when its start timestamp exceeds that limit, including on read-only checks.; `session_idle_timeout_seconds` is already a documented public configuration, but it controls inactivity-based rotation only; it is bounded to 60 seconds through 10 hours and does not configure the 24-hour absolute cap.; No existing maximum-session-length configuration was found in the browser config types or defaults.; Replay listens for `sessionPastMaximumLength`, links the old and new recording sessions, and restarts recording on rotation, so this is not a replay-buffer-only setting.; Existing replay tests explicitly protect billing-sensitive invariants: an idle tab must ship zero recordings across repeated rotations, a session with one interaction must ship exactly one recording, and cap rotations must prevent multi-day recordings.
 - Fix assessment: The code change can be localized, but it changes public session semantics and may alter replay volume and billing. It requires an explicit product/API decision and regression coverage for session rotation, cross-tab behavior, and replay volume invariants.
+
+## 2026-08-22T15:25:37.215Z
+- Item: issue #1100 — Do we need to handle `willReadFrequently` differently with Canvas
+- Conclusion: This appears to be a Canvas replay performance-warning question, not evidence of broken replay. A blanket SDK-side change would be unsafe without a current reproduction.
+- Labels: feature/replay, web, question
+- URL: https://github.com/PostHog/posthog-js/issues/1100
+- Relevant files: `packages/browser/src/extensions/replay/external/lazy-loaded-session-recorder.ts`, `packages/rrweb/rrweb/src/record/observers/canvas/canvas-manager.ts`, `packages/rrweb/rrweb/src/record/observers/canvas/canvas.ts`, `packages/rrweb/rrweb/src/record/workers/image-bitmap-data-url-worker.ts`, `packages/rrweb/rrweb-snapshot/src/utils.ts`, `packages/rrweb/rrweb-snapshot/src/snapshot.ts`
+- Findings: Canvas recording is configured by the lazy-loaded replay recorder through `recordCanvas`, with an optional FPS capture mode.; The FPS capture path snapshots the customer canvas with `createImageBitmap`; it performs its `getImageData` fingerprint read on a separate reusable `OffscreenCanvas` in the worker, whose 2D context is already created with `{ willReadFrequently: true }`.; The recorder's `HTMLCanvasElement.prototype.getContext` wrapper records the context type and changes WebGL/WebGPU capture attributes when needed, but it does not add `willReadFrequently` to application 2D context creation.; Full-snapshot canvas serialization can call `canvas.getContext('2d')`, `getImageData`, and `toDataURL` to determine whether a 2D canvas is blank and capture its initial image.; Because `willReadFrequently` is effective only on the first context creation, replay cannot reliably add it after an application or third-party library has already initialized the canvas.; The reporter's follow-up confirms that applying the option before the context is created removed the warning for their js-confetti case, but no current SDK version or standalone reproduction is provided.
+- Fix assessment: The smallest apparent code change—forcing `{ willReadFrequently: true }` in the recorder's 2D `getContext` wrapper—would affect every canvas initialized after replay starts and can degrade write-heavy canvas rendering. It also cannot help canvases initialized before the recorder. A reproduction is needed to identify the actual readback path and establish a narrowly safe policy. Any recorder change must additionally preserve lazy-loaded extension compatibility.
