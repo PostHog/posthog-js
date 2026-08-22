@@ -2,8 +2,7 @@
 
 ...<older entries truncated>
 
-_REMOTE_CONFIG[token].config`; the associated unit test verifies that this path neither loads the remote-config script nor makes the JSON request.; The global is token-scoped and includes both `config` and `siteApps`, but is currently an internal browser-SDK contract rather than an `@posthog/next` provider API.; `Autocapture.isEnabled` uses the persisted server opt-out value until a config result arrives. Thus a previously enabled value can still allow autocapture during an ordinary asynchronous initial config fetch; a preloaded response removes that observable async window.; On config failure or when `autocapture_opt_out` is absent, autocapture no longer defaults to enabled: it retains a known persisted value and stays off if none exists. Tests cover both the fresh-client and persisted-value cases.; `@posthog/next` currently server-bootstraps feature flags only (`bootstrapFlags`); no Next remote-config fetch, cache, serialization, or injection path was found.; Remote config also carries session-recording settings. Any new SSR cache must deliberately define stale, missing, and failed-response behavior; an accidental fail-closed change could silently suppress recordings, matching the remote-config/start-condition incident class.
-- Fix assessment: A small core change is not warranted because the preload mechanism already exists. A first-class Next.js feature needs an explicit public contract, server endpoint/auth model, cache TTL and invalidation semantics, safe serialization, static-versus-dynamic rendering behavior, and tests for client fallback. Remote-config freshness also affects replay start conditions, so stale or unavailable SSR data must be a deliberate product decision.
+ not warranted because the preload mechanism already exists. A first-class Next.js feature needs an explicit public contract, server endpoint/auth model, cache TTL and invalidation semantics, safe serialization, static-versus-dynamic rendering behavior, and tests for client fallback. Remote-config freshness also affects replay start conditions, so stale or unavailable SSR data must be a deliberate product decision.
 
 ## 2026-08-22T15:52:05.412Z
 - Item: issue #2159 — Implement `element_allowlist`/`element_denylist`
@@ -85,3 +84,12 @@ _REMOTE_CONFIG[token].config`; the associated unit test verifies that this path 
 - Relevant files: `packages/browser/src/remote-config.ts`, `packages/browser/src/__tests__/remote-config.test.ts`, `packages/browser/CHANGELOG.md`
 - Findings: `RemoteConfigLoader.refresh()` returns without calling `reloadFeatureFlags()` when flags are disabled, `document` is absent, or `document.visibilityState` is `hidden`.; `remote-config.test.ts` contains a regression test that mocks the browser-common `document` export as `undefined`, simulates a browser-extension background context, and verifies that `reloadFeatureFlags()` is not called.; The browser changelog records PR #3559, "Skip remote config background refreshes when no document is available," under release 1.373.0.
 - Fix assessment: No new change is appropriate: the current implementation contains the minimal missing-document guard and a focused regression test for this exact browser-extension scenario.
+
+## 2026-08-22T16:20:22.544Z
+- Item: issue #3574 — The Oculus Browser is not properly being detected
+- Conclusion: Already fixed and released via PR #3581.
+- Labels: feature/product-analytics, web, team/client-libraries
+- URL: https://github.com/PostHog/posthog-js/issues/3574
+- Relevant files: `packages/core/src/utils/user-agent-utils.ts`, `packages/browser/src/__tests__/utils/user-agent-utils.test.ts`, `packages/core/CHANGELOG.md`
+- Findings: `detectBrowser` now returns `Oculus Browser` when the UA contains `OculusBrowser`, before the Samsung Internet and Chrome branches that also match Oculus/Meta Quest UAs.; `versionRegexes` includes an `OculusBrowser/<major>.<minor>` matcher, so the detected browser version is also attributed to Oculus Browser.; Browser unit tests cover Quest 2 UAs containing `OculusBrowser`, `SamsungBrowser`, and `Chrome`, plus a Quest 3 UA without the Samsung marker; both expect `Oculus Browser` and the Oculus version.; `packages/core/CHANGELOG.md` records PR #3581 in @posthog/core 1.29.6 as: "Detect Oculus Browser (Meta Quest headsets) correctly instead of falling back to Chrome."
+- Fix assessment: No additional implementation is appropriate: the minimal ordered UA-marker fix and regression tests are already present and documented as released.
