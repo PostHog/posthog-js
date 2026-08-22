@@ -13,6 +13,8 @@ import {
     SESSION_RECORDING_REMOTE_CONFIG,
     SESSION_RECORDING_SAMPLE_RATE,
     SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX,
+    SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
+    SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS,
 } from '../../../constants'
 import { SessionIdManager } from '../../../sessionid'
 import { createMockPostHog, createMockConfig } from '../../helpers/posthog-instance'
@@ -4556,6 +4558,145 @@ describe('Lazy SessionRecording', () => {
 
             // because still waiting for URL to trigger
             expect(sessionRecording.status).toBe('buffering')
+
+            // and we can name which leg is still pending so a customer can debug the buffering
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_describePendingTriggerConditions']()).toEqual([
+                'URL condition not matched',
+            ])
+        })
+
+        it('evaluates recording status once per active flush', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+            releaseInteractionHold()
+            expect(sessionRecording.status).toBe('active')
+            const getStatus = jest.spyOn(lazyRecorder['_strategy']!, 'getStatus')
+
+            lazyRecorder['_flushBuffer']()
+
+            expect(getStatus).toHaveBeenCalledTimes(1)
+        })
+
+        it('reports a pending condition once per change', () => {
+            const previousDebug = assignableWindow.POSTHOG_DEBUG
+            assignableWindow.POSTHOG_DEBUG = true
+            const logSpy = jest.spyOn(window!.console, 'log').mockImplementation(() => {})
+            const registerSpy = jest.spyOn(posthog, 'register_for_session')
+
+            try {
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            urlTriggers: [{ url: 'start-on-me', matching: 'regex' }],
+                        },
+                    })
+                )
+                // A fresh recorder holds all flushes until interaction; this test targets trigger buffering.
+                releaseInteractionHold()
+                const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+
+                lazyRecorder['_flushBuffer']()
+                lazyRecorder['_flushBuffer']()
+
+                expect(
+                    logSpy.mock.calls
+                        .filter((call) => typeof call[1] === 'string' && call[1].startsWith('buffering:'))
+                        .map((call) => call[1])
+                ).toEqual(['buffering: URL condition not matched'])
+                expect(
+                    registerSpy.mock.calls.flatMap(([properties]) =>
+                        SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS in properties
+                            ? [properties[SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS]]
+                            : []
+                    )
+                ).toEqual([['URL condition not matched']])
+            } finally {
+                registerSpy.mockRestore()
+                logSpy.mockRestore()
+                assignableWindow.POSTHOG_DEBUG = previousDebug
+            }
+        })
+
+        it('reports the same condition again after leaving buffering', () => {
+            const previousDebug = assignableWindow.POSTHOG_DEBUG
+            assignableWindow.POSTHOG_DEBUG = true
+            const logSpy = jest.spyOn(window!.console, 'log').mockImplementation(() => {})
+            const registerSpy = jest.spyOn(posthog, 'register_for_session')
+
+            try {
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            urlTriggers: [{ url: 'start-on-me', matching: 'regex' }],
+                        },
+                    })
+                )
+                releaseInteractionHold()
+                const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+
+                lazyRecorder['_flushBuffer']()
+                lazyRecorder.overrideTrigger('url')
+                lazyRecorder['_flushBuffer']()
+                posthog.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
+                lazyRecorder['_flushBuffer']()
+
+                expect(
+                    logSpy.mock.calls
+                        .filter((call) => typeof call[1] === 'string' && call[1].startsWith('buffering:'))
+                        .map((call) => call[1])
+                ).toEqual(['buffering: URL condition not matched', 'buffering: URL condition not matched'])
+                expect(
+                    registerSpy.mock.calls.flatMap(([properties]) =>
+                        SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS in properties
+                            ? [properties[SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS]]
+                            : []
+                    )
+                ).toEqual([['URL condition not matched'], [], ['URL condition not matched']])
+            } finally {
+                registerSpy.mockRestore()
+                logSpy.mockRestore()
+                assignableWindow.POSTHOG_DEBUG = previousDebug
+            }
+        })
+
+        it('reports the same pending condition again after session rotation', () => {
+            const previousDebug = assignableWindow.POSTHOG_DEBUG
+            assignableWindow.POSTHOG_DEBUG = true
+            const logSpy = jest.spyOn(window!.console, 'log').mockImplementation(() => {})
+
+            try {
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            urlTriggers: [{ url: 'start-on-me', matching: 'regex' }],
+                        },
+                    })
+                )
+                releaseInteractionHold()
+                const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+
+                lazyRecorder['_flushBuffer']()
+                sessionIdGeneratorMock.mockImplementation(() => 'rotated-session-id')
+                sessionManager.resetSessionId()
+                sessionManager.checkAndGetSessionAndWindowId()
+                expect(lazyRecorder.sessionId).toBe('rotated-session-id')
+                lazyRecorder['_clearBuffer']()
+                releaseInteractionHold()
+                lazyRecorder['_flushBuffer']()
+
+                expect(
+                    logSpy.mock.calls
+                        .filter((call) => typeof call[1] === 'string' && call[1].startsWith('buffering:'))
+                        .map((call) => call[1])
+                ).toEqual(['buffering: URL condition not matched', 'buffering: URL condition not matched'])
+            } finally {
+                logSpy.mockRestore()
+                assignableWindow.POSTHOG_DEBUG = previousDebug
+            }
         })
 
         it('never sends data when sampling is false regardless of event triggers', async () => {
@@ -7297,6 +7438,33 @@ describe('Lazy SessionRecording', () => {
     })
 
     describe('V2 Trigger Groups Integration', () => {
+        it('describes pending conditions within trigger groups', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [
+                            {
+                                id: 'error-group',
+                                name: 'Error Tracking',
+                                sampleRate: 1.0,
+                                conditions: {
+                                    matchType: 'any',
+                                    events: [{ name: '$exception' }],
+                                },
+                            },
+                        ],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_describePendingTriggerConditions']()).toEqual([
+                'trigger group "Error Tracking": event condition not matched',
+            ])
+        })
+
         it('uses the active snapshot interval immediately after a trigger group matches', () => {
             jest.useFakeTimers()
             try {
