@@ -1,10 +1,6 @@
 import type { MixedOutput, Module } from 'metro'
 import { createPostHogMetroSerializer } from '../src/tooling/posthogMetroSerializer'
-import {
-  createDebugIdSnippet,
-  determineDebugIdFromBundleSource,
-  type MetroSerializer,
-} from '../src/tooling/utils'
+import { createDebugIdSnippet, determineDebugIdFromBundleSource, type MetroSerializer } from '../src/tooling/utils'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
