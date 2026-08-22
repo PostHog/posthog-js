@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 1100](https://github.com/PostHog/posthog-js/issues/1100) | This appears to be a Canvas replay performance-warning question, not evidence of broken replay. A blanket SDK-side change would be unsafe without a current reproduction. | feature/replay, web, question |  | no | 2026-08-22T15:25:33.389Z |
 | PostHog/posthog-js | [issue 1089](https://github.com/PostHog/posthog-js/issues/1089) | Valid session-replay feature request, but changing the cap affects session rotation and recording volume. | feature, feature/replay, web, team/client-libraries |  | no | 2026-08-22T15:24:30.585Z |
 | PostHog/posthog-js | [issue 4599](https://github.com/PostHog/posthog-js/issues/4599) | Confirmed integration bug: the Expo React Native integration wires an external Android Gradle plugin whose mapping-upload task does not inherit the SDK's project-local CLI resolution. | react-native, Android, feature/error-tracking, team/client-libraries |  | no | 2026-08-22T14:07:48.899Z |
 | PostHog/posthog-js | [issue 4596](https://github.com/PostHog/posthog-js/issues/4596) | Confirmed regression in the Rollup plugin’s post-1.4.8 in-memory chunk-ID flow when a downstream minifier removes the injected comment. | feature/error-tracking, team/error-tracking |  | no | 2026-08-21T12:31:43.763Z |
