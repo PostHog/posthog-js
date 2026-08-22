@@ -70,6 +70,7 @@ import {
 } from '../../../constants'
 import { PostHog } from '../../../posthog-core'
 import {
+    CaptureResult,
     NetworkRecordOptions,
     PerformanceCaptureConfig,
     Properties,
@@ -1192,13 +1193,21 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // Let the strategy configure itself
         this._strategy.onRemoteConfig(config)
 
-        // Setup event trigger listeners via strategy
+        // Setup event trigger listeners via strategy, stashing the callback so pre-start events can be replayed through it
+        let eventTriggerCallback: ((event: CaptureResult) => void) | undefined
         this._removeEventTriggerCaptureHook?.()
         this._removeEventTriggerCaptureHook = this._strategy.setupEventTriggerListeners(
-            this._instance.on.bind(this._instance, 'eventCaptured'),
+            (callback) => {
+                eventTriggerCallback = callback
+                return this._instance.on('eventCaptured', callback)
+            },
             this.sessionId,
             (triggerType, matchDetail) => this._activateTrigger(triggerType, matchDetail)
         )
+
+        // consume as soon as the live listener is registered, so captures made later in start() (e.g. a
+        // $snapshot from an override) stay out of the replay; optional call, older bundled cores lack it
+        const preStartEvents = this._instance.sessionRecording?.consumeEventsCapturedBeforeRecorderStarted?.() ?? []
 
         this._checkOverride(
             SESSION_RECORDING_OVERRIDE_SAMPLING,
@@ -1303,6 +1312,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         if (this.status === ACTIVE) {
             this._reportStarted(startReason || 'recording_initialized')
+        }
+
+        // events captured while this chunk was loading never reached the live listener above, so a trigger
+        // on the initial $pageview could otherwise never match; replay them now that the recorder is running
+        if (eventTriggerCallback) {
+            for (const event of preStartEvents) {
+                eventTriggerCallback(event)
+            }
         }
     }
 

@@ -206,7 +206,6 @@ describe('Lazy SessionRecording', () => {
     let sessionIdGeneratorMock: Mock
     let windowIdGeneratorMock: Mock
     let onFeatureFlagsCallback: ((flags: string[], variants: Record<string, string | boolean>) => void) | null
-    let removePageviewCaptureHookMock: Mock
 
     // staging for tests that are not about hold semantics: drop the fresh-start interaction hold
     function releaseInteractionHold(): void {
@@ -273,7 +272,6 @@ describe('Lazy SessionRecording', () => {
 
     beforeEach(() => {
         mockRemoteConfigLoad.mockClear()
-        removePageviewCaptureHookMock = jest.fn()
         sessionId = 'sessionId' + uuidv7()
 
         config = createMockConfig({
@@ -335,7 +333,7 @@ describe('Lazy SessionRecording', () => {
             _internalEventEmitter: simpleEventEmitter,
             on: jest.fn().mockImplementation((event, cb) => {
                 const unsubscribe = simpleEventEmitter.on(event, cb)
-                return removePageviewCaptureHookMock.mockImplementation(unsubscribe)
+                return jest.fn().mockImplementation(unsubscribe)
             }),
         } as Partial<PostHog> as PostHog
 
@@ -354,6 +352,8 @@ describe('Lazy SessionRecording', () => {
         })
 
         sessionRecording = new SessionRecording(posthog)
+        // mirror posthog-core, which exposes the eager extension on the instance
+        posthog.sessionRecording = sessionRecording
     })
 
     afterEach(() => {
@@ -4387,6 +4387,292 @@ describe('Lazy SessionRecording', () => {
     })
 
     describe('Event triggering', () => {
+        describe('events captured while the recorder script is lazy loading', () => {
+            // the eager extension registers its buffer hook in its constructor, so the first
+            // posthog.on subscription in each test belongs to it
+            const preStartBufferUnsubscribe = (): Mock => (posthog.on as Mock).mock.results[0].value
+
+            const currentSessionProperties = () => ({
+                $session_id: sessionManager.checkAndGetSessionAndWindowId(true).sessionId,
+            })
+
+            const deferScriptLoad = (): (() => void) => {
+                let completeScriptLoad: (() => void) | undefined
+                loadScriptMock.mockImplementation((_ph, _path, callback) => {
+                    completeScriptLoad = () => {
+                        addRRwebToWindow()
+                        callback()
+                    }
+                })
+                return () => completeScriptLoad!()
+            }
+
+            it('activates an event trigger from an event captured before the script loaded', () => {
+                // defer the script load so events can arrive while the recorder is still loading
+                const completeScriptLoad = deferScriptLoad()
+
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            eventTriggers: ['$pageview'],
+                        },
+                    })
+                )
+
+                expect(sessionRecording.status).toBe('lazy_loading')
+                simpleEventEmitter.emit('eventCaptured', { event: '$pageview', properties: currentSessionProperties() })
+
+                completeScriptLoad()
+
+                expect(sessionRecording.status).toBe('active')
+            })
+
+            it('does not activate when pre-load events do not match the trigger', () => {
+                const completeScriptLoad = deferScriptLoad()
+
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            eventTriggers: ['$exception'],
+                        },
+                    })
+                )
+
+                simpleEventEmitter.emit('eventCaptured', { event: '$pageview', properties: currentSessionProperties() })
+
+                completeScriptLoad()
+
+                expect(sessionRecording.status).toBe('buffering')
+            })
+
+            it('does not replay events that belong to a previous session', () => {
+                const completeScriptLoad = deferScriptLoad()
+
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            eventTriggers: ['$pageview'],
+                        },
+                    })
+                )
+
+                simpleEventEmitter.emit('eventCaptured', { event: '$pageview', properties: currentSessionProperties() })
+
+                // a reset while the chunk loads means the buffered event belongs to the old session
+                sessionIdGeneratorMock.mockImplementation(() => 'post-reset-session-id')
+                sessionManager.resetSessionId()
+
+                completeScriptLoad()
+
+                expect(sessionRecording.status).toBe('buffering')
+            })
+
+            it('activates from a pre-load event even when before_send removed $session_id', () => {
+                const completeScriptLoad = deferScriptLoad()
+
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            eventTriggers: ['$pageview'],
+                        },
+                    })
+                )
+
+                // eventCaptured fires after before_send, which may legally strip or rewrite $session_id
+                simpleEventEmitter.emit('eventCaptured', { event: '$pageview', properties: {} })
+
+                completeScriptLoad()
+
+                expect(sessionRecording.status).toBe('active')
+            })
+
+            it('stops buffering once the recorder has started', () => {
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            eventTriggers: ['$exception'],
+                        },
+                    })
+                )
+
+                // the recorder consumed the buffer on start, and later events are not buffered
+                simpleEventEmitter.emit('eventCaptured', {
+                    event: 'some_event',
+                    properties: currentSessionProperties(),
+                })
+                expect(sessionRecording.consumeEventsCapturedBeforeRecorderStarted()).toEqual([])
+            })
+
+            it('caps the pre-start event buffer and keeps the earliest events', () => {
+                for (let i = 0; i < 150; i++) {
+                    simpleEventEmitter.emit('eventCaptured', {
+                        event: 'event_' + i,
+                        properties: currentSessionProperties(),
+                    })
+                }
+
+                const events = sessionRecording.consumeEventsCapturedBeforeRecorderStarted()
+                expect(events).toHaveLength(100)
+                expect(events[0].event).toBe('event_0')
+                expect(events[99].event).toBe('event_99')
+
+                // consuming empties the buffer and stops further buffering
+                simpleEventEmitter.emit('eventCaptured', {
+                    event: 'late_event',
+                    properties: currentSessionProperties(),
+                })
+                expect(sessionRecording.consumeEventsCapturedBeforeRecorderStarted()).toEqual([])
+            })
+
+            it('does not buffer $snapshot events', () => {
+                simpleEventEmitter.emit('eventCaptured', { event: '$snapshot', properties: currentSessionProperties() })
+                simpleEventEmitter.emit('eventCaptured', { event: '$pageview', properties: currentSessionProperties() })
+
+                const events = sessionRecording.consumeEventsCapturedBeforeRecorderStarted()
+                expect(events.map((e) => e.event)).toEqual(['$pageview'])
+            })
+
+            it('clears the buffer when remote config disables recording', () => {
+                simpleEventEmitter.emit('eventCaptured', { event: '$pageview', properties: currentSessionProperties() })
+
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: false }))
+
+                expect(preStartBufferUnsubscribe()).toHaveBeenCalled()
+                expect(sessionRecording.consumeEventsCapturedBeforeRecorderStarted()).toEqual([])
+            })
+
+            it('tears the buffer down when recording is disabled client-side', () => {
+                posthog.config.disable_session_recording = true
+
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: { endpoint: '/s/' },
+                    })
+                )
+
+                expect(preStartBufferUnsubscribe()).toHaveBeenCalled()
+                simpleEventEmitter.emit('eventCaptured', { event: '$pageview', properties: currentSessionProperties() })
+                expect(sessionRecording.consumeEventsCapturedBeforeRecorderStarted()).toEqual([])
+            })
+
+            it('resumes buffering when a later remote config enables recording', () => {
+                // first config disables recording, tearing the buffer down
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: false }))
+                expect(preStartBufferUnsubscribe()).toHaveBeenCalled()
+
+                // a later config enables it: buffering must resume for the new lazy load
+                const completeScriptLoad = deferScriptLoad()
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            eventTriggers: ['$pageview'],
+                        },
+                    })
+                )
+
+                simpleEventEmitter.emit('eventCaptured', { event: '$pageview', properties: currentSessionProperties() })
+
+                completeScriptLoad()
+
+                expect(sessionRecording.status).toBe('active')
+            })
+
+            it('releases the buffer when the recorder script fails to load', () => {
+                loadScriptMock.mockImplementation((_ph, _path, callback) => {
+                    callback('script load error')
+                })
+
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: { endpoint: '/s/' },
+                    })
+                )
+
+                expect(preStartBufferUnsubscribe()).toHaveBeenCalled()
+                expect(sessionRecording.consumeEventsCapturedBeforeRecorderStarted()).toEqual([])
+            })
+
+            it('releases the buffer when no script loader is available', () => {
+                // a no-external bundle without the recorder imported cannot ever start recording
+                delete assignableWindow.__PosthogExtensions__.loadExternalDependency
+
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: { endpoint: '/s/' },
+                    })
+                )
+
+                expect(preStartBufferUnsubscribe()).toHaveBeenCalled()
+                expect(sessionRecording.consumeEventsCapturedBeforeRecorderStarted()).toEqual([])
+            })
+
+            it('tears the buffer down when the user has opted out', () => {
+                posthog.consent.isOptedOut = () => true
+
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: { endpoint: '/s/' },
+                    })
+                )
+
+                expect(preStartBufferUnsubscribe()).toHaveBeenCalled()
+                expect(sessionRecording.consumeEventsCapturedBeforeRecorderStarted()).toEqual([])
+            })
+
+            it('releases the buffer when the config fetch fails and nothing is persisted', () => {
+                simpleEventEmitter.emit('eventCaptured', { event: '$pageview', properties: currentSessionProperties() })
+
+                sessionRecording.onRemoteConfig({ ok: false } as RemoteConfigResult)
+
+                expect(preStartBufferUnsubscribe()).toHaveBeenCalled()
+                expect(sessionRecording.consumeEventsCapturedBeforeRecorderStarted()).toEqual([])
+            })
+
+            it('releases the buffer when the script loads but the recorder is unavailable', () => {
+                // e.g. an adblocker served an empty script: no initSessionRecording is registered
+                loadScriptMock.mockImplementation((_ph, _path, callback) => {
+                    callback()
+                })
+
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: { endpoint: '/s/' },
+                    })
+                )
+
+                expect(preStartBufferUnsubscribe()).toHaveBeenCalled()
+                expect(sessionRecording.consumeEventsCapturedBeforeRecorderStarted()).toEqual([])
+            })
+
+            it('does not crash a new recorder chunk running against an older core without the buffer API', () => {
+                const completeScriptLoad = deferScriptLoad()
+
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            eventTriggers: ['$pageview'],
+                        },
+                    })
+                )
+
+                simpleEventEmitter.emit('eventCaptured', { event: '$pageview', properties: currentSessionProperties() })
+
+                // an older bundled core exposes the extension without the consume method
+                posthog.sessionRecording = {} as any
+
+                expect(() => completeScriptLoad()).not.toThrow()
+                // no replay happened, so the trigger stays pending
+                expect(sessionRecording.status).toBe('buffering')
+            })
+        })
+
         it('uses the active snapshot interval immediately after a trigger matches', () => {
             jest.useFakeTimers()
             try {
@@ -4815,7 +5101,8 @@ describe('Lazy SessionRecording', () => {
             )
 
             expect(sessionRecording['_lazyLoadedSessionRecording']['_removePageViewCaptureHook']).not.toBeUndefined()
-            expect(posthog.on).toHaveBeenCalledTimes(1)
+            // one hook from the eager extension's pre-start event buffer, one for pageview capture
+            expect(posthog.on).toHaveBeenCalledTimes(2)
 
             // calling a second time doesn't add another capture hook
             sessionRecording.onRemoteConfig(
@@ -4825,7 +5112,7 @@ describe('Lazy SessionRecording', () => {
                     },
                 })
             )
-            expect(posthog.on).toHaveBeenCalledTimes(1)
+            expect(posthog.on).toHaveBeenCalledTimes(2)
         })
 
         it('removes the pageview capture hook on stop', () => {
@@ -4836,12 +5123,13 @@ describe('Lazy SessionRecording', () => {
                     },
                 })
             )
-            expect(sessionRecording['_lazyLoadedSessionRecording']['_removePageViewCaptureHook']).not.toBeUndefined()
+            const removePageviewCaptureHook =
+                sessionRecording['_lazyLoadedSessionRecording']['_removePageViewCaptureHook']
+            expect(removePageviewCaptureHook).not.toBeUndefined()
 
-            expect(removePageviewCaptureHookMock).not.toHaveBeenCalled()
             sessionRecording.stopRecording()
 
-            expect(removePageviewCaptureHookMock).toHaveBeenCalledTimes(1)
+            expect(removePageviewCaptureHook).toHaveBeenCalledTimes(1)
             expect(sessionRecording['_lazyLoadedSessionRecording']['_removePageViewCaptureHook']).toBeUndefined()
         })
 
