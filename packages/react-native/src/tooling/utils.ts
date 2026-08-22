@@ -64,15 +64,15 @@ export function stringToUUID(str: string): string {
 }
 
 /**
- * Looks for an injected `_posthogChunkIds[n] = "debugId"` pattern
- * in the bundle source and extracts the `debugId` value from it.
- *
- * Matches both string and numeric keys for `n`, e.g.:
- *   _posthogChunkIds["abc"] = "1234"
- *   _posthogChunkIds[42] = "1234"
+ * Looks for an injected `_posthogChunkIds[...] = "uuid"` pattern in bundle
+ * source and extracts the generated Chunk ID. The runtime key is the stack
+ * expression and can be minified to a variable such as `n`, so the key itself
+ * must not be restricted to string or numeric literals.
  */
 export function determineDebugIdFromBundleSource(code: string): string | undefined {
-  const match = code.match(/_posthogChunkIds\[\s*(?:(?:"[^"]*")|(?:'[^']*')|\d+)\s*\]\s*=\s*"([^"]+)"/)
+  const match = code.match(
+    /_posthogChunkIds\[[^\]]+\]\s*=\s*"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})"/
+  )
   return match ? match[1] : undefined
 }
 
