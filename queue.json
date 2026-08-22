@@ -2,20 +2,6 @@
   "version": 1,
   "items": [
     {
-      "id": "issue-2648-auto-none-no-comment-no-close-1787413811702",
-      "kind": "issue",
-      "number": 2648,
-      "mode": "auto",
-      "commandMention": "@posthog-watcher",
-      "enqueuedAt": "2026-08-22T15:50:11.702Z",
-      "source": {
-        "eventName": "issues",
-        "runId": 32582886493,
-        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/32582886493"
-      },
-      "attempts": 1
-    },
-    {
       "id": "issue-2650-auto-none-no-comment-no-close-1787413814664",
       "kind": "issue",
       "number": 2650,
