@@ -1,18 +1,12 @@
 import { isArray, isNull, isUndefined } from '@posthog/core'
+import type { PropertyOperator } from '@posthog/core'
+import { propertyComparisons } from '@posthog/core/surveys'
 import type { Properties } from '@posthog/types'
 
 import { jsonStringify } from './request-utils'
-import { isMatchingRegex } from './regex-utils'
 
-export type PropertyMatchType = 'exact' | 'is_not' | 'regex' | 'not_regex' | 'icontains' | 'not_icontains'
-export type PropertyOperator = PropertyMatchType | 'gt' | 'lt'
-
-export type PropertyFilters = {
-    [propertyName: string]: {
-        values: string[]
-        operator: PropertyOperator
-    }
-}
+export type { PropertyFilters, PropertyMatchType, PropertyOperator } from '@posthog/core'
+export { matchPropertyFilters, propertyComparisons } from '@posthog/core/surveys'
 
 export interface SessionRecordingTriggerPropertyFilter {
     key: string
@@ -29,34 +23,10 @@ export function getPersonPropertiesHash(
     return jsonStringify({ distinct_id, userPropertiesToSet, userPropertiesToSetOnce })
 }
 
-export const propertyComparisons: Record<PropertyOperator, (targets: string[], values: string[]) => boolean> = {
-    exact: (targets, values) => values.some((value) => targets.some((target) => value === target)),
-    is_not: (targets, values) => values.every((value) => targets.every((target) => value !== target)),
-    regex: (targets, values) => values.some((value) => targets.some((target) => isMatchingRegex(value, target))),
-    not_regex: (targets, values) => values.every((value) => targets.every((target) => !isMatchingRegex(value, target))),
-    icontains: (targets, values) =>
-        values.map(toLowerCase).some((value) => targets.map(toLowerCase).some((target) => value.includes(target))),
-    not_icontains: (targets, values) =>
-        values.map(toLowerCase).every((value) => targets.map(toLowerCase).every((target) => !value.includes(target))),
-    gt: (targets, values) =>
-        values.some((value) => {
-            const numValue = parseFloat(value)
-            return !isNaN(numValue) && targets.some((t) => numValue > parseFloat(t))
-        }),
-    lt: (targets, values) =>
-        values.some((value) => {
-            const numValue = parseFloat(value)
-            return !isNaN(numValue) && targets.some((t) => numValue < parseFloat(t))
-        }),
-}
-
-const toLowerCase = (v: string): string => v.toLowerCase()
-
 // Operators whose semantics mean "property is not X". When the property being
 // filtered on is missing or null, these match — absence of the property
-// satisfies a "not equal to X" check. This aligns with how PostHog's feature
-// flag matchers (posthog/queries/base.py, rust/feature-flags) treat missing
-// properties for negative operators.
+// satisfies a "not equal to X" check. This intentionally differs from the
+// shared map-level matcher used by survey event filters.
 const NEGATIVE_OPERATORS: ReadonlySet<string> = new Set(['is_not', 'not_icontains', 'not_regex'])
 
 /**
@@ -98,33 +68,5 @@ export function matchTriggerPropertyFilters(
         const actualValues = isArray(propertyValue) ? propertyValue.map(String) : [String(propertyValue)]
 
         return comparisonFunction(targetValues, actualValues)
-    })
-}
-
-export function matchPropertyFilters(
-    propertyFilters: PropertyFilters | undefined,
-    eventProperties: Properties | undefined
-): boolean {
-    // if there are no property filters, it means we're only matching on event name
-    if (!propertyFilters) {
-        return true
-    }
-
-    return Object.entries(propertyFilters).every(([propertyName, filter]) => {
-        const eventPropertyValue = eventProperties?.[propertyName]
-
-        if (isUndefined(eventPropertyValue) || isNull(eventPropertyValue)) {
-            return false
-        }
-
-        // convert event property to string array for comparison
-        const eventValues = [String(eventPropertyValue)]
-
-        const comparisonFunction = propertyComparisons[filter.operator]
-        if (!comparisonFunction) {
-            return false
-        }
-
-        return comparisonFunction(filter.values, eventValues)
     })
 }
