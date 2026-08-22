@@ -9,7 +9,11 @@ const findScript = (url: string): HTMLScriptElement | undefined => {
     const scripts = document?.querySelectorAll('script')
     if (scripts) {
         for (let i = 0; i < scripts.length; i++) {
-            if (scripts[i].src === url) {
+            // `.src` reads back as a resolved absolute URL, but `url` is relative
+            // whenever `api_host` is a path such as `/ingest`, so that comparison
+            // alone never matches for reverse-proxied setups. The `src` attribute
+            // holds exactly what `loadScript` wrote, so compare against both.
+            if (scripts[i].src === url || scripts[i].getAttribute('src') === url) {
                 return scripts[i]
             }
         }
