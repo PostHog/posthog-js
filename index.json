@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/3859": {
+    "key": "PostHog/posthog-js/issue/3859",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3859",
+    "url": "https://github.com/PostHog/posthog-js/issues/3859",
+    "conclusion": "Already fixed in React Native 4.47.2 by PR #3828.",
+    "labels": [
+      "react-native",
+      "feature/replay",
+      "feature/mobile",
+      "team/client-libraries"
+    ],
+    "closed": false,
+    "updatedAt": "2026-08-22T16:28:56.499Z"
+  },
   "PostHog/posthog-js/issue/3593": {
     "key": "PostHog/posthog-js/issue/3593",
     "repo": "PostHog/posthog-js",
