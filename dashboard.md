@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 3029](https://github.com/PostHog/posthog-js/issues/3029) | Likely an iOS native symbol/linkage compatibility bug between the legacy session-replay package and Skia, but it is not reproducible or actionable without a current-version minimal reproduction and crash evidence. | feature/replay, react-native, feature/mobile, team/client-libraries |  | no | 2026-08-22T16:18:59.891Z |
 | PostHog/posthog-js | [issue 2879](https://github.com/PostHog/posthog-js/issues/2879) | Already implemented and released for React Native in posthog-react-native 4.22.0. | feature/flags, team/feature-flags, react-native, feature/mobile |  | no | 2026-08-22T16:18:03.189Z |
 | PostHog/posthog-js | [issue 2659](https://github.com/PostHog/posthog-js/issues/2659) | Already fixed and released for posthog-node. | enhancement, feature, node, feature/error-tracking, feature/flags |  | no | 2026-08-22T16:17:17.382Z |
 | PostHog/posthog-js | [issue 2650](https://github.com/PostHog/posthog-js/issues/2650) | Plausible session-replay bug, but the reported generic dynamic Shadow DOM path is covered today and a minimal reproduction is required to identify the unsupported or failing path. | feature/replay, web |  | no | 2026-08-22T16:08:32.067Z |
