@@ -1,4 +1,22 @@
 {
+  "PostHog/posthog-js/issue/2097": {
+    "key": "PostHog/posthog-js/issue/2097",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 2097",
+    "url": "https://github.com/PostHog/posthog-js/issues/2097",
+    "conclusion": "Core support for synchronously preloaded remote config exists, but @posthog/next does not provide a first-class SSR fetch/cache/bootstrap integration.",
+    "labels": [
+      "enhancement",
+      "feature",
+      "feature/autocapture",
+      "feature/flags",
+      "frameworks/next-js",
+      "team/feature-flags",
+      "web"
+    ],
+    "closed": false,
+    "updatedAt": "2026-08-22T15:51:11.859Z"
+  },
   "PostHog/posthog-js/issue/1968": {
     "key": "PostHog/posthog-js/issue/1968",
     "repo": "PostHog/posthog-js",
