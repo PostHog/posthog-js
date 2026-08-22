@@ -28,6 +28,20 @@
         "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/32582771529"
       },
       "attempts": 0
+    },
+    {
+      "id": "issue-2097-auto-none-no-comment-no-close-1787413691783",
+      "kind": "issue",
+      "number": 2097,
+      "mode": "auto",
+      "commandMention": "@posthog-watcher",
+      "enqueuedAt": "2026-08-22T15:48:11.783Z",
+      "source": {
+        "eventName": "issues",
+        "runId": 32582785163,
+        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/32582785163"
+      },
+      "attempts": 0
     }
   ]
 }
