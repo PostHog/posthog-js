@@ -261,6 +261,48 @@ describe('PostHogExceptions', () => {
             })
         })
 
+        describe('Injected browser script exceptions', () => {
+            const pageFrame = {
+                filename: 'https://example.com/project/566302/sessions/index.js',
+                platform: 'javascript:web',
+            }
+
+            it.each([
+                ['Firefox for iOS', "ReferenceError: Can't find variable: __firefox__"],
+                ['Chrome for iOS', "undefined is not an object (evaluating 'window.__gCrWeb.something')"],
+            ])('does not capture exceptions thrown by %s injected scripts', (_browser, value) => {
+                const exception = { value, stacktrace: { frames: [pageFrame], type: 'raw' } }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).not.toBeCalledWith(
+                    '$exception',
+                    { $exception_list: [exception] },
+                    expect.anything()
+                )
+            })
+
+            it('captures the exception when the value does not reference an injected global', () => {
+                const exception = {
+                    value: 'ReferenceError: something is not defined',
+                    stacktrace: { frames: [pageFrame], type: 'raw' },
+                }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
+
+            it('captures injected browser script exceptions when extension capture is enabled', () => {
+                exceptions.onRemoteConfig({
+                    ok: true,
+                    config: { errorTracking: { captureExtensionExceptions: true } } as RemoteConfig,
+                })
+                const exception = {
+                    value: "ReferenceError: Can't find variable: __firefox__",
+                    stacktrace: { frames: [pageFrame], type: 'raw' },
+                }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
+        })
+
         describe('PostHog SDK exceptions', () => {
             const inAppFrame = {
                 filename: '../src/in-app-file.js',
