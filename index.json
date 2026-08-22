@@ -1,4 +1,20 @@
 {
+  "PostHog/posthog-js/issue/2659": {
+    "key": "PostHog/posthog-js/issue/2659",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 2659",
+    "url": "https://github.com/PostHog/posthog-js/issues/2659",
+    "conclusion": "Already fixed and released for posthog-node.",
+    "labels": [
+      "enhancement",
+      "feature",
+      "node",
+      "feature/error-tracking",
+      "feature/flags"
+    ],
+    "closed": false,
+    "updatedAt": "2026-08-22T16:17:17.382Z"
+  },
   "PostHog/posthog-js/issue/2650": {
     "key": "PostHog/posthog-js/issue/2650",
     "repo": "PostHog/posthog-js",
@@ -1943,22 +1959,6 @@
     ],
     "closed": false,
     "updatedAt": "2026-06-25T09:34:21.201Z"
-  },
-  "PostHog/posthog-js/issue/2659": {
-    "key": "PostHog/posthog-js/issue/2659",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 2659",
-    "url": "https://github.com/PostHog/posthog-js/issues/2659",
-    "conclusion": "Valid feature request for posthog-node flush semantics",
-    "labels": [
-      "enhancement",
-      "node",
-      "feature",
-      "feature/error-tracking",
-      "feature/flags"
-    ],
-    "closed": false,
-    "updatedAt": "2026-06-25T09:33:24.693Z"
   },
   "PostHog/posthog-js/issue/2501": {
     "key": "PostHog/posthog-js/issue/2501",
