@@ -284,9 +284,10 @@ describe('buildDsymUploadShellScript', () => {
     expect(script).toContain('SourcePackages/checkouts/posthog-ios/build-tools/upload-symbols.sh')
   })
 
-  it('waits until dwarfdump recognizes the main app dSYM without adding an Xcode input dependency', () => {
+  it('waits for matching app and dSYM UUIDs without adding an Xcode input dependency', () => {
     const script = buildDsymUploadShellScript()
     expect(script).toContain('xcrun dwarfdump --uuid "$POSTHOG_MAIN_DWARF"')
+    expect(script).toContain('xcrun dwarfdump --uuid "$POSTHOG_APP_EXECUTABLE"')
     expect(script).toContain('POSTHOG_DSYM_MAX_ATTEMPTS=10')
   })
 
@@ -301,6 +302,9 @@ describe('buildDsymUploadShellScript', () => {
     const executableName = 'ExampleApp'
     const dwarfFile = path.join(dwarfFolder, dwarfFileName, 'Contents', 'Resources', 'DWARF', executableName)
     const uploadScript = path.join(podsRoot, 'PostHog', 'build-tools', 'upload-symbols.sh')
+    const targetBuildDir = path.join(tempDir, 'build')
+    const executablePath = 'ExampleApp.app/ExampleApp'
+    const appExecutable = path.join(targetBuildDir, executablePath)
     const dwarfdumpAttempts = path.join(tempDir, 'dwarfdump-attempts')
 
     try {
@@ -308,8 +312,10 @@ describe('buildDsymUploadShellScript', () => {
       fs.mkdirSync(path.dirname(infoPlist), { recursive: true })
       fs.mkdirSync(path.dirname(dwarfFile), { recursive: true })
       fs.mkdirSync(path.dirname(uploadScript), { recursive: true })
+      fs.mkdirSync(path.dirname(appExecutable), { recursive: true })
       fs.writeFileSync(infoPlist, '')
       fs.writeFileSync(dwarfFile, 'valid dwarf')
+      fs.writeFileSync(appExecutable, 'valid executable')
       fs.writeFileSync(
         plistBuddy,
         '#!/bin/sh\ncase "$2" in\n  *CFBundleShortVersionString*) printf 2.10.0 ;;\n  *CFBundleVersion*) printf 154 ;;\nesac\n',
@@ -317,7 +323,7 @@ describe('buildDsymUploadShellScript', () => {
       )
       fs.writeFileSync(
         path.join(fakeBin, 'xcrun'),
-        '#!/bin/sh\nattempts=$(cat "$TEST_DWARFDUMP_ATTEMPTS" 2>/dev/null || printf 0)\nattempts=$((attempts + 1))\nprintf %s "$attempts" > "$TEST_DWARFDUMP_ATTEMPTS"\n[ "$attempts" -ge 3 ]\n',
+        '#!/bin/sh\ncase "$3" in\n  *dSYMs*)\n    attempts=$(cat "$TEST_DWARFDUMP_ATTEMPTS" 2>/dev/null || printf 0)\n    attempts=$((attempts + 1))\n    printf %s "$attempts" > "$TEST_DWARFDUMP_ATTEMPTS"\n    if [ "$attempts" -lt 3 ]; then\n      printf "UUID: OLD-UUID (arm64) %s\\n" "$3"\n    else\n      printf "UUID: CURRENT-UUID (arm64) %s\\n" "$3"\n    fi\n    ;;\n  *) printf "UUID: CURRENT-UUID (arm64) %s\\n" "$3" ;;\nesac\n',
         { mode: 0o755 }
       )
       fs.writeFileSync(path.join(fakeBin, 'sleep'), '#!/bin/sh\nexit 0\n', { mode: 0o755 })
@@ -337,6 +343,8 @@ describe('buildDsymUploadShellScript', () => {
           DWARF_DSYM_FOLDER_PATH: dwarfFolder,
           DWARF_DSYM_FILE_NAME: dwarfFileName,
           EXECUTABLE_NAME: executableName,
+          TARGET_BUILD_DIR: targetBuildDir,
+          EXECUTABLE_PATH: executablePath,
           TEST_DWARFDUMP_ATTEMPTS: dwarfdumpAttempts,
         },
       }).toString()
@@ -357,13 +365,18 @@ describe('buildDsymUploadShellScript', () => {
     const executableName = 'ExampleApp'
     const dwarfFile = path.join(dwarfFolder, dwarfFileName, 'Contents', 'Resources', 'DWARF', executableName)
     const uploadScript = path.join(podsRoot, 'PostHog', 'build-tools', 'upload-symbols.sh')
+    const targetBuildDir = path.join(tempDir, 'build')
+    const executablePath = 'ExampleApp.app/ExampleApp'
+    const appExecutable = path.join(targetBuildDir, executablePath)
     const uploadMarker = path.join(tempDir, 'upload-ran')
 
     try {
       fs.mkdirSync(fakeBin, { recursive: true })
       fs.mkdirSync(path.dirname(dwarfFile), { recursive: true })
       fs.mkdirSync(path.dirname(uploadScript), { recursive: true })
+      fs.mkdirSync(path.dirname(appExecutable), { recursive: true })
       fs.writeFileSync(dwarfFile, 'invalid dwarf')
+      fs.writeFileSync(appExecutable, 'valid executable')
       fs.writeFileSync(path.join(fakeBin, 'xcrun'), '#!/bin/sh\nexit 1\n', { mode: 0o755 })
       fs.writeFileSync(path.join(fakeBin, 'sleep'), '#!/bin/sh\nexit 0\n', { mode: 0o755 })
       fs.writeFileSync(uploadScript, '#!/bin/sh\ntouch "$TEST_UPLOAD_MARKER"\n')
@@ -380,6 +393,8 @@ describe('buildDsymUploadShellScript', () => {
           DWARF_DSYM_FOLDER_PATH: dwarfFolder,
           DWARF_DSYM_FILE_NAME: dwarfFileName,
           EXECUTABLE_NAME: executableName,
+          TARGET_BUILD_DIR: targetBuildDir,
+          EXECUTABLE_PATH: executablePath,
           TEST_UPLOAD_MARKER: uploadMarker,
         },
       })
