@@ -2,20 +2,6 @@
   "version": 1,
   "items": [
     {
-      "id": "issue-1089-auto-none-no-comment-no-close-1787411697279",
-      "kind": "issue",
-      "number": 1089,
-      "mode": "auto",
-      "commandMention": "@posthog-watcher",
-      "enqueuedAt": "2026-08-22T15:14:57.279Z",
-      "source": {
-        "eventName": "issues",
-        "runId": 32581114073,
-        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/32581114073"
-      },
-      "attempts": 1
-    },
-    {
       "id": "issue-1100-auto-none-no-comment-no-close-1787411700478",
       "kind": "issue",
       "number": 1100,
