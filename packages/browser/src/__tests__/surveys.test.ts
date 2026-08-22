@@ -1645,4 +1645,58 @@ describe('surveys', () => {
             expect(surveys['_isSurveysEnabled']).toBe(undefined)
         })
     })
+
+    describe('prefill initial responses', () => {
+        const singleChoiceSurvey = (overrides: Partial<Survey>): Survey =>
+            ({
+                id: 'prefill-gate-survey',
+                name: 'Prefill gate survey',
+                type: SurveyType.Popover,
+                questions: [
+                    { type: SurveyQuestionType.SingleChoice, question: 'Q1', id: 'q1', choices: ['yes', 'no'] },
+                    { type: SurveyQuestionType.SingleChoice, question: 'Q2', id: 'q2', choices: ['yes', 'no'] },
+                ],
+                current_iteration: null,
+                current_iteration_start_date: null,
+                ...overrides,
+            }) as unknown as Survey
+
+        beforeEach(() => {
+            ;(instance.capture as jest.Mock).mockClear()
+        })
+
+        it('does not send a survey sent event for an incomplete prefill when partial responses are off', () => {
+            const surveyManager = (surveys as any)._surveyManager
+            const survey = singleChoiceSurvey({ enable_partial_responses: false })
+
+            const completed = surveyManager._handleInitialResponses(survey, { 0: 0 })
+
+            expect(completed).toBe(false)
+            expect(instance.capture).not.toHaveBeenCalledWith('survey sent', expect.anything())
+        })
+
+        it('sends a completed survey sent event when the prefill answers every question', () => {
+            const surveyManager = (surveys as any)._surveyManager
+            const survey = singleChoiceSurvey({
+                enable_partial_responses: false,
+                questions: [
+                    {
+                        type: SurveyQuestionType.SingleChoice,
+                        question: 'Q1',
+                        id: 'q1',
+                        choices: ['yes', 'no'],
+                        skipSubmitButton: true,
+                    },
+                ],
+            } as Partial<Survey>)
+
+            const completed = surveyManager._handleInitialResponses(survey, { 0: 0 })
+
+            expect(completed).toBe(true)
+            expect(instance.capture).toHaveBeenCalledWith(
+                'survey sent',
+                expect.objectContaining({ $survey_completed: true })
+            )
+        })
+    })
 })

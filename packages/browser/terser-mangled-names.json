@@ -25,6 +25,7 @@
         "_areWeOnline",
         "_armFlushTimer",
         "_asRequiredConfig",
+        "_autoSubmitPrefilledResponses",
         "_baseEventProperties",
         "_beforeUnloadListener",
         "_beginCookieSyncSuppression",
