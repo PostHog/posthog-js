@@ -2,16 +2,7 @@
 
 ...<older entries truncated>
 
-l flow through `wrappedEmit`, which forwards them upward when the middle frame is not the emitting frame.; The browser replay recorder seeds `recordCrossOriginIframes` as `false`; its rrweb option type exposes that setting, but no inspected option exists to designate an embedded frame as the recording root.; The checked-out rrweb fork includes prior nested-cross-origin iframe work (#1353) but contains no reference to or implementation attributed to upstream rrweb PR #1726.; This touches replay event routing and the lazy-loaded recorder boundary. A regression could silently suppress recordings or change the amount of iframe content recorded, so end-to-end and old-core/new-recorder compatibility coverage are required.
-- Fix assessment: The likely rrweb change may be small, but the upstream PR has not been verified or integrated here, and a safe SDK implementation needs an explicit opt-in, a clear parent-frame trust boundary, replay-bundle compatibility coverage, and a real-browser three-origin test. A speculative local override would risk silently changing recording ownership or volume.
-
-## 2026-08-22T15:45:10.691Z
-- Item: issue #1683 — Type mismatch when using @segment/analytics-next
-- Conclusion: Already fixed in posthog-js 1.415.4 via PR #4494.
-- Labels: web
-- URL: https://github.com/PostHog/posthog-js/issues/1683
-- Relevant files: `packages/types/src/segment.ts`, `packages/types/src/__tests__/segment.spec.ts`, `packages/types/CHANGELOG.md`, `packages/browser/CHANGELOG.md`, `packages/browser/package.json`
-- Findings: `SegmentAnalytics.user` accepts both synchronous and Promise-based Segment user objects, with nullable IDs supported.; `SegmentAnalytics.register` now uses a permissive Promise return type so the current analytics-next plugin registration signature remains assignable while preserving legacy consumers.; `packages/types/src/__tests__/segment.spec.ts` compile-checks representative analytics-next snippet and browser shapes, as well as the prior legacy Segment interface; the test documents coverage through @segment/analytics-next 1.84.1.; `packages/browser/CHANGELOG.md` records PR #4494 as the Segment type compatibility fix in `posthog-js` 1.415.4, released on 2026-08-11.
+; `packages/types/src/__tests__/segment.spec.ts` compile-checks representative analytics-next snippet and browser shapes, as well as the prior legacy Segment interface; the test documents coverage through @segment/analytics-next 1.84.1.; `packages/browser/CHANGELOG.md` records PR #4494 as the Segment type compatibility fix in `posthog-js` 1.415.4, released on 2026-08-11.
 - Fix assessment: The reported incompatibility is already addressed and released; no new code change is appropriate unless it can be reproduced with current package versions.
 
 ## 2026-08-22T15:50:01.671Z
@@ -85,3 +76,12 @@ l flow through `wrappedEmit`, which forwards them upward when the middle frame i
 - Relevant files: `packages/node/src/client.ts`, `packages/core/src/posthog-core-stateless.ts`, `packages/node/src/__tests__/posthog-node.spec.ts`, `packages/core/src/__tests__/posthog.flush.spec.ts`, `packages/node/CHANGELOG.md`
 - Findings: `PostHog` in `packages/node/src/client.ts` overrides `flush()` to call `flushWithPendingPromises()`.; `flushWithPendingPromises()` uses the core flush path with pending-work waiting enabled before `_flush()` reads and drains the event queue.; The core implementation snapshots the pending-promise queue before registering the flush promise and excludes the flush promises from its wait, avoiding a self-wait/deadlock.; Core tests cover waiting for pending work that enqueues an event, not waiting for work added after the flush begins, and continuing to flush queued events when pending work rejects.; Node tests explicitly verify that an immediate `flush()` after `captureException()` sends the asynchronously prepared `$exception` event.; `packages/node/CHANGELOG.md` records PR #4028 as released in `posthog-node` 5.39.2 on 2026-07-01.
 - Fix assessment: No new implementation is appropriate: the requested behavior is already implemented, regression-tested, and released. The minimal resolved design makes Node flush() wait for pending SDK work rather than adding a separate public option.
+
+## 2026-08-22T16:18:07.104Z
+- Item: issue #2879 — Add `$feature_flags_error` to React-Native SDK
+- Conclusion: Already implemented and released for React Native in posthog-react-native 4.22.0.
+- Labels: feature/flags, team/feature-flags, react-native, feature/mobile
+- URL: https://github.com/PostHog/posthog-js/issues/2879
+- Relevant files: `packages/react-native/src/posthog-rn.ts`, `packages/react-native/test/posthog.spec.ts`, `packages/react-native/CHANGELOG.md`, `packages/core/src/posthog-core.ts`, `packages/core/src/types.ts`, `packages/core/src/featureFlagUtils.ts`
+- Findings: `packages/react-native/src/posthog-rn.ts` declares `PostHog extends PostHogCore`, so React Native uses the shared feature-flag evaluation-event path.; `packages/core/src/posthog-core.ts` computes errors from stored `/flags` results and request failures, joins multiple values with commas, and conditionally adds `$feature_flag_error` when capturing `$feature_flag_called`.; `packages/core/src/types.ts` defines the expected error values: `errors_while_computing_flags`, `flag_missing`, `quota_limited`, `timeout`, `connection_error`, `unknown_error`, and `api_error_{status}`.; `packages/react-native/test/posthog.spec.ts` has a dedicated Feature flag error tracking suite covering missing flags, server-computation errors, quota limiting, HTTP 500 errors, comma-separated multiple errors, and absence of the property on successful evaluation.; `packages/react-native/CHANGELOG.md` records PR #2897, "Add $feature_flag_error to $feature_flag_called events to track flag evaluation failures", under released version 4.22.0.
+- Fix assessment: No code change is appropriate because the requested behavior is already implemented, tested, and released. The minimal resolution is to direct affected users to upgrade if they are using a version older than 4.22.0.
