@@ -2,20 +2,6 @@
   "version": 1,
   "items": [
     {
-      "id": "issue-3578-auto-none-no-comment-no-close-1787415382711",
-      "kind": "issue",
-      "number": 3578,
-      "mode": "auto",
-      "commandMention": "@posthog-watcher",
-      "enqueuedAt": "2026-08-22T16:16:22.711Z",
-      "source": {
-        "eventName": "issues",
-        "runId": 32584200429,
-        "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/32584200429"
-      },
-      "attempts": 1
-    },
-    {
       "id": "issue-3582-auto-none-no-comment-no-close-1787415386805",
       "kind": "issue",
       "number": 3582,
