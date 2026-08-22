@@ -1,7 +1,4 @@
-import { execFileSync, spawnSync } from 'child_process'
-import * as fs from 'fs'
-import * as os from 'os'
-import * as path from 'path'
+import { spawnSync } from 'child_process'
 
 import {
   addDsymUploadBuildPhase,
@@ -284,132 +281,6 @@ describe('buildDsymUploadShellScript', () => {
     expect(script).toContain('SourcePackages/checkouts/posthog-ios/build-tools/upload-symbols.sh')
   })
 
-  it('waits for matching app and dSYM UUIDs without adding an Xcode input dependency', () => {
-    const script = buildDsymUploadShellScript()
-    expect(script).toContain('xcrun dwarfdump --uuid "$POSTHOG_MAIN_DWARF"')
-    expect(script).toContain('xcrun dwarfdump --uuid "$POSTHOG_APP_EXECUTABLE"')
-    expect(script).toContain('POSTHOG_DSYM_MAX_ATTEMPTS=60')
-  })
-
-  it('passes Expo source Info.plist versions to posthog-ios', () => {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-dsym-version-'))
-    const plistBuddy = path.join(tempDir, 'plist-buddy')
-    const fakeBin = path.join(tempDir, 'bin')
-    const podsRoot = path.join(tempDir, 'Pods')
-    const infoPlist = path.join(tempDir, 'App', 'Info.plist')
-    const dwarfFolder = path.join(tempDir, 'dSYMs')
-    const dwarfFileName = 'ExampleApp.app.dSYM'
-    const executableName = 'ExampleApp'
-    const dwarfFile = path.join(dwarfFolder, dwarfFileName, 'Contents', 'Resources', 'DWARF', executableName)
-    const uploadScript = path.join(podsRoot, 'PostHog', 'build-tools', 'upload-symbols.sh')
-    const targetBuildDir = path.join(tempDir, 'build')
-    const executablePath = 'ExampleApp.app/ExampleApp'
-    const appExecutable = path.join(targetBuildDir, executablePath)
-    const dwarfdumpAttempts = path.join(tempDir, 'dwarfdump-attempts')
-
-    try {
-      fs.mkdirSync(fakeBin, { recursive: true })
-      fs.mkdirSync(path.dirname(infoPlist), { recursive: true })
-      fs.mkdirSync(path.dirname(dwarfFile), { recursive: true })
-      fs.mkdirSync(path.dirname(uploadScript), { recursive: true })
-      fs.mkdirSync(path.dirname(appExecutable), { recursive: true })
-      fs.writeFileSync(infoPlist, '')
-      fs.writeFileSync(dwarfFile, 'valid dwarf')
-      fs.writeFileSync(appExecutable, 'valid executable')
-      fs.writeFileSync(
-        plistBuddy,
-        '#!/bin/sh\ncase "$2" in\n  *CFBundleShortVersionString*) printf 2.10.0 ;;\n  *CFBundleVersion*) printf 154 ;;\nesac\n',
-        { mode: 0o755 }
-      )
-      fs.writeFileSync(
-        path.join(fakeBin, 'xcrun'),
-        '#!/bin/sh\ncase "$3" in\n  *dSYMs*)\n    attempts=$(cat "$TEST_DWARFDUMP_ATTEMPTS" 2>/dev/null || printf 0)\n    attempts=$((attempts + 1))\n    printf %s "$attempts" > "$TEST_DWARFDUMP_ATTEMPTS"\n    if [ "$attempts" -lt 3 ]; then\n      printf "UUID: OLD-UUID (arm64) %s\\n" "$3"\n    else\n      printf "UUID: CURRENT-UUID (arm64) %s\\n" "$3"\n    fi\n    ;;\n  *) printf "UUID: CURRENT-UUID (arm64) %s\\n" "$3" ;;\nesac\n',
-        { mode: 0o755 }
-      )
-      fs.writeFileSync(path.join(fakeBin, 'sleep'), '#!/bin/sh\nexit 0\n', { mode: 0o755 })
-      fs.writeFileSync(uploadScript, '#!/bin/sh\nprintf "%s|%s" "$MARKETING_VERSION" "$CURRENT_PROJECT_VERSION"\n')
-
-      const output = execFileSync('/bin/sh', ['-c', buildDsymUploadShellScript()], {
-        env: {
-          ...process.env,
-          PATH: `${fakeBin}:${process.env.PATH}`,
-          PODS_ROOT: podsRoot,
-          BUILD_DIR: path.join(tempDir, 'Build', 'Products'),
-          SRCROOT: tempDir,
-          INFOPLIST_FILE: 'App/Info.plist',
-          POSTHOG_PLIST_BUDDY: plistBuddy,
-          MARKETING_VERSION: '1.0',
-          CURRENT_PROJECT_VERSION: '1',
-          CONFIGURATION: 'Release-Staging',
-          DEBUG_INFORMATION_FORMAT: 'dwarf-with-dsym',
-          DWARF_DSYM_FOLDER_PATH: dwarfFolder,
-          DWARF_DSYM_FILE_NAME: dwarfFileName,
-          EXECUTABLE_NAME: executableName,
-          TARGET_BUILD_DIR: targetBuildDir,
-          EXECUTABLE_PATH: executablePath,
-          TEST_DWARFDUMP_ATTEMPTS: dwarfdumpAttempts,
-        },
-      }).toString()
-
-      expect(output).toBe('2.10.0|154')
-      expect(fs.readFileSync(dwarfdumpAttempts, 'utf8')).toBe('3')
-    } finally {
-      fs.rmSync(tempDir, { recursive: true, force: true })
-    }
-  })
-
-  it('does not upload when the main app dSYM stays invalid', () => {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-dsym-invalid-'))
-    const fakeBin = path.join(tempDir, 'bin')
-    const podsRoot = path.join(tempDir, 'Pods')
-    const dwarfFolder = path.join(tempDir, 'dSYMs')
-    const dwarfFileName = 'ExampleApp.app.dSYM'
-    const executableName = 'ExampleApp'
-    const dwarfFile = path.join(dwarfFolder, dwarfFileName, 'Contents', 'Resources', 'DWARF', executableName)
-    const uploadScript = path.join(podsRoot, 'PostHog', 'build-tools', 'upload-symbols.sh')
-    const targetBuildDir = path.join(tempDir, 'build')
-    const executablePath = 'ExampleApp.app/ExampleApp'
-    const appExecutable = path.join(targetBuildDir, executablePath)
-    const uploadMarker = path.join(tempDir, 'upload-ran')
-
-    try {
-      fs.mkdirSync(fakeBin, { recursive: true })
-      fs.mkdirSync(path.dirname(dwarfFile), { recursive: true })
-      fs.mkdirSync(path.dirname(uploadScript), { recursive: true })
-      fs.mkdirSync(path.dirname(appExecutable), { recursive: true })
-      fs.writeFileSync(dwarfFile, 'invalid dwarf')
-      fs.writeFileSync(appExecutable, 'valid executable')
-      fs.writeFileSync(path.join(fakeBin, 'xcrun'), '#!/bin/sh\nexit 1\n', { mode: 0o755 })
-      fs.writeFileSync(path.join(fakeBin, 'sleep'), '#!/bin/sh\nexit 0\n', { mode: 0o755 })
-      fs.writeFileSync(uploadScript, '#!/bin/sh\ntouch "$TEST_UPLOAD_MARKER"\n')
-
-      const result = spawnSync('/bin/sh', ['-c', buildDsymUploadShellScript()], {
-        encoding: 'utf8',
-        env: {
-          ...process.env,
-          PATH: `${fakeBin}:${process.env.PATH}`,
-          PODS_ROOT: podsRoot,
-          BUILD_DIR: path.join(tempDir, 'Build', 'Products'),
-          CONFIGURATION: 'Release',
-          DEBUG_INFORMATION_FORMAT: 'dwarf-with-dsym',
-          INFOPLIST_FILE: '',
-          DWARF_DSYM_FOLDER_PATH: dwarfFolder,
-          DWARF_DSYM_FILE_NAME: dwarfFileName,
-          EXECUTABLE_NAME: executableName,
-          TARGET_BUILD_DIR: targetBuildDir,
-          EXECUTABLE_PATH: executablePath,
-          TEST_UPLOAD_MARKER: uploadMarker,
-        },
-      })
-
-      expect(result.status).toBe(0)
-      expect(result.stdout).toContain('warning: Main app dSYM was not ready')
-      expect(fs.existsSync(uploadMarker)).toBe(false)
-    } finally {
-      fs.rmSync(tempDir, { recursive: true, force: true })
-    }
-  })
-
   it('does not set POSTHOG_INCLUDE_SOURCE by default', () => {
     expect(buildDsymUploadShellScript()).not.toContain('POSTHOG_INCLUDE_SOURCE')
     expect(buildDsymUploadShellScript(false)).not.toContain('POSTHOG_INCLUDE_SOURCE')
@@ -443,7 +314,6 @@ describe('addDsymUploadBuildPhase', () => {
     expect(opts.shellPath).toBe('/bin/sh')
     expect(opts.shellScript).toContain('upload-symbols.sh')
     expect(opts.shellScript).not.toContain('POSTHOG_INCLUDE_SOURCE')
-    expect(opts.inputPaths).toBeUndefined()
   })
 
   it('forwards includeSource into the phase script', () => {
@@ -469,29 +339,6 @@ describe('addDsymUploadBuildPhase', () => {
 
   // xcode's addBuildPhase stores shellScript quote-escaped with literal newlines.
   const encodePbx = (script: string): string => '"' + script.replace(/"/g, '\\"') + '"'
-  const legacyDsymUploadShellScript = [
-    '# Upload iOS dSYMs to PostHog so native crashes can be symbolicated.',
-    '# upload-symbols.sh ships inside the posthog-ios dependency.',
-    'PODS_SCRIPT="${PODS_ROOT}/PostHog/build-tools/upload-symbols.sh"',
-    'SPM_SCRIPT="${BUILD_DIR%/Build/*}/SourcePackages/checkouts/posthog-ios/build-tools/upload-symbols.sh"',
-    'if [ -f "$PODS_SCRIPT" ]; then',
-    '  /bin/sh "$PODS_SCRIPT"',
-    'elif [ -f "$SPM_SCRIPT" ]; then',
-    '  /bin/sh "$SPM_SCRIPT"',
-    'else',
-    '  echo "warning: PostHog upload-symbols.sh not found in Pods or SwiftPM checkouts; skipping dSYM upload."',
-    'fi',
-  ].join('\n')
-
-  it('migrates the previous plugin-generated phase to the readiness and version fixes', () => {
-    const existing = { isa: 'PBXShellScriptBuildPhase', shellScript: encodePbx(legacyDsymUploadShellScript) }
-    const xp = mockXcodeProjectForBuildPhase(existing)
-
-    addDsymUploadBuildPhase(xp)
-
-    expect(xp.addBuildPhase).not.toHaveBeenCalled()
-    expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript()))
-  })
 
   it('refreshes an existing plugin-generated phase script so option changes take effect', () => {
     const existing = { isa: 'PBXShellScriptBuildPhase', shellScript: encodePbx(buildDsymUploadShellScript()) }

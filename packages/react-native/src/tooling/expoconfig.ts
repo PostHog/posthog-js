@@ -2,12 +2,8 @@
 // Copyright (c) 2017 Sentry
 // Licensed under the MIT License: https://github.com/getsentry/sentry-react-native/blob/main/LICENSE.md
 
-const {
-  withAppBuildGradle,
-  withGradleProperties,
-  withProjectBuildGradle,
-  withXcodeProject,
-} = require('@expo/config-plugins')
+const { withAppBuildGradle, withGradleProperties, withProjectBuildGradle, withXcodeProject } =
+  require('@expo/config-plugins')
 
 // com.posthog.android uploads R8 mapping files and injects a matching map-id so native
 // crash stack traces can be deobfuscated.
@@ -246,11 +242,7 @@ const POSTHOG_DSYM_BUILD_PHASE_NAME = 'Upload PostHog Debug Symbols'
 // Shell script for the dSYM upload build phase. It locates and runs posthog-ios's
 // upload-symbols.sh (CocoaPods or SwiftPM) rather than re-implementing dSYM upload.
 // `includeSource` (iOS only) opts into POSTHOG_INCLUDE_SOURCE to also upload native source.
-function buildDsymUploadShellScriptInternal(
-  includeSource: boolean,
-  skipOnConflict: boolean,
-  resolveVersionAndWait: boolean
-): string {
+export function buildDsymUploadShellScript(includeSource = false, skipOnConflict = false): string {
   const lines = [
     '# Upload iOS dSYMs to PostHog so native crashes can be symbolicated.',
     '# upload-symbols.sh ships inside the posthog-ios dependency.',
@@ -270,67 +262,6 @@ function buildDsymUploadShellScriptInternal(
     )
   }
 
-  if (resolveVersionAndWait) {
-    lines.push(
-      '',
-      '# Expo EAS remote versioning writes the release version to the source Info.plist',
-      '# without necessarily updating MARKETING_VERSION or CURRENT_PROJECT_VERSION.',
-      'POSTHOG_RELEASE_VERSION="${MARKETING_VERSION:-}"',
-      'POSTHOG_BUILD_VERSION="${CURRENT_PROJECT_VERSION:-}"',
-      'POSTHOG_PLIST_BUDDY="${POSTHOG_PLIST_BUDDY:-/usr/libexec/PlistBuddy}"',
-      'if [ -n "${INFOPLIST_FILE:-}" ] && [ -x "$POSTHOG_PLIST_BUDDY" ]; then',
-      '  POSTHOG_INFO_PLIST="$INFOPLIST_FILE"',
-      '  case "$POSTHOG_INFO_PLIST" in',
-      '    /*) ;;',
-      '    *) POSTHOG_INFO_PLIST="${SRCROOT}/${POSTHOG_INFO_PLIST}" ;;',
-      '  esac',
-      '  if [ -f "$POSTHOG_INFO_PLIST" ]; then',
-      '    POSTHOG_PLIST_RELEASE_VERSION=$("$POSTHOG_PLIST_BUDDY" -c "Print :CFBundleShortVersionString" "$POSTHOG_INFO_PLIST" 2>/dev/null || true)',
-      '    POSTHOG_PLIST_BUILD_VERSION=$("$POSTHOG_PLIST_BUDDY" -c "Print :CFBundleVersion" "$POSTHOG_INFO_PLIST" 2>/dev/null || true)',
-      '    case "$POSTHOG_PLIST_RELEASE_VERSION" in',
-      "      \"\"|*'$('*|*'${'*) ;;",
-      '      *) POSTHOG_RELEASE_VERSION="$POSTHOG_PLIST_RELEASE_VERSION" ;;',
-      '    esac',
-      '    case "$POSTHOG_PLIST_BUILD_VERSION" in',
-      "      \"\"|*'$('*|*'${'*) ;;",
-      '      *) POSTHOG_BUILD_VERSION="$POSTHOG_PLIST_BUILD_VERSION" ;;',
-      '    esac',
-      '  fi',
-      'fi',
-      '[ -n "$POSTHOG_RELEASE_VERSION" ] && export MARKETING_VERSION="$POSTHOG_RELEASE_VERSION"',
-      '[ -n "$POSTHOG_BUILD_VERSION" ] && export CURRENT_PROJECT_VERSION="$POSTHOG_BUILD_VERSION"',
-      '',
-      '# Do not declare the dSYM as an Xcode input: doing so can create dependency cycles',
-      '# for apps with embedded extensions. Wait until the dSYM UUIDs match the built executable instead.',
-      'if { [ -z "${CONFIGURATION:-}" ] || [ "${DEBUG_INFORMATION_FORMAT:-}" = "dwarf-with-dsym" ]; } && [ -n "${DWARF_DSYM_FOLDER_PATH:-}" ] && [ -n "${DWARF_DSYM_FILE_NAME:-}" ] && [ -n "${EXECUTABLE_NAME:-}" ] && [ -n "${TARGET_BUILD_DIR:-}" ] && [ -n "${EXECUTABLE_PATH:-}" ]; then',
-      '  POSTHOG_MAIN_DWARF="${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}/Contents/Resources/DWARF/${EXECUTABLE_NAME}"',
-      '  POSTHOG_APP_EXECUTABLE="${TARGET_BUILD_DIR}/${EXECUTABLE_PATH}"',
-      '  POSTHOG_DSYM_ATTEMPT=1',
-      '  POSTHOG_DSYM_MAX_ATTEMPTS=60',
-      '  POSTHOG_DSYM_READY=0',
-      '  while [ "$POSTHOG_DSYM_ATTEMPT" -le "$POSTHOG_DSYM_MAX_ATTEMPTS" ]; do',
-      '    if [ -s "$POSTHOG_MAIN_DWARF" ] && [ -s "$POSTHOG_APP_EXECUTABLE" ]; then',
-      '      POSTHOG_DSYM_UUIDS=$(xcrun dwarfdump --uuid "$POSTHOG_MAIN_DWARF" 2>/dev/null | awk \'{print $2}\' | sort)',
-      '      POSTHOG_APP_UUIDS=$(xcrun dwarfdump --uuid "$POSTHOG_APP_EXECUTABLE" 2>/dev/null | awk \'{print $2}\' | sort)',
-      '      if [ -n "$POSTHOG_DSYM_UUIDS" ] && [ "$POSTHOG_DSYM_UUIDS" = "$POSTHOG_APP_UUIDS" ]; then',
-      '        POSTHOG_DSYM_READY=1',
-      '        break',
-      '      fi',
-      '    fi',
-      '    if [ "$POSTHOG_DSYM_ATTEMPT" -lt "$POSTHOG_DSYM_MAX_ATTEMPTS" ]; then',
-      '      sleep 1',
-      '    fi',
-      '    POSTHOG_DSYM_ATTEMPT=$((POSTHOG_DSYM_ATTEMPT + 1))',
-      '  done',
-      '  if [ "$POSTHOG_DSYM_READY" -ne 1 ]; then',
-      '    echo "warning: Main app dSYM was not ready after ${POSTHOG_DSYM_MAX_ATTEMPTS} attempts; skipping upload: $POSTHOG_MAIN_DWARF"',
-      '    exit 0',
-      '  fi',
-      'fi',
-      ''
-    )
-  }
-
   lines.push(
     'PODS_SCRIPT="${PODS_ROOT}/PostHog/build-tools/upload-symbols.sh"',
     'SPM_SCRIPT="${BUILD_DIR%/Build/*}/SourcePackages/checkouts/posthog-ios/build-tools/upload-symbols.sh"',
@@ -344,10 +275,6 @@ function buildDsymUploadShellScriptInternal(
   )
 
   return lines.join('\n')
-}
-
-export function buildDsymUploadShellScript(includeSource = false, skipOnConflict = false): string {
-  return buildDsymUploadShellScriptInternal(includeSource, skipOnConflict, true)
 }
 
 // xcode's addBuildPhase stores shellScript quote-escaped with literal newlines; in-place
@@ -373,10 +300,7 @@ export function addDsymUploadBuildPhase(xcodeProject: any, includeSource = false
   const existing = xcodeProject.pbxItemByComment(POSTHOG_DSYM_BUILD_PHASE_NAME, 'PBXShellScriptBuildPhase')
   if (existing) {
     const generatedVariants = [false, true].flatMap((source) =>
-      [false, true].flatMap((skip) => [
-        buildDsymUploadShellScript(source, skip),
-        buildDsymUploadShellScriptInternal(source, skip, false),
-      ])
+      [false, true].map((skip) => buildDsymUploadShellScript(source, skip))
     )
     if (
       typeof existing.shellScript === 'string' &&
