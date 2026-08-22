@@ -1,4 +1,18 @@
 {
+  "PostHog/posthog-js/issue/3978": {
+    "key": "PostHog/posthog-js/issue/3978",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3978",
+    "url": "https://github.com/PostHog/posthog-js/issues/3978",
+    "conclusion": "Valid browser SDK enhancement, but automatic default capture needs product and privacy decisions before implementation.",
+    "labels": [
+      "enhancement",
+      "feature/product-analytics",
+      "web"
+    ],
+    "closed": false,
+    "updatedAt": "2026-08-22T16:29:36.817Z"
+  },
   "PostHog/posthog-js/issue/3859": {
     "key": "PostHog/posthog-js/issue/3859",
     "repo": "PostHog/posthog-js",
@@ -2000,20 +2014,6 @@
     ],
     "closed": false,
     "updatedAt": "2026-06-25T16:06:24.677Z"
-  },
-  "PostHog/posthog-js/issue/3978": {
-    "key": "PostHog/posthog-js/issue/3978",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 3978",
-    "url": "https://github.com/PostHog/posthog-js/issues/3978",
-    "conclusion": "Valid browser SDK enhancement; current default event properties do not include network-quality data.",
-    "labels": [
-      "enhancement",
-      "web",
-      "feature/product-analytics"
-    ],
-    "closed": false,
-    "updatedAt": "2026-06-25T16:05:01.547Z"
   },
   "PostHog/posthog-js/issue/3954": {
     "key": "PostHog/posthog-js/issue/3954",
