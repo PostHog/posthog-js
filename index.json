@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/3029": {
+    "key": "PostHog/posthog-js/issue/3029",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3029",
+    "url": "https://github.com/PostHog/posthog-js/issues/3029",
+    "conclusion": "Likely an iOS native symbol/linkage compatibility bug between the legacy session-replay package and Skia, but it is not reproducible or actionable without a current-version minimal reproduction and crash evidence.",
+    "labels": [
+      "feature/replay",
+      "react-native",
+      "feature/mobile",
+      "team/client-libraries"
+    ],
+    "closed": false,
+    "updatedAt": "2026-08-22T16:18:59.891Z"
+  },
   "PostHog/posthog-js/issue/2879": {
     "key": "PostHog/posthog-js/issue/2879",
     "repo": "PostHog/posthog-js",
