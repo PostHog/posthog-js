@@ -624,8 +624,8 @@ describe('record', function (this: ISuite) {
     await assertSnapshot(ctx.events);
   });
 
-  it('does not emit stylesheet rules when native insert or delete fails', async () => {
-    const exceptionNames = await ctx.page.evaluate(() => {
+  it('does not emit stylesheet mutations when the native operation fails', async () => {
+    const exceptionNames = await ctx.page.evaluate(async () => {
       const styleElement = document.createElement('style');
       styleElement.textContent = 'body { color: black; }';
       document.head.appendChild(styleElement);
@@ -645,11 +645,26 @@ describe('record', function (this: ISuite) {
       } catch (error) {
         names.push((error as DOMException).name);
       }
+      try {
+        await sheet.replace('body { color: blue; }');
+      } catch (error) {
+        names.push((error as DOMException).name);
+      }
+      try {
+        sheet.replaceSync('body { color: green; }');
+      } catch (error) {
+        names.push((error as DOMException).name);
+      }
       return names;
     });
     await ctx.page.waitForTimeout(20);
 
-    expect(exceptionNames).toEqual(['IndexSizeError', 'IndexSizeError']);
+    expect(exceptionNames).toEqual([
+      'IndexSizeError',
+      'IndexSizeError',
+      'NotAllowedError',
+      'NotAllowedError',
+    ]);
     expect(
       ctx.events.filter(
         (event) =>

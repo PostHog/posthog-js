@@ -756,21 +756,32 @@ function initStyleSheetObserver(
           argumentsList: [string],
         ) => {
           const [text] = argumentsList;
+          const result = target.apply(thisArg, argumentsList);
 
-          const { id, styleId } = getIdAndStyleId(
-            thisArg,
-            mirror,
-            stylesheetManager.styleMirror,
-          );
+          void result
+            .then(
+              callbackWrapper(() => {
+                stylesheetManager.onCssomSheetMutation(thisArg);
+                const { id, styleId } = getIdAndStyleId(
+                  thisArg,
+                  mirror,
+                  stylesheetManager.styleMirror,
+                );
 
-          if ((id && id !== -1) || (styleId && styleId !== -1)) {
-            styleSheetRuleCb({
-              id,
-              styleId,
-              replace: text,
-            });
-          }
-          return target.apply(thisArg, argumentsList);
+                if ((id && id !== -1) || (styleId && styleId !== -1)) {
+                  styleSheetRuleCb({
+                    id,
+                    styleId,
+                    replace: text,
+                  });
+                }
+              }),
+            )
+            // Preserve the original promise rejection for the caller without
+            // creating an unhandled rejection from this observer continuation.
+            .catch(() => undefined);
+
+          return result;
         },
         'host',
       ),
@@ -789,7 +800,9 @@ function initStyleSheetObserver(
           argumentsList: [string],
         ) => {
           const [text] = argumentsList;
+          const result = target.apply(thisArg, argumentsList);
 
+          stylesheetManager.onCssomSheetMutation(thisArg);
           const { id, styleId } = getIdAndStyleId(
             thisArg,
             mirror,
@@ -803,7 +816,7 @@ function initStyleSheetObserver(
               replaceSync: text,
             });
           }
-          return target.apply(thisArg, argumentsList);
+          return result;
         },
         'host',
       ),
@@ -1055,9 +1068,11 @@ function initStyleDeclarationObserver(
       ) => {
         const [property, value, priority] = argumentsList;
 
+        const result = target.apply(thisArg, argumentsList);
+
         // ignore this mutation if we do not care about this css attribute
         if (ignoreCSSAttributes.has(property)) {
-          return setProperty.apply(thisArg, [property, value, priority]);
+          return result;
         }
         stylesheetManager.onCssomSheetMutation(
           thisArg.parentRule?.parentStyleSheet,
@@ -1080,7 +1095,7 @@ function initStyleDeclarationObserver(
             index: getNestedCSSRulePositions(thisArg.parentRule!),
           });
         }
-        return target.apply(thisArg, argumentsList);
+        return result;
       },
       'host',
     ),
@@ -1097,9 +1112,11 @@ function initStyleDeclarationObserver(
       ) => {
         const [property] = argumentsList;
 
+        const result = target.apply(thisArg, argumentsList);
+
         // ignore this mutation if we do not care about this css attribute
         if (ignoreCSSAttributes.has(property)) {
-          return removeProperty.apply(thisArg, [property]);
+          return result;
         }
         stylesheetManager.onCssomSheetMutation(
           thisArg.parentRule?.parentStyleSheet,
@@ -1120,7 +1137,7 @@ function initStyleDeclarationObserver(
             index: getNestedCSSRulePositions(thisArg.parentRule!),
           });
         }
-        return target.apply(thisArg, argumentsList);
+        return result;
       },
       'host',
     ),
