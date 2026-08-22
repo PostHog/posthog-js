@@ -261,6 +261,23 @@ describe('PostHogExceptions', () => {
             })
         })
 
+        describe('Browser-injected global exceptions', () => {
+            it.each([
+                "undefined is not an object (evaluating 'window.__firefox__.reader')",
+                "undefined is not an object (evaluating 'window.__firefox__.refresh_youtube_quality_1234abcd')",
+            ])('does not capture Firefox for iOS injected-global exceptions', (value) => {
+                const exception = { type: 'TypeError', value }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).not.toBeCalled()
+            })
+
+            it('captures exceptions whose value does not mention an injected global', () => {
+                const exception = { type: 'TypeError', value: 'undefined is not an object' }
+                exceptions.sendExceptionEvent({ $exception_list: [exception] })
+                expect(captureMock).toBeCalledWith('$exception', { $exception_list: [exception] }, expect.anything())
+            })
+        })
+
         describe('PostHog SDK exceptions', () => {
             const inAppFrame = {
                 filename: '../src/in-app-file.js',

@@ -13,6 +13,12 @@ const logger = createLogger('[Error tracking]')
 // rather than being real URLs, but they mark the frame just as definitively.
 const EXTENSION_URL_PREFIXES = ['chrome-extension://', 'moz-extension://', 'safari-extension:', 'safari-web-extension:']
 
+// Firefox for iOS injects a `__firefox__` global into page scope for reader mode, YouTube quality
+// control, and playlist long-press. It reads this global before the browser attaches it, so it
+// throws in customer pages. The only stack frame is the page URL, so it evades the extension
+// filter and fingerprints a new issue per page. It is never customer code, so we always drop it.
+const INJECTED_GLOBAL_MARKERS = ['__firefox__']
+
 export function buildErrorPropertiesBuilder() {
     return new ErrorTracking.ErrorPropertiesBuilder(
         [
@@ -133,6 +139,12 @@ export class PostHogExceptions implements Extension {
                 if (!this._captureExtensionExceptions && this._isExtensionException(exceptionList)) {
                     this._addDroppedExceptionStep('Exception dropped: thrown by a browser extension')
                     logger.info('Skipping exception capture because it was thrown by an extension')
+                    return
+                }
+
+                if (this._isInjectedGlobalException(exceptionList)) {
+                    this._addDroppedExceptionStep('Exception dropped: thrown by a browser-injected global')
+                    logger.info('Skipping exception capture because it was thrown by a browser-injected global')
                     return
                 }
 
@@ -269,6 +281,12 @@ export class PostHogExceptions implements Extension {
         return frames.some(({ filename }) => {
             return !!filename && EXTENSION_URL_PREFIXES.some((prefix) => filename.startsWith(prefix))
         })
+    }
+
+    private _isInjectedGlobalException(exceptionList: ErrorTracking.ExceptionList): boolean {
+        return exceptionList.some(
+            ({ value }) => isString(value) && INJECTED_GLOBAL_MARKERS.some((marker) => value.includes(marker))
+        )
     }
 
     private _isPostHogException(exceptionList: ErrorTracking.ExceptionList): boolean {
