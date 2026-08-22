@@ -2,20 +2,7 @@
 
 ...<older entries truncated>
 
-mall change would be speculative because the obvious open/native and host-before-append paths are already implemented and tested. The missing reproduction leaves the root mode, framework implementation, timing, and whether failure is initial serialization or later mutation observation unknown.
-
-## 2026-08-22T16:17:21.017Z
-- Item: issue #2659 — Feature Request: Add option to flush with pending promises
-- Conclusion: Already fixed and released for posthog-node.
-- Labels: enhancement, feature, node, feature/error-tracking, feature/flags
-- URL: https://github.com/PostHog/posthog-js/issues/2659
-- Relevant files: `packages/node/src/client.ts`, `packages/core/src/posthog-core-stateless.ts`, `packages/node/src/__tests__/posthog-node.spec.ts`, `packages/core/src/__tests__/posthog.flush.spec.ts`, `packages/node/CHANGELOG.md`
-- Findings: `PostHog` in `packages/node/src/client.ts` overrides `flush()` to call `flushWithPendingPromises()`.; `flushWithPendingPromises()` uses the core flush path with pending-work waiting enabled before `_flush()` reads and drains the event queue.; The core implementation snapshots the pending-promise queue before registering the flush promise and excludes the flush promises from its wait, avoiding a self-wait/deadlock.; Core tests cover waiting for pending work that enqueues an event, not waiting for work added after the flush begins, and continuing to flush queued events when pending work rejects.; Node tests explicitly verify that an immediate `flush()` after `captureException()` sends the asynchronously prepared `$exception` event.; `packages/node/CHANGELOG.md` records PR #4028 as released in `posthog-node` 5.39.2 on 2026-07-01.
-- Fix assessment: No new implementation is appropriate: the requested behavior is already implemented, regression-tested, and released. The minimal resolved design makes Node flush() wait for pending SDK work rather than adding a separate public option.
-
-## 2026-08-22T16:18:07.104Z
-- Item: issue #2879 — Add `$feature_flags_error` to React-Native SDK
-- Conclusion: Already implemented and released for React Native in posthog-react-native 4.22.0.
+tive 4.22.0.
 - Labels: feature/flags, team/feature-flags, react-native, feature/mobile
 - URL: https://github.com/PostHog/posthog-js/issues/2879
 - Relevant files: `packages/react-native/src/posthog-rn.ts`, `packages/react-native/test/posthog.spec.ts`, `packages/react-native/CHANGELOG.md`, `packages/core/src/posthog-core.ts`, `packages/core/src/types.ts`, `packages/core/src/featureFlagUtils.ts`
@@ -102,3 +89,12 @@ mall change would be speculative because the obvious open/native and host-before
 - Relevant files: `packages/browser/src/posthog-surveys.ts`, `packages/browser/src/extensions/surveys.tsx`, `packages/browser/src/extensions/surveys/surveys-extension-utils.tsx`, `packages/browser/src/storage.ts`, `packages/browser/CHANGELOG.md`, `packages/browser/src/__tests__/extensions/surveys-utils.test.ts`
 - Findings: The browser changelog records PR #3832 under posthog-js 1.386.7 and explicitly says it guarded the remaining unprotected survey localStorage accesses for cross-origin iframes.; Survey reset in posthog-surveys.ts wraps localStorage removal, enumeration, and key deletion in try/catch, so inaccessible storage no longer propagates an exception.; Survey display and markSurveyAsSeen paths wrap writes to lastSeenSurveyDate in try/catch.; Survey utility code uses localStore for read paths; localStore catches storage access errors and returns null.; The survey utility tests verify that wait-period checks do not throw when localStorage.getItem is unavailable.
 - Fix assessment: No new PR is appropriate: the minimal targeted guards for the reported cross-origin localStorage failures have already been merged and released.
+
+## 2026-08-22T16:27:15.457Z
+- Item: issue #3593 — Feature Request: Expose experiment metadata in SDKs
+- Conclusion: Valid experiments feature request, but it requires a deliberately designed backend metadata contract rather than an SDK-only getter.
+- Labels: enhancement, team/experiments, feature/experiments, node
+- URL: https://github.com/PostHog/posthog-js/issues/3593
+- Relevant files: `packages/node/src/client.ts`, `packages/node/src/extensions/feature-flags/feature-flags.ts`, `packages/node/src/types.ts`, `packages/core/src/types.ts`, `packages/browser/src/posthog-featureflags.ts`, `packages/types/src/feature-flags.ts`
+- Findings: There is no getExperiments-style API in the inspected Node or shared-core SDK sources.; The shared /flags response model exposes evaluated feature-flag details, including key, enabled state, selected variant, and metadata such as flag id, version, description, payload, and has_experiment; it does not model experiment name, experiment description, or a general experiment-to-variant catalog.; Browser posthog-js exposes getFeatureFlagDetails(key), which returns details only for an evaluated feature flag rather than a list of experiment definitions.; posthog-node local evaluation loads complete flag definitions from /flags/definitions using a secret/personal credential. Those definitions include filters, cohorts, rollout information, payloads, and experiment_set, so exposing that existing object through a public SDK method would violate the requested minimal, non-sensitive contract.; The Node SDK now supports a project secret key as an alternative to a personal API key for local evaluation, but that credential remains server-only and does not meet the request for a safely public/project-key-authenticated metadata API.
+- Fix assessment: An SDK-only implementation would either lack the requested experiment data or risk exposing the full local-evaluation definitions. The necessary data shape, authorization model, disclosure policy, and cache semantics need backend and experiments-product decisions before a small SDK accessor can be implemented safely.
