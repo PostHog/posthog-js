@@ -484,7 +484,7 @@
         },
         {
           "category": "Feature flags",
-          "description": "Evaluate all feature flags for a user in a single call and return a  snapshot. Branch on `.isEnabled()` / `.getFlag()`, then pass the same snapshot to `capture()` via the `flags` option so the captured event carries the exact flag values the code branched on.\nPrefer this over repeated `isFeatureEnabled()` / `getFeatureFlag()` calls and over `capture({ sendFeatureFlags: true })` — it consolidates flag evaluation into a single `/flags` request per incoming request.\n**Local evaluation is transparent.** When the poller can resolve a flag from cached definitions, no network call is made and the snapshot's `$feature_flag_called` events are tagged `locally_evaluated: true`.\n**Trim the request.** Pass `flagKeys` to scope the underlying `/flags` request to a subset of flags — useful when you only need a few flags and want to reduce the response payload.\n**Trim the event payload.** Use `flags.only([...])` or `flags.onlyAccessed()` to filter which flags get attached to a captured event without re-fetching.",
+          "description": "Evaluate all feature flags for a user in a single call and return a  snapshot. Branch on `.isEnabled()` / `.getFlag()`, then pass the same snapshot to `capture()` via the `flags` option so the captured event carries the exact flag values the code branched on.\nPrefer this over repeated `isFeatureEnabled()` / `getFeatureFlag()` calls and over `capture({ sendFeatureFlags: true })` — it consolidates flag evaluation into a single `/flags` request per incoming request.\n**Local evaluation is transparent.** When the poller can resolve a flag from cached definitions, no network call is made and the snapshot's `$feature_flag_called` events are tagged `locally_evaluated: true`. A requested key missing from local definitions is included in a `/flags` fallback unless `onlyEvaluateLocally` is true. Locally resolved values remain authoritative when remote results are merged.\n**Trim the request.** Pass `flagKeys` to scope local evaluation, the underlying `/flags` request, and the returned snapshot to a subset of flags. Remote evaluation responses are not cached, so a key missing both locally and remotely costs one `/flags` request per `evaluateFlags()` call.\n**Trim the event payload.** Use `flags.only([...])` or `flags.onlyAccessed()` to filter which flags get attached to a captured event without re-fetching.",
           "details": null,
           "id": "evaluateFlags",
           "showDocs": true,
@@ -514,7 +514,7 @@
           "releaseTag": "public",
           "params": [
             {
-              "description": "Optional configuration for flag evaluation. Supports the same fields as `getAllFlags()`, including `flagKeys` to scope the `/flags` request.",
+              "description": "Optional configuration for flag evaluation. Supports the same fields as `getAllFlags()`. `flagKeys` scopes local evaluation, the `/flags` request, and the returned snapshot. `onlyEvaluateLocally` prevents fallback and leaves unresolved keys absent.",
               "isOptional": true,
               "type": "AllFlagsOptions",
               "name": "options"
@@ -1713,6 +1713,7 @@
           "name": "groupProperties"
         },
         {
+          "description": "Skip remote fallback and omit flags that local definitions cannot resolve.",
           "type": "boolean",
           "name": "onlyEvaluateLocally"
         },
@@ -1721,6 +1722,7 @@
           "name": "disableGeoip"
         },
         {
+          "description": "Restrict local evaluation, the `/flags` request, and the returned snapshot to these keys.\n`evaluateFlags()` falls back remotely when a requested key is missing from local definitions\nunless `onlyEvaluateLocally` is true. Remote evaluation responses are not cached, so a key\nmissing both locally and remotely costs one `/flags` request per `evaluateFlags()` call.",
           "type": "string[]",
           "name": "flagKeys"
         }
@@ -1763,6 +1765,7 @@
           "name": "groupProperties"
         },
         {
+          "description": "Skip remote fallback and omit flags that local definitions cannot resolve.",
           "type": "boolean",
           "name": "onlyEvaluateLocally"
         },
@@ -2352,6 +2355,7 @@
           "name": "groupProperties"
         },
         {
+          "description": "Skip remote fallback and omit flags that local definitions cannot resolve.",
           "type": "boolean",
           "name": "onlyEvaluateLocally"
         },
