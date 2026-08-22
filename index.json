@@ -1,4 +1,16 @@
 {
+  "PostHog/posthog-js/issue/1683": {
+    "key": "PostHog/posthog-js/issue/1683",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 1683",
+    "url": "https://github.com/PostHog/posthog-js/issues/1683",
+    "conclusion": "Already fixed in posthog-js 1.415.4 via PR #4494.",
+    "labels": [
+      "web"
+    ],
+    "closed": false,
+    "updatedAt": "2026-08-22T15:45:06.779Z"
+  },
   "PostHog/posthog-js/issue/1101": {
     "key": "PostHog/posthog-js/issue/1101",
     "repo": "PostHog/posthog-js",
