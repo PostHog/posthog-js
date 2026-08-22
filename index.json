@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/3582": {
+    "key": "PostHog/posthog-js/issue/3582",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3582",
+    "url": "https://github.com/PostHog/posthog-js/issues/3582",
+    "conclusion": "Survey position support is already released; font-family customization remains an unscoped React Native surveys enhancement.",
+    "labels": [
+      "enhancement",
+      "feature/surveys",
+      "feature/mobile",
+      "react-native"
+    ],
+    "closed": false,
+    "updatedAt": "2026-08-22T16:23:55.230Z"
+  },
   "PostHog/posthog-js/issue/3578": {
     "key": "PostHog/posthog-js/issue/3578",
     "repo": "PostHog/posthog-js",
