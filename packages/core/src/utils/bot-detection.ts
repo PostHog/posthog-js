@@ -28,7 +28,7 @@ export const DEFAULT_BLOCKED_UA_STRS = [
   'msnbot',
   'nessus',
   'petalbot',
-  'pinterest',
+  'pinterestbot',
   'prerender',
   'rogerbot',
   'screaming frog',
