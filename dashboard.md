@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 3588](https://github.com/PostHog/posthog-js/issues/3588) | Already fixed and released in posthog-js 1.386.7. | feature/surveys, web, team/client-libraries |  | no | 2026-08-22T16:26:16.812Z |
 | PostHog/posthog-js | [issue 3590](https://github.com/PostHog/posthog-js/issues/3590) | Credible session-replay canvas state-restoration bug; not a safe small fix without a focused seek regression test. | feature/replay, web |  | no | 2026-08-22T16:24:53.802Z |
 | PostHog/posthog-js | [issue 3582](https://github.com/PostHog/posthog-js/issues/3582) | Survey position support is already released; font-family customization remains an unscoped React Native surveys enhancement. | enhancement, feature/surveys, feature/mobile, react-native |  | no | 2026-08-22T16:23:55.230Z |
 | PostHog/posthog-js | [issue 3578](https://github.com/PostHog/posthog-js/issues/3578) | Already fixed and released in posthog-js 1.418.0. | feature/product-analytics, web, team/client-libraries |  | no | 2026-08-22T16:23:10.995Z |
