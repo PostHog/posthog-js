@@ -3457,6 +3457,16 @@
           "name": "metrics"
         },
         {
+          "description": "PROOF OF CONCEPT - MAY CHANGE WITHOUT WARNING\n\nAutocapture low-level Node runtime metrics (CPU time and utilization, memory\nand heap limit, event loop delay and utilization, GC pauses, uptime, active\nhandles) through `posthog.metrics`, with no instrumentation of your own.\n\nLeave this unset to let the `metrics-sdk-autocapture` feature flag decide,\nre-evaluated every 30 seconds so it works as a remote kill switch. The flag\nis only ever evaluated locally, against cached flag definitions — so it\nrequires `secretKey`, must itself be locally evaluable, and never costs a\nrequest or a `$feature_flag_called` event. Set this option explicitly to opt\nin or out and skip flag evaluation entirely.",
+          "type": "boolean",
+          "name": "enableMetricsAutocapture"
+        },
+        {
+          "description": "PROOF OF CONCEPT - MAY CHANGE WITHOUT WARNING\n\nHow often runtime metrics are sampled when autocapture is on. Values below\n1000ms are clamped, and the default matches the metrics flush interval so\neach flush window carries roughly one sample per series.",
+          "type": "number",
+          "name": "metricsAutocaptureIntervalMs"
+        },
+        {
           "description": "Credential that enables local feature flag evaluation and remote config.\n\nAccepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`).\nWhen provided, the client can evaluate feature flags locally and decrypt remote\nconfig payloads via `getRemoteConfigPayload`. Prefer this over the deprecated\n`personalApiKey` option; when both are set, `secretKey` takes precedence.",
           "type": "string",
           "name": "secretKey"

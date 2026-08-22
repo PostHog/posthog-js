@@ -174,6 +174,40 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    */
   metrics?: MetricsConfig
   /**
+   * PROOF OF CONCEPT - MAY CHANGE WITHOUT WARNING
+   *
+   * Autocapture low-level Node runtime metrics (CPU time and utilization, memory
+   * and heap limit, event loop delay and utilization, GC pauses, uptime, active
+   * handles) through `posthog.metrics`, with no instrumentation of your own.
+   *
+   * Leave this unset to let the `metrics-sdk-autocapture` feature flag decide,
+   * re-evaluated every 30 seconds so it works as a remote kill switch. The flag
+   * is only ever evaluated locally, against cached flag definitions — so it
+   * requires `secretKey`, must itself be locally evaluable, and never costs a
+   * request or a `$feature_flag_called` event. Set this option explicitly to opt
+   * in or out and skip flag evaluation entirely.
+   *
+   * @default undefined (decided by the `metrics-sdk-autocapture` feature flag)
+   * @example
+   * ```ts
+   * const client = new PostHog('phc_...', {
+   *   enableMetricsAutocapture: true,
+   *   metrics: { serviceName: 'billing-worker' },
+   * })
+   * ```
+   */
+  enableMetricsAutocapture?: boolean
+  /**
+   * PROOF OF CONCEPT - MAY CHANGE WITHOUT WARNING
+   *
+   * How often runtime metrics are sampled when autocapture is on. Values below
+   * 1000ms are clamped, and the default matches the metrics flush interval so
+   * each flush window carries roughly one sample per series.
+   *
+   * @default 10000
+   */
+  metricsAutocaptureIntervalMs?: number
+  /**
    * Credential that enables local feature flag evaluation and remote config.
    *
    * Accepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`).

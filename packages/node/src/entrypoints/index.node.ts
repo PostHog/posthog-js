@@ -7,6 +7,7 @@ import { createRelativePathModifier } from '../extensions/error-tracking/modifie
 import { PostHogBackendClient } from '../client'
 import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 import { PostHogContext } from '../extensions/context/context'
+import { RuntimeMetricsCollector } from '../extensions/metrics-autocapture/runtime.node'
 import { gzipCompress } from '../gzip.node'
 
 export class PostHog extends PostHogBackendClient {
@@ -20,6 +21,10 @@ export class PostHog extends PostHogBackendClient {
 
   protected initializeContext(): PostHogContext {
     return new PostHogContext()
+  }
+
+  protected override createRuntimeMetricsSampler(): RuntimeMetricsCollector {
+    return new RuntimeMetricsCollector()
   }
 
   protected override createErrorPropertiesBuilder(): CoreErrorTracking.ErrorPropertiesBuilder {
