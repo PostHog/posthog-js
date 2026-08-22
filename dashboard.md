@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 3578](https://github.com/PostHog/posthog-js/issues/3578) | Already fixed and released in posthog-js 1.418.0. | feature/product-analytics, web, team/client-libraries |  | no | 2026-08-22T16:23:10.995Z |
 | PostHog/posthog-js | [issue 3577](https://github.com/PostHog/posthog-js/issues/3577) | Valid feature request for configurable survey option-list height; existing labels are appropriate. | enhancement, feature/surveys, web |  | no | 2026-08-22T16:22:30.277Z |
 | PostHog/posthog-js | [issue 3576](https://github.com/PostHog/posthog-js/issues/3576) | Already fixed and released in posthog-js@1.379.1. | feature/replay, web, team/client-libraries |  | no | 2026-08-22T16:21:50.149Z |
 | PostHog/posthog-js | [issue 3574](https://github.com/PostHog/posthog-js/issues/3574) | Already fixed and released via PR #3581. | feature/product-analytics, web, team/client-libraries |  | no | 2026-08-22T16:20:17.993Z |
@@ -116,7 +117,6 @@
 | PostHog/posthog-js | [issue 3575](https://github.com/PostHog/posthog-js/issues/3575) | Valid surveys/web bug report; the rendering result can plausibly diverge from canRenderSurveyAsync after completion. | feature/surveys, web |  | no | 2026-06-30T09:33:38.426Z |
 | PostHog/posthog-js | [issue 3586](https://github.com/PostHog/posthog-js/issues/3586) | Valid feature request; the Node SDK still lacks groupIdentifyImmediate(). | enhancement, feature/product-analytics, node | https://github.com/PostHog/posthog-js/pull/4006 | no | 2026-06-29T10:08:46.834Z |
 | PostHog/posthog-js | [issue 3583](https://github.com/PostHog/posthog-js/issues/3583) | Valid bug: OpenAI Responses API streaming helper is not wrapped for PostHog params. | bug, team/llm-analytics |  | no | 2026-06-29T10:04:38.826Z |
-| PostHog/posthog-js | [issue 3578](https://github.com/PostHog/posthog-js/issues/3578) | Valid bug: reset cannot clear localStorage on other subdomains, and current default merge behavior can let stale subdomain localStorage override the cross-subdomain cookie. | feature/product-analytics, web |  | no | 2026-06-29T10:01:55.780Z |
 | PostHog/posthog-js | [issue 3573](https://github.com/PostHog/posthog-js/issues/3573) | Valid bug: `register_for_session` is currently scoped to browser `sessionStorage`, not to PostHog `$session_id` rotation. | feature/product-analytics, web |  | no | 2026-06-29T09:59:28.987Z |
 | PostHog/posthog-js | [issue 3435](https://github.com/PostHog/posthog-js/issues/3435) | Likely already fixed for posthog-js consumers by removing OpenTelemetry from published dependencies. | enhancement, dependencies, web, feature, team/logs |  | no | 2026-06-28T09:38:18.835Z |
 | PostHog/posthog-js | [issue 3530](https://github.com/PostHog/posthog-js/issues/3530) | Valid React Native surveys feature request; current code always uses a ScrollView for question content. | enhancement, feature, feature/surveys, react-native | https://github.com/PostHog/posthog-js/pull/4001 | no | 2026-06-28T09:37:17.665Z |
