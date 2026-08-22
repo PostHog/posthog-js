@@ -1186,6 +1186,9 @@ importers:
       rollup:
         specifier: ~4.53.2
         version: 4.53.3
+      vite:
+        specifier: ^8.0.16
+        version: 8.2.0(@types/node@20.19.9)(esbuild@0.25.12)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.0)
 
   packages/rrweb/all:
     dependencies:
