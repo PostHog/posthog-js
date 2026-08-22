@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/3980": {
+    "key": "PostHog/posthog-js/issue/3980",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3980",
+    "url": "https://github.com/PostHog/posthog-js/issues/3980",
+    "conclusion": "Valid Next.js feature enhancement, but automatic server-to-client flag synchronization needs an explicit design and is not a safe small change.",
+    "labels": [
+      "enhancement",
+      "feature/flags",
+      "frameworks/next-js",
+      "team/feature-flags"
+    ],
+    "closed": false,
+    "updatedAt": "2026-08-22T16:40:33.666Z"
+  },
   "PostHog/posthog-js/issue/3935": {
     "key": "PostHog/posthog-js/issue/3935",
     "repo": "PostHog/posthog-js",
@@ -2013,21 +2028,6 @@
     ],
     "closed": false,
     "updatedAt": "2026-06-25T16:14:22.029Z"
-  },
-  "PostHog/posthog-js/issue/3980": {
-    "key": "PostHog/posthog-js/issue/3980",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 3980",
-    "url": "https://github.com/PostHog/posthog-js/issues/3980",
-    "conclusion": "Valid feature request; current code has bootstrap/update primitives but lacks automatic Next.js navigation/middleware-to-client flag refresh.",
-    "labels": [
-      "enhancement",
-      "frameworks/next-js",
-      "feature/flags",
-      "team/feature-flags"
-    ],
-    "closed": false,
-    "updatedAt": "2026-06-25T16:06:24.677Z"
   },
   "PostHog/posthog-js/issue/3954": {
     "key": "PostHog/posthog-js/issue/3954",
