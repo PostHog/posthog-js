@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/2879": {
+    "key": "PostHog/posthog-js/issue/2879",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 2879",
+    "url": "https://github.com/PostHog/posthog-js/issues/2879",
+    "conclusion": "Already implemented and released for React Native in posthog-react-native 4.22.0.",
+    "labels": [
+      "feature/flags",
+      "team/feature-flags",
+      "react-native",
+      "feature/mobile"
+    ],
+    "closed": false,
+    "updatedAt": "2026-08-22T16:18:03.189Z"
+  },
   "PostHog/posthog-js/issue/2659": {
     "key": "PostHog/posthog-js/issue/2659",
     "repo": "PostHog/posthog-js",
