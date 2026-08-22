@@ -2,20 +2,7 @@
 
 ...<older entries truncated>
 
-t detect background extension background context
-- Conclusion: Already fixed in posthog-js 1.373.0 by PR #3559.
-- Labels: feature/flags, web, team/client-libraries
-- URL: https://github.com/PostHog/posthog-js/issues/3551
-- Relevant files: `packages/browser/src/remote-config.ts`, `packages/browser/src/__tests__/remote-config.test.ts`, `packages/browser/CHANGELOG.md`
-- Findings: `RemoteConfigLoader.refresh()` returns without calling `reloadFeatureFlags()` when flags are disabled, `document` is absent, or `document.visibilityState` is `hidden`.; `remote-config.test.ts` contains a regression test that mocks the browser-common `document` export as `undefined`, simulates a browser-extension background context, and verifies that `reloadFeatureFlags()` is not called.; The browser changelog records PR #3559, "Skip remote config background refreshes when no document is available," under release 1.373.0.
-- Fix assessment: No new change is appropriate: the current implementation contains the minimal missing-document guard and a focused regression test for this exact browser-extension scenario.
-
-## 2026-08-22T16:20:22.544Z
-- Item: issue #3574 — The Oculus Browser is not properly being detected
-- Conclusion: Already fixed and released via PR #3581.
-- Labels: feature/product-analytics, web, team/client-libraries
-- URL: https://github.com/PostHog/posthog-js/issues/3574
-- Relevant files: `packages/core/src/utils/user-agent-utils.ts`, `packages/browser/src/__tests__/utils/user-agent-utils.test.ts`, `packages/core/CHANGELOG.md`
+nt-utils.test.ts`, `packages/core/CHANGELOG.md`
 - Findings: `detectBrowser` now returns `Oculus Browser` when the UA contains `OculusBrowser`, before the Samsung Internet and Chrome branches that also match Oculus/Meta Quest UAs.; `versionRegexes` includes an `OculusBrowser/<major>.<minor>` matcher, so the detected browser version is also attributed to Oculus Browser.; Browser unit tests cover Quest 2 UAs containing `OculusBrowser`, `SamsungBrowser`, and `Chrome`, plus a Quest 3 UA without the Samsung marker; both expect `Oculus Browser` and the Oculus version.; `packages/core/CHANGELOG.md` records PR #3581 in @posthog/core 1.29.6 as: "Detect Oculus Browser (Meta Quest headsets) correctly instead of falling back to Chrome."
 - Fix assessment: No additional implementation is appropriate: the minimal ordered UA-marker fix and regression tests are already present and documented as released.
 
@@ -99,3 +86,12 @@ t detect background extension background context
 - Relevant files: `packages/browser-common/src/utils/event-utils.ts`, `packages/browser/src/posthog-core.ts`, `packages/browser/src/__tests__/utils/event-utils.test.ts`, `packages/types/src/posthog-config.ts`, `packages/browser/src/extensions/web-vitals/index.ts`
 - Findings: `getEventProperties` in `packages/browser-common/src/utils/event-utils.ts` builds the default browser, device, URL, screen, timezone, language, library, insert-ID, and time properties; it has no Network Information API reads or network-quality properties.; `PostHog.calculateEventProperties` calls `getEventProperties` for normal events and merges the returned values into the final payload, so adding fields there would affect broad event capture.; The existing event-utility test suite covers default property collection and is the focused location for supported and unsupported Network Information API regression coverage.; `capture_performance` is documented as Session Replay network timing and Web Vitals configuration, and the Web Vitals extension captures performance metrics separately; neither currently provides connection-quality fields on every event.; Repository searches found no existing use of `navigator.connection`, `mozConnection`, `webkitConnection`, `effectiveType`, or `downlink`.
 - Fix assessment: The code addition could be small, but introducing new automatically captured event properties creates a public data contract and affects every browser event. The requested fields have incomplete browser availability and may add fingerprinting/privacy and payload considerations. Selecting default-on versus opt-in behavior and stable property names before changing shared defaults avoids a speculative implementation.
+
+## 2026-08-22T16:30:22.279Z
+- Item: issue #3935 — Feature Request: Consider adding features from previous posthog nuxt module
+- Conclusion: Valid but underspecified Nuxt enhancement request; no safe implementation can be selected yet.
+- Labels: enhancement, nuxt, team/client-libraries
+- URL: https://github.com/PostHog/posthog-js/issues/3935
+- Relevant files: `packages/nuxt/src/module.ts`, `packages/nuxt/src/runtime/vue-plugin.ts`, `packages/nuxt/src/runtime/nitro-plugin.ts`, `packages/types/src/posthog-config.ts`
+- Findings: The Nuxt module exposes a `host` option and passes it to the browser SDK as `api_host` and to `posthog-node` as `host`.; The module accepts `clientConfig` as `Partial<PostHogConfig>` and forwards it to `posthog.init`, but its implementation contains no Nuxt/Nitro proxy route, route-rule, or reverse-proxy utility.; The browser SDK configuration includes `rewriteRequestPath`, documented for reverse proxies with custom API, feature-flag, and asset paths, plus `ui_host` for correct PostHog UI links.; The request refers broadly to features from an external previous module and does not define which features besides reverse proxying should be adopted or the required proxy routing contract.
+- Fix assessment: A reverse-proxy helper needs an explicit routing contract across Nuxt/Nitro deployment targets and PostHog endpoints. Adding a generic proxy without deciding paths, upstream host, and coverage for SDK/static/replay traffic would be speculative.
