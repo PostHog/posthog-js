@@ -1,4 +1,17 @@
 {
+  "PostHog/posthog-js/issue/3590": {
+    "key": "PostHog/posthog-js/issue/3590",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 3590",
+    "url": "https://github.com/PostHog/posthog-js/issues/3590",
+    "conclusion": "Credible session-replay canvas state-restoration bug; not a safe small fix without a focused seek regression test.",
+    "labels": [
+      "feature/replay",
+      "web"
+    ],
+    "closed": false,
+    "updatedAt": "2026-08-22T16:24:53.802Z"
+  },
   "PostHog/posthog-js/issue/3582": {
     "key": "PostHog/posthog-js/issue/3582",
     "repo": "PostHog/posthog-js",
@@ -1605,19 +1618,6 @@
     ],
     "closed": false,
     "updatedAt": "2026-06-30T09:36:47.102Z"
-  },
-  "PostHog/posthog-js/issue/3590": {
-    "key": "PostHog/posthog-js/issue/3590",
-    "repo": "PostHog/posthog-js",
-    "item": "issue 3590",
-    "url": "https://github.com/PostHog/posthog-js/issues/3590",
-    "conclusion": "Valid replay canvas bug; not a safe small sweep fix.",
-    "labels": [
-      "feature/replay",
-      "web"
-    ],
-    "closed": false,
-    "updatedAt": "2026-06-30T09:35:25.160Z"
   },
   "PostHog/posthog-js/issue/3575": {
     "key": "PostHog/posthog-js/issue/3575",
