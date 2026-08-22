@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/1089": {
+    "key": "PostHog/posthog-js/issue/1089",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 1089",
+    "url": "https://github.com/PostHog/posthog-js/issues/1089",
+    "conclusion": "Valid session-replay feature request, but changing the cap affects session rotation and recording volume.",
+    "labels": [
+      "feature",
+      "feature/replay",
+      "web",
+      "team/client-libraries"
+    ],
+    "closed": false,
+    "updatedAt": "2026-08-22T15:24:30.585Z"
+  },
   "PostHog/posthog-js/issue/4599": {
     "key": "PostHog/posthog-js/issue/4599",
     "repo": "PostHog/posthog-js",
