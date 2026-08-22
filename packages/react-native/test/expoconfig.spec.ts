@@ -594,6 +594,24 @@ describe('applyPostHogAndroidGradlePlugin', () => {
     expect(lines[appIdx + 1]).toContain('com.posthog.android')
   })
 
+  it('configures native symbol tasks to prefer a project-local CLI', () => {
+    const result = applyPostHogAndroidGradlePlugin(appBuildGradle)
+    expect(result).toContain('new File(rootDir.parentFile, "node_modules/.bin")')
+    expect(result).toContain('["posthog-cli", "posthog-cli.cmd"]')
+    expect(result).toContain('tasks.withType(com.posthog.android.PostHogCliExecTask).configureEach')
+    expect(result).toContain('postHogExecutable.convention(postHogLocalCli.absolutePath)')
+  })
+
+  it('adds local CLI configuration when migrating a build.gradle that already applies the plugin', () => {
+    const existing = appBuildGradle.replace(
+      'apply plugin: "com.android.application"',
+      'apply plugin: "com.android.application"\napply plugin: "com.posthog.android"'
+    )
+    const result = applyPostHogAndroidGradlePlugin(existing)
+    expect(result.match(/apply plugin: "com\.posthog\.android"/g)).toHaveLength(1)
+    expect(result).toContain('postHogExecutable.convention(postHogLocalCli.absolutePath)')
+  })
+
   it('is idempotent', () => {
     const once = applyPostHogAndroidGradlePlugin(appBuildGradle)
     const twice = applyPostHogAndroidGradlePlugin(once)

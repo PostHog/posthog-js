@@ -111,28 +111,50 @@ export function addPostHogAndroidGradlePluginClasspath(projectBuildGradle: strin
   }
 }
 
-// Applies the com.posthog.android plugin in the app module. Idempotent.
+const POSTHOG_ANDROID_LOCAL_CLI_CONFIG = `// Prefer a project-local CLI so native symbol uploads work on clean CI machines.
+def postHogLocalCliDirectory = new File(rootDir.parentFile, "node_modules/.bin")
+def postHogLocalCli = ["posthog-cli", "posthog-cli.cmd"]
+    .collect { new File(postHogLocalCliDirectory, it) }
+    .find { it.isFile() }
+
+if (postHogLocalCli != null) {
+    tasks.withType(com.posthog.android.PostHogCliExecTask).configureEach {
+        // A user-provided postHogExecutable still takes precedence over this convention.
+        postHogExecutable.convention(postHogLocalCli.absolutePath)
+    }
+}`
+
+// Applies the com.posthog.android plugin and configures its tasks to prefer a project-local CLI.
+// Idempotent, including when migrating a build.gradle that already applies the plugin.
 export function applyPostHogAndroidGradlePlugin(appBuildGradle: string): string {
-  if (/apply plugin: ["']com\.posthog\.android["']/.test(appBuildGradle)) {
-    return appBuildGradle
-  }
-
   const applyLine = 'apply plugin: "com.posthog.android"'
+  let contents = appBuildGradle
 
-  // Apply right after com.android.application so the plugin can hook AGP variants.
-  const appPluginPattern = /^([ \t]*apply plugin: ["']com\.android\.application["'].*)$/m
-  if (appPluginPattern.test(appBuildGradle)) {
-    return appBuildGradle.replace(appPluginPattern, `$1\n${applyLine}`)
+  if (!/apply plugin: ["']com\.posthog\.android["']/.test(contents)) {
+    // Apply right after com.android.application so the plugin can hook AGP variants.
+    const appPluginPattern = /^([ \t]*apply plugin: ["']com\.android\.application["'].*)$/m
+    if (appPluginPattern.test(contents)) {
+      contents = contents.replace(appPluginPattern, `$1\n${applyLine}`)
+    } else {
+      // Fallback: insert directly above the android { } block.
+      const androidBlockPattern = /^android\s*\{/m
+      if (androidBlockPattern.test(contents)) {
+        contents = contents.replace(androidBlockPattern, `${applyLine}\n\nandroid {`)
+      } else {
+        console.warn('PostHog: Could not find where to apply com.posthog.android in the app build.gradle')
+        return contents
+      }
+    }
   }
 
-  // Fallback: insert directly above the android { } block.
-  const androidBlockPattern = /^android\s*\{/m
-  if (androidBlockPattern.test(appBuildGradle)) {
-    return appBuildGradle.replace(androidBlockPattern, `${applyLine}\n\nandroid {`)
+  if (!contents.includes('postHogLocalCliDirectory')) {
+    contents = contents.replace(
+      /^(apply plugin: ["']com\.posthog\.android["'].*)$/m,
+      `$1\n\n${POSTHOG_ANDROID_LOCAL_CLI_CONFIG}`
+    )
   }
 
-  console.warn('PostHog: Could not find where to apply com.posthog.android in the app build.gradle')
-  return appBuildGradle
+  return contents
 }
 
 const withAndroidNativeSymbolsPlugin = (config: any) => {
