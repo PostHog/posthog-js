@@ -5023,6 +5023,24 @@ describe('Lazy SessionRecording', () => {
             expect(lazyRecorderStop).toHaveBeenCalledTimes(1)
         })
 
+        it('discards an active recorder when disposed without flushing buffered events', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                    },
+                })
+            )
+            const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']!
+            const lazyRecorderStop = jest.spyOn(lazyRecorder, 'stop')
+            const lazyRecorderDiscard = jest.spyOn(lazyRecorder, 'discard')
+
+            sessionRecording.dispose({ discardBufferedEvents: true })
+
+            expect(lazyRecorderDiscard).toHaveBeenCalledWith({ discardProducerEvents: true })
+            expect(lazyRecorderStop).not.toHaveBeenCalled()
+        })
+
         it('does not start a recorder when its script loads after disposal', () => {
             let completeScriptLoad: (() => void) | undefined
             loadScriptMock.mockImplementation((_ph, _path, callback) => {

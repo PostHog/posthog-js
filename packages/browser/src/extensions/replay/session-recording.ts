@@ -105,10 +105,14 @@ export class SessionRecording implements Extension {
         this.startIfEnabledOrStop()
     }
 
-    dispose(): void {
+    dispose({ discardBufferedEvents = false }: { discardBufferedEvents?: boolean } = {}): void {
         this._sessionRecordingDisposed = true
         document?.removeEventListener?.('visibilitychange', this._onVisibilityChange)
-        this.stopRecording()
+        if (discardBufferedEvents) {
+            this._discardRecording(true)
+        } else {
+            this.stopRecording()
+        }
     }
 
     private get _isRecordingEnabled() {
@@ -170,10 +174,21 @@ export class SessionRecording implements Extension {
             !assignableWindow?.__PosthogExtensions__?.rrweb?.record ||
             !assignableWindow.__PosthogExtensions__?.initSessionRecording
         ) {
+            // Consent and session state can change while the recorder chunk is loading.
+            // Only the recorder that initiated this load may finish starting with its manager.
+            const sessionManager = this._instance.sessionManager
             assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(
                 this._instance,
                 this._scriptName,
                 (err) => {
+                    if (
+                        this._sessionRecordingDisposed ||
+                        !this._isRecordingEnabled ||
+                        this._instance.sessionManager !== sessionManager
+                    ) {
+                        this._recordingStatus = DISABLED
+                        return
+                    }
                     if (err) {
                         // most often this is an ad blocker matching the `/static/<script>.js` path.
                         // flag it on the session so a blocked recorder is visible in analytics
@@ -197,10 +212,10 @@ export class SessionRecording implements Extension {
         this._lazyLoadedSessionRecording?.stop()
     }
 
-    private _discardRecording() {
+    private _discardRecording(discardProducerEvents = false) {
         this._persistFlagsOnSessionListener?.()
         this._persistFlagsOnSessionListener = undefined
-        this._lazyLoadedSessionRecording?.discard()
+        this._lazyLoadedSessionRecording?.discard({ discardProducerEvents })
     }
 
     private _resetSampling() {
@@ -342,7 +357,8 @@ export class SessionRecording implements Extension {
     }
 
     private _onScriptLoaded(startReason?: SessionStartReason) {
-        if (this._sessionRecordingDisposed) {
+        if (this._sessionRecordingDisposed || !this._isRecordingEnabled || !this._instance.sessionManager) {
+            this._recordingStatus = DISABLED
             return
         }
 

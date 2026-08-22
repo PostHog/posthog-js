@@ -1523,7 +1523,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._scheduleFlushBuffer()
     }
 
-    discard() {
+    discard({ discardProducerEvents = false }: { discardProducerEvents?: boolean } = {}) {
+        if (discardProducerEvents) {
+            // rrweb teardown can synchronously emit deferred stylesheet mutations.
+            // Clear first so those emissions cannot flush existing data, then clear them below too.
+            this._clearBuffer()
+            this._stopRecordingProducers()
+        }
         this._clearBuffer()
         this._teardown()
         logger.info('discarded')

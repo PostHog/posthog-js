@@ -473,13 +473,18 @@ export class PostHog implements PostHogInterface {
     private _browserClientAdapter: BrowserClientAdapter | undefined
     private _featureFlagsReloadingUnsubscribe: (() => void) | undefined
 
-    private _replaceExtension<T extends Extension>(oldExt: T | undefined, newExt: T): T {
-        if (oldExt) {
-            const idx = this._extensions.indexOf(oldExt)
-            if (idx !== -1) {
-                this._extensions.splice(idx, 1)
-            }
+    private _removeExtension<T extends Extension>(extension: T | undefined): void {
+        if (!extension) {
+            return
         }
+        const idx = this._extensions.indexOf(extension)
+        if (idx !== -1) {
+            this._extensions.splice(idx, 1)
+        }
+    }
+
+    private _replaceExtension<T extends Extension>(oldExt: T | undefined, newExt: T): T {
+        this._removeExtension(oldExt)
         this._extensions.push(newExt)
         newExt.initialize?.()
         return newExt
@@ -4286,6 +4291,8 @@ export class PostHog implements PostHogInterface {
             return
         }
         if (this._inCookielessMode()) {
+            // Identity changes must not let queued recorder work flush under the replacement identity.
+            this.sessionRecording?.dispose({ discardBufferedEvents: true })
             // If the user was being treated as rejected in on_reject mode (either explicitly opted out, or opted out by default via opt_out_capturing_by_default), then before we can start sending regular non-cookieless events
             // we need to reset the instance to ensure that there is no leaking of state or data between the cookieless and regular events
             this._reset(true, true)
@@ -4360,6 +4367,11 @@ export class PostHog implements PostHogInterface {
             return
         }
 
+        const sessionRecording =
+            this.config.cookieless_mode === COOKIELESS_ON_REJECT ? this.sessionRecording : undefined
+        // Identity changes must not let queued recorder work flush under the cookieless identity.
+        sessionRecording?.dispose({ discardBufferedEvents: true })
+
         if (this.config.cookieless_mode === COOKIELESS_ON_REJECT && this.consent.isOptedIn()) {
             // If the user has opted in, we need to reset the instance to ensure that there is no leaking of state or data between the cookieless and regular events
             this._reset(true, true)
@@ -4374,8 +4386,8 @@ export class PostHog implements PostHogInterface {
                 distinct_id: COOKIELESS_SENTINEL_VALUE,
                 $device_id: null,
             })
-            // tear down rrweb observers before sessionManager goes away — late events would throw
-            this.sessionRecording?.stopRecording()
+            // Detach the recorder before sessionManager goes away so pending work cannot outlive it.
+            this._removeExtension(sessionRecording)
             this.sessionRecording = undefined
             this.sessionManager?.destroy()
             this.pageViewManager?.destroy()
