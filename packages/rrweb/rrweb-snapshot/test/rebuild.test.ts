@@ -409,6 +409,40 @@ describe('rebuild', function () {
       ) as HTMLDivElement;
       expect(node.shadowRoot?.childNodes.length).toBe(1);
     });
+
+    it('skips a shadow host the browser refuses instead of throwing', function () {
+      let node: Node | null | undefined;
+      expect(() => {
+        node = buildNodeWithSN(
+          {
+            id: 1,
+            // a tag that is not a valid shadow host, so attachShadow throws
+            tagName: 'nohyphen',
+            type: NodeType.Element,
+            attributes: {},
+            childNodes: [
+              {
+                id: 2,
+                tagName: 'div',
+                type: NodeType.Element,
+                attributes: {},
+                childNodes: [],
+                isShadow: true,
+              },
+            ],
+            isCustom: true,
+            isShadowHost: true,
+          },
+          {
+            doc: document,
+            mirror,
+            hackCss: false,
+            cache,
+          },
+        );
+      }).not.toThrow();
+      expect((node as HTMLElement).shadowRoot).toBeNull();
+    });
   });
 
   describe('add hover class to hover selector related rules', function () {
