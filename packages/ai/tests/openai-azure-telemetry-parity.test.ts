@@ -94,6 +94,18 @@ function providerFetch(): jest.Mock {
   })
 }
 
+function providerErrorFetch(): jest.Mock {
+  return jest.fn(
+    async () =>
+      new Response(
+        JSON.stringify({
+          error: { message: 'provider rejected the request', type: 'invalid_request_error' },
+        }),
+        { status: 400, headers: { 'content-type': 'application/json' } }
+      )
+  )
+}
+
 function createPostHogMock() {
   return { capture: jest.fn(), captureImmediate: jest.fn(), privacy_mode: false }
 }
@@ -174,6 +186,38 @@ describe.each(providerCases)('$provider OpenAI-compatible telemetry parity', ({ 
       ],
     })
     expect(JSON.stringify(properties)).not.toContain(binary)
+  })
+
+  test('sanitizes Responses instructions on success', async () => {
+    const posthog = createPostHogMock()
+    const client = createClient(providerFetch(), posthog)
+
+    await client.responses.create({
+      model: 'gpt-4o',
+      input: 'Describe the image.',
+      instructions: `data:image/png;base64,${binary}`,
+    } as any)
+
+    const properties = posthog.capture.mock.calls[0][0].properties
+    expect(JSON.stringify(properties.$ai_input)).not.toContain(binary)
+    expect(JSON.stringify(properties.$ai_input)).toContain('[base64 image/png redacted]')
+  })
+
+  test('sanitizes Responses instructions on provider errors', async () => {
+    const posthog = createPostHogMock()
+    const client = createClient(providerErrorFetch(), posthog)
+
+    await expect(
+      client.responses.create({
+        model: 'gpt-4o',
+        input: 'Describe the image.',
+        instructions: `data:image/png;base64,${binary}`,
+      } as any)
+    ).rejects.toThrow('provider rejected the request')
+
+    const properties = posthog.capture.mock.calls[0][0].properties
+    expect(JSON.stringify(properties.$ai_input)).not.toContain(binary)
+    expect(JSON.stringify(properties.$ai_input)).toContain('[base64 image/png redacted]')
   })
 
   test('captures raw embedding usage consistently', async () => {

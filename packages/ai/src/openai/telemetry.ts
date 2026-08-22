@@ -140,6 +140,13 @@ export function buildChatErrorOptions(
   }
 }
 
+function buildSanitizedResponsesInput(context: CommonContext<ResponsesParams>): unknown {
+  return formatOpenAIResponsesInput(
+    sanitizeOpenAIResponse(context.params.input, context.client),
+    sanitizeOpenAIResponse(context.params.instructions, context.client) as string | null | undefined
+  )
+}
+
 export function buildResponsesSuccessOptions(
   context: CommonContext<ResponsesParams>,
   result: {
@@ -157,10 +164,7 @@ export function buildResponsesSuccessOptions(
     ...context.monitoring,
     model: context.params.model ?? response.model,
     provider: context.provider,
-    input: formatOpenAIResponsesInput(
-      sanitizeOpenAIResponse(context.params.input, context.client),
-      context.params.instructions
-    ),
+    input: buildSanitizedResponsesInput(context),
     output: sanitizeOpenAIResponse(result.output, context.client),
     latency: result.latency,
     timeToFirstToken: result.timeToFirstToken,
@@ -201,10 +205,7 @@ export function buildResponsesErrorOptions(
     ...context.monitoring,
     model: context.params.model,
     provider: context.provider,
-    input: formatOpenAIResponsesInput(
-      sanitizeOpenAIResponse(context.params.input, context.client),
-      context.params.instructions
-    ),
+    input: buildSanitizedResponsesInput(context),
     output: [],
     latency: 0,
     baseURL: context.baseURL,
