@@ -506,7 +506,9 @@ export interface ExceptionRateLimiterConfig {
 
 export interface ErrorTrackingOptions extends ExceptionRateLimiterConfig {
     /**
-     * Decide whether exceptions thrown by browser extensions should be captured
+     * Decide whether exceptions thrown by browser extensions or by scripts injected by the
+     * browser itself (for example Firefox for iOS and Chrome for iOS user scripts) should be
+     * captured. When false, both categories are dropped before capture.
      *
      * @default false
      */
