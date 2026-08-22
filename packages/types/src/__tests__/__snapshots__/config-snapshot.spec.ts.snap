@@ -737,7 +737,8 @@ exports[`config snapshot for PostHogConfig 1`] = `
       "web_vitals_attribution": [
         "undefined",
         "false",
-        "true"
+        "true",
+        "SupportedWebVitalsMetrics[]"
       ],
       "__preview_web_vitals_soft_navs": [
         "undefined",

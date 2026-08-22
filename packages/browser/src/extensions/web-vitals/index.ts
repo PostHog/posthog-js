@@ -36,7 +36,7 @@ const WEB_VITALS_ATTRIBUTION_ALLOWLIST = [
     'presentationDelay',
     'loadState',
     // LCP: which element rendered, plus the load-phase breakdown
-    'element',
+    'target',
     'url',
     'timeToFirstByte',
     'resourceLoadDelay',
@@ -49,16 +49,6 @@ const WEB_VITALS_ATTRIBUTION_ALLOWLIST = [
     // FCP
     'firstByteToFCP',
 ]
-
-const boundedAttribution = (attribution: Record<string, unknown>): Record<string, unknown> => {
-    const bounded: Record<string, unknown> = {}
-    for (const key of WEB_VITALS_ATTRIBUTION_ALLOWLIST) {
-        if (!isUndefined(attribution[key])) {
-            bounded[key] = attribution[key]
-        }
-    }
-    return bounded
-}
 
 type WebVitalsEventBuffer = {
     navigationKey: string | undefined
@@ -332,7 +322,17 @@ export class WebVitalsAutocapture {
 
         // Keep attribution only for the metrics we attribute, and bound it to small fields.
         if (isObject(metric.attribution) && this.attributionMetrics.indexOf(metric.name) > -1) {
-            bufferedMetric.attribution = boundedAttribution(metric.attribution)
+            const attribution: Record<string, unknown> = {}
+            for (const key of WEB_VITALS_ATTRIBUTION_ALLOWLIST) {
+                const value =
+                    key === 'url' && typeof metric.attribution[key] === 'string'
+                        ? this._maskedURL(metric.attribution[key])
+                        : metric.attribution[key]
+                if (!isUndefined(value)) {
+                    attribution[key] = value
+                }
+            }
+            bufferedMetric.attribution = attribution
         } else {
             delete bufferedMetric.attribution
         }
@@ -371,7 +371,16 @@ export class WebVitalsAutocapture {
                 ? posthogExtensions?.postHogWebVitalsCallbacks
                 : undefined)
         if (!isUndefined(callbacks)) {
-            ;({ onLCP, onCLS, onFCP, onINP } = callbacks)
+            const withoutAttribution = callbacks.withoutAttribution
+            const attributionMetrics = this.attributionMetrics
+            onLCP =
+                attributionMetrics.indexOf('LCP') > -1 ? callbacks.onLCP : withoutAttribution?.onLCP || callbacks.onLCP
+            onCLS =
+                attributionMetrics.indexOf('CLS') > -1 ? callbacks.onCLS : withoutAttribution?.onCLS || callbacks.onCLS
+            onFCP =
+                attributionMetrics.indexOf('FCP') > -1 ? callbacks.onFCP : withoutAttribution?.onFCP || callbacks.onFCP
+            onINP =
+                attributionMetrics.indexOf('INP') > -1 ? callbacks.onINP : withoutAttribution?.onINP || callbacks.onINP
         }
 
         if (!onLCP || !onCLS || !onFCP || !onINP) {

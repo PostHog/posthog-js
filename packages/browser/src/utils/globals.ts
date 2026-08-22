@@ -181,11 +181,15 @@ export type WebVitalsCallbackFlavor =
     | 'web-vitals-soft-navs'
     | 'web-vitals-with-attribution-soft-navs'
 
-export type WebVitalsCallbacks = {
+export type WebVitalsMetricCallbacks = {
     onLCP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
     onCLS: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
     onFCP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
     onINP: (onReport: (metric: any) => void, opts?: WebVitalsReportOpts) => void
+}
+
+export type WebVitalsCallbacks = WebVitalsMetricCallbacks & {
+    withoutAttribution?: WebVitalsMetricCallbacks
 }
 
 export type PostHogExtensionKind =

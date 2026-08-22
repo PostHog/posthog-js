@@ -3,7 +3,13 @@ import '../helpers/mock-logger'
 import { createPosthogInstance } from '../helpers/posthog-instance'
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { PostHog } from '../../posthog-core'
-import { FlagsResponse, PerformanceCaptureConfig, RemoteConfig, SupportedWebVitalsMetrics } from '../../types'
+import {
+    FlagsResponse,
+    PerformanceCaptureConfig,
+    PostHogConfig,
+    RemoteConfig,
+    SupportedWebVitalsMetrics,
+} from '../../types'
 import { assignableWindow } from '../../utils/globals'
 import { DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS, FIFTEEN_MINUTES_IN_MILLIS } from '../../extensions/web-vitals'
 import {
@@ -479,12 +485,51 @@ describe('web vitals', () => {
 
             expect(loadScriptMock).toHaveBeenCalledWith(expect.anything(), expectedBundle, expect.any(Function))
         })
+
+        it('uses unattributed observers for metrics excluded from the default attribution list', async () => {
+            const attributed = {
+                onLCP: jest.fn(),
+                onCLS: jest.fn(),
+                onFCP: jest.fn(),
+                onINP: jest.fn(),
+            }
+            const withoutAttribution = {
+                onLCP: jest.fn(),
+                onCLS: jest.fn(),
+                onFCP: jest.fn(),
+                onINP: jest.fn(),
+            }
+            const loadScriptMock = jest.fn().mockImplementation((_ph, kind, callback) => {
+                assignableWindow.__PosthogExtensions__ = {
+                    postHogWebVitalsCallbacksByFlavor: {
+                        [kind]: { ...attributed, withoutAttribution },
+                    },
+                }
+                callback()
+            })
+            assignableWindow.__PosthogExtensions__ = { loadExternalDependency: loadScriptMock }
+
+            posthog = await createPosthogInstance(uuidv7(), {
+                capture_performance: { web_vitals: true },
+                capture_pageview: false,
+            })
+
+            expect(attributed.onLCP).toHaveBeenCalled()
+            expect(attributed.onINP).toHaveBeenCalled()
+            expect(attributed.onCLS).not.toHaveBeenCalled()
+            expect(attributed.onFCP).not.toHaveBeenCalled()
+            expect(withoutAttribution.onCLS).toHaveBeenCalled()
+            expect(withoutAttribution.onFCP).toHaveBeenCalled()
+            expect(withoutAttribution.onLCP).not.toHaveBeenCalled()
+            expect(withoutAttribution.onINP).not.toHaveBeenCalled()
+        })
     })
 
     describe('captured metric payload', () => {
         const setupAndEmit = async (
             config: Partial<PerformanceCaptureConfig>,
-            emit: () => void
+            emit: () => void,
+            posthogConfig: Partial<PostHogConfig> = {}
         ): Promise<Record<string, any>> => {
             beforeSendMock = jest.fn().mockImplementation((e) => e)
             onLCPCallback = onCLSCallback = onFCPCallback = onINPCallback = undefined
@@ -505,6 +550,7 @@ describe('web vitals', () => {
             assignableWindow.__PosthogExtensions__ = { loadExternalDependency: loadScriptMock }
 
             posthog = await createPosthogInstance(uuidv7(), {
+                ...posthogConfig,
                 before_send: beforeSendMock,
                 capture_performance: { web_vitals: true, ...config },
                 capture_pageview: false,
@@ -550,6 +596,45 @@ describe('web vitals', () => {
                 processingDuration: 20,
                 presentationDelay: 30,
             })
+        })
+
+        it('keeps the LCP target in attribution', async () => {
+            const properties = await setupAndEmit({}, () => {
+                onLCPCallback?.({
+                    name: 'LCP',
+                    value: 100,
+                    attribution: { target: 'img#hero', elementRenderDelay: 20 },
+                })
+            })
+
+            expect(properties.$web_vitals_LCP_event.attribution).toEqual({
+                target: 'img#hero',
+                elementRenderDelay: 20,
+            })
+        })
+
+        it('masks personal data and removes hashes from LCP resource URLs', async () => {
+            const properties = await setupAndEmit(
+                {},
+                () => {
+                    onLCPCallback?.({
+                        name: 'LCP',
+                        value: 100,
+                        attribution: {
+                            url: 'https://cdn.example.com/hero.jpg?token=secret&size=large#private',
+                        },
+                    })
+                },
+                {
+                    mask_personal_data_properties: true,
+                    custom_personal_data_properties: ['token'],
+                    disable_capture_url_hashes: true,
+                }
+            )
+
+            expect(properties.$web_vitals_LCP_event.attribution.url).toBe(
+                'https://cdn.example.com/hero.jpg?token=<masked>&size=large'
+            )
         })
 
         it('drops attribution for CLS by default', async () => {
