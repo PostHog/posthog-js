@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 2648](https://github.com/PostHog/posthog-js/issues/2648) | No current reproducible defect is established; recommend closing as not reproducible unless a fresh, versioned reproduction appears. | feature/replay, web, team/client-libraries |  | no | 2026-08-22T16:07:46.174Z |
 | PostHog/posthog-js | [issue 2475](https://github.com/PostHog/posthog-js/issues/2475) | Confirmed historical browser-package bundling regression in posthog-js 1.279.x; the failure is not compatible with a client-side Next.js initialization path. | feature/replay, feature/heatmaps, web, team/client-libraries |  | no | 2026-08-22T16:06:50.734Z |
 | PostHog/posthog-js | [issue 2278](https://github.com/PostHog/posthog-js/issues/2278) | Already fixed: survey wait-period eligibility now safely handles denied localStorage access. | feature/surveys, web, team/client-libraries |  | no | 2026-08-22T16:05:45.039Z |
 | PostHog/posthog-js | [issue 2159](https://github.com/PostHog/posthog-js/issues/2159) | Valid cross-SDK autocapture feature request, but it needs SDK-specific API semantics before implementation. | enhancement, feature/autocapture, react-native, feature/mobile, web-lite, team/client-libraries |  | no | 2026-08-22T15:52:01.659Z |
