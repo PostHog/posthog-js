@@ -31,6 +31,7 @@ const config: ResolvedPluginConfig = {
     sourcemaps: {
         enabled: true,
         deleteAfterUpload: true,
+        releaseMode: 'symbol-set',
     },
 }
 
@@ -52,6 +53,18 @@ async function exists(filePath: string): Promise<boolean> {
     } catch {
         return false
     }
+}
+
+function createCompiler(version: string | undefined): {
+    compiler: webpack.Compiler
+    sourceMapDevToolPlugin: jest.Mock
+} {
+    const sourceMapDevToolPlugin = jest.fn().mockImplementation(() => ({ apply: jest.fn() }))
+    const compiler = {
+        webpack: { SourceMapDevToolPlugin: sourceMapDevToolPlugin, version },
+        hooks: { done: { tapAsync: jest.fn() } },
+    } as unknown as webpack.Compiler
+    return { compiler, sourceMapDevToolPlugin }
 }
 
 describe('PosthogWebpackPlugin', () => {
@@ -101,6 +114,62 @@ describe('PosthogWebpackPlugin', () => {
         await plugin.processSourceMaps(compilation, testConfig)
 
         expect(await exists(cssSourceMap)).toBe(expectedExists)
+    })
+
+    it.each<{ releaseMode: 'event' | 'symbol-set'; version: string | undefined; expected: boolean; label: string }>([
+        {
+            releaseMode: 'event',
+            version: '5.108.1',
+            expected: true,
+            label: 'enables webpack debug ids in event release mode on webpack >= 5.104',
+        },
+        {
+            releaseMode: 'event',
+            version: '6.0.0',
+            expected: true,
+            label: 'enables webpack debug ids in event release mode on webpack 6',
+        },
+        {
+            releaseMode: 'event',
+            version: '5.103.9',
+            expected: false,
+            label: 'skips debug ids on webpacks that mishandle them with hidden source maps',
+        },
+        {
+            releaseMode: 'event',
+            version: undefined,
+            expected: false,
+            label: 'skips debug ids when the compiler reports no webpack version',
+        },
+        {
+            releaseMode: 'event',
+            version: 'nightly',
+            expected: false,
+            label: 'skips debug ids when the webpack version is unparsable',
+        },
+        {
+            releaseMode: 'symbol-set',
+            version: '5.108.1',
+            expected: false,
+            label: 'does not enable debug ids in symbol-set release mode',
+        },
+    ])('$label', ({ releaseMode, version, expected }) => {
+        const testConfig = {
+            ...config,
+            sourcemaps: { ...config.sourcemaps, releaseMode },
+        }
+        const { compiler, sourceMapDevToolPlugin } = createCompiler(version)
+
+        new PosthogWebpackPlugin(testConfig, true).apply(compiler)
+
+        expect(sourceMapDevToolPlugin).toHaveBeenCalledTimes(1)
+        const options = sourceMapDevToolPlugin.mock.calls[0][0]
+        if (expected) {
+            expect(options.debugIds).toBe(true)
+        } else {
+            // Absent rather than false: webpacks predating the option reject unknown keys.
+            expect(options).not.toHaveProperty('debugIds')
+        }
     })
 
     it('continues deleting CSS source maps and logs each deletion failure', async () => {
