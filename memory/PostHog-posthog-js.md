@@ -2,17 +2,7 @@
 
 ...<older entries truncated>
 
-`/*# sourceMappingURL=... */`).; The existing tests cover JavaScript cleanup, retained existing maps, inline maps, remote maps, CRLF, and module extensions, but contain no CSS fixture.; `packages/nextjs-config/CHANGELOG.md` confirms #3764 shipped in 1.9.68 specifically as a Turbopack dangling-comment cleanup.; The webpack plugin already suppresses SourceMapDevToolPlugin comment emission with `append: false` when `deleteAfterUpload` is enabled, but it separately deletes emitted CSS map files after upload.
-- Fix assessment: The omission is localized to the Next.js Turbopack cleanup helper. A small extension to inspect CSS files and remove only dangling local CSS mapping comments, backed by focused tests, addresses the reported behavior without changing upload or deletion semantics.
-- PR: https://github.com/PostHog/posthog-js/pull/4547
-
-## 2026-08-18T08:31:39.416Z
-- Item: issue #3205 — Remove source maps from distribution
-- Conclusion: Valid distribution-size enhancement: posthog-js currently publishes generated source maps, which can substantially inflate node_modules and production container images even if they are not included in the client bundle.
-- Labels: enhancement, web, feature, team/client-libraries
-- URL: https://github.com/PostHog/posthog-js/issues/3205
-- Relevant files: `packages/browser/package.json`, `packages/browser/rollup.config.mjs`, `packages/browser/scripts/check-sourcemap-ignore-list.js`, `packages/browser/scripts/check-mangled-property-consistency.js`
-- Findings: `packages/browser/rollup.config.mjs` sets `sourcemap: true` for every generated browser entrypoint, so the build emits source-map artifacts into `dist/`.; `packages/browser/package.json` publishes `dist/*`, which includes `.js.map` files alongside JavaScript and declaration outputs.; The browser package's post-build checks deliberately consume generated maps: `check-sourcemap-ignore-list.js` requires source maps to exist, and `check-mangled-property-consistency.js` reads maps to validate cross-bundle property mangling.; Therefore, source maps should be retained through build and validation, then excluded only from the npm tarball rather than disabled globally.
+ained through build and validation, then excluded only from the npm tarball rather than disabled globally.
 - Fix assessment: The requested behavior is isolated to npm package contents. It does not require changing runtime code or disabling source-map generation used by existing build checks.
 
 ## 2026-08-19T13:55:13.093Z
@@ -88,3 +78,12 @@
 - Relevant files: `packages/react-native/src/tooling/expoconfig.ts`, `packages/react-native/tooling/posthog.gradle`, `packages/react-native/test/expoconfig.spec.ts`, `packages/react-native/CHANGELOG.md`
 - Findings: `packages/react-native/src/tooling/expoconfig.ts` pins and injects `com.posthog:posthog-android-gradle-plugin:1.4.0` when `uploadNativeSymbols` is enabled, then applies `com.posthog.android` to the app module.; The Expo config plugin adds the Gradle classpath and plugin application only; it does not set `postHogExecutable` or otherwise configure the external plugin's mapping-upload task.; `packages/react-native/tooling/posthog.gradle` has its own independent `PostHogCli.resolveCliPackagePath` resolver for Hermes upload tasks. It checks `require.resolve`, a local package path, `reactRoot/node_modules/.bin/posthog-cli`, npm local root, and global installation paths.; That local resolver is used only by the SDK-managed Hermes clone/upload tasks, not by the externally provided `uploadPostHogProguardMappingsRelease` task described in the report.; The checked-out repository does not contain the source for `posthog-android-gradle-plugin`, so its resolver behavior cannot be directly verified here; the reported task error and the absence of any executable handoff from this integration are consistent with the reported ownership gap.
 - Fix assessment: The failing executable resolver belongs to the separately maintained Android Gradle plugin. Adding an Expo-only override here would duplicate resolution logic and would not cover non-Expo React Native applications.
+
+## 2026-08-22T15:24:33.893Z
+- Item: issue #1089 — Limit session length
+- Conclusion: Valid session-replay feature request, but changing the cap affects session rotation and recording volume.
+- Labels: feature, feature/replay, web, team/client-libraries
+- URL: https://github.com/PostHog/posthog-js/issues/1089
+- Relevant files: `packages/browser/src/sessionid.ts`, `packages/types/src/posthog-config.ts`, `packages/browser/src/posthog-core.ts`, `packages/browser/src/extensions/replay/external/lazy-loaded-session-recorder.ts`, `packages/browser/src/__tests__/sessionid.test.ts`, `packages/browser/src/__tests__/extensions/replay/lazy-sessionrecording.test.ts`, `packages/browser/playwright/mocked/session-recording/session-rotation-scenarios.spec.ts`, `packages/browser/playwright/mocked/session-recording/session-recording-idle-timeout.spec.ts`
+- Findings: `packages/browser/src/sessionid.ts` defines `SESSION_LENGTH_LIMIT_MILLISECONDS` as 24 hours and rotates a session when its start timestamp exceeds that limit, including on read-only checks.; `session_idle_timeout_seconds` is already a documented public configuration, but it controls inactivity-based rotation only; it is bounded to 60 seconds through 10 hours and does not configure the 24-hour absolute cap.; No existing maximum-session-length configuration was found in the browser config types or defaults.; Replay listens for `sessionPastMaximumLength`, links the old and new recording sessions, and restarts recording on rotation, so this is not a replay-buffer-only setting.; Existing replay tests explicitly protect billing-sensitive invariants: an idle tab must ship zero recordings across repeated rotations, a session with one interaction must ship exactly one recording, and cap rotations must prevent multi-day recordings.
+- Fix assessment: The code change can be localized, but it changes public session semantics and may alter replay volume and billing. It requires an explicit product/API decision and regression coverage for session rotation, cross-tab behavior, and replay volume invariants.
