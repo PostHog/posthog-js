@@ -23,9 +23,8 @@ export {
   buildResourceAttributes,
   getOtlpSeverityNumber,
   getOtlpSeverityText,
-  toOtlpAnyValue,
-  toOtlpKeyValueList,
 } from './logs/logs-utils'
+export { toOtlpAnyValue, toOtlpKeyValueList } from './utils/otlp-any-value'
 export { PostHogLogs } from './logs'
 export type {
   BeforeSendLogFn,
@@ -68,6 +67,30 @@ export type {
   Metrics,
   MetricsConfig,
 } from './metrics/types'
+export { PostHogTraces } from './traces'
+export { SyncSpanContextManager } from './traces/context'
+export { NOOP_SPAN } from './traces/span'
+// The OTLP builders are exported for host adapters that bypass the core flush
+// path, mirroring what the logs module exposes for the browser's beacon drain.
+export { buildOtlpSpan, buildOtlpTracesPayload, buildTracesResourceAttributes } from './traces/otlp'
+export type {
+  ResolvedTracesConfig,
+  SendTracesBatchOutcome,
+  SpanContextManager,
+  TraceSdkContext,
+  TracesHost,
+} from './traces/types'
+// Same barrel convention as logs and metrics for the user-facing tracing types.
+export type {
+  Span,
+  SpanAttributes,
+  SpanAttributeValue,
+  SpanKind,
+  SpanStatusCode,
+  SpanTimeInput,
+  StartSpanOptions,
+  TracesConfig,
+} from './traces/types'
 export { uuidv7 } from './vendor/uuidv7'
 export * from './cookie'
 export * from './posthog-core'

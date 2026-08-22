@@ -9,6 +9,9 @@ import type {
   PostHogFetchResponse,
   PostHogFlagsAndPayloadsResponse,
   Properties,
+  Span,
+  StartSpanOptions,
+  TracesConfig,
 } from '@posthog/core'
 import { ContextData, ContextOptions } from './extensions/context/types'
 
@@ -173,6 +176,25 @@ export type PostHogOptions = Omit<PostHogCoreOptions, 'before_send' | 'flushInte
    * ```
    */
   metrics?: MetricsConfig
+  /**
+   * Configuration for distributed tracing (`startSpan` / `withSpan`). Tracing is
+   * off until this is set; supplying it is all that's needed to turn it on.
+   *
+   * Set `serviceName` so spans can be attributed and grouped per service — the
+   * product aggregates operations by service and span name.
+   *
+   * `shutdown()` drains spans that have already ended, within the shutdown
+   * timeout; spans still open at that point are discarded.
+   *
+   * @example
+   * ```ts
+   * const client = new PostHog('phc_...', { traces: { serviceName: 'checkout-api' } })
+   * await client.withSpan('charge', () => stripe.charge(order))
+   * ```
+   *
+   * @experimental Subject to change in a minor release.
+   */
+  traces?: TracesConfig
   /**
    * Credential that enables local feature flag evaluation and remote config.
    *
@@ -788,6 +810,30 @@ export interface IPostHog {
    * periodically. Configure via the `metrics` client option.
    */
   readonly metrics: Metrics
+
+  /**
+   * @description Starts a span without making it active, for work that can't wrap a callback.
+   * Prefer `withSpan`. Always returns a handle — an inert one when tracing is off — so calling
+   * code never has to branch.
+   * @experimental Subject to change in a minor release.
+   */
+  startSpan(name: string, options?: StartSpanOptions): Span
+
+  /**
+   * @description Runs a callback with a span active for its duration and ends the span at return
+   * (sync) or settle (async). Spans started inside nest automatically; a throw or rejection is
+   * recorded on the span and rethrown unchanged.
+   * @experimental Subject to change in a minor release.
+   */
+  withSpan<T>(name: string, fn: (span: Span) => T): T
+  withSpan<T>(name: string, options: StartSpanOptions, fn: (span: Span) => T): T
+
+  /**
+   * @description The span currently active on this async execution path, or null outside any
+   * `withSpan` callback.
+   * @experimental Subject to change in a minor release.
+   */
+  getActiveSpan(): Span | null
 
   /**
    * @description Flushes the events still in the queue and clears the feature flags poller to allow for

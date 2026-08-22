@@ -4397,6 +4397,13 @@
       "example": "{\n    kind: 'ok';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n} | {\n    kind: 'too-large';\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
     },
     {
+      "id": "SendTracesBatchOutcome",
+      "name": "SendTracesBatchOutcome",
+      "properties": [],
+      "path": "../core/src/traces/types.ts",
+      "example": "{\n    kind: 'ok';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n} | {\n    kind: 'too-large';\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
+    },
+    {
       "id": "SeverityLevel",
       "name": "SeverityLevel",
       "properties": [],

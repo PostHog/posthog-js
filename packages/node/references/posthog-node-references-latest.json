@@ -548,6 +548,28 @@
           "path": "src/entrypoints/index.node.ts"
         },
         {
+          "category": "Traces",
+          "description": "The span currently active on this async execution path, or `null` outside any `withSpan` callback.\nOn the edge build this returns `null` after an `await`, because the active span is tracked synchronously there.\n\nSubject to change in a minor release.",
+          "details": null,
+          "id": "getActiveSpan",
+          "showDocs": true,
+          "title": "getActiveSpan",
+          "examples": [
+            {
+              "id": "propagate_the_trace_to_another_service",
+              "name": "Propagate the trace to another service",
+              "code": "\n\n// Propagate the trace to another service\nconst traceparent = posthog.getActiveSpan()?.traceparent()\nawait fetch(url, { headers: traceparent ? { traceparent } : {} })\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [],
+          "returnType": {
+            "id": "Span | null",
+            "name": "Span | null"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
           "category": "Feature flags",
           "description": "Get all feature flag values for a specific user.",
           "details": null,
@@ -1280,6 +1302,41 @@
           "path": "src/entrypoints/index.node.ts"
         },
         {
+          "category": "Traces",
+          "description": "Starts a span without making it active — for work that can't wrap a callback. Prefer `withSpan`, which ends the span for you.\nAlways returns a handle, so calling code never has to branch: when the `traces` option is absent, the SDK is disabled, or the user has opted out, the handle is inert and nothing is exported.\n\nSubject to change in a minor release.",
+          "details": null,
+          "id": "startSpan",
+          "showDocs": true,
+          "title": "startSpan",
+          "examples": [
+            {
+              "id": "",
+              "name": "",
+              "code": "\n\nconst span = posthog.startSpan('checkout', { attributes: { plan: 'pro' } })\nspan.setAttribute('cart.items', 3)\nspan.end()\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "string",
+              "name": "name"
+            },
+            {
+              "description": "",
+              "isOptional": true,
+              "type": "StartSpanOptions",
+              "name": "options"
+            }
+          ],
+          "returnType": {
+            "id": "Span",
+            "name": "Span"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
           "category": "Identification",
           "description": "Remove properties from a person profile.",
           "details": null,
@@ -1381,6 +1438,41 @@
               "isOptional": true,
               "type": "ContextOptions",
               "name": "options"
+            }
+          ],
+          "returnType": {
+            "id": "T",
+            "name": "T"
+          },
+          "path": "src/entrypoints/index.node.ts"
+        },
+        {
+          "category": "Traces",
+          "description": "Runs a callback with a span active for its duration and ends the span for you — at return for a sync callback, at settle for an async one.\nSpans started inside the callback nest under it automatically. If the callback throws or rejects, the span records the exception and the original error is rethrown unchanged.\nSpans nest across `await` only on the Node runtime, which tracks the active span with `AsyncLocalStorage`. The edge build restores the active span when the callback returns its promise, so spans started after an `await` there begin a new trace.\n\nSubject to change in a minor release.",
+          "details": null,
+          "id": "withSpan",
+          "showDocs": true,
+          "title": "withSpan",
+          "examples": [
+            {
+              "id": "",
+              "name": "",
+              "code": "\n\nawait posthog.withSpan('POST /checkout', { parent: req.get('traceparent') }, async (span) => {\n  span.setAttribute('plan', user.plan)\n  return processOrder()\n})\n\n\n\n"
+            }
+          ],
+          "releaseTag": "public",
+          "params": [
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "string",
+              "name": "name"
+            },
+            {
+              "description": "",
+              "isOptional": false,
+              "type": "(span: Span) => T",
+              "name": "fn"
             }
           ],
           "returnType": {
@@ -3457,6 +3549,11 @@
           "name": "metrics"
         },
         {
+          "description": "Configuration for distributed tracing (`startSpan` / `withSpan`). Tracing is\noff until this is set; supplying it is all that's needed to turn it on.\n\nSet `serviceName` so spans can be attributed and grouped per service — the\nproduct aggregates operations by service and span name.\n\n`shutdown()` drains spans that have already ended, within the shutdown\ntimeout; spans still open at that point are discarded.",
+          "type": "TracesConfig",
+          "name": "traces"
+        },
+        {
           "description": "Credential that enables local feature flag evaluation and remote config.\n\nAccepts either a Personal API Key (`phx_...`) or a Project Secret API Key (`phs_...`).\nWhen provided, the client can evaluate feature flags locally and decrypt remote\nconfig payloads via `getRemoteConfigPayload`. Prefer this over the deprecated\n`personalApiKey` option; when both are set, `secretKey` takes precedence.",
           "type": "string",
           "name": "secretKey"
@@ -3938,6 +4035,13 @@
       "example": "{\n    kind: 'ok';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n} | {\n    kind: 'too-large';\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
     },
     {
+      "id": "SendTracesBatchOutcome",
+      "name": "SendTracesBatchOutcome",
+      "properties": [],
+      "path": "../core/src/traces/types.ts",
+      "example": "{\n    kind: 'ok';\n} | {\n    kind: 'retry-later';\n    error: unknown;\n} | {\n    kind: 'too-large';\n} | {\n    kind: 'fatal';\n    error: unknown;\n}"
+    },
+    {
       "id": "SentryIntegrationOptions",
       "name": "SentryIntegrationOptions",
       "properties": [
@@ -3989,6 +4093,12 @@
       "properties": [],
       "path": "../core/src/error-tracking/types.ts",
       "example": "(typeof severityLevels)[number]"
+    },
+    {
+      "id": "SpanContextManager",
+      "name": "SpanContextManager",
+      "properties": [],
+      "path": "../core/src/traces/types.ts"
     },
     {
       "id": "SpecificQuestionBranching",
@@ -4573,6 +4683,7 @@
     "Error tracking",
     "Privacy",
     "Feature flags",
+    "Traces",
     "Context"
   ]
 }
