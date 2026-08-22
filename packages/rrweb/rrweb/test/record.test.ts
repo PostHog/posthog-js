@@ -610,16 +610,53 @@ describe('record', function (this: ISuite) {
     expect(addRules.length).toEqual(2);
     expect((addRules[0].data as styleSheetRuleData).adds).toEqual([
       {
+        index: 0,
         rule: 'body { color: #fff; }',
       },
     ]);
     expect((addRules[1].data as styleSheetRuleData).adds).toEqual([
       {
+        index: 0,
         rule: 'body { color: #ccc; }',
       },
     ]);
     expect(removeRuleCount).toEqual(1);
     await assertSnapshot(ctx.events);
+  });
+
+  it('does not emit stylesheet rules when native insert or delete fails', async () => {
+    const exceptionNames = await ctx.page.evaluate(() => {
+      const styleElement = document.createElement('style');
+      styleElement.textContent = 'body { color: black; }';
+      document.head.appendChild(styleElement);
+
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({ emit: (window as unknown as IWindow).emit });
+
+      const sheet = styleElement.sheet!;
+      const names: string[] = [];
+      try {
+        sheet.insertRule('body { color: red; }', sheet.cssRules.length + 1);
+      } catch (error) {
+        names.push((error as DOMException).name);
+      }
+      try {
+        sheet.deleteRule(sheet.cssRules.length);
+      } catch (error) {
+        names.push((error as DOMException).name);
+      }
+      return names;
+    });
+    await ctx.page.waitForTimeout(20);
+
+    expect(exceptionNames).toEqual(['IndexSizeError', 'IndexSizeError']);
+    expect(
+      ctx.events.filter(
+        (event) =>
+          event.type === EventType.IncrementalSnapshot &&
+          event.data.source === IncrementalSource.StyleSheetRule,
+      ),
+    ).toHaveLength(0);
   });
 
   it('captures stylesheet rules with deprecated addRule & removeRule properties', async () => {
@@ -887,6 +924,70 @@ describe('record', function (this: ISuite) {
     });
     await waitForRAF(ctx.page);
     await assertSnapshot(ctx.events);
+  });
+
+  it('observes existing shadow roots discovered while serializing an added iframe', async () => {
+    await ctx.page.evaluate(async () => {
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({
+        maskTextSelector: '.mask-me',
+        emit: (window as unknown as IWindow).emit,
+      });
+
+      const iframe = document.createElement('iframe');
+      iframe.srcdoc = `
+        <div id="host"></div>
+        <script>
+          const root = document.querySelector('#host').attachShadow({ mode: 'open' });
+          root.innerHTML = '<span id="public">initial</span><span class="mask-me">' + atob('aW5pdGlhbC1wcml2YXRlLXRleHQ=') + '</span><input type="password" value="' + atob('aW5pdGlhbC1wcml2YXRlLXZhbHVl') + '">';
+        <\/script>
+      `;
+      const loaded = new Promise<void>((resolve) => {
+        iframe.addEventListener('load', () => resolve(), { once: true });
+      });
+      document.body.appendChild(iframe);
+      await loaded;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      const attachedRoot = iframe.contentDocument!.querySelector('div')!.shadowRoot!;
+      attachedRoot.querySelector('#public')!.textContent =
+        'visible-shadow-mutation';
+      attachedRoot.querySelector('input')!.value = 'updated-private-value';
+    });
+    await waitForRAF(ctx.page);
+
+    const serializedEvents = JSON.stringify(ctx.events);
+    expect(serializedEvents).toContain('visible-shadow-mutation');
+    expect(serializedEvents).not.toContain('initial-private-text');
+    expect(serializedEvents).not.toContain('initial-private-value');
+    expect(serializedEvents).not.toContain('updated-private-value');
+  });
+
+  it('does not record setter values from blocked canvases', async () => {
+    await ctx.page.evaluate(() => {
+      const blockedCanvas = document.createElement('canvas');
+      blockedCanvas.className = 'rr-block';
+      const visibleCanvas = document.createElement('canvas');
+      document.body.append(blockedCanvas, visibleCanvas);
+
+      const { record } = (window as unknown as IWindow).rrweb;
+      record({
+        recordCanvas: true,
+        emit: (window as unknown as IWindow).emit,
+      });
+
+      blockedCanvas.getContext('2d')!.fillStyle = 'private-canvas-marker';
+      visibleCanvas.getContext('2d')!.fillStyle = 'visible-canvas-marker';
+    });
+    await waitForRAF(ctx.page);
+
+    const canvasEvents = ctx.events.filter(
+      (event) =>
+        event.type === EventType.IncrementalSnapshot &&
+        event.data.source === IncrementalSource.CanvasMutation,
+    );
+    expect(JSON.stringify(canvasEvents)).toContain('visible-canvas-marker');
+    expect(JSON.stringify(canvasEvents)).not.toContain('private-canvas-marker');
   });
 
   it('captures adopted stylesheets in nested shadow doms and iframes', async () => {

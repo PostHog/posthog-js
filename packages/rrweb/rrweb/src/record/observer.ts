@@ -663,10 +663,12 @@ function initStyleSheetObserver(
         thisArg: CSSStyleSheet,
         argumentsList: [string, number | undefined],
       ) => {
-        const [rule, index] = argumentsList;
+        const [rule] = argumentsList;
 
-        // a pending budget-deferred inlining of this sheet must not emit its
-        // defer-time text over this (recorded or about-to-load) mutation
+        const insertedIndex = target.apply(thisArg, argumentsList);
+
+        // A pending budget-deferred inlining of this sheet must not emit its
+        // defer-time text over the successful mutation.
         stylesheetManager.onCssomSheetMutation(thisArg);
 
         const { id, styleId } = getIdAndStyleId(
@@ -679,10 +681,10 @@ function initStyleSheetObserver(
           styleSheetRuleCb({
             id,
             styleId,
-            adds: [{ rule, index }],
+            adds: [{ rule, index: insertedIndex }],
           });
         }
-        return target.apply(thisArg, argumentsList);
+        return insertedIndex;
       },
       'host',
     ),
@@ -710,6 +712,8 @@ function initStyleSheetObserver(
       ) => {
         const [index] = argumentsList;
 
+        const result = target.apply(thisArg, argumentsList);
+
         stylesheetManager.onCssomSheetMutation(thisArg);
 
         const { id, styleId } = getIdAndStyleId(
@@ -725,7 +729,7 @@ function initStyleSheetObserver(
             removes: [{ index }],
           });
         }
-        return target.apply(thisArg, argumentsList);
+        return result;
       },
       'host',
     ),
@@ -851,7 +855,9 @@ function initStyleSheetObserver(
             thisArg: CSSRule,
             argumentsList: [string, number | undefined],
           ) => {
-            const [rule, index] = argumentsList;
+            const [rule] = argumentsList;
+
+            const insertedIndex = target.apply(thisArg, argumentsList);
 
             stylesheetManager.onCssomSheetMutation(thisArg.parentStyleSheet);
 
@@ -870,13 +876,13 @@ function initStyleSheetObserver(
                     rule,
                     index: [
                       ...getNestedCSSRulePositions(thisArg),
-                      index || 0, // defaults to 0
+                      insertedIndex,
                     ],
                   },
                 ],
               });
             }
-            return target.apply(thisArg, argumentsList);
+            return insertedIndex;
           },
           'host',
         ),
@@ -893,6 +899,8 @@ function initStyleSheetObserver(
             argumentsList: [number],
           ) => {
             const [index] = argumentsList;
+
+            const result = target.apply(thisArg, argumentsList);
 
             stylesheetManager.onCssomSheetMutation(thisArg.parentStyleSheet);
 
@@ -911,7 +919,7 @@ function initStyleSheetObserver(
                 ],
               });
             }
-            return target.apply(thisArg, argumentsList);
+            return result;
           },
           'host',
         ),
