@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 2278](https://github.com/PostHog/posthog-js/issues/2278) | Already fixed: survey wait-period eligibility now safely handles denied localStorage access. | feature/surveys, web, team/client-libraries |  | no | 2026-08-22T16:05:45.039Z |
 | PostHog/posthog-js | [issue 2159](https://github.com/PostHog/posthog-js/issues/2159) | Valid cross-SDK autocapture feature request, but it needs SDK-specific API semantics before implementation. | enhancement, feature/autocapture, react-native, feature/mobile, web-lite, team/client-libraries |  | no | 2026-08-22T15:52:01.659Z |
 | PostHog/posthog-js | [issue 2097](https://github.com/PostHog/posthog-js/issues/2097) | Core support for synchronously preloaded remote config exists, but @posthog/next does not provide a first-class SSR fetch/cache/bootstrap integration. | enhancement, feature, feature/autocapture, feature/flags, frameworks/next-js, team/feature-flags, web |  | no | 2026-08-22T15:51:11.859Z |
 | PostHog/posthog-js | [issue 1968](https://github.com/PostHog/posthog-js/issues/1968) | Already fixed in the current browser session-replay implementation. | feature/replay, web, team/client-libraries |  | no | 2026-08-22T15:49:57.162Z |
