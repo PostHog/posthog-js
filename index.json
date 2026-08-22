@@ -1,4 +1,18 @@
 {
+  "PostHog/posthog-js/issue/2278": {
+    "key": "PostHog/posthog-js/issue/2278",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 2278",
+    "url": "https://github.com/PostHog/posthog-js/issues/2278",
+    "conclusion": "Already fixed: survey wait-period eligibility now safely handles denied localStorage access.",
+    "labels": [
+      "feature/surveys",
+      "web",
+      "team/client-libraries"
+    ],
+    "closed": false,
+    "updatedAt": "2026-08-22T16:05:45.039Z"
+  },
   "PostHog/posthog-js/issue/2159": {
     "key": "PostHog/posthog-js/issue/2159",
     "repo": "PostHog/posthog-js",
