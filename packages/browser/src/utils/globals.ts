@@ -5,6 +5,7 @@ import type { ErrorTracking } from '@posthog/core'
 import type { PostHog } from '../posthog-core'
 import type { SessionIdManager } from '../sessionid'
 import type {
+    BufferedConsoleEntry,
     DeadClicksAutoCaptureConfig,
     ExternalIntegrationKind,
     Properties,
@@ -284,6 +285,7 @@ interface PostHogExtensions {
     generateProductTours?: (posthog: PostHog, isEnabled: boolean) => any | undefined
     logs?: {
         initializeLogs?: (posthog: PostHog) => any | undefined
+        replayConsoleBuffer?: (posthog: PostHog, entries: BufferedConsoleEntry[]) => void
     }
     /** @deprecated Use `postHogWebVitalsCallbacksByFlavor` to select callbacks explicitly. */
     postHogWebVitalsCallbacks?: WebVitalsCallbacks

@@ -41,6 +41,13 @@ import type { PostHogMetrics } from './posthog-metrics'
 // Common types
 export type { Property, Properties, JsonType, JsonRecord } from '@posthog/types'
 
+// Args stay raw; the logs entrypoint owns their serialization.
+export interface BufferedConsoleEntry {
+    level: 'debug' | 'log' | 'warn' | 'error' | 'info'
+    args: any[]
+    timestamp: number
+}
+
 // Capture types
 export type { KnownEventName, EventName, CaptureResult, CaptureOptions, BeforeSendFn } from '@posthog/types'
 

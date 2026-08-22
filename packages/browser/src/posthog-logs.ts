@@ -1,7 +1,15 @@
-import { LOAD_EXT_NOT_FOUND } from './constants'
+import { LOAD_EXT_NOT_FOUND, LOGS_CAPTURE_ENABLED_SERVER_SIDE } from './constants'
 import Config from './config'
 import { PostHog } from './posthog-core'
-import type { CaptureLogOptions, RemoteConfigResult, Logger, LogSdkContext, OtlpLogsPayload } from './types'
+import type {
+    BufferedConsoleEntry,
+    CaptureLogOptions,
+    RemoteConfigResult,
+    Logger,
+    LogSdkContext,
+    OtlpLogsPayload,
+} from './types'
+import { patch } from './extensions/replay/rrweb-plugins/patch'
 import {
     PostHogLogs as CorePostHogLogs,
     buildOtlpLogsPayload,
@@ -40,6 +48,25 @@ const LOGS_SEND_TIMEOUT_MS = 90000
 // NOTE: keep the constant value and the warning copy in sync with retry-queue.ts.
 const MAX_CONSECUTIVE_STATUS_ZERO_FAILURES = 3
 const HANDLED_LOGS_REQUEST_ERROR = '__posthogHandledLogsRequestError' as const
+
+/**
+ * Must mirror the level set of the console-capture entrypoint, which owns the
+ * level mapping and serialization of buffered entries.
+ */
+const RECORDER_CONSOLE_LEVELS = ['debug', 'log', 'warn', 'error', 'info'] as const
+
+/**
+ * If remote config or the logs script never settles the question, stop holding
+ * references to console arguments after this long.
+ */
+const RECORDER_MAX_AGE_MS = 30000
+
+const consoleMethodBehindWrappers = (method: any): any => {
+    while (method?.__rrweb_original__) {
+        method = method.__rrweb_original__
+    }
+    return method
+}
 
 type HandledLogsRequestError = Error & { [HANDLED_LOGS_REQUEST_ERROR]: true }
 
@@ -87,6 +114,11 @@ export class PostHogLogs implements Extension {
     // Shared across both cores: they send to the same endpoint, so one blocker
     // verdict covers both.
     private _consecutiveStatusZeroFailures = 0
+
+    private _consoleBuffer: BufferedConsoleEntry[] = []
+    private _consoleRecorderUnpatchers: (() => void)[] = []
+    private _isRecordingConsole: boolean = false
+    private _consoleRecorderTimeout: ReturnType<typeof setTimeout> | undefined
 
     constructor(private readonly _instance: PostHog) {
         if (this._instance && this._instance.config.logs?.captureConsoleLogs) {
@@ -161,29 +193,105 @@ export class PostHogLogs implements Extension {
     }
 
     initialize() {
+        // A persisted "enabled" is a hint, not an authority: remote config may have
+        // turned capture off since last session, so nothing is captured from it.
+        // It only starts a local recorder whose buffer replays (or drops) once
+        // remote config settles the question.
+        if (!this._isLogsEnabled && this._instance?.persistence?.props?.[LOGS_CAPTURE_ENABLED_SERVER_SIDE]) {
+            this._startConsoleRecorder()
+        }
         this.loadIfEnabled()
     }
 
     onRemoteConfig(result: RemoteConfigResult) {
         if (!result.ok) {
             // Failure behaves like a response without a logs key.
+            this._stopConsoleRecorder()
             return
         }
 
         const logCapture = result.config.logs?.captureConsoleLogs
+        if (!isNullish(logCapture) && this._instance?.persistence) {
+            this._instance.persistence.register({
+                [LOGS_CAPTURE_ENABLED_SERVER_SIDE]: !!logCapture,
+            })
+        }
+
         if (isNullish(logCapture) || !logCapture) {
+            this._stopConsoleRecorder()
             return
         }
+        /**
+         * The recorder keeps running until the logs script initializes;
+         * loadIfEnabled stops it and hands the buffer over.
+         */
         this._isLogsEnabled = true
         this.loadIfEnabled()
     }
 
     reset(): void {
+        this._stopConsoleRecorder()
         this._queue = []
         this._core?.reset()
         this._consoleQueue = []
         this._consoleCore?.reset()
         this._consecutiveStatusZeroFailures = 0
+    }
+
+    private _startConsoleRecorder(): void {
+        if (this._isRecordingConsole || !assignableWindow?.console) {
+            return
+        }
+        const maxBufferSize = resolveLogsConfig(this._instance?.config?.logs).maxBufferSize
+        for (const level of RECORDER_CONSOLE_LEVELS) {
+            const trueOriginal = consoleMethodBehindWrappers(assignableWindow.console[level])
+            if (!trueOriginal) {
+                continue
+            }
+            this._consoleRecorderUnpatchers.push(
+                patch(assignableWindow.console, level, (next: any) => {
+                    const wrapped = (...args: any[]) => {
+                        if (
+                            this._isRecordingConsole &&
+                            args.length > 0 &&
+                            this._consoleBuffer.length < maxBufferSize &&
+                            this._instance?.is_capturing()
+                        ) {
+                            this._consoleBuffer.push({ level, args, timestamp: Date.now() })
+                        }
+                        return next.apply(assignableWindow.console, args)
+                    }
+                    /**
+                     * Later patchers walk this marker to reach the real console
+                     * method instead of re-entering the recorder.
+                     */
+                    ;(wrapped as any).__rrweb_original__ = trueOriginal
+                    return wrapped
+                })
+            )
+        }
+        this._isRecordingConsole = true
+        this._consoleRecorderTimeout = setTimeout(() => {
+            this._stopConsoleRecorder()
+        }, RECORDER_MAX_AGE_MS)
+    }
+
+    private _stopConsoleRecorder(): BufferedConsoleEntry[] {
+        const buffered = this._consoleBuffer
+        this._consoleBuffer = []
+        if (!this._isRecordingConsole) {
+            return buffered
+        }
+        this._isRecordingConsole = false
+        if (this._consoleRecorderTimeout) {
+            clearTimeout(this._consoleRecorderTimeout)
+            this._consoleRecorderTimeout = undefined
+        }
+        for (const unpatch of this._consoleRecorderUnpatchers) {
+            unpatch()
+        }
+        this._consoleRecorderUnpatchers = []
+        return buffered
     }
 
     captureLog(options: CaptureLogOptions): void {
@@ -253,9 +361,14 @@ export class PostHogLogs implements Extension {
         loadExternalDependency(this._instance, 'logs', (err) => {
             if (err || !phExtensions.logs?.initializeLogs) {
                 this._logger.error('Could not load logs script', err)
+                this._stopConsoleRecorder()
             } else {
                 phExtensions.logs.initializeLogs(this._instance)
                 this._isLoaded = true
+                const buffered = this._stopConsoleRecorder()
+                if (buffered.length > 0) {
+                    phExtensions.logs.replayConsoleBuffer?.(this._instance, buffered)
+                }
             }
         })
     }
