@@ -127,16 +127,51 @@ fi
 # mimics how the file is defined in node_modules/react-native/scripts/react-native-xcode.sh (PACKAGER_SOURCEMAP_FILE)
 SOURCEMAP_PACKAGER_FILE="$CONFIGURATION_BUILD_DIR/$SOURCEMAP_NAME"
 
-# Pass release info from Xcode build settings when available
+# Expo EAS remote versioning writes the release version to the source Info.plist
+# without necessarily updating MARKETING_VERSION or CURRENT_PROJECT_VERSION.
+resolve_posthog_ios_release_info() {
+  POSTHOG_RELEASE_VERSION="${MARKETING_VERSION:-}"
+  POSTHOG_BUILD_VERSION="${CURRENT_PROJECT_VERSION:-}"
+  POSTHOG_PLIST_BUDDY="${POSTHOG_PLIST_BUDDY:-/usr/libexec/PlistBuddy}"
+
+  if [ -z "${INFOPLIST_FILE:-}" ] || [ ! -x "$POSTHOG_PLIST_BUDDY" ]; then
+    return
+  fi
+
+  POSTHOG_INFO_PLIST="$INFOPLIST_FILE"
+  case "$POSTHOG_INFO_PLIST" in
+    /*) ;;
+    *) POSTHOG_INFO_PLIST="${SRCROOT}/${POSTHOG_INFO_PLIST}" ;;
+  esac
+
+  if [ ! -f "$POSTHOG_INFO_PLIST" ]; then
+    return
+  fi
+
+  POSTHOG_PLIST_RELEASE_VERSION=$("$POSTHOG_PLIST_BUDDY" -c "Print :CFBundleShortVersionString" "$POSTHOG_INFO_PLIST" 2>/dev/null || true)
+  POSTHOG_PLIST_BUILD_VERSION=$("$POSTHOG_PLIST_BUDDY" -c "Print :CFBundleVersion" "$POSTHOG_INFO_PLIST" 2>/dev/null || true)
+
+  case "$POSTHOG_PLIST_RELEASE_VERSION" in
+    ""|*'$('*|*'${'*) ;;
+    *) POSTHOG_RELEASE_VERSION="$POSTHOG_PLIST_RELEASE_VERSION" ;;
+  esac
+  case "$POSTHOG_PLIST_BUILD_VERSION" in
+    ""|*'$('*|*'${'*) ;;
+    *) POSTHOG_BUILD_VERSION="$POSTHOG_PLIST_BUILD_VERSION" ;;
+  esac
+}
+
+resolve_posthog_ios_release_info
+
 CLI_RELEASE_ARGS=""
 if [ -n "${PRODUCT_BUNDLE_IDENTIFIER}" ]; then
   CLI_RELEASE_ARGS="$CLI_RELEASE_ARGS --release-name $PRODUCT_BUNDLE_IDENTIFIER"
 fi
-if [ -n "${MARKETING_VERSION}" ]; then
-  CLI_RELEASE_ARGS="$CLI_RELEASE_ARGS --release-version $MARKETING_VERSION"
+if [ -n "${POSTHOG_RELEASE_VERSION}" ]; then
+  CLI_RELEASE_ARGS="$CLI_RELEASE_ARGS --release-version $POSTHOG_RELEASE_VERSION"
 fi
-if [ -n "${CURRENT_PROJECT_VERSION}" ]; then
-  CLI_RELEASE_ARGS="$CLI_RELEASE_ARGS --build $CURRENT_PROJECT_VERSION"
+if [ -n "${POSTHOG_BUILD_VERSION}" ]; then
+  CLI_RELEASE_ARGS="$CLI_RELEASE_ARGS --build $POSTHOG_BUILD_VERSION"
 fi
 
 # RN deletes the PACKAGER_SOURCEMAP_FILE file after execution but we need it
