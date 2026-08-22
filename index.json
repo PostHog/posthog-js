@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/1101": {
+    "key": "PostHog/posthog-js/issue/1101",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 1101",
+    "url": "https://github.com/PostHog/posthog-js/issues/1101",
+    "conclusion": "Confirmed replay feature gap: rrweb intentionally treats only the browser top-level window as the emitting recorder when cross-origin iframe recording is enabled.",
+    "labels": [
+      "enhancement",
+      "feature/replay",
+      "web",
+      "team/client-libraries"
+    ],
+    "closed": false,
+    "updatedAt": "2026-08-22T15:26:37.382Z"
+  },
   "PostHog/posthog-js/issue/1100": {
     "key": "PostHog/posthog-js/issue/1100",
     "repo": "PostHog/posthog-js",
