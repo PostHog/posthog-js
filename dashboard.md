@@ -2,6 +2,7 @@
 
 | Repo | Item | Conclusion | Labels | PR | Closed | Updated |
 | --- | --- | --- | --- | --- | --- | --- |
+| PostHog/posthog-js | [issue 3935](https://github.com/PostHog/posthog-js/issues/3935) | Valid but underspecified Nuxt enhancement request; no safe implementation can be selected yet. | enhancement, nuxt, team/client-libraries |  | no | 2026-08-22T16:30:18.610Z |
 | PostHog/posthog-js | [issue 3978](https://github.com/PostHog/posthog-js/issues/3978) | Valid browser SDK enhancement, but automatic default capture needs product and privacy decisions before implementation. | enhancement, feature/product-analytics, web |  | no | 2026-08-22T16:29:36.817Z |
 | PostHog/posthog-js | [issue 3859](https://github.com/PostHog/posthog-js/issues/3859) | Already fixed in React Native 4.47.2 by PR #3828. | react-native, feature/replay, feature/mobile, team/client-libraries |  | no | 2026-08-22T16:28:56.499Z |
 | PostHog/posthog-js | [issue 3593](https://github.com/PostHog/posthog-js/issues/3593) | Valid experiments feature request, but it requires a deliberately designed backend metadata contract rather than an SDK-only getter. | enhancement, team/experiments, feature/experiments, node |  | no | 2026-08-22T16:27:12.260Z |
