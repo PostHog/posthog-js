@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/2475": {
+    "key": "PostHog/posthog-js/issue/2475",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 2475",
+    "url": "https://github.com/PostHog/posthog-js/issues/2475",
+    "conclusion": "Confirmed historical browser-package bundling regression in posthog-js 1.279.x; the failure is not compatible with a client-side Next.js initialization path.",
+    "labels": [
+      "feature/replay",
+      "feature/heatmaps",
+      "web",
+      "team/client-libraries"
+    ],
+    "closed": false,
+    "updatedAt": "2026-08-22T16:06:50.734Z"
+  },
   "PostHog/posthog-js/issue/2278": {
     "key": "PostHog/posthog-js/issue/2278",
     "repo": "PostHog/posthog-js",
