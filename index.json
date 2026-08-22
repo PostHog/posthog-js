@@ -1,4 +1,19 @@
 {
+  "PostHog/posthog-js/issue/4599": {
+    "key": "PostHog/posthog-js/issue/4599",
+    "repo": "PostHog/posthog-js",
+    "item": "issue 4599",
+    "url": "https://github.com/PostHog/posthog-js/issues/4599",
+    "conclusion": "Confirmed integration bug: Android native-symbol uploads use the external Gradle plugin's CLI resolver, which is separate from the React Native SDK's local CLI resolver.",
+    "labels": [
+      "Android",
+      "react-native",
+      "feature/error-tracking",
+      "team/client-libraries"
+    ],
+    "closed": false,
+    "updatedAt": "2026-08-22T14:06:38.388Z"
+  },
   "PostHog/posthog-js/issue/4596": {
     "key": "PostHog/posthog-js/issue/4596",
     "repo": "PostHog/posthog-js",
