@@ -214,6 +214,17 @@ describe('consentManager', () => {
 
             expect(reloadSpy).toHaveBeenCalled()
         })
+
+        it('does not reload feature flags on a repeat opt in when consent is already granted', async () => {
+            posthog = await createPostHog({ opt_out_capturing_by_default: true })
+            // First opt in is the real transition; spy afterwards so we only observe the redundant call.
+            posthog.opt_in_capturing({ captureEventName: false })
+            const reloadSpy = jest.spyOn(posthog.featureFlags, 'reloadFeatureFlags')
+
+            posthog.opt_in_capturing({ captureEventName: false })
+
+            expect(reloadSpy).not.toHaveBeenCalled()
+        })
     })
 
     describe('reset() and consent', () => {

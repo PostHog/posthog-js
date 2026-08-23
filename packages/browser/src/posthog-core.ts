@@ -4312,6 +4312,7 @@ export class PostHog implements PostHogInterface {
             }
         }
 
+        const wasOptedIn = this.consent.isOptedIn()
         this.consent.optInOut(true)
         this._sync_opt_out_with_persistence()
 
@@ -4322,11 +4323,16 @@ export class PostHog implements PostHogInterface {
         // (this handles the case where opt_out_capturing_by_default or cookieless_mode prevented it from starting)
         this.sessionRecording?.startIfEnabledOrStop()
 
-        // Reload feature flags so they are evaluated against the post-consent identity.
-        // The pre-consent /flags request ran against an anonymous or cookieless identity, and
-        // its cached values would otherwise persist for the whole session, so experiment
-        // exposure and flag targeting would be wrong.
-        this.reloadFeatureFlags()
+        // Reload feature flags so they are evaluated against the post-consent identity, but only when
+        // consent actually transitions to granted. The pre-consent /flags request ran against an
+        // anonymous or cookieless identity, and its cached values would otherwise persist for the
+        // whole session, so experiment exposure and flag targeting would be wrong. Gating on the
+        // transition avoids a redundant /flags request when the application calls opt_in_capturing()
+        // again after consent is already granted (e.g. a consent platform re-emitting stored consent
+        // on each page load), and mirrors how identify() and group() only reload on a real change.
+        if (!wasOptedIn && this.consent.isOptedIn()) {
+            this.reloadFeatureFlags()
+        }
 
         // Reinitialize surveys if we're in cookieless mode and just opted in
         if (this.config.cookieless_mode == COOKIELESS_ON_REJECT) {
