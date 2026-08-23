@@ -6,10 +6,14 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0
 
 describe('PostHog Metro serializer', () => {
   test('generates a real deterministic chunk id for a bare React Native bundle', async () => {
+    const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {})
     const serializer = createPostHogMetroSerializer()
 
     const first = await serializer(...mockSerializerArgs())
     const second = await serializer(...mockSerializerArgs())
+
+    expect(consoleLogSpy).toHaveBeenCalledTimes(2)
+    consoleLogSpy.mockRestore()
 
     expect(typeof first).not.toBe('string')
     expect(typeof second).not.toBe('string')
