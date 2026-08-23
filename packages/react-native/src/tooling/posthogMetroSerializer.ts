@@ -111,6 +111,7 @@ export const createPostHogMetroSerializer = (customSerializer?: MetroSerializer)
 
     const bundleMap: SourceMap = JSON.parse(bundleMapString)
     bundleMap['chunkId'] = debugId
+    bundleMap['debugId'] = debugId
 
     return {
       code: bundleCodeWithDebugId,

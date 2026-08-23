@@ -29,8 +29,9 @@ describe('PostHog Metro serializer', () => {
     expect(first.code).not.toContain('__POSTHOG_CHUNK_ID__')
     expect(first.code).toContain(`//# chunkId=${firstChunkId}`)
 
-    const map = JSON.parse(first.map) as { chunkId?: string; sourcesContent?: string[] }
+    const map = JSON.parse(first.map) as { chunkId?: string; debugId?: string; sourcesContent?: string[] }
     expect(map.chunkId).toBe(firstChunkId)
+    expect(map.debugId).toBe(firstChunkId)
     expect(map.sourcesContent?.join('\n')).toContain(firstChunkId)
     expect(map.sourcesContent?.join('\n')).not.toContain('__POSTHOG_CHUNK_ID__')
   })
