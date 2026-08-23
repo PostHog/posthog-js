@@ -1,0 +1,62 @@
+{
+    "expo": {
+        "name": "example-expo-57",
+        "slug": "example-expo-57",
+        "version": "1.0.0",
+        "orientation": "portrait",
+        "icon": "./assets/images/icon.png",
+        "scheme": "exampleexpo57",
+        "userInterfaceStyle": "automatic",
+        "ios": {
+            "supportsTablet": true,
+            "bundleIdentifier": "com.marandaneto.exampleexpo57"
+        },
+        "android": {
+            "adaptiveIcon": {
+                "foregroundImage": "./assets/images/adaptive-icon.png",
+                "backgroundColor": "#ffffff"
+            },
+            "package": "com.marandaneto.exampleexpo57"
+        },
+        "web": {
+            "bundler": "metro",
+            "output": "static",
+            "favicon": "./assets/images/favicon.png"
+        },
+        "plugins": [
+            "expo-router",
+            [
+                "expo-splash-screen",
+                {
+                    "image": "./assets/images/splash-icon.png",
+                    "imageWidth": 200,
+                    "resizeMode": "contain",
+                    "backgroundColor": "#ffffff"
+                }
+            ],
+            "expo-localization",
+            [
+                "posthog-react-native/expo",
+                {
+                    "uploadNativeSymbols": {
+                        "includeSource": true
+                    }
+                }
+            ],
+            "expo-font",
+            "expo-image",
+            "expo-status-bar",
+            "expo-web-browser"
+        ],
+        "experiments": {
+            "typedRoutes": true,
+            "reactCompiler": true
+        },
+        "extra": {
+            "router": {},
+            "eas": {
+                "projectId": "bbde9299-f1d8-4a98-98b2-882f4e1278fb"
+            }
+        }
+    }
+}
