@@ -22,6 +22,7 @@ describe('external-scripts-loader', () => {
         const callback = jest.fn()
         beforeEach(() => {
             callback.mockClear()
+            mockPostHog.config.api_host = 'https://us.posthog.com'
             mockPostHog.config.strict_script_versioning = false
             mockPostHog.config.asset_host = null
             delete mockPostHog.config.__preview_external_dependency_versioned_paths
@@ -60,6 +61,21 @@ describe('external-scripts-loader', () => {
             expect(headScripts[0].src).toContain('recorder.js')
 
             mockPostHog.config.external_scripts_inject_target = 'body'
+        })
+
+        it('does not add duplicate scripts when api_host is a relative path', () => {
+            // a reverse-proxied host, which endpointFor returns as a relative URL
+            mockPostHog.config.api_host = '/ingest'
+
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', callback)
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', callback)
+
+            const scripts = document!.getElementsByTagName('script')
+            expect(scripts).toHaveLength(1)
+            expect(scripts[0].src).toBe(`${document!.baseURI.replace(/\/$/, '')}/ingest/static/recorder.js?v=1.0.0`)
+
+            scripts[0].dispatchEvent(new Event('load'))
+            expect(callback).toHaveBeenCalledTimes(2)
         })
 
         it('does not add duplicate scripts', () => {
