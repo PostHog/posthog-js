@@ -758,8 +758,8 @@ function initStyleSheetObserver(
           const [text] = argumentsList;
           const result = target.apply(thisArg, argumentsList);
 
-          void result
-            .then(
+          return result.then((stylesheet) => {
+            try {
               callbackWrapper(() => {
                 stylesheetManager.onCssomSheetMutation(thisArg);
                 const { id, styleId } = getIdAndStyleId(
@@ -775,13 +775,12 @@ function initStyleSheetObserver(
                     replace: text,
                   });
                 }
-              }),
-            )
-            // Preserve the original promise rejection for the caller without
-            // creating an unhandled rejection from this observer continuation.
-            .catch(() => undefined);
-
-          return result;
+              })();
+            } catch {
+              // Recorder errors must not affect the native promise result.
+            }
+            return stylesheet;
+          });
         },
         'host',
       ),
