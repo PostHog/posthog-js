@@ -196,6 +196,26 @@ describe('consentManager', () => {
         })
     })
 
+    describe('feature flags on opt in', () => {
+        it('reloads feature flags so they match the post-consent identity', async () => {
+            posthog = await createPostHog({ opt_out_capturing_by_default: true })
+            const reloadSpy = jest.spyOn(posthog.featureFlags, 'reloadFeatureFlags')
+
+            posthog.opt_in_capturing({ captureEventName: false })
+
+            expect(reloadSpy).toHaveBeenCalled()
+        })
+
+        it('reloads feature flags in cookieless on_reject mode after opting in', async () => {
+            posthog = await createPostHog({ cookieless_mode: 'on_reject', opt_out_capturing_by_default: true })
+            const reloadSpy = jest.spyOn(posthog.featureFlags, 'reloadFeatureFlags')
+
+            posthog.opt_in_capturing({ captureEventName: false })
+
+            expect(reloadSpy).toHaveBeenCalled()
+        })
+    })
+
     describe('reset() and consent', () => {
         it('warns when a caller directly resets after opting in and capturing changes from on to off', async () => {
             const beforeSendMock = jest.fn().mockImplementation((e) => e)
