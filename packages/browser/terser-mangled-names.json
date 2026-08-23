@@ -357,6 +357,7 @@
         "_isIdle",
         "_isInitializing",
         "_isInitializingSurveys",
+        "_isInjectedGlobalException",
         "_isInteractiveEvent",
         "_isItemPermanentlyIneligible",
         "_isLoaded",
