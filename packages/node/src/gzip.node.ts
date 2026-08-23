@@ -3,10 +3,10 @@ import { promisify } from 'node:util'
 
 const gzipAsync = promisify(gzip)
 
-export async function gzipCompress(input: string, isDebug = true): Promise<Blob | null> {
+export async function gzipCompress(input: string, isDebug = true): Promise<Uint8Array<ArrayBuffer> | null> {
   try {
     const compressed = await gzipAsync(input)
-    return new Blob([new Uint8Array(compressed)])
+    return new Uint8Array(compressed)
   } catch (error) {
     if (isDebug) {
       console.error('Failed to gzip compress data', error)

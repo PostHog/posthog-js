@@ -1447,7 +1447,7 @@ export abstract class PostHogCoreStateless {
    * Compresses an outgoing payload. Runtime-specific clients can override this
    * to avoid using the Web Streams compression implementation.
    */
-  protected compressPayload(payload: string): Promise<Blob | null> {
+  protected compressPayload(payload: string): Promise<Blob | Uint8Array<ArrayBuffer> | null> {
     return gzipCompress(payload, this.isDebug)
   }
 
@@ -1766,12 +1766,16 @@ export abstract class PostHogCoreStateless {
     try {
       if (body instanceof Blob) {
         reqByteLength = body.size
+      } else if (body instanceof Uint8Array) {
+        reqByteLength = body.byteLength
       } else {
         reqByteLength = Buffer.byteLength(body, STRING_FORMAT)
       }
     } catch {
       if (body instanceof Blob) {
         reqByteLength = body.size
+      } else if (body instanceof Uint8Array) {
+        reqByteLength = body.byteLength
       } else {
         const encoded = new TextEncoder().encode(body)
         reqByteLength = encoded.length

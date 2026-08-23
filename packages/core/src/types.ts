@@ -304,7 +304,7 @@ export type PostHogFetchOptions = {
   mode?: 'no-cors'
   credentials?: 'omit'
   headers: { [key: string]: string }
-  body?: string | Blob
+  body?: string | Blob | Uint8Array<ArrayBuffer>
   signal?: AbortSignal
 }
 

@@ -14,7 +14,7 @@ export class PostHog extends PostHogBackendClient {
     return 'posthog-node'
   }
 
-  protected override compressPayload(payload: string): Promise<Blob | null> {
+  protected override compressPayload(payload: string): Promise<Uint8Array<ArrayBuffer> | null> {
     return gzipCompress(payload, this.isDebug)
   }
 
