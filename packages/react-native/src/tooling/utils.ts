@@ -157,10 +157,17 @@ export function createVirtualJSModule(
   moduleCode: string
 ): Module<VirtualJSOutput> & { setSource: (code: string) => void } {
   let sourceCode = moduleCode
+  const outputData: VirtualJSOutput['data'] = {
+    code: sourceCode,
+    lineCount: countLines(sourceCode),
+    map: [],
+  }
 
   return {
     setSource: (code: string) => {
       sourceCode = code
+      outputData.code = code
+      outputData.lineCount = countLines(code)
     },
     dependencies: new Map(),
     getSource: () => Buffer.from(sourceCode),
@@ -169,11 +176,7 @@ export function createVirtualJSModule(
     output: [
       {
         type: 'js/script/virtual',
-        data: {
-          code: sourceCode,
-          lineCount: countLines(sourceCode),
-          map: [],
-        },
+        data: outputData,
       },
     ],
   }
