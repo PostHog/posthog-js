@@ -1,5 +1,12 @@
 # @posthog/core
 
+## 1.48.9
+
+### Patch Changes
+
+- [#4614](https://github.com/PostHog/posthog-js/pull/4614) [`3593c43`](https://github.com/PostHog/posthog-js/commit/3593c43e98269cbe0bc18e697d38b8c862419b09) Thanks [@iamomiid](https://github.com/iamomiid)! - The Node SDK now sends the raw gzip bytes as the request body instead of wrapping them in a `Blob`. On Node 24.16 and later, reading a `Blob` request body leaks a native `BlobReader` that is never released, so a service calling `capture()` and `flush()` once per request grew by roughly 2.3 KB of heap per event and never gave it back. This completes the work in #4423: switching to `node:zlib` removed the compression-time Blob reads, but the body itself was still a Blob and still got read once per request. Compression behaviour, headers and the wire format are unchanged, and the edge build keeps using `CompressionStream`.
+  (2026-08-24)
+
 ## 1.48.8
 
 ### Patch Changes
