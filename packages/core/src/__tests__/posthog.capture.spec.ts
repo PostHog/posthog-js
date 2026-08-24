@@ -279,6 +279,34 @@ describe('PostHog Core', () => {
       expect(mocks.fetch).not.toHaveBeenCalled()
     })
 
+    it('should fail closed when a before_send function throws', async () => {
+      const error = new Error('before_send failed')
+      const sentinel = jest.fn((event: CaptureEvent | null) => event)
+      const captureListener = jest.fn()
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+        flushAt: 1,
+        before_send: [
+          (event) => event && { ...event, properties: { ...event.properties, transformed: true } },
+          () => {
+            throw error
+          },
+          sentinel,
+        ],
+      })
+      const errorSpy = jest.spyOn((posthog as any)._logger, 'error').mockImplementation(() => {})
+      posthog.on('capture', captureListener)
+
+      expect(() => posthog.capture('custom-event')).not.toThrow()
+      await waitForPromises()
+
+      expect(sentinel).not.toHaveBeenCalled()
+      expect(captureListener).not.toHaveBeenCalled()
+      expect(posthog.getPersistedProperty(PostHogPersistedProperty.Queue)).toBeUndefined()
+      expect(mocks.fetch).not.toHaveBeenCalled()
+      expect(errorSpy).toHaveBeenCalledWith("Error in before_send function for event 'custom-event':", error)
+      errorSpy.mockRestore()
+    })
+
     it('should pass timestamp and uuid through before_send', async () => {
       const customDate = new Date('2023-06-15')
       const customUuid = uuidv7()

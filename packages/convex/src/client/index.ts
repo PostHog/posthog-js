@@ -119,8 +119,13 @@ export class PostHog {
     const fns = Array.isArray(this.beforeSend) ? this.beforeSend : [this.beforeSend]
     let result: PostHogEvent | null = event
     for (const fn of fns) {
-      result = fn(result)
-      if (!result) return null
+      try {
+        result = fn(result)
+        if (!result) return null
+      } catch (e) {
+        console.warn(`[PostHog] Error in beforeSend function for event '${event.event}':`, e)
+        return null
+      }
     }
     return result
   }

@@ -14,6 +14,14 @@ export const UNKNOWN_FUNCTION = '?'
 // but do not let it count as in_app and pull the issue into the site's own stack.
 const MASKED_URL_PREFIX = 'webkit-masked-url://'
 
+// Chromium's counterpart: a script with no URL at all -- code injected by an extension
+// (`chrome.scripting.executeScript`), pasted into devtools, or evaluated from a string -- shows
+// up as a bare `<anonymous>:line:col` frame. The page's own eval'd code is *not* affected: V8
+// reports it as `eval at <anonymous> (https://site/app.js:1:2)` and the chrome parser already
+// rewrites that to the site URL. A bare `<anonymous>` can never be symbolicated, so treating it
+// as in_app only ever pulled an unresolvable frame into the site's own stack.
+const ANONYMOUS_FILENAME = '<anonymous>'
+
 export function createFrame(
   platform: StackFrame['platform'],
   filename: string,
@@ -26,8 +34,8 @@ export function createFrame(
     platform,
     filename,
     function: func === '<anonymous>' ? UNKNOWN_FUNCTION : func,
-    // Browser frames are considered in_app unless the runtime has masked their origin
-    in_app: !filename?.startsWith(MASKED_URL_PREFIX),
+    // Browser frames are considered in_app unless the runtime has masked or dropped their origin
+    in_app: !filename?.startsWith(MASKED_URL_PREFIX) && filename !== ANONYMOUS_FILENAME,
   }
 
   if (!isUndefined(lineno)) {

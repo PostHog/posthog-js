@@ -35,6 +35,7 @@ import documentReplacementEvents from './events/document-replacement';
 import hoverInIframeShadowDom from './events/iframe-shadowdom-hover';
 import customElementDefineClass from './events/custom-element-define-class';
 import svgXlinkHrefEvents from './events/svg-xlink-href';
+import readdNodeSubtreeSwapEvents from './events/readd-node-subtree-swap';
 import {
   EventType,
   IncrementalSource,
@@ -216,6 +217,29 @@ describe('replayer', function () {
     });
   });
 
+  for (const useVirtualDom of [true, false]) {
+    it(`replaces a re-added node instead of duplicating it (virtual dom: ${useVirtualDom})`, async () => {
+      await page.evaluate(
+        `events = ${JSON.stringify(readdNodeSubtreeSwapEvents)}`,
+      );
+      const result = await page.evaluate(`
+        const { Replayer } = rrweb;
+        const replayer = new Replayer(events, { useVirtualDom: ${useVirtualDom} });
+        replayer.pause(600);
+        const container = replayer.iframe.contentDocument.getElementById('container');
+        ({
+          childElementCount: container.childElementCount,
+          childClasses: [...container.children].map((c) => c.className),
+        });
+      `);
+
+      expect(result).toEqual({
+        childElementCount: 1,
+        childClasses: ['b'],
+      });
+    });
+  }
+
   it('can fast forward past StyleSheetRule changes on virtual elements', async () => {
     await page.evaluate(`events = ${JSON.stringify(styleSheetRuleEvents)}`);
     const actionLength = await page.evaluate(`
@@ -307,6 +331,47 @@ describe('replayer', function () {
 
     await assertDomSnapshot(page);
   });
+
+  for (const useVirtualDom of [true, false]) {
+    it(`keeps a stylesheet attached when late CSS text replaces it (virtual dom: ${useVirtualDom})`, async () => {
+      const eventsWithLateCssText = [
+        ...styleSheetRuleEvents,
+        {
+          type: EventType.IncrementalSnapshot,
+          data: {
+            source: IncrementalSource.Mutation,
+            adds: [],
+            removes: [],
+            texts: [],
+            attributes: [
+              {
+                id: 101,
+                attributes: { _cssText: 'a { color: rgb(1, 2, 3); }' },
+              },
+            ],
+          },
+          timestamp: styleSheetRuleEvents[0].timestamp + 3200,
+        },
+      ];
+      await page.evaluate(`events = ${JSON.stringify(eventsWithLateCssText)}`);
+
+      const result = await page.evaluate(`
+        const { Replayer } = rrweb;
+        const replayer = new Replayer(events, { useVirtualDom: ${useVirtualDom} });
+        replayer.pause(3500);
+        const doc = replayer.iframe.contentDocument;
+        ({
+          stylesheetCount: doc.querySelectorAll('style[data-meta^="from full-snapshot"]').length,
+          linkColor: replayer.iframe.contentWindow.getComputedStyle(doc.querySelector('a')).color,
+        });
+      `);
+
+      expect(result).toEqual({
+        stylesheetCount: 1,
+        linkColor: 'rgb(1, 2, 3)',
+      });
+    });
+  }
 
   it('should delete fast forwarded StyleSheetRules that where removed', async () => {
     await page.evaluate(`events = ${JSON.stringify(styleSheetRuleEvents)}`);

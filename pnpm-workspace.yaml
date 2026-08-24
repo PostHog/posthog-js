@@ -17,7 +17,7 @@ catalog:
   '@babel/preset-env': ^7.27.1
   '@babel/preset-react': ^7.27.1
   '@babel/preset-typescript': ^7.27.1
-  '@posthog/cli': ~0.13.0
+  '@posthog/cli': ~0.14.1
   '@rslib/core': 0.10.6
   '@testing-library/dom': ^10.4.1
   '@testing-library/jest-dom': ^6.9.1
@@ -100,6 +100,16 @@ trustPolicyExclude:
   - vite@5.4.21
 
 trustPolicy: no-downgrade
+
+peerDependencyRules:
+  allowedVersions:
+    # @rekog/mcp-nest (used by the packages/mcp integration harness via the
+    # rekog-mcp-nest-v1/v2 aliases) peers on zod ^4, while packages/mcp provides
+    # zod 3 for the v1 MCP SDK. The mismatch is harmless: the harness fixtures
+    # pass zod-4 schemas from their own zod4 alias (nest-v1) or raw JSON Schema
+    # objects (nest-v2), so the code paths that would need rekog's own zod link
+    # to be v4 are never reached.
+    '@rekog/mcp-nest>zod': '3 || 4'
 
 patchedDependencies:
   browserstack-local@1.5.1: patches/browserstack-local@1.5.1.patch
