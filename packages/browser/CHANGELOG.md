@@ -1,5 +1,12 @@
 # posthog-js
 
+## 1.418.12
+
+### Patch Changes
+
+- [#4501](https://github.com/PostHog/posthog-js/pull/4501) [`9e853c1`](https://github.com/PostHog/posthog-js/commit/9e853c11f6a97197667caeeb11849dff776c986c) Thanks [@posthog](https://github.com/apps/posthog)! - Session replay: fixed a stale element left rendered in the player when a mutation re-added a node id with changed attributes. Affects both `useVirtualDom` modes.
+  (2026-08-24)
+
 ## 1.418.11
 
 ### Patch Changes

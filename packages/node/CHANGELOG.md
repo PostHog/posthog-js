@@ -1,5 +1,12 @@
 # posthog-node
 
+## 5.51.0
+
+### Minor Changes
+
+- [#4564](https://github.com/PostHog/posthog-js/pull/4564) [`233ac88`](https://github.com/PostHog/posthog-js/commit/233ac88afd0168476178bda66d9f823a95bac068) Thanks [@marandaneto](https://github.com/marandaneto)! - Fall back to remote evaluation when a requested flag is missing from loaded local definitions. This
+  changes scoped calls that previously omitted the flag without making a request. (2026-08-24)
+
 ## 5.50.0
 
 ### Minor Changes
