@@ -97,6 +97,20 @@ plugins.withId('com.android.application') {
                             posthogUploadArgs.add("--skip-on-conflict")
                         }
 
+                        // How the release a build belongs to gets associated with the exceptions
+                        // it reports. `symbol-set` (the default) stamps the release onto the
+                        // uploaded source maps; `event` uploads them release-independent and lets
+                        // each event resolve its own release from the $app_namespace /
+                        // $app_version / $app_build the SDK already sends, which the release
+                        // coordinates below are built from. Passed only outside the default mode,
+                        // so a symbol-set build keeps working against a posthog-cli predating the
+                        // flag.
+                        def posthogReleaseMode = resolvePostHogReleaseMode(project)
+                        def posthogReleaseModeArgs = []
+                        if (posthogReleaseMode != null && posthogReleaseMode != "symbol-set") {
+                            posthogReleaseModeArgs.addAll(["--release-mode", posthogReleaseMode])
+                        }
+
                         // posthog.dotenvFile (gradle.properties): dotenv file with POSTHOG_CLI_*
                         // credentials, relative paths resolved against the android root project.
                         // Exported to the CLI as POSTHOG_CLI_DOTENV_FILE (posthog-cli >= 0.8.4;
@@ -134,12 +148,20 @@ plugins.withId('com.android.application') {
                                 "--composed-map-path", sourcemapOutput          // The path of the composed source map
                             ])
                             args.addAll(extraArgs)
+                            args.addAll(posthogReleaseModeArgs)
                             logger.info("posthog-cli clone arguments: ${args}")
 
                             injected.execOps.exec {
                                 workingDir reactRoot
                                 if (posthogDotenvFilePath != null) {
                                     environment "POSTHOG_CLI_DOTENV_FILE", posthogDotenvFilePath
+                                }
+                                // posthog-cli reads POSTHOG_RELEASE_MODE itself when
+                                // --release-mode is absent, which it deliberately is in symbol-set
+                                // mode. Pin the resolved mode so a daemon that inherited the
+                                // variable cannot override an explicit posthog.releaseMode.
+                                if (posthogReleaseMode != null) {
+                                    environment "POSTHOG_RELEASE_MODE", posthogReleaseMode
                                 }
                                 commandLine(*osCompatibility, *args)
                             }
@@ -153,12 +175,16 @@ plugins.withId('com.android.application') {
                             ])
                             args.addAll(extraArgs)
                             args.addAll(posthogUploadArgs)
+                            args.addAll(posthogReleaseModeArgs)
                             logger.info("posthog-cli upload arguments: ${args}")
 
                             injected.execOps.exec {
                                 workingDir reactRoot
                                 if (posthogDotenvFilePath != null) {
                                     environment "POSTHOG_CLI_DOTENV_FILE", posthogDotenvFilePath
+                                }
+                                if (posthogReleaseMode != null) {
+                                    environment "POSTHOG_RELEASE_MODE", posthogReleaseMode
                                 }
                                 commandLine(*osCompatibility, *args)
                             }
@@ -278,6 +304,29 @@ def resolvePostHogReactNativeSDKPath(reactRoot) {
     } catch (Throwable ignored) {} // if the resolve fails we fallback to the default path
     def packagePath = resolvedPath != null && resolvedPath.exists() ? resolvedPath.getAbsolutePath() : "$reactRoot/node_modules/posthog-react-native"
     return packagePath
+}
+
+/**
+ * Release mode for this build: the `posthog.releaseMode` gradle property, then the
+ * `POSTHOG_RELEASE_MODE` environment variable posthog-cli and the bundler plugins already read,
+ * then null for the posthog-cli default. `com.posthog.android` reads the same property for the R8
+ * mapping upload, so one entry covers both halves of an Android build.
+ *
+ * An unrecognized value fails the build rather than falling back, so a typo cannot silently leave
+ * a build binding its source maps to a release it meant to keep independent.
+ */
+static String resolvePostHogReleaseMode(Project project) {
+    def value = project.findProperty("posthog.releaseMode")?.toString()?.trim()
+    if (!value) {
+        value = System.getenv("POSTHOG_RELEASE_MODE")?.trim()
+    }
+    if (!value) {
+        return null
+    }
+    if (!(value in ["symbol-set", "event"])) {
+        throw new GradleException("posthog.releaseMode must be one of symbol-set, event, was '${value}'")
+    }
+    return value
 }
 
 /** Extract from arguments collection bundle and sourcemap files output names. */

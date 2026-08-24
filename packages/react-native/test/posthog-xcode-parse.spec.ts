@@ -1,4 +1,4 @@
-import { execFileSync, execSync } from 'child_process'
+import { execFileSync, execSync, spawnSync } from 'child_process'
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
@@ -370,7 +370,7 @@ describe('posthog-xcode.sh skipOnConflict upload flag', () => {
 
     expect(contents).toContain('POSTHOG_UPLOAD_ARGS+=(--skip-on-conflict)')
     expect(contents).toContain(
-      'CLI_UPLOAD_OUTPUT=$("$PH_CLI_PATH" hermes upload --directory "$DERIVED_FILE_DIR" "${CLI_RELEASE_ARGS[@]}" "${POSTHOG_UPLOAD_ARGS[@]}" 2>&1)'
+      'CLI_UPLOAD_OUTPUT=$("$PH_CLI_PATH" hermes upload --directory "$DERIVED_FILE_DIR" "${CLI_RELEASE_ARGS[@]}" "${POSTHOG_UPLOAD_ARGS[@]}" "${POSTHOG_RELEASE_MODE_ARGS[@]}" 2>&1)'
     )
     expect(contents).not.toContain('hermes clone --skip-on-conflict')
   })
@@ -404,5 +404,150 @@ print_command_error "posthog-cli hermes upload" "42" "$CLI_OUTPUT"`
       'error: posthog-cli hermes upload - Oops! real failure',
     ])
     expect(output.every((line) => line.startsWith('error: '))).toBe(true)
+  })
+})
+
+describe('posthog-xcode.sh posthog-cli invocation', () => {
+  // Runs the wrapper against a posthog-cli stub that records its arguments, so the assertions
+  // are on what the CLI was actually asked to do rather than on the shell source.
+  const runWrapper = (
+    args: string[],
+    extraEnv: Record<string, string>,
+    infoPlist?: Record<string, string>
+  ): { status: number; invocations: string[]; output: string } => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-xcode-release-mode-'))
+    try {
+      const derivedDir = path.join(tempDir, 'derived')
+      const configurationDir = path.join(tempDir, 'configuration')
+      const homeDir = path.join(tempDir, 'home')
+      const iosDir = path.join(tempDir, 'ios')
+      const cliTracePath = path.join(tempDir, 'cli.log')
+      const cliPath = path.join(homeDir, '.posthog', 'posthog-cli')
+      const reactNativePath = path.join(tempDir, 'react-native-xcode.sh')
+
+      for (const directory of [derivedDir, configurationDir, iosDir, path.dirname(cliPath)]) {
+        fs.mkdirSync(directory, { recursive: true })
+      }
+      fs.writeFileSync(cliPath, '#!/bin/sh\necho "$@" >> "$CLI_TRACE_PATH"\n', { mode: 0o755 })
+      fs.writeFileSync(reactNativePath, '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+
+      const plistEnv: Record<string, string> = {}
+      if (infoPlist) {
+        const entries = Object.entries(infoPlist)
+          .map(([key, value]) => `  <key>${key}</key>\n  <string>${value}</string>`)
+          .join('\n')
+        fs.mkdirSync(path.join(iosDir, 'App'), { recursive: true })
+        fs.writeFileSync(
+          path.join(iosDir, 'App', 'Info.plist'),
+          `<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0">\n<dict>\n${entries}\n</dict>\n</plist>\n`
+        )
+        plistEnv.SRCROOT = iosDir
+        plistEnv.INFOPLIST_FILE = 'App/Info.plist'
+      }
+
+      const result = spawnSync(SCRIPT_PATH, [...args, '/bin/sh', reactNativePath], {
+        cwd: iosDir,
+        env: {
+          ...process.env,
+          CLI_TRACE_PATH: cliTracePath,
+          CONFIGURATION_BUILD_DIR: configurationDir,
+          DERIVED_FILE_DIR: derivedDir,
+          // Stands in for a CI runner so the wrapper skips deriving git metadata from the
+          // (repo-less) temp directory.
+          GITHUB_SHA: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          HOME: homeDir,
+          NODE_BINARY: process.execPath,
+          ...plistEnv,
+          ...extraEnv,
+        },
+        encoding: 'utf8',
+      })
+
+      const invocations = fs.existsSync(cliTracePath)
+        ? fs.readFileSync(cliTracePath, 'utf8').trim().split('\n').filter(Boolean)
+        : []
+      return { status: result.status ?? -1, invocations, output: `${result.stdout}${result.stderr}` }
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
+  }
+
+  it.each([
+    ['the POSTHOG_RELEASE_MODE env var', [] as string[], { POSTHOG_RELEASE_MODE: 'event' }],
+    ['the --posthog-release-mode argument', ['--posthog-release-mode', 'event', '--'], {}],
+  ])('passes --release-mode event to clone and upload from %s', (_source, args, env) => {
+    const { status, invocations } = runWrapper(args, env)
+
+    expect(status).toBe(0)
+    expect(invocations).toHaveLength(2)
+    expect(invocations[0]).toContain('hermes clone')
+    expect(invocations[0]).toContain('--release-mode event')
+    expect(invocations[1]).toContain('hermes upload')
+    expect(invocations[1]).toContain('--release-mode event')
+  })
+
+  it('omits the flag by default so an older posthog-cli keeps working', () => {
+    const { status, invocations } = runWrapper([], { POSTHOG_RELEASE_MODE: '' })
+
+    expect(status).toBe(0)
+    expect(invocations).toHaveLength(2)
+    expect(invocations.join('\n')).not.toContain('--release-mode')
+  })
+
+  it('fails the build on an unrecognized mode instead of binding the maps anyway', () => {
+    const { status, invocations, output } = runWrapper([], { POSTHOG_RELEASE_MODE: 'evnet' })
+
+    expect(status).not.toBe(0)
+    expect(invocations).toHaveLength(0)
+    expect(output).toContain("must be 'symbol-set' or 'event'")
+  })
+
+  // The SDK reports $app_version and $app_build from Info.plist, and event release mode resolves
+  // an exception's release from exactly those. Expo writes literal versions there and leaves
+  // MARKETING_VERSION at the Xcode template default of 1.0, so a release keyed on the build
+  // setting never matches an event and the exception silently reports no release.
+  it('keys the release on Info.plist rather than the build settings', () => {
+    const { status, invocations } = runWrapper(
+      [],
+      {
+        PRODUCT_BUNDLE_IDENTIFIER: 'com.example.app',
+        MARKETING_VERSION: '1.0',
+        CURRENT_PROJECT_VERSION: '1',
+      },
+      { CFBundleShortVersionString: '1.0.0', CFBundleVersion: '42' }
+    )
+
+    expect(status).toBe(0)
+    expect(invocations[1]).toContain('--release-name com.example.app')
+    expect(invocations[1]).toContain('--release-version 1.0.0')
+    expect(invocations[1]).toContain('--build 42')
+  })
+
+  it('falls back to the build settings when Info.plist only references them', () => {
+    const { status, invocations } = runWrapper(
+      [],
+      {
+        PRODUCT_BUNDLE_IDENTIFIER: 'com.example.app',
+        MARKETING_VERSION: '2.5.0',
+        CURRENT_PROJECT_VERSION: '7',
+      },
+      { CFBundleShortVersionString: '$(MARKETING_VERSION)', CFBundleVersion: '$(CURRENT_PROJECT_VERSION)' }
+    )
+
+    expect(status).toBe(0)
+    expect(invocations[1]).toContain('--release-version 2.5.0')
+    expect(invocations[1]).toContain('--build 7')
+  })
+
+  it('falls back to the build settings when there is no Info.plist at all', () => {
+    const { status, invocations } = runWrapper([], {
+      PRODUCT_BUNDLE_IDENTIFIER: 'com.example.app',
+      MARKETING_VERSION: '3.1.4',
+      CURRENT_PROJECT_VERSION: '9',
+    })
+
+    expect(status).toBe(0)
+    expect(invocations[1]).toContain('--release-version 3.1.4')
+    expect(invocations[1]).toContain('--build 9')
   })
 })

@@ -17,7 +17,9 @@ import {
   moveDsymUploadBuildPhaseToEnd,
   resolveDotenvFileProp,
   resolveNativeSymbolUpload,
+  resolveReleaseModeProp,
   updateDotenvFileGradleProperties,
+  updateReleaseModeGradleProperties,
 } from '../src/tooling/expoconfig'
 
 const postHogExpoPlugin = (postHogExpoPluginModule as any).default
@@ -183,6 +185,21 @@ describe('modifyExistingXcodeBuildScript', () => {
     expect(parsed).not.toContain('POSTHOG_SKIP_ON_CONFLICT')
   })
 
+  it('adds and removes the release mode export as the prop changes', () => {
+    // Reverting `releaseMode` in app.json has to remove the export, or the build keeps uploading
+    // release-independent source maps after the user asked for the default back.
+    const script = { shellScript: JSON.stringify('"../node_modules/react-native/scripts/react-native-xcode.sh"') }
+
+    modifyExistingXcodeBuildScript(script, false, 'event')
+    expect(JSON.parse(script.shellScript)).toContain('export POSTHOG_RELEASE_MODE=event')
+
+    modifyExistingXcodeBuildScript(script, false, 'symbol-set')
+    expect(JSON.parse(script.shellScript)).toContain('export POSTHOG_RELEASE_MODE=symbol-set')
+
+    modifyExistingXcodeBuildScript(script)
+    expect(JSON.parse(script.shellScript)).not.toContain('POSTHOG_RELEASE_MODE')
+  })
+
   it('migrates an existing shell-prefixed PostHog wrapper to a composable invocation', () => {
     const reactNativeCommand = '../node_modules/react-native/scripts/react-native-xcode.sh'
     const oldWrapped = `/bin/sh ${addPostHogWithBundledScriptsToBundleShellScript(reactNativeCommand)}`
@@ -346,6 +363,20 @@ describe('addDsymUploadBuildPhase', () => {
 
   // xcode's addBuildPhase stores shellScript quote-escaped with literal newlines.
   const encodePbx = (script: string): string => '"' + script.replace(/"/g, '\\"') + '"'
+
+  it('unbinds dSYM uploads from a release in event mode, and refreshes back out of it', () => {
+    // The refresh only fires when the stored script matches a variant the plugin can generate, so
+    // a release-mode variant missing from that list would silently freeze the phase as-is.
+    const existing = { isa: 'PBXShellScriptBuildPhase', shellScript: encodePbx(buildDsymUploadShellScript()) }
+    const xp = mockXcodeProjectForBuildPhase(existing)
+
+    addDsymUploadBuildPhase(xp, false, false, 'event')
+    expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript(false, false, 'event')))
+    expect(existing.shellScript).toContain('export POSTHOG_NO_RELEASE_BIND=1')
+
+    addDsymUploadBuildPhase(xp, false, false, 'symbol-set')
+    expect(existing.shellScript).not.toContain('POSTHOG_NO_RELEASE_BIND')
+  })
 
   it('refreshes an existing plugin-generated phase script so option changes take effect', () => {
     const existing: any = {
@@ -678,6 +709,40 @@ describe('updateDotenvFileGradleProperties', () => {
   it('leaves unrelated properties untouched', () => {
     const result = updateDotenvFileGradleProperties([...unrelated], '.env')
     expect(result.slice(0, unrelated.length)).toEqual(unrelated)
+  })
+})
+
+describe('updateReleaseModeGradleProperties', () => {
+  const unrelated = [
+    { type: 'comment', value: 'Project-wide Gradle settings.' },
+    { type: 'property', key: 'android.useAndroidX', value: 'true' },
+  ]
+
+  it('adds the entry when set and removes it when the prop is dropped', () => {
+    const withEntry = updateReleaseModeGradleProperties([...unrelated], 'event')
+    expect(withEntry).toEqual([...unrelated, { type: 'property', key: 'posthog.releaseMode', value: 'event' }])
+
+    expect(updateReleaseModeGradleProperties(withEntry)).toEqual(unrelated)
+  })
+
+  it('replaces an existing entry instead of duplicating it', () => {
+    const withEntry = updateReleaseModeGradleProperties([...unrelated], 'event')
+    const result = updateReleaseModeGradleProperties(withEntry, 'symbol-set')
+    expect(result.filter((item) => item.key === 'posthog.releaseMode')).toEqual([
+      { type: 'property', key: 'posthog.releaseMode', value: 'symbol-set' },
+    ])
+  })
+})
+
+describe('resolveReleaseModeProp', () => {
+  it('treats an unset or blank prop as the posthog-cli default', () => {
+    expect(resolveReleaseModeProp()).toBeUndefined()
+    expect(resolveReleaseModeProp('  ')).toBeUndefined()
+  })
+
+  it('stops the prebuild on a typo rather than falling back to the default', () => {
+    expect(resolveReleaseModeProp(' event ')).toBe('event')
+    expect(() => resolveReleaseModeProp('evnet')).toThrow("was 'evnet'")
   })
 })
 

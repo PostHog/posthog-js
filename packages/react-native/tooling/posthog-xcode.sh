@@ -33,10 +33,19 @@ print_command_error() {
 # WITH_ENVIRONMENT is executed by React Native
 
 POSTHOG_SKIP_ON_CONFLICT_ENABLED="${POSTHOG_SKIP_ON_CONFLICT:-}"
+POSTHOG_RELEASE_MODE_VALUE="${POSTHOG_RELEASE_MODE:-}"
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --posthog-skip-on-conflict)
       POSTHOG_SKIP_ON_CONFLICT_ENABLED=1
+      shift
+      ;;
+    --posthog-release-mode)
+      POSTHOG_RELEASE_MODE_VALUE="$2"
+      shift 2
+      ;;
+    --posthog-release-mode=*)
+      POSTHOG_RELEASE_MODE_VALUE="${1#*=}"
       shift
       ;;
     --)
@@ -52,6 +61,32 @@ done
 POSTHOG_UPLOAD_ARGS=()
 if [ "$POSTHOG_SKIP_ON_CONFLICT_ENABLED" = "1" ] || [ "$POSTHOG_SKIP_ON_CONFLICT_ENABLED" = "true" ]; then
   POSTHOG_UPLOAD_ARGS+=(--skip-on-conflict)
+fi
+
+# How the release a build belongs to gets associated with the exceptions it reports.
+#   symbol-set (the default) stamps the release onto the uploaded source maps, and an exception
+#     inherits the release of the maps its frames resolved against.
+#   event uploads the maps release-independent, and each event resolves its own release from the
+#     $app_namespace / $app_version / $app_build the SDK already sends. Xcode's build settings
+#     supply matching coordinates below, so nothing has to be injected into the app.
+POSTHOG_RELEASE_MODE_ARGS=()
+if [ -n "$POSTHOG_RELEASE_MODE_VALUE" ]; then
+  case "$POSTHOG_RELEASE_MODE_VALUE" in
+    symbol-set|event) ;;
+    *)
+      echo "error: posthog release mode must be 'symbol-set' or 'event', was '$POSTHOG_RELEASE_MODE_VALUE'"
+      exit 1
+      ;;
+  esac
+
+  # posthog-cli reads POSTHOG_RELEASE_MODE itself when --release-mode is absent, which it
+  # deliberately is in symbol-set mode so the flag stays optional against a CLI predating it. Pin
+  # the resolved mode so a variable inherited from the build environment cannot quietly override
+  # an explicit --posthog-release-mode.
+  export POSTHOG_RELEASE_MODE="$POSTHOG_RELEASE_MODE_VALUE"
+  if [ "$POSTHOG_RELEASE_MODE_VALUE" != "symbol-set" ]; then
+    POSTHOG_RELEASE_MODE_ARGS=(--release-mode "$POSTHOG_RELEASE_MODE_VALUE")
+  fi
 fi
 
 REACT_NATIVE_XCODE_DEFAULT="../node_modules/react-native/scripts/react-native-xcode.sh"
@@ -304,7 +339,7 @@ fi
 
 # Execute posthog cli clone
 set +x +e
-CLI_CLONE_OUTPUT=$("$PH_CLI_PATH" hermes clone --minified-map-path "$SOURCEMAP_PACKAGER_FILE" --composed-map-path "$SOURCEMAP_FILE" "${CLI_RELEASE_ARGS[@]}" 2>&1)
+CLI_CLONE_OUTPUT=$("$PH_CLI_PATH" hermes clone --minified-map-path "$SOURCEMAP_PACKAGER_FILE" --composed-map-path "$SOURCEMAP_FILE" "${CLI_RELEASE_ARGS[@]}" "${POSTHOG_RELEASE_MODE_ARGS[@]}" 2>&1)
 CLONE_EXIT_CODE=$?
 if [ $CLONE_EXIT_CODE -eq 0 ]; then
   echo "$CLI_CLONE_OUTPUT" | awk '{print "output: posthog-cli - " $0}'
@@ -316,7 +351,7 @@ set -x -e
 
 # Execute posthog cli upload
 set +x +e
-CLI_UPLOAD_OUTPUT=$("$PH_CLI_PATH" hermes upload --directory "$DERIVED_FILE_DIR" "${CLI_RELEASE_ARGS[@]}" "${POSTHOG_UPLOAD_ARGS[@]}" 2>&1)
+CLI_UPLOAD_OUTPUT=$("$PH_CLI_PATH" hermes upload --directory "$DERIVED_FILE_DIR" "${CLI_RELEASE_ARGS[@]}" "${POSTHOG_UPLOAD_ARGS[@]}" "${POSTHOG_RELEASE_MODE_ARGS[@]}" 2>&1)
 UPLOAD_EXIT_CODE=$?
 if [ $UPLOAD_EXIT_CODE -eq 0 ]; then
   echo "$CLI_UPLOAD_OUTPUT" | awk '{print "output: posthog-cli - " $0}'
