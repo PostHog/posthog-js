@@ -386,3 +386,70 @@ test.describe('Session recording - array.js', () => {
         expect(targetEvent!['properties']['$sdk_debug_session_start']).toBeDefined()
     })
 })
+
+test.describe('Session recording - lazy recorder compatibility', () => {
+    test('captures clipboard events from persisted config before fresh config responds', async ({ page, context }) => {
+        let releaseConfigResponse: () => void = () => {}
+        const remoteConfigResponseGate = new Promise<void>((resolve) => {
+            releaseConfigResponse = resolve
+        })
+        const privateClipboardText = 'private pasted value'
+
+        try {
+            await start(
+                {
+                    waitForFlags: false,
+                    remoteConfigResponseGate,
+                    options: { session_recording: {} },
+                    flagsResponseOverrides: {
+                        sessionRecording: { endpoint: '/ses/' },
+                        autocapture_opt_out: true,
+                    },
+                    url: './playground/cypress/index.html',
+                    runBeforePostHogInit: async (currentPage) => {
+                        await currentPage.evaluate(() => {
+                            window.localStorage.setItem(
+                                'ph_test token_posthog',
+                                JSON.stringify({
+                                    distinct_id: 'clipboard-compat-user',
+                                    $session_recording_remote_config: {
+                                        enabled: true,
+                                        endpoint: '/ses/',
+                                        cache_timestamp: Date.now(),
+                                    },
+                                })
+                            )
+                        })
+                    },
+                },
+                page,
+                context
+            )
+
+            await waitForSessionRecordingToStart(page)
+            await page.resetCapturedEvents()
+            const responsePromise = page.waitForResponse('**/ses/*')
+            await page.evaluate((clipboardText) => {
+                const input = document.querySelector('[data-cy-input]') as HTMLInputElement
+                const event = new Event('paste', { bubbles: true, cancelable: true, composed: true })
+                Object.defineProperty(event, 'clipboardData', {
+                    value: { getData: () => clipboardText },
+                })
+                input.dispatchEvent(event)
+            }, privateClipboardText)
+            await responsePromise
+
+            const clipboardEvents = (await page.capturedEvents())
+                .filter((event) => event.event === '$snapshot')
+                .flatMap((event) => event.properties.$snapshot_data)
+                .filter((event: any) => event.type === 5 && event.data?.tag === '$clipboard')
+            expect(clipboardEvents).toHaveLength(1)
+            expect(clipboardEvents[0].data.payload).toEqual(
+                expect.objectContaining({ type: 'paste', textLength: privateClipboardText.length })
+            )
+            expect(JSON.stringify(clipboardEvents[0])).not.toContain(privateClipboardText)
+        } finally {
+            releaseConfigResponse()
+        }
+    })
+})

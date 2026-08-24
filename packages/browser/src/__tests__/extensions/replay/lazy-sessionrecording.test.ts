@@ -1,7 +1,7 @@
 /// <reference lib="dom" />
 
 import '@testing-library/jest-dom'
-import { isUndefined } from '@posthog/core'
+import { isFunction, isUndefined } from '@posthog/core'
 
 import { PostHogPersistence } from '../../../posthog-persistence'
 import {
@@ -50,6 +50,7 @@ import {
     IncrementalSource,
     type metaEvent,
     type pluginEvent,
+    type RecordPlugin,
 } from '../../../extensions/replay/types/rrweb-types'
 import { ConsentManager } from '../../../consent'
 import { SimpleEventEmitter } from '@posthog/browser-common/utils/simple-event-emitter'
@@ -182,6 +183,16 @@ const createPluginSnapshot = (event = {}): pluginEvent => ({
     ...event,
 })
 
+function dispatchClipboardEvent(target: EventTarget, type: 'copy' | 'cut' | 'paste', clipboardValue?: unknown): void {
+    const event = new Event(type, { bubbles: true, cancelable: true, composed: true })
+    if (!isUndefined(clipboardValue)) {
+        Object.defineProperty(event, 'clipboardData', {
+            value: { getData: () => clipboardValue },
+        })
+    }
+    target.dispatchEvent(event)
+}
+
 function makeFlagsResponse(partialResponse: Partial<FlagsResponse>): RemoteConfigResult {
     return { ok: true, config: partialResponse as unknown as RemoteConfig }
 }
@@ -237,9 +248,13 @@ describe('Lazy SessionRecording', () => {
 
     const addRRwebToWindow = () => {
         assignableWindow.__PosthogExtensions__.rrweb = {
-            record: jest.fn(({ emit }) => {
+            record: jest.fn(({ emit, plugins = [] }) => {
                 _emit = emit
-                return () => {}
+                const pluginCleanups = plugins
+                    .filter(Boolean)
+                    .map((plugin: RecordPlugin) => plugin.observer?.(jest.fn(), window as Window, plugin.options))
+                    .filter(isFunction)
+                return () => pluginCleanups.forEach((cleanup: () => void) => cleanup())
             }),
             version: 'fake',
             wasMaxDepthReached: jest.fn(() => false),
@@ -2397,6 +2412,28 @@ describe('Lazy SessionRecording', () => {
                     expect(shippedSessionIds()).toEqual(new Set([sessionId]))
                 })
 
+                it('a clipboard interaction after many idle rotations ships exactly one session', () => {
+                    const rotationsBeforeClipboard = runExternalRotations(startingTimestamp, 1)
+                    expect(rotationsBeforeClipboard).toBeGreaterThan(25)
+                    expect(shippedSessionIds()).toEqual(new Set())
+
+                    _addCustomEvent.mockImplementation((tag: string, payload: any) => {
+                        _emit(createCustomSnapshot({ timestamp: Date.now() }, payload, tag))
+                    })
+                    try {
+                        dispatchClipboardEvent(document, 'copy')
+                        sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+                        const clipboardSessionIds = shippedSessionIds()
+                        expect(clipboardSessionIds.size).toBe(1)
+
+                        const rotationsAfterClipboard = runExternalRotations(Date.now(), 1)
+                        expect(rotationsAfterClipboard).toBeGreaterThan(25)
+                        expect(shippedSessionIds()).toEqual(clipboardSessionIds)
+                    } finally {
+                        _addCustomEvent.mockReset()
+                    }
+                })
+
                 // The Jul 2026 idle-rotation family: an idle tab rotates, the markers for the
                 // rotation land in the new session's empty buffer, and shipping them opens a
                 // recording that bills the customer and plays back as nothing.
@@ -3428,6 +3465,179 @@ describe('Lazy SessionRecording', () => {
     })
 
     describe('recording', () => {
+        describe('clipboard interactions', () => {
+            beforeEach(() => {
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+                _addCustomEvent.mockClear()
+            })
+
+            it.each(['copy', 'cut'] as const)('records %s with the selected input length and no text', (type) => {
+                const input = document.createElement('input')
+                input.value = 'private clipboard value'
+                document.body.appendChild(input)
+                input.setSelectionRange(2, 9)
+
+                try {
+                    dispatchClipboardEvent(input, type)
+
+                    expect(_addCustomEvent).toHaveBeenCalledWith('$clipboard', {
+                        type,
+                        textLength: 7,
+                    })
+                    expect(JSON.stringify(_addCustomEvent.mock.calls[0][1])).not.toContain('private clipboard value')
+                } finally {
+                    input.remove()
+                }
+            })
+
+            it('records paste with the clipboard text length and target node id', () => {
+                const input = document.createElement('input')
+                const clipboardText = 'private pasted value'
+                document.body.appendChild(input)
+                assignableWindow.__PosthogExtensions__.rrweb.record.mirror = {
+                    getId: jest.fn(() => 42),
+                    getNode: jest.fn(),
+                }
+
+                try {
+                    dispatchClipboardEvent(input, 'paste', clipboardText)
+
+                    expect(_addCustomEvent).toHaveBeenCalledWith('$clipboard', {
+                        type: 'paste',
+                        textLength: clipboardText.length,
+                        nodeId: 42,
+                    })
+                    expect(JSON.stringify(_addCustomEvent.mock.calls[0][1])).not.toContain(clipboardText)
+                } finally {
+                    input.remove()
+                }
+            })
+
+            it('uses zero when clipboard data does not return a string', () => {
+                dispatchClipboardEvent(document, 'paste', { length: { privateValue: 'not numeric' } })
+
+                expect(_addCustomEvent).toHaveBeenCalledWith('$clipboard', {
+                    type: 'paste',
+                    textLength: 0,
+                })
+                expect(_addCustomEvent.mock.calls[0][1]).toEqual({ type: 'paste', textLength: 0 })
+            })
+
+            it('does not record clipboard events inside ph-no-capture', () => {
+                const privateContainer = document.createElement('div')
+                const input = document.createElement('input')
+                privateContainer.className = 'ph-no-capture'
+                privateContainer.appendChild(input)
+                document.body.appendChild(privateContainer)
+
+                try {
+                    dispatchClipboardEvent(input, 'paste', 'private pasted value')
+
+                    expect(_addCustomEvent).not.toHaveBeenCalled()
+                } finally {
+                    privateContainer.remove()
+                }
+            })
+
+            it('does not record clipboard events inside the configured block selector', () => {
+                const privateContainer = document.createElement('div')
+                const input = document.createElement('input')
+                privateContainer.dataset.private = 'true'
+                privateContainer.appendChild(input)
+                document.body.appendChild(privateContainer)
+                posthog.config.session_recording.blockSelector = '[data-private]'
+
+                try {
+                    dispatchClipboardEvent(input, 'paste', 'private pasted value')
+
+                    expect(_addCustomEvent).not.toHaveBeenCalled()
+                } finally {
+                    posthog.config.session_recording.blockSelector = undefined
+                    privateContainer.remove()
+                }
+            })
+
+            it('uses the original shadow DOM target', () => {
+                const host = document.createElement('div')
+                const shadowRoot = host.attachShadow({ mode: 'open' })
+                const input = document.createElement('input')
+                input.value = 'private clipboard value'
+                input.setSelectionRange(3, 11)
+                shadowRoot.appendChild(input)
+                document.body.appendChild(host)
+                const getId = jest.fn((node) => (node === input ? 42 : -1))
+                assignableWindow.__PosthogExtensions__.rrweb.record.mirror = {
+                    getId,
+                    getNode: jest.fn(),
+                }
+
+                try {
+                    dispatchClipboardEvent(input, 'copy')
+
+                    expect(_addCustomEvent).toHaveBeenCalledWith('$clipboard', {
+                        type: 'copy',
+                        textLength: 8,
+                        nodeId: 42,
+                    })
+                    expect(getId).toHaveBeenCalledWith(input)
+                } finally {
+                    host.remove()
+                }
+            })
+
+            it('observes clipboard events in same-origin iframe documents', () => {
+                const iframe = document.createElement('iframe')
+                document.body.appendChild(iframe)
+                const recordMock = assignableWindow.__PosthogExtensions__.rrweb.record as Mock
+                const recordOptions = recordMock.mock.calls[recordMock.mock.calls.length - 1][0]
+                const clipboardPlugin = recordOptions.plugins.find(
+                    (plugin: RecordPlugin) => plugin.name === 'posthog/clipboard-observer'
+                ) as RecordPlugin
+                const removeIframeObserver = clipboardPlugin.observer?.(
+                    jest.fn(),
+                    iframe.contentWindow as Window,
+                    clipboardPlugin.options
+                )
+
+                try {
+                    dispatchClipboardEvent(iframe.contentDocument as Document, 'paste', 'private pasted value')
+
+                    expect(_addCustomEvent).toHaveBeenCalledWith('$clipboard', {
+                        type: 'paste',
+                        textLength: 20,
+                    })
+                } finally {
+                    removeIframeObserver?.()
+                    iframe.remove()
+                }
+            })
+
+            it('treats clipboard custom events as activity', () => {
+                const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+                lazyRecorder['_isIdle'] = true
+                lazyRecorder['_holdFlushUntilInteraction'] = true
+
+                sessionRecording.onRRwebEmit(
+                    createCustomSnapshot({ timestamp: Date.now() }, { type: 'copy', textLength: 5 }, '$clipboard')
+                )
+
+                expect(lazyRecorder['_isIdle']).toBe(false)
+                expect(lazyRecorder['_holdFlushUntilInteraction']).toBe(false)
+                expect(lazyRecorder['_buffer'].data).toContainEqual(
+                    expect.objectContaining({ data: expect.objectContaining({ tag: '$clipboard' }) })
+                )
+            })
+
+            it('removes clipboard listeners when recording stops', () => {
+                sessionRecording.stopRecording()
+                _addCustomEvent.mockClear()
+
+                dispatchClipboardEvent(document, 'paste', 'private pasted value')
+
+                expect(_addCustomEvent).not.toHaveBeenCalled()
+            })
+        })
+
         it('calls rrweb.record with the right options', () => {
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
@@ -3454,10 +3664,18 @@ describe('Lazy SessionRecording', () => {
                 maskAttributeFn: undefined,
                 slimDOMOptions: {},
                 collectFonts: false,
-                plugins: [],
+                plugins: [
+                    {
+                        name: 'posthog/clipboard-observer',
+                        observer: expect.any(Function),
+                        options: {},
+                    },
+                ],
                 inlineStylesheet: true,
                 inlineStylesheetBudgetRules: 10_000,
                 recordCrossOriginIframes: false,
+                sampling: undefined,
+                attributeFilter: undefined,
             })
         })
 
@@ -7264,6 +7482,27 @@ describe('Lazy SessionRecording', () => {
 
             sessionRecording.startIfEnabledOrStop()
             expect(sessionRecording.started).toBe(true)
+        })
+
+        it('captures clipboard events with an older core before fresh remote config arrives', () => {
+            ;(sessionManager as any).on = undefined
+            posthog.persistence?.register({
+                [SESSION_RECORDING_REMOTE_CONFIG]: {
+                    enabled: true,
+                    endpoint: '/s/',
+                    cache_timestamp: Date.now(),
+                },
+            })
+
+            sessionRecording.startIfEnabledOrStop()
+            _addCustomEvent.mockClear()
+            dispatchClipboardEvent(document, 'paste', 'private pasted value')
+
+            expect(sessionRecording.started).toBe(true)
+            expect(_addCustomEvent).toHaveBeenCalledWith('$clipboard', {
+                type: 'paste',
+                textLength: 20,
+            })
         })
 
         it('does not start recording from stale persisted config', () => {

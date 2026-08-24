@@ -108,6 +108,10 @@ const FIVE_MINUTES = ONE_MINUTE * 5
 const ONE_HOUR = ONE_MINUTE * 60
 const MIN_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS = 1000
 const MAX_TRIGGER_PENDING_BUFFER_INTERVAL_MILLIS = ONE_HOUR
+const CLIPBOARD_EVENT_TAG = '$clipboard'
+const CLIPBOARD_EVENT_TYPES = ['copy', 'cut', 'paste'] as const
+const CLIPBOARD_OBSERVER_PLUGIN = 'posthog/clipboard-observer'
+const MAX_SAFE_INTEGER = 9007199254740991
 
 // A full snapshot runs as one uninterruptible task, so anything at this scale is a
 // visible freeze - no rendering, scrolling, or cursor movement - and worth a warning.
@@ -195,6 +199,78 @@ function getRRWeb() {
 
 function getRRWebRecord(): rrwebRecordType | undefined {
     return getRRWeb()?.record
+}
+
+function getClipboardEventPath(event: ClipboardEvent): EventTarget[] {
+    try {
+        const path = event.composedPath?.()
+        if (path?.length) {
+            return path
+        }
+    } catch {}
+
+    return event.target ? [event.target] : []
+}
+
+function getElementFromEventTarget(target: EventTarget | null): Element | null {
+    const element = target as Element | null
+    if (isFunction(element?.matches)) {
+        return element
+    }
+
+    const parentElement = (target as Node | null)?.parentElement
+    return isFunction(parentElement?.matches) ? parentElement : null
+}
+
+function isClipboardEventBlocked(eventPath: EventTarget[], blockSelector: string | null | undefined): boolean {
+    for (const target of eventPath) {
+        const element = getElementFromEventTarget(target)
+        if (!element) {
+            continue
+        }
+
+        try {
+            if (element.closest('.ph-no-capture') || (blockSelector && element.closest(blockSelector))) {
+                return true
+            }
+        } catch {
+            return true
+        }
+    }
+
+    return false
+}
+
+function isNonNegativeSafeInteger(value: unknown): value is number {
+    return isNumber(value) && value >= 0 && value <= MAX_SAFE_INTEGER && Math.floor(value) === value
+}
+
+function getClipboardTextLength(event: ClipboardEvent, target: EventTarget | null): number {
+    try {
+        if (event.type === 'paste') {
+            const clipboardText = event.clipboardData?.getData('text/plain')
+            return typeof clipboardText === 'string' ? clipboardText.length : 0
+        }
+
+        const input = target as HTMLInputElement | HTMLTextAreaElement | null
+        if (isNonNegativeSafeInteger(input?.selectionStart) && isNonNegativeSafeInteger(input?.selectionEnd)) {
+            return Math.max(0, input.selectionEnd - input.selectionStart)
+        }
+
+        const selectionText = (target as Node | null)?.ownerDocument?.defaultView?.getSelection?.()?.toString()
+        return typeof selectionText === 'string' ? selectionText.length : 0
+    } catch {
+        return 0
+    }
+}
+
+function getClipboardNodeId(target: EventTarget | null): number | undefined {
+    try {
+        const nodeId = getRRWebRecord()?.mirror?.getId(target as Node | null)
+        return isNonNegativeSafeInteger(nodeId) ? nodeId : undefined
+    } catch {
+        return undefined
+    }
 }
 
 export type compressedFullSnapshotEvent = {
@@ -804,6 +880,22 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _gatherRRWebPlugins() {
         const plugins: RecordPlugin[] = []
+
+        plugins.push({
+            name: CLIPBOARD_OBSERVER_PLUGIN,
+            options: {},
+            observer: (_callback, currentWindow) => {
+                const clipboardDocument = currentWindow.document
+                CLIPBOARD_EVENT_TYPES.forEach((eventType) =>
+                    addEventListener(clipboardDocument, eventType, this._onClipboardEvent, { capture: true })
+                )
+                return () => {
+                    CLIPBOARD_EVENT_TYPES.forEach((eventType) =>
+                        clipboardDocument.removeEventListener(eventType, this._onClipboardEvent, true)
+                    )
+                }
+            },
+        })
 
         const recordConsolePlugin = assignableWindow.__PosthogExtensions__?.rrwebPlugins?.getRecordConsolePlugin
         if (recordConsolePlugin && this._isConsoleLogCaptureEnabled) {
@@ -2318,6 +2410,22 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._tryAddCustomEvent('browser online', {})
     }
 
+    private _onClipboardEvent = (event: Event): void => {
+        const clipboardEvent = event as ClipboardEvent
+        const eventPath = getClipboardEventPath(clipboardEvent)
+        if (isClipboardEventBlocked(eventPath, this._masking?.blockSelector)) {
+            return
+        }
+
+        const target = eventPath[0] ?? clipboardEvent.target
+        const nodeId = getClipboardNodeId(target)
+        this._tryAddCustomEvent(CLIPBOARD_EVENT_TAG, {
+            type: clipboardEvent.type,
+            textLength: getClipboardTextLength(clipboardEvent, target),
+            ...(isNumber(nodeId) ? { nodeId } : {}),
+        })
+    }
+
     private _onVisibilityChange = (): void => {
         if (document?.visibilityState) {
             if (document.visibilityState === 'visible') {
@@ -2343,8 +2451,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private _isInteractiveEvent(event: eventWithTime) {
         return (
-            event.type === INCREMENTAL_SNAPSHOT_EVENT_TYPE &&
-            ACTIVE_SOURCES.indexOf(event.data?.source as IncrementalSource) !== -1
+            isCustomEvent(event, CLIPBOARD_EVENT_TAG) ||
+            (event.type === INCREMENTAL_SNAPSHOT_EVENT_TYPE &&
+                ACTIVE_SOURCES.indexOf(event.data?.source as IncrementalSource) !== -1)
         )
     }
 

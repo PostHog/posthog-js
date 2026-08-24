@@ -32,6 +32,7 @@ export interface StartOptions {
     type?: 'navigate' | 'reload'
     options?: Partial<PostHogConfig>
     flagsResponseOverrides?: Partial<FlagsResponse>
+    remoteConfigResponseGate?: Promise<void>
     url?: string
 }
 
@@ -44,6 +45,7 @@ export async function start(
         runAfterPostHogInit = undefined,
         type = 'navigate',
         options = {},
+        remoteConfigResponseGate,
         flagsResponseOverrides = {
             sessionRecording: undefined,
             isAuthenticated: false,
@@ -93,7 +95,8 @@ export async function start(
     // Mock the remote config endpoint to return the same config data as the flags response.
     // RemoteConfig is now the sole config loading mechanism, so tests must serve it.
     // Uses a regex that excludes config.js (script) — only intercepts the JSON config endpoint.
-    void context.route(/\/array\/[^/]+\/config(\?|$)/, (route) => {
+    void context.route(/\/array\/[^/]+\/config(\?|$)/, async (route) => {
+        await remoteConfigResponseGate
         route.fulfill({
             status: 200,
             contentType: 'application/json',
@@ -103,7 +106,8 @@ export async function start(
 
     // allow promise in e2e tests
     const flagsMock = new Promise((resolve) => {
-        void context.route('**/flags/*', (route) => {
+        void context.route('**/flags/*', async (route) => {
+            await remoteConfigResponseGate
             route.fulfill({
                 status: 200,
                 contentType: 'application/json',
