@@ -1,17 +1,12 @@
 import type { ApiResponse } from '@posthog/browser-common'
 
+import type { AnalyticsMessage } from './analytics-internal'
 import { createId } from './id'
 import type { RequestRuntime } from './request'
 
 const RETRYABLE_STATUSES = [408, 500, 502, 503, 504]
 
-export interface CaptureV1Message {
-    event: string
-    uuid: string
-    distinct_id: string
-    timestamp: string
-    properties: Record<string, unknown>
-}
+export type CaptureV1Message = AnalyticsMessage
 
 interface CaptureV1EventOptions {
     cookieless_mode?: boolean
@@ -52,6 +47,7 @@ interface CaptureV1SenderOptions {
     elapsedNow?: () => number
     random?: () => number
     sleep?: (delayMs: number) => Promise<void>
+    signal?: AbortSignal
     generateRequestId?: () => string
     /** Re-checked before and after backoff so consent revocation or disposal stops retries. */
     canRetry?: () => boolean
@@ -194,6 +190,61 @@ const retryDelay = (
     }
     const jittered = Math.min(maxBackoffMs, Math.ceil(exponential * (0.5 + randomValue)))
     return retryAfterMs === undefined ? jittered : Math.max(jittered, Math.min(retryAfterMs, maxBackoffMs))
+}
+
+const cancellationError = (): Error => new Error('Capture V1 retry was cancelled')
+
+const waitForRetry = async (
+    delayMs: number,
+    sleep: ((delayMs: number) => Promise<void>) | undefined,
+    signal: AbortSignal | undefined
+): Promise<void> => {
+    if (signal?.aborted) {
+        throw cancellationError()
+    }
+    if (!signal && sleep) {
+        return sleep(delayMs)
+    }
+
+    let timer: ReturnType<typeof globalThis.setTimeout> | undefined
+    let onAbort: (() => void) | undefined
+    const wait = sleep
+        ? sleep(delayMs)
+        : new Promise<void>((resolve) => {
+              timer = globalThis.setTimeout(resolve, delayMs)
+          })
+    if (!signal) {
+        return wait
+    }
+
+    const cancelled = new Promise<never>((_resolve, reject) => {
+        onAbort = () => {
+            if (timer !== undefined) {
+                globalThis.clearTimeout(timer)
+            }
+            reject(cancellationError())
+        }
+        try {
+            // eslint-disable-next-line posthog-js/no-add-event-listener
+            signal.addEventListener('abort', onAbort, { once: true })
+            if (signal.aborted) {
+                onAbort()
+            }
+        } catch {
+            onAbort = undefined
+        }
+    })
+    try {
+        await (onAbort ? Promise.race([wait, cancelled]) : wait)
+    } finally {
+        if (onAbort) {
+            try {
+                signal.removeEventListener('abort', onAbort)
+            } catch {
+                // Listener cleanup is best effort for injected signals.
+            }
+        }
+    }
 }
 
 const attemptOnce = async (
@@ -352,7 +403,6 @@ export const sendCaptureV1Batch = async (
     const now = options.now ?? Date.now
     const random = options.random ?? Math.random
     // Defaults: 4 attempts, 3s initial delay, 30s backoff, 10s request timeout, 60s total.
-    const sleep = options.sleep ?? ((delayMs) => new Promise((resolve) => globalThis.setTimeout(resolve, delayMs)))
     const maxAttempts = Math.floor(numberOption(options.maxAttempts, 4, 1))
     const initialDelayMs = numberOption(options.initialRetryDelayMs, 3_000, 0)
     const maxBackoffMs = numberOption(options.maxBackoffMs, 30_000, 0)
@@ -436,9 +486,9 @@ export const sendCaptureV1Batch = async (
             return finish(new Error('Capture V1 exhausted its elapsed retry budget'))
         }
         try {
-            await sleep(delay)
+            await waitForRetry(delay, options.sleep, options.signal)
             if (options.canRetry && !options.canRetry()) {
-                throw new Error('Capture V1 retry was cancelled')
+                throw cancellationError()
             }
         } catch (error) {
             return finish(error)

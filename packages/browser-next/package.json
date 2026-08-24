@@ -23,6 +23,11 @@
             "types": "./dist/index.d.ts",
             "require": "./dist/index.js",
             "import": "./dist/index.mjs"
+        },
+        "./analytics": {
+            "types": "./dist/analytics.d.ts",
+            "require": "./dist/analytics.js",
+            "import": "./dist/analytics.mjs"
         }
     },
     "scripts": {
@@ -31,8 +36,9 @@
         "lint:fix": "eslint src tests fixtures scripts/*.mjs --fix",
         "build": "rslib build",
         "dev": "rslib build -w",
-        "test:unit": "jest -c jest.config.cjs",
+        "test:unit": "jest -c jest.config.cjs && rslib build && node scripts/check-mixed-module-delivery.mjs",
         "test:capture-v1-live": "pnpm build && node scripts/check-capture-v1-live.mjs",
+        "test:mixed-modules": "rslib build && node scripts/check-mixed-module-delivery.mjs",
         "check-types": "tsc --noEmit --project tsconfig.json",
         "bundle-size": "pnpm build && node scripts/check-bundle-size.mjs",
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"

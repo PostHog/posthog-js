@@ -12,10 +12,11 @@ import {
 } from '@posthog/browser-common'
 import { Publisher } from '@posthog/browser-common/pubsub'
 
+import { createAnalyticsDelivery, isAnalyticsExtension, type AnalyticsMessage } from './analytics-internal'
 import { isLikelyBot } from './bot-filter'
-import { sendCaptureV1Batch, type CaptureV1Message } from './capture-v1'
 import { ExtensionRegistry } from './extensions/registry'
 import { createId } from './id'
+import { Lane } from './lane'
 import { createLogger } from './logger'
 import { createFailedResponse, sendRequest, type RequestRuntime } from './request'
 import { BrowserState, getDefaultStorage } from './state'
@@ -23,6 +24,8 @@ import type { BrowserFetch, BrowserNavigator, NewSessionInfo, PostHog, PostHogOp
 import { version } from './version'
 
 const isNonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null && !Array.isArray(value)
 const normalizeHost = (host: string): string => host.replace(/\/+$/, '')
 const isValidDistinctId = (value: unknown): value is string =>
     isNonEmptyString(value) &&
@@ -75,7 +78,7 @@ class PostHogBrowserClient implements PostHog {
     private readonly _newSessionPublisher: Publisher<NewSessionInfo>
     private readonly _registry: ExtensionRegistry
     private readonly _dynamicEventProperties: Array<() => Record<string, unknown>> = []
-    private readonly _pendingDeliveries = new Set<Promise<ApiResponse>>()
+    private readonly _analyticsLane: Lane<AnalyticsMessage>
     private readonly _requestRuntime: RequestRuntime
     private readonly _state: BrowserState
     private readonly _blocked: boolean
@@ -103,6 +106,11 @@ class PostHogBrowserClient implements PostHog {
         )
         this._eventPublisher = new Publisher((error) => this.logger.error('An event listener failed', error))
         this._newSessionPublisher = new Publisher((error) => this.logger.error('A session listener failed', error))
+        this._analyticsLane = new Lane(
+            1_000,
+            (error) => this.logger.error('Event delivery failed', error),
+            (count) => this.logger.warn(`Analytics queue dropped ${count} event${count === 1 ? '' : 's'}`)
+        )
 
         const browserNavigator: BrowserNavigator | undefined =
             options.navigator === false ? undefined : (options.navigator ?? getDefaultNavigator())
@@ -198,53 +206,75 @@ class PostHogBrowserClient implements PostHog {
             }
         }
 
+        let messageProperties: Record<string, unknown>
+        let observedProperties: Record<string, unknown>
+        let uuid: string | undefined
+        let timestamp: Date | undefined
+        try {
+            const callerProperties: Record<string, unknown> = {
+                ...dynamicProperties,
+                ...(properties ?? {}),
+            }
+            const set = options.set
+            const setOnce = options.setOnce
+            uuid = options.uuid
+            timestamp = options.timestamp
+            if (set) {
+                callerProperties['$set'] = set
+            }
+            if (setOnce) {
+                callerProperties['$set_once'] = setOnce
+            }
+            const serializedProperties = JSON.stringify(callerProperties)
+            const parsedMessageProperties: unknown = JSON.parse(serializedProperties)
+            const parsedObservedProperties: unknown = JSON.parse(serializedProperties)
+            if (!isRecord(parsedMessageProperties) || !isRecord(parsedObservedProperties)) {
+                throw new Error('Event properties must serialize to an object')
+            }
+            messageProperties = parsedMessageProperties
+            observedProperties = parsedObservedProperties
+        } catch (error) {
+            this.logger.error('Event properties are not JSON-serializable', error)
+            return
+        }
+
         const [session, newSessionReason] = this._state.sessionForEvent()
         if (newSessionReason) {
             this._newSessionPublisher.publish({ ...session, reason: newSessionReason })
         }
-        const finalProperties: Record<string, unknown> = {
-            ...dynamicProperties,
-            ...(properties ?? {}),
+        const distinctId = this.distinctId
+        const groups = this.groups
+        Object.assign(messageProperties, {
             token: this.projectToken,
-            distinct_id: this.distinctId,
+            distinct_id: distinctId,
             $device_id: this.deviceId,
-            $groups: this.groups,
+            $groups: groups,
             $session_id: session.sessionId,
             $window_id: session.windowId,
             $lib: 'web',
             $lib_version: version,
-        }
-        if (options.set) {
-            finalProperties['$set'] = options.set
-        }
-        if (options.setOnce) {
-            finalProperties['$set_once'] = options.setOnce
-        }
-
-        const message: CaptureV1Message = {
-            uuid: options.uuid ?? createId(),
-            event,
-            distinct_id: this.distinctId,
-            properties: finalProperties,
-            timestamp: eventTimestamp(options.timestamp),
-        }
-
-        const delivery = sendCaptureV1Batch(this._requestRuntime, [message], version, {
-            canRetry: () => this._canUseState(),
         })
-        this._pendingDeliveries.add(delivery)
-        const removeDelivery = (): boolean => this._pendingDeliveries.delete(delivery)
-        void delivery.then(removeDelivery, removeDelivery)
-        try {
-            const observedProperties = JSON.parse(JSON.stringify(finalProperties)) as Record<string, unknown>
-            this._eventPublisher.publish({ event, properties: observedProperties })
-        } catch (error) {
-            this.logger.error('Event properties are not JSON-serializable', error)
-        }
+        Object.assign(observedProperties, {
+            token: this.projectToken,
+            distinct_id: distinctId,
+            $device_id: this.deviceId,
+            $groups: { ...groups },
+            $session_id: session.sessionId,
+            $window_id: session.windowId,
+            $lib: 'web',
+            $lib_version: version,
+        })
 
-        const response = await delivery
-        if (response.error || response.statusCode >= 400) {
-            this.logger.error('Event delivery failed', response.error ?? response.statusCode)
+        const message: AnalyticsMessage = {
+            uuid: uuid ?? createId(),
+            event,
+            distinct_id: distinctId,
+            properties: messageProperties,
+            timestamp: eventTimestamp(timestamp),
+        }
+        this._eventPublisher.publish(deepFreeze({ event, properties: observedProperties }))
+        if (this._canUseState()) {
+            this._analyticsLane.enqueue(message)
         }
     }
 
@@ -312,7 +342,7 @@ class PostHogBrowserClient implements PostHog {
     }
 
     async flush(): Promise<void> {
-        await Promise.all([...this._pendingDeliveries])
+        await this._analyticsLane.flush()
     }
 
     optIn(): void {
@@ -324,6 +354,7 @@ class PostHogBrowserClient implements PostHog {
     optOut(): void {
         if (!this._disposed) {
             this._state.optOut()
+            this._analyticsLane.purge()
         }
     }
 
@@ -408,11 +439,38 @@ class PostHogBrowserClient implements PostHog {
         return this._registry.get<T>(name)
     }
 
-    installExtension(extension: Extension): Promise<Disposable> {
+    async installExtension(extension: Extension): Promise<Disposable> {
         if (!this._canUseState()) {
-            return Promise.reject(new Error('PostHog extensions are disabled'))
+            throw new Error('PostHog extensions are disabled')
         }
-        return this._registry.install(extension)
+        const registered = await this._registry.install(extension)
+        let delivery: Disposable | undefined
+        try {
+            if (isAnalyticsExtension(extension)) {
+                delivery = this._analyticsLane.install(
+                    extension[createAnalyticsDelivery]({
+                        runtime: this._requestRuntime,
+                        libraryVersion: version,
+                        canRetry: () => this._canUseState(),
+                        reportFailure: (error) => this.logger.error('Event delivery failed', error),
+                    })
+                )
+            }
+        } catch (error) {
+            await registered.dispose()
+            throw error
+        }
+
+        let active = true
+        return {
+            dispose: async () => {
+                if (active) {
+                    active = false
+                    delivery?.dispose()
+                    await registered.dispose()
+                }
+            },
+        }
     }
 
     async loadExtension(loader: () => Promise<Extension>): Promise<Disposable> {
@@ -428,7 +486,7 @@ class PostHogBrowserClient implements PostHog {
             }
             throw new Error('PostHog extensions are disabled')
         }
-        return this._registry.install(extension)
+        return this.installExtension(extension)
     }
 
     async dispose(): Promise<void> {
@@ -438,7 +496,7 @@ class PostHogBrowserClient implements PostHog {
         this._disposed = true
 
         await this._registry.dispose()
-        await this.flush()
+        await this._analyticsLane.dispose()
         this._remoteConfigPublisher.dispose()
         this._eventPublisher.dispose()
         this._newSessionPublisher.dispose()

@@ -1,4 +1,5 @@
-import { createPostHog, type BrowserFetch, type RemoteConfig } from '../src'
+import { analytics } from '../src/analytics'
+import { createPostHog, type BrowserFetch, type PostHogOptions, type RemoteConfig } from '../src'
 import { createFetch, MemoryStorage, type SentRequest } from './helpers'
 
 const createRemoteConfig = (overrides: Partial<RemoteConfig> = {}): RemoteConfig =>
@@ -14,6 +15,9 @@ const createRemoteConfig = (overrides: Partial<RemoteConfig> = {}): RemoteConfig
 const captureEvent = (request: SentRequest | undefined): Record<string, unknown> | undefined =>
     (request?.body?.batch as Record<string, unknown>[] | undefined)?.[0]
 
+const createPostHogWithAnalytics = (options: PostHogOptions) =>
+    createPostHog({ ...options, extensions: [analytics(), ...(options.extensions ?? [])] })
+
 describe('@posthog/browser core', () => {
     it('requires a project token in options', async () => {
         // @ts-expect-error Verify the runtime guard for untyped JavaScript consumers.
@@ -23,9 +27,151 @@ describe('@posthog/browser core', () => {
         await expect(createPostHog({ projectToken: '' })).rejects.toThrow('A PostHog project token is required')
     })
 
-    it('builds and sends a protected event envelope', async () => {
+    it('buffers capture until analytics delivery is installed', async () => {
         const requests: SentRequest[] = []
         const posthog = await createPostHog({
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: false,
+            fetch: createFetch(requests),
+        })
+
+        await posthog.capture('queued', undefined, {
+            uuid: 'queued-uuid',
+            timestamp: new Date('2026-01-02T03:04:05.000Z'),
+        })
+        await posthog.flush()
+        expect(requests).toHaveLength(0)
+
+        await posthog.loadExtension(async () => (await import('../src/analytics')).analytics())
+        await posthog.flush()
+
+        expect(requests).toHaveLength(1)
+        expect(captureEvent(requests[0])).toMatchObject({
+            event: 'queued',
+            uuid: 'queued-uuid',
+            timestamp: '2026-01-02T03:04:05.000Z',
+        })
+    })
+
+    it('produces the same wire event for eager and lazy analytics delivery', async () => {
+        const run = async (
+            eager: boolean
+        ): Promise<{
+            event: Record<string, unknown> | undefined
+            identity: { distinctId: string; sessionId: string; windowId: string }
+        }> => {
+            const requests: SentRequest[] = []
+            const posthog = await createPostHog({
+                projectToken: 'ph_test',
+                storage: false,
+                navigator: false,
+                fetch: createFetch(requests),
+                extensions: eager ? [analytics()] : [],
+            })
+            await posthog.capture(
+                'equivalent',
+                { value: 1 },
+                {
+                    uuid: 'equivalent-uuid',
+                    timestamp: new Date('2026-01-02T03:04:05.000Z'),
+                }
+            )
+            const session = posthog.session
+            const identity = {
+                distinctId: posthog.distinctId,
+                sessionId: session.sessionId,
+                windowId: session.windowId,
+            }
+            if (!eager) {
+                await posthog.installExtension(analytics())
+            }
+            await posthog.flush()
+            return { event: captureEvent(requests[0]), identity }
+        }
+        const normalizeIds = (event: Record<string, unknown> | undefined): unknown => {
+            const copy = JSON.parse(JSON.stringify(event)) as Record<string, unknown>
+            const properties = copy.properties as Record<string, unknown>
+            copy.distinct_id = '<distinct-id>'
+            copy.session_id = '<session-id>'
+            copy.window_id = '<window-id>'
+            properties.$device_id = '<device-id>'
+            return copy
+        }
+        const eager = await run(true)
+        const lazy = await run(false)
+        for (const result of [eager, lazy]) {
+            expect(result.event).toMatchObject({
+                distinct_id: result.identity.distinctId,
+                session_id: result.identity.sessionId,
+                window_id: result.identity.windowId,
+                uuid: 'equivalent-uuid',
+                timestamp: '2026-01-02T03:04:05.000Z',
+            })
+        }
+
+        expect(normalizeIds(lazy.event)).toEqual(normalizeIds(eager.event))
+    })
+
+    it('drains a lazy backlog in FIFO requests capped at one event', async () => {
+        const requests: SentRequest[] = []
+        const posthog = await createPostHog({
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: false,
+            fetch: createFetch(requests),
+        })
+        await posthog.capture('first')
+        await posthog.capture('second')
+        await posthog.capture('third')
+
+        await posthog.installExtension(analytics())
+        await posthog.flush()
+
+        expect(requests).toHaveLength(3)
+        expect(requests.map((request) => (request.body?.batch as Record<string, unknown>[]).length)).toEqual([1, 1, 1])
+        expect(requests.map((request) => captureEvent(request)?.event)).toEqual(['first', 'second', 'third'])
+    })
+
+    it('purges buffered capture when consent is revoked before delivery attaches', async () => {
+        const requests: SentRequest[] = []
+        const posthog = await createPostHog({
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: false,
+            fetch: createFetch(requests),
+        })
+
+        await posthog.capture('private')
+        posthog.optOut()
+        posthog.optIn()
+        await posthog.installExtension(analytics())
+        await posthog.flush()
+
+        expect(requests).toHaveLength(0)
+    })
+
+    it('does not send a staged event after opt-out followed immediately by opt-in', async () => {
+        const requests: SentRequest[] = []
+        const posthog = await createPostHogWithAnalytics({
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: false,
+            fetch: createFetch(requests),
+        })
+
+        const capture = posthog.capture('private')
+        posthog.optOut()
+        posthog.optIn()
+        await capture
+        await posthog.flush()
+
+        expect(requests).toHaveLength(0)
+    })
+
+    it('builds and sends a protected event envelope', async () => {
+        const requests: SentRequest[] = []
+        const posthog = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -90,7 +236,12 @@ describe('@posthog/browser core', () => {
             new Promise<Response>((resolve) => {
                 finishRequest = resolve
             })
-        const posthog = await createPostHog({ projectToken: 'ph_test', storage: false, navigator: false, fetch })
+        const posthog = await createPostHogWithAnalytics({
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: false,
+            fetch,
+        })
 
         const capture = posthog.capture('pending')
         let flushed = false
@@ -126,7 +277,12 @@ describe('@posthog/browser core', () => {
             })
         )
 
-        const posthog = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
+        const posthog = await createPostHogWithAnalytics({
+            projectToken: 'ph_test',
+            storage,
+            navigator: false,
+            fetch: false,
+        })
 
         expect(posthog.deviceId).toBe('legacy-anonymous')
         expect(posthog.anonymousId).toBe('legacy-anonymous')
@@ -137,7 +293,7 @@ describe('@posthog/browser core', () => {
     it('persists identity, groups, and core key-value data', async () => {
         const storage = new MemoryStorage()
         const requests: SentRequest[] = []
-        const first = await createPostHog({
+        const first = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
             storage,
             navigator: false,
@@ -150,7 +306,7 @@ describe('@posthog/browser core', () => {
         const anonymousId = first.anonymousId
         await first.dispose()
 
-        const second = await createPostHog({
+        const second = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
             storage,
             navigator: false,
@@ -164,7 +320,12 @@ describe('@posthog/browser core', () => {
     })
 
     it('implements synchronous key-value initialization and batch operations', async () => {
-        const posthog = await createPostHog({ projectToken: 'ph_test', storage: false, navigator: false, fetch: false })
+        const posthog = await createPostHogWithAnalytics({
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: false,
+            fetch: false,
+        })
 
         expect(posthog.kv.initialize()).toBeUndefined()
         posthog.kv.set({ first: true, second: 'value', ['__proto__']: { safe: true } })
@@ -183,7 +344,12 @@ describe('@posthog/browser core', () => {
     })
 
     it('copies key-value data at the storage boundary', async () => {
-        const posthog = await createPostHog({ projectToken: 'ph_test', storage: false, navigator: false, fetch: false })
+        const posthog = await createPostHogWithAnalytics({
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: false,
+            fetch: false,
+        })
         const input = { nested: { value: 1 } }
         posthog.kv.set('object', input)
         input.nested.value = 2
@@ -198,12 +364,17 @@ describe('@posthog/browser core', () => {
 
     it('does not turn default capture into explicit consent', async () => {
         const storage = new MemoryStorage()
-        const first = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
+        const first = await createPostHogWithAnalytics({
+            projectToken: 'ph_test',
+            storage,
+            navigator: false,
+            fetch: false,
+        })
         await first.dispose()
 
         expect(storage.values.has('ph_ph_test_posthog_browser_v2_consent')).toBe(false)
 
-        const second = await createPostHog({
+        const second = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
             storage,
             navigator: false,
@@ -216,7 +387,7 @@ describe('@posthog/browser core', () => {
     it('ignores identity changes and analytics persistence before explicit opt-in', async () => {
         const requests: SentRequest[] = []
         const storage = new MemoryStorage()
-        const posthog = await createPostHog({
+        const posthog = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
             storage,
             navigator: false,
@@ -232,7 +403,9 @@ describe('@posthog/browser core', () => {
         expect(storage.values.size).toBe(0)
 
         posthog.optIn()
+        await posthog.installExtension(analytics())
         await posthog.capture('after_consent')
+        await posthog.flush()
 
         expect(captureEvent(requests[0])).toMatchObject({
             distinct_id: anonymousId,
@@ -246,7 +419,12 @@ describe('@posthog/browser core', () => {
             client.current?.optOut()
             return new Response('{}', { status: 503 })
         })
-        const posthog = await createPostHog({ projectToken: 'ph_test', storage: false, navigator: false, fetch })
+        const posthog = await createPostHogWithAnalytics({
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: false,
+            fetch,
+        })
         client.current = posthog
 
         await posthog.capture('consent_revoked_during_delivery')
@@ -260,7 +438,12 @@ describe('@posthog/browser core', () => {
             const fetch = jest
                 .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
                 .mockResolvedValue(new Response('{}', { status: 503 }))
-            const posthog = await createPostHog({ projectToken: 'ph_test', storage: false, navigator: false, fetch })
+            const posthog = await createPostHogWithAnalytics({
+                projectToken: 'ph_test',
+                storage: false,
+                navigator: false,
+                fetch,
+            })
 
             let captureSettled = false
             let flushSettled = false
@@ -273,7 +456,7 @@ describe('@posthog/browser core', () => {
             await jest.advanceTimersByTimeAsync(0)
             expect(fetch).toHaveBeenCalledTimes(1)
             expect(jest.getTimerCount()).toBe(1)
-            expect(captureSettled).toBe(false)
+            expect(captureSettled).toBe(true)
             expect(flushSettled).toBe(false)
 
             posthog.optOut()
@@ -288,13 +471,85 @@ describe('@posthog/browser core', () => {
         }
     })
 
+    it('permanently cancels retry when consent is revoked and restored during backoff', async () => {
+        jest.useFakeTimers()
+        try {
+            const fetch = jest
+                .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+                .mockResolvedValue(new Response('{}', { status: 503 }))
+            const posthog = await createPostHogWithAnalytics({
+                projectToken: 'ph_test',
+                storage: false,
+                navigator: false,
+                fetch,
+            })
+
+            await posthog.capture('revoked_and_restored')
+            await jest.advanceTimersByTimeAsync(0)
+            expect(fetch).toHaveBeenCalledTimes(1)
+            expect(jest.getTimerCount()).toBe(1)
+
+            posthog.optOut()
+            posthog.optIn()
+            await jest.advanceTimersByTimeAsync(0)
+            await posthog.flush()
+
+            expect(fetch).toHaveBeenCalledTimes(1)
+            expect(jest.getTimerCount()).toBe(0)
+        } finally {
+            jest.useRealTimers()
+        }
+    })
+
+    it('requeues retryable work when analytics delivery is detached during backoff', async () => {
+        jest.useFakeTimers()
+        try {
+            const fetch = jest
+                .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+                .mockResolvedValueOnce(new Response('{}', { status: 503 }))
+                .mockResolvedValue(new Response('{}', { status: 200 }))
+            const posthog = await createPostHog({
+                projectToken: 'ph_test',
+                storage: false,
+                navigator: false,
+                fetch,
+            })
+            const delivery = await posthog.installExtension(analytics())
+
+            await posthog.capture('detached_during_backoff', undefined, { uuid: 'stable-retry-uuid' })
+            await jest.advanceTimersByTimeAsync(0)
+            expect(fetch).toHaveBeenCalledTimes(1)
+            expect(jest.getTimerCount()).toBe(1)
+
+            await delivery.dispose()
+            await posthog.installExtension(analytics())
+            await posthog.flush()
+
+            expect(fetch).toHaveBeenCalledTimes(2)
+            expect(jest.getTimerCount()).toBe(0)
+            expect(
+                fetch.mock.calls.map(([, init]) => {
+                    const body = JSON.parse(String(init?.body)) as { batch: Array<{ uuid: string }> }
+                    return body.batch[0]?.uuid
+                })
+            ).toEqual(['stable-retry-uuid', 'stable-retry-uuid'])
+        } finally {
+            jest.useRealTimers()
+        }
+    })
+
     it('settles disposal without retrying when disposed during real backoff', async () => {
         jest.useFakeTimers()
         try {
             const fetch = jest
                 .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
                 .mockResolvedValue(new Response('{}', { status: 503 }))
-            const posthog = await createPostHog({ projectToken: 'ph_test', storage: false, navigator: false, fetch })
+            const posthog = await createPostHogWithAnalytics({
+                projectToken: 'ph_test',
+                storage: false,
+                navigator: false,
+                fetch,
+            })
 
             const capture = posthog.capture('disposed_during_backoff')
             await jest.advanceTimersByTimeAsync(0)
@@ -320,7 +575,7 @@ describe('@posthog/browser core', () => {
     it('persists opt-out without retaining identity state', async () => {
         const storage = new MemoryStorage()
         const requests: SentRequest[] = []
-        const first = await createPostHog({
+        const first = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
             storage,
             navigator: false,
@@ -333,7 +588,7 @@ describe('@posthog/browser core', () => {
         expect(requests).toHaveLength(0)
         expect([...storage.values.keys()]).toEqual(['ph_ph_test_posthog_browser_v2_consent'])
 
-        const second = await createPostHog({
+        const second = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
             storage,
             navigator: false,
@@ -346,7 +601,7 @@ describe('@posthog/browser core', () => {
     it('drops capture for a blocked user agent without writing persistence', async () => {
         const requests: SentRequest[] = []
         const storage = new MemoryStorage()
-        const posthog = await createPostHog({
+        const posthog = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
             storage,
             navigator: { userAgent: 'Googlebot/2.1' },
@@ -371,7 +626,7 @@ describe('@posthog/browser core', () => {
 
     it('falls back to keepalive fetch when sendBeacon rejects a payload', async () => {
         const requests: SentRequest[] = []
-        const posthog = await createPostHog({
+        const posthog = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
             storage: false,
             fetch: createFetch(requests),
@@ -390,7 +645,7 @@ describe('@posthog/browser core', () => {
 
     it('rejects request URLs outside the configured API origin', async () => {
         const requests: SentRequest[] = []
-        const posthog = await createPostHog({
+        const posthog = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -405,7 +660,7 @@ describe('@posthog/browser core', () => {
 
     it('routes requests through the configured target host', async () => {
         const requests: SentRequest[] = []
-        const posthog = await createPostHog({
+        const posthog = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
             apiHost: 'https://api.example.com',
             flagsHost: 'https://flags.example.com',
@@ -424,8 +679,148 @@ describe('@posthog/browser core', () => {
         ])
     })
 
+    it('contains throwing caller-property getters before session or persistence mutation', async () => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-01-02T03:04:05.000Z'))
+        try {
+            const requests: SentRequest[] = []
+            const storage = new MemoryStorage()
+            const posthog = await createPostHogWithAnalytics({
+                projectToken: 'ph_test',
+                storage,
+                navigator: false,
+                fetch: createFetch(requests),
+            })
+            const events: string[] = []
+            posthog.onEvent(({ event }) => events.push(event))
+            const session = { ...posthog.session }
+            const persisted = new Map(storage.values)
+            const properties = Object.defineProperty({}, 'hostile', {
+                enumerable: true,
+                get() {
+                    throw new Error('property getter failed')
+                },
+            })
+            jest.advanceTimersByTime(1_000)
+
+            await expect(posthog.capture('hostile_properties', properties)).resolves.toBeUndefined()
+
+            expect(posthog.session).toEqual(session)
+            expect(storage.values).toEqual(persisted)
+            expect(events).toEqual([])
+            expect(requests).toEqual([])
+        } finally {
+            jest.useRealTimers()
+        }
+    })
+
+    it.each<[string, unknown]>([
+        ['null', null],
+        ['a primitive', 'invalid'],
+        ['an array', []],
+        ['a thrown error', new Error('toJSON failed')],
+    ])('rejects properties whose toJSON returns %s before session or persistence mutation', async (_name, result) => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-01-02T03:04:05.000Z'))
+        try {
+            const requests: SentRequest[] = []
+            const storage = new MemoryStorage()
+            const posthog = await createPostHogWithAnalytics({
+                projectToken: 'ph_test',
+                storage,
+                navigator: false,
+                fetch: createFetch(requests),
+            })
+            const events: string[] = []
+            posthog.onEvent(({ event }) => events.push(event))
+            const session = { ...posthog.session }
+            const persisted = new Map(storage.values)
+            const properties = {
+                toJSON() {
+                    if (result instanceof Error) {
+                        throw result
+                    }
+                    return result
+                },
+            }
+            jest.advanceTimersByTime(1_000)
+
+            await expect(posthog.capture('hostile_to_json', properties)).resolves.toBeUndefined()
+
+            expect(posthog.session).toEqual(session)
+            expect(storage.values).toEqual(persisted)
+            expect(events).toEqual([])
+            expect(requests).toEqual([])
+        } finally {
+            jest.useRealTimers()
+        }
+    })
+
+    it('accepts record-valued toJSON output while preserving protected property precedence', async () => {
+        const requests: SentRequest[] = []
+        const posthog = await createPostHogWithAnalytics({
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: false,
+            fetch: createFetch(requests),
+        })
+
+        await posthog.capture('valid_to_json', {
+            toJSON: () => ({ source: 'toJSON', token: 'caller-token', distinct_id: 'caller-id' }),
+        })
+        await posthog.flush()
+
+        expect(captureEvent(requests[0])).toMatchObject({
+            event: 'valid_to_json',
+            distinct_id: posthog.distinctId,
+            properties: { source: 'toJSON' },
+        })
+        expect(captureEvent(requests[0])?.properties).not.toMatchObject({
+            token: expect.anything(),
+            distinct_id: expect.anything(),
+        })
+    })
+
+    it('contains throwing capture-option getters before session or persistence mutation', async () => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-01-02T03:04:05.000Z'))
+        try {
+            const requests: SentRequest[] = []
+            const storage = new MemoryStorage()
+            const posthog = await createPostHogWithAnalytics({
+                projectToken: 'ph_test',
+                storage,
+                navigator: false,
+                fetch: createFetch(requests),
+            })
+            const events: string[] = []
+            posthog.onEvent(({ event }) => events.push(event))
+            const session = { ...posthog.session }
+            const persisted = new Map(storage.values)
+            jest.advanceTimersByTime(1_000)
+
+            for (const option of ['set', 'setOnce', 'uuid', 'timestamp']) {
+                const options = Object.defineProperty({}, option, {
+                    get() {
+                        throw new Error(`${option} getter failed`)
+                    },
+                }) as Parameters<typeof posthog.capture>[2]
+                await expect(posthog.capture(`hostile_${option}`, undefined, options)).resolves.toBeUndefined()
+            }
+
+            expect(posthog.session).toEqual(session)
+            expect(storage.values).toEqual(persisted)
+            expect(events).toEqual([])
+            expect(requests).toEqual([])
+        } finally {
+            jest.useRealTimers()
+        }
+    })
+
     it('does not let event observers mutate caller-owned nested properties', async () => {
-        const posthog = await createPostHog({ projectToken: 'ph_test', storage: false, navigator: false, fetch: false })
+        const posthog = await createPostHogWithAnalytics({
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: false,
+            fetch: false,
+        })
         const properties = { nested: { value: 1 } }
         posthog.onEvent((event) => {
             const nested = event.properties.nested as { value: number }
@@ -436,9 +831,33 @@ describe('@posthog/browser core', () => {
         expect(properties).toEqual({ nested: { value: 1 } })
     })
 
+    it('publishes the same immutable payload to later event observers', async () => {
+        const posthog = await createPostHogWithAnalytics({
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: false,
+            fetch: false,
+        })
+        const observed: unknown[] = []
+        posthog.onEvent((event) => {
+            ;(event as { event: string }).event = 'replaced'
+        })
+        posthog.onEvent((event) => {
+            ;(event as { properties: Record<string, unknown> }).properties = { nested: { value: 2 } }
+        })
+        posthog.onEvent((event) => {
+            ;(event.properties.nested as { value: number }).value = 3
+        })
+        posthog.onEvent((event) => observed.push(event))
+
+        await posthog.capture('event', { nested: { value: 1 } })
+
+        expect(observed).toEqual([{ event: 'event', properties: expect.objectContaining({ nested: { value: 1 } }) }])
+    })
+
     it('does not let event observers replace protected delivery fields', async () => {
         const requests: SentRequest[] = []
-        const posthog = await createPostHog({
+        const posthog = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -460,7 +879,12 @@ describe('@posthog/browser core', () => {
     })
 
     it('continues event notification after one observer throws', async () => {
-        const posthog = await createPostHog({ projectToken: 'ph_test', storage: false, navigator: false, fetch: false })
+        const posthog = await createPostHogWithAnalytics({
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: false,
+            fetch: false,
+        })
         const events: string[] = []
         posthog.onEvent(() => {
             throw new Error('listener failed')
@@ -475,7 +899,7 @@ describe('@posthog/browser core', () => {
         'rejects invalid distinct ID %j without state or delivery changes',
         async (distinctId) => {
             const requests: SentRequest[] = []
-            const posthog = await createPostHog({
+            const posthog = await createPostHogWithAnalytics({
                 projectToken: 'ph_test',
                 storage: false,
                 navigator: false,
@@ -496,7 +920,7 @@ describe('@posthog/browser core', () => {
 
     it.each(['', '   ', '\t'])('rejects invalid group type %j without state or delivery changes', async (type) => {
         const requests: SentRequest[] = []
-        const posthog = await createPostHog({
+        const posthog = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -511,7 +935,7 @@ describe('@posthog/browser core', () => {
 
     it.each(['', '   ', '\t'])('rejects invalid group key %j without state or delivery changes', async (key) => {
         const requests: SentRequest[] = []
-        const posthog = await createPostHog({
+        const posthog = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -526,7 +950,7 @@ describe('@posthog/browser core', () => {
 
     it.each(['', '   ', '\t'])('rejects invalid event name %j without session or delivery changes', async (event) => {
         const requests: SentRequest[] = []
-        const posthog = await createPostHog({
+        const posthog = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -542,7 +966,7 @@ describe('@posthog/browser core', () => {
 
     it('marks same-ID anonymous identify as identified without later relinking it', async () => {
         const requests: SentRequest[] = []
-        const posthog = await createPostHog({
+        const posthog = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -564,7 +988,7 @@ describe('@posthog/browser core', () => {
 
     it('does not repeat group-identify for an unchanged group without properties', async () => {
         const requests: SentRequest[] = []
-        const posthog = await createPostHog({
+        const posthog = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -575,14 +999,16 @@ describe('@posthog/browser core', () => {
         await posthog.group('organization', 'org-123')
         await posthog.group('organization', 'org-123', { name: 'Acme' })
 
-        expect(requests.map((request) => captureEvent(request)?.event)).toEqual(['$groupidentify', '$groupidentify'])
-        expect(captureEvent(requests[0])?.properties).not.toHaveProperty('$group_set')
-        expect(captureEvent(requests[1])?.properties).toMatchObject({ $group_set: { name: 'Acme' } })
+        await posthog.flush()
+        const events = requests.flatMap((request) => request.body?.batch as Record<string, unknown>[])
+        expect(events.map((event) => event.event)).toEqual(['$groupidentify', '$groupidentify'])
+        expect(events[0]?.properties).not.toHaveProperty('$group_set')
+        expect(events[1]?.properties).toMatchObject({ $group_set: { name: 'Acme' } })
     })
 
     it('does not merge a second identified user with the anonymous id', async () => {
         const requests: SentRequest[] = []
-        const posthog = await createPostHog({
+        const posthog = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -601,7 +1027,7 @@ describe('@posthog/browser core', () => {
     })
 
     it('stops waiting for remote configuration after the timeout', async () => {
-        const posthog = await createPostHog({
+        const posthog = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -614,7 +1040,7 @@ describe('@posthog/browser core', () => {
     })
 
     it('turns a synchronous remote configuration failure into undefined', async () => {
-        const posthog = await createPostHog({
+        const posthog = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -630,7 +1056,7 @@ describe('@posthog/browser core', () => {
     it('loads remote configuration once and publishes it', async () => {
         const remoteConfig = createRemoteConfig({ hasFeatureFlags: true })
         const loader = jest.fn(async () => remoteConfig)
-        const posthog = await createPostHog({
+        const posthog = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -649,7 +1075,7 @@ describe('@posthog/browser core', () => {
     it('loads remote configuration when an extension-facing listener subscribes', async () => {
         const remoteConfig = createRemoteConfig({ hasFeatureFlags: true })
         const loader = jest.fn(async () => remoteConfig)
-        const posthog = await createPostHog({
+        const posthog = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
             storage: false,
             navigator: false,
@@ -666,7 +1092,7 @@ describe('@posthog/browser core', () => {
         const requests: SentRequest[] = []
         const storage = new MemoryStorage()
         const remoteConfigLoader = jest.fn(async () => createRemoteConfig())
-        const posthog = await createPostHog({
+        const posthog = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
             storage,
             navigator: false,
@@ -687,7 +1113,12 @@ describe('@posthog/browser core', () => {
 
         expect(posthog.kv.get('before_dispose')).toBeUndefined()
         expect(posthog.kv.get('after_dispose')).toBeUndefined()
-        const reloaded = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
+        const reloaded = await createPostHogWithAnalytics({
+            projectToken: 'ph_test',
+            storage,
+            navigator: false,
+            fetch: false,
+        })
         expect(reloaded.kv.get('before_dispose')).toBe(true)
         expect(reloaded.kv.get('after_dispose')).toBeUndefined()
         expect(requests).toHaveLength(0)
@@ -697,7 +1128,7 @@ describe('@posthog/browser core', () => {
 
     it('uses sendBeacon for unload requests', async () => {
         const sent: Array<{ url: string; data: BodyInit | null | undefined }> = []
-        const posthog = await createPostHog({
+        const posthog = await createPostHogWithAnalytics({
             projectToken: 'ph_test',
             storage: false,
             fetch: false,
@@ -721,8 +1152,18 @@ describe('@posthog/browser core', () => {
 
     it('uses a different window id for each client in the same session', async () => {
         const storage = new MemoryStorage()
-        const first = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
-        const second = await createPostHog({ projectToken: 'ph_test', storage, navigator: false, fetch: false })
+        const first = await createPostHogWithAnalytics({
+            projectToken: 'ph_test',
+            storage,
+            navigator: false,
+            fetch: false,
+        })
+        const second = await createPostHogWithAnalytics({
+            projectToken: 'ph_test',
+            storage,
+            navigator: false,
+            fetch: false,
+        })
 
         expect(second.session.sessionId).toBe(first.session.sessionId)
         expect(second.session.windowId).not.toBe(first.session.windowId)
@@ -731,7 +1172,12 @@ describe('@posthog/browser core', () => {
     it('rotates an idle session when capture runs', async () => {
         const now = Date.now()
         const clock = jest.spyOn(Date, 'now').mockReturnValue(now)
-        const posthog = await createPostHog({ projectToken: 'ph_test', storage: false, navigator: false, fetch: false })
+        const posthog = await createPostHogWithAnalytics({
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: false,
+            fetch: false,
+        })
         const sessions: string[] = []
         posthog.onNewSession((session) => sessions.push(session.reason))
 
@@ -743,7 +1189,12 @@ describe('@posthog/browser core', () => {
     })
 
     it('preserves the device ID while rotating the anonymous ID on reset', async () => {
-        const posthog = await createPostHog({ projectToken: 'ph_test', storage: false, navigator: false, fetch: false })
+        const posthog = await createPostHogWithAnalytics({
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: false,
+            fetch: false,
+        })
         const deviceId = posthog.deviceId
 
         posthog.reset()
@@ -753,7 +1204,12 @@ describe('@posthog/browser core', () => {
     })
 
     it('rotates identity and publishes reset session details', async () => {
-        const posthog = await createPostHog({ projectToken: 'ph_test', storage: false, navigator: false, fetch: false })
+        const posthog = await createPostHogWithAnalytics({
+            projectToken: 'ph_test',
+            storage: false,
+            navigator: false,
+            fetch: false,
+        })
         const originalId = posthog.anonymousId
         const sessions: string[] = []
         posthog.onNewSession((session) => sessions.push(`${session.reason}:${session.sessionId}`))

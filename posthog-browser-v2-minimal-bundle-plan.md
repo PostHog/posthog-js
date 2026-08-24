@@ -309,7 +309,7 @@ A lane is the smallest delivery unit with independent failure and backpressure b
 
 Do not put events with different endpoints, wire shapes, payload limits, or retry semantics in one batch. A failure in one lane must not requeue or resend events already accepted in another lane.
 
-Keep the framework small. A browser lane is a policy bundle, not a worker pool or general scheduling framework. The root owns analytics admission and one bounded in-memory analytics buffer, but it must not statically import the analytics delivery implementation. A dedicated one-slot capability can attach Capture V1 delivery eagerly or lazily and atomically drain the buffer without changing event UUIDs, timestamps, identity, session, ordering, or consent decisions. Optional products install their lanes from explicit entry points; the root must not contain a catalog or implementation for AI, replay, logs, metrics, or traces.
+Keep the framework small. A browser lane is a policy bundle, not a worker pool or general scheduling framework. The root owns analytics admission and one bounded in-memory analytics buffer, but it must not statically import the analytics delivery implementation. The composition root retains that first generic lane handle so Capture V1 delivery can attach eagerly or lazily and atomically drain the buffer without changing event UUIDs, timestamps, identity, session, ordering, or consent decisions. Optional products install their lanes from explicit entry points; the root must not contain a catalog or implementation for AI, replay, logs, metrics, or traces.
 
 Use an explicit product API to select a non-analytics lane. Do not infer the lane from an event-name prefix, and do not add a caller-selected lane string to general `capture()`. For example, an optional AI module can own `captureAi()` and a private AI lane sink. A call to `capture('$ai_generation')` still uses the analytics lane. A call to `captureAi({ event: '$ai_generation', ... })` uses the AI lane because the API selected it. The method can warn about an unexpected event name, but the name must not override the selected lane.
 
@@ -322,28 +322,27 @@ The concrete precedents are:
 
 The browser implementation should preserve explicit routing, queue isolation, lazy activation, per-lane limits, and coordinated lifecycle without copying server-side threads, persistence, or worker machinery.
 
-Use one small host boundary. This is illustrative, not a frozen public contract. `LaneSink`, `LaneSlot`, `InstalledLane`, and the coordinator are package-private implementation types; do not export them from the package root or add them to the shared `Client` contract:
+Use one small host boundary. This is illustrative, not a frozen public contract. `LaneSink`, `Lane`, `LaneDelivery`, and any coordinator are package-private implementation types; do not export them from the package root or add them to the shared `Client` contract:
 
 ```ts
 interface LaneSink<E> {
-    enqueue(event: E): Promise<void>
+    enqueue(event: E): void
 }
 
-interface LaneSlot<E> {
-    readonly sink: LaneSink<E>
-    install(delivery: InstalledLane<E>): Disposable
+interface Lane<E> extends LaneSink<E> {
+    install(delivery: LaneDelivery<E>): Disposable
+    flush(): Promise<void>
+    dispose(): Promise<void>
 }
 
-interface Delivery {
-    readonly analytics: LaneSlot<Event>
-    createLane<E>(): LaneSlot<E>
-    flush(options?: { unload?: boolean }): Promise<void>
-    request(path: string, init?: SendRequestInit): Promise<ApiResponse>
+interface LaneCoordinator {
+    createLane<E>(): Lane<E>
+    flush(): Promise<void>
     dispose(): Promise<void>
 }
 ```
 
-Analytics is an ordinary lane with one reserved distinction: its `LaneSlot` exists when core starts because general `capture()` and core-generated `$pageview` events need a stable sink before a delivery policy is installed. Installing Capture V1 delivery on that slot transfers buffered work while preserving ordering; detaching leaves unaccepted work in the slot. Optional products create their slots only when imported and receive only their own typed sink. Slot creation and installation are internal extension-host capabilities, not a public arbitrary-endpoint registry or caller-selected lane string. Omit a delivery or product import and its implementation must be absent from the bundle.
+The composition root creates the first generic lane and privately gives its sink to general `capture()` and core-generated `$pageview`. Installing Capture V1 delivery on that retained lane handle transfers buffered work while preserving ordering; no coordinator exposes a named analytics property or understands endpoints. Optional products create their lanes only when imported and receive only their own typed sink. Lane creation and installation are internal extension-host capabilities, not a public arbitrary-endpoint registry or caller-selected lane string. Omit a delivery or product import and its implementation must be absent from the bundle.
 
 The root implementation will use:
 
@@ -588,16 +587,17 @@ const posthog = await createPostHog({
 
 `projectToken` is required at the type and runtime boundaries. The package has no default singleton. The current unit suite, lint, formatting, and diff checks pass.
 
-The current capture fixture is 21,166 B minified, 7,301 B gzip, and 6,588 B Brotli, but this is not a compliant baseline. The prototype still omits required behavior. The first Capture V1 transform, Fetch attempt, and result-classification slice added approximately 2.6 KiB minified and 0.9 KiB gzip. Bounded selective retry, transient status handling, jittered backoff, and `Retry-After` added approximately 2.2 KiB minified and 0.8 KiB gzip. Per-attempt timeout, response-body timeout, late-response cleanup, and an aggregate elapsed budget added 1,169 B minified and 422 B gzip. The first post-timeout optimization pass removed 1,609 B minified, 319 B gzip, and 272 B Brotli without removing behavior. It replaced repeated sender result construction, compacted internal records, and removed one-use runtime constants and object fields while retaining conventional TypeScript-private class members. Current module attribution is 7,623 B for the client, 4,873 B for Capture V1, 4,060 B for state, 1,435 B for requests, and 1,146 B for the extension registry. An ESM `version`-only consumer is approximately 50 bytes gzip, while the current CommonJS form retains approximately 6.3 KiB gzip. Re-evaluate CommonJS publication before release.
+The current buffer-only core is 19,913 B minified, 6,375 B gzip, and 5,780 B Brotli. The eager core-plus-analytics composition is 25,679 B minified, 8,591 B gzip, and 7,785 B Brotli. A real dynamic-import fixture is 20,112 B minified and 6,592 B gzip initially, and 25,845 B minified and 9,289 B gzip across all loaded chunks. Neither is a compliant baseline because byte/time queue limits, automatic `$pageview`, compression, teardown, and other required behavior remain incomplete. Compared with the preceding statically integrated sender fixture, the split removes 1,253 B minified, 926 B gzip, and 808 B Brotli from the core initial graph while adding 4,513 B minified, 1,290 B gzip, and 1,197 B Brotli to the eager total for the bounded lane, private attachment seam, capture-time copying, flush barriers, cancellation safety, and retryable ownership across delivery replacement. The Capture V1 module is absent from core and lazy-initial attribution and contributes 5,243 B minified to the eager composition. Re-evaluate CommonJS publication before release.
 
 Known blockers and gaps:
 
 - Browser-next satisfies the current `@posthog/browser-common` `Client` and `KeyValueStore` type contracts. The shared conformance suite now runs against the legacy browser adapter, browser-next, and `TestClient`.
 - Browser-next type checking, declaration generation, build, and bundle measurement pass when run directly. The filtered pnpm command can still trigger unrelated workspace dependency repair in this checkout.
-- The current event request uses the Capture Analytics V1 endpoint, event/batch transform, required normal-Fetch headers, result classification, bounded selective retry, transient-status/network backoff, per-attempt timeout, and an aggregate elapsed budget. It does not yet use a bounded queue, compression, payload limits, teardown delivery, or rate limiting.
+- Core capture now admits finalized events to a private 1,000-event FIFO queue, drops the oldest event on count overflow, resolves `capture()` on admission, and retains queued events when `flush()` runs without delivery. A byte bound and maximum queue age remain open.
+- The separately imported `@posthog/browser/analytics` extension uses the Capture Analytics V1 endpoint, event/batch transform, required normal-Fetch headers, result classification, bounded selective retry, actively cancelable backoff, per-attempt timeout, and an aggregate elapsed budget. Explicit delivery detachment preserves sender-reported retryable events for a replacement policy with their original event identity, while opt-out and disposal remain terminal. It temporarily sends one event per request so a lazy backlog cannot create one unbounded batch; byte-aware batching and splitting remain open alongside compression, teardown delivery, and rate limiting.
 - An opt-in live check sends synthetic events through both the direct regional host and a path-preserving local reverse proxy to the real Capture V1 backend. Direct browser Fetch also passed CORS preflight, and the resulting events were query-visible. Deployed managed-proxy verification remains open.
 - The Capture V1 RFC defines browser Beacon query fallbacks, but the current deployed-source backend still requires headers and has not implemented its V1 query type.
-- No lane abstraction currently isolates queue, endpoint, serialization, size, transport, and retry policy.
+- The private lane isolates core admission from Capture V1 delivery. Automatic `$pageview`, byte/time queue limits, compression, teardown, and optional product lanes remain unimplemented.
 - Consent can be bypassed by extension requests and can become stale across active clients.
 - The agreed shared default/custom consent-key contract and interoperable value encoding are not yet implemented.
 - Persistence uses stale whole-record snapshots and is not safe across tabs.
@@ -657,7 +657,11 @@ Do not freeze more generic runtime contracts until this phase identifies the req
 - [ ] **P2.4**: Implement idle, maximum-length, window, and cross-tab session behavior.
 - [x] **P2.5**: Implement the Capture V1 event transform, batch envelope, required Fetch headers, and result parser.
 - [ ] **P2.6**: Implement the bounded core analytics buffer, synchronous capture admission, and core `$pageview` admission without requiring analytics delivery to be attached.
-- [ ] **P2.7**: Implement the separately imported Capture V1 delivery policy and install it on the reserved analytics lane slot, with batching and native compression.
+    - [x] Add the count-bounded FIFO admission queue, oldest-event overflow, consent purge, unattached flush, and explicit delivery installation.
+    - [ ] Add the byte/time bounds and core `$pageview` admission.
+- [ ] **P2.7**: Implement the separately imported Capture V1 delivery policy and install it on the private core capture lane, with batching and native compression.
+    - [x] Extract Capture V1 delivery to `@posthog/browser/analytics` and keep it out of the root graph.
+    - [ ] Add native compression and measured batch thresholds.
 - [ ] **P2.8**: Implement normal Fetch delivery and synchronous best-effort teardown delivery with V1 Beacon mode when supported, keepalive Fetch fallback, timeout, bounded partial retry, backoff, jitter, flush, unload, and rate limiting.
 - [ ] **P2.9**: Add `capture`, `identify`, `group`, `reset`, `flush`, and `dispose` state-machine coverage.
 

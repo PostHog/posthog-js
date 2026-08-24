@@ -90,7 +90,7 @@ The core contains these responsibilities:
 - A bounded in-memory analytics buffer that accepts events before delivery attaches.
 - Core-generated `$pageview` admission through the same buffer without waiting for remote configuration or analytics delivery.
 - A small control-plane Fetch path for immediate remote configuration and extension requests.
-- A reserved analytics lane slot whose delivery policy can be separately imported.
+- A private core capture lane whose delivery policy can be separately imported.
 - Extension lifecycle and isolation.
 - No-throw boundaries for customer-controlled and browser operations.
 
@@ -102,7 +102,7 @@ Consent uses `__ph_opt_in_out_<project-token>` by default and accepts a verbatim
 
 The analytics delivery capability must use Capture Analytics V1 at `POST /i/v1/analytics/events`. It must not use the legacy `/e/` envelope. Normal analytics delivery must use Fetch so it can send required headers, observe the UUID-keyed result map, time out, rate limit, and retry only server-marked retry events. It receives the core's bound Fetch capability but owns analytics-specific batching, authentication, compression, response, retry, and teardown policy. Remote configuration uses the small core control-plane request path and must not wait for analytics delivery to load.
 
-A lane has a stable typed sink and bounded queue plus an attachable delivery policy. The policy owns one endpoint, event/batch serializer, payload limits, compression, transport, response classification, retry policy, and teardown policy. Events with different policies must not share a batch. A failure in one lane must not requeue or resend an event already accepted in another lane. Analytics is an ordinary lane whose slot is reserved at core startup because general `capture()` needs its sink before delivery attaches. The root statically includes only that slot, admission, and bounded buffer, not the analytics delivery policy. Attaching a policy must preserve queued event UUIDs, timestamps, identity, session, ordering, and consent decisions. Optional product entry points create their lane slots only when imported; the root must not contain their implementations or a product catalog.
+A lane has a stable typed sink and bounded queue plus an attachable delivery policy. The policy owns one endpoint, event/batch serializer, payload limits, compression, transport, response classification, retry policy, and teardown policy. Events with different policies must not share a batch. A failure in one lane must not requeue or resend an event already accepted in another lane. The composition root creates the first generic lane and privately gives its sink to general `capture()` before delivery attaches. No coordinator exposes a named analytics lane or understands endpoints. The root statically includes only that lane, admission, and bounded buffer, not the analytics delivery policy. Attaching a policy must preserve queued event UUIDs, timestamps, identity, session, ordering, and consent decisions. Optional product entry points create their lanes only when imported; the root must not contain their implementations or a product catalog.
 
 Select an optional lane through an explicit product API, such as `captureAi()`, not an event-name prefix or a caller-supplied lane string on general `capture()`. General `capture()` always uses analytics. The product module receives only its private lane sink. Install the lane lazily, then include it in client `flush()` and `dispose()`. Lane sinks, lane state, delivery policies, and the coordinator are package-private implementation details; do not export them from the package root or add them to the shared `Client` contract. This follows Python's `_capture_ai` lane and the unmerged Node `captureAi` design while keeping product code removable from the browser root.
 
@@ -110,7 +110,7 @@ Teardown delivery must use the Capture V1 header-less Beacon contract only after
 
 ### 4.4 Optional adapters and extensions
 
-Put delivery or product behavior in an extension, capability, or adapter. Examples include analytics delivery, replay, surveys, and web vitals. Analytics delivery installs on the reserved analytics lane slot through the same internal mechanism used by optional lanes; it is not registered in a public product catalog.
+Put delivery or product behavior in an extension, capability, or adapter. Examples include analytics delivery, replay, surveys, and web vitals. Analytics delivery installs on the private core capture lane through the same internal mechanism used by optional lanes; it is not registered in a public product catalog.
 
 An optional module can import the core. The core must not import the optional module.
 

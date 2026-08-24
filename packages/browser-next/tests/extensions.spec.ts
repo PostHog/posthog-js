@@ -1,5 +1,6 @@
 import type { Client } from '@posthog/browser-common'
 
+import { analytics } from '../src/analytics'
 import { createPostHog, type Extension, type RemoteConfig } from '../src'
 import { createFetch, MemoryStorage, type SentRequest } from './helpers'
 
@@ -39,11 +40,12 @@ describe('@posthog/browser extensions', () => {
             storage: false,
             navigator: false,
             fetch: createFetch(requests),
-            extensions: [extension],
+            extensions: [analytics(), extension],
         })
 
         expect(posthog.getExtension<FlagCapability>('flags')?.getFlag('beta')).toBe('enabled')
         await posthog.capture('event')
+        await posthog.flush()
         const batch = requests[0]?.body?.batch as Array<{ properties: Record<string, unknown> }> | undefined
         expect(batch?.[0]?.properties).toMatchObject({ feature_context: 'ready' })
 
@@ -327,9 +329,10 @@ describe('@posthog/browser extensions', () => {
             storage: false,
             navigator: false,
             fetch: createFetch(requests),
-            extensions: [first, failed],
+            extensions: [analytics(), first, failed],
         })
         await posthog.capture('still_available')
+        await posthog.flush()
 
         expect(requests).toHaveLength(1)
         expect(firstDispose).not.toHaveBeenCalled()
