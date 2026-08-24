@@ -1,5 +1,12 @@
 # @posthog/react-native-plugin
 
+## 2.4.2
+
+### Patch Changes
+
+- [#4624](https://github.com/PostHog/posthog-js/pull/4624) [`41f276d`](https://github.com/PostHog/posthog-js/commit/41f276dbd987d776259bcbadc6a8fefcfa6a038d) Thanks [@marandaneto](https://github.com/marandaneto)! - Require posthog-ios 3.69.10 so native dSYMs are uploaded after they are ready.
+  (2026-08-24)
+
 ## 2.4.1
 
 ### Patch Changes
