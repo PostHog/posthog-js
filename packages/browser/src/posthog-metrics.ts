@@ -151,8 +151,8 @@ export class PostHogMetrics implements Extension {
                         settle({ kind: 'ok' })
                     } else if (status === 413) {
                         settle({ kind: 'too-large' })
-                    } else if (status === 0 || status === 429 || status >= 500) {
-                        // Transient (network / rate-limit / server error): keep and retry.
+                    } else if (status === 0 || status === 408 || status === 429 || status >= 500) {
+                        // Transient (network / timeout / rate-limit / server error): keep and retry.
                         settle({
                             kind: 'retry-later',
                             error: response.error ?? new Error(`metrics request failed with status ${status}`),

@@ -123,8 +123,9 @@ import {
 import { uuidv7 } from '@posthog/browser-common/utils/uuidv7'
 import { ExternalIntegrations } from './extensions/external-integration'
 import { BrowserClientAdapter } from './extensions/browser-client'
-import type { PostHogSurveys } from './posthog-surveys'
-import type { Autocapture } from './autocapture'
+import type { Extension as BrowserCommonExtension } from '@posthog/browser-common'
+import type { BrowserSurveys } from './browser-surveys'
+import type { BrowserAutocapture } from './browser-autocapture'
 import type { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
 import type { ExceptionObserver } from './extensions/exception-autocapture'
 import type { HistoryAutocapture } from './extensions/history-autocapture'
@@ -415,7 +416,7 @@ export class PostHog implements PostHogInterface {
     scrollManager: ScrollManager
     pageViewManager: PageViewManager
     featureFlags: TreeShakeable<PostHogFeatureFlags>
-    surveys: TreeShakeable<PostHogSurveys>
+    surveys: TreeShakeable<BrowserSurveys>
     conversations: TreeShakeable<PostHogConversations>
     logs: TreeShakeable<PostHogLogs>
     metrics: TreeShakeable<PostHogMetrics>
@@ -431,7 +432,7 @@ export class PostHog implements PostHogInterface {
     sessionPropsManager?: SessionPropsManager
     requestRouter: RequestRouter
     siteApps?: SiteApps
-    autocapture?: Autocapture
+    autocapture?: BrowserAutocapture
     heatmaps?: Heatmaps
     tracingHeaders?: TracingHeaders
     webVitalsAutocapture?: WebVitalsAutocapture
@@ -964,6 +965,19 @@ export class PostHog implements PostHogInterface {
         return this
     }
 
+    private _isSharedExtension(extension: Extension | BrowserCommonExtension): extension is BrowserCommonExtension {
+        const sharedExtension = extension as BrowserCommonExtension
+        return isString(sharedExtension.name) && isFunction(sharedExtension.setup)
+    }
+
+    private _enrollExtension(extension: Extension | BrowserCommonExtension, initTasks: Array<() => void>): void {
+        if (this._isSharedExtension(extension)) {
+            initTasks.push(() => void this._getBrowserClientAdapter().add(extension).catch(__NOOP))
+        } else {
+            this._extensions.push(extension)
+        }
+    }
+
     private _enrollFeatureFlags(): void {
         const FeatureFlagsClass =
             this.config.__extensionClasses?.featureFlags ?? PostHog.__defaultExtensionClasses?.featureFlags
@@ -1017,10 +1031,10 @@ export class PostHog implements PostHogInterface {
             })
         }
         if (ext.autocapture) {
-            this._extensions.push((this.autocapture = new ext.autocapture(this)))
+            this._enrollExtension((this.autocapture = new ext.autocapture(this) as BrowserAutocapture), initTasks)
         }
         if (ext.surveys) {
-            this._extensions.push((this.surveys = this.surveys ?? new ext.surveys(this)))
+            this._enrollExtension((this.surveys = this.surveys ?? new ext.surveys(this)), initTasks)
         }
         if (ext.logs) {
             this._extensions.push((this.logs = this.logs ?? new ext.logs(this)))
@@ -3466,7 +3480,7 @@ export class PostHog implements PostHogInterface {
         }
 
         this._remoteConfigLoader?.stop()
-        this._browserClientAdapter?.dispose()
+        this._getBrowserClientAdapter().dispose()
         this.sessionRecording?.dispose()
 
         // Best-effort flush of anything still queued, mirroring page-unload teardown
@@ -3749,6 +3763,9 @@ export class PostHog implements PostHogInterface {
             this.tracingHeaders?.startIfEnabledOrStop()
             this.autocapture?.startIfEnabled()
             this.heatmaps?.startIfEnabled()
+            if ('capture_pageview' in config || 'disable_capture_url_hashes' in config) {
+                this.historyAutocapture?.startIfEnabledOrStop()
+            }
             this.exceptionObserver?.startIfEnabledOrStop()
             this.deadClicksAutocapture?.startIfEnabledOrStop()
             this.surveys?.loadIfEnabled()
@@ -4136,8 +4153,7 @@ export class PostHog implements PostHogInterface {
     _shouldCapturePageleave(): boolean {
         return (
             this.config.capture_pageleave === true ||
-            (this.config.capture_pageleave === 'if_capture_pageview' &&
-                (this.config.capture_pageview === true || this.config.capture_pageview === 'history_change'))
+            (this.config.capture_pageleave === 'if_capture_pageview' && !!this.config.capture_pageview)
         )
     }
 
