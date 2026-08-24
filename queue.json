@@ -13,7 +13,7 @@
         "runId": 32722977569,
         "runUrl": "https://github.com/PostHog/posthog-js/actions/runs/32722977569"
       },
-      "attempts": 0
+      "attempts": 1
     },
     {
       "id": "pull_request-4623-fix-address-review-no-comment-no-close-1787571606324",
