@@ -22,13 +22,11 @@ import { BrowserState, getDefaultStorage } from './state'
 import type { BrowserFetch, BrowserNavigator, NewSessionInfo, PostHog, PostHogOptions, StorageLike } from './types'
 import { version } from './version'
 
-const DEFAULT_API_HOST = 'https://us.i.posthog.com'
-const DEFAULT_REMOTE_CONFIG_TIMEOUT_MS = 10_000
-const INVALID_DISTINCT_IDS = ['$posthog_cookieless', 'distinct_id', 'distinctid', 'undefined', 'null']
-
 const isNonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0
+const normalizeHost = (host: string): string => host.replace(/\/+$/, '')
 const isValidDistinctId = (value: unknown): value is string =>
-    isNonEmptyString(value) && !INVALID_DISTINCT_IDS.includes(value.toLowerCase())
+    isNonEmptyString(value) &&
+    !['$posthog_cookieless', 'distinct_id', 'distinctid', 'undefined', 'null'].includes(value.toLowerCase())
 
 const deepFreeze = <T>(value: T): T => {
     if (value && typeof value === 'object') {
@@ -117,22 +115,22 @@ class PostHogBrowserClient implements PostHog {
             options.storage === false ? undefined : (options.storage ?? getDefaultStorage())
         const storage = this._blocked ? undefined : requestedStorage
         this._state = new BrowserState(projectToken, storage, options.persistenceKey, options.optOutByDefault ?? false)
-        const apiHost = (options.apiHost ?? DEFAULT_API_HOST).replace(/\/+$/, '')
-        this._requestRuntime = {
-            hosts: {
+        const apiHost = normalizeHost(options.apiHost ?? 'https://us.i.posthog.com')
+        this._requestRuntime = [
+            {
                 api: apiHost,
-                flags: (options.flagsHost ?? apiHost).replace(/\/+$/, ''),
-                assets: (options.assetsHost ?? apiHost).replace(/\/+$/, ''),
+                flags: normalizeHost(options.flagsHost ?? apiHost),
+                assets: normalizeHost(options.assetsHost ?? apiHost),
             },
             projectToken,
-            fetch: browserFetch,
-            navigator: browserNavigator,
-        }
+            browserFetch,
+            browserNavigator,
+        ]
         this._remoteConfig = options.remoteConfig
         this._remoteConfigLoader = options.remoteConfigLoader
         this._remoteConfigTimeoutMs =
             options.remoteConfigTimeoutMs === undefined || !Number.isFinite(options.remoteConfigTimeoutMs)
-                ? DEFAULT_REMOTE_CONFIG_TIMEOUT_MS
+                ? 10_000
                 : Math.max(0, options.remoteConfigTimeoutMs)
 
         this.kv = this._state.keyValueStore('core', () => this._canUseState())
@@ -187,24 +185,23 @@ class PostHogBrowserClient implements PostHog {
         properties: Record<string, unknown> | null = null,
         options: CaptureOptions = {}
     ): Promise<void> {
-        if (this._disposed || this._blocked || this.hasOptedOut() || !isNonEmptyString(event)) {
+        if (!isNonEmptyString(event) || !this._canUseState()) {
             return
         }
 
         const dynamicProperties: Record<string, unknown> = {}
-        this._dynamicEventProperties.slice().forEach((producer) => {
+        for (const producer of this._dynamicEventProperties.slice()) {
             try {
                 Object.assign(dynamicProperties, producer())
             } catch (error) {
                 this.logger.error('An event property producer failed', error)
             }
-        })
-
-        const sessionUpdate = this._state.sessionForEvent()
-        if (sessionUpdate.reason) {
-            this._newSessionPublisher.publish({ ...sessionUpdate.session, reason: sessionUpdate.reason })
         }
-        const session = sessionUpdate.session
+
+        const [session, newSessionReason] = this._state.sessionForEvent()
+        if (newSessionReason) {
+            this._newSessionPublisher.publish({ ...session, reason: newSessionReason })
+        }
         const finalProperties: Record<string, unknown> = {
             ...dynamicProperties,
             ...(properties ?? {}),
@@ -227,7 +224,7 @@ class PostHogBrowserClient implements PostHog {
         const message: CaptureV1Message = {
             uuid: options.uuid ?? createId(),
             event,
-            distinctId: this.distinctId,
+            distinct_id: this.distinctId,
             properties: finalProperties,
             timestamp: eventTimestamp(options.timestamp),
         }
@@ -236,10 +233,8 @@ class PostHogBrowserClient implements PostHog {
             canRetry: () => this._canUseState(),
         })
         this._pendingDeliveries.add(delivery)
-        void delivery.then(
-            () => this._pendingDeliveries.delete(delivery),
-            () => this._pendingDeliveries.delete(delivery)
-        )
+        const removeDelivery = (): boolean => this._pendingDeliveries.delete(delivery)
+        void delivery.then(removeDelivery, removeDelivery)
         try {
             const observedProperties = JSON.parse(JSON.stringify(finalProperties)) as Record<string, unknown>
             this._eventPublisher.publish({ event, properties: observedProperties })
@@ -258,7 +253,7 @@ class PostHogBrowserClient implements PostHog {
         set?: Record<string, unknown>,
         setOnce?: Record<string, unknown>
     ): Promise<void> {
-        if (!isValidDistinctId(distinctId) || this._disposed || this._blocked || this.hasOptedOut()) {
+        if (!isValidDistinctId(distinctId) || !this._canUseState()) {
             return
         }
 
@@ -292,13 +287,7 @@ class PostHogBrowserClient implements PostHog {
     }
 
     async group(type: string, key: string, properties?: Record<string, unknown>): Promise<void> {
-        if (
-            !isNonEmptyString(type) ||
-            !isNonEmptyString(key) ||
-            this._disposed ||
-            this._blocked ||
-            this.hasOptedOut()
-        ) {
+        if (!isNonEmptyString(type) || !isNonEmptyString(key) || !this._canUseState()) {
             return
         }
 
@@ -374,7 +363,8 @@ class PostHogBrowserClient implements PostHog {
         if (!this._canUseState()) {
             return undefined
         }
-        if (this._remoteConfig !== undefined || !this._remoteConfigLoader) {
+        const loader = this._remoteConfigLoader
+        if (this._remoteConfig !== undefined || !loader) {
             return this._remoteConfig
         }
 
@@ -383,10 +373,7 @@ class PostHogBrowserClient implements PostHog {
             const timeoutResult = new Promise<undefined>((resolve) => {
                 timeout = globalThis.setTimeout(() => resolve(undefined), this._remoteConfigTimeoutMs)
             })
-            this._remoteConfigPromise = Promise.race([
-                Promise.resolve().then(() => this._remoteConfigLoader?.()),
-                timeoutResult,
-            ])
+            this._remoteConfigPromise = Promise.race([Promise.resolve().then(() => loader()), timeoutResult])
                 .then((remoteConfig) => {
                     if (!this._canUseState()) {
                         return undefined

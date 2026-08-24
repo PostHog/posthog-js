@@ -26,12 +26,12 @@ const toApiResponse = async (response: Response): Promise<ApiResponse> => {
     }
 }
 
-export interface RequestRuntime {
-    hosts: Record<RequestTarget, string>
-    projectToken: string
-    fetch: BrowserFetch | undefined
-    navigator: BrowserNavigator | undefined
-}
+export type RequestRuntime = [
+    hosts: Record<RequestTarget, string>,
+    projectToken: string,
+    fetch: BrowserFetch | undefined,
+    navigator: BrowserNavigator | undefined,
+]
 
 export const sendRequest = async (
     runtime: RequestRuntime,
@@ -46,25 +46,27 @@ export const sendRequest = async (
             return createFailedResponse(new Error('Request paths must be relative to a configured PostHog host'))
         }
 
-        const baseUrl = new URL(`${runtime.hosts[init.target ?? 'api']}/`)
+        const baseUrl = new URL(`${runtime[0][init.target ?? 'api']}/`)
         url = new URL(path, baseUrl)
         if (url.origin !== baseUrl.origin) {
             return createFailedResponse(new Error('Request path resolved outside the configured PostHog host'))
         }
-        Object.entries(init.query ?? {}).forEach(([key, value]) => url.searchParams.set(key, value))
+        for (const [key, value] of Object.entries(init.query ?? {})) {
+            url.searchParams.set(key, value)
+        }
         // Extensions cannot replace the host client's authentication token.
-        url.searchParams.set('token', runtime.projectToken)
+        url.searchParams.set('token', runtime[1])
         body = init.body === undefined ? undefined : JSON.stringify(init.body)
     } catch (error) {
         return createFailedResponse(error)
     }
 
     const method = init.method ?? (body === undefined ? 'GET' : 'POST')
-    if (init.transport === 'sendBeacon' && method === 'POST' && runtime.navigator?.sendBeacon) {
+    if (init.transport === 'sendBeacon' && method === 'POST' && runtime[3]?.sendBeacon) {
         try {
             const data =
                 body === undefined || typeof Blob !== 'function' ? body : new Blob([body], { type: 'application/json' })
-            if (runtime.navigator.sendBeacon(url.toString(), data)) {
+            if (runtime[3].sendBeacon(url.toString(), data)) {
                 return { statusCode: 202 }
             }
         } catch {
@@ -72,7 +74,7 @@ export const sendRequest = async (
         }
     }
 
-    if (!runtime.fetch) {
+    if (!runtime[2]) {
         return createFailedResponse(new Error('Fetch is not available'))
     }
 
@@ -94,7 +96,7 @@ export const sendRequest = async (
             requestInit.signal = controller.signal
         }
 
-        return await toApiResponse(await runtime.fetch(url, requestInit))
+        return await toApiResponse(await runtime[2](url, requestInit))
     } catch (error) {
         return createFailedResponse(error)
     } finally {

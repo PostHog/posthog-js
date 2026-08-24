@@ -338,6 +338,34 @@ describe('@posthog/browser extensions', () => {
         expect(firstDispose).toHaveBeenCalledTimes(1)
     })
 
+    it('disposes an installed extension once across repeated handles and client disposal', async () => {
+        const dispose = jest.fn(async () => {})
+        const posthog = await createPostHog({ projectToken: 'ph_test', storage: false, navigator: false, fetch: false })
+        const installation = await posthog.installExtension({ name: 'once', setup() {}, dispose })
+
+        await Promise.all([installation.dispose(), installation.dispose()])
+        await posthog.dispose()
+
+        expect(dispose).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not let a stale handle dispose a replacement with the same name', async () => {
+        const oldDispose = jest.fn()
+        const replacementDispose = jest.fn()
+        const posthog = await createPostHog({ projectToken: 'ph_test', storage: false, navigator: false, fetch: false })
+        const oldInstallation = await posthog.installExtension({ name: 'reused', setup() {}, dispose: oldDispose })
+        await oldInstallation.dispose()
+        const replacement: Extension = { name: 'reused', setup() {}, dispose: replacementDispose }
+        const replacementInstallation = await posthog.installExtension(replacement)
+
+        await oldInstallation.dispose()
+
+        expect(posthog.getExtension('reused')).toBe(replacement)
+        expect(oldDispose).toHaveBeenCalledTimes(1)
+        expect(replacementDispose).not.toHaveBeenCalled()
+        await replacementInstallation.dispose()
+    })
+
     it('disposes extensions in reverse installation order', async () => {
         const events: string[] = []
         const createExtension = (name: string): Extension => ({

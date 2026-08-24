@@ -22,14 +22,7 @@ interface PersistedState {
     extensionData: Record<string, Record<string, unknown>>
 }
 
-interface SessionUpdate {
-    session: SessionContext
-    reason?: NewSessionReason
-}
-
-const SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000
-const SESSION_MAX_LENGTH_MS = 24 * 60 * 60 * 1000
-const SESSION_ACTIVITY_WRITE_INTERVAL_MS = 60 * 1000
+type SessionUpdate = [session: SessionContext, reason?: NewSessionReason]
 
 const emptyRecord = <T>(): Record<string, T> => Object.create(null) as Record<string, T>
 
@@ -163,12 +156,15 @@ export class BrowserState {
     private readonly _windowId = createId()
     private _lastActivityWriteTimestamp = 0
 
+    private readonly _storage: StorageLike | undefined
+
     constructor(
         projectToken: string,
-        private readonly _storage: StorageLike | undefined,
+        storage: StorageLike | undefined,
         persistenceKey: string | undefined,
         optOutByDefault: boolean
     ) {
+        this._storage = storage
         this._stateKey = persistenceKey ?? `ph_${projectToken}_posthog_browser_v2`
         this._consentKey = `${this._stateKey}_consent`
         this._consent = optOutByDefault ? 'denied' : 'implicit'
@@ -236,9 +232,9 @@ export class BrowserState {
     sessionForEvent(now = Date.now()): SessionUpdate {
         const { sessionStartTimestamp, lastActivityTimestamp } = this._state.session
         let reason: NewSessionReason | undefined
-        if (now - lastActivityTimestamp > SESSION_IDLE_TIMEOUT_MS) {
+        if (now - lastActivityTimestamp > 1_800_000) {
             reason = 'idleTimeout'
-        } else if (now - sessionStartTimestamp > SESSION_MAX_LENGTH_MS) {
+        } else if (now - sessionStartTimestamp > 86_400_000) {
             reason = 'maxLength'
         }
 
@@ -246,15 +242,15 @@ export class BrowserState {
             this._state.session = createSession(now)
             this._lastActivityWriteTimestamp = now
             this._save()
-            return { session: this.session, reason }
+            return [this.session, reason]
         }
 
         this._state.session.lastActivityTimestamp = now
-        if (now - this._lastActivityWriteTimestamp >= SESSION_ACTIVITY_WRITE_INTERVAL_MS) {
+        if (now - this._lastActivityWriteTimestamp >= 60_000) {
             this._lastActivityWriteTimestamp = now
             this._save()
         }
-        return { session: this.session }
+        return [this.session]
     }
 
     reset(): SessionContext {
@@ -278,12 +274,7 @@ export class BrowserState {
     }
 
     keyValueStore(namespace: string, canAccess: () => boolean = () => true): KeyValueStore {
-        const values = (): Record<string, unknown> => {
-            if (!Object.prototype.hasOwnProperty.call(this._state.extensionData, namespace)) {
-                this._state.extensionData[namespace] = emptyRecord<unknown>()
-            }
-            return this._state.extensionData[namespace] ?? emptyRecord<unknown>()
-        }
+        const values = (): Record<string, unknown> => (this._state.extensionData[namespace] ??= emptyRecord<unknown>())
         const read = (key: string): unknown => {
             if (!canAccess()) {
                 return undefined

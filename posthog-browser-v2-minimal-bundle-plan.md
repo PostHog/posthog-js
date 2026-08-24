@@ -46,8 +46,8 @@ The useful root client must provide these invariants:
 3. **Bot filtering**: reject traffic from the compact, approved blocked-user-agent set before state mutation or delivery.
 4. **Identity**: distinguish device, anonymous, and current distinct IDs; implement anonymous-to-identified linkage; reject invalid IDs; and define reset preservation explicitly.
 5. **Sessions**: enforce idle and maximum length, keep a shared session with a per-window ID, use fresh state before decisions, and prevent stale tabs from overwriting newer sessions.
-6. **Capture protocol**: validate and copy inputs, use defined property precedence, protect protocol fields, serialize safely, enforce payload limits, and implement the Capture Analytics V1 event, batch, authentication, response, and retry contracts.
-7. **Delivery lanes**: route each traffic class to an independent bounded queue, endpoint, wire serializer, batching policy, transport strategy, retry policy, and teardown policy. The root includes only the analytics lane.
+6. **Capture admission**: validate and copy inputs, use defined property precedence, protect protocol fields, serialize safely, enforce admission limits, and synchronously enqueue finalized analytics events. Core-generated `$pageview` events use this same queue and do not wait for remote configuration or analytics delivery to attach.
+7. **Delivery capabilities**: retain a small control-plane Fetch path in core for remote configuration and extension requests. Install analytics delivery separately so Capture V1 batching, authentication, compression, response handling, retry, and teardown policy can be loaded eagerly or lazily without changing queued event semantics.
 8. **Extension isolation**: implement the shared client contract, enforce consent on transport and storage, isolate failures, and dispose deterministically.
 
 Correctness, consent, privacy, and no-throw behavior take priority over a size target.
@@ -77,7 +77,7 @@ Use the Capture Analytics V1 SDK test harness and peer implementations for exact
 
 ### Capture Analytics V1 protocol
 
-The root analytics lane uses `POST /i/v1/analytics/events`. It must not send analytics events to `/e/`, `/batch/`, `/capture/`, `/track/`, or `/i/v0/e/`.
+The analytics delivery capability uses `POST /i/v1/analytics/events`. It must not send analytics events to `/e/`, `/batch/`, `/capture/`, `/track/`, or `/i/v0/e/`.
 
 Normal Fetch requests use:
 
@@ -231,7 +231,7 @@ interface BrowserClient {
 }
 ```
 
-`capture()` will resolve after the queue accepts the event. `flush()` will wait for the current delivery work.
+`capture()` will resolve after the core queue accepts the event. `flush()` will wait for currently attached delivery work; it must not wait indefinitely for an analytics delivery capability that may never load. The core queues an enabled initial `$pageview` through the same admission path without waiting for remote configuration or delivery attachment.
 
 ## Capture pipeline
 
@@ -246,9 +246,9 @@ capture()
   → add caller properties
   → add protected protocol properties
   → publish onEvent
-  → select the analytics lane
-  → enqueue the normalized event
-  → build the lane-specific Capture V1 batch
+  → enqueue the normalized event in the bounded core analytics buffer
+  → hand queued events to the attached analytics delivery capability
+  → build the Capture V1 batch
   → compress the batch when useful
   → send the batch
   → prune and retry only server-marked retry events
@@ -309,7 +309,7 @@ A lane is the smallest delivery unit with independent failure and backpressure b
 
 Do not put events with different endpoints, wire shapes, payload limits, or retry semantics in one batch. A failure in one lane must not requeue or resend events already accepted in another lane.
 
-Keep the framework small. A browser lane is a policy bundle, not a worker pool or general scheduling framework. The root statically includes one analytics lane. Optional products install their lanes from explicit entry points; the root must not contain a catalog or implementation for AI, replay, logs, metrics, or traces.
+Keep the framework small. A browser lane is a policy bundle, not a worker pool or general scheduling framework. The root owns analytics admission and one bounded in-memory analytics buffer, but it must not statically import the analytics delivery implementation. A dedicated one-slot capability can attach Capture V1 delivery eagerly or lazily and atomically drain the buffer without changing event UUIDs, timestamps, identity, session, ordering, or consent decisions. Optional products install their lanes from explicit entry points; the root must not contain a catalog or implementation for AI, replay, logs, metrics, or traces.
 
 Use an explicit product API to select a non-analytics lane. Do not infer the lane from an event-name prefix, and do not add a caller-selected lane string to general `capture()`. For example, an optional AI module can own `captureAi()` and a private AI lane sink. A call to `capture('$ai_generation')` still uses the analytics lane. A call to `captureAi({ event: '$ai_generation', ... })` uses the AI lane because the API selected it. The method can warn about an unexpected event name, but the name must not override the selected lane.
 
@@ -322,33 +322,37 @@ The concrete precedents are:
 
 The browser implementation should preserve explicit routing, queue isolation, lazy activation, per-lane limits, and coordinated lifecycle without copying server-side threads, persistence, or worker machinery.
 
-Use one small host boundary. This is illustrative, not a frozen public contract:
+Use one small host boundary. This is illustrative, not a frozen public contract. `LaneSink`, `LaneSlot`, `InstalledLane`, and the coordinator are package-private implementation types; do not export them from the package root or add them to the shared `Client` contract:
 
 ```ts
 interface LaneSink<E> {
     enqueue(event: E): Promise<void>
 }
 
+interface LaneSlot<E> {
+    readonly sink: LaneSink<E>
+    install(delivery: InstalledLane<E>): Disposable
+}
+
 interface Delivery {
-    analytics: LaneSink<Event>
-    installLane<E>(lane: InstalledLane<E>): LaneSink<E>
+    readonly analytics: LaneSlot<Event>
+    createLane<E>(): LaneSlot<E>
     flush(options?: { unload?: boolean }): Promise<void>
     request(path: string, init?: SendRequestInit): Promise<ApiResponse>
     dispose(): Promise<void>
 }
 ```
 
-`installLane()` is extension-host infrastructure, not a public arbitrary-endpoint API. It registers a supplied lane for coordinated flush and disposal. Core `capture()` can reach only `analytics`. An optional product receives only its own returned sink. Omit the product import and its lane implementation must be absent from the bundle.
+Analytics is an ordinary lane with one reserved distinction: its `LaneSlot` exists when core starts because general `capture()` and core-generated `$pageview` events need a stable sink before a delivery policy is installed. Installing Capture V1 delivery on that slot transfers buffered work while preserving ordering; detaching leaves unaccepted work in the slot. Optional products create their slots only when imported and receive only their own typed sink. Slot creation and installation are internal extension-host capabilities, not a public arbitrary-endpoint registry or caller-selected lane string. Omit a delivery or product import and its implementation must be absent from the bundle.
 
 The root implementation will use:
 
-- An in-memory batch.
-- `fetch` during normal runtime.
-- `sendBeacon` for best-effort teardown delivery.
-- Keepalive Fetch as the teardown fallback.
-- A short timeout.
-- A small retry limit.
+- A bounded in-memory analytics buffer.
+- A small Fetch-based control-plane request path for remote configuration and extension requests.
+- No analytics batching, compression, retry, or teardown transport implementation.
 - No durable queue.
+
+The optional analytics delivery capability will use normal Fetch, Capture V1 batching and result handling, compression, retry, and teardown transport. It receives the bound core Fetch capability but owns analytics-specific request policy. Remote configuration starts from core and must not wait for analytics delivery to load.
 
 #### Transport policy
 
@@ -584,7 +588,7 @@ const posthog = await createPostHog({
 
 `projectToken` is required at the type and runtime boundaries. The package has no default singleton. The current unit suite, lint, formatting, and diff checks pass.
 
-The current capture fixture is 22,775 B minified and 7,620 B gzip, but this is not a compliant baseline. The prototype still omits required behavior. The first Capture V1 transform, Fetch attempt, and result-classification slice added approximately 2.6 KiB minified and 0.9 KiB gzip. Bounded selective retry, transient status handling, jittered backoff, and `Retry-After` added approximately 2.2 KiB minified and 0.8 KiB gzip. Per-attempt timeout, response-body timeout, late-response cleanup, and an aggregate elapsed budget added 1,169 B minified and 422 B gzip. An ESM `version`-only consumer is approximately 50 bytes gzip, while the current CommonJS form retains approximately 6.3 KiB gzip. Re-evaluate CommonJS publication before release.
+The current capture fixture is 21,166 B minified, 7,301 B gzip, and 6,588 B Brotli, but this is not a compliant baseline. The prototype still omits required behavior. The first Capture V1 transform, Fetch attempt, and result-classification slice added approximately 2.6 KiB minified and 0.9 KiB gzip. Bounded selective retry, transient status handling, jittered backoff, and `Retry-After` added approximately 2.2 KiB minified and 0.8 KiB gzip. Per-attempt timeout, response-body timeout, late-response cleanup, and an aggregate elapsed budget added 1,169 B minified and 422 B gzip. The first post-timeout optimization pass removed 1,609 B minified, 319 B gzip, and 272 B Brotli without removing behavior. It replaced repeated sender result construction, compacted internal records, and removed one-use runtime constants and object fields while retaining conventional TypeScript-private class members. Current module attribution is 7,623 B for the client, 4,873 B for Capture V1, 4,060 B for state, 1,435 B for requests, and 1,146 B for the extension registry. An ESM `version`-only consumer is approximately 50 bytes gzip, while the current CommonJS form retains approximately 6.3 KiB gzip. Re-evaluate CommonJS publication before release.
 
 Known blockers and gaps:
 
@@ -603,7 +607,7 @@ Known blockers and gaps:
 Decisions that still need an explicit answer:
 
 - [ ] **D1**: Decide whether the package is an upgrade-compatible replacement or a narrower API with behavior-compatible capture.
-- [x] **D2**: Use Capture Analytics V1 at `POST /i/v1/analytics/events` for the root analytics lane; do not use the legacy `/e/` contract.
+- [x] **D2**: Use Capture Analytics V1 at `POST /i/v1/analytics/events` for the separately imported analytics delivery capability; do not use the legacy `/e/` contract.
 - [ ] **D3**: Approve reset consent and device-ID semantics.
 - [x] **D4**: Use `__ph_opt_in_out_<project-token>` by default, preserve custom consent names through `consentPersistenceName`, and use interoperable `0`/`1` values. Keep deprecated prefix-derived keys and backend migration in a compatibility entry point.
 - [ ] **D5**: Decide whether DNT and cookieless modes are root contracts, standard-preset contracts, or unsupported alpha behavior.
@@ -652,8 +656,8 @@ Do not freeze more generic runtime contracts until this phase identifies the req
 - [ ] **P2.3**: Implement conflict-safe local-storage persistence.
 - [ ] **P2.4**: Implement idle, maximum-length, window, and cross-tab session behavior.
 - [x] **P2.5**: Implement the Capture V1 event transform, batch envelope, required Fetch headers, and result parser.
-- [ ] **P2.6**: Implement a small lane dispatcher and the root analytics lane with an independent bounded queue and policy.
-- [ ] **P2.7**: Implement in-memory batching and native compression within the analytics lane.
+- [ ] **P2.6**: Implement the bounded core analytics buffer, synchronous capture admission, and core `$pageview` admission without requiring analytics delivery to be attached.
+- [ ] **P2.7**: Implement the separately imported Capture V1 delivery policy and install it on the reserved analytics lane slot, with batching and native compression.
 - [ ] **P2.8**: Implement normal Fetch delivery and synchronous best-effort teardown delivery with V1 Beacon mode when supported, keepalive Fetch fallback, timeout, bounded partial retry, backoff, jitter, flush, unload, and rate limiting.
 - [ ] **P2.9**: Add `capture`, `identify`, `group`, `reset`, `flush`, and `dispose` state-machine coverage.
 
@@ -696,13 +700,13 @@ Each selected adapter must preserve the same core invariants. Keep its implement
 
 ### Phase 5: Add remote configuration
 
-- [ ] **P5.1**: Put remote configuration in a dynamic host module.
-- [ ] **P5.2**: Load the module when an extension requests configuration.
+- [ ] **P5.1**: Implement a small core control-plane Fetch request for remote configuration.
+- [ ] **P5.2**: Start the request after consent and bot admission, independently and in parallel with analytics delivery loading.
 - [ ] **P5.3**: Cache the first request.
 - [ ] **P5.4**: Define timeout, retry, late-success, and permanent-failure behavior.
 - [ ] **P5.5**: Publish later configuration changes.
 
-Do not load remote configuration for direct capture users.
+Remote configuration must not depend on the analytics delivery capability. Provide an explicit option to disable the request for compositions that do not need configuration.
 
 ### Phase 6: Add the standard entry point
 

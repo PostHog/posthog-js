@@ -6,7 +6,7 @@ This document defines the bundle architecture for `@posthog/browser`.
 
 The goal is a behavior-complete core in the smallest practical bundle. Core behavior is a fixed constraint. Bundle size is the optimization objective.
 
-The root package must provide a useful capture client. It must preserve required wire, consent, identity, session, cross-context, delivery, no-throw, and extension-isolation behavior. Do not reduce bundle size by removing one of these invariants. Reimplement the invariant with a smaller mechanism.
+The root package must provide a useful capture host. It must preserve required capture admission, consent, identity, session, cross-context, no-throw, and extension-isolation behavior. It owns a bounded in-memory analytics buffer but does not statically import analytics delivery. A separately imported analytics capability supplies Capture V1 batching and transmission eagerly or lazily. Do not reduce bundle size by removing an invariant. Reimplement the invariant with a smaller mechanism or move only the policy that can safely begin after admission.
 
 Optional features must stay outside the root import graph. Each public optional feature must be removable when an application does not import it. Application bundlers must be able to remove each unused module.
 
@@ -85,10 +85,12 @@ The core contains these responsibilities:
 - Compact bot filtering.
 - Device, anonymous, and identified state.
 - Session, window, and cross-context correctness.
-- Safe Capture Analytics V1 event and batch construction.
+- Safe event normalization, copying, and admission.
 - Conflict-safe persistence.
-- A small lane dispatcher with one root analytics lane.
-- Bounded batching, normal Fetch delivery, partial retry, flush, and best-effort teardown delivery.
+- A bounded in-memory analytics buffer that accepts events before delivery attaches.
+- Core-generated `$pageview` admission through the same buffer without waiting for remote configuration or analytics delivery.
+- A small control-plane Fetch path for immediate remote configuration and extension requests.
+- A reserved analytics lane slot whose delivery policy can be separately imported.
 - Extension lifecycle and isolation.
 - No-throw boundaries for customer-controlled and browser operations.
 
@@ -98,17 +100,17 @@ Review each core mechanism with compliance tests, bundle measurements, and modul
 
 Consent uses `__ph_opt_in_out_<project-token>` by default and accepts a verbatim `consentPersistenceName` override. Store interoperable `0`/`1` values and accept the established yes/no-like forms. Keep this logical key independent of identity persistence and consistent across consent storage adapters. Deprecated prefix-derived keys and migration between storage backends belong in a compatibility entry point.
 
-The root analytics lane must use Capture Analytics V1 at `POST /i/v1/analytics/events`. It must not use the legacy `/e/` envelope. Normal delivery must use Fetch so the host can send required headers, observe the UUID-keyed result map, time out, rate limit, and retry only server-marked retry events.
+The analytics delivery capability must use Capture Analytics V1 at `POST /i/v1/analytics/events`. It must not use the legacy `/e/` envelope. Normal analytics delivery must use Fetch so it can send required headers, observe the UUID-keyed result map, time out, rate limit, and retry only server-marked retry events. It receives the core's bound Fetch capability but owns analytics-specific batching, authentication, compression, response, retry, and teardown policy. Remote configuration uses the small core control-plane request path and must not wait for analytics delivery to load.
 
-A lane owns one queue, endpoint, event/batch serializer, payload limits, compression, transport, response classification, retry policy, and teardown policy. Events with different policies must not share a batch. A failure in one lane must not requeue or resend an event already accepted in another lane. The root statically includes only the analytics lane. Optional product entry points can install additional lanes; the root must not contain their implementations or a product catalog.
+A lane has a stable typed sink and bounded queue plus an attachable delivery policy. The policy owns one endpoint, event/batch serializer, payload limits, compression, transport, response classification, retry policy, and teardown policy. Events with different policies must not share a batch. A failure in one lane must not requeue or resend an event already accepted in another lane. Analytics is an ordinary lane whose slot is reserved at core startup because general `capture()` needs its sink before delivery attaches. The root statically includes only that slot, admission, and bounded buffer, not the analytics delivery policy. Attaching a policy must preserve queued event UUIDs, timestamps, identity, session, ordering, and consent decisions. Optional product entry points create their lane slots only when imported; the root must not contain their implementations or a product catalog.
 
-Select an optional lane through an explicit product API, such as `captureAi()`, not an event-name prefix or a caller-supplied lane string on general `capture()`. General `capture()` always uses analytics. The product module receives only its private lane sink. Install the lane lazily, then include it in client `flush()` and `dispose()`. This follows Python's `_capture_ai` lane and the unmerged Node `captureAi` design while keeping product code removable from the browser root.
+Select an optional lane through an explicit product API, such as `captureAi()`, not an event-name prefix or a caller-supplied lane string on general `capture()`. General `capture()` always uses analytics. The product module receives only its private lane sink. Install the lane lazily, then include it in client `flush()` and `dispose()`. Lane sinks, lane state, delivery policies, and the coordinator are package-private implementation details; do not export them from the package root or add them to the shared `Client` contract. This follows Python's `_capture_ai` lane and the unmerged Node `captureAi` design while keeping product code removable from the browser root.
 
 Teardown delivery must use the Capture V1 header-less Beacon contract only after the target backend and proxy paths support it. Otherwise, use Fetch with `keepalive: true` and the normal V1 headers. Treat a successful Beacon call as browser acceptance, not confirmed delivery. Enforce one aggregate teardown-byte budget across all Beacon and keepalive Fetch attempts; splitting a batch does not increase the browser's shared in-flight quota. Do not parse per-event responses, start asynchronous compression, or start retry timers during teardown. Register page lifecycle listeners during client initialization and remove them during disposal.
 
 ### 4.4 Optional adapters and extensions
 
-Put product behavior in an extension or an adapter. Examples include replay, surveys, and web vitals.
+Put delivery or product behavior in an extension, capability, or adapter. Examples include analytics delivery, replay, surveys, and web vitals. Analytics delivery installs on the reserved analytics lane slot through the same internal mechanism used by optional lanes; it is not registered in a public product catalog.
 
 An optional module can import the core. The core must not import the optional module.
 
@@ -137,7 +139,7 @@ Cross-context conflict safety is also a core invariant. Same-origin local-storag
 
 ## 5. Root entry point
 
-The root entry point must provide a useful client. It must not provide every PostHog product.
+The root entry point must provide a useful capture host with bounded analytics admission. It must not statically include analytics transmission or every PostHog product. A standard preset can attach analytics delivery eagerly or start a literal dynamic import immediately while core remote configuration proceeds in parallel.
 
 The root entry point must use named exports. It must not create a default client singleton.
 
@@ -253,6 +255,7 @@ Example:
 ```text
 @posthog/browser
 @posthog/browser/standard
+@posthog/browser/delivery/analytics
 @posthog/browser/persistence/cookie
 @posthog/browser/delivery/durable
 @posthog/browser/extensions/feature-flags

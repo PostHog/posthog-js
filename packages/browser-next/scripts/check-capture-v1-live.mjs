@@ -17,17 +17,12 @@ const send = async (apiHost, route) => {
     const runId = `real-ph-browser-next-v1-${route}-${Date.now()}-${randomUUID()}`
     const timestamp = new Date().toISOString()
     const result = await sendCaptureV1Batch(
-        {
-            hosts: { api: apiHost, flags: apiHost, assets: apiHost },
-            projectToken,
-            fetch,
-            navigator: undefined,
-        },
+        [{ api: apiHost, flags: apiHost, assets: apiHost }, projectToken, fetch, undefined],
         [
             {
                 event: 'real_posthog_test_browser_next_capture_v1',
                 uuid: randomUUID(),
-                distinctId: `real-posthog-test-${runId}`,
+                distinct_id: `real-posthog-test-${runId}`,
                 timestamp,
                 properties: {
                     test_run_id: runId,

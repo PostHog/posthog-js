@@ -5,28 +5,26 @@ import type { BrowserFetch } from '../src/types'
 const message = (overrides: Partial<CaptureV1Message> = {}): CaptureV1Message => ({
     event: 'signed_up',
     uuid: 'event-uuid',
-    distinctId: 'person-1',
+    distinct_id: 'person-1',
     timestamp: '2026-01-02T03:04:05.000Z',
     properties: {},
     ...overrides,
 })
 
-const runtime = (fetch: BrowserFetch | undefined): RequestRuntime => ({
-    hosts: {
+const runtime = (fetch: BrowserFetch | undefined): RequestRuntime => [
+    {
         api: 'https://example.com/proxy',
         flags: 'https://example.com/proxy',
         assets: 'https://example.com/proxy',
     },
-    projectToken: 'ph_test',
+    'ph_test',
     fetch,
-    navigator: undefined,
-})
+    undefined,
+]
 
 describe('Capture Analytics V1', () => {
     it('builds the root event shape without mutating the normalized message', () => {
         const input = message({
-            set: { email: 'person@example.com' },
-            setOnce: { source: 'docs' },
             properties: {
                 token: 'ph_test',
                 distinct_id: 'person-1',
@@ -34,6 +32,8 @@ describe('Capture Analytics V1', () => {
                 $device_id: 'device-1',
                 $groups: { company: 'posthog' },
                 $unset: ['old_property'],
+                $set: { email: 'person@example.com' },
+                $set_once: { source: 'docs' },
                 $session_id: 'session-1',
                 $window_id: 'window-1',
                 $lib: 'web',
@@ -81,6 +81,21 @@ describe('Capture Analytics V1', () => {
                 message({ properties: { $cookieless_mode: 'maybe', $product_tour_id: 42, keep: true } })
             )
         ).toMatchObject({ options: {}, properties: { keep: true } })
+    })
+
+    it('ignores enumerable properties inherited by the option sentinel table', () => {
+        Object.defineProperty(Object.prototype, 'inherited_capture_control', {
+            configurable: true,
+            enumerable: true,
+            get: () => {
+                throw new Error('inherited control was read')
+            },
+        })
+        try {
+            expect(buildCaptureV1Event(message())).toMatchObject({ options: {}, properties: {} })
+        } finally {
+            delete (Object.prototype as Record<string, unknown>).inherited_capture_control
+        }
     })
 
     it('sends the exact Fetch request contract through a proxy path', async () => {
@@ -475,6 +490,27 @@ describe('Capture Analytics V1', () => {
         expect(sleep.mock.calls).toEqual([[100], [200]])
         expect(result.retry).toEqual(['retry'])
         expect(result.error).toBeInstanceOf(Error)
+    })
+
+    it.each([
+        [Number.NaN, 4],
+        [Number.POSITIVE_INFINITY, 4],
+        [-1, 1],
+        [2.9, 2],
+    ])('normalizes an attempt budget of %s to %s attempts', async (maxAttempts, expectedAttempts) => {
+        const fetch = jest
+            .fn<ReturnType<BrowserFetch>, Parameters<BrowserFetch>>()
+            .mockResolvedValue(new Response('{}', { status: 503 }))
+
+        await sendCaptureV1Batch(runtime(fetch), [message()], '1.2.3', {
+            maxAttempts,
+            initialRetryDelayMs: 0,
+            maxBackoffMs: 0,
+            elapsedNow: () => 0,
+            sleep: async () => {},
+        })
+
+        expect(fetch).toHaveBeenCalledTimes(expectedAttempts)
     })
 
     it('always makes one attempt when the attempt budget is zero', async () => {

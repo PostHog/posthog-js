@@ -3,22 +3,14 @@ import type { ApiResponse } from '@posthog/browser-common'
 import { createId } from './id'
 import type { RequestRuntime } from './request'
 
-const ANALYTICS_PATH = '/i/v1/analytics/events'
 const RETRYABLE_STATUSES = [408, 500, 502, 503, 504]
-const DEFAULT_MAX_ATTEMPTS = 4
-const DEFAULT_RETRY_DELAY_MS = 3_000
-const DEFAULT_MAX_BACKOFF_MS = 30_000
-const DEFAULT_REQUEST_TIMEOUT_MS = 10_000
-const DEFAULT_MAX_ELAPSED_MS = 60_000
 
 export interface CaptureV1Message {
     event: string
     uuid: string
-    distinctId: string
+    distinct_id: string
     timestamp: string
     properties: Record<string, unknown>
-    set?: Record<string, unknown>
-    setOnce?: Record<string, unknown>
 }
 
 interface CaptureV1EventOptions {
@@ -65,35 +57,32 @@ interface CaptureV1SenderOptions {
     canRetry?: () => boolean
 }
 
-interface AttemptResult {
-    response?: Response
-    result: CaptureV1Result
-    retryEvents: CaptureV1Event[]
-}
+type AttemptResult = [CaptureV1Result, CaptureV1Event[], Response | undefined]
 
-const isBoolean = (value: unknown): value is boolean => value === true || value === false
-const isNumber = (value: unknown): value is number => Number.isFinite(value as number)
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value)
-const eventIds = (events: CaptureV1Event[]): string[] => events.map(({ uuid }) => uuid)
-const defaultElapsedNow = (): number => globalThis.performance?.now() ?? Date.now()
-
+const eventIds = (events: { uuid: string }[]): string[] => events.map(({ uuid }) => uuid)
+const failedResult = (events: { uuid: string }[], error: unknown, statusCode = 0): CaptureV1Result => ({
+    statusCode,
+    retry: eventIds(events),
+    drops: [],
+    error,
+})
 const cancelResponseBody = (response: Response | undefined): void => {
     try {
-        const cancellation = response?.body?.cancel()
-        if (cancellation) {
-            void cancellation.catch(() => {})
-        }
+        void response?.body?.cancel().catch(() => {})
     } catch {
         // Cancellation is best-effort for late or timed-out responses.
     }
 }
 
 const coerceBoolean = (value: unknown): boolean | undefined => {
-    if (isBoolean(value)) {
+    // eslint-disable-next-line posthog-js/no-direct-boolean-check
+    if (typeof value === 'boolean') {
         return value
     }
-    if (isNumber(value)) {
+    // eslint-disable-next-line posthog-js/no-direct-number-check
+    if (typeof value === 'number' && Number.isFinite(value)) {
         return value !== 0
     }
     if (typeof value === 'string') {
@@ -136,17 +125,11 @@ export const buildCaptureV1Event = (message: CaptureV1Message): CaptureV1Event =
     delete properties.$lib_version
     delete properties.token
     delete properties.distinct_id
-    if (message.set !== undefined && properties.$set === undefined) {
-        properties.$set = message.set
-    }
-    if (message.setOnce !== undefined && properties.$set_once === undefined) {
-        properties.$set_once = message.setOnce
-    }
 
     return {
         event: message.event,
         uuid: message.uuid,
-        distinct_id: message.distinctId,
+        distinct_id: message.distinct_id,
         timestamp: message.timestamp,
         ...(typeof sessionId === 'string' ? { session_id: sessionId } : {}),
         ...(typeof windowId === 'string' ? { window_id: windowId } : {}),
@@ -189,6 +172,9 @@ const parseRetryAfter = (response: Response | undefined, now: () => number): num
     }
 }
 
+const numberOption = (value: number | undefined, fallback: number, minimum: number): number =>
+    Math.max(minimum, Number.isFinite(value) ? value! : fallback)
+
 const retryDelay = (
     attempt: number,
     initialDelayMs: number,
@@ -225,15 +211,12 @@ const attemptOnce = async (
     try {
         body = JSON.stringify({ created_at: createdAt, batch: events })
     } catch (error) {
-        return {
-            result: { statusCode: 0, retry: eventIds(events), drops: [], error },
-            retryEvents: [],
-        }
+        return [failedResult(events, error), [], undefined]
     }
 
     let controller: AbortController | undefined
     try {
-        controller = typeof globalThis.AbortController === 'function' ? new globalThis.AbortController() : undefined
+        controller = new AbortController()
     } catch {
         // The deadline race still bounds injected Fetch implementations without AbortController.
     }
@@ -243,7 +226,7 @@ const attemptOnce = async (
         credentials: 'omit',
         headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${runtime.projectToken}`,
+            Authorization: `Bearer ${runtime[1]}`,
             'PostHog-Sdk-Info': `posthog-js/${libraryVersion}`,
             'PostHog-Attempt': String(attempt),
             'PostHog-Request-Id': requestId,
@@ -254,15 +237,7 @@ const attemptOnce = async (
     }
     const remainingAfterSetup = remainingTime()
     if (remainingAfterSetup <= 0) {
-        return {
-            result: {
-                statusCode: 0,
-                retry: eventIds(events),
-                drops: [],
-                error: new Error('Capture V1 exhausted its elapsed retry budget'),
-            },
-            retryEvents: events,
-        }
+        return [failedResult(events, new Error('Capture V1 exhausted its elapsed retry budget')), events, undefined]
     }
     const attemptTimeoutMs = Math.max(1, Math.min(timeoutMs, remainingAfterSetup))
 
@@ -288,7 +263,7 @@ const attemptOnce = async (
 
     let text: string
     try {
-        const fetchPromise = runtime.fetch!(`${runtime.hosts.api}${ANALYTICS_PATH}`, requestInit)
+        const fetchPromise = runtime[2]!(`${runtime[0].api}/i/v1/analytics/events`, requestInit)
         void fetchPromise.then(
             (lateResponse) => {
                 if (timedOut && !response) {
@@ -304,11 +279,7 @@ const attemptOnce = async (
         const status = response?.status ?? 0
         const retryEvents =
             !response || (status >= 200 && status < 300) || RETRYABLE_STATUSES.includes(status) ? events : []
-        return {
-            ...(response ? { response } : {}),
-            result: { statusCode: status, retry: eventIds(retryEvents), drops: [], error },
-            retryEvents,
-        }
+        return [failedResult(retryEvents, error, status), retryEvents, response]
     } finally {
         if (timer !== undefined) {
             globalThis.clearTimeout(timer)
@@ -326,36 +297,22 @@ const attemptOnce = async (
             json = undefined
         }
     }
-    const base = {
-        statusCode: status,
-        ...(text ? { text } : {}),
-        ...(json !== undefined ? { json } : {}),
-    }
     if (status < 200 || status >= 300) {
         const suffix = text ? `: ${text.slice(0, 512)}` : ''
-        return {
+        const retryEvents = retryableStatus ? events : []
+        return [
+            failedResult(retryEvents, new Error(`Capture V1 request failed with HTTP ${status}${suffix}`), status),
+            retryEvents,
             response,
-            result: {
-                ...base,
-                retry: retryableStatus ? eventIds(events) : [],
-                drops: [],
-                error: new Error(`Capture V1 request failed with HTTP ${status}${suffix}`),
-            },
-            retryEvents: retryableStatus ? events : [],
-        }
+        ]
     }
 
     if (!isRecord(json) || (json.results !== undefined && !isRecord(json.results))) {
-        return {
+        return [
+            failedResult([], new Error(`Capture V1 returned an unparseable ${status} response body`), status),
+            [],
             response,
-            result: {
-                ...base,
-                retry: [],
-                drops: [],
-                error: new Error(`Capture V1 returned an unparseable ${status} response body`),
-            },
-            retryEvents: [],
-        }
+        ]
     }
 
     const results = isRecord(json.results) ? json.results : {}
@@ -376,18 +333,7 @@ const attemptOnce = async (
         }
     }
 
-    return {
-        response,
-        result: {
-            ...base,
-            retry: eventIds(retryEvents),
-            drops,
-            ...(retryEvents.length || drops.length
-                ? { error: new Error('Capture V1 did not accept every event') }
-                : {}),
-        },
-        retryEvents,
-    }
+    return [{ statusCode: status, retry: eventIds(retryEvents), drops }, retryEvents, response]
 }
 
 export const sendCaptureV1Batch = async (
@@ -399,44 +345,20 @@ export const sendCaptureV1Batch = async (
     if (messages.length === 0) {
         return { statusCode: 204, retry: [], drops: [] }
     }
-    if (!runtime.fetch) {
-        return {
-            statusCode: 0,
-            retry: messages.map(({ uuid }) => uuid),
-            drops: [],
-            error: new Error('Fetch is not available'),
-        }
+    if (!runtime[2]) {
+        return failedResult(messages, new Error('Fetch is not available'))
     }
 
     const now = options.now ?? Date.now
     const random = options.random ?? Math.random
+    // Defaults: 4 attempts, 3s initial delay, 30s backoff, 10s request timeout, 60s total.
     const sleep = options.sleep ?? ((delayMs) => new Promise((resolve) => globalThis.setTimeout(resolve, delayMs)))
-    const configuredAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS
-    const configuredInitialDelay = options.initialRetryDelayMs ?? DEFAULT_RETRY_DELAY_MS
-    const configuredMaxBackoff = options.maxBackoffMs ?? DEFAULT_MAX_BACKOFF_MS
-    const configuredRequestTimeout = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
-    const configuredMaxElapsed = options.maxElapsedMs ?? DEFAULT_MAX_ELAPSED_MS
-    const maxAttempts = Math.max(
-        1,
-        Number.isFinite(configuredAttempts) ? Math.floor(configuredAttempts) : DEFAULT_MAX_ATTEMPTS
-    )
-    const initialDelayMs = Math.max(
-        0,
-        Number.isFinite(configuredInitialDelay) ? configuredInitialDelay : DEFAULT_RETRY_DELAY_MS
-    )
-    const maxBackoffMs = Math.max(
-        0,
-        Number.isFinite(configuredMaxBackoff) ? configuredMaxBackoff : DEFAULT_MAX_BACKOFF_MS
-    )
-    const requestTimeoutMs = Math.max(
-        1,
-        Number.isFinite(configuredRequestTimeout) ? Math.floor(configuredRequestTimeout) : DEFAULT_REQUEST_TIMEOUT_MS
-    )
-    const maxElapsedMs = Math.max(
-        1,
-        Number.isFinite(configuredMaxElapsed) ? Math.floor(configuredMaxElapsed) : DEFAULT_MAX_ELAPSED_MS
-    )
-    const elapsedNow = options.elapsedNow ?? defaultElapsedNow
+    const maxAttempts = Math.floor(numberOption(options.maxAttempts, 4, 1))
+    const initialDelayMs = numberOption(options.initialRetryDelayMs, 3_000, 0)
+    const maxBackoffMs = numberOption(options.maxBackoffMs, 30_000, 0)
+    const requestTimeoutMs = Math.floor(numberOption(options.requestTimeoutMs, 10_000, 1))
+    const maxElapsedMs = Math.floor(numberOption(options.maxElapsedMs, 60_000, 1))
+    const elapsedNow = options.elapsedNow ?? (() => globalThis.performance?.now() ?? Date.now())
     const startedAt = safeNow(elapsedNow)
     const remainingTime = (): number => maxElapsedMs - Math.max(0, safeNow(elapsedNow) - startedAt)
     let requestId: string
@@ -451,26 +373,27 @@ export const sendCaptureV1Batch = async (
     try {
         pending = messages.map(buildCaptureV1Event)
     } catch (error) {
-        return { statusCode: 0, retry: messages.map(({ uuid }) => uuid), drops: [], error }
+        return failedResult(messages, error)
     }
 
     const drops: CaptureV1Drop[] = []
     let latest: CaptureV1Result = { statusCode: 0, retry: eventIds(pending), drops: [] }
-    const elapsedBudgetExhausted = (): CaptureV1Result => ({
-        ...latest,
-        retry: eventIds(pending),
-        drops,
-        error: new Error('Capture V1 exhausted its elapsed retry budget'),
-    })
+    const finish = (error: unknown): CaptureV1Result => {
+        latest.retry = eventIds(pending)
+        latest.drops = drops
+        latest.error = error
+        return latest
+    }
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         const remainingBeforeAttempt = remainingTime()
         if (remainingBeforeAttempt <= 0) {
-            return elapsedBudgetExhausted()
+            return finish(new Error('Capture V1 exhausted its elapsed retry budget'))
         }
 
-        let outcome: AttemptResult
+        let retryEvents: CaptureV1Event[]
+        let response: Response | undefined
         try {
-            outcome = await attemptOnce(
+            ;[latest, retryEvents, response] = await attemptOnce(
                 runtime,
                 pending,
                 libraryVersion,
@@ -478,52 +401,39 @@ export const sendCaptureV1Batch = async (
                 requestId,
                 attempt,
                 now,
-                Math.max(1, Math.min(requestTimeoutMs, remainingBeforeAttempt)),
+                requestTimeoutMs,
                 remainingTime
             )
         } catch (error) {
-            outcome = {
-                result: { statusCode: 0, retry: eventIds(pending), drops: [], error },
-                retryEvents: pending,
-            }
+            latest = failedResult(pending, error)
+            retryEvents = pending
         }
-        latest = outcome.result
         drops.push(...latest.drops)
-        if (outcome.retryEvents.length === 0) {
-            return {
-                ...latest,
-                drops,
-                ...(drops.length ? { error: latest.error ?? new Error('Capture V1 dropped one or more events') } : {}),
+        if (retryEvents.length === 0) {
+            latest.drops = drops
+            if (drops.length) {
+                latest.error ??= new Error('Capture V1 dropped one or more events')
             }
+            return latest
         }
-        pending = outcome.retryEvents
+        pending = retryEvents
         if (attempt === maxAttempts) {
-            return {
-                ...latest,
-                retry: eventIds(pending),
-                drops,
-                error: latest.error ?? new Error('Capture V1 exhausted its retry budget'),
-            }
+            return finish(latest.error ?? new Error('Capture V1 exhausted its retry budget'))
         }
 
-        let canRetry = true
+        let allowed = true
         try {
-            canRetry = options.canRetry?.() ?? true
+            allowed = options.canRetry?.() ?? true
         } catch {
-            canRetry = false
+            allowed = false
         }
-        if (!canRetry) {
-            return {
-                ...latest,
-                retry: eventIds(pending),
-                drops,
-                error: new Error('Capture V1 retry was cancelled'),
-            }
+        if (!allowed) {
+            return finish(new Error('Capture V1 retry was cancelled'))
         }
 
-        const delay = retryDelay(attempt, initialDelayMs, maxBackoffMs, random, parseRetryAfter(outcome.response, now))
+        const delay = retryDelay(attempt, initialDelayMs, maxBackoffMs, random, parseRetryAfter(response, now))
         if (delay >= remainingTime()) {
-            return elapsedBudgetExhausted()
+            return finish(new Error('Capture V1 exhausted its elapsed retry budget'))
         }
         try {
             await sleep(delay)
@@ -531,9 +441,11 @@ export const sendCaptureV1Batch = async (
                 throw new Error('Capture V1 retry was cancelled')
             }
         } catch (error) {
-            return { ...latest, retry: eventIds(pending), drops, error }
+            return finish(error)
         }
     }
 
-    return { ...latest, retry: eventIds(pending), drops }
+    latest.retry = eventIds(pending)
+    latest.drops = drops
+    return latest
 }

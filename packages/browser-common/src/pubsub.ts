@@ -18,10 +18,14 @@ export type Listener<T> = (handler: (payload: T) => void) => Disposable
  */
 export class Publisher<T> implements Disposable {
     /** Subscriptions currently registered with this publisher. */
-    private _subscriptions: Array<{ handler: (payload: T) => void; isActive: boolean }> = []
+    private _subscriptions: Array<[(payload: T) => void, boolean]> = []
     private _disposed = false
 
-    constructor(private readonly _onError?: (error: unknown) => void) {}
+    private readonly _onError: ((error: unknown) => void) | undefined
+
+    constructor(onError?: (error: unknown) => void) {
+        this._onError = onError
+    }
 
     /**
      * Register a handler for future payloads. The returned disposable
@@ -32,7 +36,7 @@ export class Publisher<T> implements Disposable {
             return { dispose() {} }
         }
 
-        const subscription = { handler, isActive: true }
+        const subscription: [(payload: T) => void, boolean] = [handler, true]
 
         this._subscriptions.push(subscription)
 
@@ -43,7 +47,7 @@ export class Publisher<T> implements Disposable {
                     return
                 }
                 active = false
-                subscription.isActive = false
+                subscription[1] = false
 
                 const index = this._subscriptions.indexOf(subscription)
                 if (index !== -1) {
@@ -58,12 +62,12 @@ export class Publisher<T> implements Disposable {
         const subscriptions = this._subscriptions.slice()
 
         subscriptions.forEach((subscription) => {
-            if (!subscription.isActive) {
+            if (!subscription[1]) {
                 return
             }
 
             try {
-                subscription.handler(payload)
+                subscription[0](payload)
             } catch (error) {
                 if (!this._onError) {
                     throw error
@@ -77,7 +81,7 @@ export class Publisher<T> implements Disposable {
     dispose(): void {
         this._disposed = true
         this._subscriptions.forEach((subscription) => {
-            subscription.isActive = false
+            subscription[1] = false
         })
         this._subscriptions = []
     }
