@@ -117,7 +117,7 @@ jobs:
         name: Notify Slack - Approval Needed
         needs: check-changesets
         if: needs.check-changesets.outputs.has-changesets == 'true'
-        uses: PostHog/.github/.github/workflows/notify-approval-needed.yml@836a5e06cdf40ed2a46b16f131b0a9b03c1ffea1
+        uses: PostHog/.github/.github/workflows/notify-approval-needed.yml@5ba5d24966f2c416ca792654638e4ce6f19f545b
         with:
             slack_channel_id: ${{ vars.SLACK_APPROVALS_CLIENT_LIBRARIES_CHANNEL_ID }}
             slack_user_group_id: ${{ vars.GROUP_CLIENT_LIBRARIES_SLACK_GROUP_ID }}
