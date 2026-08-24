@@ -14,7 +14,7 @@
     "dependencies": {
         "@expo/metro-runtime": "~57.0.12",
         "@expo/vector-icons": "^15.1.1",
-        "@posthog/react-native-plugin": ">=2.4.2",
+        "@posthog/react-native-plugin": "*",
         "expo": "~57.0.15",
         "expo-application": "~57.0.2",
         "expo-blur": "~57.0.2",
