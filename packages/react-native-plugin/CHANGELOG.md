@@ -1,5 +1,12 @@
 # @posthog/react-native-plugin
 
+## 2.5.0
+
+### Minor Changes
+
+- [#4529](https://github.com/PostHog/posthog-js/pull/4529) [`ad6d5c6`](https://github.com/PostHog/posthog-js/commit/ad6d5c6b4bbcac41c40eb9a775ae863f917740a4) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Add `sessionReplayConfig.verifyScreenshotMaskAlignment` for Android session replay. This option requires `@posthog/react-native-plugin`.
+  (2026-08-24)
+
 ## 2.4.3
 
 ### Patch Changes
