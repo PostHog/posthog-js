@@ -795,6 +795,31 @@ describe('PostHog Core', () => {
         expect(mocks.fetch).toHaveBeenCalledTimes(1)
       })
 
+      // The classification cases run with retries off, so they never reach the
+      // `retryCheck` the senders share. This pins it: 413 has to leave the
+      // transport on the first response for the caller to shrink its batch and
+      // retry the same records, where a 5xx is worth re-sending as-is.
+      it.each([
+        [500, 3],
+        [413, 1],
+        [400, 1],
+      ])('sends %i %i time(s) before returning', async (status, attempts) => {
+        jest.useRealTimers()
+        ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+          fetchRetryCount: 2,
+          fetchRetryDelay: 1,
+          preloadFeatureFlags: false,
+        })
+        mocks.fetch.mockResolvedValue({
+          status,
+          text: async () => 'err',
+          json: async () => ({ status: 'err' }),
+        })
+
+        await send(posthog)
+        expect(mocks.fetch).toHaveBeenCalledTimes(attempts)
+      })
+
       it('carries the HTTP error on a retry-later outcome', async () => {
         ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
           fetchRetryCount: 0,
