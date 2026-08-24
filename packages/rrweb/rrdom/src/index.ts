@@ -1,4 +1,7 @@
-import { createMirror as createNodeMirror } from '@posthog/rrweb-snapshot';
+import {
+  attachShadowRootSafely,
+  createMirror as createNodeMirror,
+} from '@posthog/rrweb-snapshot';
 import type { Mirror as NodeMirror } from '@posthog/rrweb-snapshot';
 import { NodeType as RRNodeType } from '@posthog/rrweb-types';
 import type {
@@ -268,9 +271,13 @@ export function buildFromNode(
       rrNode = rrdom.createComment((node as Comment).textContent || '');
       break;
     // if node is a shadow root
-    case NodeType.DOCUMENT_FRAGMENT_NODE:
-      rrNode = (parentRRNode as IRRElement).attachShadow({ mode: 'open' });
+    case NodeType.DOCUMENT_FRAGMENT_NODE: {
+      const shadowHost = parentRRNode as IRRElement;
+      if (!attachShadowRootSafely(shadowHost)) return null;
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      rrNode = shadowHost.shadowRoot!;
       break;
+    }
     default:
       return null;
   }

@@ -1760,8 +1760,10 @@ export class Replayer {
       if (mutation.node.isShadow) {
         // If the parent is attached a shadow dom after it's created, it won't have a shadow root.
         if (!hasShadowRoot(parent)) {
-          // The parent can be a tag the browser refuses as a shadow host. Skip
-          // this subtree instead of letting attachShadow abort the rebuild.
+          // The parent can be a tag that refuses a shadow root — a real element
+          // the browser rejects, or an RRMediaElement while the virtual DOM is
+          // in use. Skip this subtree instead of letting attachShadow abandon
+          // the rest of the mutation batch.
           if (!attachShadowRootSafely(parent as Element | RRElement)) {
             return this.warn(
               'Parent does not support shadow root, skipping mutation',

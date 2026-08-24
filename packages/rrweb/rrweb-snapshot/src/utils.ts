@@ -39,11 +39,12 @@ export function isShadowRoot(n: Node): n is ShadowRoot {
 
 /**
  * Attach an open shadow root to a rebuilt element and report whether it worked.
- * A recorded shadow host can come back as a tag the browser refuses as a shadow
- * host, for example an invalid custom element name or one whose
- * `customElements.define` threw. An unguarded `attachShadow` then raises a
- * `NotSupportedError` that aborts the whole rebuild, so callers use the return
- * value to skip that one subtree instead.
+ * Two different things can refuse. A real element is only accepted when its tag
+ * is a valid shadow host name per the DOM spec, so a rebuilt host can be refused
+ * where the recorded one was not, and `attachShadow` raises a `NotSupportedError`
+ * that the full-snapshot rebuild does not catch, ending playback. Under the
+ * virtual DOM the element is an `RRElement`, and `RRMediaElement` refuses every
+ * time. Callers use the return value to skip that one subtree instead.
  */
 export function attachShadowRootSafely(el: {
   attachShadow(init: ShadowRootInit): unknown;

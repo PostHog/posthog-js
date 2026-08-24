@@ -113,6 +113,7 @@ function isPlausibleCustomElementName(name: string): boolean {
 }
 
 const warnedCustomElementNames = new Set<string>();
+const warnedShadowHostTags = new Set<string>();
 
 function safeDocNode(
   n: textNode,
@@ -410,7 +411,13 @@ function buildNode(
          * we can remove it.
          */
         if (!node.shadowRoot) {
-          attachShadowRootSafely(node);
+          if (
+            !attachShadowRootSafely(node) &&
+            !warnedShadowHostTags.has(tagName)
+          ) {
+            warnedShadowHostTags.add(tagName);
+            console.warn('rrweb: browser refused a shadow root on', tagName);
+          }
         } else {
           while (node.shadowRoot.firstChild) {
             node.shadowRoot.removeChild(node.shadowRoot.firstChild);
@@ -520,6 +527,12 @@ export function buildNodeWithSN(
     !skipChild
   ) {
     for (const childN of n.childNodes) {
+      if (childN.isShadow && isElement(node) && !node.shadowRoot) {
+        // The host has no shadow root to receive this subtree. Appending it to
+        // the light DOM instead would put shadow-scoped <style> nodes in the
+        // document, where their rules apply to the whole replayed page.
+        continue;
+      }
       const childNode = buildNodeWithSN(childN, {
         doc,
         mirror,

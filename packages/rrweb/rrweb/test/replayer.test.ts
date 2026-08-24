@@ -23,6 +23,7 @@ import inputEvents from './events/input';
 import iframeEvents from './events/iframe';
 import selectionEvents from './events/selection';
 import shadowDomEvents from './events/shadow-dom';
+import shadowDomRefusedHostEvents from './events/shadow-dom-refused-host';
 import badTextareaEvents from './events/bad-textarea';
 import badStyleEvents from './events/bad-style';
 import StyleSheetTextMutation from './events/style-sheet-text-mutation';
@@ -848,6 +849,27 @@ describe('replayer', function () {
             .shadowRoot!.querySelector('span')!.textContent,
       ),
     ).toEqual('shadow dom two');
+  });
+
+  // Guards both the appendNode call site here and the isShadowHost one in
+  // rrweb-snapshot's buildNodeWithSN; removing either fails this test.
+  it('keeps applying a mutation batch when the shadow host is refused', async () => {
+    await page.evaluate(`
+      events = ${JSON.stringify(shadowDomRefusedHostEvents)};
+      const { Replayer } = rrweb;
+      var replayer = new Replayer(events,{showDebug:true});
+      replayer.pause(1050);
+    `);
+    const iframe = await page.$('iframe');
+    const contentDocument = await iframe!.contentFrame()!;
+    expect(
+      await contentDocument!.$eval('video', (element) => element.shadowRoot),
+    ).toBeNull();
+    expect(
+      await contentDocument!.evaluate(
+        () => document.querySelector('#after-refused-host')?.textContent,
+      ),
+    ).toEqual('still applied');
   });
 
   it('can fast-forward mutation events containing painted canvas in iframe', async () => {

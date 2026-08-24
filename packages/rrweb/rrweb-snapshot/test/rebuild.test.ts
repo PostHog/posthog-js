@@ -423,6 +423,14 @@ describe('rebuild', function () {
             childNodes: [
               {
                 id: 2,
+                tagName: 'style',
+                type: NodeType.Element,
+                attributes: { _cssText: '.a { color: red }' },
+                childNodes: [],
+                isShadow: true,
+              },
+              {
+                id: 3,
                 tagName: 'div',
                 type: NodeType.Element,
                 attributes: {},
@@ -442,6 +450,7 @@ describe('rebuild', function () {
         );
       }).not.toThrow();
       expect((node as HTMLElement).shadowRoot).toBeNull();
+      expect((node as HTMLElement).outerHTML).toBe('<nohyphen></nohyphen>');
     });
   });
 
