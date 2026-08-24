@@ -1,5 +1,12 @@
 # @posthog/mcp
 
+## 0.11.7
+
+### Patch Changes
+
+- [#4542](https://github.com/PostHog/posthog-js/pull/4542) [`0fe77e8`](https://github.com/PostHog/posthog-js/commit/0fe77e84a61f5cf532e69f5388b034fe7af5b343) Thanks [@gesh](https://github.com/gesh)! - Return conversation IDs as data-only tool output to avoid prompt-injection warnings from clients with stale schemas.
+  (2026-08-18)
+
 ## 0.11.6
 
 ### Patch Changes

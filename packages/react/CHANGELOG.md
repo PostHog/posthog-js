@@ -1,5 +1,14 @@
 # @posthog/react
 
+## 1.10.4
+
+### Patch Changes
+
+- [#4567](https://github.com/PostHog/posthog-js/pull/4567) [`5bd2c8d`](https://github.com/PostHog/posthog-js/commit/5bd2c8d0f30ecdd2fa14f0f05b3d43ef4e6b8d41) Thanks [@github-actions](https://github.com/apps/github-actions)! - Render React component stacks as linked exception causes so error tracking identifies the crashing component.
+  (2026-08-21)
+- Updated dependencies [[`caed377`](https://github.com/PostHog/posthog-js/commit/caed377b3827c365fcb4bc9a093ec811030a7356), [`5bd2c8d`](https://github.com/PostHog/posthog-js/commit/5bd2c8d0f30ecdd2fa14f0f05b3d43ef4e6b8d41)]:
+    - posthog-js@1.418.7
+
 ## 1.10.3
 
 ### Patch Changes

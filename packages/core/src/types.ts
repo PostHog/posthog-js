@@ -299,12 +299,14 @@ export enum PostHogPersistedProperty {
   DeviceId = 'device_id', // only used by posthog-react-native
 }
 
+export type PostHogFetchBodyBytes = Uint8Array & { buffer: ArrayBuffer }
+
 export type PostHogFetchOptions = {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH'
   mode?: 'no-cors'
   credentials?: 'omit'
   headers: { [key: string]: string }
-  body?: string | Blob
+  body?: string | Blob | PostHogFetchBodyBytes
   signal?: AbortSignal
 }
 
@@ -312,7 +314,7 @@ export type PostHogFetchOptions = {
 export type PostHogCaptureOptions = {
   /** If provided overrides the auto-generated event UUID. Must be a valid UUID. */
   uuid?: string
-  /** If provided overrides the auto-generated timestamp */
+  /** If provided, overrides the auto-generated timestamp. UTC is preferred; non-UTC input is converted to UTC. */
   timestamp?: Date
   disableGeoip?: boolean
   /**

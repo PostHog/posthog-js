@@ -1,10 +1,12 @@
 import { window } from '@posthog/browser-common/utils/globals'
+import { SESSION_RECORDING_IS_SAMPLED } from '../constants'
 import {
     resetSessionStorageSupported,
     seekFirstNonPublicSubDomain,
     resetSubDomainCache,
     sessionStore,
     createLocalPlusCookieStore,
+    getCookiePersistedPropertiesMetadataName,
     cookieStore,
     resetLocalStorageSupported,
 } from '../storage'
@@ -95,10 +97,107 @@ describe('sessionStore', () => {
     })
 })
 
-describe('createLocalPlusCookieStore._set', () => {
+describe('createLocalPlusCookieStore', () => {
     beforeEach(() => {
         resetLocalStorageSupported()
         window?.localStorage.clear()
+    })
+
+    it.each(['"string"', '123', 'true', '[]'])(
+        'ignores non-object cookie roots without throwing: %s',
+        (cookieValue) => {
+            const name = 'ph_x_posthog'
+            window?.localStorage.setItem(name, JSON.stringify({ distinct_id: 'local-id' }))
+            document.cookie = `${name}=${encodeURIComponent(cookieValue)}; path=/`
+            const store = createLocalPlusCookieStore([], true)
+
+            expect(() => store._parse(name)).not.toThrow()
+            expect(store._parse(name)).toEqual({ distinct_id: 'local-id' })
+        }
+    )
+
+    it('does not merge unsafe cookie property names', () => {
+        const name = 'ph_x_posthog'
+        window?.localStorage.setItem(name, JSON.stringify({ distinct_id: 'local-id' }))
+        document.cookie = `${name}=${encodeURIComponent('{"__proto__":{"polluted":true},"distinct_id":"cookie-id"}')}; path=/`
+        const store = createLocalPlusCookieStore([], true)
+
+        const value = store._parse(name)!
+
+        expect(value.distinct_id).toBe('cookie-id')
+        expect(value).not.toHaveProperty('polluted')
+        expect(Object.getPrototypeOf(value)).toBe(Object.prototype)
+    })
+
+    it('marks built-in-only snapshots as written by the current SDK', () => {
+        const name = 'ph_current_builtin_posthog'
+        const store = createLocalPlusCookieStore([], true)
+
+        store._set(name, { distinct_id: 'abc' })
+
+        expect(cookieStore._parse(getCookiePersistedPropertiesMetadataName(name))).toEqual({
+            p: [],
+            f: expect.any(String),
+        })
+    })
+
+    it('preserves a falsy built-in omitted by a legacy cookie writer', () => {
+        const name = 'ph_legacy_falsy_posthog'
+        const store = createLocalPlusCookieStore([], true)
+        window?.localStorage.setItem(
+            name,
+            JSON.stringify({ distinct_id: 'abc', [SESSION_RECORDING_IS_SAMPLED]: false })
+        )
+        cookieStore._set(name, { distinct_id: 'abc' })
+
+        expect(store._parse(name)).toEqual({
+            distinct_id: 'abc',
+            $user_state: 'anonymous',
+            [SESSION_RECORDING_IS_SAMPLED]: false,
+        })
+    })
+
+    it('removes a falsy built-in omitted by a current authoritative snapshot', () => {
+        const name = 'ph_current_falsy_posthog'
+        const store = createLocalPlusCookieStore([], true)
+        store._set(name, { distinct_id: 'abc' })
+        window?.localStorage.setItem(
+            name,
+            JSON.stringify({ distinct_id: 'abc', [SESSION_RECORDING_IS_SAMPLED]: false })
+        )
+
+        expect(store._parse(name)).toEqual({ distinct_id: 'abc', $user_state: 'anonymous' })
+    })
+
+    it('stores custom-key metadata outside the event-visible persistence cookie', () => {
+        const name = 'ph_x_posthog'
+        const store = createLocalPlusCookieStore(['custom_property'], true)
+
+        store._set(name, { distinct_id: 'abc', custom_property: 'custom' })
+
+        expect(cookieStore._parse(name)).toEqual({ distinct_id: 'abc', custom_property: 'custom' })
+        expect(cookieStore._parse(name)).not.toHaveProperty('$cookie_persisted_properties')
+        expect(cookieStore._parse(getCookiePersistedPropertiesMetadataName(name))).toEqual({
+            p: ['custom_property'],
+            f: expect.any(String),
+        })
+    })
+
+    it('publishes built-in identity when custom-key metadata cannot be persisted', () => {
+        const name = 'ph_x_posthog'
+        cookieStore._set(name, { distinct_id: 'anonymous' })
+        const store = createLocalPlusCookieStore(['custom_property'], true)
+        const cookieSet = cookieStore._set
+        const setSpy = jest
+            .spyOn(cookieStore, '_set')
+            .mockImplementation((cookieName, ...args) =>
+                cookieName === getCookiePersistedPropertiesMetadataName(name) ? false : cookieSet(cookieName, ...args)
+            )
+
+        store._set(name, { distinct_id: 'identified-user', custom_property: 'custom' })
+
+        expect(cookieStore._parse(name)).toEqual({ distinct_id: 'identified-user' })
+        setSpy.mockRestore()
     })
 
     it('reports the localStorage write succeeded even when the cookie mirror throws', () => {

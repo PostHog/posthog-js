@@ -298,8 +298,15 @@ export interface DeadClickCandidate {
     mutationDelayMs?: number
     // time between click and the most recent selection changed event
     selectionChangedDelayMs?: number
-    // time between click and the most recent visibility change event
+    // delay between the click and the nearest visibility change within the suppression window, on
+    // either side — a tab going to or from hidden near a click (opening a new tab, or waking the
+    // tab) is a liveness signal, so it only ever suppresses a dead click, never causes one. recorded
+    // as the event fires (not read from a shared timestamp at check time) so a later transition
+    // can't overwrite the click-correlated one
     visibilityChangedDelayMs?: number
+    // as above for window focus/blur — a click that opens a new window/popup may only surface as
+    // the current window losing focus, so this is the liveness signal for that case
+    focusChangedDelayMs?: number
     // if neither scroll nor mutation seen before threshold passed
     absoluteDelayMs?: number
 }
@@ -457,7 +464,14 @@ export interface HeatmapConfig {
  * Configuration defaults snapshot used by `PostHogConfig.defaults`.
  * Later dates include all earlier default changes.
  */
-export type ConfigDefaults = '2026-06-25' | '2026-05-30' | '2026-01-30' | '2025-11-30' | '2025-05-24' | 'unset'
+export type ConfigDefaults =
+    | '2026-08-29'
+    | '2026-06-25'
+    | '2026-05-30'
+    | '2026-01-30'
+    | '2025-11-30'
+    | '2025-05-24'
+    | 'unset'
 
 export type ExternalIntegrationKind = 'intercom' | 'crispChat'
 
@@ -1084,6 +1098,19 @@ export interface MetricsConfig {
 type NextOptions = { revalidate: false | 0 | number; tags: string[] }
 
 /**
+ * Selects which same-page URL changes automatically capture a `$pageview`.
+ * Each option defaults to `false` when omitted.
+ */
+export interface CapturePageviewOptions {
+    /** Capture a pageview when `location.pathname` changes. */
+    path?: boolean
+    /** Capture a pageview when `location.search` changes. */
+    search?: boolean
+    /** Capture a pageview when `location.hash` changes, unless `disable_capture_url_hashes` is enabled. */
+    hash?: boolean
+}
+
+/**
  * Configuration options for the PostHog JavaScript SDK.
  * @see https://posthog.com/docs/libraries/js#config
  */
@@ -1304,18 +1331,19 @@ export interface PostHogConfig {
     /**
      * Determines whether PostHog should capture pageview events automatically.
      * Can be:
-     * - `true`: Capture regular pageviews (default)
+     * - `true`: Capture the initial pageview
      * - `false`: Don't capture any pageviews
-     * - `'history_change'`: Capture pageviews on the initial page load and on history API changes (pushState, replaceState, popstate)
+     * - `'history_change'`: Capture the initial pageview and pageviews when the pathname changes
+     * - An object: Capture the initial pageview and pageviews when any selected URL component changes
      *
      * @default true (or `'history_change'` when `defaults` is `'2025-05-24'` or later)
      */
-    capture_pageview: boolean | 'history_change'
+    capture_pageview: boolean | 'history_change' | CapturePageviewOptions
 
     /**
      * Determines whether PostHog should capture pageleave events.
      * If set to `true`, it will capture pageleave events for all pages.
-     * If set to `'if_capture_pageview'`, it will only capture pageleave events if `capture_pageview` is also set to `true` or `'history_change'`.
+     * If set to `'if_capture_pageview'`, it will only capture pageleave events if `capture_pageview` is enabled.
      *
      * @default 'if_capture_pageview'
      */
@@ -1499,11 +1527,13 @@ export interface PostHogConfig {
     /**
      * Determines whether PostHog should load external dependency scripts from
      * semver-qualified asset paths such as /static/1.370.0/recorder.js instead
-     * of the legacy /static/recorder.js?v=1.370.0 form.
+     * of the legacy /static/recorder.js?v=1.370.0 form. Set to `true` to use only
+     * versioned paths, `false` to use only legacy paths, or `'fallback'` to try
+     * the versioned path first and retry with the legacy path if it fails.
      *
-     * @default false
+     * @default 'fallback'
      */
-    strict_script_versioning: boolean
+    strict_script_versioning: boolean | 'fallback'
 
     /**
      * Optional host override for static assets loaded by PostHog, such as
@@ -1678,6 +1708,7 @@ export interface PostHogConfig {
      * - `'2026-01-30'`: Defaults from '2025-11-30' plus external_scripts_inject_target defaults to 'head' (avoids SSR hydration errors)
      * - `'2026-05-30'`: Defaults from '2026-01-30' plus `persistence_save_debounce_ms` defaults to `250`, `split_storage` and `detect_google_search_app` default to `true`, and rageclick defaults also exclude stepper controls and text-selection surfaces
      * - `'2026-06-25'`: Defaults from '2026-05-30' plus `session_recording.streamNetworkBody` defaults to `true` (streams network bodies to enforce the payload size limit)
+     * - `'2026-08-29'`: Defaults from '2026-06-25' plus `cookieWinsOnConflict` defaults to `true` (the shared cross-subdomain cookie wins over stale per-origin localStorage)
      *
      * @default 'unset'
      */
@@ -1699,13 +1730,19 @@ export interface PostHogConfig {
     __preview_deferred_init_extensions: boolean
 
     /**
-     * In `'localStorage+cookie'` persistence mode, prefer cookie values over localStorage
-     * when both stores carry the same key. Fixes cross-subdomain identify and session
-     * disconnects caused by stale per-subdomain localStorage clobbering a fresh shared cookie.
-     * Read at SDK init; has no effect when toggled via `set_config` or for other persistence modes.
+     * In `'localStorage+cookie'` persistence mode, prefer shared cookie values over
+     * per-origin localStorage when both stores carry the same key. The SDK also checks
+     * for cookie changes before captures and persistence writes so already-open sibling
+     * subdomains adopt identity changes made by `identify()` or `reset()`.
+     *
+     * When `defaults` is `'2026-08-29'` or later, this defaults to `true`.
      *
      * @default false
-     * @experimental
+     */
+    cookieWinsOnConflict: boolean
+
+    /**
+     * @deprecated Use `cookieWinsOnConflict` instead.
      */
     __preview_cookie_wins_on_conflict: boolean
 

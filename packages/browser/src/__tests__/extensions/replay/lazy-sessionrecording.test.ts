@@ -13,6 +13,8 @@ import {
     SESSION_RECORDING_REMOTE_CONFIG,
     SESSION_RECORDING_SAMPLE_RATE,
     SESSION_RECORDING_TRIGGER_V2_GROUP_SAMPLING_PREFIX,
+    SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
+    SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS,
 } from '../../../constants'
 import { SessionIdManager } from '../../../sessionid'
 import { createMockPostHog, createMockConfig } from '../../helpers/posthog-instance'
@@ -355,6 +357,7 @@ describe('Lazy SessionRecording', () => {
     })
 
     afterEach(() => {
+        sessionRecording.stopRecording()
         // @ts-expect-error this is a test, it's safe to write to location like this
         window!.location = originalLocation
     })
@@ -1270,28 +1273,47 @@ describe('Lazy SessionRecording', () => {
                 expect(bufferedEvent.data.tag).toBe(eventTag)
             })
 
-            it.each(['$session_ending', '$session_starting'])(
-                'corrects timestamp for %s events when idle',
-                (eventTag: string) => {
-                    const lastActivityTime = startingTimestamp + 100
-                    const eventRecordedTime = startingTimestamp + 5000
+            it('corrects timestamp for $session_ending events when idle', () => {
+                const lastActivityTime = startingTimestamp + 100
+                const eventRecordedTime = startingTimestamp + 5000
 
-                    // force idle state
-                    sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = true
-                    sessionRecording['_lazyLoadedSessionRecording']['_lastActivityTimestamp'] = lastActivityTime
+                // force idle state
+                sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = true
+                sessionRecording['_lazyLoadedSessionRecording']['_lastActivityTimestamp'] = lastActivityTime
 
-                    const event = createCustomSnapshot(
-                        { timestamp: eventRecordedTime },
-                        { lastActivityTimestamp: lastActivityTime },
-                        eventTag
-                    )
-                    sessionRecording.onRRwebEmit(event as eventWithTime)
+                const event = createCustomSnapshot(
+                    { timestamp: eventRecordedTime },
+                    { lastActivityTimestamp: lastActivityTime },
+                    '$session_ending'
+                )
+                sessionRecording.onRRwebEmit(event as eventWithTime)
 
-                    const bufferedEvent = sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data[0]
-                    // timestamp should be corrected to lastActivityTimestamp, not the time rrweb recorded it
-                    expect(bufferedEvent.timestamp).toBe(lastActivityTime)
-                }
-            )
+                const bufferedEvent = sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data[0]
+                // timestamp should be corrected to lastActivityTimestamp, not the time rrweb recorded it,
+                // so a late-detected idle period doesn't artificially extend the old session
+                expect(bufferedEvent.timestamp).toBe(lastActivityTime)
+            })
+
+            it('does not backdate $session_starting events when idle', () => {
+                const lastActivityTime = startingTimestamp + 100
+                const eventRecordedTime = startingTimestamp + 5000
+
+                // force idle state
+                sessionRecording['_lazyLoadedSessionRecording']['_isIdle'] = true
+                sessionRecording['_lazyLoadedSessionRecording']['_lastActivityTimestamp'] = lastActivityTime
+
+                const event = createCustomSnapshot(
+                    { timestamp: eventRecordedTime },
+                    { lastActivityTimestamp: lastActivityTime },
+                    '$session_starting'
+                )
+                sessionRecording.onRRwebEmit(event as eventWithTime)
+
+                const bufferedEvent = sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data[0]
+                // $session_starting ships to the NEW session: stamping it with the old session's
+                // last activity would drag the new recording's start back by the whole idle gap
+                expect(bufferedEvent.timestamp).toBe(eventRecordedTime)
+            })
 
             it("enters idle state within one session if the activity is non-user generated and there's no activity for (RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) 5 minutes", () => {
                 const firstActivityTimestamp = startingTimestamp + 100
@@ -1381,17 +1403,201 @@ describe('Lazy SessionRecording', () => {
 
                 // the fourth snapshot should not trigger a flush because the session id has not changed...
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer']).toEqual({
-                    // as we return from idle we will capture a full snapshot _before_ the fourth snapshot
-                    data: [fourthSnapshot],
-                    sizes: [68],
+                    // the mutation that triggered idle was dropped, so returning from idle
+                    // captures a full snapshot _before_ the fourth snapshot to re-sync the player
+                    data: [createFullSnapshot(), fourthSnapshot],
+                    sizes: [20, 68],
                     sessionId: firstSessionId,
-                    size: 68,
+                    size: 88,
                     windowId: expect.any(String),
                 })
 
                 // because not enough time passed while idle we still have the same session id at the end of this sequence
                 const endingSessionId = sessionRecording['_lazyLoadedSessionRecording']['_sessionId']
                 expect(endingSessionId).toEqual(firstSessionId)
+            })
+
+            it('takes a full snapshot on return from idle when mutations were dropped while idle', () => {
+                const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock
+
+                emitActiveEvent(startingTimestamp + 100)
+                // flush so the buffer only holds what the idle cycle produces
+                sessionRecording['_lazyLoadedSessionRecording']['_flushBuffer']()
+
+                // a non-interactive mutation past the threshold declares idle and is dropped
+                emitInactiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000, true)
+                takeFullSnapshot.mockClear()
+
+                // the DOM keeps mutating while idle; rrweb observes it but the recorder drops it
+                _emit({
+                    ...createIncrementalMutationEvent(),
+                    timestamp: startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 2000,
+                })
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual(true)
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([])
+
+                // user returns: the player's mirror is stale, so we must re-sync it
+                const wakeEvent = emitActiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 3000)
+
+                expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
+                // the full snapshot is buffered before the wake event, so the replayed
+                // stream never applies post-idle incrementals to a pre-idle tree
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_buffer'].data).toEqual([
+                    createFullSnapshot(),
+                    wakeEvent,
+                ])
+            })
+
+            it('does not take an immediate full snapshot on return from idle when no mutations were dropped', () => {
+                const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock
+
+                emitActiveEvent(startingTimestamp + 100)
+
+                // a plugin event past the threshold declares idle without any dropped mutation
+                _emit({
+                    ...createPluginSnapshot({}),
+                    timestamp: startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000,
+                } as eventWithTime)
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual(true)
+                takeFullSnapshot.mockClear()
+
+                // the DOM did not change while idle, so the mirror is still in sync on wake
+                emitActiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 2000)
+
+                expect(takeFullSnapshot).not.toHaveBeenCalled()
+            })
+
+            it.each([
+                ['a mutation', createIncrementalMutationEvent(), true],
+                ['a stylesheet rule change', createIncrementalStyleSheetEvent({ adds: [] }), true],
+                // a periodic full snapshot can itself cross the idle threshold and be dropped
+                ['a full snapshot', createFullSnapshot(), true],
+                ['a canvas mutation', createIncrementalSnapshot({ data: { source: 9 } }), false],
+                ['a plugin event', createPluginSnapshot({}), false],
+            ] as [string, eventWithTime, boolean][])(
+                'when %s crosses the idle threshold and is dropped, wake heals: %s',
+                (_name: string, droppedEvent: eventWithTime, heals: boolean) => {
+                    const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record
+                        .takeFullSnapshot as Mock
+
+                    emitActiveEvent(startingTimestamp + 100)
+
+                    // the event itself declares idle in _updateWindowAndSessionIds, then the
+                    // idle gate drops it - the timer-driven full snapshot sequence hits this
+                    _emit({
+                        ...droppedEvent,
+                        timestamp: startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000,
+                    } as eventWithTime)
+                    expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual(true)
+                    takeFullSnapshot.mockClear()
+
+                    emitActiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 2000)
+
+                    expect(takeFullSnapshot).toHaveBeenCalledTimes(heals ? 1 : 0)
+                }
+            )
+
+            it('retries the healing snapshot on the next wake when taking it fails', () => {
+                const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock
+
+                emitActiveEvent(startingTimestamp + 100)
+
+                // idle with a dropped mutation
+                emitInactiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000, true)
+                takeFullSnapshot.mockClear()
+
+                // the wake heal fails, so no full snapshot event is emitted
+                takeFullSnapshot.mockImplementationOnce(() => {
+                    throw new Error('rrweb not ready')
+                })
+                emitActiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 2000)
+                expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
+                // the drop signal survives the failed take
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_eventsDroppedWhileIdle']).toBeGreaterThan(0)
+
+                // idle again with no new drops, then wake: the heal is retried
+                _emit({
+                    ...createPluginSnapshot({}),
+                    timestamp: startingTimestamp + 2 * RECORDING_IDLE_THRESHOLD_MS + 3000,
+                } as eventWithTime)
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual(true)
+                emitActiveEvent(startingTimestamp + 2 * RECORDING_IDLE_THRESHOLD_MS + 4000)
+
+                expect(takeFullSnapshot.mock.calls.length).toBeGreaterThanOrEqual(2)
+                expect(sessionRecording['_lazyLoadedSessionRecording']['_eventsDroppedWhileIdle']).toEqual(0)
+            })
+
+            it.each([
+                // a trigger-pending buffer ships on activation, so it needs the heal
+                ['a recording trigger is pending', true, 1],
+                // sampled-out buffering discards the buffer, so the heal is pure cost
+                ['no trigger is pending', false, 0],
+            ] as [string, boolean, number][])(
+                'buffering wake heal when %s: %i snapshot(s)',
+                (_name: string, hasPendingTriggers: boolean, expectedSnapshots: number) => {
+                    const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record
+                        .takeFullSnapshot as Mock
+                    const lazyRecording = sessionRecording['_lazyLoadedSessionRecording']
+
+                    emitActiveEvent(startingTimestamp + 100)
+                    lazyRecording['_flushBuffer']()
+
+                    // idle with a dropped mutation
+                    emitInactiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000, true)
+                    takeFullSnapshot.mockClear()
+
+                    Object.defineProperty(lazyRecording, 'status', { get: () => 'buffering', configurable: true })
+                    const pendingSpy = jest
+                        .spyOn(lazyRecording['_strategy']!, 'hasPendingTriggers')
+                        .mockReturnValue(hasPendingTriggers)
+                    try {
+                        const wakeEvent = emitActiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 2000)
+                        expect(takeFullSnapshot).toHaveBeenCalledTimes(expectedSnapshots)
+                        if (expectedSnapshots > 0) {
+                            // the heal lands in the buffer before the wake event, so when
+                            // trigger activation flushes, the shipped stream starts in sync
+                            const bufferedTypes = lazyRecording['_buffer'].data.map((e: any) => e.type)
+                            expect(bufferedTypes.indexOf(2)).toBeGreaterThan(-1)
+                            expect(bufferedTypes.indexOf(2)).toBeLessThan(
+                                lazyRecording['_buffer'].data.indexOf(wakeEvent)
+                            )
+                        }
+                    } finally {
+                        pendingSpy.mockRestore()
+                        delete (lazyRecording as any).status
+                    }
+                }
+            )
+
+            it('heals on wake when the mutation throttler swallowed an event while idle', () => {
+                const takeFullSnapshot = assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot as Mock
+                const lazyRecording = sessionRecording['_lazyLoadedSessionRecording']
+
+                emitActiveEvent(startingTimestamp + 100)
+
+                // idle via a plugin event, so nothing is counted yet
+                _emit({
+                    ...createPluginSnapshot({}),
+                    timestamp: startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000,
+                } as eventWithTime)
+                expect(lazyRecording['_isIdle']).toEqual(true)
+                takeFullSnapshot.mockClear()
+
+                // a rate-limited attribute mutation is swallowed before the idle gate;
+                // while idle no later update can restore the attribute, so it must count
+                lazyRecording['_mutationThrottler'] = { throttleMutations: () => undefined } as any
+                try {
+                    _emit({
+                        ...createIncrementalMutationEvent(),
+                        timestamp: startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 2000,
+                    })
+                } finally {
+                    lazyRecording['_mutationThrottler'] = undefined
+                }
+                expect(lazyRecording['_eventsDroppedWhileIdle']).toBeGreaterThan(0)
+
+                emitActiveEvent(startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 3000)
+                expect(takeFullSnapshot).toHaveBeenCalledTimes(1)
             })
 
             it('rotates session if idle for (MAX_SESSION_IDLE_TIMEOUT) 30 minutes', () => {
@@ -2468,6 +2674,62 @@ describe('Lazy SessionRecording', () => {
                     expect(sessionRecording['_lazyLoadedSessionRecording']['_isIdle']).toEqual('unknown')
                     // exactly one restart: the initial start plus a single re-record for the rotation
                     expect(recordMock).toHaveBeenCalledTimes(2)
+                } finally {
+                    _addCustomEvent.mockReset()
+                }
+            })
+
+            it('attributes the backdated sessionIdle marker to the session that went idle, not a rotation-born session', () => {
+                // A suspended tab emits nothing while backgrounded, so idle is only detected on
+                // wake — by which time an app-level capture may already have rotated the session.
+                // The sessionIdle marker is restamped to lastActivity + threshold (up to hours in
+                // the past); if it follows the rotation into the new session, it drags the new
+                // recording's start back by the whole idle gap and the player reports the prefix
+                // as unplayable ("the initial snapshot of the screen arrived late").
+                _addCustomEvent.mockImplementation((tag: string, payload: any) => {
+                    _emit({ type: EventType.Custom, data: { tag, payload }, timestamp: Date.now() })
+                })
+                try {
+                    const lazy = sessionRecording['_lazyLoadedSessionRecording']!
+                    jest.useFakeTimers().setSystemTime(new Date(startingTimestamp + 100))
+                    emitActiveEvent(startingTimestamp + 100)
+                    _emit(createFullSnapshot({ timestamp: startingTimestamp + 110 }))
+                    jest.advanceTimersByTime(RECORDING_BUFFER_TIMEOUT)
+                    ;(posthog.capture as Mock).mockClear()
+
+                    // the tab sleeps well past the session timeout; on wake an app-level capture
+                    // rotates the session before any rrweb event reaches the recorder
+                    const rotatedSessionId = 'wake-rotated-session-id'
+                    sessionIdGeneratorMock.mockImplementation(() => rotatedSessionId)
+                    const wakeTimestamp = startingTimestamp + 97 * 60 * 1000
+                    jest.setSystemTime(new Date(wakeTimestamp))
+                    sessionManager.checkAndGetSessionAndWindowId(false, wakeTimestamp)
+                    expect(lazy['_sessionId']).toEqual(rotatedSessionId)
+
+                    // the idle marker ships with the session that actually went idle
+                    expect(posthog.capture).toHaveBeenCalledWith(
+                        '$snapshot',
+                        expect.objectContaining({
+                            $session_id: sessionId,
+                            $snapshot_data: expect.arrayContaining([
+                                expect.objectContaining({ data: expect.objectContaining({ tag: 'sessionIdle' }) }),
+                            ]),
+                        }),
+                        expect.any(Object)
+                    )
+
+                    // nothing attributed to the rotation-born session predates the rotation
+                    const newEpochEvents = [
+                        ...(posthog.capture as Mock).mock.calls
+                            .filter(([name, props]) => name === '$snapshot' && props.$session_id === rotatedSessionId)
+                            .flatMap(([, props]) => props.$snapshot_data),
+                        ...lazy['_buffer'].data,
+                    ]
+                    expect(lazy['_buffer'].sessionId).toEqual(rotatedSessionId)
+                    expect(newEpochEvents.length).toBeGreaterThan(0)
+                    newEpochEvents.forEach((e) => {
+                        expect(e.timestamp).toBeGreaterThanOrEqual(wakeTimestamp)
+                    })
                 } finally {
                     _addCustomEvent.mockReset()
                 }
@@ -4296,6 +4558,145 @@ describe('Lazy SessionRecording', () => {
 
             // because still waiting for URL to trigger
             expect(sessionRecording.status).toBe('buffering')
+
+            // and we can name which leg is still pending so a customer can debug the buffering
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_describePendingTriggerConditions']()).toEqual([
+                'URL condition not matched',
+            ])
+        })
+
+        it('evaluates recording status once per active flush', () => {
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+            releaseInteractionHold()
+            expect(sessionRecording.status).toBe('active')
+            const getStatus = jest.spyOn(lazyRecorder['_strategy']!, 'getStatus')
+
+            lazyRecorder['_flushBuffer']()
+
+            expect(getStatus).toHaveBeenCalledTimes(1)
+        })
+
+        it('reports a pending condition once per change', () => {
+            const previousDebug = assignableWindow.POSTHOG_DEBUG
+            assignableWindow.POSTHOG_DEBUG = true
+            const logSpy = jest.spyOn(window!.console, 'log').mockImplementation(() => {})
+            const registerSpy = jest.spyOn(posthog, 'register_for_session')
+
+            try {
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            urlTriggers: [{ url: 'start-on-me', matching: 'regex' }],
+                        },
+                    })
+                )
+                // A fresh recorder holds all flushes until interaction; this test targets trigger buffering.
+                releaseInteractionHold()
+                const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+
+                lazyRecorder['_flushBuffer']()
+                lazyRecorder['_flushBuffer']()
+
+                expect(
+                    logSpy.mock.calls
+                        .filter((call) => typeof call[1] === 'string' && call[1].startsWith('buffering:'))
+                        .map((call) => call[1])
+                ).toEqual(['buffering: URL condition not matched'])
+                expect(
+                    registerSpy.mock.calls.flatMap(([properties]) =>
+                        SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS in properties
+                            ? [properties[SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS]]
+                            : []
+                    )
+                ).toEqual([['URL condition not matched']])
+            } finally {
+                registerSpy.mockRestore()
+                logSpy.mockRestore()
+                assignableWindow.POSTHOG_DEBUG = previousDebug
+            }
+        })
+
+        it('reports the same condition again after leaving buffering', () => {
+            const previousDebug = assignableWindow.POSTHOG_DEBUG
+            assignableWindow.POSTHOG_DEBUG = true
+            const logSpy = jest.spyOn(window!.console, 'log').mockImplementation(() => {})
+            const registerSpy = jest.spyOn(posthog, 'register_for_session')
+
+            try {
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            urlTriggers: [{ url: 'start-on-me', matching: 'regex' }],
+                        },
+                    })
+                )
+                releaseInteractionHold()
+                const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+
+                lazyRecorder['_flushBuffer']()
+                lazyRecorder.overrideTrigger('url')
+                lazyRecorder['_flushBuffer']()
+                posthog.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
+                lazyRecorder['_flushBuffer']()
+
+                expect(
+                    logSpy.mock.calls
+                        .filter((call) => typeof call[1] === 'string' && call[1].startsWith('buffering:'))
+                        .map((call) => call[1])
+                ).toEqual(['buffering: URL condition not matched', 'buffering: URL condition not matched'])
+                expect(
+                    registerSpy.mock.calls.flatMap(([properties]) =>
+                        SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS in properties
+                            ? [properties[SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS]]
+                            : []
+                    )
+                ).toEqual([['URL condition not matched'], [], ['URL condition not matched']])
+            } finally {
+                registerSpy.mockRestore()
+                logSpy.mockRestore()
+                assignableWindow.POSTHOG_DEBUG = previousDebug
+            }
+        })
+
+        it('reports the same pending condition again after session rotation', () => {
+            const previousDebug = assignableWindow.POSTHOG_DEBUG
+            assignableWindow.POSTHOG_DEBUG = true
+            const logSpy = jest.spyOn(window!.console, 'log').mockImplementation(() => {})
+
+            try {
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            endpoint: '/s/',
+                            urlTriggers: [{ url: 'start-on-me', matching: 'regex' }],
+                        },
+                    })
+                )
+                releaseInteractionHold()
+                const lazyRecorder = sessionRecording['_lazyLoadedSessionRecording']
+
+                lazyRecorder['_flushBuffer']()
+                sessionIdGeneratorMock.mockImplementation(() => 'rotated-session-id')
+                sessionManager.resetSessionId()
+                sessionManager.checkAndGetSessionAndWindowId()
+                expect(lazyRecorder.sessionId).toBe('rotated-session-id')
+                lazyRecorder['_clearBuffer']()
+                releaseInteractionHold()
+                lazyRecorder['_flushBuffer']()
+
+                expect(
+                    logSpy.mock.calls
+                        .filter((call) => typeof call[1] === 'string' && call[1].startsWith('buffering:'))
+                        .map((call) => call[1])
+                ).toEqual(['buffering: URL condition not matched', 'buffering: URL condition not matched'])
+            } finally {
+                logSpy.mockRestore()
+                assignableWindow.POSTHOG_DEBUG = previousDebug
+            }
         })
 
         it('never sends data when sampling is false regardless of event triggers', async () => {
@@ -7037,6 +7438,33 @@ describe('Lazy SessionRecording', () => {
     })
 
     describe('V2 Trigger Groups Integration', () => {
+        it('describes pending conditions within trigger groups', () => {
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        version: 2,
+                        triggerGroups: [
+                            {
+                                id: 'error-group',
+                                name: 'Error Tracking',
+                                sampleRate: 1.0,
+                                conditions: {
+                                    matchType: 'any',
+                                    events: [{ name: '$exception' }],
+                                },
+                            },
+                        ],
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+            expect(sessionRecording['_lazyLoadedSessionRecording']['_describePendingTriggerConditions']()).toEqual([
+                'trigger group "Error Tracking": event condition not matched',
+            ])
+        })
+
         it('uses the active snapshot interval immediately after a trigger group matches', () => {
             jest.useFakeTimers()
             try {

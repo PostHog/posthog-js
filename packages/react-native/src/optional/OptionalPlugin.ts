@@ -25,9 +25,20 @@ export type PostHogReactNativePluginExtended = typeof PostHogReactNativePlugin &
 
 export let OptionalReactNativePlugin: PostHogReactNativePluginExtended | undefined = undefined
 
+// Resolved version of the loaded native plugin. It is logged next to the replay
+// config so a stale plugin, which silently ignores newer options such as sampleRate,
+// is visible in a debug log.
+export let OptionalReactNativePluginVersion: string | undefined = undefined
+
 if (Platform.OS !== 'web') {
   try {
     OptionalReactNativePlugin = require('@posthog/react-native-plugin')
+    try {
+      OptionalReactNativePluginVersion = require('@posthog/react-native-plugin/package.json')?.version
+    } catch {
+      // Strict resolvers such as Node and Jest can reject this unexported subpath on older plugin versions.
+      // Metro falls back to file-based resolution, so version logging only degrades to unknown where needed.
+    }
   } catch (e) {}
 
   // The legacy fallback is session-replay only and has no macOS support, so it's skipped on macOS.

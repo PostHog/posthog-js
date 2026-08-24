@@ -1009,15 +1009,17 @@ function record<T = eventWithTime>(
       try {
         const iframeId = mirror.getId(iframeEl);
         const cleanup = observe(iframeEl.contentDocument!);
-        handlers.push(cleanup);
-        // Accumulate cleanups across iframe navigations.
-        if (iframeId !== -1) {
-          let bucket = iframeObserverCleanups.get(iframeId);
-          if (!bucket) {
-            bucket = new Set();
-            iframeObserverCleanups.set(iframeId, bucket);
+        if (typeof cleanup === 'function') {
+          handlers.push(cleanup);
+          // Accumulate cleanups across iframe navigations.
+          if (iframeId !== -1) {
+            let bucket = iframeObserverCleanups.get(iframeId);
+            if (!bucket) {
+              bucket = new Set();
+              iframeObserverCleanups.set(iframeId, bucket);
+            }
+            bucket.add(cleanup);
           }
-          bucket.add(cleanup);
         }
       } catch (error) {
         // TODO: handle internal error
@@ -1072,7 +1074,8 @@ function record<T = eventWithTime>(
 
     const init = () => {
       takeFullSnapshot();
-      handlers.push(observe(document));
+      const cleanup = observe(document);
+      if (typeof cleanup === 'function') handlers.push(cleanup);
       handlers.push(on('fullscreenchange', emitFullscreenChange));
       handlers.push(on('webkitfullscreenchange', emitFullscreenChange));
       handlers.push(on('mozfullscreenchange', emitFullscreenChange));

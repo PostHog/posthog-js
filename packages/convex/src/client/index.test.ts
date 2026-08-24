@@ -478,6 +478,35 @@ describe('beforeSend', () => {
     expect(fn2).not.toHaveBeenCalled()
   })
 
+  test('fails closed when a beforeSend function throws', async () => {
+    const component = { lib: { capture: 'capture_ref' } }
+    const error = new Error('beforeSend failed')
+    const sentinel: BeforeSendFn = jest.fn((event: Parameters<BeforeSendFn>[0]) => event)
+    const posthog = new PostHog(component as never, {
+      beforeSend: [
+        (event) => ({ ...event, properties: { ...event.properties, transformed: true } }),
+        () => {
+          throw error
+        },
+        sentinel,
+      ],
+    })
+    const ctx = mockSchedulerCtx()
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
+
+    await expect(
+      posthog.capture(ctx as never, {
+        distinctId: 'user-1',
+        event: 'test',
+      })
+    ).resolves.toBeUndefined()
+
+    expect(sentinel).not.toHaveBeenCalled()
+    expect(ctx.scheduler.runAfter).not.toHaveBeenCalled()
+    expect(warnSpy).toHaveBeenCalledWith("[PostHog] Error in beforeSend function for event 'test':", error)
+    warnSpy.mockRestore()
+  })
+
   test('applies beforeSend to identify events', async () => {
     const component = { lib: { identify: 'identify_ref' } }
     const beforeSend: BeforeSendFn = (event) => {

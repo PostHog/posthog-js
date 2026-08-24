@@ -1,5 +1,49 @@
 # @posthog/types
 
+## 1.405.2
+
+### Patch Changes
+
+- [#4418](https://github.com/PostHog/posthog-js/pull/4418) [`be2161d`](https://github.com/PostHog/posthog-js/commit/be2161d68946b30d27d7a0a5c2cb5671b04d5ac0) Thanks [@posthog](https://github.com/apps/posthog)! - feat: add granular automatic pageview options for SPA navigation
+
+    `capture_pageview` now accepts an object with `path`, `search`, and `hash` options. Each selected URL component triggers a `$pageview` when it changes, including direct hash changes used by hash-based routers. The existing `'history_change'` option continues to capture pathname changes. (2026-08-24)
+
+## 1.405.1
+
+### Patch Changes
+
+- [#4583](https://github.com/PostHog/posthog-js/pull/4583) [`6322f09`](https://github.com/PostHog/posthog-js/commit/6322f09922270e9d1562bacf0e602e76d238d395) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix logs and metrics being silently dropped when an attribute holds a very large integer, a function, a symbol, a sparse array, or a truncated emoji.
+  Cap log and metric attributes at 20 levels of nesting, 1,000 entries per object and 10,000 values in total, marking anything beyond as `[Truncated]`.
+  Type `OtlpAnyValue.intValue` as `string | number` — code reading that field must handle both. (2026-08-21)
+
+## 1.405.0
+
+### Minor Changes
+
+- [#4496](https://github.com/PostHog/posthog-js/pull/4496) [`1ade666`](https://github.com/PostHog/posthog-js/commit/1ade6663991eeff176b3127181195f1e0012241b) Thanks [@marandaneto](https://github.com/marandaneto)! - Add `cookieWinsOnConflict` to keep shared cross-subdomain identity and session state ahead of stale per-origin localStorage, deprecate `__preview_cookie_wins_on_conflict`, and enable the new behavior for the `2026-08-29` defaults.
+  (2026-08-18)
+
+## 1.404.1
+
+### Patch Changes
+
+- [#4503](https://github.com/PostHog/posthog-js/pull/4503) [`eb05237`](https://github.com/PostHog/posthog-js/commit/eb0523729c4f989663a38d3ce9d0e61d4f262ee1) Thanks [@pauldambra](https://github.com/pauldambra)! - fix(dead-clicks): treat visibility and focus changes as liveness signals, not dead-click evidence
+
+    The dead-click detector treated a `visibilitychange` as evidence a click was dead: it measured `Math.abs(clickTimestamp - lastVisibilityChange)` and, once that exceeded the threshold, timed the click out as dead. Because it only recorded the tab becoming visible, any click in a session where the tab had ever been backgrounded (median gap ~1 minute) was flagged.
+
+    A visibility or focus change near a click is the opposite — a sign the click did something (it woke/focused the tab, opened a new tab, or opened a new window/popup) — so these signals now only ever _suppress_ a dead click, never cause one:
+    - Visibility changes are recorded in both directions (a click that opens a new tab sends the current tab to `hidden`), and a window `focus`/`blur` observer is added, since a click that opens a new window/popup may leave the tab visible and only surface as the current window losing focus.
+    - A click within a wake-up/interaction window (1s, wide enough for a real "tab back, then click" gesture) of any such change is suppressed.
+    - The visibility signal no longer feeds the dead-marking path at all. `$dead_click_visibility_changed_timeout` stays in the payload (always false) for shape compatibility, and a new `$dead_click_focus_changed_delay_ms` is emitted for observability.
+    - Visibility/focus changes are now recorded onto each queued candidate the instant they fire (like scroll), instead of being read from a single shared timestamp when the click is checked ~1s later. A click that hides or blurs the tab (opening a new tab/window) suspends that check while the tab is backgrounded; by the time it resumes the tab has usually returned, and the shared timestamp would have been overwritten by that later transition — losing the click-correlated one and wrongly flagging the click dead. Stamping the candidate as the event fires makes delayed hide→show and blur→focus sequences suppress correctly. (2026-08-14)
+
+## 1.404.0
+
+### Minor Changes
+
+- [#4485](https://github.com/PostHog/posthog-js/pull/4485) [`8bc63c3`](https://github.com/PostHog/posthog-js/commit/8bc63c368e46d0f392a45712d2a72f9f97fcbd3e) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Default external dependency loading to versioned asset paths with automatic fallback to legacy paths, and add a `strict_script_versioning: 'fallback'` mode.
+  (2026-08-13)
+
 ## 1.403.1
 
 ### Patch Changes

@@ -17,6 +17,7 @@ import {
   FeatureFlagDetail,
   SurveyResponse,
   PostHogFetchResponse,
+  PostHogFetchBodyBytes,
   PostHogFetchOptions,
   PostHogPersistedProperty,
   PostHogQueueItem,
@@ -1263,6 +1264,21 @@ export abstract class PostHogCoreStateless {
     return sanitizedMessage
   }
 
+  private normalizeTimestampForWire(timestamp: unknown): unknown {
+    const parsedTimestamp =
+      timestamp instanceof Date ? timestamp : typeof timestamp === 'string' ? new Date(timestamp) : null
+    if (!parsedTimestamp || Number.isNaN(parsedTimestamp.getTime())) {
+      return timestamp
+    }
+
+    const normalized = parsedTimestamp.toISOString()
+    const fractionalSeconds =
+      typeof timestamp === 'string' ? timestamp.match(/\.(\d+)(?:Z|[+-]\d{2}:?\d{2})?$/i)?.[1] : undefined
+    return fractionalSeconds && fractionalSeconds.length > 3
+      ? normalized.replace(/\.\d{3}Z$/, `.${fractionalSeconds}Z`)
+      : normalized
+  }
+
   protected prepareMessage(_message: any, options?: PostHogCaptureOptions): PostHogEventProperties {
     const message = {
       ..._message,
@@ -1432,7 +1448,7 @@ export abstract class PostHogCoreStateless {
    * Compresses an outgoing payload. Runtime-specific clients can override this
    * to avoid using the Web Streams compression implementation.
    */
-  protected compressPayload(payload: string): Promise<Blob | null> {
+  protected compressPayload(payload: string): Promise<Blob | PostHogFetchBodyBytes | null> {
     return gzipCompress(payload, this.isDebug)
   }
 
@@ -1459,7 +1475,14 @@ export abstract class PostHogCoreStateless {
   ): Promise<void> {
     const data: Record<string, any> = {
       api_key: this.apiKey,
-      batch: batchMessages,
+      batch: batchMessages.map((message) => {
+        if (!message) {
+          return message
+        }
+
+        const timestamp = this.normalizeTimestampForWire(message.timestamp)
+        return timestamp === message.timestamp ? message : { ...message, timestamp }
+      }),
       sent_at: currentISOTime(),
     }
 
@@ -1744,12 +1767,16 @@ export abstract class PostHogCoreStateless {
     try {
       if (body instanceof Blob) {
         reqByteLength = body.size
+      } else if (body instanceof Uint8Array) {
+        reqByteLength = body.byteLength
       } else {
         reqByteLength = Buffer.byteLength(body, STRING_FORMAT)
       }
     } catch {
       if (body instanceof Blob) {
         reqByteLength = body.size
+      } else if (body instanceof Uint8Array) {
+        reqByteLength = body.byteLength
       } else {
         const encoded = new TextEncoder().encode(body)
         reqByteLength = encoded.length

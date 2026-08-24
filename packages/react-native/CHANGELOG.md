@@ -1,5 +1,72 @@
 # posthog-react-native
 
+## 4.63.8
+
+### Patch Changes
+
+- [#4631](https://github.com/PostHog/posthog-js/pull/4631) [`1167239`](https://github.com/PostHog/posthog-js/commit/116723906ab68404fb6140d298bc648c5c330075) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix session replay started with `startRecording()` capturing nothing on Android by requiring `@posthog/react-native-plugin` 2.4.3 or newer.
+  (2026-08-24)
+
+## 4.63.7
+
+### Patch Changes
+
+- [#4602](https://github.com/PostHog/posthog-js/pull/4602) [`9e53f91`](https://github.com/PostHog/posthog-js/commit/9e53f91cf3e0e4c146ca8914925d775f7752c2ea) Thanks [@marandaneto](https://github.com/marandaneto)! - Use the iOS version reported by Info.plist when uploading Hermes source maps, including custom Xcode build settings. Matching native dSYM attribution requires @posthog/react-native-plugin 2.4.2 or later (PostHog/posthog-ios#776).
+  (2026-08-24)
+
+## 4.63.6
+
+### Patch Changes
+
+- [#4498](https://github.com/PostHog/posthog-js/pull/4498) [`9b2a1b1`](https://github.com/PostHog/posthog-js/commit/9b2a1b18db64f9f6b331cbded543c5ead3ccf0cb) Thanks [@posthog](https://github.com/apps/posthog)! - fix(react-native): warn when a local `sessionReplayConfig.sampleRate` overrides the project setting, warn when replay starts with no cached remote config, and log the native plugin version next to the replay config
+  (2026-08-24)
+
+## 4.63.5
+
+### Patch Changes
+
+- [#4581](https://github.com/PostHog/posthog-js/pull/4581) [`556d235`](https://github.com/PostHog/posthog-js/commit/556d23503a0409b455b4e77334624db583effbd0) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix `reloadFeatureFlags` and `reloadFeatureFlagsAsync` returning flags evaluated before the caller's most recent identity or person-property change when several reloads overlap, and stop overlapping reloads from skipping the remote config refresh
+  (2026-08-21)
+- Updated dependencies [[`556d235`](https://github.com/PostHog/posthog-js/commit/556d23503a0409b455b4e77334624db583effbd0)]:
+  - @posthog/core@1.48.8
+
+## 4.63.4
+
+### Patch Changes
+
+- [#4583](https://github.com/PostHog/posthog-js/pull/4583) [`6322f09`](https://github.com/PostHog/posthog-js/commit/6322f09922270e9d1562bacf0e602e76d238d395) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix logs and metrics being silently dropped when an attribute holds a very large integer, a function, a symbol, a sparse array, or a truncated emoji.
+  Cap log and metric attributes at 20 levels of nesting, 1,000 entries per object and 10,000 values in total, marking anything beyond as `[Truncated]`.
+  Type `OtlpAnyValue.intValue` as `string | number` — code reading that field must handle both. (2026-08-21)
+- Updated dependencies [[`6322f09`](https://github.com/PostHog/posthog-js/commit/6322f09922270e9d1562bacf0e602e76d238d395)]:
+  - @posthog/core@1.48.7
+  - @posthog/types@1.405.1
+
+## 4.63.3
+
+### Patch Changes
+
+- [#4578](https://github.com/PostHog/posthog-js/pull/4578) [`bae46bf`](https://github.com/PostHog/posthog-js/commit/bae46bfd11f73d3e62a6d0733144c180df354916) Thanks [@marandaneto](https://github.com/marandaneto)! - Drop events when a before-send hook throws instead of sending the unmodified event.
+  (2026-08-20)
+- Updated dependencies [[`bae46bf`](https://github.com/PostHog/posthog-js/commit/bae46bfd11f73d3e62a6d0733144c180df354916), [`aef2f49`](https://github.com/PostHog/posthog-js/commit/aef2f493cc8d834780f6b670e15e909e6363c259)]:
+  - @posthog/core@1.48.6
+
+## 4.63.2
+
+### Patch Changes
+
+- [#4528](https://github.com/PostHog/posthog-js/pull/4528) [`42281fa`](https://github.com/PostHog/posthog-js/commit/42281facbb400fa243107551aa6f955d4fd87807) Thanks [@luke-belton](https://github.com/luke-belton)! - Avoid rereading cached feature flag results on unrelated React Native component rerenders.
+  (2026-08-14)
+
+## 4.63.1
+
+### Patch Changes
+
+- [#4526](https://github.com/PostHog/posthog-js/pull/4526) [`aba7d55`](https://github.com/PostHog/posthog-js/commit/aba7d55320ac13a5841af3eb2e859113f304e6f1) Thanks [@github-actions](https://github.com/apps/github-actions)! - Avoid re-reading the feature flag store when feature flag hooks rerender with unchanged inputs.
+  (2026-08-14)
+- Updated dependencies [[`0a0206f`](https://github.com/PostHog/posthog-js/commit/0a0206f907f4b58dc28f36aa1fc441b55c489faf), [`eb05237`](https://github.com/PostHog/posthog-js/commit/eb0523729c4f989663a38d3ce9d0e61d4f262ee1)]:
+  - @posthog/core@1.48.1
+  - @posthog/types@1.404.1
+
 ## 4.63.0
 
 ### Minor Changes

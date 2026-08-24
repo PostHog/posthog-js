@@ -3104,7 +3104,7 @@
           "name": "uuid"
         },
         {
-          "description": "If provided overrides the auto-generated timestamp",
+          "description": "If provided, overrides the auto-generated timestamp. UTC is preferred; non-UTC input is converted to UTC.",
           "type": "Date",
           "name": "timestamp"
         },
@@ -3539,6 +3539,38 @@
       "path": "../core/src/types.ts"
     },
     {
+      "id": "PostHogFetchBodyBytes",
+      "name": "PostHogFetchBodyBytes",
+      "properties": [
+        {
+          "description": "The size in bytes of each element in the array.",
+          "type": "number",
+          "name": "BYTES_PER_ELEMENT"
+        },
+        {
+          "description": "The ArrayBuffer instance referenced by the array.",
+          "type": "ArrayBuffer",
+          "name": "buffer"
+        },
+        {
+          "description": "The length in bytes of the array.",
+          "type": "number",
+          "name": "byteLength"
+        },
+        {
+          "description": "The offset in bytes of the array.",
+          "type": "number",
+          "name": "byteOffset"
+        },
+        {
+          "description": "The length of the array.",
+          "type": "number",
+          "name": "length"
+        }
+      ],
+      "path": "../core/src/types.ts"
+    },
+    {
       "id": "PostHogFetchOptions",
       "name": "PostHogFetchOptions",
       "properties": [
@@ -3559,7 +3591,7 @@
           "name": "headers"
         },
         {
-          "type": "string | Blob",
+          "type": "string | PostHogFetchBodyBytes | Blob",
           "name": "body"
         },
         {

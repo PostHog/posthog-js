@@ -62,6 +62,7 @@ import {
     SESSION_RECORDING_PAST_MINIMUM_DURATION,
     SESSION_RECORDING_REMOTE_CONFIG,
     SESSION_RECORDING_START_REASON,
+    SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS,
     SDK_DEBUG_REPLAY_RRWEB_ATTACHED,
     SDK_DEBUG_REPLAY_RRWEB_START_ATTEMPTED,
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
@@ -156,6 +157,11 @@ interface SessionIdlePayload {
     threshold: number
     bufferLength: number
     bufferSize: number
+    // the session that went idle. The marker is restamped to lastActivityTimestamp + threshold,
+    // so routing it by the recorder's live session id backdates a rotation-born session by the
+    // whole idle gap when a rotation lands between emit and capture (see onRRwebEmit)
+    sessionId?: string
+    windowId?: string
 }
 
 export interface SnapshotBuffer {
@@ -426,6 +432,10 @@ function isSessionIdleEvent(e: eventWithTime): e is eventWithTime & customEvent 
     return isCustomEvent(e, 'sessionIdle')
 }
 
+function getSessionIdlePayload(e: eventWithTime): SessionIdlePayload | null {
+    return isSessionIdleEvent(e) ? (e.data.payload as SessionIdlePayload) : null
+}
+
 type SessionEndingPayload = {
     lastActivityTimestamp?: number
     currentSessionId?: string
@@ -458,6 +468,15 @@ function isAllowedWhenIdle(e: eventWithTime): boolean {
     return isSessionIdleEvent(e) || isSessionEndingEvent(e) || isSessionStartingEvent(e)
 }
 
+// dropping these desyncs the player's mirror, styles, or viewport in ways only a
+// fresh full snapshot repairs; canvas is excluded because a snapshot cannot restore it
+function isMirrorDesyncingWhenDropped(e: eventWithTime): boolean {
+    if (e.type === EventType.FullSnapshot || e.type === EventType.Meta) {
+        return true
+    }
+    return e.type === EventType.IncrementalSnapshot && e.data.source !== IncrementalSource.CanvasMutation
+}
+
 /** When we put the recording into a paused state, we add a custom event.
  *  However, in the paused state, events are dropped and never make it to the buffer,
  *  so we need to manually let this one through */
@@ -485,6 +504,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
      */
     private _queuedRRWebEvents: QueuedRRWebEvent[] = []
     private _isIdle: boolean | 'unknown' = 'unknown'
+    // events rrweb observed while confirmed idle are dropped, not buffered, so the
+    // player's mirror no longer matches the live DOM; when > 0 only a fresh full
+    // snapshot stops later incrementals referencing state the player never saw.
+    // Cleared only when a full snapshot actually passes the idle gate, so a failed
+    // wake heal retries on the next wake instead of losing the signal
+    private _eventsDroppedWhileIdle = 0
     // true while the current epoch has had no user interaction; a held epoch is
     // discarded (not shipped) by stop or a subsequent rotation
     private _holdFlushUntilInteraction = false
@@ -1763,29 +1788,40 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         const throttledEvent = this._mutationThrottler ? this._mutationThrottler.throttleMutations(rawEvent) : rawEvent
 
         if (!throttledEvent) {
+            // when awake, a throttled attribute's later updates get through once the bucket
+            // refills; while idle those are dropped too, so only the wake heal restores them
+            if (this._isIdle === true) {
+                this._eventsDroppedWhileIdle++
+            }
             return
         }
 
         // TODO: Re-add ensureMaxMessageSize once we are confident in it
         const event = truncateLargeConsoleLogs(throttledEvent)
 
-        // Session lifecycle events ($session_ending, $session_starting) carry their target session ID
-        // in the payload. We must extract this BEFORE _updateWindowAndSessionIds runs, because that
-        // method triggers checkAndGetSessionAndWindowId() which would update this._sessionId.
-        // This is critical for $session_ending which must go to the OLD session, not the new one,
-        // and for $session_starting which must go to the NEW session.
+        // Session lifecycle events ($session_ending, $session_starting, sessionIdle) carry their
+        // target session ID in the payload. We must extract this BEFORE _updateWindowAndSessionIds
+        // runs, because that method triggers checkAndGetSessionAndWindowId() which would update
+        // this._sessionId. This is critical for $session_ending which must go to the OLD session,
+        // not the new one, and for $session_starting which must go to the NEW session.
         const sessionEndingPayload = getSessionEndingPayload(event)
         const sessionStartingPayload = getSessionStartingPayload(event)
+        const sessionIdlePayload = getSessionIdlePayload(event)
 
         if (sessionEndingPayload || sessionStartingPayload) {
-            // Adjust timestamp from payload to avoid artificially extending session duration
-            const payload = (sessionEndingPayload ?? sessionStartingPayload) as {
-                lastActivityTimestamp?: number
+            // Backdate $session_ending to the old session's real end so a late-detected idle
+            // period doesn't artificially extend it. $session_starting must NOT be backdated:
+            // it ships to the NEW session, and stamping it with the old session's last activity
+            // drags the new recording's start back by the whole idle gap
+            if (sessionEndingPayload?.lastActivityTimestamp) {
+                event.timestamp = sessionEndingPayload.lastActivityTimestamp
             }
-            if (payload?.lastActivityTimestamp) {
-                event.timestamp = payload.lastActivityTimestamp
-            }
-        } else {
+        } else if (!sessionIdlePayload?.sessionId) {
+            // sessionIdle markers with a pinned session id skip the session check: they are only
+            // emitted from inside _updateWindowAndSessionIds, whose caller runs the check itself
+            // right after, and running it here first can adopt a pending rotation before the
+            // marker is captured — attributing a marker backdated by the idle gap to the new
+            // session, which drags the new recording's start back and makes its prefix unplayable
             this._updateWindowAndSessionIds(event)
         }
 
@@ -1799,28 +1835,38 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // Route lifecycle events using their payload IDs:
         // - $session_ending uses currentSessionId (the old session it's ending)
         // - $session_starting uses nextSessionId (the new session it's starting)
+        // - sessionIdle uses the session that went idle (backdated markers must not follow a rotation)
         // - All other events use the current session ID
         const targetSessionId =
-            sessionEndingPayload?.currentSessionId ?? sessionStartingPayload?.nextSessionId ?? this._sessionId
+            sessionEndingPayload?.currentSessionId ??
+            sessionStartingPayload?.nextSessionId ??
+            sessionIdlePayload?.sessionId ??
+            this._sessionId
         const targetWindowId =
-            sessionEndingPayload?.currentWindowId ?? sessionStartingPayload?.nextWindowId ?? this._windowId
+            sessionEndingPayload?.currentWindowId ??
+            sessionStartingPayload?.nextWindowId ??
+            sessionIdlePayload?.windowId ??
+            this._windowId
 
         // When in an idle state we keep recording but don't capture the events,
         // we don't want to return early if idle is 'unknown'
         if (this._isIdle === true && !isAllowedWhenIdle(event)) {
+            if (isMirrorDesyncingWhenDropped(event)) {
+                this._eventsDroppedWhileIdle++
+            }
             return
         }
 
-        if (isSessionIdleEvent(event)) {
+        if (event.type === EventType.FullSnapshot) {
+            // this snapshot re-syncs the player's mirror, so idle-era drops are healed
+            this._eventsDroppedWhileIdle = 0
+        }
+
+        if (sessionIdlePayload) {
             // session idle events have a timestamp when rrweb sees them
             // which can artificially lengthen a session
             // we know when we detected it based on the payload and can correct the timestamp
-            const payload = event.data.payload as SessionIdlePayload
-            if (payload) {
-                const lastActivity = payload.lastActivityTimestamp
-                const threshold = payload.threshold
-                event.timestamp = lastActivity + threshold
-            }
+            event.timestamp = sessionIdlePayload.lastActivityTimestamp + sessionIdlePayload.threshold
         }
 
         const compressionEnabled = this._instance.config.session_recording.compress_events ?? true
@@ -1961,6 +2007,45 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         )
     }
 
+    /**
+     * Names the trigger conditions that are keeping the session in BUFFERING, so diagnostics can
+     * identify which leg failed instead of only reporting an unexplained "buffering". A URL trigger
+     * that never matches under the default AND matching otherwise looks like a session that is about
+     * to record.
+     */
+    private _describePendingTriggerConditions(): string[] {
+        return this._strategy?.getPendingTriggerConditions(this.sessionId) ?? []
+    }
+
+    private _lastLoggedBufferingReason: string | undefined
+
+    private _maybeLogBufferingReason(status: SessionRecordingStatus): void {
+        if (status !== BUFFERING) {
+            if (!isUndefined(this._lastLoggedBufferingReason)) {
+                this._instance.register_for_session({ [SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS]: [] })
+            }
+            this._lastLoggedBufferingReason = undefined
+            return
+        }
+        const pending = this._describePendingTriggerConditions()
+        if (pending.length === 0) {
+            if (!isUndefined(this._lastLoggedBufferingReason)) {
+                this._instance.register_for_session({ [SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS]: [] })
+            }
+            this._lastLoggedBufferingReason = undefined
+            return
+        }
+        const reason = pending.join(', ')
+        const reasonKey = `${this.sessionId}:${reason}`
+        // only report on change so the flush cadence doesn't repeat diagnostics while buffering
+        if (reasonKey === this._lastLoggedBufferingReason) {
+            return
+        }
+        this._lastLoggedBufferingReason = reasonKey
+        this._instance.register_for_session({ [SDK_DEBUG_REPLAY_PENDING_TRIGGER_CONDITIONS]: pending })
+        logger.info(`buffering: ${reason}`)
+    }
+
     private _flushBuffer(): SnapshotBuffer {
         // cleared before the re-entrant reads below, so a flush they schedule survives this call
         this._clearFlushBufferTimer()
@@ -1988,8 +2073,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._strategy?.ensureSamplingDecision(this.sessionId)
 
         const isBelowMinimumDuration = this._isBelowMinimumDuration()
+        const status = this.status
 
-        if (this.status === BUFFERING || this.status === PAUSED || this.status === DISABLED || isBelowMinimumDuration) {
+        // run on every flush, not just the buffering branch: when the session goes active this
+        // clears the saved reason, so a later session that buffers for the same condition still logs
+        this._maybeLogBufferingReason(status)
+
+        if (status === BUFFERING || status === PAUSED || status === DISABLED || isBelowMinimumDuration) {
             this._scheduleFlushBuffer()
             return this._buffer
         }
@@ -2283,6 +2373,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                     threshold: this._sessionIdleThresholdMilliseconds,
                     bufferLength: this._buffer.data.length,
                     bufferSize: this._buffer.size,
+                    // pin the marker to the session that actually went idle: it is restamped to
+                    // lastActivityTimestamp + threshold, and if a pending rotation is adopted
+                    // before it is captured (e.g. waking from a long-suspended tab), routing it
+                    // by the live session id would backdate the rotation-born session's start
+                    // by the whole idle gap
+                    sessionId: this._sessionId,
+                    windowId: this._windowId,
                 })
 
                 // proactively flush the buffer in case the session is idle for a long time
@@ -2344,6 +2441,15 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 this._releaseHoldAndFlush()
             }
             if (returningFromIdle) {
+                // a trigger-pending buffer ships on activation, so it needs the heal as
+                // much as a live recording; only sampled-out and disabled states skip it
+                const bufferCanShip =
+                    ['sampled', 'active'].includes(this.status) || this._strategy?.hasPendingTriggers(this.sessionId)
+                // a snapshot from _releaseHoldAndFlush above has already cleared the
+                // counter by the time this check runs, so we never take two in one tick
+                if (this._eventsDroppedWhileIdle > 0 && bufferCanShip) {
+                    this._tryTakeFullSnapshot()
+                }
                 this._scheduleFullSnapshot()
             }
         }

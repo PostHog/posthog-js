@@ -1,5 +1,198 @@
 # posthog-js
 
+## 1.418.13
+
+### Patch Changes
+
+- [#4418](https://github.com/PostHog/posthog-js/pull/4418) [`be2161d`](https://github.com/PostHog/posthog-js/commit/be2161d68946b30d27d7a0a5c2cb5671b04d5ac0) Thanks [@posthog](https://github.com/apps/posthog)! - feat: add granular automatic pageview options for SPA navigation
+
+    `capture_pageview` now accepts an object with `path`, `search`, and `hash` options. Each selected URL component triggers a `$pageview` when it changes, including direct hash changes used by hash-based routers. The existing `'history_change'` option continues to capture pathname changes. (2026-08-24)
+
+- Updated dependencies [[`be2161d`](https://github.com/PostHog/posthog-js/commit/be2161d68946b30d27d7a0a5c2cb5671b04d5ac0)]:
+    - @posthog/types@1.405.2
+
+## 1.418.12
+
+### Patch Changes
+
+- [#4501](https://github.com/PostHog/posthog-js/pull/4501) [`9e853c1`](https://github.com/PostHog/posthog-js/commit/9e853c11f6a97197667caeeb11849dff776c986c) Thanks [@posthog](https://github.com/apps/posthog)! - Session replay: fixed a stale element left rendered in the player when a mutation re-added a node id with changed attributes. Affects both `useVirtualDom` modes.
+  (2026-08-24)
+
+## 1.418.11
+
+### Patch Changes
+
+- [#4603](https://github.com/PostHog/posthog-js/pull/4603) [`ca030a6`](https://github.com/PostHog/posthog-js/commit/ca030a66bacd0f084845838e19c0f0b18d54e468) Thanks [@martinfrancois](https://github.com/martinfrancois)! - Stop adding PostHog's optional feature scripts, such as the session replay recorder and exception autocapture, to the page more than once. Sites that proxy PostHog through their own domain, by setting `api_host` to a path like `/ingest` rather than a full URL, ended up with the same `<script>` tag three or four times: the check meant to spot the duplicate compared the browser's resolved absolute URL against the relative one, so it never matched. The network tab showed a single request either way, because the browser served the repeats from its cache, which is why this was easy to miss. Nothing measurable got slower as a result, so this is a correctness fix rather than a speed one.
+  (2026-08-24)
+
+- [#4453](https://github.com/PostHog/posthog-js/pull/4453) [`325870a`](https://github.com/PostHog/posthog-js/commit/325870a3b6473b1dd302fa66b9a98a02287eb825) Thanks [@posthog](https://github.com/apps/posthog)! - When session replay is waiting on a trigger, debug mode now names the conditions that haven't matched yet (for example `buffering: URL condition not matched`, or the named trigger group whose condition is pending) instead of only reporting `buffering`. Enable it with `posthog.debug()`. Logged once per change, not once per flush.
+  (2026-08-24)
+
+## 1.418.10
+
+### Patch Changes
+
+- [#4451](https://github.com/PostHog/posthog-js/pull/4451) [`e1d993c`](https://github.com/PostHog/posthog-js/commit/e1d993c6ffa38b7fc8d622148ae0479fbdf1e210) Thanks [@posthog](https://github.com/apps/posthog)! - Guard the replayer's hover handling against non-element and detached hover targets, which previously threw an unhandled `TypeError` (`querySelectorAll` on a node without that method) and stopped session recording playback mid-stream.
+  (2026-08-21)
+
+- [#4557](https://github.com/PostHog/posthog-js/pull/4557) [`4451274`](https://github.com/PostHog/posthog-js/commit/4451274d10bfac8236a6e2f7d846ff71030513e4) Thanks [@posthog](https://github.com/apps/posthog)! - Keep replay playback running when a recording adopts constructed stylesheets across a document swap. A constructed stylesheet can only be adopted by the document that created it, so a sheet held over a swap is rejected and the error previously stopped the player. Adoption now falls back to whatever is already applied.
+  (2026-08-21)
+
+## 1.418.9
+
+### Patch Changes
+
+- [#4588](https://github.com/PostHog/posthog-js/pull/4588) [`c8df61c`](https://github.com/PostHog/posthog-js/commit/c8df61cf792d0835db57822fcd4a3efe1ea21c50) Thanks [@clr182](https://github.com/clr182)! - fix(replay): attribute the backdated sessionIdle marker to the session that went idle, so a rotation-born session's recording no longer starts hours before its first snapshot
+  (2026-08-21)
+
+## 1.418.8
+
+### Patch Changes
+
+- [#4583](https://github.com/PostHog/posthog-js/pull/4583) [`6322f09`](https://github.com/PostHog/posthog-js/commit/6322f09922270e9d1562bacf0e602e76d238d395) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix logs and metrics being silently dropped when an attribute holds a very large integer, a function, a symbol, a sparse array, or a truncated emoji.
+  Cap log and metric attributes at 20 levels of nesting, 1,000 entries per object and 10,000 values in total, marking anything beyond as `[Truncated]`.
+  Type `OtlpAnyValue.intValue` as `string | number` — code reading that field must handle both. (2026-08-21)
+- Updated dependencies [[`6322f09`](https://github.com/PostHog/posthog-js/commit/6322f09922270e9d1562bacf0e602e76d238d395)]:
+    - @posthog/core@1.48.7
+    - @posthog/types@1.405.1
+
+## 1.418.7
+
+### Patch Changes
+
+- [#4459](https://github.com/PostHog/posthog-js/pull/4459) [`caed377`](https://github.com/PostHog/posthog-js/commit/caed377b3827c365fcb4bc9a093ec811030a7356) Thanks [@posthog](https://github.com/apps/posthog)! - fix(browser): stop the `$posthog_cookieless` sentinel from leaking into `identify()` and real events. A tab that missed a cross-tab consent flip could emit the sentinel as a durable distinct_id — merging distinct real users into a single person. It now adopts the identity persisted by the tab that handled consent, falling back to a fresh anonymous device id when persistence is not shared.
+  (2026-08-21)
+
+- [#4567](https://github.com/PostHog/posthog-js/pull/4567) [`5bd2c8d`](https://github.com/PostHog/posthog-js/commit/5bd2c8d0f30ecdd2fa14f0f05b3d43ef4e6b8d41) Thanks [@github-actions](https://github.com/apps/github-actions)! - Render React component stacks as linked exception causes so error tracking identifies the crashing component.
+  (2026-08-21)
+
+## 1.418.6
+
+### Patch Changes
+
+- [#4578](https://github.com/PostHog/posthog-js/pull/4578) [`bae46bf`](https://github.com/PostHog/posthog-js/commit/bae46bfd11f73d3e62a6d0733144c180df354916) Thanks [@marandaneto](https://github.com/marandaneto)! - Drop events when a before-send hook throws instead of sending the unmodified event.
+  (2026-08-20)
+
+- [#4582](https://github.com/PostHog/posthog-js/pull/4582) [`aef2f49`](https://github.com/PostHog/posthog-js/commit/aef2f493cc8d834780f6b670e15e909e6363c259) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Stop building a stack frame for a `window.onerror` report that carries no code position, such as the `ResizeObserver` loop warning. The frame named the document URL rather than a script, so no source map could resolve it. These exceptions now arrive with no stack trace.
+  (2026-08-20)
+- Updated dependencies [[`bae46bf`](https://github.com/PostHog/posthog-js/commit/bae46bfd11f73d3e62a6d0733144c180df354916), [`aef2f49`](https://github.com/PostHog/posthog-js/commit/aef2f493cc8d834780f6b670e15e909e6363c259)]:
+    - @posthog/core@1.48.6
+
+## 1.418.5
+
+### Patch Changes
+
+- [#4572](https://github.com/PostHog/posthog-js/pull/4572) [`9701637`](https://github.com/PostHog/posthog-js/commit/9701637b359859f69d8c876838241ed90ccbfa99) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Stop counting Chromium `<anonymous>` stack frames (extension-injected, devtools or string-evaluated code) as in-app code.
+  (2026-08-19)
+- Updated dependencies [[`9701637`](https://github.com/PostHog/posthog-js/commit/9701637b359859f69d8c876838241ed90ccbfa99)]:
+    - @posthog/core@1.48.5
+
+## 1.418.4
+
+### Patch Changes
+
+- [#4309](https://github.com/PostHog/posthog-js/pull/4309) [`b564d61`](https://github.com/PostHog/posthog-js/commit/b564d619fe97682413edfded287c2c2ffe446dbd) Thanks [@posthog](https://github.com/apps/posthog)! - Fix session recording in the full browser bundles. `array.full.js` and `module.full.es.js` only inlined rrweb, so they still fetched the recorder script at runtime - the request the full bundles exist to avoid. They now inline the whole recorder. Also flags the session with `$sdk_debug_recording_script_not_loaded` when the recorder script fails to load, so a blocked recorder is visible in analytics rather than only in the console.
+  (2026-08-19)
+
+## 1.418.3
+
+### Patch Changes
+
+- [#4558](https://github.com/PostHog/posthog-js/pull/4558) [`3f9ba71`](https://github.com/PostHog/posthog-js/commit/3f9ba71c50aa106e82d54f2e8f176fde9a4d54a2) Thanks [@posthog](https://github.com/apps/posthog)! - Fall back to the synthetic exception stack when a captured `Error` has no stack, so frameless failures (such as a Firefox network `fetch` `TypeError`) keep their call-site frames and group per call site instead of merging into one issue.
+  (2026-08-19)
+- Updated dependencies [[`3f9ba71`](https://github.com/PostHog/posthog-js/commit/3f9ba71c50aa106e82d54f2e8f176fde9a4d54a2)]:
+    - @posthog/core@1.48.4
+
+## 1.418.2
+
+### Patch Changes
+
+- [#4555](https://github.com/PostHog/posthog-js/pull/4555) [`3e0edff`](https://github.com/PostHog/posthog-js/commit/3e0edff32a6a6285876026fae35a402d7faef004) Thanks [@HaynesPostHog](https://github.com/HaynesPostHog)! - Fix a Chrome renderer crash (grey "Aw, Snap" tab, "Error code: 5") that could still occur when closing an in-app survey on a heavy page such as a large dashboard.
+
+    Closing a survey animated the fade-out with `document.startViewTransition`, which snapshots the entire page viewport. The survey applied no `view-transition-name` scoping, so on a heavy host page capturing that whole-page snapshot could exhaust renderer memory and crash the tab. A previous fix addressed a related crash (a snapshot pointing at a removed node) but left the document-level transition — and its whole-page snapshot cost — in place.
+
+    The survey renders in an isolated shadow root, so it never needed a document-level transition. The close now fades the popup out with a plain CSS opacity transition scoped to the survey's own container, then unmounts it once the fade has run. No whole-page snapshot, no crash, same fade-out UX. (2026-08-19)
+
+## 1.418.1
+
+### Patch Changes
+
+- [#4549](https://github.com/PostHog/posthog-js/pull/4549) [`0599fe0`](https://github.com/PostHog/posthog-js/commit/0599fe051e86a1df76f34952a650fb004ade0479) Thanks [@ablaszkiewicz](https://github.com/ablaszkiewicz)! - Recognise Firefox and Safari extension frames when filtering extension exceptions, and stop counting Safari's masked `webkit-masked-url://` frames as in-app code.
+  (2026-08-18)
+- Updated dependencies [[`0599fe0`](https://github.com/PostHog/posthog-js/commit/0599fe051e86a1df76f34952a650fb004ade0479)]:
+    - @posthog/core@1.48.3
+
+## 1.418.0
+
+### Minor Changes
+
+- [#4496](https://github.com/PostHog/posthog-js/pull/4496) [`1ade666`](https://github.com/PostHog/posthog-js/commit/1ade6663991eeff176b3127181195f1e0012241b) Thanks [@marandaneto](https://github.com/marandaneto)! - Add `cookieWinsOnConflict` to keep shared cross-subdomain identity and session state ahead of stale per-origin localStorage, deprecate `__preview_cookie_wins_on_conflict`, and enable the new behavior for the `2026-08-29` defaults.
+  (2026-08-18)
+
+### Patch Changes
+
+- Updated dependencies [[`1ade666`](https://github.com/PostHog/posthog-js/commit/1ade6663991eeff176b3127181195f1e0012241b)]:
+    - @posthog/types@1.405.0
+
+## 1.417.4
+
+### Patch Changes
+
+- [#4509](https://github.com/PostHog/posthog-js/pull/4509) [`8d74821`](https://github.com/PostHog/posthog-js/commit/8d74821112fae5e23fb86e4f457cfda03aac10df) Thanks [@ksvat](https://github.com/ksvat)! - Take a full snapshot when session recording wakes from idle if DOM mutations were dropped while idle, so replay no longer shows duplicated or overlapping DOM after an idle period.
+  (2026-08-17)
+
+## 1.417.3
+
+### Patch Changes
+
+- [#4540](https://github.com/PostHog/posthog-js/pull/4540) [`ce8fc13`](https://github.com/PostHog/posthog-js/commit/ce8fc133346d373927a68e7e20073d947699358b) Thanks [@marandaneto](https://github.com/marandaneto)! - Restore exception autocapture compatibility for posthog-js clients through version 1.141.0.
+  (2026-08-17)
+
+## 1.417.2
+
+### Patch Changes
+
+- [#4413](https://github.com/PostHog/posthog-js/pull/4413) [`7b61aa4`](https://github.com/PostHog/posthog-js/commit/7b61aa45cda28e3a4facfa179d7d3146ff3a81a4) Thanks [@posthog](https://github.com/apps/posthog)! - Fix error tracking coercion reporting the wrong exception type for non-`Error` objects (e.g. `TypeError`, `ReferenceError`) that are thrown by browser extensions or other cross-realm code. Previously these always reported as type `Error`, burying the real type in the message string. Also fixed a local `isError` helper shadowing the more robust cross-realm-aware implementation, which caused some errors thrown from iframes or extension isolated worlds to be misclassified.
+  (2026-08-17)
+- Updated dependencies [[`7b61aa4`](https://github.com/PostHog/posthog-js/commit/7b61aa45cda28e3a4facfa179d7d3146ff3a81a4)]:
+    - @posthog/core@1.48.2
+
+## 1.417.1
+
+### Patch Changes
+
+- [#4521](https://github.com/PostHog/posthog-js/pull/4521) [`0a0206f`](https://github.com/PostHog/posthog-js/commit/0a0206f907f4b58dc28f36aa1fc441b55c489faf) Thanks [@marandaneto](https://github.com/marandaneto)! - Normalize capture timestamp overrides to equivalent UTC ISO strings in the browser and Node.js SDKs and shared core.
+  (2026-08-14)
+
+- [#4523](https://github.com/PostHog/posthog-js/pull/4523) [`6230b5b`](https://github.com/PostHog/posthog-js/commit/6230b5b0774f6f4da0e586f13f589ac3bc7579b8) Thanks [@marandaneto](https://github.com/marandaneto)! - Prevent swallowed rrweb observer initialization errors from breaking session replay teardown and subsequent recorder restarts.
+  (2026-08-14)
+
+- [#4503](https://github.com/PostHog/posthog-js/pull/4503) [`eb05237`](https://github.com/PostHog/posthog-js/commit/eb0523729c4f989663a38d3ce9d0e61d4f262ee1) Thanks [@pauldambra](https://github.com/pauldambra)! - fix(dead-clicks): treat visibility and focus changes as liveness signals, not dead-click evidence
+
+    The dead-click detector treated a `visibilitychange` as evidence a click was dead: it measured `Math.abs(clickTimestamp - lastVisibilityChange)` and, once that exceeded the threshold, timed the click out as dead. Because it only recorded the tab becoming visible, any click in a session where the tab had ever been backgrounded (median gap ~1 minute) was flagged.
+
+    A visibility or focus change near a click is the opposite — a sign the click did something (it woke/focused the tab, opened a new tab, or opened a new window/popup) — so these signals now only ever _suppress_ a dead click, never cause one:
+    - Visibility changes are recorded in both directions (a click that opens a new tab sends the current tab to `hidden`), and a window `focus`/`blur` observer is added, since a click that opens a new window/popup may leave the tab visible and only surface as the current window losing focus.
+    - A click within a wake-up/interaction window (1s, wide enough for a real "tab back, then click" gesture) of any such change is suppressed.
+    - The visibility signal no longer feeds the dead-marking path at all. `$dead_click_visibility_changed_timeout` stays in the payload (always false) for shape compatibility, and a new `$dead_click_focus_changed_delay_ms` is emitted for observability.
+    - Visibility/focus changes are now recorded onto each queued candidate the instant they fire (like scroll), instead of being read from a single shared timestamp when the click is checked ~1s later. A click that hides or blurs the tab (opening a new tab/window) suspends that check while the tab is backgrounded; by the time it resumes the tab has usually returned, and the shared timestamp would have been overwritten by that later transition — losing the click-correlated one and wrongly flagging the click dead. Stamping the candidate as the event fires makes delayed hide→show and blur→focus sequences suppress correctly. (2026-08-14)
+
+- Updated dependencies [[`0a0206f`](https://github.com/PostHog/posthog-js/commit/0a0206f907f4b58dc28f36aa1fc441b55c489faf), [`eb05237`](https://github.com/PostHog/posthog-js/commit/eb0523729c4f989663a38d3ce9d0e61d4f262ee1)]:
+    - @posthog/core@1.48.1
+    - @posthog/types@1.404.1
+
+## 1.417.0
+
+### Minor Changes
+
+- [#4485](https://github.com/PostHog/posthog-js/pull/4485) [`8bc63c3`](https://github.com/PostHog/posthog-js/commit/8bc63c368e46d0f392a45712d2a72f9f97fcbd3e) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - Default external dependency loading to versioned asset paths with automatic fallback to legacy paths, and add a `strict_script_versioning: 'fallback'` mode.
+  (2026-08-13)
+
+### Patch Changes
+
+- Updated dependencies [[`8bc63c3`](https://github.com/PostHog/posthog-js/commit/8bc63c368e46d0f392a45712d2a72f9f97fcbd3e)]:
+    - @posthog/types@1.404.0
+
 ## 1.416.1
 
 ### Patch Changes

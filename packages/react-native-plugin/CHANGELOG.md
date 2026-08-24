@@ -1,5 +1,26 @@
 # @posthog/react-native-plugin
 
+## 2.4.3
+
+### Patch Changes
+
+- [#4630](https://github.com/PostHog/posthog-js/pull/4630) [`97e1cf8`](https://github.com/PostHog/posthog-js/commit/97e1cf813e11fefc71b396e5cd816116d74f708c) Thanks [@turnipdabeets](https://github.com/turnipdabeets)! - Fix session replay started with `startRecording()` capturing nothing on Android by bumping `com.posthog:posthog-android` to `3.60.7`.
+  (2026-08-24)
+
+## 2.4.2
+
+### Patch Changes
+
+- [#4624](https://github.com/PostHog/posthog-js/pull/4624) [`41f276d`](https://github.com/PostHog/posthog-js/commit/41f276dbd987d776259bcbadc6a8fefcfa6a038d) Thanks [@marandaneto](https://github.com/marandaneto)! - Require posthog-ios 3.69.10 so native dSYMs are uploaded after they are ready.
+  (2026-08-24)
+
+## 2.4.1
+
+### Patch Changes
+
+- [#4585](https://github.com/PostHog/posthog-js/pull/4585) [`6a35dc7`](https://github.com/PostHog/posthog-js/commit/6a35dc7e38e944b779c6f6e47a666575fc2f5a09) Thanks [@marandaneto](https://github.com/marandaneto)! - Export the package metadata so consumers can resolve the installed plugin version.
+  (2026-08-21)
+
 ## 2.4.0
 
 ### Minor Changes

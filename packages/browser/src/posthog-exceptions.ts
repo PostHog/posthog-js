@@ -8,6 +8,11 @@ import { isString, isArray, isObject, ErrorTracking, isNullish } from '@posthog/
 
 const logger = createLogger('[Error tracking]')
 
+// Browser extensions serve their content scripts from these schemes. `safari-extension:` and
+// `safari-web-extension:` are synthesised by the stack parser (see extractSafariExtensionDetails)
+// rather than being real URLs, but they mark the frame just as definitively.
+const EXTENSION_URL_PREFIXES = ['chrome-extension://', 'moz-extension://', 'safari-extension:', 'safari-web-extension:']
+
 export function buildErrorPropertiesBuilder() {
     return new ErrorTracking.ErrorPropertiesBuilder(
         [
@@ -261,7 +266,9 @@ export class PostHogExceptions implements Extension {
 
     private _isExtensionException(exceptionList: ErrorTracking.ExceptionList): boolean {
         const frames = exceptionList.flatMap((e) => e.stacktrace?.frames ?? [])
-        return frames.some((f) => f.filename && f.filename.startsWith('chrome-extension://'))
+        return frames.some(({ filename }) => {
+            return !!filename && EXTENSION_URL_PREFIXES.some((prefix) => filename.startsWith(prefix))
+        })
     }
 
     private _isPostHogException(exceptionList: ErrorTracking.ExceptionList): boolean {

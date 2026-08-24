@@ -1,7 +1,18 @@
-import type { Plugin, OutputOptions, OutputAsset, OutputChunk } from 'rollup'
-import { PluginConfig, resolveConfig, runSourcemapCli } from '@posthog/plugin-utils'
+import type { Plugin, OutputOptions, OutputAsset, OutputChunk, RenderedChunk } from 'rollup'
+import {
+    PluginConfig,
+    resolveConfig,
+    runSourcemapCli,
+    resolveReleaseId,
+    createChunkId,
+    createStableChunkId,
+    createChunkIdSnippet,
+    createChunkIdComment,
+    determineChunkIdFromSource,
+} from '@posthog/plugin-utils'
 import path from 'node:path'
 import fs from 'node:fs/promises'
+import MagicString from 'magic-string'
 
 // Re-export for backward compatibility
 export type PostHogRollupPluginOptions = PluginConfig
@@ -12,10 +23,56 @@ type PostHogRollupPlugin = Plugin & {
     config: () => { build: { sourcemap: boolean | 'hidden' } } | undefined
 }
 
+const JS_CHUNK_REGEX = /\.(js|mjs|cjs)$/
+
+// Matches a leading hashbang plus the whole directive prologue — comments and
+// string literal statements like "use strict" or "use client". The snippet
+// must be injected after them: before a hashbang it breaks the file, before a
+// directive it silently demotes the directive to a no-op expression. A string
+// counts only when terminated by `;`, or by a newline (ASI) whose next token
+// cannot continue the expression — `"undefined"!=typeof x` or `"a"\n.trim()`
+// are expressions that injecting into would split into a SyntaxError. When in
+// doubt the prologue ends and the snippet goes to offset 0, which is always
+// syntactically safe.
+const PROLOGUE_REGEX =
+    /^(?:#![^\n]*\n)?(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*(?:\n|$)|(?:"[^"\\\n]*"|'[^'\\\n]*')(?:\s*;|[^\S\n]*\n(?!\s*(?:!=|[+\-*/%.,([?:<>=&|^~`]|in\b|instanceof\b))))*/
+
 export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOptions): Plugin {
     const posthogOptions = resolveConfig(userOptions)
+    const eventReleaseMode = posthogOptions.sourcemaps.releaseMode === 'event'
+
+    // Resolved once per build and shared by every output, so all chunks of one build carry the
+    // same release. Cleared in buildStart because a watch-mode rebuild can land on a new commit,
+    // which is a different release.
+    let releaseIdPromise: Promise<string | undefined> | undefined
+    let warnedAboutMissingRelease = false
+    const chunkIdsByPreliminaryFileName = new Map<string, Set<string>>()
+
+    function rememberChunkId(preliminaryFileName: string, chunkId: string) {
+        const chunkIds = chunkIdsByPreliminaryFileName.get(preliminaryFileName) ?? new Set<string>()
+        chunkIds.add(chunkId)
+        chunkIdsByPreliminaryFileName.set(preliminaryFileName, chunkIds)
+    }
+
+    function injectChunkId(code: string, chunkId: string, releaseId?: string) {
+        const magicString = new MagicString(code)
+        magicString.appendLeft(code.match(PROLOGUE_REGEX)?.[0].length ?? 0, createChunkIdSnippet(chunkId, releaseId))
+        magicString.append(createChunkIdComment(chunkId))
+
+        return {
+            code: magicString.toString(),
+            map: magicString.generateMap({ hires: 'boundary' }),
+        }
+    }
+
     const plugin: PostHogRollupPlugin = {
         name: 'posthog-rollup-plugin',
+
+        buildStart() {
+            releaseIdPromise = undefined
+            warnedAboutMissingRelease = false
+            chunkIdsByPreliminaryFileName.clear()
+        },
 
         config() {
             if (!posthogOptions.sourcemaps.enabled) return
@@ -39,13 +96,86 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
             },
         },
 
+        // Chunk ids are injected in-memory, before rollup writes the files and
+        // before `generateBundle` — where SRI plugins (e.g. vite-plugin-sri3)
+        // compute integrity hashes and rollup resolves [hash] file names. The
+        // written files are final; nothing may rewrite them afterwards.
+        renderChunk: {
+            order: 'post',
+            handler(code: string, chunk: RenderedChunk) {
+                if (!posthogOptions.sourcemaps.enabled) return null
+                if (!JS_CHUNK_REGEX.test(chunk.fileName)) return null
+                // Already carries an id (watch-mode re-render, another tool)
+                const existingChunkId = determineChunkIdFromSource(code)
+                if (existingChunkId) {
+                    rememberChunkId(chunk.fileName, existingChunkId)
+                    if (eventReleaseMode) {
+                        console.warn(
+                            `PostHog: ${chunk.fileName} already carries a chunk id, so no release id was injected — its exceptions will report no release`
+                        )
+                    }
+                    return null
+                }
+
+                if (!eventReleaseMode) {
+                    const chunkId = createChunkId()
+                    rememberChunkId(chunk.fileName, chunkId)
+                    return injectChunkId(code, chunkId)
+                }
+
+                // Event mode carries the release inside the chunk, which means resolving it before
+                // the snippet is built. The id is content-addressed so an unchanged chunk keeps its
+                // id (and its symbol set) across rebuilds.
+                releaseIdPromise ??= resolveReleaseId(posthogOptions)
+                const chunkId = createStableChunkId(code)
+                rememberChunkId(chunk.fileName, chunkId)
+                return releaseIdPromise.then((releaseId) => {
+                    // A build that identifies no release still symbolicates from its chunk ids, so
+                    // this warns rather than failing, matching what posthog-cli does in the same
+                    // situation.
+                    if (!releaseId && !warnedAboutMissingRelease) {
+                        warnedAboutMissingRelease = true
+                        console.warn(
+                            '[posthog-rollup-plugin] no release could be resolved, injecting chunk ids only, so exceptions from this build will report no release. Set sourcemaps.releaseName and sourcemaps.releaseVersion, or build from a git repository or a supported CI environment.'
+                        )
+                    }
+                    return injectChunkId(code, chunkId, releaseId)
+                })
+            },
+        },
+
+        // Vite 8's Oxc output minifier runs after renderChunk and removes the CLI-facing comment,
+        // while preserving the executable snippet. Restore the same comment once output minification
+        // is complete. preliminaryFileName links the final OutputChunk back to its RenderedChunk even
+        // when Rollup replaces a [hash] placeholder. Matching against the tracked id avoids treating
+        // unrelated bundled `_posthogChunkIds` strings as injected chunks.
+        generateBundle: {
+            order: 'pre',
+            handler(_options, bundle) {
+                for (const chunk of Object.values(bundle)) {
+                    if (chunk.type !== 'chunk' || !JS_CHUNK_REGEX.test(chunk.fileName)) continue
+                    if (determineChunkIdFromSource(chunk.code)) continue
+
+                    const chunkId = Array.from(chunkIdsByPreliminaryFileName.get(chunk.preliminaryFileName) ?? []).find(
+                        (candidate) => chunk.code.includes(candidate)
+                    )
+                    if (chunkId) {
+                        // This only appends an unmapped trailing comment, so existing source-map
+                        // positions remain valid. `order: pre` also lets SRI plugins hash final code.
+                        chunk.code += createChunkIdComment(chunkId)
+                    }
+                }
+            },
+        },
+
         writeBundle: {
-            // Write bundle is executed in parallel, make it sequential to ensure correct order
+            // Serializes with other writeBundle hooks within this output only —
+            // multi-output builds still upload concurrently.
             sequential: true,
             async handler(options: OutputOptions, bundle: { [fileName: string]: OutputAsset | OutputChunk }) {
                 if (!posthogOptions.sourcemaps.enabled) return
-                const chunks: { [fileName: string]: OutputChunk } = {}
                 const filePaths: string[] = []
+                const mapPaths: string[] = []
                 const basePaths: string[] = []
 
                 if (options.dir) {
@@ -58,11 +188,28 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
 
                 for (const fileName in bundle) {
                     const chunk = bundle[fileName]
-                    const isJsFile = /\.(js|mjs|cjs)$/.test(fileName)
-                    if (chunk.type === 'chunk' && isJsFile) {
-                        const chunkPath = path.resolve(...basePaths, fileName)
-                        chunks[chunkPath] = chunk
-                        filePaths.push(chunkPath)
+                    if (chunk.type !== 'chunk' || !JS_CHUNK_REGEX.test(fileName)) continue
+
+                    // Prebuilt chunks (`emitFile({type: 'prebuilt-chunk'})`) never
+                    // pass through renderChunk and carry no chunk id — including
+                    // them would abort the CLI's all-or-nothing upload.
+                    if (!determineChunkIdFromSource(chunk.code)) continue
+
+                    filePaths.push(path.resolve(...basePaths, fileName))
+
+                    // The CLI can only associate a hidden map located right next
+                    // to its chunk (`<file>.map`); with a custom sourcemapFileNames
+                    // layout it finds zero pairs and exits successfully — the
+                    // build would silently upload no symbols. Fail fast instead.
+                    // Visible maps are fine: the CLI follows the sourceMappingURL
+                    // comment wherever it points.
+                    const mapFileName = chunk.sourcemapFileName ?? `${fileName}.map`
+                    if (mapFileName === `${fileName}.map`) {
+                        mapPaths.push(path.resolve(...basePaths, mapFileName))
+                    } else if (options.sourcemap === 'hidden') {
+                        throw new Error(
+                            `[posthog-rollup-plugin] custom output.sourcemapFileNames ('${mapFileName}') is not supported with hidden sourcemaps: posthog-cli can only discover a hidden map next to its chunk ('${fileName}.map'), so nothing would be uploaded. Use the default sourcemap file names, or keep sourcemaps visible (deleteAfterUpload: false).`
+                        )
                     }
                 }
 
@@ -73,16 +220,26 @@ export default function posthogRollupPlugin(userOptions: PostHogRollupPluginOpti
                     return
                 }
 
-                await runSourcemapCli(posthogOptions, { filePaths })
+                // Upload only — the chunk ids were injected in renderChunk, so
+                // `sourcemap process` (which rewrites the files on disk) is not
+                // needed and would invalidate SRI hashes and content-hashed
+                // file names.
+                await runSourcemapCli(posthogOptions, { filePaths, command: 'upload' })
 
-                // we need to update code for others plugins to work
-                await Promise.all(
-                    Object.entries(chunks).map(([chunkPath, chunk]) =>
-                        fs.readFile(chunkPath, 'utf8').then((content) => {
-                            chunk.code = content
-                        })
-                    )
-                )
+                // `--delete-after` also rewrites the .js files, so the plugin
+                // deletes the maps itself. Only reached when the upload
+                // succeeded — a throw above keeps the maps around. Cleanup
+                // failures must not fail the (successful) build.
+                if (posthogOptions.sourcemaps.deleteAfterUpload) {
+                    const results = await Promise.allSettled(mapPaths.map((mapPath) => fs.rm(mapPath, { force: true })))
+                    results.forEach((result, index) => {
+                        if (result.status === 'rejected') {
+                            console.warn(
+                                `PostHog sourcemaps uploaded, but failed to delete source map ${mapPaths[index]}: ${result.reason}`
+                            )
+                        }
+                    })
+                }
             },
         },
     }

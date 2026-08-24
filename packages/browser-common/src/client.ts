@@ -34,7 +34,7 @@ export interface CapturedEventInfo {
 
 /** Per-call capture overrides, mirroring the client's public capture options. */
 export interface CaptureOptions {
-    /** Override the event timestamp sent to PostHog. */
+    /** Override the event timestamp sent to PostHog. UTC is preferred; non-UTC input is converted to UTC. */
     timestamp?: Date
     /** Override the event UUID used for de-duplication. */
     uuid?: string

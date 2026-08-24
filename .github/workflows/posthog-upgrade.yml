@@ -13,6 +13,7 @@ on:
                     - posthog-node
                     - posthog-js-lite
                     - posthog-react-native
+                    - '@posthog/react-native-plugin'
                     - '@posthog/mcp'
                     - '@posthog/rollup-plugin'
             package_version:
@@ -48,10 +49,10 @@ jobs:
                   node-version: 24
 
             - name: Setup pnpm
-              uses: pnpm/setup@5d160c5bc68a09337ad0d5654e237e03253b5879 # v1
+              uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
               with:
                   cache: false
-                  install: false
+                  run_install: false
 
             - name: Wait for package to become available on npm
               shell: bash
@@ -101,7 +102,7 @@ jobs:
                           root_package_spec="@posthog/mcp-analytics@npm:@posthog/mcp@${PACKAGE_VERSION}"
                           pnpm update --recursive "$root_package_spec"
                           ;;
-                      posthog-react-native|@posthog/rollup-plugin)
+                      posthog-react-native|@posthog/react-native-plugin|@posthog/rollup-plugin)
                           # These packages are used only by the standalone Desktop workspace.
                           ;;
                       *)
@@ -227,15 +228,6 @@ jobs:
                       --repo PostHog/posthog \
                       --title "$PR_TITLE" \
                       --body "$PR_BODY"
-
-            - name: Enable automerge
-              env:
-                  GH_TOKEN: ${{ steps.upgrader.outputs.token }}
-                  PR_NUMBER: ${{ steps.main-repo-pr.outputs.pull-request-number }}
-              run: |
-                  if [ "$(gh pr view "$PR_NUMBER" --repo PostHog/posthog --json autoMergeRequest --jq '.autoMergeRequest != null')" = "false" ]; then
-                      gh pr merge "$PR_NUMBER" --repo PostHog/posthog --auto --squash
-                  fi
 
             - name: Assign reviewers
               env:

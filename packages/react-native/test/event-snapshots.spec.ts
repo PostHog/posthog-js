@@ -102,6 +102,23 @@ describe('PostHog React Native event and request snapshots', () => {
     jest.useRealTimers()
   })
 
+  it('serializes timestamp overrides as UTC without rewriting caller properties', async () => {
+    const fetchMock = installFetchMock()
+    const posthog = createClient({ disableRemoteFeatureFlags: true, setDefaultPersonProperties: false })
+    await posthog.ready()
+
+    posthog.capture(
+      'timezone override',
+      { caller_timestamp: '2024-01-02T12:04:05.000+09:00' },
+      { timestamp: new Date('2024-01-02T12:04:05.000+09:00') }
+    )
+    await posthog.flush()
+
+    const event = parsedCall(fetchMock, '/batch/').body.batch[0]
+    expect(event.timestamp).toBe('2024-01-02T03:04:05.000Z')
+    expect(event.properties.caller_timestamp).toBe('2024-01-02T12:04:05.000+09:00')
+  })
+
   it('snapshots complete enriched analytics events at the decoded batch boundary', async () => {
     const fetchMock = installFetchMock()
     const posthog = createClient({

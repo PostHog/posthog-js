@@ -33,7 +33,7 @@ test.describe('surveys - URL prefill with auto-submit', () => {
         page,
         context,
     }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
+        await page.route('**/surveys/**', async (route) => {
             await route.fulfill({ json: { surveys: [prefillSurvey] } })
         })
 
@@ -49,7 +49,20 @@ test.describe('surveys - URL prefill with auto-submit', () => {
             page,
             context
         )
-        await surveysAPICall
+
+        await page.evaluate(
+            () =>
+                new Promise<void>((resolve, reject) => {
+                    const ph = (window as any).posthog
+                    ph.onSurveysLoaded((_surveys: unknown[], context?: { isLoaded: boolean; error?: string }) => {
+                        if (context?.isLoaded) {
+                            resolve()
+                        } else {
+                            reject(new Error(context?.error ?? 'Surveys failed to load'))
+                        }
+                    })
+                })
+        )
 
         // The hosted survey page renders on demand and passes the custom URL params as properties.
         await page.evaluate((survey) => {
