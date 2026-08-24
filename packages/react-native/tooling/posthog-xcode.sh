@@ -49,9 +49,9 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-POSTHOG_UPLOAD_ARGS=""
+POSTHOG_UPLOAD_ARGS=()
 if [ "$POSTHOG_SKIP_ON_CONFLICT_ENABLED" = "1" ] || [ "$POSTHOG_SKIP_ON_CONFLICT_ENABLED" = "true" ]; then
-  POSTHOG_UPLOAD_ARGS="$POSTHOG_UPLOAD_ARGS --skip-on-conflict"
+  POSTHOG_UPLOAD_ARGS+=(--skip-on-conflict)
 fi
 
 REACT_NATIVE_XCODE_DEFAULT="../node_modules/react-native/scripts/react-native-xcode.sh"
@@ -127,9 +127,26 @@ fi
 # mimics how the file is defined in node_modules/react-native/scripts/react-native-xcode.sh (PACKAGER_SOURCEMAP_FILE)
 SOURCEMAP_PACKAGER_FILE="$CONFIGURATION_BUILD_DIR/$SOURCEMAP_NAME"
 
-# Expo EAS remote versioning writes the release version to the source Info.plist
-# without necessarily updating MARKETING_VERSION or CURRENT_PROJECT_VERSION.
+# The native runtime reports these values from the built Info.plist. Prefer the source Info.plist so
+# source maps use the same release when Expo EAS remote versioning does not update Xcode's defaults.
 resolve_posthog_ios_release_info() {
+  resolve_posthog_build_setting_reference() {
+    local value="$1"
+    local name
+
+    case "$value" in
+      \$\(*\))
+        name=${value#\$(}
+        printenv "${name%)}" 2>/dev/null || true
+        ;;
+      \$\{*\})
+        name=${value#\$\{}
+        printenv "${name%\}}" 2>/dev/null || true
+        ;;
+      *) printf '%s' "$value" ;;
+    esac
+  }
+
   POSTHOG_RELEASE_VERSION="${MARKETING_VERSION:-}"
   POSTHOG_BUILD_VERSION="${CURRENT_PROJECT_VERSION:-}"
   POSTHOG_PLIST_BUDDY="${POSTHOG_PLIST_BUDDY:-/usr/libexec/PlistBuddy}"
@@ -150,28 +167,30 @@ resolve_posthog_ios_release_info() {
 
   POSTHOG_PLIST_RELEASE_VERSION=$("$POSTHOG_PLIST_BUDDY" -c "Print :CFBundleShortVersionString" "$POSTHOG_INFO_PLIST" 2>/dev/null || true)
   POSTHOG_PLIST_BUILD_VERSION=$("$POSTHOG_PLIST_BUDDY" -c "Print :CFBundleVersion" "$POSTHOG_INFO_PLIST" 2>/dev/null || true)
+  POSTHOG_PLIST_RELEASE_VERSION=$(resolve_posthog_build_setting_reference "$POSTHOG_PLIST_RELEASE_VERSION")
+  POSTHOG_PLIST_BUILD_VERSION=$(resolve_posthog_build_setting_reference "$POSTHOG_PLIST_BUILD_VERSION")
 
   case "$POSTHOG_PLIST_RELEASE_VERSION" in
-    ""|*'$('*|*'${'*) ;;
+    ""|*"\$("*|*"\${"*) ;;
     *) POSTHOG_RELEASE_VERSION="$POSTHOG_PLIST_RELEASE_VERSION" ;;
   esac
   case "$POSTHOG_PLIST_BUILD_VERSION" in
-    ""|*'$('*|*'${'*) ;;
+    ""|*"\$("*|*"\${"*) ;;
     *) POSTHOG_BUILD_VERSION="$POSTHOG_PLIST_BUILD_VERSION" ;;
   esac
 }
 
 resolve_posthog_ios_release_info
 
-CLI_RELEASE_ARGS=""
+CLI_RELEASE_ARGS=()
 if [ -n "${PRODUCT_BUNDLE_IDENTIFIER}" ]; then
-  CLI_RELEASE_ARGS="$CLI_RELEASE_ARGS --release-name $PRODUCT_BUNDLE_IDENTIFIER"
+  CLI_RELEASE_ARGS+=(--release-name "$PRODUCT_BUNDLE_IDENTIFIER")
 fi
 if [ -n "${POSTHOG_RELEASE_VERSION}" ]; then
-  CLI_RELEASE_ARGS="$CLI_RELEASE_ARGS --release-version $POSTHOG_RELEASE_VERSION"
+  CLI_RELEASE_ARGS+=(--release-version "$POSTHOG_RELEASE_VERSION")
 fi
 if [ -n "${POSTHOG_BUILD_VERSION}" ]; then
-  CLI_RELEASE_ARGS="$CLI_RELEASE_ARGS --build $POSTHOG_BUILD_VERSION"
+  CLI_RELEASE_ARGS+=(--build "$POSTHOG_BUILD_VERSION")
 fi
 
 # RN deletes the PACKAGER_SOURCEMAP_FILE file after execution but we need it
@@ -261,7 +280,7 @@ fi
 
 # Execute posthog cli clone
 set +x +e
-CLI_CLONE_OUTPUT=$(/bin/sh -c "$PH_CLI_PATH hermes clone --minified-map-path $SOURCEMAP_PACKAGER_FILE --composed-map-path $SOURCEMAP_FILE $CLI_RELEASE_ARGS" 2>&1)
+CLI_CLONE_OUTPUT=$("$PH_CLI_PATH" hermes clone --minified-map-path "$SOURCEMAP_PACKAGER_FILE" --composed-map-path "$SOURCEMAP_FILE" "${CLI_RELEASE_ARGS[@]}" 2>&1)
 CLONE_EXIT_CODE=$?
 if [ $CLONE_EXIT_CODE -eq 0 ]; then
   echo "$CLI_CLONE_OUTPUT" | awk '{print "output: posthog-cli - " $0}'
@@ -273,7 +292,7 @@ set -x -e
 
 # Execute posthog cli upload
 set +x +e
-CLI_UPLOAD_OUTPUT=$(/bin/sh -c "$PH_CLI_PATH hermes upload --directory $DERIVED_FILE_DIR $CLI_RELEASE_ARGS $POSTHOG_UPLOAD_ARGS" 2>&1)
+CLI_UPLOAD_OUTPUT=$("$PH_CLI_PATH" hermes upload --directory "$DERIVED_FILE_DIR" "${CLI_RELEASE_ARGS[@]}" "${POSTHOG_UPLOAD_ARGS[@]}" 2>&1)
 UPLOAD_EXIT_CODE=$?
 if [ $UPLOAD_EXIT_CODE -eq 0 ]; then
   echo "$CLI_UPLOAD_OUTPUT" | awk '{print "output: posthog-cli - " $0}'

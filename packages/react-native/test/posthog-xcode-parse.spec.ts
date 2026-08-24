@@ -191,7 +191,8 @@ describe('posthog-xcode.sh release version resolution', () => {
     plistVersion: string,
     plistBuild: string,
     marketingVersion = '1.0',
-    projectVersion = '1'
+    projectVersion = '1',
+    buildSettings: Record<string, string> = {}
   ): string => {
     const plistBuddy = path.join(tempDir, 'plist-buddy')
     const infoPlist = path.join(tempDir, 'ExampleApp', 'Info.plist')
@@ -214,6 +215,7 @@ describe('posthog-xcode.sh release version resolution', () => {
         CURRENT_PROJECT_VERSION: projectVersion,
         TEST_PLIST_VERSION: plistVersion,
         TEST_PLIST_BUILD: plistBuild,
+        ...buildSettings,
       },
     }).toString()
   }
@@ -227,10 +229,24 @@ describe('posthog-xcode.sh release version resolution', () => {
     }
   })
 
+  it('resolves custom Xcode build settings referenced by the source Info.plist', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-xcode-version-'))
+    try {
+      expect(
+        resolveReleaseInfo(tempDir, '$(APP_VERSION)', '${BUILD_NUMBER}', '1.0', '1', {
+          APP_VERSION: '9.9.9',
+          BUILD_NUMBER: '321',
+        })
+      ).toBe('9.9.9|321')
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it('keeps Xcode versions when source Info.plist values are unresolved', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-xcode-version-'))
     try {
-      expect(resolveReleaseInfo(tempDir, '$(MARKETING_VERSION)', '$(CURRENT_PROJECT_VERSION)')).toBe('1.0|1')
+      expect(resolveReleaseInfo(tempDir, '$(MISSING_VERSION)', '$(A)-$(B)')).toBe('1.0|1')
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true })
     }
@@ -241,9 +257,9 @@ describe('posthog-xcode.sh skipOnConflict upload flag', () => {
   it('passes --skip-on-conflict only to hermes upload', () => {
     const contents = fs.readFileSync(SCRIPT_PATH, 'utf8')
 
-    expect(contents).toContain('POSTHOG_UPLOAD_ARGS="$POSTHOG_UPLOAD_ARGS --skip-on-conflict"')
+    expect(contents).toContain('POSTHOG_UPLOAD_ARGS+=(--skip-on-conflict)')
     expect(contents).toContain(
-      'CLI_UPLOAD_OUTPUT=$(/bin/sh -c "$PH_CLI_PATH hermes upload --directory $DERIVED_FILE_DIR $CLI_RELEASE_ARGS $POSTHOG_UPLOAD_ARGS" 2>&1)'
+      'CLI_UPLOAD_OUTPUT=$("$PH_CLI_PATH" hermes upload --directory "$DERIVED_FILE_DIR" "${CLI_RELEASE_ARGS[@]}" "${POSTHOG_UPLOAD_ARGS[@]}" 2>&1)'
     )
     expect(contents).not.toContain('hermes clone --skip-on-conflict')
   })
