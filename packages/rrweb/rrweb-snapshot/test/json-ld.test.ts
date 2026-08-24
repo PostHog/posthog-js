@@ -196,9 +196,29 @@ describe('sanitizeJsonLd', () => {
       { actionStatus: 'https://schema.org/CompletedActionStatus' },
     ],
     [
+      'AggregateOffer',
+      { lowPrice: 20, highPrice: 30, customerEmail: 'private@example.com' },
+      { lowPrice: 20, highPrice: 30 },
+    ],
+    [
+      'AggregateRating',
+      { ratingValue: 4.8, reviewCount: 12, reviewer: 'Private person' },
+      { ratingValue: 4.8, reviewCount: 12 },
+    ],
+    [
+      'Brand',
+      { name: 'Acme', email: 'private@example.com' },
+      { name: 'Acme' },
+    ],
+    [
       'CreativeWork',
       { genre: 'Documentation', inLanguage: 'en', author: 'Private person' },
       { genre: 'Documentation', inLanguage: 'en' },
+    ],
+    [
+      'Offer',
+      { price: 25, priceCurrency: 'GBP', customer: 'Private person' },
+      { price: 25, priceCurrency: 'GBP' },
     ],
     [
       'Organization',
@@ -221,7 +241,7 @@ describe('sanitizeJsonLd', () => {
       },
       { name: 'Canvas shoes', category: 'Footwear' },
     ],
-  ])('uses conservative paths for %s', (type, properties, expected) => {
+  ])('uses type-specific property rules for %s', (type, properties, expected) => {
     const sanitized = sanitizeJsonLd(
       JSON.stringify({
         '@context': 'https://schema.org',
@@ -237,7 +257,7 @@ describe('sanitizeJsonLd', () => {
     });
   });
 
-  it('uses narrower rules for nested organizations', () => {
+  it('uses the same organization rule at every depth', () => {
     const sanitized = sanitizeJsonLd(
       JSON.stringify({
         '@context': 'https://schema.org',
@@ -245,8 +265,9 @@ describe('sanitizeJsonLd', () => {
         manufacturer: {
           '@type': 'Organization',
           name: 'Acme',
-          legalName: 'Private subsidiary name',
-          nonprofitStatus: 'Private status',
+          legalName: 'Acme Subsidiary Ltd',
+          nonprofitStatus: 'Nonprofit501c3',
+          email: 'private@example.com',
         },
       }),
     );
@@ -254,7 +275,12 @@ describe('sanitizeJsonLd', () => {
     expect(JSON.parse(sanitized!)).toEqual({
       '@context': 'https://schema.org',
       '@type': 'Product',
-      manufacturer: { '@type': 'Organization', name: 'Acme' },
+      manufacturer: {
+        '@type': 'Organization',
+        name: 'Acme',
+        legalName: 'Acme Subsidiary Ltd',
+        nonprofitStatus: 'Nonprofit501c3',
+      },
     });
   });
 

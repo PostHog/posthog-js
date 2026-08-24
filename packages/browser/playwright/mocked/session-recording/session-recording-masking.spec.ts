@@ -79,6 +79,12 @@ test.describe('Session recording - masking', () => {
                         '@type': 'Person',
                         name: 'PRIVATE_NESTED_PERSON',
                     },
+                    manufacturer: {
+                        '@type': 'Organization',
+                        name: 'ALLOWED_MANUFACTURER',
+                        legalName: 'ALLOWED_MANUFACTURER_LEGAL_NAME',
+                        email: 'PRIVATE_MANUFACTURER_EMAIL',
+                    },
                 })
                 appendJsonLd(
                     {
@@ -132,6 +138,8 @@ test.describe('Session recording - masking', () => {
         )
         expect(eventBytes).toContain('ALLOWED_INITIAL_PRODUCT')
         expect(eventBytes).toContain('ALLOWED_DYNAMIC_PRODUCT')
+        expect(eventBytes).toContain('ALLOWED_MANUFACTURER')
+        expect(eventBytes).toContain('ALLOWED_MANUFACTURER_LEGAL_NAME')
         for (const privateMarker of [
             'PRIVATE_ATTRIBUTE',
             'PRIVATE_COMMENT',
@@ -139,6 +147,7 @@ test.describe('Session recording - masking', () => {
             'PRIVATE_DESCRIPTION',
             'PRIVATE_URL_TOKEN',
             'PRIVATE_NESTED_PERSON',
+            'PRIVATE_MANUFACTURER_EMAIL',
             'PRIVATE_MASKED_PRODUCT',
             'PRIVATE_DYNAMIC_EMAIL',
         ]) {

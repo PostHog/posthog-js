@@ -37,9 +37,17 @@ const brandRule: JsonLdEntityRule = {
   type: 'Brand',
   properties: { name: true },
 };
-const nestedOrganizationRule: JsonLdEntityRule = {
+const organizationRule: JsonLdEntityRule = {
   type: 'Organization',
-  properties: { name: true },
+  properties: {
+    name: true,
+    legalName: true,
+    foundingDate: true,
+    dissolutionDate: true,
+    nonprofitStatus: true,
+    aggregateRating: [aggregateRatingRule],
+    brand: [brandRule],
+  },
 };
 const offerRule: JsonLdEntityRule = {
   type: 'Offer',
@@ -49,7 +57,7 @@ const offerRule: JsonLdEntityRule = {
     priceValidUntil: true,
     availability: true,
     itemCondition: true,
-    seller: [nestedOrganizationRule],
+    seller: [organizationRule],
   },
 };
 const aggregateOfferRule: JsonLdEntityRule = {
@@ -63,7 +71,7 @@ const aggregateOfferRule: JsonLdEntityRule = {
     offers: [offerRule],
   },
 };
-const ROOT_RULES: readonly JsonLdEntityRule[] = [
+const ENTITY_RULES: readonly JsonLdEntityRule[] = [
   {
     type: 'Action',
     properties: { actionStatus: true },
@@ -86,21 +94,14 @@ const ROOT_RULES: readonly JsonLdEntityRule[] = [
       educationalUse: true,
       interactivityType: true,
       aggregateRating: [aggregateRatingRule],
-      publisher: [nestedOrganizationRule],
+      publisher: [organizationRule],
     },
   },
-  {
-    type: 'Organization',
-    properties: {
-      name: true,
-      legalName: true,
-      foundingDate: true,
-      dissolutionDate: true,
-      nonprofitStatus: true,
-      aggregateRating: [aggregateRatingRule],
-      brand: [brandRule],
-    },
-  },
+  aggregateOfferRule,
+  aggregateRatingRule,
+  brandRule,
+  offerRule,
+  organizationRule,
   {
     type: 'Person',
     properties: {},
@@ -137,8 +138,8 @@ const ROOT_RULES: readonly JsonLdEntityRule[] = [
       size: true,
       productionDate: true,
       releaseDate: true,
-      brand: [brandRule, nestedOrganizationRule],
-      manufacturer: [nestedOrganizationRule],
+      brand: [brandRule, organizationRule],
+      manufacturer: [organizationRule],
       offers: [offerRule, aggregateOfferRule],
       aggregateRating: [aggregateRatingRule],
     },
@@ -260,7 +261,7 @@ function sanitizeRoot(value: unknown): Record<string, unknown> | null {
     return null;
   }
 
-  const entity = sanitizeEntity(value, ROOT_RULES);
+  const entity = sanitizeEntity(value, ENTITY_RULES);
   if (!entity) {
     return null;
   }
