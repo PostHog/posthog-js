@@ -330,14 +330,29 @@ export function buildDsymUploadShellScript(
     )
   }
 
-  if (releaseMode === 'event') {
-    lines.push(
-      '# Upload dSYMs without binding them to a release, so each crash resolves its own from the',
-      '# app version and namespace the SDK sends. posthog-ios versions whose upload-symbols.sh does',
-      '# not read this variable ignore it and keep binding the dSYMs.',
-      'export POSTHOG_NO_RELEASE_BIND=1'
-    )
-  }
+  // Resolved when the phase runs, not when it is generated. The bundle phase reads
+  // POSTHOG_RELEASE_MODE out of the environment, so a build configured that way rather than
+  // through the plugin prop would otherwise upload its maps release-independent and keep binding
+  // its dSYMs. posthog-ios reads only POSTHOG_NO_RELEASE_BIND, and posthog-cli's `dsym upload`
+  // binds no environment variable of its own, so the translation has to happen here.
+  lines.push(
+    releaseMode
+      ? `POSTHOG_RESOLVED_RELEASE_MODE="${releaseMode}"`
+      : 'POSTHOG_RESOLVED_RELEASE_MODE="${POSTHOG_RELEASE_MODE:-}"',
+    'case "$POSTHOG_RESOLVED_RELEASE_MODE" in',
+    '  ""|symbol-set) ;;',
+    '  event)',
+    '    # Upload dSYMs without binding them to a release, so each crash resolves its own from the',
+    '    # app version and namespace the SDK sends. posthog-ios versions whose upload-symbols.sh',
+    '    # does not read this variable ignore it and keep binding the dSYMs.',
+    '    export POSTHOG_NO_RELEASE_BIND=1',
+    '    ;;',
+    '  *)',
+    "    echo \"error: posthog release mode must be 'symbol-set' or 'event', was '$POSTHOG_RESOLVED_RELEASE_MODE'\"",
+    '    exit 1',
+    '    ;;',
+    'esac'
+  )
 
   lines.push(
     'PODS_SCRIPT="${PODS_ROOT}/PostHog/build-tools/upload-symbols.sh"',

@@ -1,5 +1,8 @@
 import { withXcodeProject } from '@expo/config-plugins'
 import { spawnSync } from 'child_process'
+import * as fs from 'fs'
+import * as os from 'os'
+import * as path from 'path'
 
 import * as postHogExpoPluginModule from '../src/tooling/expoconfig'
 import {
@@ -372,10 +375,57 @@ describe('addDsymUploadBuildPhase', () => {
 
     addDsymUploadBuildPhase(xp, false, false, 'event')
     expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript(false, false, 'event')))
-    expect(existing.shellScript).toContain('export POSTHOG_NO_RELEASE_BIND=1')
 
     addDsymUploadBuildPhase(xp, false, false, 'symbol-set')
-    expect(existing.shellScript).not.toContain('POSTHOG_NO_RELEASE_BIND')
+    expect(existing.shellScript).toBe(encodePbx(buildDsymUploadShellScript(false, false, 'symbol-set')))
+  })
+
+  // Runs the generated phase against a stub upload-symbols.sh, so the assertions are on what
+  // posthog-ios actually receives rather than on the shell source.
+  const runDsymPhase = (script: string, env: Record<string, string>): { status: number; output: string } => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'posthog-dsym-phase-'))
+    try {
+      const stub = path.join(tempDir, 'PostHog', 'build-tools', 'upload-symbols.sh')
+      fs.mkdirSync(path.dirname(stub), { recursive: true })
+      fs.writeFileSync(stub, '#!/bin/sh\necho "NO_RELEASE_BIND=${POSTHOG_NO_RELEASE_BIND:-unset}"\n', {
+        mode: 0o755,
+      })
+      const scriptPath = path.join(tempDir, 'phase.sh')
+      fs.writeFileSync(scriptPath, script, { mode: 0o755 })
+      const result = spawnSync('/bin/sh', [scriptPath], {
+        env: { ...process.env, PODS_ROOT: tempDir, BUILD_DIR: tempDir, ...env },
+        encoding: 'utf8',
+      })
+      return { status: result.status ?? -1, output: `${result.stdout}${result.stderr}` }
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
+  }
+
+  it('unbinds dSYM uploads when only the environment selects event mode', () => {
+    // The bundle phase reads POSTHOG_RELEASE_MODE from the environment, so a build configured that
+    // way and not through the plugin prop used to upload maps unbound and dSYMs bound.
+    const script = buildDsymUploadShellScript()
+
+    expect(runDsymPhase(script, { POSTHOG_RELEASE_MODE: 'event' }).output).toContain('NO_RELEASE_BIND=1')
+    expect(runDsymPhase(script, { POSTHOG_RELEASE_MODE: 'symbol-set' }).output).toContain('NO_RELEASE_BIND=unset')
+    expect(runDsymPhase(script, {}).output).toContain('NO_RELEASE_BIND=unset')
+  })
+
+  it('keeps the plugin prop in charge when the environment disagrees', () => {
+    // The bundle phase exports the prop's mode, overriding what it inherited. The dSYM phase has
+    // to settle the same disagreement the same way, or one build binds half its symbols.
+    const script = buildDsymUploadShellScript(false, false, 'event')
+
+    expect(runDsymPhase(script, { POSTHOG_RELEASE_MODE: 'symbol-set' }).output).toContain('NO_RELEASE_BIND=1')
+  })
+
+  it('fails the build on a release mode it does not recognize', () => {
+    // Falling back would upload dSYMs bound to a release the user asked to keep independent.
+    const result = runDsymPhase(buildDsymUploadShellScript(), { POSTHOG_RELEASE_MODE: 'evnet' })
+
+    expect(result.status).toBe(1)
+    expect(result.output).toContain("was 'evnet'")
   })
 
   it('refreshes an existing plugin-generated phase script so option changes take effect', () => {
