@@ -454,24 +454,6 @@ describe('PostHog Core', () => {
       expect(Date.now() - time).toBeLessThan(1000)
     })
 
-    it.each([408, 429, 500])('keeps logs batches retryable after exhausted retries with %s error', async (status) => {
-      ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
-        fetchRetryCount: 0,
-        preloadFeatureFlags: false,
-      })
-      mocks.fetch.mockResolvedValue({
-        status,
-        text: async () => 'err',
-        json: async () => ({ status: 'err' }),
-      })
-
-      await expect(posthog._sendLogsBatch({ resourceLogs: [] })).resolves.toMatchObject({
-        kind: 'retry-later',
-        error: { name: 'PostHogFetchHttpError', status },
-      })
-      expect(mocks.fetch).toHaveBeenCalledTimes(1)
-    })
-
     it('responds with an error after retries with network error ', async () => {
       mocks.fetch.mockImplementation(() => {
         return Promise.reject(new Error('network problems'))
@@ -776,6 +758,58 @@ describe('PostHog Core', () => {
       expect(mocks.storage.getItem(PostHogPersistedProperty.Queue)).toMatchObject([
         { message: { event: 'test-event-3' } },
       ])
+    })
+  })
+
+  describe('OTLP batch senders', () => {
+    // Both share one `_sendOtlpBatch`; the table pins them to the same
+    // classification so a wrapper can't reintroduce a per-signal retry policy.
+    const senders = {
+      logs: (client: PostHogCoreTestClient) => client._sendLogsBatch({ resourceLogs: [] }),
+      metrics: (client: PostHogCoreTestClient) => client._sendMetricsBatch({ resourceMetrics: [] }),
+    }
+
+    const cases: [number, string][] = [
+      [408, 'retry-later'],
+      [429, 'retry-later'],
+      [500, 'retry-later'],
+      [503, 'retry-later'],
+      [413, 'too-large'],
+      [400, 'fatal'],
+      [401, 'fatal'],
+    ]
+
+    describe.each(Object.entries(senders))('%s', (_name, send) => {
+      it.each(cases)('classifies an exhausted %i as %s', async (status, kind) => {
+        ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+          fetchRetryCount: 0,
+          preloadFeatureFlags: false,
+        })
+        mocks.fetch.mockResolvedValue({
+          status,
+          text: async () => 'err',
+          json: async () => ({ status: 'err' }),
+        })
+
+        await expect(send(posthog)).resolves.toMatchObject({ kind })
+        expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      })
+
+      it('carries the HTTP error on a retry-later outcome', async () => {
+        ;[posthog, mocks] = createTestClient('TEST_API_KEY', {
+          fetchRetryCount: 0,
+          preloadFeatureFlags: false,
+        })
+        mocks.fetch.mockResolvedValue({
+          status: 503,
+          text: async () => 'err',
+          json: async () => ({ status: 'err' }),
+        })
+
+        await expect(send(posthog)).resolves.toMatchObject({
+          error: { name: 'PostHogFetchHttpError', status: 503 },
+        })
+      })
     })
   })
 })

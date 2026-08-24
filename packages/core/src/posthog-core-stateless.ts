@@ -237,6 +237,17 @@ export type SendLogsBatchOutcome =
   | { kind: 'retry-later'; error: unknown }
   | { kind: 'fatal'; error: unknown }
 
+/**
+ * Each signal keeps its own exported outcome type because each belongs to a
+ * separate host contract. The wrappers return this value directly, so one
+ * drifting out of shape fails to compile.
+ */
+type SendOtlpBatchOutcome =
+  | { kind: 'ok' }
+  | { kind: 'too-large' }
+  | { kind: 'retry-later'; error: unknown }
+  | { kind: 'fatal'; error: unknown }
+
 export enum QuotaLimitedFeature {
   FeatureFlags = 'feature_flags',
   Recordings = 'recordings',
@@ -1632,20 +1643,28 @@ export abstract class PostHogCoreStateless {
   }
 
   /**
-   * Sends a pre-built OTLP logs payload to `/i/v1/logs`. Returns a tagged
-   * outcome instead of throwing so PostHogLogs doesn't have to know about the
-   * core's error class hierarchy. Error classification lives here.
+   * Shared implementation behind the OTLP senders, which differ only in path.
+   * Returns a tagged outcome instead of throwing so the queue owners don't
+   * have to know the core's error class hierarchy.
    *
-   * 413 is passed through as `too-large` (not auto-retried) so the caller can
-   * shrink `maxBatchRecordsPerPost` and retry the same records.
+   * Exhausted 408/429/5xx stay `retry-later`, unlike the events `_flush()`
+   * which drops anything that isn't a network error: every OTLP queue is
+   * bounded and retried with backoff, so holding a batch through an outage can
+   * neither grow without limit nor spin.
    */
-  async _sendLogsBatch(payload: OtlpLogsPayload): Promise<SendLogsBatchOutcome> {
+  private async _sendOtlpBatch({
+    path,
+    payload,
+  }: {
+    path: 'logs' | 'metrics'
+    payload: OtlpLogsPayload | OtlpMetricsPayload
+  }): Promise<SendOtlpBatchOutcome> {
     if (this.disabled) {
       return { kind: 'fatal', error: new Error('The client is disabled') }
     }
 
     const serialized = JSON.stringify(payload)
-    const url = `${this.host}/i/v1/logs?token=${encodeURIComponent(this.apiKey)}`
+    const url = `${this.host}/i/v1/${path}?token=${encodeURIComponent(this.apiKey)}`
 
     const gzippedPayload = !this.disableCompression ? await this.compressPayload(serialized) : null
     const fetchOptions: PostHogFetchOptions = {
@@ -1684,58 +1703,12 @@ export abstract class PostHogCoreStateless {
     }
   }
 
-  /**
-   * Sends a pre-built OTLP metrics payload to `/i/v1/metrics`. Same tagged
-   * outcome contract and error classification as `_sendLogsBatch` — this is
-   * the `MetricsHost._sendMetricsBatch` implementation, so `PostHogMetrics`
-   * can use any core-based SDK as its host.
-   */
+  async _sendLogsBatch(payload: OtlpLogsPayload): Promise<SendLogsBatchOutcome> {
+    return this._sendOtlpBatch({ path: 'logs', payload })
+  }
+
   async _sendMetricsBatch(payload: OtlpMetricsPayload): Promise<SendMetricsBatchOutcome> {
-    if (this.disabled) {
-      return { kind: 'fatal', error: new Error('The client is disabled') }
-    }
-
-    const serialized = JSON.stringify(payload)
-    const url = `${this.host}/i/v1/metrics?token=${encodeURIComponent(this.apiKey)}`
-
-    const gzippedPayload = !this.disableCompression ? await this.compressPayload(serialized) : null
-    const fetchOptions: PostHogFetchOptions = {
-      method: 'POST',
-      headers: {
-        ...this.getCustomHeaders(),
-        'Content-Type': 'application/json',
-        ...(gzippedPayload !== null && { 'Content-Encoding': 'gzip' }),
-      },
-      body: gzippedPayload || serialized,
-    }
-
-    try {
-      await this.fetchWithRetry(
-        url,
-        fetchOptions,
-        { type: 'successful-write' },
-        {
-          retryCheck: (err) => {
-            if (isPostHogFetchContentTooLargeError(err)) {
-              return false
-            }
-            return isPostHogFetchRetryableError(err)
-          },
-        }
-      )
-      return { kind: 'ok' }
-    } catch (err) {
-      if (isPostHogFetchContentTooLargeError(err)) {
-        return { kind: 'too-large' }
-      }
-      // Exhausted retries on a retryable failure (network error, 408/429/5xx)
-      // still classify as retry-later so the window rides the next flush; only
-      // non-retryable HTTP errors (and 413 above) drop the batch.
-      if (isPostHogFetchRetryableError(err)) {
-        return { kind: 'retry-later', error: err }
-      }
-      return { kind: 'fatal', error: err }
-    }
+    return this._sendOtlpBatch({ path: 'metrics', payload })
   }
 
   private fetchWithRetry<T>(
