@@ -1098,6 +1098,19 @@ export interface MetricsConfig {
 type NextOptions = { revalidate: false | 0 | number; tags: string[] }
 
 /**
+ * Selects which same-page URL changes automatically capture a `$pageview`.
+ * Each option defaults to `false` when omitted.
+ */
+export interface CapturePageviewOptions {
+    /** Capture a pageview when `location.pathname` changes. */
+    path?: boolean
+    /** Capture a pageview when `location.search` changes. */
+    search?: boolean
+    /** Capture a pageview when `location.hash` changes, unless `disable_capture_url_hashes` is enabled. */
+    hash?: boolean
+}
+
+/**
  * Configuration options for the PostHog JavaScript SDK.
  * @see https://posthog.com/docs/libraries/js#config
  */
@@ -1318,18 +1331,19 @@ export interface PostHogConfig {
     /**
      * Determines whether PostHog should capture pageview events automatically.
      * Can be:
-     * - `true`: Capture regular pageviews (default)
+     * - `true`: Capture the initial pageview
      * - `false`: Don't capture any pageviews
-     * - `'history_change'`: Capture pageviews on the initial page load and on history API changes (pushState, replaceState, popstate)
+     * - `'history_change'`: Capture the initial pageview and pageviews when the pathname changes
+     * - An object: Capture the initial pageview and pageviews when any selected URL component changes
      *
      * @default true (or `'history_change'` when `defaults` is `'2025-05-24'` or later)
      */
-    capture_pageview: boolean | 'history_change'
+    capture_pageview: boolean | 'history_change' | CapturePageviewOptions
 
     /**
      * Determines whether PostHog should capture pageleave events.
      * If set to `true`, it will capture pageleave events for all pages.
-     * If set to `'if_capture_pageview'`, it will only capture pageleave events if `capture_pageview` is also set to `true` or `'history_change'`.
+     * If set to `'if_capture_pageview'`, it will only capture pageleave events if `capture_pageview` is enabled.
      *
      * @default 'if_capture_pageview'
      */

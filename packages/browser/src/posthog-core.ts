@@ -3749,6 +3749,9 @@ export class PostHog implements PostHogInterface {
             this.tracingHeaders?.startIfEnabledOrStop()
             this.autocapture?.startIfEnabled()
             this.heatmaps?.startIfEnabled()
+            if ('capture_pageview' in config || 'disable_capture_url_hashes' in config) {
+                this.historyAutocapture?.startIfEnabledOrStop()
+            }
             this.exceptionObserver?.startIfEnabledOrStop()
             this.deadClicksAutocapture?.startIfEnabledOrStop()
             this.surveys?.loadIfEnabled()
@@ -4136,8 +4139,7 @@ export class PostHog implements PostHogInterface {
     _shouldCapturePageleave(): boolean {
         return (
             this.config.capture_pageleave === true ||
-            (this.config.capture_pageleave === 'if_capture_pageview' &&
-                (this.config.capture_pageview === true || this.config.capture_pageview === 'history_change'))
+            (this.config.capture_pageleave === 'if_capture_pageview' && !!this.config.capture_pageview)
         )
     }
 
