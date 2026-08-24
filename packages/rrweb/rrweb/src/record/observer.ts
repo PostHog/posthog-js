@@ -654,6 +654,63 @@ function initStyleSheetObserver(
     };
   }
 
+  type QueuedStyleSheetMutation = {
+    emit?: () => void;
+    ready: boolean;
+  };
+  const queuedStyleSheetMutations = new WeakMap<
+    CSSStyleSheet,
+    QueuedStyleSheetMutation[]
+  >();
+  const flushStyleSheetMutations = (sheet: CSSStyleSheet) => {
+    const queue = queuedStyleSheetMutations.get(sheet);
+    if (!queue) return;
+
+    while (queue[0]?.ready) {
+      const mutation = queue.shift();
+      try {
+        mutation?.emit?.();
+      } catch {
+        // Recorder errors must not affect native CSSOM operations.
+      }
+    }
+    if (queue.length === 0) {
+      queuedStyleSheetMutations.delete(sheet);
+    }
+  };
+  const queueStyleSheetMutation = (
+    sheet: CSSStyleSheet,
+    emit: () => void,
+  ) => {
+    const queue = queuedStyleSheetMutations.get(sheet);
+    if (!queue) {
+      emit();
+      return;
+    }
+    queue.push({ emit, ready: true });
+    flushStyleSheetMutations(sheet);
+  };
+  const queuePendingStyleSheetMutation = (
+    sheet: CSSStyleSheet,
+    emit: () => void,
+  ) => {
+    let queue = queuedStyleSheetMutations.get(sheet);
+    if (!queue) {
+      queue = [];
+      queuedStyleSheetMutations.set(sheet, queue);
+    }
+    const mutation: QueuedStyleSheetMutation = { emit, ready: false };
+    queue.push(mutation);
+    let completed = false;
+    return (success: boolean) => {
+      if (completed) return;
+      completed = true;
+      mutation.ready = true;
+      if (!success) mutation.emit = undefined;
+      flushStyleSheetMutations(sheet);
+    };
+  };
+
   // eslint-disable-next-line @typescript-eslint/unbound-method
   const insertRule = win.CSSStyleSheet.prototype.insertRule;
   win.CSSStyleSheet.prototype.insertRule = new Proxy(insertRule, {
@@ -678,11 +735,13 @@ function initStyleSheetObserver(
         );
 
         if ((id && id !== -1) || (styleId && styleId !== -1)) {
-          styleSheetRuleCb({
-            id,
-            styleId,
-            adds: [{ rule, index: insertedIndex }],
-          });
+          queueStyleSheetMutation(thisArg, () =>
+            styleSheetRuleCb({
+              id,
+              styleId,
+              adds: [{ rule, index: insertedIndex }],
+            }),
+          );
         }
         return insertedIndex;
       },
@@ -723,11 +782,13 @@ function initStyleSheetObserver(
         );
 
         if ((id && id !== -1) || (styleId && styleId !== -1)) {
-          styleSheetRuleCb({
-            id,
-            styleId,
-            removes: [{ index }],
-          });
+          queueStyleSheetMutation(thisArg, () =>
+            styleSheetRuleCb({
+              id,
+              styleId,
+              removes: [{ index }],
+            }),
+          );
         }
         return result;
       },
@@ -758,29 +819,46 @@ function initStyleSheetObserver(
           const [text] = argumentsList;
           const result = target.apply(thisArg, argumentsList);
 
-          return result.then((stylesheet) => {
-            try {
-              callbackWrapper(() => {
-                stylesheetManager.onCssomSheetMutation(thisArg);
-                const { id, styleId } = getIdAndStyleId(
-                  thisArg,
-                  mirror,
-                  stylesheetManager.styleMirror,
-                );
+          if (
+            thisArg.ownerNode ||
+            !result ||
+            typeof result.then !== 'function'
+          ) {
+            return result;
+          }
 
-                if ((id && id !== -1) || (styleId && styleId !== -1)) {
-                  styleSheetRuleCb({
-                    id,
-                    styleId,
-                    replace: text,
-                  });
-                }
-              })();
-            } catch {
-              // Recorder errors must not affect the native promise result.
+          try {
+            stylesheetManager.onCssomSheetMutation(thisArg);
+            const { id, styleId } = getIdAndStyleId(
+              thisArg,
+              mirror,
+              stylesheetManager.styleMirror,
+            );
+            if (!((id && id !== -1) || (styleId && styleId !== -1))) {
+              return result;
             }
-            return stylesheet;
-          });
+
+            const completeMutation = queuePendingStyleSheetMutation(
+              thisArg,
+              () =>
+                styleSheetRuleCb({
+                  id,
+                  styleId,
+                  replace: text,
+                }),
+            );
+            try {
+              void result.then(
+                () => completeMutation(true),
+                () => completeMutation(false),
+              );
+            } catch {
+              completeMutation(false);
+            }
+          } catch {
+            // Recorder errors must not affect the native promise result.
+          }
+          return result;
         },
         'host',
       ),
@@ -809,11 +887,13 @@ function initStyleSheetObserver(
           );
 
           if ((id && id !== -1) || (styleId && styleId !== -1)) {
-            styleSheetRuleCb({
-              id,
-              styleId,
-              replaceSync: text,
-            });
+            queueStyleSheetMutation(thisArg, () =>
+              styleSheetRuleCb({
+                id,
+                styleId,
+                replaceSync: text,
+              }),
+            );
           }
           return result;
         },
@@ -879,20 +959,21 @@ function initStyleSheetObserver(
               stylesheetManager.styleMirror,
             );
 
-            if ((id && id !== -1) || (styleId && styleId !== -1)) {
-              styleSheetRuleCb({
-                id,
-                styleId,
-                adds: [
-                  {
-                    rule,
-                    index: [
-                      ...getNestedCSSRulePositions(thisArg),
-                      insertedIndex,
-                    ],
-                  },
-                ],
-              });
+            if (
+              thisArg.parentStyleSheet &&
+              ((id && id !== -1) || (styleId && styleId !== -1))
+            ) {
+              const index = [
+                ...getNestedCSSRulePositions(thisArg),
+                insertedIndex,
+              ];
+              queueStyleSheetMutation(thisArg.parentStyleSheet, () =>
+                styleSheetRuleCb({
+                  id,
+                  styleId,
+                  adds: [{ rule, index }],
+                }),
+              );
             }
             return insertedIndex;
           },
@@ -922,14 +1003,21 @@ function initStyleSheetObserver(
               stylesheetManager.styleMirror,
             );
 
-            if ((id && id !== -1) || (styleId && styleId !== -1)) {
-              styleSheetRuleCb({
-                id,
-                styleId,
-                removes: [
-                  { index: [...getNestedCSSRulePositions(thisArg), index] },
-                ],
-              });
+            if (
+              thisArg.parentStyleSheet &&
+              ((id && id !== -1) || (styleId && styleId !== -1))
+            ) {
+              const nestedIndex = [
+                ...getNestedCSSRulePositions(thisArg),
+                index,
+              ];
+              queueStyleSheetMutation(thisArg.parentStyleSheet, () =>
+                styleSheetRuleCb({
+                  id,
+                  styleId,
+                  removes: [{ index: nestedIndex }],
+                }),
+              );
             }
             return result;
           },
