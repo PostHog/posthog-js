@@ -479,6 +479,7 @@
         "_onCapturedEvent",
         "_onClick",
         "_onClickHandler",
+        "_onClipboardEvent",
         "_onDeadClick",
         "_onFocusChange",
         "_onIdentityChanged",
