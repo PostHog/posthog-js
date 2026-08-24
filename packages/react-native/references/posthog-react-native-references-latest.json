@@ -4288,6 +4288,26 @@
       "example": "Record<string, any>"
     },
     {
+      "id": "PropertyFilters",
+      "name": "PropertyFilters",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "Record<string, {\n    values: string[];\n    operator: PropertyOperator;\n}>"
+    },
+    {
+      "id": "PropertyMatchType",
+      "name": "PropertyMatchType",
+      "properties": [],
+      "path": "../core/src/types.ts"
+    },
+    {
+      "id": "PropertyOperator",
+      "name": "PropertyOperator",
+      "properties": [],
+      "path": "../core/src/types.ts",
+      "example": "\"gt\" | \"lt\""
+    },
+    {
       "id": "RatingSurveyQuestion",
       "name": "RatingSurveyQuestion",
       "properties": [
@@ -4587,7 +4607,7 @@
           "name": "appearance"
         },
         {
-          "type": "{ url?: string; selector?: string; seenSurveyWaitPeriodInDays?: number; urlMatchType?: SurveyMatchType; events?: { repeatedActivation?: boolean; values?: { name: string; }[]; }; actions?: { values: SurveyActionType[]; }; deviceTypes?: string[]; deviceTypesMatchType?: SurveyMatchType; linkedFlagVariant?: string; }",
+          "type": "{ url?: string; selector?: string; seenSurveyWaitPeriodInDays?: number; urlMatchType?: SurveyMatchType; events?: { repeatedActivation?: boolean; values?: SurveyEventWithFilters[]; }; actions?: { values: SurveyActionType[]; }; deviceTypes?: string[]; deviceTypesMatchType?: SurveyMatchType; linkedFlagVariant?: string; }",
           "name": "conditions"
         },
         {
@@ -4873,6 +4893,21 @@
         }
       ],
       "path": "dist/surveys/surveys-utils.d.ts"
+    },
+    {
+      "id": "SurveyEventWithFilters",
+      "name": "SurveyEventWithFilters",
+      "properties": [
+        {
+          "type": "string",
+          "name": "name"
+        },
+        {
+          "type": "PropertyFilters",
+          "name": "propertyFilters"
+        }
+      ],
+      "path": "../core/src/types.ts"
     },
     {
       "id": "SurveyMatchType",

@@ -4483,27 +4483,6 @@
       "path": "lib/src/posthog-product-tours-types.d.ts"
     },
     {
-      "id": "PropertyFilters",
-      "name": "PropertyFilters",
-      "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
-      "example": "{\n    [propertyName: string]: {\n        values: string[];\n        operator: PropertyOperator;\n    };\n}"
-    },
-    {
-      "id": "PropertyMatchType",
-      "name": "PropertyMatchType",
-      "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
-      "example": "\"regex\" | \"not_regex\" | \"exact\" | \"is_not\" | \"icontains\" | \"not_icontains\""
-    },
-    {
-      "id": "PropertyOperator",
-      "name": "PropertyOperator",
-      "properties": [],
-      "path": "../browser-common/dist/types/surveys.d.ts",
-      "example": "\"gt\" | \"lt\""
-    },
-    {
       "id": "QueuedRequestWithOptions",
       "name": "QueuedRequestWithOptions",
       "properties": [
@@ -5525,21 +5504,6 @@
       "properties": [],
       "path": "../browser-common/dist/types/surveys.d.ts",
       "example": "(typeof SurveyEventType)[keyof typeof SurveyEventType]"
-    },
-    {
-      "id": "SurveyEventWithFilters",
-      "name": "SurveyEventWithFilters",
-      "properties": [
-        {
-          "type": "string",
-          "name": "name"
-        },
-        {
-          "type": "PropertyFilters",
-          "name": "propertyFilters"
-        }
-      ],
-      "path": "../browser-common/dist/types/surveys.d.ts"
     },
     {
       "id": "SurveyPosition",
