@@ -535,8 +535,7 @@ export class SurveyManager {
      * 1) the survey is complete, OR
      * 2) partial responses are enabled AND the skipped questions were set to auto-submit.
      *
-     * Both prefill paths share this gate. Without it a single prefilled answer stores an incomplete
-     * response. That send also marks the survey seen and stops the respondent from finishing it.
+     * Both prefill paths share this gate.
      */
     private _autoSubmitPrefilledResponses(
         survey: Survey,
@@ -1576,25 +1575,17 @@ export function Questions({
         const newResponses = { ...questionsResponses, [responseKey]: res }
         setQuestionsResponses(newResponses)
 
-        // getNextSurveyStep uses indices into survey.questions, the canonical order. The UI walks
-        // surveyQuestions, which getDisplayOrderQuestions can shuffle. Convert the display index to the
-        // canonical index before branching. Convert the branching result back afterwards. This makes
-        // branching read the current question's rules and select the correct next question.
-        const canonicalQuestionIndex = survey.questions.indexOf(surveyQuestions[displayQuestionIndex])
-        const nextStep = getNextSurveyStep(survey, canonicalQuestionIndex, res)
+        const nextStep = getNextSurveyStep(survey, displayQuestionIndex, res)
         const isSurveyCompleted = nextStep === SurveyQuestionBranchingType.End
         const newVisitedIndices = [...visitedIndices, displayQuestionIndex]
 
         if (!isSurveyCompleted) {
-            // nextStep is a canonical index. Convert it back to the display order, because
-            // currentQuestionIndex must point into surveyQuestions.
-            const nextDisplayIndex = surveyQuestions.indexOf(survey.questions[nextStep])
             setVisitedIndices(newVisitedIndices)
-            setCurrentQuestionIndex(nextDisplayIndex)
+            setCurrentQuestionIndex(nextStep)
             setInProgressSurveyState(survey, {
                 surveySubmissionId: surveySubmissionId,
                 responses: newResponses,
-                lastQuestionIndex: nextDisplayIndex,
+                lastQuestionIndex: nextStep,
                 visitedIndices: newVisitedIndices,
                 surveyLanguage,
             })

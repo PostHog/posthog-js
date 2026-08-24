@@ -574,8 +574,24 @@ export const getDisplayOrderChoices = (question: MultipleSurveyQuestion): string
     return shuffledOptions
 }
 
+const hasBranching = (survey: Survey): boolean => survey.questions.some((question) => !!question.branching?.type)
+
+/**
+ * Shuffling is skipped whenever positions into survey.questions are also used elsewhere, because a
+ * shuffled array makes those positions refer to a different question:
+ * - branching rules hold the position of their target question. The API rejects surveys that set
+ *   both shuffleQuestions and branching, so that guard covers rows predating the validation.
+ * - in-progress state holds the position the respondent is on and the positions already answered.
+ *   Prefill writes that state before the survey renders.
+ */
 export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
-    if (!survey.appearance || !survey.appearance.shuffleQuestions || survey.enable_partial_responses) {
+    if (
+        !survey.appearance ||
+        !survey.appearance.shuffleQuestions ||
+        survey.enable_partial_responses ||
+        hasBranching(survey) ||
+        isSurveyInProgress(survey)
+    ) {
         return survey.questions
     }
 
