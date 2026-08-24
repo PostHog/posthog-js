@@ -35,8 +35,13 @@ import {
   recompressBase64Image,
   absolutifyURLs,
 } from './utils';
-import { isJsonLdScript, sanitizeJsonLdScript } from './json-ld';
-import dom from '@posthog/rrweb-utils';
+import {
+  getJsonLdScriptTextNode,
+  isJsonLdScript,
+  isScriptElement,
+  sanitizeJsonLdScript,
+} from './json-ld';
+import dom, { nodeName } from '@posthog/rrweb-utils';
 import {
   beginSnapshotCostTracking,
   countSerializedNode,
@@ -48,12 +53,6 @@ import {
 
 let _id = 1;
 const tagNameRegex = new RegExp('[^a-z0-9-_:]');
-const DOCUMENT_NODE = 9;
-const DOCUMENT_TYPE_NODE = 10;
-const ELEMENT_NODE = 1;
-const TEXT_NODE = 3;
-const CDATA_SECTION_NODE = 4;
-const COMMENT_NODE = 8;
 
 export const IGNORED_NODE = -2;
 
@@ -62,7 +61,11 @@ export function genId(): number {
 }
 
 function getValidTagName(element: Element): Lowercase<string> {
-  const processedTagName = toLowerCase(dom.nodeName(element));
+  if (element instanceof HTMLFormElement) {
+    return 'form';
+  }
+
+  const processedTagName = toLowerCase(nodeName(element));
 
   if (tagNameRegex.test(processedTagName)) {
     // if the tag name is odd and we cannot extract
@@ -312,7 +315,7 @@ export function classMatchesRegex(
   checkAncestors: boolean,
 ): boolean {
   if (!node) return false;
-  if (dom.nodeType(node) !== ELEMENT_NODE) {
+  if (node.nodeType !== node.ELEMENT_NODE) {
     if (!checkAncestors) return false;
     return classMatchesRegex(dom.parentNode(node), regex, checkAncestors);
   }
@@ -560,8 +563,8 @@ function serializeNode(
   } = options;
   // Only record root id when document object is not the base document
   const rootId = getRootId(doc, mirror);
-  switch (dom.nodeType(n)) {
-    case DOCUMENT_NODE:
+  switch (n.nodeType) {
+    case n.DOCUMENT_NODE:
       if ((n as Document).compatMode !== 'CSS1Compat') {
         return {
           type: NodeType.Document,
@@ -574,7 +577,7 @@ function serializeNode(
           childNodes: [],
         };
       }
-    case DOCUMENT_TYPE_NODE:
+    case n.DOCUMENT_TYPE_NODE:
       return {
         type: NodeType.DocumentType,
         name: (n as DocumentType).name,
@@ -582,7 +585,7 @@ function serializeNode(
         systemId: (n as DocumentType).systemId,
         rootId,
       };
-    case ELEMENT_NODE:
+    case n.ELEMENT_NODE:
       return serializeElementNode(n as Element, {
         doc,
         blockClass,
@@ -600,20 +603,20 @@ function serializeNode(
         newlyAddedElement,
         rootId,
       });
-    case TEXT_NODE:
+    case n.TEXT_NODE:
       return serializeTextNode(n as Text, {
         doc,
         needsMask,
         maskTextFn,
         rootId,
       });
-    case CDATA_SECTION_NODE:
+    case n.CDATA_SECTION_NODE:
       return {
         type: NodeType.CDATA,
         textContent: '',
         rootId,
       };
-    case COMMENT_NODE:
+    case n.COMMENT_NODE:
       return {
         type: NodeType.Comment,
         textContent: dom.textContent(n as Comment) || '',
@@ -643,10 +646,10 @@ function serializeTextNode(
   // The parent node may not be a html element which has a tagName attribute.
   // So just let it be undefined which is ok in this use case.
   const parent = dom.parentNode(n);
-  const parentTagName = parent ? dom.nodeName(parent) : undefined;
+  const parentTagName = parent && (parent as HTMLElement).tagName;
   let text = dom.textContent(n);
   const isStyle = parentTagName === 'STYLE' ? true : undefined;
-  const isScript = parentTagName === 'SCRIPT' ? true : undefined;
+  const isScript = parent && isScriptElement(parent) ? true : undefined;
   if (isStyle && text) {
     try {
       // try to read style sheet
@@ -681,11 +684,9 @@ function serializeTextNode(
     text = absolutifyURLs(text, getHref(options.doc));
   }
   if (isScript) {
-    if (parent && isJsonLdScript(parent as Element)) {
-      const firstTextNode = Array.from(dom.childNodes(parent)).find(
-        (child) => dom.nodeType(child) === TEXT_NODE,
-      );
-      text = firstTextNode === n ? sanitizeJsonLdScript(parent as Element) || '' : '';
+    if (parent && isJsonLdScript(parent)) {
+      const firstTextNode = getJsonLdScriptTextNode(parent);
+      text = firstTextNode === n ? sanitizeJsonLdScript(parent) || '' : '';
     } else {
       text = 'SCRIPT_PLACEHOLDER';
     }
@@ -1106,13 +1107,9 @@ function slimDOMExcluded(
 ): boolean {
   const parent = dom.parentNode(node);
   if (
-    parent &&
-    dom.nodeName(parent) === 'SCRIPT' &&
-    isJsonLdScript(parent as Element)
+    parent && isJsonLdScript(parent)
   ) {
-    const firstTextNode = Array.from(dom.childNodes(parent)).find(
-      (child) => dom.nodeType(child) === TEXT_NODE,
-    );
+    const firstTextNode = getJsonLdScriptTextNode(parent);
     if (node !== firstTextNode) {
       return true;
     }
@@ -1123,8 +1120,8 @@ function slimDOMExcluded(
     return true;
   } else if (sn.type === NodeType.Element) {
     if (sn.tagName === 'script') {
-      if (isJsonLdScript(node as Element)) {
-        return sanitizeJsonLdScript(node as Element) === null;
+      if (isJsonLdScript(node)) {
+        return sanitizeJsonLdScript(node) === null;
       }
       if (slimDOMOptions.script) {
         return true;
@@ -1328,8 +1325,7 @@ export function serializeNodeWithId(
 
   if (
     needsMask &&
-    dom.nodeName(n) === 'SCRIPT' &&
-    isJsonLdScript(n as Element)
+    isJsonLdScript(n)
   ) {
     return null;
   }

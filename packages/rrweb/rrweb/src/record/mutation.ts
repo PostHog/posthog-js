@@ -14,9 +14,13 @@ import {
   nowMs,
   getSuspensionGeneration,
   recordMutationCost,
-  isJsonLdScript,
-  sanitizeJsonLdScript,
 } from '@posthog/rrweb-snapshot';
+import {
+  getJsonLdScriptTextNode,
+  isJsonLdScript,
+  isScriptElement,
+  sanitizeJsonLdScript,
+} from '@posthog/rrweb-snapshot/record';
 import type { observerParam, MutationBufferParam } from '../types';
 import type {
   mutationRecord,
@@ -143,8 +147,6 @@ const moveKey = (id: number, parentId: number) => `${id}@${parentId}`;
 const XML_NAMESPACE = 'http://www.w3.org/XML/1998/namespace';
 const XMLNS_NAMESPACE = 'http://www.w3.org/2000/xmlns/';
 const XLINK_NAMESPACE = 'http://www.w3.org/1999/xlink';
-const DOCUMENT_FRAGMENT_NODE = 11;
-const TEXT_NODE = 3;
 
 function getSerializedAttributeName(
   target: Element,
@@ -376,8 +378,7 @@ export default class MutationBuffer {
       if (parentId === -1 || nextId === -1) {
         return addList.addNode(n);
       }
-      const serializeJsonLdChildren =
-        dom.nodeName(n) === 'SCRIPT' && isJsonLdScript(n as Element);
+      const serializeJsonLdChildren = isJsonLdScript(n);
       const sn = serializeNodeWithId(n, {
         doc: this.doc,
         mirror: this.mirror,
@@ -500,7 +501,7 @@ export default class MutationBuffer {
               const unhandledNode = _node.value;
               const parent = dom.parentNode(unhandledNode);
               // If the node is the direct child of a shadow root, we treat the shadow host as its parent node.
-              if (parent && dom.nodeType(parent) === DOCUMENT_FRAGMENT_NODE) {
+              if (parent && parent.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
                 const shadowHost = dom.host(parent as ShadowRoot);
                 const parentId = this.mirror.getId(shadowHost);
                 if (parentId !== -1) {
@@ -660,10 +661,8 @@ export default class MutationBuffer {
       const parent =
         m.type === 'characterData' ? dom.parentNode(m.target) : null;
       const firstJsonLdTextNode =
-        parent && dom.nodeName(parent) === 'SCRIPT' && isJsonLdScript(parent as Element)
-          ? Array.from(dom.childNodes(parent)).find(
-              (child) => dom.nodeType(child) === TEXT_NODE,
-            )
+        parent && isJsonLdScript(parent)
+          ? getJsonLdScriptTextNode(parent)
           : null;
       if (
         !firstJsonLdTextNode ||
@@ -676,14 +675,10 @@ export default class MutationBuffer {
       case 'characterData': {
         const parent = dom.parentNode(m.target);
         const script =
-          parent && dom.nodeName(parent) === 'SCRIPT'
-            ? (parent as Element)
-            : null;
+          parent && isScriptElement(parent) ? parent : null;
         const firstScriptTextNode =
           script && isJsonLdScript(script)
-            ? Array.from(dom.childNodes(script)).find(
-                (child) => dom.nodeType(child) === TEXT_NODE,
-              )
+            ? getJsonLdScriptTextNode(script)
             : null;
         if (
           script &&
@@ -734,7 +729,7 @@ export default class MutationBuffer {
       case 'attributes': {
         const target = m.target as Element;
         if (
-          dom.nodeName(target) === 'SCRIPT' &&
+          isScriptElement(target) &&
           (this.slimDOMOptions.script || isJsonLdScript(target))
         ) {
           return;
@@ -951,27 +946,25 @@ export default class MutationBuffer {
     if (
       this.slimDOMOptions.script &&
       parent &&
-      dom.nodeName(parent) === 'SCRIPT'
+      isScriptElement(parent)
     ) {
       if (
-        !isJsonLdScript(parent as Element) ||
+        !isJsonLdScript(parent) ||
         needMaskingText(parent, this.maskTextClass, this.maskTextSelector, true) ||
-        sanitizeJsonLdScript(parent as Element) === null
+        sanitizeJsonLdScript(parent) === null
       ) {
         return;
       }
-      const firstTextNode = Array.from(dom.childNodes(parent)).find(
-        (child) => dom.nodeType(child) === TEXT_NODE,
-      );
+      const firstTextNode = getJsonLdScriptTextNode(parent);
       if (n !== firstTextNode) {
         return;
       }
     }
     if (
       this.slimDOMOptions.script &&
-      dom.nodeName(n) === 'SCRIPT' &&
+      isScriptElement(n) &&
       (needMaskingText(n, this.maskTextClass, this.maskTextSelector, true) ||
-        sanitizeJsonLdScript(n as Element) === null)
+        sanitizeJsonLdScript(n) === null)
     ) {
       return;
     }
@@ -1013,8 +1006,7 @@ export default class MutationBuffer {
 
     // if this node is blocked `serializeNode` will turn it into a placeholder element
     // but we have to remove it's children otherwise they will be added as placeholders too
-    const serializedWithChildren =
-      dom.nodeName(n) === 'SCRIPT' && isJsonLdScript(n as Element);
+    const serializedWithChildren = isJsonLdScript(n);
     if (
       !serializedWithChildren &&
       !isBlocked(n, this.blockClass, this.blockSelector, false)

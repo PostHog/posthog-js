@@ -7,6 +7,10 @@ const workspacePackages: Record<string, string> = {
     __dirname,
     '../rrweb-snapshot/src/record.ts',
   ),
+  '@posthog/rrweb-snapshot/record': path.resolve(
+    __dirname,
+    '../rrweb-snapshot/src/record.ts',
+  ),
   '@posthog/rrdom': path.resolve(__dirname, '../rrdom/src/index.ts'),
 };
 

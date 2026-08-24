@@ -1,4 +1,4 @@
-import dom from '@posthog/rrweb-utils';
+import dom, { getAttribute, nodeName } from '@posthog/rrweb-utils';
 
 type JsonLdScalar = string | number | boolean | null;
 type JsonLdType =
@@ -299,11 +299,23 @@ export function sanitizeJsonLd(text: string): string | null {
   }
 }
 
-export function isJsonLdScript(element: Element): boolean {
+export function isScriptElement(node: Node): node is HTMLScriptElement {
+  return nodeName(node) === 'SCRIPT';
+}
+
+export function isJsonLdScript(node: Node): node is HTMLScriptElement {
   return (
-    dom.nodeName(element) === 'SCRIPT' &&
-    dom.getAttribute(element, 'type')?.trim().toLowerCase() ===
+    isScriptElement(node) &&
+    getAttribute(node, 'type')?.trim().toLowerCase() ===
       'application/ld+json'
+  );
+}
+
+export function getJsonLdScriptTextNode(element: Element): Text | null {
+  return (
+    (Array.from(dom.childNodes(element)).find(
+      (child) => child.nodeType === 3,
+    ) as Text | undefined) || null
   );
 }
 

@@ -25,7 +25,6 @@ const testableAccessors = {
     'parentElement',
     'textContent',
     'nodeName',
-    'nodeType',
   ] as const,
   ShadowRoot: ['host', 'styleSheets'] as const,
   Element: ['shadowRoot'] as const,
@@ -241,10 +240,6 @@ export function nodeName(node: Node): string {
   return getUntaintedAccessor('Node', node, 'nodeName');
 }
 
-export function nodeType(node: Node): number {
-  return getUntaintedAccessor('Node', node, 'nodeType');
-}
-
 export function contains(n: Node, other: Node): boolean {
   return getUntaintedMethod('Node', n, 'contains')(other);
 }
@@ -395,8 +390,6 @@ export default {
   parentNode,
   parentElement,
   textContent,
-  nodeName,
-  nodeType,
   contains,
   getRootNode,
   host,
@@ -404,7 +397,6 @@ export default {
   shadowRoot,
   querySelector,
   querySelectorAll,
-  getAttribute,
   mutationObserver: mutationObserverCtor,
   patch,
 };
