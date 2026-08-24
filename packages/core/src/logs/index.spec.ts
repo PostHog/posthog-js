@@ -116,6 +116,37 @@ describe('PostHogLogs over the core sender', () => {
     expect(queueOf(client)).toHaveLength(1)
   })
 
+  it('retains and resends records after transport retries are exhausted', async () => {
+    jest.useRealTimers()
+    const [client, mocks] = createTestClient('TEST_API_KEY', {
+      fetchRetryCount: 2,
+      fetchRetryDelay: 1,
+      preloadFeatureFlags: false,
+    })
+    const unavailableResponse = { status: 503, text: async () => 'unavailable', json: async () => ({}) }
+    mocks.fetch
+      .mockResolvedValueOnce(unavailableResponse)
+      .mockResolvedValueOnce(unavailableResponse)
+      .mockResolvedValueOnce(unavailableResponse)
+      .mockResolvedValueOnce({ status: 200, text: async () => 'ok', json: async () => ({}) })
+    const logs = new PostHogLogs(
+      client,
+      resolveForTest(),
+      createMockLogger(),
+      () => ({ distinctId: 'user-123' }),
+      immediateOnReady
+    )
+
+    logs.captureLog({ body: 'retry me' })
+    await expect(logs.flush()).rejects.toHaveProperty('name', 'PostHogFetchHttpError')
+    expect(mocks.fetch).toHaveBeenCalledTimes(3)
+    expect(queueOf(client)).toHaveLength(1)
+
+    await expect(logs.flush()).resolves.toBeUndefined()
+    expect(mocks.fetch).toHaveBeenCalledTimes(4)
+    expect(queueOf(client)).toHaveLength(0)
+  })
+
   it('drops the batch when the endpoint answers 401', async () => {
     const { logs, client } = createLogsOverCore(401)
     logs.captureLog({ body: 'unauthorized' })

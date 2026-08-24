@@ -800,7 +800,10 @@ describe('PostHog Core', () => {
       // transport on the first response for the caller to shrink its batch and
       // retry the same records, where a 5xx is worth re-sending as-is.
       it.each([
+        [408, 3],
+        [429, 3],
         [500, 3],
+        [503, 3],
         [413, 1],
         [400, 1],
       ])('sends %i %i time(s) before returning', async (status, attempts) => {
